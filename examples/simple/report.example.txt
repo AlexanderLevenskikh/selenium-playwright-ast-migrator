@@ -1,0 +1,10 @@
+Processed: examples/simple/input/SimpleSeleniumTest.cs
+  Tests: 2
+  Unsupported: 1
+  Semantic: 0, SyntaxFallback: 7
+  Mapped: 6, Unmapped: 0
+  TODO comments: 2
+  Output: examples/simple/input/Output/SimpleSeleniumTestPlaywright.cs
+
+Total: 1 files, 2 tests, 1 unsupported actions
+  Mapped: 6, Unmapped: 0

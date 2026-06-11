@@ -1,0 +1,32 @@
+{
+  "SourceProjectName": "MyProject.E2ETests",
+  "UiTargets": [
+    {
+      "SourceExpression": "page.Username",
+      "TargetExpression": "GetByTestId(\"username\")",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.Password",
+      "TargetExpression": "GetByTestId(\"password\")",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.SubmitButton",
+      "TargetExpression": "GetByTestId(\"submit-button\")",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.SearchBox",
+      "TargetExpression": "GetByTestId(\"search-box\")",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.SearchButton",
+      "TargetExpression": "GetByTestId(\"search-button\")",
+      "TargetKind": "TestId"
+    }
+  ],
+  "PageObjects": [],
+  "Methods": []
+}
