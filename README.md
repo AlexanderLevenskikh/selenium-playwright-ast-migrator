@@ -52,31 +52,39 @@ dotnet test
 ## CLI-запуск
 
 ```bash
-# Один файл
-dotnet run --project Migrator.Cli -- input.cs --config adapter-config.json --output output.cs
+# Analyze — отчёт без генерации файлов
+dotnet run --project Migrator.Cli -- --mode analyze --input ./OldTests --out ./analysis --format both
 
-# Директория
-dotnet run --project Migrator.Cli -- ./tests/ --config adapter-config.json --output ./output/
+# Migrate — генерация Playwright C#
+dotnet run --project Migrator.Cli -- --mode migrate --input ./OldTests --out ./Generated --config ./adapter-config.json
+
+# Verify (экспериментальный) — проверка структуры сгенерированных файлов
+dotnet run --project Migrator.Cli -- --mode verify --input ./Generated --out ./verify-report
+
+# Quality gate
+dotnet run --project Migrator.Cli -- --mode migrate --input ./OldTests --fail-on-unsupported --fail-on-todo
 ```
 
 Публикация самодостаточного исполняемого файла:
 
 ```bash
 dotnet publish Migrator.Cli -c Release -o ./publish
-./publish/Migrator.Cli input.cs --config adapter-config.json
+./publish/Migrator.Cli --mode migrate --input ./OldTests --config ./adapter-config.json
 ```
 
 ## Аргументы CLI
 
-| Аргумент       | Описание                                        |
-|----------------|--------------------------------------------------|
-| `<file\|dir>`  | Исходный `.cs`-файл или директория с тестами     |
-| `--config`     | Путь к JSON-конфигу адаптера (опционально)       |
-| `--output`     | Путь к выходному файлу (опционально, по умолчанию `./Output/`) |
+| Аргумент              | Описание                                                            |
+|-----------------------|---------------------------------------------------------------------|
+| `--mode`              | `analyze`, `migrate`, `verify` (по умолчанию `migrate`)             |
+| `--input`             | Исходный `.cs`-файл или директория с тестами (обязательно)          |
+| `--out`               | Выходная директория (опционально, авто-дефолт по режиму)            |
+| `--config`            | Путь к JSON-конфигу адаптера (опционально)                          |
+| `--format`            | Формат отчёта: `text`, `json`, `both` (по умолчанию `both`)         |
+| `--fail-on-unsupported` | Exit code 2 если есть unsupported actions                   |
+| `--fail-on-todo`      | Exit code 3 если есть TODO комментарии                              |
 
-Код выхода: `0` — unsupported-действий нет; `1` — обнаружены unsupported-действия.
-Это quality gate: exit code 1 сигнализирует, что результат требует ручной проверки.
-Полноценный режим `--analyze` (exit 0 со статистикой, без генерации файлов) пока не реализован.
+Коды выхода: `0` — успех; `1` — ошибка CLI; `2` — `--fail-on-unsupported`; `3` — `--fail-on-todo`.
 
 ## Как читать отчёт
 

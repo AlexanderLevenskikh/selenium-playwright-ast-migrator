@@ -1,4 +1,4 @@
-namespace Migrator.Core;
+namespace Migrator.Core.Models;
 
 public enum RecognitionConfidence
 {
