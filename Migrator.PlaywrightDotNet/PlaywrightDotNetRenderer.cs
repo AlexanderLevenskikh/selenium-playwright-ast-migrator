@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Migrator.Core;
 using Migrator.Core.Models;
@@ -13,7 +15,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         _indent = indent;
     }
 
-    public string Render(TestFileModel model, IProjectAdapter? adapter = null)
+    public string Render(TestFileModel model)
     {
         var sb = new StringBuilder();
 
@@ -22,7 +24,7 @@ public class PlaywrightDotNetRenderer : IRenderer
 
         if (!string.IsNullOrEmpty(model.Namespace))
         {
-            sb.AppendLine($"using Microsoft.Playwright.NUnit;");
+            sb.AppendLine("using Microsoft.Playwright.NUnit;");
             sb.AppendLine("using NUnit.Framework;");
             sb.AppendLine("using System.Threading.Tasks;");
             sb.AppendLine();
@@ -33,7 +35,8 @@ public class PlaywrightDotNetRenderer : IRenderer
         var className = model.ClassName + "Playwright";
         var allActions = model.Tests.SelectMany(t => t.BodyActions).ToList();
         var allSetupActions = model.SetUpActions.ToList();
-        var unsupportedCount = allActions.OfType<UnsupportedAction>().Count();
+        var allFileActions = allActions.Concat(allSetupActions).ToList();
+        var unsupportedCount = allFileActions.Count(a => a is UnsupportedAction);
 
         if (unsupportedCount > 0)
         {
@@ -47,13 +50,13 @@ public class PlaywrightDotNetRenderer : IRenderer
 
         if (model.SetUpActions.Any())
         {
-            RenderSetUp(sb, model.SetUpActions, adapter);
+            RenderSetUp(sb, model.SetUpActions);
             sb.AppendLine();
         }
 
         foreach (var test in model.Tests)
         {
-            RenderTest(sb, test, adapter);
+            RenderTest(sb, test);
             sb.AppendLine();
         }
 
@@ -62,19 +65,19 @@ public class PlaywrightDotNetRenderer : IRenderer
         return sb.ToString();
     }
 
-    void RenderSetUp(StringBuilder sb, IEnumerable<TestAction> actions, IProjectAdapter? adapter)
+    void RenderSetUp(StringBuilder sb, IEnumerable<TestAction> actions)
     {
         sb.AppendLine($"{_indent}[SetUp]");
         sb.AppendLine($"{_indent}public async Task SetUp()");
         sb.AppendLine($"{_indent}{{");
 
         foreach (var action in actions)
-            RenderAction(sb, action, adapter);
+            RenderAction(sb, action);
 
         sb.AppendLine($"{_indent}}}");
     }
 
-    void RenderTest(StringBuilder sb, TestModel test, IProjectAdapter? adapter)
+    void RenderTest(StringBuilder sb, TestModel test)
     {
         if (!string.IsNullOrEmpty(test.Category))
             sb.AppendLine($"{_indent}[Category(\"{test.Category}\")]");
@@ -83,7 +86,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         {
             if (!string.IsNullOrEmpty(caseData.RawSourceText))
             {
-                var raw = caseData.RawSourceText.TrimStart('[');
+                var raw = NormalizeAttribute(caseData.RawSourceText);
                 sb.AppendLine($"{_indent}{raw}");
             }
             else
@@ -107,7 +110,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         sb.AppendLine($"{_indent}{{");
 
         foreach (var action in test.BodyActions)
-            RenderAction(sb, action, adapter);
+            RenderAction(sb, action);
 
         sb.AppendLine($"{_indent}}}");
     }
@@ -126,15 +129,15 @@ public class PlaywrightDotNetRenderer : IRenderer
         }));
     }
 
-    void RenderAction(StringBuilder sb, TestAction action, IProjectAdapter? adapter)
+    void RenderAction(StringBuilder sb, TestAction action)
     {
         switch (action)
         {
             case ClickAction click:
-                RenderClick(sb, click, adapter);
+                RenderClick(sb, click);
                 break;
             case SendKeysAction sendKeys:
-                RenderSendKeys(sb, sendKeys, adapter);
+                RenderSendKeys(sb, sendKeys);
                 break;
             case AssertThatAction assertThat:
                 RenderAssertThat(sb, assertThat);
@@ -143,7 +146,7 @@ public class PlaywrightDotNetRenderer : IRenderer
                 RenderAssertAreEqual(sb, assertEqual);
                 break;
             case MethodInvocationAction methodInv:
-                RenderMethodInvocation(sb, methodInv, adapter);
+                RenderMethodInvocation(sb, methodInv);
                 break;
             case UnsupportedAction unsupported:
                 RenderUnsupported(sb, unsupported);
@@ -154,34 +157,86 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
     }
 
-    void RenderClick(StringBuilder sb, ClickAction action, IProjectAdapter? adapter)
+    void RenderClick(StringBuilder sb, ClickAction action)
     {
-        var target = ResolveTarget(action.TargetExpression, adapter);
-        if (target.IsMapped)
+        var target = action.Target;
+        if (target.Kind != TargetKind.Unresolved)
         {
-            sb.AppendLine($"{_indent}{_indent}await Page.{target.RenderTarget()}.ClickAsync(); // line {action.SourceLine}");
+            sb.AppendLine($"{_indent}{_indent}await {RenderTargetExpression(target)}.ClickAsync(); // line {action.SourceLine}");
         }
         else
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {action.TargetExpression}");
-            sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {action.TargetExpression}\").ClickAsync(); // line {action.SourceLine}");
+            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {target.SourceExpression}");
+            sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {target.SourceExpression}\").ClickAsync(); // line {action.SourceLine}");
         }
     }
 
-    void RenderSendKeys(StringBuilder sb, SendKeysAction action, IProjectAdapter? adapter)
+    void RenderSendKeys(StringBuilder sb, SendKeysAction action)
     {
-        var target = ResolveTarget(action.TargetExpression, adapter);
+        var target = action.Target;
         var text = ConvertExpression(action.TextExpression);
 
-        if (target.IsMapped)
+        if (target.Kind != TargetKind.Unresolved)
         {
-            sb.AppendLine($"{_indent}{_indent}await Page.{target.RenderTarget()}.FillAsync({text}); // line {action.SourceLine}");
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                sb.AppendLine($"{_indent}{_indent}// TODO: source input call has no value argument: {target.SourceExpression}");
+                sb.AppendLine($"{_indent}{_indent}// await {RenderTargetExpression(target)}.FillAsync(/* TODO */); // line {action.SourceLine}");
+            }
+            else if (TryRenderKeyExpression(action.TextExpression, out var keyName))
+            {
+                sb.AppendLine($"{_indent}{_indent}await {RenderTargetExpression(target)}.PressAsync(\"{keyName}\"); // line {action.SourceLine}");
+            }
+            else
+            {
+                sb.AppendLine($"{_indent}{_indent}await {RenderTargetExpression(target)}.FillAsync({text}); // line {action.SourceLine}");
+            }
         }
         else
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {action.TargetExpression}");
-            sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {action.TargetExpression}\").FillAsync({text}); // line {action.SourceLine}");
+            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {target.SourceExpression}");
+            if (string.IsNullOrWhiteSpace(text))
+                sb.AppendLine($"{_indent}{_indent}// await Page.Locator(\"TODO: {target.SourceExpression}\").FillAsync(/* TODO */); // line {action.SourceLine}");
+            else if (TryRenderKeyExpression(action.TextExpression, out var keyName))
+                sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {target.SourceExpression}\").PressAsync(\"{keyName}\"); // line {action.SourceLine}");
+            else
+                sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {target.SourceExpression}\").FillAsync({text}); // line {action.SourceLine}");
         }
+    }
+
+    bool TryRenderKeyExpression(string expression, out string keyName)
+    {
+        keyName = string.Empty;
+        var expr = expression.Trim();
+        if (!expr.StartsWith("Keys.", System.StringComparison.Ordinal))
+            return false;
+
+        keyName = expr.Substring("Keys.".Length);
+        return !string.IsNullOrWhiteSpace(keyName);
+    }
+
+    string NormalizeAttribute(string rawAttribute)
+    {
+        var raw = rawAttribute.Trim();
+        if (raw.StartsWith("[") && raw.EndsWith("]"))
+            return raw;
+
+        if (raw.StartsWith("["))
+            return raw + "]";
+
+        return $"[{raw}]";
+    }
+
+    string RenderTargetExpression(TargetExpression target)
+    {
+        var rendered = target.RenderLocator();
+        return target.Kind switch
+        {
+            TargetKind.PlaywrightLocator => rendered.StartsWith("Page.") ? rendered : $"Page.{rendered}",
+            TargetKind.PageObjectProperty => rendered,
+            TargetKind.RawExpression => rendered,
+            _ => $"Page.Locator(\"TODO: {target.SourceExpression}\")"
+        };
     }
 
     void RenderAssertThat(StringBuilder sb, AssertThatAction action)
@@ -200,35 +255,18 @@ public class PlaywrightDotNetRenderer : IRenderer
             $"{_indent}{_indent}Assert.That({actual}, Is.EqualTo({expected})); // line {action.SourceLine}");
     }
 
-    void RenderMethodInvocation(StringBuilder sb, MethodInvocationAction action, IProjectAdapter? adapter)
+    void RenderMethodInvocation(StringBuilder sb, MethodInvocationAction action)
     {
-        var targetMethod = adapter?.ResolveMethodTarget(action.MethodName);
         var converted = ConvertExpression(action.FullSourceText);
 
-        if (targetMethod != null)
-        {
-            sb.AppendLine($"{_indent}{_indent}// [{action.MethodName} -> {targetMethod}] {converted} // line {action.SourceLine}");
-        }
-        else
-        {
-            sb.AppendLine($"{_indent}{_indent}// [{action.MethodName}] {converted} // line {action.SourceLine}");
-            sb.AppendLine($"{_indent}{_indent}// TODO: manual review needed");
-        }
+        sb.AppendLine($"{_indent}{_indent}// [{action.MethodName}] {converted} // line {action.SourceLine}");
+        sb.AppendLine($"{_indent}{_indent}// TODO: manual review needed");
     }
 
     void RenderUnsupported(StringBuilder sb, UnsupportedAction action)
     {
         sb.AppendLine($"{_indent}{_indent}// TODO: UNSUPPORTED [{action.Reason}]");
         sb.AppendLine($"{_indent}{_indent}//   {EscapeComment(action.SourceText)}");
-    }
-
-    TargetExpression ResolveTarget(string sourceExpression, IProjectAdapter? adapter)
-    {
-        if (adapter != null)
-            return adapter.ResolveTarget(sourceExpression);
-
-        // No adapter — use legacy behavior based on confidence
-        return TargetExpression.Unmapped(sourceExpression);
     }
 
     string ConvertExpression(string expr)

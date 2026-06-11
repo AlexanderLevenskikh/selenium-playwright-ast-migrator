@@ -1,11 +1,12 @@
+using System.Collections.Generic;
 using Migrator.Core.Models;
 
 namespace Migrator.Core;
 
 /// <summary>
 /// Orchestrates the full migration pipeline:
-/// Roslyn parser -> source IR -> renderer (+ adapter) -> generated C# -> MigrationReport.
-/// Adapter is optional; when absent, all targets remain unmapped.
+/// Roslyn parser -> source IR -> adapter.Adapt() -> target IR -> renderer -> ReportBuilder -> MigrationReport.
+/// Adapter is optional; when absent, all targets remain unresolved.
 /// </summary>
 public class MigrationPipeline
 {
@@ -26,12 +27,12 @@ public class MigrationPipeline
     /// </summary>
     public PipelineResult ProcessFile(string filePath)
     {
-        var model = _parser.Parse(filePath);
-        var generated = _renderer.Render(model, _adapter);
+        var sourceModel = _parser.Parse(filePath);
+        var targetModel = _adapter != null ? _adapter.Adapt(sourceModel) : sourceModel;
+        var generated = _renderer.Render(targetModel);
+        var report = ReportBuilder.Build(targetModel, generated);
 
-        var report = BuildReport(model, generated);
-
-        return new PipelineResult(model, generated, report);
+        return new PipelineResult(sourceModel, targetModel, generated, report);
     }
 
     /// <summary>
@@ -40,65 +41,10 @@ public class MigrationPipeline
     public IEnumerable<PipelineResult> ProcessDirectory(string directoryPath)
     {
         var models = _parser.ParseDirectory(directoryPath);
-        return models.Select(model =>
-        {
-            var generated = _renderer.Render(model, _adapter);
-            var report = BuildReport(model, generated);
-            return new PipelineResult(model, generated, report);
-        }).ToList();
-    }
-
-    MigrationReport BuildReport(TestFileModel model, string generatedOutput)
-    {
-        var allActions = model.Tests.SelectMany(t => t.BodyActions).ToList();
-        var allSetupActions = model.SetUpActions.ToList();
-        var allFileActions = allActions.Concat(allSetupActions).ToList();
-
-        var unsupportedActions = allFileActions.OfType<UnsupportedAction>().ToList();
-        var semanticCount = allFileActions.Count(a => a.Confidence == RecognitionConfidence.Semantic);
-        var syntaxFallbackCount = allFileActions.Count(a => a.Confidence == RecognitionConfidence.SyntaxFallback);
-
-        var uiActions = allFileActions.OfType<ClickAction>().Cast<object>()
-            .Concat(allFileActions.OfType<SendKeysAction>()).ToList();
-
-        var mappedTargets = _adapter is not null
-            ? allFileActions.Count(a =>
-            {
-                if (a is ClickAction click)
-                    return _adapter.ResolveTarget(click.TargetExpression).IsMapped;
-                if (a is SendKeysAction sk)
-                    return _adapter.ResolveTarget(sk.TargetExpression).IsMapped;
-                return false;
-            })
-            : 0;
-
-        var unmappedTargets = _adapter is not null
-            ? allFileActions.Count(a =>
-            {
-                if (a is ClickAction click)
-                    return !_adapter.ResolveTarget(click.TargetExpression).IsMapped;
-                if (a is SendKeysAction sk)
-                    return !_adapter.ResolveTarget(sk.TargetExpression).IsMapped;
-                return false;
-            })
-            : uiActions.Count;
-
-        var todoComments = generatedOutput.Split('\n').Count(line =>
-            line.TrimStart().StartsWith("// TODO:"));
-
-        return new MigrationReport(
-            SourceFilePath: model.FilePath,
-            TotalTests: model.Tests.Count(),
-            SuccessfullyConvertedTests: model.Tests.Count(t => !t.BodyActions.Any(a => a is UnsupportedAction)),
-            UnsupportedActions: unsupportedActions,
-            GeneratedOutput: generatedOutput,
-            SemanticActions: semanticCount,
-            SyntaxFallbackActions: syntaxFallbackCount,
-            UnsupportedCount: unsupportedActions.Count,
-            MappedTargets: mappedTargets,
-            UnmappedTargets: unmappedTargets,
-            TodoComments: todoComments
-        );
+        var results = new List<PipelineResult>();
+        foreach (var model in models)
+            results.Add(ProcessFile(model.FilePath));
+        return results;
     }
 }
 
@@ -107,6 +53,7 @@ public class MigrationPipeline
 /// </summary>
 public record PipelineResult(
     TestFileModel SourceModel,
+    TestFileModel TargetModel,
     string GeneratedOutput,
     MigrationReport Report
 );

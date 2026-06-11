@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
 using Migrator.Core;
 using Migrator.Core.Models;
 using System.Text.Json;
@@ -5,27 +8,42 @@ using System.Text.Json;
 namespace Migrator.SeleniumCSharp;
 
 /// <summary>
-/// Concrete adapter implementation. Uses ProjectAdapterConfig (neutral models) to resolve
-/// source expressions to target expressions. Config is loaded from JSON file.
+/// Concrete adapter implementation. Pure resolution — no side effects on ResolveTarget.
+/// Uses ProjectAdapterConfig (neutral models) to resolve source expressions to target expressions.
 /// </summary>
 public class DefaultProjectAdapter : IProjectAdapter
 {
-    readonly ProjectAdapterConfig? _config;
-    readonly Dictionary<string, TargetExpression> _targetCache = new();
-    readonly Dictionary<string, string> _pageObjectCache = new();
-    readonly Dictionary<string, string> _methodCache = new();
-    int _mappedCount;
-    int _unmappedCount;
+    readonly Dictionary<string, MappedTarget> _targetMap = new();
+    readonly Dictionary<string, string> _pageObjectMap = new();
+    readonly Dictionary<string, string> _methodMap = new();
 
     public DefaultProjectAdapter()
     {
-        _config = null;
     }
 
     public DefaultProjectAdapter(ProjectAdapterConfig config)
     {
-        _config = config;
-        PreloadMappings();
+        if (config == null) return;
+
+        foreach (var mapping in config.UiTargets)
+        {
+            var kind = mapping.TargetKind switch
+            {
+                "TestId" => TargetKind.PlaywrightLocator,
+                "Locator" => TargetKind.PlaywrightLocator,
+                "PageObjectProperty" => TargetKind.PageObjectProperty,
+                "RawExpression" => TargetKind.RawExpression,
+                _ => TargetKind.PlaywrightLocator
+            };
+            _targetMap[mapping.SourceExpression] = new MappedTarget(
+                mapping.SourceExpression, mapping.TargetExpression, kind);
+        }
+
+        foreach (var po in config.PageObjects)
+            _pageObjectMap[po.SourceType] = po.VariableName;
+
+        foreach (var m in config.Methods)
+            _methodMap[m.SourceMethod] = m.TargetMethod;
     }
 
     public DefaultProjectAdapter(string configPath)
@@ -42,59 +60,42 @@ public class DefaultProjectAdapter : IProjectAdapter
         return config;
     }
 
-    void PreloadMappings()
-    {
-        if (_config == null) return;
-
-        foreach (var mapping in _config.UiTargets)
-            _targetCache[mapping.SourceExpression] = TargetExpression.Mapped(mapping.SourceExpression, mapping.TargetExpression);
-
-        foreach (var po in _config.PageObjects)
-            _pageObjectCache[po.SourceType] = po.VariableName;
-
-        foreach (var m in _config.Methods)
-            _methodCache[m.SourceMethod] = m.TargetMethod;
-    }
-
+    /// <summary>
+    /// Pure resolution — no side effects. Returns MappedTarget if mapping exists,
+    /// UnresolvedTarget otherwise.
+    /// </summary>
     public TargetExpression ResolveTarget(string sourceExpression)
     {
-        if (_config == null)
-        {
-            _unmappedCount++;
-            return TargetExpression.Unmapped(sourceExpression);
-        }
-
-        if (_targetCache.TryGetValue(sourceExpression, out var target))
-        {
-            _mappedCount++;
+        if (_targetMap.TryGetValue(sourceExpression, out var target))
             return target;
-        }
 
         // Try prefix matching: "page.User.Click" should match "page.User"
-        foreach (var entry in _targetCache)
+        foreach (var entry in _targetMap)
         {
             if (sourceExpression.StartsWith(entry.Key + ".", StringComparison.Ordinal) ||
                 sourceExpression == entry.Key)
             {
-                _mappedCount++;
                 return entry.Value;
             }
         }
 
-        _unmappedCount++;
-        return TargetExpression.Unmapped(sourceExpression);
+        return new UnresolvedTarget(sourceExpression);
     }
 
     public string? ResolvePageObjectVariable(string sourceType)
     {
-        return _pageObjectCache.GetValueOrDefault(sourceType);
+        return _pageObjectMap.GetValueOrDefault(sourceType);
     }
 
     public string? ResolveMethodTarget(string sourceMethod)
     {
-        return _methodCache.GetValueOrDefault(sourceMethod);
+        return _methodMap.GetValueOrDefault(sourceMethod);
     }
 
+    /// <summary>
+    /// Apply adapter mappings to a parsed file model, producing a target model
+    /// where ClickAction/SendKeysAction carry resolved TargetExpression.
+    /// </summary>
     public TestFileModel Adapt(TestFileModel sourceModel)
     {
         var adaptedTests = sourceModel.Tests.Select(AdaptTest).ToList();
@@ -129,17 +130,14 @@ public class DefaultProjectAdapter : IProjectAdapter
         {
             ClickAction click => new ClickAction(
                 click.SourceLine,
-                click.TargetExpression,
+                ResolveTarget(click.Target.SourceExpression),
                 click.Confidence),
             SendKeysAction sendKeys => new SendKeysAction(
                 sendKeys.SourceLine,
-                sendKeys.TargetExpression,
+                ResolveTarget(sendKeys.Target.SourceExpression),
                 sendKeys.TextExpression,
                 sendKeys.Confidence),
             _ => action
         };
     }
-
-    public int MappedTargets => _mappedCount;
-    public int UnmappedTargets => _unmappedCount;
 }

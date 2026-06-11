@@ -2,13 +2,18 @@ namespace Migrator.Core.Models;
 
 public sealed class SendKeysAction : TestAction
 {
-    public string TargetExpression { get; }
+    public TargetExpression Target { get; }
     public string TextExpression { get; }
 
-    public SendKeysAction(int sourceLine, string targetExpression, string textExpression, RecognitionConfidence confidence = RecognitionConfidence.Semantic)
+    public SendKeysAction(int sourceLine, TargetExpression target, string textExpression, RecognitionConfidence confidence = RecognitionConfidence.Semantic)
         : base(sourceLine, confidence)
     {
-        TargetExpression = targetExpression;
+        Target = target;
         TextExpression = textExpression;
+    }
+
+    public SendKeysAction(int sourceLine, string rawTarget, string textExpression, RecognitionConfidence confidence = RecognitionConfidence.Semantic)
+        : this(sourceLine, TargetExpression.Unresolved(rawTarget), textExpression, confidence)
+    {
     }
 }

@@ -9,45 +9,20 @@ public class AssertInvocationRecognizer : IInvocationRecognizer
     {
         if (ctx.MethodName == "That" && ctx.ReceiverText.Contains("Assert"))
         {
-            var args = ExtractArgs(ctx.FullText);
-            return new AssertThatAction(ctx.SourceLine, args[0], args[1], RecognitionConfidence.SyntaxFallback);
+            var args = ctx.ArgumentTexts;
+            var actual = args.Count > 0 ? args[0] : string.Empty;
+            var constraint = args.Count > 1 ? args[1] : string.Empty;
+            return new AssertThatAction(ctx.SourceLine, actual, constraint, RecognitionConfidence.SyntaxFallback);
         }
 
         if (ctx.MethodName == "AreEqual" && ctx.ReceiverText.Contains("Assert"))
         {
-            var args = ExtractArgs(ctx.FullText);
-            return new AssertAreEqualAction(ctx.SourceLine, args[0], args.Length > 1 ? args[1] : string.Empty, RecognitionConfidence.SyntaxFallback);
+            var args = ctx.ArgumentTexts;
+            var expected = args.Count > 0 ? args[0] : string.Empty;
+            var actual = args.Count > 1 ? args[1] : string.Empty;
+            return new AssertAreEqualAction(ctx.SourceLine, expected, actual, RecognitionConfidence.SyntaxFallback);
         }
 
         return null;
-    }
-
-    static string[] ExtractArgs(string fullText)
-    {
-        var paren = fullText.IndexOf('(');
-        if (paren < 0) return Array.Empty<string>();
-
-        var inner = fullText.Substring(paren + 1);
-        var close = inner.LastIndexOf(')');
-        var content = close >= 0 ? inner.Substring(0, close) : inner;
-
-        var parts = new List<string>();
-        var depth = 0;
-        var start = 0;
-
-        for (var i = 0; i < content.Length; i++)
-        {
-            var c = content[i];
-            if (c == '(' || c == '<') depth++;
-            if (c == ')' || c == '>') depth--;
-            if (c == ',' && depth == 0)
-            {
-                parts.Add(content.Substring(start, i - start).Trim());
-                start = i + 1;
-            }
-        }
-
-        parts.Add(content.Substring(start).Trim());
-        return parts.ToArray();
     }
 }

@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 
 namespace ArBilling.E2ETests.Tests.Functional.Playwright;
 
+// WARNING: 3 unsupported action(s) found. See TODO comments below.
+
 public class WidgetPlaywright : PageTest
 {
 
@@ -55,8 +57,8 @@ public class WidgetPlaywright : PageTest
 	[Test]
 	public async Task CheckSearchToWidget()
 	{
-		await Page.GetByTestId("widget-search").FillAsync(); // line 47
-		await Page.GetByTestId("widget-search").FillAsync(); // line 48
+		await Page.GetByTestId("widget-search").FillAsync("Отправка в Диадок АНО ДПО 12.2022 (СЦ 0669)"); // line 47
+		await Page.GetByTestId("widget-search").PressAsync("Enter"); // line 48
 		// [ValidateLoading] page.Loader.ValidateLoading() // line 49
 		// TODO: manual review needed
 		// [WaitPresence] page.FuterUser.WaitPresence() // line 50

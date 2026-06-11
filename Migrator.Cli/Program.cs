@@ -1,4 +1,6 @@
-﻿using Migrator.Core;
+﻿using System;
+using System.IO;
+using Migrator.Core;
 using Migrator.Core.Models;
 using Migrator.PlaywrightDotNet;
 using Migrator.Roslyn;
@@ -28,15 +30,17 @@ if (configPath != null && File.Exists(configPath))
     Console.WriteLine($"Loaded adapter config: {configPath}");
 }
 
-IEnumerable<TestFileModel> models;
+var pipeline = new MigrationPipeline(parser, renderer, adapter);
+
+IEnumerable<PipelineResult> results;
 
 if (Directory.Exists(inputPath))
 {
-    models = parser.ParseDirectory(inputPath);
+    results = pipeline.ProcessDirectory(inputPath);
 }
 else
 {
-    models = new[] { parser.Parse(inputPath) };
+    results = new[] { pipeline.ProcessFile(inputPath) };
 }
 
 int totalFiles = 0;
@@ -45,65 +49,33 @@ int totalUnsupported = 0;
 int totalMapped = 0;
 int totalUnmapped = 0;
 
-foreach (var model in models)
+foreach (var result in results)
 {
-    var output = renderer.Render(model, adapter);
-
-    var allActions = model.Tests.SelectMany(t => t.BodyActions).ToList();
-    var allSetupActions = model.SetUpActions.ToList();
-    var allFileActions = allActions.Concat(allSetupActions).ToList();
-    var unsupportedCount = allActions.OfType<UnsupportedAction>().Count();
-    var semanticCount = allFileActions.Count(a => a.Confidence == RecognitionConfidence.Semantic);
-    var syntaxFallbackCount = allFileActions.Count(a => a.Confidence == RecognitionConfidence.SyntaxFallback);
-
-    var mappedTargets = 0;
-    var unmappedTargets = 0;
-    if (adapter is DefaultProjectAdapter dpa)
-    {
-        mappedTargets = dpa.MappedTargets;
-        unmappedTargets = dpa.UnmappedTargets;
-    }
-
-    var todoComments = output.Split('\n').Count(line =>
-        line.TrimStart().StartsWith("// TODO:"));
+    var report = result.Report;
 
     totalFiles++;
-    totalTests += model.Tests.Count();
-    totalUnsupported += unsupportedCount;
-    totalMapped += mappedTargets;
-    totalUnmapped += unmappedTargets;
+    totalTests += report.TotalTests;
+    totalUnsupported += report.UnsupportedCount;
+    totalMapped += report.MappedTargets;
+    totalUnmapped += report.UnmappedTargets;
 
     var outDir = outputPath != null
         ? Path.GetDirectoryName(Path.GetFullPath(outputPath))
         : Path.Combine(Path.GetDirectoryName(inputPath) ?? ".", "Output");
     var outName = outputPath?.Contains(Path.DirectorySeparatorChar.ToString()) == true
         ? Path.GetFileName(outputPath)
-        : $"{model.ClassName}Playwright.cs";
+        : $"{result.SourceModel.ClassName}Playwright.cs";
     Directory.CreateDirectory(outDir ?? ".");
     var fullOut = Path.Combine(outDir ?? ".", outName);
-    File.WriteAllText(fullOut, output);
+    File.WriteAllText(fullOut, report.GeneratedOutput);
 
-    var report = new MigrationReport(
-        SourceFilePath: model.FilePath,
-        TotalTests: model.Tests.Count(),
-        SuccessfullyConvertedTests: model.Tests.Count(t => !t.BodyActions.Any(a => a is UnsupportedAction)),
-        UnsupportedActions: model.Tests.SelectMany(t => t.BodyActions).OfType<UnsupportedAction>(),
-        GeneratedOutput: fullOut,
-        SemanticActions: semanticCount,
-        SyntaxFallbackActions: syntaxFallbackCount,
-        UnsupportedCount: unsupportedCount,
-        MappedTargets: mappedTargets,
-        UnmappedTargets: unmappedTargets,
-        TodoComments: todoComments
-    );
-
-    Console.WriteLine($"Processed: {model.FilePath}");
+    Console.WriteLine($"Processed: {report.SourceFilePath}");
     Console.WriteLine($"  Tests: {report.TotalTests}");
     Console.WriteLine($"  Unsupported: {report.UnsupportedCount}");
     Console.WriteLine($"  Semantic: {report.SemanticActions}, SyntaxFallback: {report.SyntaxFallbackActions}");
     Console.WriteLine($"  Mapped: {report.MappedTargets}, Unmapped: {report.UnmappedTargets}");
     Console.WriteLine($"  TODO comments: {report.TodoComments}");
-    Console.WriteLine($"  Output: {report.GeneratedOutput}");
+    Console.WriteLine($"  Output: {fullOut}");
 }
 
 Console.WriteLine();

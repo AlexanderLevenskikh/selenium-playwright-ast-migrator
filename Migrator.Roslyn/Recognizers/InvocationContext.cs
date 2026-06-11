@@ -7,7 +7,8 @@ public record InvocationContext(
     string ReceiverText,
     string FullText,
     int SourceLine,
-    bool SymbolResolved
+    bool SymbolResolved,
+    IReadOnlyList<string> ArgumentTexts
 );
 
 public interface IInvocationRecognizer

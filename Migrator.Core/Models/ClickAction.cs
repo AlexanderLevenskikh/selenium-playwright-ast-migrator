@@ -2,11 +2,16 @@ namespace Migrator.Core.Models;
 
 public sealed class ClickAction : TestAction
 {
-    public string TargetExpression { get; }
+    public TargetExpression Target { get; }
 
-    public ClickAction(int sourceLine, string targetExpression, RecognitionConfidence confidence = RecognitionConfidence.Semantic)
+    public ClickAction(int sourceLine, TargetExpression target, RecognitionConfidence confidence = RecognitionConfidence.Semantic)
         : base(sourceLine, confidence)
     {
-        TargetExpression = targetExpression;
+        Target = target;
+    }
+
+    public ClickAction(int sourceLine, string rawTarget, RecognitionConfidence confidence = RecognitionConfidence.Semantic)
+        : this(sourceLine, TargetExpression.Unresolved(rawTarget), confidence)
+    {
     }
 }

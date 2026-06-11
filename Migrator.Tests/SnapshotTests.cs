@@ -1,9 +1,12 @@
+using System.IO;
+using System.Linq;
 using System.Reflection;
 using Migrator.Core;
 using Migrator.Core.Models;
 using Migrator.PlaywrightDotNet;
 using Migrator.Roslyn;
 using Migrator.SeleniumCSharp;
+using Xunit;
 
 namespace Migrator.Tests;
 
@@ -22,7 +25,7 @@ public class SnapshotTests
 
         var result = pipeline.ProcessFile(Path.Combine(_testFilesDir, "Widget.cs"));
 
-        var model = result.SourceModel;
+        var model = result.TargetModel;
         var output = result.GeneratedOutput;
         var report = result.Report;
 
@@ -55,6 +58,10 @@ public class SnapshotTests
 
         Assert.Contains("// TODO:", output);
         Assert.Contains("// TODO: UNSUPPORTED", output);
+
+        Assert.Equal(
+            Normalize(File.ReadAllText(Path.Combine(_testFilesDir, "Expected", "Widget.generated.cs"))),
+            Normalize(output));
 
         Assert.True(report.MappedTargets > 0, $"Expected mapped targets > 0, got {report.MappedTargets}");
         Assert.True(report.TotalTests == 3);
@@ -102,10 +109,40 @@ public class SnapshotTests
         Assert.Contains("// TODO:", output);
         Assert.Contains("// TODO: UNSUPPORTED", output);
 
+        Assert.Equal(
+            Normalize(File.ReadAllText(Path.Combine(_testFilesDir, "Expected", "ButtonTests.generated.cs"))),
+            Normalize(output));
+
         Assert.True(report.MappedTargets > 0, $"Expected mapped targets > 0, got {report.MappedTargets}");
         Assert.Equal(3, report.TotalTests);
         Assert.True(report.TodoComments > 0);
         Assert.Equal(report.TodoComments, output.Split('\n').Count(l => l.TrimStart().StartsWith("// TODO:")));
+    }
+
+    [Fact]
+    public void Snapshot_NoUnsupportedActions_NoWarningBanner()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "NoUnsupported",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel(
+                    Name: "DoClick",
+                    Category: null,
+                    CaseData: Array.Empty<TestCaseData>(),
+                    Parameters: Array.Empty<MethodParameterModel>(),
+                    BodyActions: new[] { (TestAction)new ClickAction(5, "btn") }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.DoesNotContain("WARNING", output);
+        Assert.Contains("class NoUnsupportedPlaywright : PageTest", output);
     }
 
     [Fact]
@@ -123,8 +160,8 @@ public class SnapshotTests
 
         Assert.True(report.UnsupportedCount >= 0);
 
-        var allActions = result.SourceModel.Tests.SelectMany(t => t.BodyActions)
-            .Concat(result.SourceModel.SetUpActions).ToList();
+        var allActions = result.TargetModel.Tests.SelectMany(t => t.BodyActions)
+            .Concat(result.TargetModel.SetUpActions).ToList();
 
         var unsupported = allActions.OfType<UnsupportedAction>().ToList();
         Assert.Equal(unsupported.Count, report.UnsupportedCount);
@@ -166,7 +203,7 @@ public class SnapshotTests
     }
 
     [Fact]
-    public void Snapshot_Widget_NoAdapter_AllTargetsUnmapped()
+    public void Snapshot_Widget_NoAdapter_AllTargetsUnresolved()
     {
         var parser = new RoslynTestFileParser();
         var renderer = new PlaywrightDotNetRenderer();
@@ -178,7 +215,7 @@ public class SnapshotTests
         var report = result.Report;
 
         Assert.Equal(0, report.MappedTargets);
-        Assert.True(report.UnmappedTargets > 0, "Without adapter, all Click/SendKeys targets should be unmapped");
+        Assert.True(report.UnmappedTargets > 0, "Without adapter, all Click/SendKeys targets should be unresolved");
         Assert.Contains("TODO: page.User", output);
     }
 
@@ -203,4 +240,51 @@ public class SnapshotTests
         Assert.Contains("GetByTestId(\"widget-user\")", widgetResult.GeneratedOutput);
         Assert.True(widgetResult.Report.MappedTargets > 0);
     }
+
+    [Fact]
+    public void Snapshot_SourceVsTargetModel_AdapterResolvesTargets()
+    {
+        var adapterConfigPath = Path.Combine(_testFilesDir, "adapter-config.json");
+        var adapter = new DefaultProjectAdapter(adapterConfigPath);
+        var parser = new RoslynTestFileParser();
+        var renderer = new PlaywrightDotNetRenderer();
+        var pipeline = new MigrationPipeline(parser, renderer, adapter);
+
+        var result = pipeline.ProcessFile(Path.Combine(_testFilesDir, "Widget.cs"));
+
+        var sourceClicks = result.SourceModel.Tests.SelectMany(t => t.BodyActions)
+            .OfType<ClickAction>().ToList();
+        var targetClicks = result.TargetModel.Tests.SelectMany(t => t.BodyActions)
+            .OfType<ClickAction>().ToList();
+
+        Assert.Equal(sourceClicks.Count, targetClicks.Count);
+
+        Assert.All(targetClicks, c => Assert.NotNull(c.Target));
+
+        var mappedInTarget = targetClicks.Count(c => c.Target.Kind != TargetKind.Unresolved);
+        Assert.True(mappedInTarget > 0, "Adapter should resolve at least one Click target");
+    }
+
+    [Fact]
+    public void Snapshot_ReportBuilder_IsPure()
+    {
+        var adapterConfigPath = Path.Combine(_testFilesDir, "adapter-config.json");
+        var adapter = new DefaultProjectAdapter(adapterConfigPath);
+        var parser = new RoslynTestFileParser();
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var model = parser.Parse(Path.Combine(_testFilesDir, "Widget.cs"));
+        var targetModel = adapter.Adapt(model);
+        var output = renderer.Render(targetModel);
+
+        var report1 = ReportBuilder.Build(targetModel, output);
+        var report2 = ReportBuilder.Build(targetModel, output);
+
+        Assert.Equal(report1.MappedTargets, report2.MappedTargets);
+        Assert.Equal(report1.UnmappedTargets, report2.UnmappedTargets);
+        Assert.Equal(report1.TodoComments, report2.TodoComments);
+        Assert.Equal(report1.UnsupportedCount, report2.UnsupportedCount);
+    }
+
+    static string Normalize(string text) => text.Replace("\r\n", "\n").Trim();
 }

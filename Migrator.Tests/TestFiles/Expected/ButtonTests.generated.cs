@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 
 namespace ArBilling.E2ETests.Tests.NonCategory.Playwright;
 
+// WARNING: 2 unsupported action(s) found. See TODO comments below.
+
 public class ButtonTestsPlaywright : PageTest
 {
 

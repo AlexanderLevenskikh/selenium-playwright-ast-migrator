@@ -104,8 +104,19 @@ public class RoslynTestFileParser : ITestFileParser
 
     public IEnumerable<TestFileModel> ParseDirectory(string directoryPath)
     {
-        var files = Directory.GetFiles(directoryPath, "*.cs", SearchOption.AllDirectories);
+        var files = Directory.GetFiles(directoryPath, "*.cs", SearchOption.AllDirectories)
+            .Where(IsInputFixtureFile);
         return files.Select(Parse).ToList();
+    }
+
+    static bool IsInputFixtureFile(string filePath)
+    {
+        var fileName = Path.GetFileName(filePath);
+        if (fileName.EndsWith(".generated.cs", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var parts = filePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return !parts.Any(p => string.Equals(p, "Expected", StringComparison.OrdinalIgnoreCase));
     }
 
     TestModel ParseTestMethod(MethodDeclarationSyntax method, SemanticModel semanticModel)
@@ -209,7 +220,11 @@ public class RoslynTestFileParser : ITestFileParser
         var fullText = invocation.ToString().Trim().Trim(';');
         var symbolResolved = methodSymbol != null;
 
-        var ctx = new InvocationContext(methodName, receiverText, fullText, line, symbolResolved);
+        var argumentTexts = invocation.ArgumentList.Arguments
+            .Select(a => a.Expression.ToString())
+            .ToArray();
+
+        var ctx = new InvocationContext(methodName, receiverText, fullText, line, symbolResolved, argumentTexts);
 
         // --- Semantic path: try recognizers with symbol info ---
         if (symbolResolved)

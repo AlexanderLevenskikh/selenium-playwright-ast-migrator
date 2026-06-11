@@ -10,7 +10,7 @@ public interface IProjectAdapter
 {
     /// <summary>
     /// Resolve a source UI expression (e.g. "page.User") to a target expression.
-    /// Returns MappedTarget if a mapping exists, UnmappedTarget otherwise.
+    /// Pure — no side effects.
     /// </summary>
     TargetExpression ResolveTarget(string sourceExpression);
 
@@ -26,6 +26,7 @@ public interface IProjectAdapter
 
     /// <summary>
     /// Apply adapter mappings to a parsed file model, producing target IR.
+    /// ClickAction and SendKeysAction will carry resolved TargetExpression.
     /// </summary>
     TestFileModel Adapt(TestFileModel sourceModel);
 }

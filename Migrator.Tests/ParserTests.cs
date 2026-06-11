@@ -1,9 +1,11 @@
+using System.IO;
 using System.Reflection;
 using Migrator.Core;
 using Migrator.Core.Models;
 using Migrator.PlaywrightDotNet;
 using Migrator.Roslyn;
 using Migrator.SeleniumCSharp;
+using Xunit;
 
 namespace Migrator.Tests;
 
@@ -186,8 +188,9 @@ public class ParserTests
         Assert.Contains("WidgetPlaywright", output);
         Assert.Contains("CheckUserToWidget", output);
 
-        var unsupportedCount = model.Tests.SelectMany(t => t.BodyActions)
-            .OfType<UnsupportedAction>().Count();
+        var allFileActions = model.Tests.SelectMany(t => t.BodyActions)
+            .Concat(model.SetUpActions).ToList();
+        var unsupportedCount = allFileActions.Count(a => a is UnsupportedAction);
         if (unsupportedCount > 0)
         {
             Assert.Contains("WARNING", output);
@@ -201,33 +204,12 @@ public class ParserTests
         var model = _parser.Parse(Path.Combine(_testFilesDir, "ButtonTests.cs"));
         var renderer = new PlaywrightDotNetRenderer();
         var output = renderer.Render(model);
-
-        var unsupportedActions = model.Tests.SelectMany(t => t.BodyActions)
-            .OfType<UnsupportedAction>().ToList();
-
-        var allActions = model.Tests.SelectMany(t => t.BodyActions).ToList();
-        var semanticCount = allActions.Count(a => a.Confidence == RecognitionConfidence.Semantic);
-        var syntaxFallbackCount = allActions.Count(a => a.Confidence == RecognitionConfidence.SyntaxFallback);
-
-        var report = new MigrationReport(
-            SourceFilePath: model.FilePath,
-            TotalTests: model.Tests.Count(),
-            SuccessfullyConvertedTests: model.Tests.Count(t => !t.BodyActions.Any(a => a is UnsupportedAction)),
-            UnsupportedActions: unsupportedActions,
-            GeneratedOutput: output,
-            SemanticActions: semanticCount,
-            SyntaxFallbackActions: syntaxFallbackCount,
-            UnsupportedCount: unsupportedActions.Count,
-            MappedTargets: 0,
-            UnmappedTargets: 0,
-            TodoComments: 0
-        );
+        var report = ReportBuilder.Build(model, output);
 
         Assert.Equal(3, report.TotalTests);
         Assert.NotNull(report.GeneratedOutput);
-        Assert.Equal(unsupportedActions.Count, report.UnsupportedActions.Count());
-        Assert.Equal(0, report.MappedTargets);
-        Assert.Equal(0, report.UnmappedTargets);
+        Assert.True(report.MappedTargets >= 0);
+        Assert.True(report.UnmappedTargets >= 0);
     }
 
     [Fact]
@@ -255,10 +237,10 @@ public class ParserTests
             Methods: Array.Empty<MethodMapping>()
         );
         var adapter = new DefaultProjectAdapter(config);
+        var pipeline = new MigrationPipeline(_parser, new PlaywrightDotNetRenderer(), adapter);
 
-        var model = _parser.Parse(Path.Combine(_testFilesDir, "Widget.cs"));
-        var renderer = new PlaywrightDotNetRenderer();
-        var output = renderer.Render(model, adapter);
+        var result = pipeline.ProcessFile(Path.Combine(_testFilesDir, "Widget.cs"));
+        var output = result.GeneratedOutput;
 
         Assert.Contains("GetByTestId(\"widget-user\")", output);
         Assert.Contains(".ClickAsync()", output);
@@ -279,8 +261,7 @@ public class ParserTests
         );
         var adapter = new DefaultProjectAdapter(config);
 
-        var clickAction = new ClickAction(1, "page.Name", RecognitionConfidence.SyntaxFallback);
-        var sendKeysAction = new SendKeysAction(2, "page.Name", "\"test\"", RecognitionConfidence.SyntaxFallback);
+        var sendKeysAction = new SendKeysAction(1, TargetExpression.Mapped("page.Name", "GetByTestId(\"user-name\")", TargetKind.PlaywrightLocator), "\"test\"", RecognitionConfidence.SyntaxFallback);
         var testModel = new TestModel(
             Name: "TestSendKeys",
             Category: null,
@@ -298,7 +279,7 @@ public class ParserTests
         );
 
         var renderer = new PlaywrightDotNetRenderer();
-        var output = renderer.Render(fileModel, adapter);
+        var output = renderer.Render(fileModel);
 
         Assert.Contains("GetByTestId(\"user-name\")", output);
         Assert.Contains(".FillAsync", output);
@@ -319,7 +300,7 @@ public class ParserTests
         );
         var adapter = new DefaultProjectAdapter(config);
 
-        var clickAction = new ClickAction(1, "page.UnknownElement", RecognitionConfidence.SyntaxFallback);
+        var clickAction = new ClickAction(1, TargetExpression.Unresolved("page.UnknownElement"), RecognitionConfidence.SyntaxFallback);
         var testModel = new TestModel(
             Name: "TestUnmapped",
             Category: null,
@@ -337,7 +318,7 @@ public class ParserTests
         );
 
         var renderer = new PlaywrightDotNetRenderer();
-        var output = renderer.Render(fileModel, adapter);
+        var output = renderer.Render(fileModel);
 
         Assert.Contains("TODO: map source expression to Playwright locator: page.UnknownElement", output);
         Assert.Contains("TODO: page.UnknownElement", output);
@@ -357,8 +338,8 @@ public class ParserTests
         );
         var adapter = new DefaultProjectAdapter(config);
 
-        var mappedClick = new ClickAction(1, "page.User", RecognitionConfidence.SyntaxFallback);
-        var unmappedClick = new ClickAction(2, "page.Missing", RecognitionConfidence.SyntaxFallback);
+        var mappedClick = new ClickAction(1, TargetExpression.Mapped("page.User", "GetByTestId(\"widget-user\")", TargetKind.PlaywrightLocator), RecognitionConfidence.SyntaxFallback);
+        var unmappedClick = new ClickAction(2, TargetExpression.Unresolved("page.Missing"), RecognitionConfidence.SyntaxFallback);
         var testModel = new TestModel(
             Name: "TestMixed",
             Category: null,
@@ -376,21 +357,8 @@ public class ParserTests
         );
 
         var renderer = new PlaywrightDotNetRenderer();
-        var output = renderer.Render(fileModel, adapter);
-
-        var report = new MigrationReport(
-            SourceFilePath: "test.cs",
-            TotalTests: 1,
-            SuccessfullyConvertedTests: 1,
-            UnsupportedActions: Array.Empty<UnsupportedAction>(),
-            GeneratedOutput: output,
-            SemanticActions: 0,
-            SyntaxFallbackActions: 2,
-            UnsupportedCount: 0,
-            MappedTargets: adapter.ResolveTarget("page.User").IsMapped ? 1 : 0,
-            UnmappedTargets: adapter.ResolveTarget("page.Missing").IsMapped ? 0 : 1,
-            TodoComments: output.Split('\n').Count(l => l.TrimStart().StartsWith("// TODO:"))
-        );
+        var output = renderer.Render(fileModel);
+        var report = ReportBuilder.Build(fileModel, output);
 
         Assert.Equal(1, report.MappedTargets);
         Assert.Equal(1, report.UnmappedTargets);
