@@ -4,5 +4,5 @@ namespace Migrator.Core;
 
 public interface IRenderer
 {
-    string Render(TestFileModel model);
+    string Render(TestFileModel model, IProjectAdapter? adapter = null);
 }

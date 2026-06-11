@@ -9,5 +9,9 @@ public record MigrationReport(
     IEnumerable<UnsupportedAction> UnsupportedActions,
     string? GeneratedOutput,
     int SemanticActions,
-    int SyntaxFallbackActions
+    int SyntaxFallbackActions,
+    int UnsupportedCount,
+    int MappedTargets,
+    int UnmappedTargets,
+    int TodoComments
 );

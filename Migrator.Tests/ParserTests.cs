@@ -3,6 +3,7 @@ using Migrator.Core;
 using Migrator.Core.Models;
 using Migrator.PlaywrightDotNet;
 using Migrator.Roslyn;
+using Migrator.SeleniumCSharp;
 
 namespace Migrator.Tests;
 
@@ -215,12 +216,18 @@ public class ParserTests
             UnsupportedActions: unsupportedActions,
             GeneratedOutput: output,
             SemanticActions: semanticCount,
-            SyntaxFallbackActions: syntaxFallbackCount
+            SyntaxFallbackActions: syntaxFallbackCount,
+            UnsupportedCount: unsupportedActions.Count,
+            MappedTargets: 0,
+            UnmappedTargets: 0,
+            TodoComments: 0
         );
 
         Assert.Equal(3, report.TotalTests);
         Assert.NotNull(report.GeneratedOutput);
         Assert.Equal(unsupportedActions.Count, report.UnsupportedActions.Count());
+        Assert.Equal(0, report.MappedTargets);
+        Assert.Equal(0, report.UnmappedTargets);
     }
 
     [Fact]
@@ -231,5 +238,162 @@ public class ParserTests
         var output = renderer.Render(model);
 
         Assert.Contains("TODO:", output);
+    }
+
+    // --- Adapter mapping tests ---
+
+    [Fact]
+    public void Adapter_MappedClick_GeneratesCleanLocator()
+    {
+        var config = new ProjectAdapterConfig(
+            SourceProjectName: "TestProject",
+            UiTargets: new[]
+            {
+                new UiTargetMapping("page.User", "GetByTestId(\"widget-user\")", "TestId"),
+            },
+            PageObjects: Array.Empty<PageObjectMapping>(),
+            Methods: Array.Empty<MethodMapping>()
+        );
+        var adapter = new DefaultProjectAdapter(config);
+
+        var model = _parser.Parse(Path.Combine(_testFilesDir, "Widget.cs"));
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model, adapter);
+
+        Assert.Contains("GetByTestId(\"widget-user\")", output);
+        Assert.Contains(".ClickAsync()", output);
+        Assert.DoesNotContain("TODO: page.User", output);
+    }
+
+    [Fact]
+    public void Adapter_MappedSendKeys_GeneratesCleanLocator()
+    {
+        var config = new ProjectAdapterConfig(
+            SourceProjectName: "TestProject",
+            UiTargets: new[]
+            {
+                new UiTargetMapping("page.Name", "GetByTestId(\"user-name\")", "TestId"),
+            },
+            PageObjects: Array.Empty<PageObjectMapping>(),
+            Methods: Array.Empty<MethodMapping>()
+        );
+        var adapter = new DefaultProjectAdapter(config);
+
+        var clickAction = new ClickAction(1, "page.Name", RecognitionConfidence.SyntaxFallback);
+        var sendKeysAction = new SendKeysAction(2, "page.Name", "\"test\"", RecognitionConfidence.SyntaxFallback);
+        var testModel = new TestModel(
+            Name: "TestSendKeys",
+            Category: null,
+            CaseData: Array.Empty<TestCaseData>(),
+            Parameters: Array.Empty<MethodParameterModel>(),
+            BodyActions: new[] { sendKeysAction }
+        );
+        var fileModel = new TestFileModel(
+            FilePath: "test.cs",
+            Namespace: "Test",
+            ClassName: "TestClass",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[] { testModel }
+        );
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(fileModel, adapter);
+
+        Assert.Contains("GetByTestId(\"user-name\")", output);
+        Assert.Contains(".FillAsync", output);
+        Assert.DoesNotContain("TODO: page.Name", output);
+    }
+
+    [Fact]
+    public void Adapter_UnmappedTarget_StayAsTODO()
+    {
+        var config = new ProjectAdapterConfig(
+            SourceProjectName: "TestProject",
+            UiTargets: new[]
+            {
+                new UiTargetMapping("page.User", "GetByTestId(\"widget-user\")", "TestId"),
+            },
+            PageObjects: Array.Empty<PageObjectMapping>(),
+            Methods: Array.Empty<MethodMapping>()
+        );
+        var adapter = new DefaultProjectAdapter(config);
+
+        var clickAction = new ClickAction(1, "page.UnknownElement", RecognitionConfidence.SyntaxFallback);
+        var testModel = new TestModel(
+            Name: "TestUnmapped",
+            Category: null,
+            CaseData: Array.Empty<TestCaseData>(),
+            Parameters: Array.Empty<MethodParameterModel>(),
+            BodyActions: new[] { clickAction }
+        );
+        var fileModel = new TestFileModel(
+            FilePath: "test.cs",
+            Namespace: "Test",
+            ClassName: "TestClass",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[] { testModel }
+        );
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(fileModel, adapter);
+
+        Assert.Contains("TODO: map source expression to Playwright locator: page.UnknownElement", output);
+        Assert.Contains("TODO: page.UnknownElement", output);
+    }
+
+    [Fact]
+    public void Adapter_Report_ShowsMappingQuality()
+    {
+        var config = new ProjectAdapterConfig(
+            SourceProjectName: "TestProject",
+            UiTargets: new[]
+            {
+                new UiTargetMapping("page.User", "GetByTestId(\"widget-user\")", "TestId"),
+            },
+            PageObjects: Array.Empty<PageObjectMapping>(),
+            Methods: Array.Empty<MethodMapping>()
+        );
+        var adapter = new DefaultProjectAdapter(config);
+
+        var mappedClick = new ClickAction(1, "page.User", RecognitionConfidence.SyntaxFallback);
+        var unmappedClick = new ClickAction(2, "page.Missing", RecognitionConfidence.SyntaxFallback);
+        var testModel = new TestModel(
+            Name: "TestMixed",
+            Category: null,
+            CaseData: Array.Empty<TestCaseData>(),
+            Parameters: Array.Empty<MethodParameterModel>(),
+            BodyActions: new[] { mappedClick, unmappedClick }
+        );
+        var fileModel = new TestFileModel(
+            FilePath: "test.cs",
+            Namespace: "Test",
+            ClassName: "TestClass",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[] { testModel }
+        );
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(fileModel, adapter);
+
+        var report = new MigrationReport(
+            SourceFilePath: "test.cs",
+            TotalTests: 1,
+            SuccessfullyConvertedTests: 1,
+            UnsupportedActions: Array.Empty<UnsupportedAction>(),
+            GeneratedOutput: output,
+            SemanticActions: 0,
+            SyntaxFallbackActions: 2,
+            UnsupportedCount: 0,
+            MappedTargets: adapter.ResolveTarget("page.User").IsMapped ? 1 : 0,
+            UnmappedTargets: adapter.ResolveTarget("page.Missing").IsMapped ? 0 : 1,
+            TodoComments: output.Split('\n').Count(l => l.TrimStart().StartsWith("// TODO:"))
+        );
+
+        Assert.Equal(1, report.MappedTargets);
+        Assert.Equal(1, report.UnmappedTargets);
+        Assert.True(report.TodoComments > 0, "Should have at least one TODO for unmapped target");
     }
 }

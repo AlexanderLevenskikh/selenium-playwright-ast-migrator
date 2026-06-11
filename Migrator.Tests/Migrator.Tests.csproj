@@ -29,6 +29,8 @@
   <ItemGroup>
     <Compile Remove="TestFiles\**\*.cs" />
     <None Include="TestFiles\**\*.cs" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="TestFiles\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="TestFiles\**\*.generated.cs" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
