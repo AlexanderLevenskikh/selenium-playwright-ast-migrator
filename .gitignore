@@ -1,0 +1,110 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+
+# .NET / NuGet
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+project.lock.json
+project.fragment.lock.json
+artifacts/
+packages/
+.nuget/
+*.nupkg
+*.snupkg
+
+# Test results
+TestResults/
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+*.coveragexml
+coverage/
+coverage.*/
+lcov.info
+
+# BenchmarkDotNet
+BenchmarkDotNet.Artifacts/
+
+# IDEs
+.vs/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.DotSettings.user
+
+# Rider / ReSharper
+_ReSharper*/
+*.ReSharper
+*.DotSettings.user
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.orig
+
+# Generated migration output
+# Если generated output нужен только для ручной проверки — игнорируем.
+# Если expected/snapshot файлы лежат в тестах — их НЕ класть в эти папки.
+generated/
+Generated/
+out/
+output/
+migration-output/
+MigrationOutput/
+
+# Local migration workspace
+.local/
+work/
+scratch/
+
+# Archives produced during experiments
+*.zip
+*.7z
+*.rar
+
+# Playwright artifacts, если появятся в renderer/integration tests
+playwright-report/
+blob-report/
+test-results/
+.playwright/
+
+# Node artifacts, если рядом будут TS-скрипты/старый мигратор
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Keep input fixtures and snapshots
+!**/TestFiles/**/*.cs
+!**/__snapshots__/**
+!**/Snapshots/**
+!**/Expected/**
