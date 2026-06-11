@@ -37,11 +37,11 @@ int totalUnsupported = 0;
 foreach (var model in models)
 {
     var output = renderer.Render(model);
-    var unsupportedCount = model.Tests.SelectMany(t => t.BodyActions)
-        .OfType<UnsupportedAction>().Count();
+    var allActions = model.Tests.SelectMany(t => t.BodyActions).ToList();
+    var unsupportedCount = allActions.OfType<UnsupportedAction>().Count();
 
     totalFiles++;
-    totalTests += model.Tests.Count(t => t.Name != "__SetUp__");
+    totalTests += model.Tests.Count();
     totalUnsupported += unsupportedCount;
 
     var outDir = outputPath != null
@@ -54,14 +54,13 @@ foreach (var model in models)
     var fullOut = Path.Combine(outDir ?? ".", outName);
     File.WriteAllText(fullOut, output);
 
-    var allActions = model.Tests.SelectMany(t => t.BodyActions).ToList();
-    var semanticCount = allActions.Count(a => a.Confidence == Migrator.Core.RecognitionConfidence.Semantic);
-    var syntaxFallbackCount = allActions.Count(a => a.Confidence == Migrator.Core.RecognitionConfidence.SyntaxFallback);
+    var semanticCount = allActions.Count(a => a.Confidence == RecognitionConfidence.Semantic);
+    var syntaxFallbackCount = allActions.Count(a => a.Confidence == RecognitionConfidence.SyntaxFallback);
 
     var report = new MigrationReport(
         SourceFilePath: model.FilePath,
-        TotalTests: model.Tests.Count(t => t.Name != "__SetUp__"),
-        SuccessfullyConvertedTests: model.Tests.Count(t => t.Name != "__SetUp__" && !t.BodyActions.Any(a => a is UnsupportedAction)),
+        TotalTests: model.Tests.Count(),
+        SuccessfullyConvertedTests: model.Tests.Count(t => !t.BodyActions.Any(a => a is UnsupportedAction)),
         UnsupportedActions: model.Tests.SelectMany(t => t.BodyActions).OfType<UnsupportedAction>(),
         GeneratedOutput: fullOut,
         SemanticActions: semanticCount,
@@ -71,6 +70,7 @@ foreach (var model in models)
     Console.WriteLine($"Processed: {model.FilePath}");
     Console.WriteLine($"  Tests: {report.TotalTests}");
     Console.WriteLine($"  Unsupported: {report.UnsupportedActions.Count()}");
+    Console.WriteLine($"  Semantic: {report.SemanticActions}, SyntaxFallback: {report.SyntaxFallbackActions}");
     Console.WriteLine($"  Output: {report.GeneratedOutput}");
 }
 

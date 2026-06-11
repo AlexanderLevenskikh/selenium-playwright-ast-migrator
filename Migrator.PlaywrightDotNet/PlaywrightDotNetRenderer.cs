@@ -31,23 +31,31 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
 
         var className = model.ClassName + "Playwright";
+        var allActions = model.Tests.SelectMany(t => t.BodyActions).ToList();
+        var unsupportedCount = allActions.OfType<UnsupportedAction>().Count();
 
-        if (model.Tests.Any(t => t.BodyActions.Any(a => a is UnsupportedAction)))
+        if (unsupportedCount > 0)
         {
-            var unsupportedCount = model.Tests.SelectMany(t => t.BodyActions)
-                .OfType<UnsupportedAction>().Count();
             sb.AppendLine($"// WARNING: {unsupportedCount} unsupported action(s) found. See TODO comments below.");
             sb.AppendLine();
         }
 
         sb.AppendLine($"public class {className} : PageTest");
         sb.AppendLine("{");
+        sb.AppendLine();
 
+        // Render [SetUp] method
+        if (model.SetUpActions.Any())
+        {
+            RenderSetUp(sb, model.SetUpActions);
+            sb.AppendLine();
+        }
+
+        // Render tests
         foreach (var test in model.Tests)
         {
-            if (test.Name == "__SetUp__") continue;
-
             RenderTest(sb, test);
+            sb.AppendLine();
         }
 
         sb.AppendLine("}");
@@ -55,36 +63,68 @@ public class PlaywrightDotNetRenderer : IRenderer
         return sb.ToString();
     }
 
+    void RenderSetUp(StringBuilder sb, IEnumerable<TestAction> actions)
+    {
+        sb.AppendLine($"{_indent}[SetUp]");
+        sb.AppendLine($"{_indent}public async Task SetUp()");
+        sb.AppendLine($"{_indent}{{");
+
+        foreach (var action in actions)
+            RenderAction(sb, action);
+
+        sb.AppendLine($"{_indent}}}");
+    }
+
     void RenderTest(StringBuilder sb, TestModel test)
     {
         if (!string.IsNullOrEmpty(test.Category))
-        {
             sb.AppendLine($"{_indent}[Category(\"{test.Category}\")]");
-        }
 
-        if (test.CaseData.Any())
+        foreach (var caseData in test.CaseData)
         {
-            foreach (var caseData in test.CaseData)
+            if (!string.IsNullOrEmpty(caseData.RawSourceText))
             {
-                var args = string.Join(", ", caseData.Arguments);
+                var raw = caseData.RawSourceText.TrimStart('[');
+                sb.AppendLine($"{_indent}{raw}");
+            }
+            else
+            {
+                var args = string.Join(", ", caseData.Arguments.Select(a =>
+                {
+                    if (a.All(char.IsDigit) || (a.Contains('.') && a.Replace(".", "").Replace("-", "").All(char.IsDigit)))
+                        return a;
+
+                    return $"\"{a}\"";
+                }));
                 sb.AppendLine($"{_indent}[TestCase({args})]");
             }
         }
-        else
-        {
-            sb.AppendLine($"{_indent}[Test]");
-        }
 
-        sb.AppendLine($"{_indent}public async Task {test.Name}()");
+        if (!test.CaseData.Any())
+            sb.AppendLine($"{_indent}[Test]");
+
+        var paramList = RenderParameters(test.Parameters);
+        sb.AppendLine($"{_indent}public async Task {test.Name}({paramList})");
         sb.AppendLine($"{_indent}{{");
 
         foreach (var action in test.BodyActions)
-        {
             RenderAction(sb, action);
-        }
 
         sb.AppendLine($"{_indent}}}");
-        sb.AppendLine();
+    }
+
+    string RenderParameters(IEnumerable<MethodParameterModel> parameters)
+    {
+        if (parameters == null || !parameters.Any())
+            return string.Empty;
+
+        return string.Join(", ", parameters.Select(p =>
+        {
+            var param = $"{p.Type} {p.Name}";
+            if (p.DefaultValue != null)
+                param += $" = {p.DefaultValue}";
+            return param;
+        }));
     }
 
     void RenderAction(StringBuilder sb, TestAction action)
@@ -117,13 +157,13 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     void RenderClick(StringBuilder sb, ClickAction action)
     {
-        var locator = ConvertToLocator(action.TargetExpression);
+        var locator = ConvertToLocator(action.TargetExpression, action.Confidence);
         sb.AppendLine($"{_indent}{_indent}await Page.{locator}.ClickAsync(); // line {action.SourceLine}");
     }
 
     void RenderSendKeys(StringBuilder sb, SendKeysAction action)
     {
-        var locator = ConvertToLocator(action.TargetExpression);
+        var locator = ConvertToLocator(action.TargetExpression, action.Confidence);
         var text = ConvertExpression(action.TextExpression);
         sb.AppendLine($"{_indent}{_indent}await Page.{locator}.FillAsync({text}); // line {action.SourceLine}");
     }
@@ -157,8 +197,13 @@ public class PlaywrightDotNetRenderer : IRenderer
         sb.AppendLine($"{_indent}{_indent}//   {EscapeComment(action.SourceText)}");
     }
 
-    string ConvertToLocator(string expression)
+    string ConvertToLocator(string expression, RecognitionConfidence confidence)
     {
+        if (confidence == RecognitionConfidence.SyntaxFallback)
+        {
+            return $"Locator(\"TODO: {expression}\")";
+        }
+
         if (expression.Contains("MenuItems."))
         {
             var member = expression.Substring(expression.LastIndexOf('.') + 1);
@@ -171,9 +216,7 @@ public class PlaywrightDotNetRenderer : IRenderer
     string ConvertExpression(string expr)
     {
         if (expr.StartsWith('"') && expr.EndsWith('"'))
-        {
             return expr;
-        }
 
         return expr;
     }

@@ -5,11 +5,37 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Migrator.Core.Models;
+using Migrator.Roslyn.Recognizers;
 
 namespace Migrator.Roslyn;
 
 public class RoslynTestFileParser : ITestFileParser
 {
+    readonly List<IInvocationRecognizer> _semanticRecognizers;
+    readonly List<IInvocationRecognizer> _syntaxFallbackRecognizers;
+
+    public RoslynTestFileParser()
+        : this(CreateDefaultRecognizers())
+    {
+    }
+
+    public RoslynTestFileParser(List<IInvocationRecognizer> recognizers)
+    {
+        _semanticRecognizers = recognizers;
+        _syntaxFallbackRecognizers = recognizers;
+    }
+
+    static List<IInvocationRecognizer> CreateDefaultRecognizers() => new()
+    {
+        new ClickInvocationRecognizer(),
+        new SendKeysInvocationRecognizer(),
+        new AssertInvocationRecognizer(),
+        new FluentAssertionsRecognizer(),
+        new WaitInvocationRecognizer(),
+        new PageObjectMethodRecognizer(),
+        new UnknownInvocationRecognizer(),
+    };
+
     public TestFileModel Parse(string filePath)
     {
         var source = File.ReadAllText(filePath);
@@ -52,17 +78,26 @@ public class RoslynTestFileParser : ITestFileParser
             .Select(t => t.Type.ToString())
             .FirstOrDefault() ?? null;
 
-        var usings = root.DescendantNodes().OfType<UsingDirectiveSyntax>()
-            .Select(u => u.Name?.ToString() ?? string.Empty)
-            .ToImmutableArray();
+        var setUpMethod = testClass.DescendantNodes().OfType<MethodDeclarationSyntax>()
+            .FirstOrDefault(m => m.AttributeLists.SelectMany(al => al.Attributes)
+                .Any(a => a.Name.ToString() == "SetUp"));
 
-        var tests = ParseTests(testClass, semanticModel, tree, usings).ToList();
+        var setUpActions = setUpMethod != null
+            ? ParseMethodBody(setUpMethod, semanticModel).ToList()
+            : new List<TestAction>();
+
+        var tests = testClass.DescendantNodes().OfType<MethodDeclarationSyntax>()
+            .Where(m => m.AttributeLists.SelectMany(al => al.Attributes)
+                .Any(a => a.Name.ToString() == "Test" || a.Name.ToString() == "TestCase"))
+            .Select(m => ParseTestMethod(m, semanticModel))
+            .ToList();
 
         return new TestFileModel(
             FilePath: filePath,
             Namespace: ns,
             ClassName: testClass.Identifier.Text,
             BaseClassName: baseClassName,
+            SetUpActions: setUpActions,
             Tests: tests
         );
     }
@@ -73,93 +108,59 @@ public class RoslynTestFileParser : ITestFileParser
         return files.Select(Parse).ToList();
     }
 
-    private static IEnumerable<TestModel> ParseTests(
-        ClassDeclarationSyntax classDecl,
-        SemanticModel semanticModel,
-        SyntaxTree syntaxTree,
-        ImmutableArray<string> usings)
+    TestModel ParseTestMethod(MethodDeclarationSyntax method, SemanticModel semanticModel)
     {
-        var fields = classDescendantFields(classDecl).ToList();
+        var name = method.Identifier.Text;
 
-        foreach (var method in classDecl.DescendantNodes().OfType<MethodDeclarationSyntax>())
-        {
-            var testAttr = method.AttributeLists.SelectMany(al => al.Attributes)
-                .FirstOrDefault(a => a.Name.ToString() == "Test" || a.Name.ToString() == "TestCase");
+        var category = method.AttributeLists.SelectMany(al => al.Attributes)
+            .FirstOrDefault(a => a.Name.ToString() == "Category")
+            ?.ArgumentList?.Arguments.FirstOrDefault()
+            ?.Expression.ToString().Trim('"');
 
-            if (testAttr == null)
-            {
-                var setUpAttr = method.AttributeLists.SelectMany(al => al.Attributes)
-                    .FirstOrDefault(a => a.Name.ToString() == "SetUp");
+        var caseData = ParseCaseData(method).ToList();
 
-                if (setUpAttr != null)
-                {
-                    var setUpActions = ParseMethodBody(method, semanticModel);
-                    yield return new TestModel(
-                        Name: "__SetUp__",
-                        Category: null,
-                        CaseData: Array.Empty<TestCaseData>(),
-                        SetUpActions: setUpActions,
-                        BodyActions: Array.Empty<TestAction>()
-                    );
-                }
+        var parameters = method.ParameterList?.Parameters
+            .Select(p => new MethodParameterModel(
+                Type: p.Type?.ToString() ?? string.Empty,
+                Name: p.Identifier.Text,
+                DefaultValue: p.Default?.Value.ToString()
+            ))
+            .ToList() ?? new List<MethodParameterModel>();
 
-                continue;
-            }
+        var bodyActions = ParseMethodBody(method, semanticModel).ToList();
 
-            var category = method.AttributeLists.SelectMany(al => al.Attributes)
-                .FirstOrDefault(a => a.Name.ToString() == "Category")
-                ?.ArgumentList?.Arguments.FirstOrDefault()
-                ?.Expression.ToString()
-                .Trim('"');
-
-            var caseData = ParseCaseData(method);
-            var bodyActions = ParseMethodBody(method, semanticModel);
-
-            yield return new TestModel(
-                Name: method.Identifier.Text,
-                Category: category,
-                CaseData: caseData,
-                SetUpActions: Array.Empty<TestAction>(),
-                BodyActions: bodyActions
-            );
-        }
+        return new TestModel(
+            Name: name,
+            Category: category,
+            CaseData: caseData,
+            Parameters: parameters,
+            BodyActions: bodyActions
+        );
     }
 
-    static IEnumerable<FieldInfo> classDescendantFields(ClassDeclarationSyntax classDecl)
+    static List<TestCaseData> ParseCaseData(MethodDeclarationSyntax method)
     {
-        foreach (var field in classDecl.DescendantNodes().OfType<FieldDeclarationSyntax>())
-        {
-            foreach (var variable in field.Declaration.Variables)
-            {
-                yield return new FieldInfo(
-                    Name: variable.Identifier.Text,
-                    Type: field.Declaration.Type.ToString(),
-                    Line: field.GetLocation().GetLineSpan().StartLinePosition.Line + 1
-                );
-            }
-        }
-    }
+        var results = new List<TestCaseData>();
 
-    static IEnumerable<TestCaseData> ParseCaseData(MethodDeclarationSyntax method)
-    {
         foreach (var attr in method.AttributeLists.SelectMany(al => al.Attributes)
             .Where(a => a.Name.ToString() == "TestCase"))
         {
+            var rawSource = attr.ToString();
             var args = attr.ArgumentList?.Arguments
                 .Select(ExtractArgText)
                 .ToList() ?? new List<string>();
 
-            yield return new TestCaseData(args);
+            results.Add(new TestCaseData(args, rawSource));
         }
+
+        return results;
     }
 
-    static string ExtractArgText(Microsoft.CodeAnalysis.CSharp.Syntax.AttributeArgumentSyntax arg)
+    static string ExtractArgText(AttributeArgumentSyntax arg)
     {
         var text = arg.Expression.ToString();
-        if (arg.Expression is LiteralExpressionSyntax lit && lit.Token.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.StringLiteralToken))
-        {
+        if (arg.Expression is LiteralExpressionSyntax lit && lit.Token.IsKind(SyntaxKind.StringLiteralToken))
             return lit.Token.ValueText;
-        }
 
         return text;
     }
@@ -176,43 +177,13 @@ public class RoslynTestFileParser : ITestFileParser
             {
                 yield return action;
             }
-            else
+            else if (IsMeaningfulStatement(statement))
             {
                 var text = statement.ToString().Trim();
-                if (!string.IsNullOrEmpty(text) && IsMeaningfulStatement(statement))
-                {
+                if (!string.IsNullOrEmpty(text))
                     yield return new UnsupportedAction(line, text, "Statement type not yet supported by extractor");
-                }
             }
         }
-    }
-
-    static bool IsMeaningfulStatement(StatementSyntax statement)
-    {
-        return statement switch
-        {
-            EmptyStatementSyntax => false,
-            ExpressionStatementSyntax expr => IsMeaningfulExpr(expr.Expression),
-            LocalDeclarationStatementSyntax => true,
-            IfStatementSyntax => true,
-            ForStatementSyntax => true,
-            ForEachStatementSyntax => true,
-            WhileStatementSyntax => true,
-            ReturnStatementSyntax => true,
-            TryStatementSyntax => true,
-            _ => false
-        };
-    }
-
-    static bool IsMeaningfulExpr(ExpressionSyntax expr)
-    {
-        return expr switch
-        {
-            AwaitExpressionSyntax aw => IsMeaningfulExpr(aw.Expression),
-            InvocationExpressionSyntax => true,
-            AssignmentExpressionSyntax => true,
-            _ => false
-        };
     }
 
     static TestAction? TryExtractAction(StatementSyntax statement, SemanticModel semanticModel, int line)
@@ -238,18 +209,23 @@ public class RoslynTestFileParser : ITestFileParser
         var fullText = invocation.ToString().Trim().Trim(';');
         var symbolResolved = methodSymbol != null;
 
-        // --- Semantic path ---
+        var ctx = new InvocationContext(methodName, receiverText, fullText, line, symbolResolved);
+
+        // --- Semantic path: try recognizers with symbol info ---
         if (symbolResolved)
         {
-            var semanticResult = TryExtractSemantic(methodSymbol!, methodName, receiverText, invocation, line);
-            if (semanticResult != null)
+            if (TryRecognizeSemantic(methodSymbol!, methodName, receiverText, invocation, line) is { } semanticResult)
                 return semanticResult;
         }
 
-        // --- Syntax fallback ---
-        var fallbackResult = TryExtractSyntaxFallback(methodName, receiverText, invocation, line);
-        if (fallbackResult != null)
-            return fallbackResult;
+        // --- Syntax fallback: run recognizer pipeline ---
+        foreach (var recognizer in CreateDefaultRecognizers())
+        {
+            if (recognizer is UnknownInvocationRecognizer) continue;
+
+            if (recognizer.TryRecognize(ctx) is { } fallbackResult)
+                return fallbackResult;
+        }
 
         // --- Builtin/System calls — skip ---
         if (symbolResolved && IsBuiltinSystemMethod(methodSymbol!))
@@ -260,14 +236,12 @@ public class RoslynTestFileParser : ITestFileParser
             : "Could not resolve method symbol and no syntax fallback matched");
     }
 
-    static TestAction? TryExtractSemantic(IMethodSymbol methodSymbol, string methodName, string receiverText, InvocationExpressionSyntax invocation, int line)
+    static TestAction? TryRecognizeSemantic(IMethodSymbol methodSymbol, string methodName, string receiverText, InvocationExpressionSyntax invocation, int line)
     {
         var containingType = methodSymbol.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
         if (methodName == "Click" && IsSeleniumControlType(methodSymbol, containingType))
-        {
             return new ClickAction(line, receiverText);
-        }
 
         if ((methodName == "SendKeys" || methodName == "InputText") &&
             (IsSeleniumControlType(methodSymbol, containingType) || containingType.Contains("OpenQA.Selenium")))
@@ -302,83 +276,9 @@ public class RoslynTestFileParser : ITestFileParser
         return containingType.Contains("System.") || containingType.Contains("Microsoft.");
     }
 
-    static TestAction? TryExtractSyntaxFallback(string methodName, string receiverText, InvocationExpressionSyntax invocation, int line)
-    {
-        var fullText = invocation.ToString().Trim().Trim(';');
-
-        // Click-like calls: page.Xxx.Click()
-        if (methodName == "Click" && receiverText.Contains("."))
-        {
-            return new ClickAction(line, receiverText, RecognitionConfidence.SyntaxFallback);
-        }
-
-        // SendKeys / input-like calls: page.Xxx.SendKeys(...), page.Xxx.InputText(...)
-        if ((methodName == "SendKeys" || methodName == "InputText" || methodName == "InputValue" ||
-             methodName == "ManualInputValue") && receiverText.Contains("."))
-        {
-            var firstArg = invocation.ArgumentList.Arguments.FirstOrDefault();
-            var argText = firstArg?.Expression.ToString() ?? string.Empty;
-            return new SendKeysAction(line, receiverText, argText, RecognitionConfidence.SyntaxFallback);
-        }
-
-        // Assert.That(actual, constraint)
-        if (methodName == "That" && receiverText.Contains("Assert"))
-        {
-            var args = invocation.ArgumentList.Arguments.ToList();
-            var actual = args.Count > 0 ? args[0].Expression.ToString() : string.Empty;
-            var constraint = args.Count > 1 ? args[1].Expression.ToString() : string.Empty;
-            return new AssertThatAction(line, actual, constraint, RecognitionConfidence.SyntaxFallback);
-        }
-
-        // Assert.AreEqual(expected, actual)
-        if (methodName == "AreEqual" && receiverText.Contains("Assert"))
-        {
-            var args = invocation.ArgumentList.Arguments.ToList();
-            var expected = args.Count > 0 ? args[0].Expression.ToString() : string.Empty;
-            var actual = args.Count > 1 ? args[1].Expression.ToString() : string.Empty;
-            return new AssertAreEqualAction(line, expected, actual, RecognitionConfidence.SyntaxFallback);
-        }
-
-        // Fluent assertions chain
-        if (methodName == "Should" || methodName == "Be" || methodName == "NotBe" || methodName == "Contain" ||
-            methodName == "NotContainAll" || methodName == "ContainAny" || methodName == "NotBeEmpty")
-        {
-            return new MethodInvocationAction(line, receiverText, methodName, fullText, RecognitionConfidence.SyntaxFallback);
-        }
-
-        // Wait / presence helpers
-        if (methodName == "Wait" || methodName == "EqualTo" || methodName == "WaitPresence")
-        {
-            return new MethodInvocationAction(line, receiverText, methodName, fullText, RecognitionConfidence.SyntaxFallback);
-        }
-
-        // ClickAndOpen<T>() pattern
-        if (methodName == "ClickAndOpen" && receiverText.Contains("."))
-        {
-            return new MethodInvocationAction(line, receiverText, methodName, fullText, RecognitionConfidence.SyntaxFallback);
-        }
-
-        // Known page-object method patterns
-        if (methodName == "ValidateLoading" || methodName == "Get" || methodName == "Visible" ||
-            methodName == "OpenSearchPage" || methodName == "OpenRegistryAgentPage")
-        {
-            return new MethodInvocationAction(line, receiverText, methodName, fullText, RecognitionConfidence.SyntaxFallback);
-        }
-
-        // Complex input+select patterns — too nuanced for SendKeys, keep as MethodInvocation
-        if ((methodName == "InputAndSelect" || methodName == "InputTextAndSelectValue" ||
-             methodName == "InputTextAndSelect" || methodName == "ManualInputValue") && receiverText.Contains("."))
-        {
-            return new MethodInvocationAction(line, receiverText, methodName, fullText, RecognitionConfidence.SyntaxFallback);
-        }
-
-        return null;
-    }
-
     static bool IsSeleniumControlType(IMethodSymbol methodSymbol, string containingType)
     {
-        var containingTypeInfo = containingType;
-        if (containingTypeInfo.Contains("OpenQA.Selenium")) return true;
+        if (containingType.Contains("OpenQA.Selenium")) return true;
 
         var baseType = methodSymbol.ContainingType;
         while (baseType.BaseType != null)
@@ -413,21 +313,31 @@ public class RoslynTestFileParser : ITestFileParser
         };
     }
 
-    static MethodDeclarationInfo CreateMethodInfo(
-        MethodDeclarationSyntax method,
-        IEnumerable<FieldInfo> fields,
-        ImmutableArray<string> usings,
-        SemanticModel semanticModel,
-        SyntaxTree syntaxTree)
+    static bool IsMeaningfulStatement(StatementSyntax statement)
     {
-        return new MethodDeclarationInfo(
-            Name: method.Identifier.Text,
-            BodyText: method.Body?.ToString() ?? string.Empty,
-            StartLine: method.GetLocation().GetLineSpan().StartLinePosition.Line + 1,
-            Fields: fields,
-            Usings: usings,
-            SemanticModel: semanticModel,
-            SyntaxTree: syntaxTree
-        );
+        return statement switch
+        {
+            EmptyStatementSyntax => false,
+            ExpressionStatementSyntax expr => IsMeaningfulExpr(expr.Expression),
+            LocalDeclarationStatementSyntax => true,
+            IfStatementSyntax => true,
+            ForStatementSyntax => true,
+            ForEachStatementSyntax => true,
+            WhileStatementSyntax => true,
+            ReturnStatementSyntax => true,
+            TryStatementSyntax => true,
+            _ => false
+        };
+    }
+
+    static bool IsMeaningfulExpr(ExpressionSyntax expr)
+    {
+        return expr switch
+        {
+            AwaitExpressionSyntax aw => IsMeaningfulExpr(aw.Expression),
+            InvocationExpressionSyntax => true,
+            AssignmentExpressionSyntax => true,
+            _ => false
+        };
     }
 }

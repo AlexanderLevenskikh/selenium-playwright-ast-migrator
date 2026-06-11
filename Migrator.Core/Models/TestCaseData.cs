@@ -1,5 +1,6 @@
 namespace Migrator.Core.Models;
 
 public record TestCaseData(
-    IEnumerable<string> Arguments
+    IEnumerable<string> Arguments,
+    string RawSourceText
 );

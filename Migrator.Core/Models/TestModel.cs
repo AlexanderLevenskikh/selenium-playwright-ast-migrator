@@ -4,6 +4,6 @@ public record TestModel(
     string Name,
     string? Category,
     IEnumerable<TestCaseData> CaseData,
-    IEnumerable<TestAction> SetUpActions,
+    IEnumerable<MethodParameterModel> Parameters,
     IEnumerable<TestAction> BodyActions
 );

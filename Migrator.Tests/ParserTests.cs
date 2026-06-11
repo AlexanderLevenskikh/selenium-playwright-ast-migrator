@@ -19,17 +19,29 @@ public class ParserTests
         Assert.Equal("ButtonTests", model.ClassName);
         Assert.Equal("ArBilling.E2ETests.Tests.NonCategory", model.Namespace);
         Assert.NotNull(model.BaseClassName);
-        Assert.True(model.Tests.Any(t => t.Name == "__SetUp__"));
+        Assert.NotEmpty(model.SetUpActions);
 
-        var testMethods = model.Tests.Where(t => t.Name != "__SetUp__").ToList();
-        Assert.Equal(3, testMethods.Count);
-        Assert.Contains(testMethods, t => t.Name == "CheckSearchButton");
-        Assert.Contains(testMethods, t => t.Name == "CheckFeedBackButton");
-        Assert.Contains(testMethods, t => t.Name == "CheckButtonCatalogsPartners");
+        Assert.Equal(3, model.Tests.Count());
+        Assert.Contains(model.Tests, t => t.Name == "CheckSearchButton");
+        Assert.Contains(model.Tests, t => t.Name == "CheckFeedBackButton");
+        Assert.Contains(model.Tests, t => t.Name == "CheckButtonCatalogsPartners");
 
-        var searchBtn = testMethods.First(t => t.Name == "CheckSearchButton");
+        var searchBtn = model.Tests.First(t => t.Name == "CheckSearchButton");
         Assert.Equal("QuickRunning", searchBtn.Category);
         Assert.NotEmpty(searchBtn.BodyActions);
+    }
+
+    [Fact]
+    public void Parse_ButtonTests_SetUp_OnFileLevel()
+    {
+        var model = _parser.Parse(Path.Combine(_testFilesDir, "ButtonTests.cs"));
+
+        Assert.NotEmpty(model.SetUpActions);
+        Assert.All(model.SetUpActions, a =>
+            Assert.True(
+                a is ClickAction or MethodInvocationAction or SendKeysAction or
+                AssertThatAction or AssertAreEqualAction or UnsupportedAction or PageObjectFieldAction,
+                $"Unknown action type: {a.GetType().Name}"));
     }
 
     [Fact]
@@ -39,23 +51,34 @@ public class ParserTests
 
         Assert.Equal("RegistryFilter", model.ClassName);
 
-        var testMethods = model.Tests.Where(t => t.Name != "__SetUp__").ToList();
-        var sortTest = testMethods.First(t => t.Name == "CheckFilterScSortAndExcludeToRegistry");
+        var sortTest = model.Tests.First(t => t.Name == "CheckFilterScSortAndExcludeToRegistry");
 
         Assert.Equal(2, sortTest.CaseData.Count());
         Assert.Equal("По возрастанию", sortTest.CaseData.First().Arguments.First());
+        Assert.True(sortTest.CaseData.First().RawSourceText.Contains("TestCase"),
+            $"RawSourceText should contain 'TestCase', got: {sortTest.CaseData.First().RawSourceText}");
 
-        var decimalTest = testMethods.First(t => t.Name == "CheckFilterRealizationToRegistry");
+        var decimalTest = model.Tests.First(t => t.Name == "CheckFilterRealizationToRegistry");
         Assert.Equal(2, decimalTest.CaseData.Count());
+    }
+
+    [Fact]
+    public void Parse_RegistryFilter_Parameters_Preserved()
+    {
+        var model = _parser.Parse(Path.Combine(_testFilesDir, "RegistryFilter.cs"));
+
+        var sortTest = model.Tests.First(t => t.Name == "CheckFilterScSortAndExcludeToRegistry");
+        Assert.Equal(2, sortTest.Parameters.Count());
+        Assert.Equal("string", sortTest.Parameters.First().Type);
+        Assert.Equal("sortOrder", sortTest.Parameters.First().Name);
     }
 
     [Fact]
     public void Parse_RegistryFilter_CapturesClicksAndMethodInvocations()
     {
         var model = _parser.Parse(Path.Combine(_testFilesDir, "RegistryFilter.cs"));
-        var testMethods = model.Tests.Where(t => t.Name != "__SetUp__").ToList();
 
-        var checkFilterSc = testMethods.First(t => t.Name == "CheckFilterScToRegistry");
+        var checkFilterSc = model.Tests.First(t => t.Name == "CheckFilterScToRegistry");
 
         Assert.Contains(checkFilterSc.BodyActions, a => a is MethodInvocationAction mi && mi.MethodName.Contains("InputAndSelect"));
         Assert.Contains(checkFilterSc.BodyActions, a => a is MethodInvocationAction mi && mi.MethodName.Contains("ValidateLoading"));
@@ -63,26 +86,21 @@ public class ParserTests
     }
 
     [Fact]
-    public void Parse_Widget_DetectsSetUpWithClickAndOpen()
+    public void Parse_Widget_SetUp_OnFileLevel()
     {
         var model = _parser.Parse(Path.Combine(_testFilesDir, "Widget.cs"));
 
         Assert.Equal("Widget", model.ClassName);
-
-        var setUp = model.Tests.First(t => t.Name == "__SetUp__");
-        Assert.NotEmpty(setUp.SetUpActions);
-
-        var testMethods = model.Tests.Where(t => t.Name != "__SetUp__").ToList();
-        Assert.Equal(3, testMethods.Count);
+        Assert.NotEmpty(model.SetUpActions);
+        Assert.Equal(3, model.Tests.Count());
     }
 
     [Fact]
     public void Parse_Widget_ClickAndSendKeysDetected()
     {
         var model = _parser.Parse(Path.Combine(_testFilesDir, "Widget.cs"));
-        var testMethods = model.Tests.Where(t => t.Name != "__SetUp__").ToList();
 
-        var checkUser = testMethods.First(t => t.Name == "CheckUserToWidget");
+        var checkUser = model.Tests.First(t => t.Name == "CheckUserToWidget");
 
         Assert.Contains(checkUser.BodyActions, a => a is ClickAction);
         Assert.Contains(checkUser.BodyActions, a => a is MethodInvocationAction mi && mi.MethodName.Contains("InputText"));
@@ -92,30 +110,37 @@ public class ParserTests
     public void Parse_NoSilentLoss_UnsupportedActionsPresent()
     {
         var model = _parser.Parse(Path.Combine(_testFilesDir, "ButtonTests.cs"));
-        var testMethods = model.Tests.Where(t => t.Name != "__SetUp__").ToList();
 
-        var allActions = testMethods.SelectMany(t => t.BodyActions).ToList();
+        var allActions = model.Tests.SelectMany(t => t.BodyActions).ToList();
 
         Assert.All(allActions, a =>
         {
             Assert.True(
                 a is ClickAction or SendKeysAction or AssertThatAction or AssertAreEqualAction or
                 MethodInvocationAction or UnsupportedAction or PageObjectFieldAction,
-                $"Action type {a.GetType().Name} should be one of the known types — nothing should be silently dropped"
+                $"Action type {a.GetType().Name} should be one of the known types"
             );
         });
     }
 
     [Fact]
-    public void Parse_RegistryFilter_HasUnsupportedActions()
+    public void Parse_RegistryFilter_AllActionsHaveReasons()
     {
         var model = _parser.Parse(Path.Combine(_testFilesDir, "RegistryFilter.cs"));
         var allActions = model.Tests.SelectMany(t => t.BodyActions).ToList();
 
         var unsupported = allActions.OfType<UnsupportedAction>().ToList();
-
-        Assert.NotEmpty(unsupported);
         Assert.All(unsupported, u => Assert.False(string.IsNullOrEmpty(u.Reason)));
+
+        var knownActions = allActions.OfType<ClickAction>().Cast<object>()
+            .Concat(allActions.OfType<SendKeysAction>())
+            .Concat(allActions.OfType<MethodInvocationAction>())
+            .Concat(allActions.OfType<AssertThatAction>())
+            .Concat(allActions.OfType<AssertAreEqualAction>())
+            .ToList();
+
+        Assert.True(knownActions.Count + unsupported.Count == allActions.Count,
+            "All actions must be either recognized or marked unsupported — nothing silently dropped");
     }
 
     [Fact]
@@ -127,6 +152,8 @@ public class ParserTests
 
         Assert.Contains("PageTest", output);
         Assert.Contains("class ButtonTestsPlaywright", output);
+        Assert.Contains("[SetUp]", output);
+        Assert.Contains("public async Task SetUp()", output);
         Assert.Contains("[Test]", output);
         Assert.Contains("[Category(\"QuickRunning\")]", output);
         Assert.Contains("async Task CheckSearchButton", output);
@@ -144,6 +171,8 @@ public class ParserTests
         Assert.Contains("По возрастанию", output);
         Assert.Contains("По убыванию", output);
         Assert.Contains("CheckFilterScSortAndExcludeToRegistry", output);
+        Assert.Contains("string sortOrder", output);
+        Assert.Contains("string text", output);
     }
 
     [Fact]
@@ -181,9 +210,8 @@ public class ParserTests
 
         var report = new MigrationReport(
             SourceFilePath: model.FilePath,
-            TotalTests: model.Tests.Count(t => t.Name != "__SetUp__"),
-            SuccessfullyConvertedTests: model.Tests.Count(t =>
-                t.Name != "__SetUp__" && !t.BodyActions.Any(a => a is UnsupportedAction)),
+            TotalTests: model.Tests.Count(),
+            SuccessfullyConvertedTests: model.Tests.Count(t => !t.BodyActions.Any(a => a is UnsupportedAction)),
             UnsupportedActions: unsupportedActions,
             GeneratedOutput: output,
             SemanticActions: semanticCount,
@@ -193,5 +221,15 @@ public class ParserTests
         Assert.Equal(3, report.TotalTests);
         Assert.NotNull(report.GeneratedOutput);
         Assert.Equal(unsupportedActions.Count, report.UnsupportedActions.Count());
+    }
+
+    [Fact]
+    public void Render_SyntaxFallback_ProducesTODO_Locators()
+    {
+        var model = _parser.Parse(Path.Combine(_testFilesDir, "Widget.cs"));
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+
+        Assert.Contains("TODO:", output);
     }
 }

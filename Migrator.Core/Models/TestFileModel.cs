@@ -5,5 +5,6 @@ public record TestFileModel(
     string Namespace,
     string ClassName,
     string? BaseClassName,
+    IEnumerable<TestAction> SetUpActions,
     IEnumerable<TestModel> Tests
 );
