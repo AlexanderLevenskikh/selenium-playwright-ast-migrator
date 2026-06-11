@@ -286,5 +286,154 @@ public class SnapshotTests
         Assert.Equal(report1.UnsupportedCount, report2.UnsupportedCount);
     }
 
+    [Fact]
+    public void GeneratedOutput_HasNoCSharpCompilationErrors_ButtonTests()
+    {
+        var adapterConfigPath = Path.Combine(_testFilesDir, "adapter-config.json");
+        var adapter = new DefaultProjectAdapter(adapterConfigPath);
+        var parser = new RoslynTestFileParser();
+        var renderer = new PlaywrightDotNetRenderer();
+        var pipeline = new MigrationPipeline(parser, renderer, adapter);
+
+        var result = pipeline.ProcessFile(Path.Combine(_testFilesDir, "ButtonTests.cs"));
+        var output = result.GeneratedOutput;
+
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void GeneratedOutput_HasNoCSharpCompilationErrors_Widget()
+    {
+        var adapterConfigPath = Path.Combine(_testFilesDir, "adapter-config.json");
+        var adapter = new DefaultProjectAdapter(adapterConfigPath);
+        var parser = new RoslynTestFileParser();
+        var renderer = new PlaywrightDotNetRenderer();
+        var pipeline = new MigrationPipeline(parser, renderer, adapter);
+
+        var result = pipeline.ProcessFile(Path.Combine(_testFilesDir, "Widget.cs"));
+        var output = result.GeneratedOutput;
+
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void GeneratedOutput_HasNoCSharpCompilationErrors_RegistryFilter_WithTestCase()
+    {
+        var adapterConfigPath = Path.Combine(_testFilesDir, "adapter-config.json");
+        var adapter = new DefaultProjectAdapter(adapterConfigPath);
+        var parser = new RoslynTestFileParser();
+        var renderer = new PlaywrightDotNetRenderer();
+        var pipeline = new MigrationPipeline(parser, renderer, adapter);
+
+        var result = pipeline.ProcessFile(Path.Combine(_testFilesDir, "RegistryFilter.cs"));
+        var output = result.GeneratedOutput;
+
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void GeneratedOutput_HasNoCSharpCompilationErrors_Synthetic_NoUnsupported_NoWarning()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "CleanTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel(
+                    Name: "DoClick",
+                    Category: null,
+                    CaseData: Array.Empty<TestCaseData>(),
+                    Parameters: Array.Empty<MethodParameterModel>(),
+                    BodyActions: new[] { (TestAction)new ClickAction(5, "btn") }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.DoesNotContain("WARNING", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void GeneratedOutput_HasNoCSharpCompilationErrors_WithTestCase_Parameters()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "ParamTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel(
+                    Name: "ParametrizedTest",
+                    Category: "Quick",
+                    CaseData: new[]
+                    {
+                        new TestCaseData(new[] { "alpha", "1" }, "[TestCase(\"alpha\", \"1\")]"),
+                        new TestCaseData(new[] { "beta", "2" }, "[TestCase(\"beta\", \"2\")]"),
+                    },
+                    Parameters: new[]
+                    {
+                        new MethodParameterModel("string", "sortOrder", null),
+                        new MethodParameterModel("string", "value", null),
+                    },
+                    BodyActions: new[] { (TestAction)new ClickAction(10, "el") }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("[TestCase", output);
+        Assert.Contains("ParametrizedTest(string sortOrder, string value)", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    // TargetKind compile-smoke coverage:
+    // - PlaywrightLocator: covered by ButtonTests, Widget, Synthetic_NoUnsupported (GetByTestId, Locator)
+    // - Unresolved: covered by Widget_NoAdapter (emits "TODO: ..." comments)
+    // - PageObjectProperty: NOT covered by compile-smoke — it emits bare property names that require
+    //   external page-object stub classes. Render correctness is verified by assertion below.
+    // - RawExpression: currently not emitted by the renderer pipeline; no dedicated compile test
+    [Fact]
+    public void GeneratedOutput_HasNoCSharpCompilationErrors_Synthetic_PageObjectProperty_RenderedCorrectly()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "PoPropertyTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel(
+                    Name: "CheckProperty",
+                    Category: null,
+                    CaseData: Array.Empty<TestCaseData>(),
+                    Parameters: Array.Empty<MethodParameterModel>(),
+                    BodyActions: new TestAction[]
+                    {
+                        new ClickAction(
+                            5,
+                            TargetExpression.Mapped("page.User", "User", TargetKind.PageObjectProperty)),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("await User.ClickAsync()", output);
+        Assert.DoesNotContain("TODO:", output);
+        Assert.DoesNotContain("Page.Locator(\"User\")", output);
+    }
+
     static string Normalize(string text) => text.Replace("\r\n", "\n").Trim();
 }
