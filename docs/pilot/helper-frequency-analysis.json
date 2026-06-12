@@ -1,0 +1,141 @@
+{
+  "analysisVersion": "wide-v1",
+  "files": [
+    "ButtonTests.cs",
+    "NewPatternsFixture.cs",
+    "RegistryFilter.cs",
+    "Widget.cs"
+  ],
+  "summary": {
+    "filesProcessed": 4,
+    "testsFound": 16,
+    "actionsFound": 62,
+    "semanticActions": 15,
+    "syntaxFallbackActions": 47,
+    "mappedTargets": 11,
+    "unmappedTargets": 13,
+    "todoComments": 50
+  },
+  "helpers": [
+    {
+      "name": "ValidateLoading",
+      "occurrences": 10,
+      "files": 3,
+      "exampleCalls": ["page.Loader.ValidateLoading()", "pagef.Loader.ValidateLoading()"],
+      "status": "mapped exact",
+      "candidateAction": "exact mapping (complex semantics)"
+    },
+    {
+      "name": "OpenRegistryAgentPage",
+      "occurrences": 3,
+      "files": 2,
+      "exampleCalls": ["Navigation.OpenRegistryAgentPage()"],
+      "status": "unmapped",
+      "candidateAction": "exact profile mapping"
+    },
+    {
+      "name": "OpenSearchPage",
+      "occurrences": 1,
+      "files": 1,
+      "exampleCalls": ["Navigation.OpenSearchPage()"],
+      "status": "mapped exact",
+      "candidateAction": "exact mapping"
+    },
+    {
+      "name": "InputTextAndSelectValue",
+      "occurrences": 1,
+      "files": 1,
+      "exampleCalls": ["page.UserInput.InputTextAndSelectValue(\"Test User\")"],
+      "status": "mapped exact",
+      "candidateAction": "exact mapping"
+    },
+    {
+      "name": "ManualInputValue",
+      "occurrences": 1,
+      "files": 1,
+      "exampleCalls": ["page.WidgetDate.ManualInputValue(\"March\", \"2025\", 22)"],
+      "status": "mapped TODO",
+      "candidateAction": "manual migration"
+    },
+    {
+      "name": "ClickAndOpen<TPage>",
+      "occurrences": 1,
+      "files": 1,
+      "exampleCalls": ["pagef.WidgetButton.ClickAndOpen<WidgetPage>()"],
+      "status": "mapped exact",
+      "candidateAction": "exact mapping"
+    },
+    {
+      "name": "InputAndSelect",
+      "occurrences": 1,
+      "files": 1,
+      "exampleCalls": ["page.Sc.InputAndSelect(\"1000000001\")"],
+      "status": "unmapped",
+      "candidateAction": "manual migration"
+    },
+    {
+      "name": "SelectValue",
+      "occurrences": 1,
+      "files": 1,
+      "exampleCalls": ["page.StatusDropdown.SelectValue(\"active\")"],
+      "status": "unmapped",
+      "candidateAction": "generic recognizer candidate"
+    },
+    {
+      "name": "ToHaveTextAsync (Expect)",
+      "occurrences": 1,
+      "files": 1,
+      "exampleCalls": ["Expect(page.ResultText).ToHaveTextAsync(\"expected text\")"],
+      "status": "unmapped",
+      "candidateAction": "generic recognizer candidate"
+    },
+    {
+      "name": "ToBeHiddenAsync (Expect)",
+      "occurrences": 1,
+      "files": 1,
+      "exampleCalls": ["Expect(page.HiddenElement).ToBeHiddenAsync()"],
+      "status": "unmapped",
+      "candidateAction": "generic recognizer candidate"
+    },
+    {
+      "name": "ExcludeValue",
+      "occurrences": 1,
+      "files": 1,
+      "exampleCalls": ["page.Sc.ExcludeValue(\"1000000001\")"],
+      "status": "unmapped",
+      "candidateAction": "defer"
+    },
+    {
+      "name": "SortSc",
+      "occurrences": 1,
+      "files": 1,
+      "exampleCalls": ["page.Sc.SortSc(sortOrder)"],
+      "status": "unmapped",
+      "candidateAction": "defer"
+    },
+    {
+      "name": "ClearSort",
+      "occurrences": 1,
+      "files": 1,
+      "exampleCalls": ["page.Sc.ClearSort()"],
+      "status": "unmapped",
+      "candidateAction": "defer"
+    },
+    {
+      "name": "Sort",
+      "occurrences": 1,
+      "files": 1,
+      "exampleCalls": ["page.SalesAmount.Sort(sortOrder)"],
+      "status": "unmapped",
+      "candidateAction": "defer"
+    },
+    {
+      "name": "GoToAsync",
+      "occurrences": 1,
+      "files": 1,
+      "exampleCalls": ["Navigation.GoToAsync(\"/registry\")"],
+      "status": "unmapped",
+      "candidateAction": "defer"
+    }
+  ]
+}

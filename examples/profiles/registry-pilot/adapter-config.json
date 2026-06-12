@@ -1,0 +1,136 @@
+{
+  "SourceProjectName": "Example.E2ETests",
+  "LocatorSettings": {
+    "DefaultTestIdAttribute": "data-test-id",
+    "KnownTestIdAttributes": [
+      "data-testid",
+      "data-test-id",
+      "data-tid",
+      "data-test"
+    ]
+  },
+  "UiTargets": [
+    {
+      "SourceExpression": "page.Sc",
+      "TargetExpression": "sc-filter",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.SalesAmount",
+      "TargetExpression": "sales-amount-sort",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.Table.Items.ElementAt(2)",
+      "TargetExpression": "Page.Locator(\"[data-test-id='table-row']\").Nth(2)",
+      "TargetKind": "RawExpression"
+    },
+    {
+      "SourceExpression": "page.Table.Items.ElementAt(4)",
+      "TargetExpression": "Page.Locator(\"[data-test-id='table-row']\").Nth(4)",
+      "TargetKind": "RawExpression"
+    },
+    {
+      "SourceExpression": "page.ReportsSubtotalSalesAmount",
+      "TargetExpression": "subtotal-sales",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.ReportsSubtotalAddCalcAmount",
+      "TargetExpression": "subtotal-add-calc",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.ReportsSubtotalReward",
+      "TargetExpression": "subtotal-reward",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.TableLoader",
+      "TargetExpression": "table-loader",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-test"
+    }
+  ],
+  "PageObjects": [],
+  "Methods": [
+    {
+      "SourceMethod": "Navigation.OpenRegistryAgentPage()",
+      "TargetMethod": null,
+      "Description": "Navigate to registry agent page — needs runtime URL from config",
+      "TargetStatements": [
+        "// TODO: replace with actual runtime URL from config"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "pagef.Loader.ValidateLoading()",
+      "TargetMethod": null,
+      "Description": "Wait for loader to finish — uses data-test='table-loader'",
+      "TargetStatements": [
+        "var loader = Page.Locator(\"[data-test='table-loader']\");",
+        "if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Loader.ValidateLoading()",
+      "TargetMethod": null,
+      "Description": "Wait for loader to finish — uses data-test='table-loader'",
+      "TargetStatements": [
+        "var loader = Page.Locator(\"[data-test='table-loader']\");",
+        "if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Sc.InputAndSelect(\"1000000001\")",
+      "TargetMethod": null,
+      "Description": "Fill filter input and select first match — simplified to FillAsync + PressAsync(Enter)",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test-id='sc-filter']\").FillAsync(\"1000000001\");",
+        "await Page.Locator(\"[data-test-id='sc-filter']\").PressAsync(\"Enter\");"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Sc.ExcludeValue(\"1000000001\")",
+      "TargetMethod": null,
+      "Description": "Exclude value from filter — complex interaction, needs manual review",
+      "TargetStatements": [
+        "// TODO: ExcludeValue for filter — complex interaction, needs manual migration",
+        "// Original: page.Sc.ExcludeValue(\"1000000001\")"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Sc.SortSc(sortOrder)",
+      "TargetMethod": null,
+      "Description": "Sort by SC — complex interaction, needs manual review",
+      "TargetStatements": [
+        "// TODO: SortSc for filter — complex interaction, needs manual migration",
+        "// Original: page.Sc.SortSc(sortOrder)"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Sc.ClearSort()",
+      "TargetMethod": null,
+      "Description": "Clear sort — simplified to click",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test-id='sc-filter']\").ClickAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.SalesAmount.Sort(sortOrder)",
+      "TargetMethod": null,
+      "Description": "Sort by sales amount — complex interaction, needs manual review",
+      "TargetStatements": [
+        "// TODO: Sort for sales amount — complex interaction, needs manual migration",
+        "// Original: page.SalesAmount.Sort(sortOrder)"
+      ],
+      "RequiresReview": true
+    }
+  ]
+}
