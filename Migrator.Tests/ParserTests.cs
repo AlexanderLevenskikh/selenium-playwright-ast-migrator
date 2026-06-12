@@ -775,7 +775,21 @@ public class ParserTests
             "Test",
             Array.Empty<UiTargetMapping>(),
             Array.Empty<PageObjectMapping>(),
-            new[] { new MethodMapping("Nav.OpenPage()", "GotoAsync", "nav", new[] { "await Page.GotoAsync(\"/page\");" }, true) });
+            new[]
+            {
+                new MethodMapping(
+                    "Navigation.GoToAsync(\"/registry\")",
+                    null,
+                    "navigate to registry",
+                    new[] { "await Page.GotoAsync(\"/registry\");" },
+                    false),
+                new MethodMapping(
+                    "page = pagef",
+                    null,
+                    "assign page variable",
+                    new[] { "// page is set up" },
+                    false)
+            });
         var adapter = new DefaultProjectAdapter(config);
         var parser = new RoslynTestFileParser();
         var sourceModel = parser.Parse(Path.Combine(_testFilesDir, "NewPatternsFixture.cs"));
@@ -783,7 +797,69 @@ public class ParserTests
         var adapted = adapter.Adapt(sourceModel);
 
         var mappedActions = adapted.SetUpActions.OfType<MappedMethodInvocationAction>().ToList();
-        Assert.Empty(mappedActions);
+        Assert.Equal(2, mappedActions.Count);
+        Assert.Equal("await Page.GotoAsync(\"/registry\");", mappedActions[0].TargetStatements[0]);
+        Assert.Equal("// page is set up", mappedActions[1].TargetStatements[0]);
+        Assert.False(mappedActions[0].RequiresReview);
+        Assert.False(mappedActions[1].RequiresReview);
+
+        // Renderer should output the target statements
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(adapted);
+        Assert.Contains("await Page.GotoAsync(\"/registry\");", output);
+        Assert.Contains("// page is set up", output);
+
+        // Setup actions are safe mapped — no other unmapped actions in setup
+        Assert.Empty(adapted.SetUpActions.OfType<RawStatementAction>());
+        Assert.Empty(adapted.SetUpActions.OfType<MethodInvocationAction>());
+    }
+
+    [Fact]
+    public void MethodMapping_RequiresReview_True_ProducesWarningHeader()
+    {
+        var model = new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "T",
+            ClassName: "T",
+            BaseClassName: null,
+            SetUpActions: new TestAction[]
+            {
+                new MappedMethodInvocationAction(1, "Setup.Init()", new[] { "await Page.GotoAsync(\"/\");" }, requiresReview: true)
+            },
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(),
+                    new TestAction[] { new ClickAction(1, TargetExpression.Mapped("btn", "GetByTestId(\"btn\")", TargetKind.PlaywrightLocator)) })
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+        Assert.Contains("WARNING", output);
+        Assert.Contains("TODO", output);
+    }
+
+    [Fact]
+    public void MethodMapping_RequiresReview_False_NoWarningHeader()
+    {
+        var model = new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "T",
+            ClassName: "T",
+            BaseClassName: null,
+            SetUpActions: new TestAction[]
+            {
+                new MappedMethodInvocationAction(1, "Setup.Init()", new[] { "await Page.GotoAsync(\"/\");" }, requiresReview: false)
+            },
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(),
+                    new TestAction[] { new ClickAction(1, TargetExpression.Mapped("btn", "GetByTestId(\"btn\")", TargetKind.PlaywrightLocator)) })
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+        Assert.DoesNotContain("WARNING", output);
+        Assert.DoesNotContain("TODO", output);
     }
 
     static TestFileModel CreateModel(TestAction action)

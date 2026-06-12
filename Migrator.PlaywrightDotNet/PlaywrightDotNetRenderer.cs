@@ -37,7 +37,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         var className = model.ClassName + "Playwright";
         var hasTodoActions = model.Tests.SelectMany(t => t.BodyActions)
             .Concat(model.SetUpActions)
-            .Any(a => a is UnsupportedAction or RawStatementAction or MappedMethodInvocationAction);
+            .Any(a => a is UnsupportedAction or RawStatementAction or (MappedMethodInvocationAction { RequiresReview: true }));
 
         if (hasTodoActions)
         {

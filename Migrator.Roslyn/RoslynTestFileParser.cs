@@ -36,11 +36,11 @@ public class RoslynTestFileParser : ITestFileParser
         new UrlAssertionRecognizer(),
         new FluentAssertionsRecognizer(),
         new WaitInvocationRecognizer(),
-        new PageObjectMethodRecognizer(),
         new AsyncPlaywrightRecognizer(),
         new NavigationRecognizer(),
         new PlaywrightAssertionRecognizer(),
         new SelectValueRecognizer(),
+        new PageObjectMethodRecognizer(),
         new UnknownInvocationRecognizer(),
     };
 

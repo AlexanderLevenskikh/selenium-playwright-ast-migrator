@@ -42,7 +42,8 @@ public class DefaultProjectAdapter : IProjectAdapter
 
         foreach (var m in config.Methods)
         {
-            _methodMap[m.SourceMethod] = m.TargetMethod;
+            if (m.TargetMethod != null)
+                _methodMap[m.SourceMethod] = m.TargetMethod;
             if (m.TargetStatements != null && m.TargetStatements.Length > 0)
                 _methodStatementsMap[m.SourceMethod] = (m.TargetStatements, m.RequiresReview);
         }

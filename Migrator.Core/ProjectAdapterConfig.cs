@@ -26,7 +26,7 @@ public record PageObjectMapping(
 
 public record MethodMapping(
     string SourceMethod,
-    string TargetMethod,
+    string? TargetMethod,
     string? Description,
     string[]? TargetStatements,
     bool RequiresReview

@@ -3,19 +3,17 @@ using Migrator.Core.Models;
 
 namespace Migrator.Roslyn.Recognizers;
 
+/// <summary>
+/// Catches unrecognized method invocations on a receiver and preserves them
+/// as MethodInvocationAction for adapter config mapping or manual review.
+/// Placed near the end of the recognizer pipeline — acts as a generic fallback
+/// for any receiver-based invocation that other recognizers didn't handle.
+/// </summary>
 public class PageObjectMethodRecognizer : IInvocationRecognizer
 {
-    static readonly HashSet<string> KnownMethods = new()
-    {
-        "ClickAndOpen", "ValidateLoading", "Get", "Visible",
-        "InputAndSelect", "InputTextAndSelectValue", "InputTextAndSelect",
-        "ManualInputValue", "ExcludeValue", "SortSc", "ClearSort", "Sort",
-        "InputText"
-    };
-
     public TestAction? TryRecognize(InvocationContext ctx)
     {
-        if (KnownMethods.Contains(ctx.MethodName) && !string.IsNullOrEmpty(ctx.ReceiverText))
+        if (!string.IsNullOrEmpty(ctx.ReceiverText))
             return new MethodInvocationAction(ctx.SourceLine, ctx.ReceiverText, ctx.MethodName, ctx.FullText, RecognitionConfidence.SyntaxFallback);
 
         return null;
