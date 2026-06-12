@@ -127,6 +127,20 @@ pnpm-debug.log*
 .env.*
 !.env.example
 
+# Playwright trace files
+*.trace
+*.trace.zip
+*.png
+*.jpg
+*.jpeg
+*.webm
+*.mp4
+
+# Local/private profile configs
+*.local.json
+**/*.local.json
+profiles/**/*.local.json
+
 # Keep input fixtures and snapshots
 !**/TestFiles/**/*.cs
 !**/__snapshots__/**

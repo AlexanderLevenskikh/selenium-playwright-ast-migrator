@@ -30,7 +30,7 @@ public class SnapshotTests
         var report = result.Report;
 
         Assert.Equal("Widget", model.ClassName);
-        Assert.Equal("ArBilling.E2ETests.Tests.Functional", model.Namespace);
+        Assert.Equal("Example.E2ETests.Tests.Functional", model.Namespace);
         Assert.NotEmpty(model.SetUpActions);
         Assert.Equal(3, model.Tests.Count());
 
@@ -38,7 +38,7 @@ public class SnapshotTests
         Assert.Contains("using NUnit.Framework;", output);
         Assert.Contains("using System.Threading.Tasks;", output);
 
-        Assert.Contains("namespace ArBilling.E2ETests.Tests.Functional.Playwright;", output);
+        Assert.Contains("namespace Example.E2ETests.Tests.Functional.Playwright;", output);
         Assert.Contains("class WidgetPlaywright : PageTest", output);
 
         Assert.Contains("[SetUp]", output);
@@ -86,7 +86,7 @@ public class SnapshotTests
         var report = result.Report;
 
         Assert.Contains("using Microsoft.Playwright.NUnit;", output);
-        Assert.Contains("namespace ArBilling.E2ETests.Tests.NonCategory.Playwright;", output);
+        Assert.Contains("namespace Example.E2ETests.Tests.NonCategory.Playwright;", output);
         Assert.Contains("class ButtonTestsPlaywright : PageTest", output);
 
         Assert.Contains("[SetUp]", output);
@@ -188,8 +188,8 @@ public class SnapshotTests
         var report = result.Report;
 
         Assert.Contains("TestCase", output);
-        Assert.Contains("По возрастанию", output);
-        Assert.Contains("По убыванию", output);
+        Assert.Contains("Ascending", output);
+        Assert.Contains("Descending", output);
         Assert.Contains("CheckFilterScSortAndExcludeToRegistry", output);
         Assert.Contains("string sortOrder", output);
         Assert.Contains("string text", output);

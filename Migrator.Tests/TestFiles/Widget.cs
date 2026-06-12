@@ -1,11 +1,11 @@
-using ArBilling.E2ETests.Infrastructure;
-using ArBilling.E2ETests.Infrastructure.PageElements;
-using ArBilling.E2ETests.PageObjects.Widget;
+using Example.E2ETests.Infrastructure;
+using Example.E2ETests.Infrastructure.PageElements;
+using Example.E2ETests.PageObjects.Widget;
 using FluentAssertions;
 using NUnit.Framework;
 using OpenQA.Selenium;
 
-namespace ArBilling.E2ETests.Tests.Functional;
+namespace Example.E2ETests.Tests.Functional;
 
 public class Widget : TestBase
 {
@@ -27,7 +27,7 @@ public class Widget : TestBase
     public void CheckUserToWidget()
     {
         page.User.Click();
-        page.UserInput.InputTextAndSelectValue("Selenium-администатор");
+        page.UserInput.InputTextAndSelectValue("Test User");
         page.FuterUser.Visible.Wait().EqualTo(true);
         page.FuterUser.Text.Get().Should().NotBeEmpty();
     }
@@ -35,7 +35,7 @@ public class Widget : TestBase
     [Test]
     public void CheckDateToWidget()
     {
-        page.WidgetDate.ManualInputValue("Март", "2025", 22);
+        page.WidgetDate.ManualInputValue("March", "2025", 22);
         page.Loader.ValidateLoading();
         page.FuterUser.Visible.Wait().EqualTo(true);
         page.FuterUser.Text.Get().Should().NotBeEmpty();
@@ -44,7 +44,7 @@ public class Widget : TestBase
     [Test]
     public void CheckSearchToWidget()
     {
-        page.WidgetSearch.InputText("Отправка в Диадок АНО ДПО 12.2022 (СЦ 0669)");
+        page.WidgetSearch.InputText("Example invoice 2024");
         page.WidgetSearch.InputText(Keys.Enter);
         page.Loader.ValidateLoading();
         page.FuterUser.WaitPresence();

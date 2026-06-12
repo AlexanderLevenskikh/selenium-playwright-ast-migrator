@@ -4,7 +4,7 @@ using Microsoft.Playwright.NUnit;
 using NUnit.Framework;
 using System.Threading.Tasks;
 
-namespace ArBilling.E2ETests.Tests.Functional.Playwright;
+namespace Example.E2ETests.Tests.Functional.Playwright;
 
 // WARNING: some actions need manual review. See TODO comments below.
 
@@ -28,7 +28,7 @@ public class WidgetPlaywright : PageTest
 	public async Task CheckUserToWidget()
 	{
 		await Page.GetByTestId("widget-user").ClickAsync(); // line 29
-		// [InputTextAndSelectValue] page.UserInput.InputTextAndSelectValue("Selenium-администатор") // line 30
+		// [InputTextAndSelectValue] page.UserInput.InputTextAndSelectValue("Test User") // line 30
 		// TODO: manual review needed
 		await Expect(Page.GetByTestId("futer-user")).ToBeVisibleAsync(); // line 31
 		var textResult_0 = await Page.GetByTestId("futer-user").InnerTextAsync(); // line 32
@@ -38,7 +38,7 @@ public class WidgetPlaywright : PageTest
 	[Test]
 	public async Task CheckDateToWidget()
 	{
-		// [ManualInputValue] page.WidgetDate.ManualInputValue("Март", "2025", 22) // line 38
+		// [ManualInputValue] page.WidgetDate.ManualInputValue("March", "2025", 22) // line 38
 		// TODO: manual review needed
 		// [ValidateLoading] page.Loader.ValidateLoading() // line 39
 		// TODO: manual review needed
@@ -50,7 +50,7 @@ public class WidgetPlaywright : PageTest
 	[Test]
 	public async Task CheckSearchToWidget()
 	{
-		await Page.GetByTestId("widget-search").FillAsync("Отправка в Диадок АНО ДПО 12.2022 (СЦ 0669)"); // line 47
+		await Page.GetByTestId("widget-search").FillAsync("Example invoice 2024"); // line 47
 		await Page.GetByTestId("widget-search").PressAsync("Enter"); // line 48
 		// [ValidateLoading] page.Loader.ValidateLoading() // line 49
 		// TODO: manual review needed

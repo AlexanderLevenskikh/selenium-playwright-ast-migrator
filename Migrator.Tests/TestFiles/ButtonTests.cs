@@ -1,9 +1,9 @@
-using ArBilling.E2ETests.Infrastructure;
-using ArBilling.E2ETests.PageObjects;
+using Example.E2ETests.Infrastructure;
+using Example.E2ETests.PageObjects;
 using FluentAssertions;
 using NUnit.Framework;
 
-namespace ArBilling.E2ETests.Tests.NonCategory;
+namespace Example.E2ETests.Tests.NonCategory;
 
 public class ButtonTests : TestBase
 {
@@ -31,7 +31,7 @@ public class ButtonTests : TestBase
     public void CheckFeedBackButton()
     {
         page.MenuItems.SideMenuButtonFeedback.Visible.Wait().EqualTo(true);
-        page.MenuItems.SideMenuButtonFeedback.Text.Get().Should().Be("Оставить отзыв");
+        page.MenuItems.SideMenuButtonFeedback.Text.Get().Should().Be("Leave feedback");
     }
 
     [Test]
