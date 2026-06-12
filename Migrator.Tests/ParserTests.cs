@@ -1,5 +1,6 @@
 using System.IO;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Migrator.Core;
 using Migrator.Core.Models;
 using Migrator.PlaywrightDotNet;
@@ -1064,5 +1065,309 @@ public class ParserTests
 
         Assert.Contains("Page.GetByTestId(\"submit\")", output);
         Assert.DoesNotContain("TODO", output);
+    }
+
+    // --- MappedMethodInvocation var deduplication tests ---
+
+    [Fact]
+    public void Render_MappedMethodInvocation_RepeatedVarDedup()
+    {
+        var loaderStatements = new[]
+        {
+            "var loader = Page.Locator(\"[data-test='table-loader']\");",
+            "if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync();",
+        };
+
+        var model = new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "TC",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel(
+                    Name: "T1",
+                    Category: null,
+                    CaseData: Array.Empty<TestCaseData>(),
+                    Parameters: Array.Empty<MethodParameterModel>(),
+                    BodyActions: new TestAction[]
+                    {
+                        new MappedMethodInvocationAction(1, "page.Loader.ValidateLoading()", loaderStatements, false),
+                        new MappedMethodInvocationAction(2, "page.Loader.ValidateLoading()", loaderStatements, false),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+
+        Assert.Contains("var loader", output);
+        Assert.Contains("var loader_0", output);
+        Assert.Contains("await loader_0.CountAsync()", output);
+        Assert.Contains("await Expect(loader_0).ToBeHiddenAsync()", output);
+
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void Render_MappedMethodInvocation_FirstVarKeptAsIs()
+    {
+        var loaderStatements = new[]
+        {
+            "var loader = Page.Locator(\"[data-test='table-loader']\");",
+            "if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync();",
+        };
+
+        var model = new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "TC",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel(
+                    Name: "T1",
+                    Category: null,
+                    CaseData: Array.Empty<TestCaseData>(),
+                    Parameters: Array.Empty<MethodParameterModel>(),
+                    BodyActions: new TestAction[]
+                    {
+                        new MappedMethodInvocationAction(1, "page.Loader.ValidateLoading()", loaderStatements, false),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+
+        Assert.Contains("var loader", output);
+        Assert.Contains("await loader.CountAsync()", output);
+        Assert.Contains("await Expect(loader).ToBeHiddenAsync()", output);
+        Assert.DoesNotContain("loader_0", output);
+
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void Render_MappedMethodInvocation_ThreeRepeatedVarAllUnique()
+    {
+        var loaderStatements = new[]
+        {
+            "var loader = Page.Locator(\"[data-test='table-loader']\");",
+            "if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync();",
+        };
+
+        var model = new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "TC",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel(
+                    Name: "T1",
+                    Category: null,
+                    CaseData: Array.Empty<TestCaseData>(),
+                    Parameters: Array.Empty<MethodParameterModel>(),
+                    BodyActions: new TestAction[]
+                    {
+                        new MappedMethodInvocationAction(1, "page.Loader.ValidateLoading()", loaderStatements, false),
+                        new MappedMethodInvocationAction(2, "page.Loader.ValidateLoading()", loaderStatements, false),
+                        new MappedMethodInvocationAction(3, "page.Loader.ValidateLoading()", loaderStatements, false),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+
+        Assert.Contains("var loader", output);
+        Assert.Contains("var loader_0", output);
+        Assert.Contains("var loader_1", output);
+
+        var varLoaderCount = output.Split('\n').Count(l => Regex.IsMatch(l, @"\bvar loader\b"));
+        Assert.True(varLoaderCount == 1, $"Expected 1 'var loader', got {varLoaderCount}");
+
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void Render_MappedMethodInvocation_DedupDoesNotCorruptSubstring()
+    {
+        var statementsWithSubstring = new[]
+        {
+            "var loader = Page.Locator(\"[data-test='table-loader']\");",
+            "var loaderState = true;",
+            "if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync();",
+        };
+
+        var model = new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "TC",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel(
+                    Name: "T1",
+                    Category: null,
+                    CaseData: Array.Empty<TestCaseData>(),
+                    Parameters: Array.Empty<MethodParameterModel>(),
+                    BodyActions: new TestAction[]
+                    {
+                        new MappedMethodInvocationAction(1, "page.Loader.ValidateLoading()", statementsWithSubstring, false),
+                        new MappedMethodInvocationAction(2, "page.Loader.ValidateLoading()", statementsWithSubstring, false),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+
+        Assert.Contains("var loader", output);
+        Assert.Contains("var loader_0", output);
+        Assert.Contains("loaderState", output);
+        Assert.DoesNotContain("loader_0State", output);
+
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void Render_MappedMethodInvocation_DedupScopesPerMethod()
+    {
+        var loaderStatements = new[]
+        {
+            "var loader = Page.Locator(\"[data-test='table-loader']\");",
+            "if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync();",
+        };
+
+        var model = new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "TC",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel(
+                    Name: "T1",
+                    Category: null,
+                    CaseData: Array.Empty<TestCaseData>(),
+                    Parameters: Array.Empty<MethodParameterModel>(),
+                    BodyActions: new TestAction[]
+                    {
+                        new MappedMethodInvocationAction(1, "page.Loader.ValidateLoading()", loaderStatements, false),
+                        new MappedMethodInvocationAction(2, "page.Loader.ValidateLoading()", loaderStatements, false),
+                    }),
+                new TestModel(
+                    Name: "T2",
+                    Category: null,
+                    CaseData: Array.Empty<TestCaseData>(),
+                    Parameters: Array.Empty<MethodParameterModel>(),
+                    BodyActions: new TestAction[]
+                    {
+                        new MappedMethodInvocationAction(3, "page.Loader.ValidateLoading()", loaderStatements, false),
+                        new MappedMethodInvocationAction(4, "page.Loader.ValidateLoading()", loaderStatements, false),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+
+        var lines = output.Split('\n');
+        var t1Start = lines.FirstOrDefault(i => i.Contains("public async Task T1"));
+        var t2Start = lines.FirstOrDefault(i => i.Contains("public async Task T2"));
+
+        Assert.Contains("var loader", output);
+        Assert.Contains("var loader_0", output);
+
+        var varLoaderCount = output.Split('\n').Count(l => Regex.IsMatch(l, @"\bvar loader\b"));
+        Assert.True(varLoaderCount == 2, $"Expected 2 'var loader', got {varLoaderCount}");
+
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void Render_MappedMethodInvocation_NoVarNoDedup()
+    {
+        var noVarStatements = new[]
+        {
+            "await Page.GotoAsync(\"/registry\");",
+        };
+
+        var model = new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "TC",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel(
+                    Name: "T1",
+                    Category: null,
+                    CaseData: Array.Empty<TestCaseData>(),
+                    Parameters: Array.Empty<MethodParameterModel>(),
+                    BodyActions: new TestAction[]
+                    {
+                        new MappedMethodInvocationAction(1, "Navigation.GoToAsync(\"/registry\")", noVarStatements, false),
+                        new MappedMethodInvocationAction(2, "Navigation.GoToAsync(\"/registry\")", noVarStatements, false),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+
+        Assert.Contains("await Page.GotoAsync(\"/registry\");", output);
+        Assert.DoesNotContain("var loader", output);
+        Assert.DoesNotContain("_0", output);
+
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void Render_MappedMethodInvocation_DedupInSetUp()
+    {
+        var loaderStatements = new[]
+        {
+            "var loader = Page.Locator(\"[data-test='table-loader']\");",
+            "if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync();",
+        };
+
+        var model = new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "TC",
+            BaseClassName: null,
+            SetUpActions: new TestAction[]
+            {
+                new MappedMethodInvocationAction(1, "pagef.Loader.ValidateLoading()", loaderStatements, false),
+                new MappedMethodInvocationAction(2, "pagef.Loader.ValidateLoading()", loaderStatements, false),
+            },
+            Tests: new[]
+            {
+                new TestModel(
+                    Name: "T1",
+                    Category: null,
+                    CaseData: Array.Empty<TestCaseData>(),
+                    Parameters: Array.Empty<MethodParameterModel>(),
+                    BodyActions: Array.Empty<TestAction>()),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+
+        Assert.Contains("var loader", output);
+        Assert.Contains("var loader_0", output);
+        Assert.Contains("await loader_0.CountAsync()", output);
+
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
     }
 }

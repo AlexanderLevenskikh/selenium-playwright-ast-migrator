@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using Migrator.Core;
 using Migrator.Core.Models;
 
@@ -404,7 +405,7 @@ public class PlaywrightDotNetRenderer : IRenderer
 
             var resolved = stmt;
             foreach (var (orig, renamed) in seenInInvocation)
-                resolved = resolved.Replace(orig, renamed);
+                resolved = Regex.Replace(resolved, $@"\b{Regex.Escape(orig)}\b", renamed);
             result[i] = resolved;
         }
 
