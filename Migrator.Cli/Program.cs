@@ -342,8 +342,7 @@ static Dictionary<string, (int Count, string File, int Line)> CollectAllUnsuppor
         {
             if (action is UnsupportedAction ua)
             {
-                var key = ua.SourceText.Length > 80 ? ua.SourceText.Substring(0, 80) + "..." : ua.SourceText;
-                key = key.Replace("\n", " ").Replace("\r", " ");
+                var key = ua.SourceText.Replace("\n", " ").Replace("\r", " ");
                 if (!allUnsupported.ContainsKey(key))
                     allUnsupported[key] = (1, report.SourceFilePath, action.SourceLine);
                 else
@@ -421,8 +420,7 @@ static MigrationSummaryReport BuildSummary(List<PipelineResult> results, out IRe
 
             if (action is UnsupportedAction ua)
             {
-                var key = ua.SourceText.Length > 80 ? ua.SourceText.Substring(0, 80) + "..." : ua.SourceText;
-                key = key.Replace("\n", " ").Replace("\r", " ");
+                var key = ua.SourceText.Replace("\n", " ").Replace("\r", " ");
                 if (!allUnsupported.ContainsKey(key))
                     allUnsupported[key] = (1, report.SourceFilePath, action.SourceLine);
                 else

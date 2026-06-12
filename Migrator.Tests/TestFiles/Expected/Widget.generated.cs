@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace ArBilling.E2ETests.Tests.Functional.Playwright;
 
-// WARNING: 3 action(s) need manual review. See TODO comments below.
+// WARNING: some actions need manual review. See TODO comments below.
 
 public class WidgetPlaywright : PageTest
 {

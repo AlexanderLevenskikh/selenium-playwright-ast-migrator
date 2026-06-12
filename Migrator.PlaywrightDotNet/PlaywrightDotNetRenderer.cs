@@ -33,14 +33,13 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
 
         var className = model.ClassName + "Playwright";
-        var allActions = model.Tests.SelectMany(t => t.BodyActions).ToList();
-        var allSetupActions = model.SetUpActions.ToList();
-        var allFileActions = allActions.Concat(allSetupActions).ToList();
-        var todoCount = allFileActions.Count(a => a is UnsupportedAction or RawStatementAction);
+        var hasTodoActions = model.Tests.SelectMany(t => t.BodyActions)
+            .Concat(model.SetUpActions)
+            .Any(a => a is UnsupportedAction or RawStatementAction);
 
-        if (todoCount > 0)
+        if (hasTodoActions)
         {
-            sb.AppendLine($"// WARNING: {todoCount} action(s) need manual review. See TODO comments below.");
+            sb.AppendLine("// WARNING: some actions need manual review. See TODO comments below.");
             sb.AppendLine();
         }
 
@@ -154,6 +153,12 @@ public class PlaywrightDotNetRenderer : IRenderer
             case RawStatementAction raw:
                 RenderRawStatement(sb, raw);
                 break;
+            case PressAction press:
+                RenderPress(sb, press);
+                break;
+            case LocalDeclarationAction localDecl:
+                RenderLocalDeclaration(sb, localDecl);
+                break;
             default:
                 sb.AppendLine($"{_indent}{_indent}// [unknown action: {action.GetType().Name}]");
                 break;
@@ -186,10 +191,6 @@ public class PlaywrightDotNetRenderer : IRenderer
                 sb.AppendLine($"{_indent}{_indent}// TODO: source input call has no value argument: {target.SourceExpression}");
                 sb.AppendLine($"{_indent}{_indent}// await {RenderTargetExpression(target)}.FillAsync(/* TODO */); // line {action.SourceLine}");
             }
-            else if (TryRenderKeyExpression(action.TextExpression, out var keyName))
-            {
-                sb.AppendLine($"{_indent}{_indent}await {RenderTargetExpression(target)}.PressAsync(\"{keyName}\"); // line {action.SourceLine}");
-            }
             else
             {
                 sb.AppendLine($"{_indent}{_indent}await {RenderTargetExpression(target)}.FillAsync({text}); // line {action.SourceLine}");
@@ -200,22 +201,35 @@ public class PlaywrightDotNetRenderer : IRenderer
             sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {target.SourceExpression}");
             if (string.IsNullOrWhiteSpace(text))
                 sb.AppendLine($"{_indent}{_indent}// await Page.Locator(\"TODO: {target.SourceExpression}\").FillAsync(/* TODO */); // line {action.SourceLine}");
-            else if (TryRenderKeyExpression(action.TextExpression, out var keyName))
-                sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {target.SourceExpression}\").PressAsync(\"{keyName}\"); // line {action.SourceLine}");
             else
                 sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {target.SourceExpression}\").FillAsync({text}); // line {action.SourceLine}");
         }
     }
 
-    bool TryRenderKeyExpression(string expression, out string keyName)
+    void RenderPress(StringBuilder sb, PressAction action)
     {
-        keyName = string.Empty;
-        var expr = expression.Trim();
-        if (!expr.StartsWith("Keys.", System.StringComparison.Ordinal))
-            return false;
+        var target = action.Target;
+        var keyName = ExtractKeyName(action.KeyName);
 
-        keyName = expr.Substring("Keys.".Length);
-        return !string.IsNullOrWhiteSpace(keyName);
+        if (target.Kind != TargetKind.Unresolved)
+        {
+            sb.AppendLine($"{_indent}{_indent}await {RenderTargetExpression(target)}.PressAsync(\"{keyName}\"); // line {action.SourceLine}");
+        }
+        else
+        {
+            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {target.SourceExpression}");
+            sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {target.SourceExpression}\").PressAsync(\"{keyName}\"); // line {action.SourceLine}");
+        }
+    }
+
+    string ExtractKeyName(string keyExpression)
+    {
+        var expr = keyExpression.Trim();
+        if (expr.StartsWith("Keys.", System.StringComparison.Ordinal))
+            return expr.Substring("Keys.".Length);
+        if (expr.StartsWith('"') && expr.EndsWith('"'))
+            return expr.Substring(1, expr.Length - 2);
+        return expr;
     }
 
     string NormalizeAttribute(string rawAttribute)
@@ -275,6 +289,11 @@ public class PlaywrightDotNetRenderer : IRenderer
     void RenderRawStatement(StringBuilder sb, RawStatementAction action)
     {
         sb.AppendLine($"{_indent}{_indent}// TODO: raw statement — review: {EscapeComment(action.SourceText)}");
+    }
+
+    void RenderLocalDeclaration(StringBuilder sb, LocalDeclarationAction action)
+    {
+        sb.AppendLine($"{_indent}{_indent}{action.VariableType} {action.VariableName} = {action.InitializationValue}; // line {action.SourceLine}");
     }
 
     string ConvertExpression(string expr)

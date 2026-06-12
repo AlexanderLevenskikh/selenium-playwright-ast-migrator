@@ -15,6 +15,11 @@ public class SendKeysInvocationRecognizer : IInvocationRecognizer
         if (SimpleInputMethods.Contains(ctx.MethodName) && !string.IsNullOrEmpty(ctx.ReceiverText))
         {
             var argText = ctx.ArgumentTexts.FirstOrDefault() ?? string.Empty;
+            if (argText.StartsWith("Keys.", System.StringComparison.Ordinal))
+            {
+                var keyName = argText.Substring("Keys.".Length);
+                return new PressAction(ctx.SourceLine, ctx.ReceiverText, keyName, RecognitionConfidence.SyntaxFallback);
+            }
             return new SendKeysAction(ctx.SourceLine, ctx.ReceiverText, argText, RecognitionConfidence.SyntaxFallback);
         }
 

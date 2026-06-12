@@ -203,9 +203,12 @@ public class RoslynTestFileParser : ITestFileParser
 
     static TestAction? TryExtractAction(StatementSyntax statement, SemanticModel semanticModel, int line)
     {
-        // Local declarations — preserve as raw statements
+        // Local declarations — try to extract meaningful declarations
         if (statement is LocalDeclarationStatementSyntax lds)
         {
+            if (TryExtractLocalDeclaration(lds, line) is { } localDecl)
+                return localDecl;
+
             var text = lds.ToString().Trim().Trim(';');
             return new RawStatementAction(line, text);
         }
@@ -281,6 +284,11 @@ public class RoslynTestFileParser : ITestFileParser
         {
             var firstArg = invocation.ArgumentList.Arguments.FirstOrDefault();
             var argText = firstArg?.Expression.ToString() ?? string.Empty;
+            if (argText.StartsWith("Keys.", System.StringComparison.Ordinal))
+            {
+                var keyName = argText.Substring("Keys.".Length);
+                return new PressAction(line, receiverText, keyName);
+            }
             return new SendKeysAction(line, receiverText, argText);
         }
 
@@ -370,5 +378,39 @@ public class RoslynTestFileParser : ITestFileParser
             InvocationExpressionSyntax => true,
             _ => false
         };
+    }
+
+    static LocalDeclarationAction? TryExtractLocalDeclaration(LocalDeclarationStatementSyntax lds, int line)
+    {
+        var declaration = lds.Declaration;
+        if (declaration.Variables.Count == 0) return null;
+
+        var variable = declaration.Variables[0];
+        var varName = variable.Identifier.Text;
+
+        if (!IsMeaningfulVariableName(varName))
+            return null;
+
+        var typeText = declaration.Type.ToString();
+        var valueText = variable.Initializer?.Value.ToString() ?? string.Empty;
+
+        return new LocalDeclarationAction(line, varName, typeText, valueText);
+    }
+
+    static readonly HashSet<string> MeaningfulVariableNames = new(StringComparer.Ordinal)
+    {
+        "name", "code", "text", "value", "result", "response",
+        "displayName", "itemCode", "userName", "entryCode",
+        "searchText", "filterText", "inputValue", "selectedValue",
+    };
+
+    static bool IsMeaningfulVariableName(string name)
+    {
+        name = name.TrimStart('@');
+        if (MeaningfulVariableNames.Contains(name.ToLowerInvariant()))
+            return true;
+
+        var lower = name.ToLowerInvariant();
+        return lower.Contains("name") || lower.Contains("code") || lower.Contains("text") || lower.Contains("value");
     }
 }
