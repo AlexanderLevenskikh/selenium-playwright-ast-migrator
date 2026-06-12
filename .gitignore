@@ -95,6 +95,7 @@ adapter-config.pilot.json
 
 # Local manual proof outputs
 manual-proof/
+manual-proof-*/
 
 # Local migration workspace
 .local/
