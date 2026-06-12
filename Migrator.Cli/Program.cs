@@ -308,6 +308,7 @@ static Dictionary<string, (int Count, string File, int Line)> CollectAllUnmapped
             {
                 ClickAction c => c.Target,
                 SendKeysAction s => s.Target,
+                PressAction p => p.Target,
                 _ => null
             };
 
@@ -394,7 +395,7 @@ static MigrationSummaryReport BuildSummary(List<PipelineResult> results, out IRe
             .Concat(result.TargetModel.SetUpActions).ToList();
         totalActions += allActions.Count;
 
-        if (report.UnsupportedCount > 0)
+        if (report.TodoComments > 0)
             filesWithWarnings++;
 
         foreach (var action in allActions)
@@ -403,6 +404,7 @@ static MigrationSummaryReport BuildSummary(List<PipelineResult> results, out IRe
             {
                 ClickAction c => c.Target,
                 SendKeysAction s => s.Target,
+                PressAction p => p.Target,
                 _ => null
             };
 

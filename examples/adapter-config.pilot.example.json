@@ -1,0 +1,47 @@
+{
+  "SourceProjectName": "ExampleTestProject",
+  "UiTargets": [
+    {
+      "SourceExpression": "page.User",
+      "TargetExpression": "GetByTestId(\"user-filter\")",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.Name",
+      "TargetExpression": "GetByTestId(\"user-name\")",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.MenuItems.SearchButton",
+      "TargetExpression": "GetByTestId(\"search-button\")",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.MenuItems.Catalogs",
+      "TargetExpression": "GetByTestId(\"catalogs-menu\")",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.MenuItems.Partners",
+      "TargetExpression": "GetByTestId(\"partners-menu\")",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.SearchInput",
+      "TargetExpression": "Locator(\"[data-tid='Input__root']\")",
+      "TargetKind": "Locator"
+    },
+    {
+      "SourceExpression": "page.Footer",
+      "TargetExpression": "GetByTestId(\"process-footer\")",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.Parameters",
+      "TargetExpression": "GetByTestId(\"params-label\")",
+      "TargetKind": "TestId"
+    }
+  ],
+  "PageObjects": [],
+  "Methods": []
+}

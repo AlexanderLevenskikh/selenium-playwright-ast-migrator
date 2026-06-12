@@ -47,6 +47,7 @@ public static class ReportBuilder
     {
         if (action is ClickAction click) return click.Target;
         if (action is SendKeysAction sk) return sk.Target;
+        if (action is PressAction p) return p.Target;
         return null;
     }
 }

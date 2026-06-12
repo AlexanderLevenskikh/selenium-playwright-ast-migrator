@@ -432,4 +432,96 @@ public class ParserTests
         Assert.Contains("var code", output);
         Assert.Contains("var name", output);
     }
+
+    [Fact]
+    public void Adapter_UnmappedPressAction_CountedInReport()
+    {
+        var adapter = new DefaultProjectAdapter(new ProjectAdapterConfig(
+            SourceProjectName: "Test",
+            UiTargets: Array.Empty<UiTargetMapping>(),
+            PageObjects: Array.Empty<PageObjectMapping>(),
+            Methods: Array.Empty<MethodMapping>()
+        ));
+
+        var pressAction = new PressAction(1, TargetExpression.Unresolved("page.UnknownSearch"), "Enter", RecognitionConfidence.SyntaxFallback);
+        var testModel = new TestModel(
+            Name: "TestPress",
+            Category: null,
+            CaseData: Array.Empty<TestCaseData>(),
+            Parameters: Array.Empty<MethodParameterModel>(),
+            BodyActions: new[] { pressAction }
+        );
+        var fileModel = new TestFileModel(
+            FilePath: "test.cs",
+            Namespace: "Test",
+            ClassName: "TestClass",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[] { testModel }
+        );
+
+        var adapted = adapter.Adapt(fileModel);
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(adapted);
+        var report = ReportBuilder.Build(adapted, output);
+
+        Assert.Equal(1, report.UnmappedTargets);
+        Assert.Equal(0, report.MappedTargets);
+        Assert.Contains("TODO: page.UnknownSearch", output);
+    }
+
+    [Fact]
+    public void Summary_FilesWithWarnings_CountsFilesWithTodoComments()
+    {
+        var fileModelWithTodo = new TestFileModel(
+            FilePath: "with-todo.cs",
+            Namespace: "Test",
+            ClassName: "WithTodo",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel(
+                    Name: "T1",
+                    Category: null,
+                    CaseData: Array.Empty<TestCaseData>(),
+                    Parameters: Array.Empty<MethodParameterModel>(),
+                    BodyActions: new[]
+                    {
+                        new ClickAction(1, TargetExpression.Unresolved("page.Unknown"), RecognitionConfidence.SyntaxFallback)
+                    }
+                )
+            }
+        );
+        var fileModelClean = new TestFileModel(
+            FilePath: "clean.cs",
+            Namespace: "Test",
+            ClassName: "Clean",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel(
+                    Name: "T2",
+                    Category: null,
+                    CaseData: Array.Empty<TestCaseData>(),
+                    Parameters: Array.Empty<MethodParameterModel>(),
+                    BodyActions: new[]
+                    {
+                        new ClickAction(1, TargetExpression.Mapped("page.Known", "GetByTestId(\"known\")", TargetKind.PlaywrightLocator), RecognitionConfidence.SyntaxFallback)
+                    }
+                )
+            }
+        );
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var outputWithTodo = renderer.Render(fileModelWithTodo);
+        var outputClean = renderer.Render(fileModelClean);
+
+        var reportWithTodo = ReportBuilder.Build(fileModelWithTodo, outputWithTodo);
+        var reportClean = ReportBuilder.Build(fileModelClean, outputClean);
+
+        Assert.True(reportWithTodo.TodoComments > 0, "File with unmapped target should have TODO comments");
+        Assert.True(reportClean.TodoComments == 0, "File with all mapped targets should have no TODO comments");
+    }
 }
