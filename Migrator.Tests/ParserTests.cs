@@ -43,7 +43,8 @@ public class ParserTests
         Assert.All(model.SetUpActions, a =>
             Assert.True(
                 a is ClickAction or MethodInvocationAction or SendKeysAction or
-                AssertThatAction or AssertAreEqualAction or UnsupportedAction or PageObjectFieldAction,
+                AssertThatAction or AssertAreEqualAction or UnsupportedAction or PageObjectFieldAction or
+                RawStatementAction,
                 $"Unknown action type: {a.GetType().Name}"));
     }
 
@@ -120,7 +121,8 @@ public class ParserTests
         {
             Assert.True(
                 a is ClickAction or SendKeysAction or AssertThatAction or AssertAreEqualAction or
-                MethodInvocationAction or UnsupportedAction or PageObjectFieldAction,
+                MethodInvocationAction or UnsupportedAction or PageObjectFieldAction or
+                RawStatementAction,
                 $"Action type {a.GetType().Name} should be one of the known types"
             );
         });
@@ -140,10 +142,11 @@ public class ParserTests
             .Concat(allActions.OfType<MethodInvocationAction>())
             .Concat(allActions.OfType<AssertThatAction>())
             .Concat(allActions.OfType<AssertAreEqualAction>())
+            .Concat(allActions.OfType<RawStatementAction>())
             .ToList();
 
         Assert.True(knownActions.Count + unsupported.Count == allActions.Count,
-            "All actions must be either recognized or marked unsupported — nothing silently dropped");
+            "All actions must be either recognized, raw statement, or marked unsupported — nothing silently dropped");
     }
 
     [Fact]
@@ -190,8 +193,8 @@ public class ParserTests
 
         var allFileActions = model.Tests.SelectMany(t => t.BodyActions)
             .Concat(model.SetUpActions).ToList();
-        var unsupportedCount = allFileActions.Count(a => a is UnsupportedAction);
-        if (unsupportedCount > 0)
+        var todoCount = allFileActions.Count(a => a is UnsupportedAction or RawStatementAction);
+        if (todoCount > 0)
         {
             Assert.Contains("WARNING", output);
             Assert.Contains("TODO", output);
@@ -363,5 +366,70 @@ public class ParserTests
         Assert.Equal(1, report.MappedTargets);
         Assert.Equal(1, report.UnmappedTargets);
         Assert.True(report.TodoComments > 0, "Should have at least one TODO for unmapped target");
+    }
+
+    // --- New recognizer fixture tests ---
+
+    [Fact]
+    public void Parse_NewPatterns_ClickAsyncRecognized()
+    {
+        var model = _parser.Parse(Path.Combine(_testFilesDir, "NewPatternsFixture.cs"));
+        var test = model.Tests.First(t => t.Name == "CheckClickAsync");
+        Assert.Contains(test.BodyActions, a => a is ClickAction);
+    }
+
+    [Fact]
+    public void Parse_NewPatterns_FillAsyncRecognized()
+    {
+        var model = _parser.Parse(Path.Combine(_testFilesDir, "NewPatternsFixture.cs"));
+        var test = model.Tests.First(t => t.Name == "CheckFillAsync");
+        Assert.Contains(test.BodyActions, a => a is SendKeysAction sk && sk.TextExpression.Contains("test value"));
+    }
+
+    [Fact]
+    public void Parse_NewPatterns_PressAsyncRecognized()
+    {
+        var model = _parser.Parse(Path.Combine(_testFilesDir, "NewPatternsFixture.cs"));
+        var test = model.Tests.First(t => t.Name == "CheckPressAsync");
+        Assert.Contains(test.BodyActions, a => a is PressAction p && p.KeyName == "Enter");
+    }
+
+    [Fact]
+    public void Parse_NewPatterns_SelectValueRecognized()
+    {
+        var model = _parser.Parse(Path.Combine(_testFilesDir, "NewPatternsFixture.cs"));
+        var test = model.Tests.First(t => t.Name == "CheckSelectValue");
+        Assert.Contains(test.BodyActions, a => a is MethodInvocationAction mi && mi.MethodName == "SelectValue");
+    }
+
+    [Fact]
+    public void Parse_NewPatterns_PlaywrightAssertionRecognized()
+    {
+        var model = _parser.Parse(Path.Combine(_testFilesDir, "NewPatternsFixture.cs"));
+        var test = model.Tests.First(t => t.Name == "CheckPlaywrightAssertion");
+        Assert.Contains(test.BodyActions, a => a is MethodInvocationAction mi && mi.MethodName == "ToHaveTextAsync");
+        Assert.Contains(test.BodyActions, a => a is MethodInvocationAction mi && mi.MethodName == "ToBeHiddenAsync");
+    }
+
+    [Fact]
+    public void Parse_NewPatterns_LocalDeclarationExtracted()
+    {
+        var model = _parser.Parse(Path.Combine(_testFilesDir, "NewPatternsFixture.cs"));
+        var test = model.Tests.First(t => t.Name == "CheckLocalDeclaration");
+        Assert.Contains(test.BodyActions, a => a is LocalDeclarationAction ld && ld.VariableName == "code");
+        Assert.Contains(test.BodyActions, a => a is LocalDeclarationAction ld && ld.VariableName == "name");
+        Assert.DoesNotContain(test.BodyActions, a => a is LocalDeclarationAction ld && ld.VariableName == "irrelevant");
+    }
+
+    [Fact]
+    public void Render_NewPatterns_PressActionRendersCorrectly()
+    {
+        var model = _parser.Parse(Path.Combine(_testFilesDir, "NewPatternsFixture.cs"));
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+
+        Assert.Contains(".PressAsync(\"Enter\")", output);
+        Assert.Contains("var code", output);
+        Assert.Contains("var name", output);
     }
 }

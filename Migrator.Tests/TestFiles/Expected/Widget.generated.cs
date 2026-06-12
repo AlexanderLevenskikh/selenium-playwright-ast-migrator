@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace ArBilling.E2ETests.Tests.Functional.Playwright;
 
-// WARNING: 3 unsupported action(s) found. See TODO comments below.
+// WARNING: some actions need manual review. See TODO comments below.
 
 public class WidgetPlaywright : PageTest
 {
@@ -14,14 +14,11 @@ public class WidgetPlaywright : PageTest
 	[SetUp]
 	public async Task SetUp()
 	{
-		// TODO: UNSUPPORTED [Statement type not yet supported by extractor]
-		//   var pagef = Navigation.OpenSearchPage();
+		// TODO: raw statement — review: var pagef = Navigation.OpenSearchPage()
 		// [ValidateLoading] pagef.Loader.ValidateLoading() // line 18
 		// TODO: manual review needed
-		// TODO: UNSUPPORTED [Statement type not yet supported by extractor]
-		//   var lightbox = pagef.WidgetButton.ClickAndOpen<WidgetPage>();
-		// TODO: UNSUPPORTED [Statement type not yet supported by extractor]
-		//   page = lightbox;
+		// TODO: raw statement — review: var lightbox = pagef.WidgetButton.ClickAndOpen<WidgetPage>()
+		// TODO: raw statement — review: page = lightbox
 		// [EqualTo] page.User.Visible.Wait().EqualTo(true) // line 21
 		// TODO: manual review needed
 		// [EqualTo] page.FuterUser.Visible.Wait().EqualTo(true) // line 22

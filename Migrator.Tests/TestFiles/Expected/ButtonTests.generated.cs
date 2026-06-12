@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace ArBilling.E2ETests.Tests.NonCategory.Playwright;
 
-// WARNING: 2 unsupported action(s) found. See TODO comments below.
+// WARNING: some actions need manual review. See TODO comments below.
 
 public class ButtonTestsPlaywright : PageTest
 {
@@ -14,10 +14,8 @@ public class ButtonTestsPlaywright : PageTest
 	[SetUp]
 	public async Task SetUp()
 	{
-		// TODO: UNSUPPORTED [Statement type not yet supported by extractor]
-		//   var pagef = Navigation.OpenRegistryAgentPage();
-		// TODO: UNSUPPORTED [Statement type not yet supported by extractor]
-		//   page = pagef;
+		// TODO: raw statement — review: var pagef = Navigation.OpenRegistryAgentPage()
+		// TODO: raw statement — review: page = pagef
 		// [ValidateLoading] page.Loader.ValidateLoading() // line 17
 		// TODO: manual review needed
 	}

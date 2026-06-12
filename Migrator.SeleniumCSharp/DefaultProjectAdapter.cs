@@ -137,6 +137,11 @@ public class DefaultProjectAdapter : IProjectAdapter
                 ResolveTarget(sendKeys.Target.SourceExpression),
                 sendKeys.TextExpression,
                 sendKeys.Confidence),
+            PressAction press => new PressAction(
+                press.SourceLine,
+                ResolveTarget(press.Target.SourceExpression),
+                press.KeyName,
+                press.Confidence),
             _ => action
         };
     }
