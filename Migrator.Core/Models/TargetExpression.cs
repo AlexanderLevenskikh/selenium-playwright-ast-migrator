@@ -35,11 +35,18 @@ public abstract class TargetExpression
 public sealed class MappedTarget : TargetExpression
 {
     public string TargetExpression { get; }
+    /// <summary>
+    /// When set, indicates this is a TestId target that should render as
+    /// <c>Page.Locator("[{TestIdAttribute}='{TargetExpression}']")</c>.
+    /// When null, uses standard rendering (e.g., <c>Page.GetByTestId()</c>).
+    /// </summary>
+    public string? TestIdAttribute { get; }
 
-    public MappedTarget(string source, string targetExpression, TargetKind kind)
+    public MappedTarget(string source, string targetExpression, TargetKind kind, string? testIdAttribute = null)
         : base(source, kind)
     {
         TargetExpression = targetExpression;
+        TestIdAttribute = testIdAttribute;
     }
 
     public override string RenderLocator() => TargetExpression;

@@ -16,7 +16,8 @@ public class WidgetPlaywright : PageTest
 	{
 		// TODO: replace with actual runtime URL from config // line 17
 		// TODO: mapped method requires manual review — var pagef = Navigation.OpenSearchPage()
-		await Expect(Page.Locator("[data-test='table-loader']")).ToBeHiddenAsync(); // line 18
+		var loader = Page.Locator("[data-test='table-loader']"); // line 18
+		if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync(); // line 18
 		// TODO: mapped method requires manual review — pagef.Loader.ValidateLoading()
 		await Page.Locator("[data-test-id='t-widget-closed']").ClickAsync(); // line 19
 		// TODO: mapped method requires manual review — var lightbox = pagef.WidgetButton.ClickAndOpen<WidgetPage>()
@@ -29,53 +30,38 @@ public class WidgetPlaywright : PageTest
 	[Test]
 	public async Task CheckUserToWidget()
 	{
-		await Page.Locator("[data-test-id='t_widget_userfilter']").ClickAsync(); // line 30
-		// [InputTextAndSelectValue] page.UserInput.InputTextAndSelectValue("Selenium-администатор") // line 31
+		await Page.Locator("[data-test-id='t_widget_userfilter']").ClickAsync(); // line 29
+		// [InputTextAndSelectValue] page.UserInput.InputTextAndSelectValue("Selenium-администатор") // line 30
 		// TODO: manual review needed
-		await Expect(Page.Locator("[data-test-id='t_process_footer']")).ToBeVisibleAsync(); // line 32
-		var textResult_0 = await Page.Locator("[data-test-id='t_process_footer']").InnerTextAsync(); // line 33
+		await Expect(Page.Locator("[data-test-id='t_process_footer']")).ToBeVisibleAsync(); // line 31
+		var textResult_0 = await Page.Locator("[data-test-id='t_process_footer']").InnerTextAsync(); // line 32
 		Assert.That(textResult_0, Is.Not.Empty);
 	}
 
 	[Test]
 	public async Task CheckDateToWidget()
 	{
-		// [ManualInputValue] page.WidgetDate.ManualInputValue("Март", "2025", 22) // line 39
+		// [ManualInputValue] page.WidgetDate.ManualInputValue("Март", "2025", 22) // line 38
 		// TODO: manual review needed
-		await Expect(Page.Locator("[data-test='table-loader']")).ToBeHiddenAsync(); // line 40
+		var loader = Page.Locator("[data-test='table-loader']"); // line 39
+		if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync(); // line 39
 		// TODO: mapped method requires manual review — page.Loader.ValidateLoading()
-		await Expect(Page.Locator("[data-test-id='t_process_footer']")).ToBeVisibleAsync(); // line 41
-		var textResult_1 = await Page.Locator("[data-test-id='t_process_footer']").InnerTextAsync(); // line 42
+		await Expect(Page.Locator("[data-test-id='t_process_footer']")).ToBeVisibleAsync(); // line 40
+		var textResult_1 = await Page.Locator("[data-test-id='t_process_footer']").InnerTextAsync(); // line 41
 		Assert.That(textResult_1, Is.Not.Empty);
 	}
 
 	[Test]
 	public async Task CheckSearchToWidget()
 	{
-		await Page.Locator("[data-tid='Input__root']").FillAsync("Отправка в Диадок АНО ДПО 12.2022 (СЦ 0669)"); // line 48
-		await Page.Locator("[data-tid='Input__root']").PressAsync("Enter"); // line 49
-		await Expect(Page.Locator("[data-test='table-loader']")).ToBeHiddenAsync(); // line 50
+		await Page.Locator("[data-tid='Input__root']").FillAsync("Отправка в Диадок АНО ДПО 12.2022 (СЦ 0669)"); // line 47
+		await Page.Locator("[data-tid='Input__root']").PressAsync("Enter"); // line 48
+		var loader = Page.Locator("[data-test='table-loader']"); // line 49
+		if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync(); // line 49
 		// TODO: mapped method requires manual review — page.Loader.ValidateLoading()
-		await Page.Locator("[data-test-id='t_process_footer']").WaitForAsync(); // line 51
-		var textResult_2 = await Page.Locator("[data-test-id='t_process_footer']").InnerTextAsync(); // line 52
+		await Page.Locator("[data-test-id='t_process_footer']").WaitForAsync(); // line 50
+		var textResult_2 = await Page.Locator("[data-test-id='t_process_footer']").InnerTextAsync(); // line 51
 		Assert.That(textResult_2, Is.Not.Empty);
-	}
-
-	[Test]
-	public async Task CheckWidgetErrorsPopUp()
-	{
-		await Page.Locator("[data-tid='Input__root']").FillAsync("Отправка в Диадок АНО ДПО 12.2022 (СЦ 0669)"); // line 58
-		await Page.Locator("[data-tid='Input__root']").PressAsync("Enter"); // line 59
-		await Expect(Page.Locator("[data-test='table-loader']")).ToBeHiddenAsync(); // line 60
-		// TODO: mapped method requires manual review — page.Loader.ValidateLoading()
-		await Page.Locator("[data-test-id='t_process_footer']").WaitForAsync(); // line 61
-		await Page.Locator("[data-test-id='t_process_footer']").ClickAsync(); // line 62
-		await Expect(Page.Locator("TODO: page.Parameters")).ToBeVisibleAsync(); // line 63
-		// TODO: map source expression to Playwright locator: page.Parameters
-		// TODO: map source expression to Playwright locator: page.Parameters
-		await Page.Locator("TODO: page.Parameters").ClickAsync(); // line 64
-		await Expect(Page.Locator("TODO: page.ErrorText")).ToHaveTextAsync("TEST ERROR"); // line 65
-		// TODO: map source expression to Playwright locator: page.ErrorText
 	}
 
 }

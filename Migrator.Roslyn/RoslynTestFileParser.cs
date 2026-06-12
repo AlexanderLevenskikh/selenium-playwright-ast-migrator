@@ -124,7 +124,8 @@ public class RoslynTestFileParser : ITestFileParser
             return false;
 
         var parts = filePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return !parts.Any(p => string.Equals(p, "Expected", StringComparison.OrdinalIgnoreCase));
+        return !parts.Any(p => string.Equals(p, "Expected", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(p, "CompileSmoke", StringComparison.OrdinalIgnoreCase));
     }
 
     TestModel ParseTestMethod(MethodDeclarationSyntax method, SemanticModel semanticModel)

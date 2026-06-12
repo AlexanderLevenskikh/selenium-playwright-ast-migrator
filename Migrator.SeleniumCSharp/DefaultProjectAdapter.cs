@@ -33,8 +33,16 @@ public class DefaultProjectAdapter : IProjectAdapter
                 "RawExpression" => TargetKind.RawExpression,
                 _ => TargetKind.PlaywrightLocator
             };
+
+            string? testIdAttribute = null;
+            if (kind == TargetKind.PlaywrightLocator && mapping.TargetKind == "TestId")
+            {
+                testIdAttribute = mapping.TestIdAttribute
+                    ?? config.LocatorSettings?.DefaultTestIdAttribute;
+            }
+
             _targetMap[mapping.SourceExpression] = new MappedTarget(
-                mapping.SourceExpression, mapping.TargetExpression, kind);
+                mapping.SourceExpression, mapping.TargetExpression, kind, testIdAttribute);
         }
 
         foreach (var po in config.PageObjects)

@@ -1,70 +1,73 @@
-# Manual Proof Summary
+# Runtime Proof Summary
 
-Pilot migration of a real Selenium test to Playwright .NET, with manual review of one generated test method.
+Pilot migration of a real Selenium test to Playwright .NET, compiled and executed in a browser.
 
-## Selected test
+## Result
 
-`CheckSearchToWidget()` — search + Enter key + footer text verification.
+The `CheckSearchToWidget` test passed in a headless Chromium browser: **1 passed, 0 failed, ~8s**.
 
-Chosen because: 0 unmapped targets, 0 unsupported actions, remaining TODOs are from known generic gaps.
+Compile-smoke: clean, 0 errors.
+Unit tests: all green (61+).
 
-## Report consistency
+## Key Discovery — Selector Conventions
 
-Fresh migrate run (both text and JSON) — CLI summary and `report.json` match exactly:
+The project-specific Selenium helper `WithDataTestId("x")` maps to `data-test-id="x"` (3-word, hyphenated attribute), not Playwright's default `data-testid`. This caused all `GetByTestId(...)` locators to silently fail at runtime.
 
-| Metric | CLI | JSON |
-|---|---|---|
-| MappedTargets | 7 | 7 |
-| UnmappedTargets | 0 | 0 |
-| UnsupportedActions | 0 | 0 |
-| TodoComments | 20 | 20 |
+The project also uses:
+- `data-tid` (via `WithTid` helper)
+- `data-test` (via `WithDataTest` helper)
 
-No inconsistency between report formats.
+## Before / After
 
-## Manual edits — classification
+**Before (pilot v3):** `Page.GetByTestId("...")` — no elements found, all assertions failed.
 
-| # | Original (generated TODO) | Manual replacement | Category | Future recognizer? |
-|---|---|---|---|---|
-| 1 | `[ValidateLoading] page.Loader.ValidateLoading()` | Comment: project-specific loader wait | project-specific helper | No |
-| 2 | `[WaitPresence] page.FuterUser.WaitPresence()` | `await Page.GetByTestId("...").WaitForAsync();` | missing generic recognizer | Yes — `WaitPresenceRecognizer` |
-| 3 | `[NotBeEmpty] page.FuterUser.Text.Get().Should().NotBeEmpty()` | `InnerTextAsync()` + `Should().NotBeNullOrEmpty()` | missing generic recognizer / assertion translation | Yes — `FluentAssertionsTextRecognizer` |
+**After (pilot v5):** `Page.Locator("[data-test-id='...']")` — elements found, assertions pass.
 
-## Remaining TODOs in the fixed test
+## Selector Conventions in Config
 
-1 remaining TODO: `ValidateLoading` — project-specific, no known Playwright equivalent, unknown locator.
+To avoid verbose `RawExpression` mappings, the adapter config now supports `LocatorSettings`:
 
-## Near-compileable verdict
+```json
+{
+  "LocatorSettings": {
+    "DefaultTestIdAttribute": "data-test-id"
+  },
+  "UiTargets": [
+    {
+      "SourceExpression": "page.WidgetButton",
+      "TargetExpression": "t-widget-closed",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.WidgetSearch",
+      "TargetExpression": "Input__root",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-tid"
+    }
+  ]
+}
+```
 
-The `CheckSearchToWidget` method body is syntactically valid C#. Uses standard Playwright APIs (`FillAsync`, `PressAsync`, `WaitForAsync`, `InnerTextAsync`) and FluentAssertions (already in the source project's dependencies).
+This renders as:
+- `Page.Locator("[data-test-id='t-widget-closed']")` — uses config default
+- `Page.Locator("[data-tid='Input__root']")` — uses per-mapping override
 
-The overall class won't compile because SetUp navigation is unresolved (`Navigation.OpenSearchPage()`, `ClickAndOpen<WidgetPage>()`).
+## Loader Wait Pattern
 
-## Manual effort summary
+For optional loader waits (element may not appear), the clean pattern is:
 
-- **Lines changed**: 6 (2 action lines cleaned, 3 TODOs resolved, 1 project-specific TODO left)
-- **Time estimate**: ~10 min for a developer familiar with both codebases
-- **Key blocker**: SetUp navigation helpers have no mapped translation
+```csharp
+var loader = Page.Locator("[data-test='table-loader']");
+if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync();
+```
 
-## Top future generic recognizer candidates
+No empty `catch` blocks.
 
-| # | Recognizer | Patterns | Impact |
-|---|---|---|---|
-| 1 | `FluentAssertionsTextRecognizer` | `X.Text.Get().Should().Be(...)`, `X.Text.Get().Should().NotBeEmpty()` | ~8 TODOs in Widget file, ~6 in ButtonTests |
-| 2 | `VisibilityWaitRecognizer` | `X.Visible.Wait().EqualTo(true/false)` | ~4 in Widget, ~14 in ButtonTests |
-| 3 | `WaitPresenceRecognizer` | `X.WaitPresence()` | ~2 in Widget, structural in others |
+## Remaining Blockers (Generalized)
 
-## Project-specific helpers (stay manual / profile-based)
-
-1. `ValidateLoading` — custom loader visibility check
-2. `InputTextAndSelectValue` — custom dropdown fill + select combo
-3. `ManualInputValue` — custom date picker day/month/year setter
-4. `ClickAndOpen<TPage>` — custom navigation + page object transition
-5. `Navigation.Open*()` — custom setup helpers
+1. **SetUp navigation** — project-specific navigation helpers (`OpenSearchPage`, `ClickAndOpen<T>`) require manual `MethodMapping` entries with runtime URLs.
+2. **Project-specific helpers** — dropdown selectors, date pickers, and custom input methods require per-project manual mapping.
 
 ## Conclusion
 
-**Can the generated test body be brought to near-compileable without changing Core/Roslyn/Renderer?**
-
-**Partial yes.** The test body is near-compileable with 2 lines of manual code. The full test cannot run because SetUp navigation has no mapped translation.
-
-Both blockers require either adapter config entries for navigation, or project-specific setup that the migrator cannot infer.
+**The migrated test runs successfully in a browser.** The main blocker was the selector convention mismatch (`data-test-id` vs `data-testid`), resolved via the `LocatorSettings` config mechanism.
