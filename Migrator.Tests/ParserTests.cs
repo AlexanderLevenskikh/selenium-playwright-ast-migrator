@@ -876,4 +876,145 @@ public class ParserTests
                     new[] { action })
             });
     }
+
+    // --- LocatorSettings / TestIdAttribute tests ---
+
+    [Fact]
+    public void Adapter_DefaultTestIdAttribute_RendererUsesCustomAttribute()
+    {
+        var config = new ProjectAdapterConfig(
+            SourceProjectName: "TestProject",
+            UiTargets: new[]
+            {
+                new UiTargetMapping("page.Submit", "submit-button", "TestId"),
+            },
+            PageObjects: Array.Empty<PageObjectMapping>(),
+            Methods: Array.Empty<MethodMapping>(),
+            LocatorSettings: new LocatorSettings("data-test-id", null)
+        );
+        var adapter = new DefaultProjectAdapter(config);
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var click = new ClickAction(1, TargetExpression.Mapped("page.Submit", "submit-button", TargetKind.PlaywrightLocator));
+        var model = CreateModel(click);
+        var adapted = adapter.Adapt(model);
+        var output = renderer.Render(adapted);
+
+        Assert.Contains("Page.Locator(\"[data-test-id='submit-button']\")", output);
+        Assert.DoesNotContain("GetByTestId", output);
+    }
+
+    [Fact]
+    public void Adapter_PerMappingTestIdAttributeOverridesConfigDefault()
+    {
+        var config = new ProjectAdapterConfig(
+            SourceProjectName: "TestProject",
+            UiTargets: new[]
+            {
+                new UiTargetMapping("page.Search", "Input__root", "TestId", "data-tid"),
+            },
+            PageObjects: Array.Empty<PageObjectMapping>(),
+            Methods: Array.Empty<MethodMapping>(),
+            LocatorSettings: new LocatorSettings("data-test-id", null)
+        );
+        var adapter = new DefaultProjectAdapter(config);
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var click = new ClickAction(1, TargetExpression.Mapped("page.Search", "Input__root", TargetKind.PlaywrightLocator));
+        var model = CreateModel(click);
+        var adapted = adapter.Adapt(model);
+        var output = renderer.Render(adapted);
+
+        Assert.Contains("Page.Locator(\"[data-tid='Input__root']\")", output);
+        Assert.DoesNotContain("data-test-id", output);
+    }
+
+    [Fact]
+    public void Adapter_NoLocatorSettings_BackwardCompatibleGetByTestId()
+    {
+        var config = new ProjectAdapterConfig(
+            SourceProjectName: "TestProject",
+            UiTargets: new[]
+            {
+                new UiTargetMapping("page.Submit", "GetByTestId(\"submit\")", "TestId"),
+            },
+            PageObjects: Array.Empty<PageObjectMapping>(),
+            Methods: Array.Empty<MethodMapping>()
+        );
+        var adapter = new DefaultProjectAdapter(config);
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var click = new ClickAction(1, TargetExpression.Mapped("page.Submit", "GetByTestId(\"submit\")", TargetKind.PlaywrightLocator));
+        var model = CreateModel(click);
+        var adapted = adapter.Adapt(model);
+        var output = renderer.Render(adapted);
+
+        Assert.Contains("Page.GetByTestId(\"submit\")", output);
+    }
+
+    [Fact]
+    public void Adapter_TestIdAttribute_SpecialCharsEscaped()
+    {
+        var config = new ProjectAdapterConfig(
+            SourceProjectName: "TestProject",
+            UiTargets: new[]
+            {
+                new UiTargetMapping("page.El", "test'id\"value", "TestId"),
+            },
+            PageObjects: Array.Empty<PageObjectMapping>(),
+            Methods: Array.Empty<MethodMapping>(),
+            LocatorSettings: new LocatorSettings("data-test-id", null)
+        );
+        var adapter = new DefaultProjectAdapter(config);
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var click = new ClickAction(1, TargetExpression.Mapped("page.El", "test'id\"value", TargetKind.PlaywrightLocator));
+        var model = CreateModel(click);
+        var adapted = adapter.Adapt(model);
+        var output = renderer.Render(adapted);
+
+        Assert.Contains("Page.Locator(\"[data-test-id=", output);
+        Assert.DoesNotContain("Page.Locator(\"[data-test-id='test'id", output);
+    }
+
+    [Fact]
+    public void Adapter_RawExpression_StillWorks()
+    {
+        var config = new ProjectAdapterConfig(
+            SourceProjectName: "TestProject",
+            UiTargets: new[]
+            {
+                new UiTargetMapping("page.El", "Page.Locator(\"#custom\")", "RawExpression"),
+            },
+            PageObjects: Array.Empty<PageObjectMapping>(),
+            Methods: Array.Empty<MethodMapping>()
+        );
+        var adapter = new DefaultProjectAdapter(config);
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var click = new ClickAction(1, TargetExpression.Mapped("page.El", "Page.Locator(\"#custom\")", TargetKind.RawExpression));
+        var model = CreateModel(click);
+        var adapted = adapter.Adapt(model);
+        var output = renderer.Render(adapted);
+
+        Assert.Contains("Page.Locator(\"#custom\")", output);
+    }
+
+    [Fact]
+    public void Adapter_WidgetPilotConfig_GeneratesCorrectLocators()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(_testFilesDir, "..", "..", "..", "..", ".."));
+        var adapterConfigPath = Path.Combine(repoRoot, "examples", "profiles", "widget-pilot", "adapter-config.json");
+
+        var adapter = new DefaultProjectAdapter(adapterConfigPath);
+        var pipeline = new MigrationPipeline(_parser, new PlaywrightDotNetRenderer(), adapter);
+
+        var widgetPath = Path.Combine(_testFilesDir, "Widget.cs");
+        var result = pipeline.ProcessFile(widgetPath);
+        var output = result.GeneratedOutput;
+
+        Assert.Contains("Page.Locator(\"[data-test-id='t_widget_userfilter']\")", output);
+        Assert.Contains("Page.Locator(\"[data-tid='Input__root']\")", output);
+        Assert.DoesNotContain("RawExpression", output);
+    }
 }

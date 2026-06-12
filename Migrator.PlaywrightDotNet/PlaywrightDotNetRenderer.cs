@@ -426,6 +426,13 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     string RenderTargetExpression(TargetExpression target)
     {
+        if (target is MappedTarget mapped && mapped.TestIdAttribute != null && target.Kind == TargetKind.PlaywrightLocator)
+        {
+            var attr = EscapeAttribute(mapped.TestIdAttribute);
+            var value = EscapeString(mapped.TargetExpression);
+            return $"Page.Locator(\"[{attr}='{value}']\")";
+        }
+
         var rendered = target.RenderLocator();
         return target.Kind switch
         {
@@ -434,6 +441,16 @@ public class PlaywrightDotNetRenderer : IRenderer
             TargetKind.RawExpression => rendered,
             _ => $"Page.Locator(\"TODO: {target.SourceExpression}\")"
         };
+    }
+
+    string EscapeAttribute(string attr)
+    {
+        return attr.Replace("\\", "\\\\").Replace("\"", "\\\"");
+    }
+
+    string EscapeString(string value)
+    {
+        return value.Replace("\\", "\\\\").Replace("'", "\\'").Replace("\"", "\\\"");
     }
 
     string ConvertExpression(string expr)

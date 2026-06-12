@@ -1,40 +1,56 @@
 {
   "SourceProjectName": "ArBilling.E2ETests",
+  "LocatorSettings": {
+    "DefaultTestIdAttribute": "data-test-id",
+    "KnownTestIdAttributes": [
+      "data-testid",
+      "data-test-id",
+      "data-tid",
+      "data-test"
+    ]
+  },
   "UiTargets": [
     {
       "SourceExpression": "page.User",
-      "TargetExpression": "Page.Locator(\"[data-test-id='t_widget_userfilter']\")",
-      "TargetKind": "RawExpression"
+      "TargetExpression": "t_widget_userfilter",
+      "TargetKind": "TestId"
     },
     {
       "SourceExpression": "page.Name",
-      "TargetExpression": "Page.Locator(\"[data-test-id='user-name']\")",
-      "TargetKind": "RawExpression"
+      "TargetExpression": "user-name",
+      "TargetKind": "TestId"
     },
     {
       "SourceExpression": "page.WidgetSearch",
-      "TargetExpression": "Page.Locator(\"[data-tid='Input__root']\")",
-      "TargetKind": "RawExpression"
+      "TargetExpression": "Input__root",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-tid"
     },
     {
       "SourceExpression": "page.FuterUser",
-      "TargetExpression": "Page.Locator(\"[data-test-id='t_process_footer']\")",
-      "TargetKind": "RawExpression"
+      "TargetExpression": "t_process_footer",
+      "TargetKind": "TestId"
     },
     {
       "SourceExpression": "page.UserInput",
-      "TargetExpression": "Page.Locator(\"[data-test-id='t_widget_searchfilter']\")",
-      "TargetKind": "RawExpression"
+      "TargetExpression": "t_widget_searchfilter",
+      "TargetKind": "TestId"
     },
     {
       "SourceExpression": "page.WidgetDate",
-      "TargetExpression": "Page.Locator(\"[data-test-id='t_widget_datefilter']\")",
-      "TargetKind": "RawExpression"
+      "TargetExpression": "t_widget_datefilter",
+      "TargetKind": "TestId"
     },
     {
       "SourceExpression": "page.WidgetButton",
-      "TargetExpression": "Page.Locator(\"[data-test-id='t-widget-closed']\")",
-      "TargetKind": "RawExpression"
+      "TargetExpression": "t-widget-closed",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.TableLoader",
+      "TargetExpression": "table-loader",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-test"
     }
   ],
   "PageObjects": [],
@@ -53,7 +69,8 @@
       "TargetMethod": null,
       "Description": "Wait for loader to finish — verified source: data-test='table-loader' (WithDataTest, NOT WithDataTestId). Loader.ValidateLoading is complex (retry with reload), simplified to single wait.",
       "TargetStatements": [
-        "await Expect(Page.Locator(\"[data-test='table-loader']\")).ToBeHiddenAsync();"
+        "var loader = Page.Locator(\"[data-test='table-loader']\");",
+        "if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync();"
       ],
       "RequiresReview": true
     },
@@ -62,7 +79,8 @@
       "TargetMethod": null,
       "Description": "Wait for loader to finish — verified source: data-test='table-loader' (WithDataTest, NOT WithDataTestId). Loader.ValidateLoading is complex (retry with reload), simplified to single wait.",
       "TargetStatements": [
-        "await Expect(Page.Locator(\"[data-test='table-loader']\")).ToBeHiddenAsync();"
+        "var loader = Page.Locator(\"[data-test='table-loader']\");",
+        "if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync();"
       ],
       "RequiresReview": true
     },
