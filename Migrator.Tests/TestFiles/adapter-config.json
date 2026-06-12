@@ -1,5 +1,5 @@
 {
-  "SourceProjectName": "ArBilling.E2ETests",
+  "SourceProjectName": "Example.E2ETests",
   "UiTargets": [
     {
       "SourceExpression": "page.User",

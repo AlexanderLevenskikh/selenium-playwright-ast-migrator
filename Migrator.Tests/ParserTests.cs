@@ -20,7 +20,7 @@ public class ParserTests
         var model = _parser.Parse(Path.Combine(_testFilesDir, "ButtonTests.cs"));
 
         Assert.Equal("ButtonTests", model.ClassName);
-        Assert.Equal("ArBilling.E2ETests.Tests.NonCategory", model.Namespace);
+        Assert.Equal("Example.E2ETests.Tests.NonCategory", model.Namespace);
         Assert.NotNull(model.BaseClassName);
         Assert.NotEmpty(model.SetUpActions);
 
@@ -58,7 +58,7 @@ public class ParserTests
         var sortTest = model.Tests.First(t => t.Name == "CheckFilterScSortAndExcludeToRegistry");
 
         Assert.Equal(2, sortTest.CaseData.Count());
-        Assert.Equal("По возрастанию", sortTest.CaseData.First().Arguments.First());
+        Assert.Equal("Ascending", sortTest.CaseData.First().Arguments.First());
         Assert.True(sortTest.CaseData.First().RawSourceText.Contains("TestCase"),
             $"RawSourceText should contain 'TestCase', got: {sortTest.CaseData.First().RawSourceText}");
 
@@ -180,8 +180,8 @@ public class ParserTests
         var output = renderer.Render(model);
 
         Assert.Contains("TestCase", output);
-        Assert.Contains("По возрастанию", output);
-        Assert.Contains("По убыванию", output);
+        Assert.Contains("Ascending", output);
+        Assert.Contains("Descending", output);
         Assert.Contains("CheckFilterScSortAndExcludeToRegistry", output);
         Assert.Contains("string sortOrder", output);
         Assert.Contains("string text", output);
@@ -540,7 +540,7 @@ public class ParserTests
         var textAction = test.BodyActions.OfType<TextAssertionAction>().FirstOrDefault();
         Assert.NotNull(textAction);
         Assert.Equal(TextAssertionKind.TextEquals, textAction!.Kind);
-        Assert.Equal("\"Оставить отзыв\"", textAction.ExpectedValue);
+        Assert.Equal("\"Leave feedback\"", textAction.ExpectedValue);
         Assert.Equal("page.MenuItems.SideMenuButtonFeedback", textAction.Target.SourceExpression);
     }
 

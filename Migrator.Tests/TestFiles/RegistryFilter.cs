@@ -1,10 +1,10 @@
 using System.Linq;
-using ArBilling.E2ETests.Infrastructure;
-using ArBilling.E2ETests.PageObjects;
+using Example.E2ETests.Infrastructure;
+using Example.E2ETests.PageObjects;
 using FluentAssertions;
 using NUnit.Framework;
 
-namespace ArBilling.E2ETests.Tests.Filters;
+namespace Example.E2ETests.Tests.Filters;
 
 public class RegistryFilter : TestBase
 {
@@ -22,17 +22,17 @@ public class RegistryFilter : TestBase
     [Category("QuickRunning")]
     public void CheckFilterScToRegistry()
     {
-        page.Sc.InputAndSelect("8610013950");
+        page.Sc.InputAndSelect("1000000001");
         page.Loader.ValidateLoading();
         page.Table.Items.ElementAt(2).Text.Get().Should().Contain("0004");
     }
 
-    [TestCase("По возрастанию", "0005")]
-    [TestCase("По убыванию", "0346")]
+    [TestCase("Ascending", "0005")]
+    [TestCase("Descending", "0346")]
     [Category("QuickRunning")]
     public void CheckFilterScSortAndExcludeToRegistry(string sortOrder, string text)
     {
-        page.Sc.ExcludeValue("8610013950");
+        page.Sc.ExcludeValue("1000000001");
         page.Loader.ValidateLoading();
         page.Sc.SortSc(sortOrder);
         page.Loader.ValidateLoading();
@@ -41,8 +41,8 @@ public class RegistryFilter : TestBase
         page.Loader.ValidateLoading();
     }
 
-    [TestCase("По возрастанию", 0)]
-    [TestCase("По убыванию", 1452041.54)]
+    [TestCase("Ascending", 0)]
+    [TestCase("Descending", 1234567.89)]
     [Category("QuickRunning")]
     public void CheckFilterRealizationToRegistry(string sortOrder, decimal text)
     {
@@ -55,8 +55,8 @@ public class RegistryFilter : TestBase
     [Category("QuickRunning")]
     public void CheckSubtotalToRegistry()
     {
-        page.ReportsSubtotalSalesAmount.Sum.Get().Should().Be(2988323.95m);
-        page.ReportsSubtotalAddCalcAmount.Sum.Get().Should().Be(-5409.00m);
-        page.ReportsSubtotalReward.Sum.Get().Should().Be(484811.84m);
+        page.ReportsSubtotalSalesAmount.Sum.Get().Should().Be(1000000.00m);
+        page.ReportsSubtotalAddCalcAmount.Sum.Get().Should().Be(-1000.00m);
+        page.ReportsSubtotalReward.Sum.Get().Should().Be(500000.00m);
     }
 }

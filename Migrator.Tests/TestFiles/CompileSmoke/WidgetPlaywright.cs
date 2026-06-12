@@ -4,7 +4,7 @@ using Microsoft.Playwright.NUnit;
 using NUnit.Framework;
 using System.Threading.Tasks;
 
-namespace ArBilling.E2ETests.Tests.Functional.Playwright;
+namespace Example.E2ETests.Tests.Functional.Playwright;
 
 // WARNING: some actions need manual review. See TODO comments below.
 
@@ -31,9 +31,9 @@ public class WidgetPlaywright : PageTest
 	public async Task CheckUserToWidget()
 	{
 		await Page.Locator("[data-test-id='t_widget_userfilter']").ClickAsync(); // line 29
-		await Page.Locator("[data-test-id='t_widget_searchfilter']").FillAsync("Selenium-администатор"); // line 30
+		await Page.Locator("[data-test-id='t_widget_searchfilter']").FillAsync("Test User"); // line 30
 		await Page.Locator("[data-test-id='t_widget_searchfilter']").PressAsync("Enter"); // line 30
-		// TODO: mapped method requires manual review — page.UserInput.InputTextAndSelectValue("Selenium-администатор")
+		// TODO: mapped method requires manual review — page.UserInput.InputTextAndSelectValue("Test User")
 		await Expect(Page.Locator("[data-test-id='t_process_footer']").First).ToBeVisibleAsync(); // line 31
 		var textResult_0 = await Page.Locator("[data-test-id='t_process_footer']").First.InnerTextAsync(); // line 32
 		Assert.That(textResult_0, Is.Not.Empty);
@@ -43,8 +43,8 @@ public class WidgetPlaywright : PageTest
 	public async Task CheckDateToWidget()
 	{
 		// TODO: ManualInputValue for date picker — complex interaction, needs manual migration // line 38
-		// Original: page.WidgetDate.ManualInputValue("Март", "2025", 22) // line 38
-		// TODO: mapped method requires manual review — page.WidgetDate.ManualInputValue("Март", "2025", 22)
+		// Original: page.WidgetDate.ManualInputValue("March", "2025", 22) // line 38
+		// TODO: mapped method requires manual review — page.WidgetDate.ManualInputValue("March", "2025", 22)
 		var loader = Page.Locator("[data-test='table-loader']"); // line 39
 		if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync(); // line 39
 		// TODO: mapped method requires manual review — page.Loader.ValidateLoading()
@@ -56,7 +56,7 @@ public class WidgetPlaywright : PageTest
 	[Test]
 	public async Task CheckSearchToWidget()
 	{
-		await Page.Locator("[data-tid='Input__root']").FillAsync("Отправка в Диадок АНО ДПО 12.2022 (СЦ 0669)"); // line 47
+		await Page.Locator("[data-tid='Input__root']").FillAsync("Example invoice 2024"); // line 47
 		await Page.Locator("[data-tid='Input__root']").PressAsync("Enter"); // line 48
 		var loader = Page.Locator("[data-test='table-loader']"); // line 49
 		if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync(); // line 49

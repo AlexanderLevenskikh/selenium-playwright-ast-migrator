@@ -4,7 +4,7 @@ using Microsoft.Playwright.NUnit;
 using NUnit.Framework;
 using System.Threading.Tasks;
 
-namespace ArBilling.E2ETests.Tests.NonCategory.Playwright;
+namespace Example.E2ETests.Tests.NonCategory.Playwright;
 
 // WARNING: some actions need manual review. See TODO comments below.
 
@@ -37,7 +37,7 @@ public class ButtonTestsPlaywright : PageTest
 	{
 		await Expect(Page.Locator("TODO: page.MenuItems.SideMenuButtonFeedback")).ToBeVisibleAsync(); // line 33
 		// TODO: map source expression to Playwright locator: page.MenuItems.SideMenuButtonFeedback
-		await Expect(Page.Locator("TODO: page.MenuItems.SideMenuButtonFeedback")).ToHaveTextAsync("Оставить отзыв"); // line 34
+		await Expect(Page.Locator("TODO: page.MenuItems.SideMenuButtonFeedback")).ToHaveTextAsync("Leave feedback"); // line 34
 		// TODO: map source expression to Playwright locator: page.MenuItems.SideMenuButtonFeedback
 	}
 

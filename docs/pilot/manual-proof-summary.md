@@ -17,15 +17,17 @@ Unit tests: all green (69).
 
 ## Key Discovery — Selector Conventions
 
-The project-specific Selenium helper `WithDataTestId("x")` maps to `data-test-id="x"` (3-word, hyphenated attribute), not Playwright's default `data-testid`. This caused all `GetByTestId(...)` locators to silently fail at runtime.
+A project-specific Selenium helper named like `WithDataTestId("x")` maps to `data-test-id="x"` (3-word, hyphenated attribute), not Playwright's default `data-testid`. This caused all `GetByTestId(...)` locators to silently fail at runtime.
 
 The project also uses:
 - `data-tid` (via `WithTid` helper)
 - `data-test` (via `WithDataTest` helper)
 
+After configuring selector conventions in the adapter profile (`LocatorSettings`), the generated Playwright test compiled cleanly and passed in browser.
+
 ## Key Discovery — Strict Mode
 
-Playwright strict mode requires `.First` when a locator matches multiple elements. The `t_process_footer` selector matches 20 elements (one per table row). Solution: use `RawExpression` mapping with `.First` in the profile.
+Playwright strict mode requires `.First` when a locator matches multiple elements. A footer selector matched 20 elements (one per table row). Solution: use `RawExpression` mapping with `.First` in the profile.
 
 ## Before / After
 
@@ -77,7 +79,7 @@ Playwright strict mode requires `.First` when a locator matches multiple element
 | `page.WidgetButton` | TestId `t-widget-closed` | yes | no |
 | `page.TableLoader` | TestId `table-loader` (data-test) | yes | no |
 | `ValidateLoading` | MethodMapping (loader wait) | yes | yes |
-| `ClickAndOpen<WidgetPage>` | MethodMapping (click) | yes | yes |
+| `ClickAndOpen<TPage>` | MethodMapping (click) | yes | yes |
 | `InputTextAndSelectValue` | MethodMapping (fill + Enter) | yes | yes |
 | `ManualInputValue` | MethodMapping (TODO) | no | yes |
 
