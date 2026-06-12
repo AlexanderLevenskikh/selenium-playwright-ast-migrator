@@ -57,7 +57,7 @@ public class SnapshotTests
         Assert.DoesNotContain("TODO: page.WidgetSearch", output);
 
         Assert.Contains("// TODO:", output);
-        Assert.Contains("// TODO: UNSUPPORTED", output);
+        Assert.Contains("// TODO: manual review needed", output);
 
         Assert.Equal(
             Normalize(File.ReadAllText(Path.Combine(_testFilesDir, "Expected", "Widget.generated.cs"))),
@@ -107,7 +107,7 @@ public class SnapshotTests
         Assert.DoesNotContain("TODO: page.MenuItems.SideMenuCatalogsPartners", output);
 
         Assert.Contains("// TODO:", output);
-        Assert.Contains("// TODO: UNSUPPORTED", output);
+        Assert.Contains("// TODO: manual review needed", output);
 
         Assert.Equal(
             Normalize(File.ReadAllText(Path.Combine(_testFilesDir, "Expected", "ButtonTests.generated.cs"))),

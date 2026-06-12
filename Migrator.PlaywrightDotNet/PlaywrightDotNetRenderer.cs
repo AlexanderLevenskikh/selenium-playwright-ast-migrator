@@ -36,11 +36,11 @@ public class PlaywrightDotNetRenderer : IRenderer
         var allActions = model.Tests.SelectMany(t => t.BodyActions).ToList();
         var allSetupActions = model.SetUpActions.ToList();
         var allFileActions = allActions.Concat(allSetupActions).ToList();
-        var unsupportedCount = allFileActions.Count(a => a is UnsupportedAction);
+        var todoCount = allFileActions.Count(a => a is UnsupportedAction or RawStatementAction);
 
-        if (unsupportedCount > 0)
+        if (todoCount > 0)
         {
-            sb.AppendLine($"// WARNING: {unsupportedCount} unsupported action(s) found. See TODO comments below.");
+            sb.AppendLine($"// WARNING: {todoCount} action(s) need manual review. See TODO comments below.");
             sb.AppendLine();
         }
 
@@ -150,6 +150,9 @@ public class PlaywrightDotNetRenderer : IRenderer
                 break;
             case UnsupportedAction unsupported:
                 RenderUnsupported(sb, unsupported);
+                break;
+            case RawStatementAction raw:
+                RenderRawStatement(sb, raw);
                 break;
             default:
                 sb.AppendLine($"{_indent}{_indent}// [unknown action: {action.GetType().Name}]");
@@ -267,6 +270,11 @@ public class PlaywrightDotNetRenderer : IRenderer
     {
         sb.AppendLine($"{_indent}{_indent}// TODO: UNSUPPORTED [{action.Reason}]");
         sb.AppendLine($"{_indent}{_indent}//   {EscapeComment(action.SourceText)}");
+    }
+
+    void RenderRawStatement(StringBuilder sb, RawStatementAction action)
+    {
+        sb.AppendLine($"{_indent}{_indent}// TODO: raw statement — review: {EscapeComment(action.SourceText)}");
     }
 
     string ConvertExpression(string expr)

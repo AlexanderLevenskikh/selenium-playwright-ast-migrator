@@ -102,7 +102,8 @@ static void RunAnalyze(MigrationSummaryReport summary, string outPath, string fo
 {
     Directory.CreateDirectory(outPath);
 
-    WriteReports(summary, outPath, format);
+    var allUnsupported = CollectAllUnsupported(results);
+    WriteReports(summary, outPath, format, allUnmapped, allUnsupported);
     GenerateDraftConfig(allUnmapped, outPath, configPath);
 
     PrintSummary(summary);
@@ -127,7 +128,8 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
 
     var summaryWithGenerated = summary with { GeneratedFiles = generated };
 
-    WriteReports(summaryWithGenerated, outPath, format);
+    var allUnsupported = CollectAllUnsupported(results);
+    WriteReports(summaryWithGenerated, outPath, format, allUnmapped, allUnsupported);
     GenerateDraftConfig(allUnmapped, outPath, configPath);
 
     PrintSummary(summaryWithGenerated);
@@ -181,11 +183,15 @@ static void RunVerify(MigrationSummaryReport summary, string outPath, string for
     Console.WriteLine();
     Console.WriteLine("Verify complete (experimental): full compile-smoke is not yet implemented.");
 
-    WriteReports(summary, outPath, format);
+    var allUnsupported = CollectAllUnsupported(results);
+    var allUnmapped = CollectAllUnmapped(results);
+    WriteReports(summary, outPath, format, allUnmapped, allUnsupported);
     PrintSummary(summary);
 }
 
-static void WriteReports(MigrationSummaryReport summary, string outPath, string format)
+static void WriteReports(MigrationSummaryReport summary, string outPath, string format,
+    IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped,
+    IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnsupported)
 {
     if (format == "text" || format == "both")
     {
@@ -197,29 +203,159 @@ static void WriteReports(MigrationSummaryReport summary, string outPath, string 
         File.WriteAllText(Path.Combine(outPath, "report.json"), ReportWriter.ToJson(summary));
     }
 
-    if (summary.TopUnmappedTargets.Count > 0)
+    if (allUnmapped.Count > 0)
     {
         if (format == "json" || format == "both")
         {
-            File.WriteAllText(Path.Combine(outPath, "unmapped-targets.json"), ReportWriter.UnmappedTargetsToJson(summary));
+            File.WriteAllText(Path.Combine(outPath, "unmapped-targets.json"),
+                WriteAllUnmappedJson(allUnmapped, summary));
         }
         if (format == "text" || format == "both")
         {
-            File.WriteAllText(Path.Combine(outPath, "unmapped-targets.csv"), ReportWriter.UnmappedTargetsToCsv(summary));
+            File.WriteAllText(Path.Combine(outPath, "unmapped-targets.csv"),
+                WriteAllUnmappedCsv(allUnmapped));
         }
     }
 
-    if (summary.TopUnsupportedActions.Count > 0)
+    if (allUnsupported.Count > 0)
     {
         if (format == "json" || format == "both")
         {
-            File.WriteAllText(Path.Combine(outPath, "unsupported-actions.json"), ReportWriter.UnsupportedActionsToJson(summary));
+            File.WriteAllText(Path.Combine(outPath, "unsupported-actions.json"),
+                WriteAllUnsupportedJson(allUnsupported));
         }
         if (format == "text" || format == "both")
         {
-            File.WriteAllText(Path.Combine(outPath, "unsupported-actions.csv"), ReportWriter.UnsupportedActionsToCsv(summary));
+            File.WriteAllText(Path.Combine(outPath, "unsupported-actions.csv"),
+                WriteAllUnsupportedCsv(allUnsupported));
         }
     }
+}
+
+static string WriteAllUnmappedJson(IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped, MigrationSummaryReport summary)
+{
+    var items = allUnmapped
+        .OrderByDescending(kv => kv.Value.Count)
+        .Select(kv => new
+        {
+            SourceExpression = kv.Key,
+            Usages = kv.Value.Count,
+            ExampleFile = kv.Value.File,
+            ExampleLine = kv.Value.Line,
+            SuggestedTargetExpression = SuggestTargetExpression(kv.Key)
+        }).ToArray();
+
+    return System.Text.Json.JsonSerializer.Serialize(items, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+}
+
+static string WriteAllUnmappedCsv(IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped)
+{
+    var sb = new System.Text.StringBuilder();
+    sb.AppendLine("SourceExpression,Usages,ExampleFile,ExampleLine,SuggestedTargetExpression");
+    foreach (var kv in allUnmapped.OrderByDescending(kv => kv.Value.Count))
+    {
+        sb.AppendLine($"{EscapeCsv(kv.Key)},{kv.Value.Count},{EscapeCsv(kv.Value.File)},{kv.Value.Line},{EscapeCsv(SuggestTargetExpression(kv.Key))}");
+    }
+    return sb.ToString();
+}
+
+static string WriteAllUnsupportedJson(IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnsupported)
+{
+    var items = allUnsupported
+        .OrderByDescending(kv => kv.Value.Count)
+        .Select(kv => new
+        {
+            MethodOrSourceText = kv.Key,
+            Count = kv.Value.Count,
+            ExampleFile = kv.Value.File,
+            ExampleLine = kv.Value.Line
+        }).ToArray();
+
+    return System.Text.Json.JsonSerializer.Serialize(items, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+}
+
+static string WriteAllUnsupportedCsv(IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnsupported)
+{
+    var sb = new System.Text.StringBuilder();
+    sb.AppendLine("MethodOrSourceText,Count,ExampleFile,ExampleLine");
+    foreach (var kv in allUnsupported.OrderByDescending(kv => kv.Value.Count))
+    {
+        sb.AppendLine($"{EscapeCsv(kv.Key)},{kv.Value.Count},{EscapeCsv(kv.Value.File)},{kv.Value.Line}");
+    }
+    return sb.ToString();
+}
+
+static string EscapeCsv(string value)
+{
+    if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
+        return "\"" + value.Replace("\"", "\"\"") + "\"";
+    return value;
+}
+
+static Dictionary<string, (int Count, string File, int Line)> CollectAllUnmapped(List<PipelineResult> results)
+{
+    var allUnmapped = new Dictionary<string, (int Count, string File, int Line)>();
+
+    foreach (var result in results)
+    {
+        var report = result.Report;
+        var allActions = result.TargetModel.Tests.SelectMany(t => t.BodyActions)
+            .Concat(result.TargetModel.SetUpActions).ToList();
+
+        foreach (var action in allActions)
+        {
+            var target = action switch
+            {
+                ClickAction c => c.Target,
+                SendKeysAction s => s.Target,
+                _ => null
+            };
+
+            if (target is { Kind: TargetKind.Unresolved })
+            {
+                var key = target.SourceExpression;
+                if (!allUnmapped.ContainsKey(key))
+                    allUnmapped[key] = (1, report.SourceFilePath, action.SourceLine);
+                else
+                {
+                    var existing = allUnmapped[key];
+                    allUnmapped[key] = (existing.Count + 1, existing.File, existing.Line);
+                }
+            }
+        }
+    }
+
+    return allUnmapped;
+}
+
+static Dictionary<string, (int Count, string File, int Line)> CollectAllUnsupported(List<PipelineResult> results)
+{
+    var allUnsupported = new Dictionary<string, (int Count, string File, int Line)>();
+
+    foreach (var result in results)
+    {
+        var report = result.Report;
+        var allActions = result.TargetModel.Tests.SelectMany(t => t.BodyActions)
+            .Concat(result.TargetModel.SetUpActions).ToList();
+
+        foreach (var action in allActions)
+        {
+            if (action is UnsupportedAction ua)
+            {
+                var key = ua.SourceText.Length > 80 ? ua.SourceText.Substring(0, 80) + "..." : ua.SourceText;
+                key = key.Replace("\n", " ").Replace("\r", " ");
+                if (!allUnsupported.ContainsKey(key))
+                    allUnsupported[key] = (1, report.SourceFilePath, action.SourceLine);
+                else
+                {
+                    var existing = allUnsupported[key];
+                    allUnsupported[key] = (existing.Count + 1, existing.File, existing.Line);
+                }
+            }
+        }
+    }
+
+    return allUnsupported;
 }
 
 // --- Summary builder ---

@@ -8,7 +8,7 @@ public class PageObjectMethodRecognizer : IInvocationRecognizer
     static readonly HashSet<string> KnownMethods = new()
     {
         "ClickAndOpen", "ValidateLoading", "Get", "Visible",
-        "OpenSearchPage", "OpenRegistryAgentPage",
+        "OpenSearchPage",
         "InputAndSelect", "InputTextAndSelectValue", "InputTextAndSelect",
         "ManualInputValue", "ExcludeValue", "SortSc", "ClearSort", "Sort",
         "InputText"

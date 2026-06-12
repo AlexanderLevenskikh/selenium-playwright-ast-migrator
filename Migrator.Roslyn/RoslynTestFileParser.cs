@@ -33,6 +33,10 @@ public class RoslynTestFileParser : ITestFileParser
         new FluentAssertionsRecognizer(),
         new WaitInvocationRecognizer(),
         new PageObjectMethodRecognizer(),
+        new AsyncPlaywrightRecognizer(),
+        new NavigationRecognizer(),
+        new PlaywrightAssertionRecognizer(),
+        new SelectValueRecognizer(),
         new UnknownInvocationRecognizer(),
     };
 
@@ -199,6 +203,20 @@ public class RoslynTestFileParser : ITestFileParser
 
     static TestAction? TryExtractAction(StatementSyntax statement, SemanticModel semanticModel, int line)
     {
+        // Local declarations — preserve as raw statements
+        if (statement is LocalDeclarationStatementSyntax lds)
+        {
+            var text = lds.ToString().Trim().Trim(';');
+            return new RawStatementAction(line, text);
+        }
+
+        // Assignments in expression statements — preserve as raw statements
+        if (statement is ExpressionStatementSyntax { Expression: AssignmentExpressionSyntax })
+        {
+            var text = statement.ToString().Trim().Trim(';');
+            return new RawStatementAction(line, text);
+        }
+
         var expression = statement is ExpressionStatementSyntax es ? es.Expression : null;
         var invocation = expression switch
         {
@@ -334,7 +352,6 @@ public class RoslynTestFileParser : ITestFileParser
         {
             EmptyStatementSyntax => false,
             ExpressionStatementSyntax expr => IsMeaningfulExpr(expr.Expression),
-            LocalDeclarationStatementSyntax => true,
             IfStatementSyntax => true,
             ForStatementSyntax => true,
             ForEachStatementSyntax => true,
@@ -351,7 +368,6 @@ public class RoslynTestFileParser : ITestFileParser
         {
             AwaitExpressionSyntax aw => IsMeaningfulExpr(aw.Expression),
             InvocationExpressionSyntax => true,
-            AssignmentExpressionSyntax => true,
             _ => false
         };
     }

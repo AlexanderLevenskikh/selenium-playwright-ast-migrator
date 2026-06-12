@@ -43,7 +43,8 @@ public class ParserTests
         Assert.All(model.SetUpActions, a =>
             Assert.True(
                 a is ClickAction or MethodInvocationAction or SendKeysAction or
-                AssertThatAction or AssertAreEqualAction or UnsupportedAction or PageObjectFieldAction,
+                AssertThatAction or AssertAreEqualAction or UnsupportedAction or PageObjectFieldAction or
+                RawStatementAction,
                 $"Unknown action type: {a.GetType().Name}"));
     }
 
@@ -120,7 +121,8 @@ public class ParserTests
         {
             Assert.True(
                 a is ClickAction or SendKeysAction or AssertThatAction or AssertAreEqualAction or
-                MethodInvocationAction or UnsupportedAction or PageObjectFieldAction,
+                MethodInvocationAction or UnsupportedAction or PageObjectFieldAction or
+                RawStatementAction,
                 $"Action type {a.GetType().Name} should be one of the known types"
             );
         });
@@ -140,10 +142,11 @@ public class ParserTests
             .Concat(allActions.OfType<MethodInvocationAction>())
             .Concat(allActions.OfType<AssertThatAction>())
             .Concat(allActions.OfType<AssertAreEqualAction>())
+            .Concat(allActions.OfType<RawStatementAction>())
             .ToList();
 
         Assert.True(knownActions.Count + unsupported.Count == allActions.Count,
-            "All actions must be either recognized or marked unsupported — nothing silently dropped");
+            "All actions must be either recognized, raw statement, or marked unsupported — nothing silently dropped");
     }
 
     [Fact]
@@ -190,8 +193,8 @@ public class ParserTests
 
         var allFileActions = model.Tests.SelectMany(t => t.BodyActions)
             .Concat(model.SetUpActions).ToList();
-        var unsupportedCount = allFileActions.Count(a => a is UnsupportedAction);
-        if (unsupportedCount > 0)
+        var todoCount = allFileActions.Count(a => a is UnsupportedAction or RawStatementAction);
+        if (todoCount > 0)
         {
             Assert.Contains("WARNING", output);
             Assert.Contains("TODO", output);
