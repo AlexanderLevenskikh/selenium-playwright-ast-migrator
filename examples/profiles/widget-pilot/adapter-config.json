@@ -3,7 +3,7 @@
   "UiTargets": [
     {
       "SourceExpression": "page.User",
-      "TargetExpression": "GetByTestId(\"widget-user\")",
+      "TargetExpression": "GetByTestId(\"t_widget_userfilter\")",
       "TargetKind": "TestId"
     },
     {
@@ -13,12 +13,27 @@
     },
     {
       "SourceExpression": "page.WidgetSearch",
-      "TargetExpression": "GetByTestId(\"widget-search\")",
-      "TargetKind": "TestId"
+      "TargetExpression": "Page.Locator(\"[data-tid='Input__root']\")",
+      "TargetKind": "RawExpression"
     },
     {
       "SourceExpression": "page.FuterUser",
-      "TargetExpression": "GetByTestId(\"futer-user\")",
+      "TargetExpression": "GetByTestId(\"t_process_footer\")",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.UserInput",
+      "TargetExpression": "GetByTestId(\"t_widget_searchfilter\")",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.WidgetDate",
+      "TargetExpression": "GetByTestId(\"t_widget_datefilter\")",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.WidgetButton",
+      "TargetExpression": "GetByTestId(\"t-widget-closed\")",
       "TargetKind": "TestId"
     }
   ],
@@ -27,43 +42,43 @@
     {
       "SourceMethod": "Navigation.OpenSearchPage()",
       "TargetMethod": null,
-      "Description": "Navigate to search page — replace with actual Playwright navigation",
+      "Description": "Navigate to search page — verified source: Urls.BaseUrlSearch. Actual URL is internal host, needs runtime config.",
       "TargetStatements": [
-        "await Page.GotoAsync(\"/search\");"
+        "// TODO: replace with actual runtime URL from config"
       ],
       "RequiresReview": true
     },
     {
       "SourceMethod": "pagef.Loader.ValidateLoading()",
       "TargetMethod": null,
-      "Description": "Wait for loader to finish — replace with actual loading indicator locator",
+      "Description": "Wait for loader to finish — verified source: data-testid='table-loader'. Loader.ValidateLoading is complex (retry with reload), simplified to single wait.",
       "TargetStatements": [
-        "// TODO: map to actual loading indicator locator and uncomment:\n// await Expect(Page.GetByTestId(\"loading-indicator\")).ToBeHiddenAsync();"
+        "await Expect(Page.GetByTestId(\"table-loader\")).ToBeHiddenAsync();"
       ],
       "RequiresReview": true
     },
     {
       "SourceMethod": "page.Loader.ValidateLoading()",
       "TargetMethod": null,
-      "Description": "Wait for loader to finish — replace with actual loading indicator locator",
+      "Description": "Wait for loader to finish — verified source: data-testid='table-loader'. Loader.ValidateLoading is complex (retry with reload), simplified to single wait.",
       "TargetStatements": [
-        "// TODO: map to actual loading indicator locator and uncomment:\n// await Expect(Page.GetByTestId(\"loading-indicator\")).ToBeHiddenAsync();"
+        "await Expect(Page.GetByTestId(\"table-loader\")).ToBeHiddenAsync();"
       ],
       "RequiresReview": true
     },
     {
       "SourceMethod": "pagef.WidgetButton.ClickAndOpen<WidgetPage>()",
       "TargetMethod": null,
-      "Description": "Click widget button to open widget page — needs actual target locator",
+      "Description": "Click widget button to open widget page — verified source: data-testid='t-widget-closed'. ClickAndOpen may involve overlay/frame handling beyond simple click.",
       "TargetStatements": [
-        "await Page.GetByTestId(\"widget-button\").ClickAsync();"
+        "await Page.GetByTestId(\"t-widget-closed\").ClickAsync();"
       ],
       "RequiresReview": true
     },
     {
       "SourceMethod": "page = lightbox",
       "TargetMethod": null,
-      "Description": "Page variable assignment from lightbox open result",
+      "Description": "Page variable assignment from ClickAndOpen result — handled by Page context",
       "TargetStatements": [
         "// page variable assigned from ClickAndOpen result — handled by Page context"
       ],
