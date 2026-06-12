@@ -3,13 +3,13 @@
   "UiTargets": [
     {
       "SourceExpression": "page.User",
-      "TargetExpression": "GetByTestId(\"t_widget_userfilter\")",
-      "TargetKind": "TestId"
+      "TargetExpression": "Page.Locator(\"[data-test-id='t_widget_userfilter']\")",
+      "TargetKind": "RawExpression"
     },
     {
       "SourceExpression": "page.Name",
-      "TargetExpression": "GetByTestId(\"user-name\")",
-      "TargetKind": "TestId"
+      "TargetExpression": "Page.Locator(\"[data-test-id='user-name']\")",
+      "TargetKind": "RawExpression"
     },
     {
       "SourceExpression": "page.WidgetSearch",
@@ -18,23 +18,23 @@
     },
     {
       "SourceExpression": "page.FuterUser",
-      "TargetExpression": "GetByTestId(\"t_process_footer\")",
-      "TargetKind": "TestId"
+      "TargetExpression": "Page.Locator(\"[data-test-id='t_process_footer']\")",
+      "TargetKind": "RawExpression"
     },
     {
       "SourceExpression": "page.UserInput",
-      "TargetExpression": "GetByTestId(\"t_widget_searchfilter\")",
-      "TargetKind": "TestId"
+      "TargetExpression": "Page.Locator(\"[data-test-id='t_widget_searchfilter']\")",
+      "TargetKind": "RawExpression"
     },
     {
       "SourceExpression": "page.WidgetDate",
-      "TargetExpression": "GetByTestId(\"t_widget_datefilter\")",
-      "TargetKind": "TestId"
+      "TargetExpression": "Page.Locator(\"[data-test-id='t_widget_datefilter']\")",
+      "TargetKind": "RawExpression"
     },
     {
       "SourceExpression": "page.WidgetButton",
-      "TargetExpression": "GetByTestId(\"t-widget-closed\")",
-      "TargetKind": "TestId"
+      "TargetExpression": "Page.Locator(\"[data-test-id='t-widget-closed']\")",
+      "TargetKind": "RawExpression"
     }
   ],
   "PageObjects": [],
@@ -51,27 +51,27 @@
     {
       "SourceMethod": "pagef.Loader.ValidateLoading()",
       "TargetMethod": null,
-      "Description": "Wait for loader to finish — verified source: data-testid='table-loader'. Loader.ValidateLoading is complex (retry with reload), simplified to single wait.",
+      "Description": "Wait for loader to finish — verified source: data-test='table-loader' (WithDataTest, NOT WithDataTestId). Loader.ValidateLoading is complex (retry with reload), simplified to single wait.",
       "TargetStatements": [
-        "await Expect(Page.GetByTestId(\"table-loader\")).ToBeHiddenAsync();"
+        "await Expect(Page.Locator(\"[data-test='table-loader']\")).ToBeHiddenAsync();"
       ],
       "RequiresReview": true
     },
     {
       "SourceMethod": "page.Loader.ValidateLoading()",
       "TargetMethod": null,
-      "Description": "Wait for loader to finish — verified source: data-testid='table-loader'. Loader.ValidateLoading is complex (retry with reload), simplified to single wait.",
+      "Description": "Wait for loader to finish — verified source: data-test='table-loader' (WithDataTest, NOT WithDataTestId). Loader.ValidateLoading is complex (retry with reload), simplified to single wait.",
       "TargetStatements": [
-        "await Expect(Page.GetByTestId(\"table-loader\")).ToBeHiddenAsync();"
+        "await Expect(Page.Locator(\"[data-test='table-loader']\")).ToBeHiddenAsync();"
       ],
       "RequiresReview": true
     },
     {
       "SourceMethod": "pagef.WidgetButton.ClickAndOpen<WidgetPage>()",
       "TargetMethod": null,
-      "Description": "Click widget button to open widget page — verified source: data-testid='t-widget-closed'. ClickAndOpen may involve overlay/frame handling beyond simple click.",
+      "Description": "Click widget button to open widget page — verified source: data-test-id='t-widget-closed'. WithDataTestId maps to data-test-id (3-word, hyphenated) NOT data-testid.",
       "TargetStatements": [
-        "await Page.GetByTestId(\"t-widget-closed\").ClickAsync();"
+        "await Page.Locator(\"[data-test-id='t-widget-closed']\").ClickAsync();"
       ],
       "RequiresReview": true
     },
