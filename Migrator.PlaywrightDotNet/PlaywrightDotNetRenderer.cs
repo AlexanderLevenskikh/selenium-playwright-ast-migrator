@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using Migrator.Core;
 using Migrator.Core.Models;
 
@@ -10,6 +11,7 @@ public class PlaywrightDotNetRenderer : IRenderer
 {
     readonly string _indent;
     int _tempVarCounter = 0;
+    readonly HashSet<string> _methodScopeVars = new();
 
     public PlaywrightDotNetRenderer(string indent = "\t")
     {
@@ -51,12 +53,14 @@ public class PlaywrightDotNetRenderer : IRenderer
 
         if (model.SetUpActions.Any())
         {
+            _methodScopeVars.Clear();
             RenderSetUp(sb, model.SetUpActions);
             sb.AppendLine();
         }
 
         foreach (var test in model.Tests)
         {
+            _methodScopeVars.Clear();
             RenderTest(sb, test);
             sb.AppendLine();
         }
@@ -352,14 +356,60 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     void RenderMappedMethodInvocation(StringBuilder sb, MappedMethodInvocationAction action)
     {
-        foreach (var stmt in action.TargetStatements)
+        var processed = DeduplicateInvocationVariables(action.TargetStatements);
+        for (var i = 0; i < processed.Length; i++)
         {
-            sb.AppendLine($"{_indent}{_indent}{stmt} // line {action.SourceLine}");
+            sb.AppendLine($"{_indent}{_indent}{processed[i]} // line {action.SourceLine}");
         }
         if (action.RequiresReview)
         {
             sb.AppendLine($"{_indent}{_indent}// TODO: mapped method requires manual review — {EscapeComment(action.FullSourceText)}");
         }
+    }
+
+    string[] DeduplicateInvocationVariables(IReadOnlyList<string> statements)
+    {
+        var result = new string[statements.Count];
+        var seenInInvocation = new Dictionary<string, string>();
+
+        for (var i = 0; i < statements.Count; i++)
+        {
+            var stmt = statements[i].Trim();
+            if (stmt.StartsWith("var "))
+            {
+                var eqIdx = stmt.IndexOf('=');
+                if (eqIdx > 0)
+                {
+                    var varName = stmt.Substring(4, eqIdx - 4).Trim();
+                    string finalName;
+
+                    if (_methodScopeVars.Contains(varName))
+                    {
+                        var newVar = NextTempVar(varName);
+                        while (_methodScopeVars.Contains(newVar))
+                            newVar = NextTempVar(varName);
+                        finalName = newVar;
+                        _methodScopeVars.Add(finalName);
+                    }
+                    else
+                    {
+                        finalName = varName;
+                        _methodScopeVars.Add(varName);
+                    }
+
+                    seenInInvocation[varName] = finalName;
+                    result[i] = $"var {finalName}{stmt.Substring(eqIdx)}";
+                    continue;
+                }
+            }
+
+            var resolved = stmt;
+            foreach (var (orig, renamed) in seenInInvocation)
+                resolved = Regex.Replace(resolved, $@"\b{Regex.Escape(orig)}\b", renamed);
+            result[i] = resolved;
+        }
+
+        return result;
     }
 
     void RenderAssertThat(StringBuilder sb, AssertThatAction action)
