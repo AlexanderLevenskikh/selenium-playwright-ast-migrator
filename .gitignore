@@ -73,6 +73,28 @@ out/
 output/
 migration-output/
 MigrationOutput/
+pilot-generated/
+pilot-generated-buttons/
+pilot-generated-fix/
+migration-analysis/
+migration-analysis-pilot/
+analysis/
+analysis-with-config/
+GeneratedPilot/
+
+# Generated report artifacts
+report.txt
+report.json
+unmapped-targets.csv
+unmapped-targets.json
+unsupported-actions.csv
+unsupported-actions.json
+adapter-config.draft.json
+adapter-config.draft.*.json
+adapter-config.pilot.json
+
+# Local manual proof outputs
+manual-proof/
 
 # Local migration workspace
 .local/
