@@ -28,8 +28,8 @@
     },
     {
       "SourceExpression": "page.FuterUser",
-      "TargetExpression": "t_process_footer",
-      "TargetKind": "TestId"
+      "TargetExpression": "Page.Locator(\"[data-test-id='t_process_footer']\").First",
+      "TargetKind": "RawExpression"
     },
     {
       "SourceExpression": "page.UserInput",
@@ -101,6 +101,26 @@
         "// page variable assigned from ClickAndOpen result — handled by Page context"
       ],
       "RequiresReview": false
+    },
+    {
+      "SourceMethod": "page.UserInput.InputTextAndSelectValue(\"Selenium-администатор\")",
+      "TargetMethod": null,
+      "Description": "Fill combobox and select first matching option — verified source: data-test-id='t_widget_searchfilter'. InputTextAndSelectValue is complex (fill + wait + click first option), simplified to fill + Enter.",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test-id='t_widget_searchfilter']\").FillAsync(\"Selenium-администатор\");",
+        "await Page.Locator(\"[data-test-id='t_widget_searchfilter']\").PressAsync(\"Enter\");"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.WidgetDate.ManualInputValue(\"Март\", \"2025\", 22)",
+      "TargetMethod": null,
+      "Description": "Fill date picker — verified source: data-test-id='t_widget_datefilter'. ManualInputValue sets month, year, day. Date picker interaction is complex and not fully verified — requires manual review.",
+      "TargetStatements": [
+        "// TODO: ManualInputValue for date picker — complex interaction, needs manual migration",
+        "// Original: page.WidgetDate.ManualInputValue(\"Март\", \"2025\", 22)"
+      ],
+      "RequiresReview": true
     }
   ]
 }

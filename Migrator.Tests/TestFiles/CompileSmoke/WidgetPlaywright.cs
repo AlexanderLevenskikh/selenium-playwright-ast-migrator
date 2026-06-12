@@ -23,7 +23,7 @@ public class WidgetPlaywright : PageTest
 		// TODO: mapped method requires manual review — var lightbox = pagef.WidgetButton.ClickAndOpen<WidgetPage>()
 		// page variable assigned from ClickAndOpen result — handled by Page context // line 20
 		await Expect(Page.Locator("[data-test-id='t_widget_userfilter']")).ToBeVisibleAsync(); // line 21
-		await Expect(Page.Locator("[data-test-id='t_process_footer']")).ToBeVisibleAsync(); // line 22
+		await Expect(Page.Locator("[data-test-id='t_process_footer']").First).ToBeVisibleAsync(); // line 22
 	}
 
 	[Category("QuickRunning")]
@@ -31,23 +31,25 @@ public class WidgetPlaywright : PageTest
 	public async Task CheckUserToWidget()
 	{
 		await Page.Locator("[data-test-id='t_widget_userfilter']").ClickAsync(); // line 29
-		// [InputTextAndSelectValue] page.UserInput.InputTextAndSelectValue("Selenium-администатор") // line 30
-		// TODO: manual review needed
-		await Expect(Page.Locator("[data-test-id='t_process_footer']")).ToBeVisibleAsync(); // line 31
-		var textResult_0 = await Page.Locator("[data-test-id='t_process_footer']").InnerTextAsync(); // line 32
+		await Page.Locator("[data-test-id='t_widget_searchfilter']").FillAsync("Selenium-администатор"); // line 30
+		await Page.Locator("[data-test-id='t_widget_searchfilter']").PressAsync("Enter"); // line 30
+		// TODO: mapped method requires manual review — page.UserInput.InputTextAndSelectValue("Selenium-администатор")
+		await Expect(Page.Locator("[data-test-id='t_process_footer']").First).ToBeVisibleAsync(); // line 31
+		var textResult_0 = await Page.Locator("[data-test-id='t_process_footer']").First.InnerTextAsync(); // line 32
 		Assert.That(textResult_0, Is.Not.Empty);
 	}
 
 	[Test]
 	public async Task CheckDateToWidget()
 	{
-		// [ManualInputValue] page.WidgetDate.ManualInputValue("Март", "2025", 22) // line 38
-		// TODO: manual review needed
+		// TODO: ManualInputValue for date picker — complex interaction, needs manual migration // line 38
+		// Original: page.WidgetDate.ManualInputValue("Март", "2025", 22) // line 38
+		// TODO: mapped method requires manual review — page.WidgetDate.ManualInputValue("Март", "2025", 22)
 		var loader = Page.Locator("[data-test='table-loader']"); // line 39
 		if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync(); // line 39
 		// TODO: mapped method requires manual review — page.Loader.ValidateLoading()
-		await Expect(Page.Locator("[data-test-id='t_process_footer']")).ToBeVisibleAsync(); // line 40
-		var textResult_1 = await Page.Locator("[data-test-id='t_process_footer']").InnerTextAsync(); // line 41
+		await Expect(Page.Locator("[data-test-id='t_process_footer']").First).ToBeVisibleAsync(); // line 40
+		var textResult_1 = await Page.Locator("[data-test-id='t_process_footer']").First.InnerTextAsync(); // line 41
 		Assert.That(textResult_1, Is.Not.Empty);
 	}
 
@@ -59,8 +61,8 @@ public class WidgetPlaywright : PageTest
 		var loader = Page.Locator("[data-test='table-loader']"); // line 49
 		if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync(); // line 49
 		// TODO: mapped method requires manual review — page.Loader.ValidateLoading()
-		await Page.Locator("[data-test-id='t_process_footer']").WaitForAsync(); // line 50
-		var textResult_2 = await Page.Locator("[data-test-id='t_process_footer']").InnerTextAsync(); // line 51
+		await Page.Locator("[data-test-id='t_process_footer']").First.WaitForAsync(); // line 50
+		var textResult_2 = await Page.Locator("[data-test-id='t_process_footer']").First.InnerTextAsync(); // line 51
 		Assert.That(textResult_2, Is.Not.Empty);
 	}
 

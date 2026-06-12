@@ -436,11 +436,39 @@ public class PlaywrightDotNetRenderer : IRenderer
         var rendered = target.RenderLocator();
         return target.Kind switch
         {
-            TargetKind.PlaywrightLocator => rendered.StartsWith("Page.") ? rendered : $"Page.{rendered}",
+            TargetKind.PlaywrightLocator => RenderPlaywrightLocator(mapped: target as MappedTarget, rendered),
             TargetKind.PageObjectProperty => rendered,
             TargetKind.RawExpression => rendered,
             _ => $"Page.Locator(\"TODO: {target.SourceExpression}\")"
         };
+    }
+
+    string RenderPlaywrightLocator(MappedTarget? mapped, string rendered)
+    {
+        if (rendered.StartsWith("Page."))
+            return rendered;
+
+        // Legacy: TargetExpression already contains Playwright call like GetByTestId("x")
+        if (IsLegacyPlaywrightFragment(rendered))
+            return $"Page.{rendered}";
+
+        // Semantic: TargetExpression is a raw test-id value like "submit"
+        if (mapped != null)
+            return $"Page.GetByTestId(\"{mapped.TargetExpression}\")";
+
+        return $"Page.{rendered}";
+    }
+
+    static bool IsLegacyPlaywrightFragment(string expr)
+    {
+        var trimmed = expr.Trim();
+        return trimmed.StartsWith("GetByTestId(") ||
+               trimmed.StartsWith("Locator(") ||
+               trimmed.StartsWith("GetByText(") ||
+               trimmed.StartsWith("GetByRole(") ||
+               trimmed.StartsWith("GetByLabel(") ||
+               trimmed.StartsWith("GetByPlaceholder(") ||
+               trimmed.StartsWith("GetByAltText(");
     }
 
     string EscapeAttribute(string attr)

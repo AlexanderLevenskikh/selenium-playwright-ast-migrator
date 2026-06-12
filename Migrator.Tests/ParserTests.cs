@@ -1017,4 +1017,52 @@ public class ParserTests
         Assert.Contains("Page.Locator(\"[data-tid='Input__root']\")", output);
         Assert.DoesNotContain("RawExpression", output);
     }
+
+    [Fact]
+    public void Adapter_SemanticTestId_NoLocatorSettings_RendersGetByTestId()
+    {
+        var config = new ProjectAdapterConfig(
+            SourceProjectName: "TestProject",
+            UiTargets: new[]
+            {
+                new UiTargetMapping("page.Submit", "submit", "TestId"),
+            },
+            PageObjects: Array.Empty<PageObjectMapping>(),
+            Methods: Array.Empty<MethodMapping>()
+        );
+        var adapter = new DefaultProjectAdapter(config);
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var click = new ClickAction(1, TargetExpression.Mapped("page.Submit", "submit", TargetKind.PlaywrightLocator));
+        var model = CreateModel(click);
+        var adapted = adapter.Adapt(model);
+        var output = renderer.Render(adapted);
+
+        Assert.Contains("Page.GetByTestId(\"submit\")", output);
+        Assert.DoesNotContain("Page.submit", output);
+    }
+
+    [Fact]
+    public void Adapter_LegacyTestId_FragmentRendersCorrectly()
+    {
+        var config = new ProjectAdapterConfig(
+            SourceProjectName: "TestProject",
+            UiTargets: new[]
+            {
+                new UiTargetMapping("page.Submit", "GetByTestId(\"submit\")", "TestId"),
+            },
+            PageObjects: Array.Empty<PageObjectMapping>(),
+            Methods: Array.Empty<MethodMapping>()
+        );
+        var adapter = new DefaultProjectAdapter(config);
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var click = new ClickAction(1, TargetExpression.Mapped("page.Submit", "GetByTestId(\"submit\")", TargetKind.PlaywrightLocator));
+        var model = CreateModel(click);
+        var adapted = adapter.Adapt(model);
+        var output = renderer.Render(adapted);
+
+        Assert.Contains("Page.GetByTestId(\"submit\")", output);
+        Assert.DoesNotContain("TODO", output);
+    }
 }
