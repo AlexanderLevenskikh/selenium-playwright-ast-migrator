@@ -304,13 +304,7 @@ static Dictionary<string, (int Count, string File, int Line)> CollectAllUnmapped
 
         foreach (var action in allActions)
         {
-            var target = action switch
-            {
-                ClickAction c => c.Target,
-                SendKeysAction s => s.Target,
-                PressAction p => p.Target,
-                _ => null
-            };
+            var target = GetTarget(action);
 
             if (target is { Kind: TargetKind.Unresolved })
             {
@@ -327,6 +321,20 @@ static Dictionary<string, (int Count, string File, int Line)> CollectAllUnmapped
     }
 
     return allUnmapped;
+}
+
+static TargetExpression? GetTarget(TestAction action)
+{
+    return action switch
+    {
+        ClickAction c => c.Target,
+        SendKeysAction s => s.Target,
+        PressAction p => p.Target,
+        TextAssertionAction ta => ta.Target,
+        VisibilityAssertionAction va => va.Target,
+        WaitForAction wa => wa.Target,
+        _ => null
+    };
 }
 
 static Dictionary<string, (int Count, string File, int Line)> CollectAllUnsupported(List<PipelineResult> results)
@@ -400,13 +408,7 @@ static MigrationSummaryReport BuildSummary(List<PipelineResult> results, out IRe
 
         foreach (var action in allActions)
         {
-            var target = action switch
-            {
-                ClickAction c => c.Target,
-                SendKeysAction s => s.Target,
-                PressAction p => p.Target,
-                _ => null
-            };
+            var target = GetTarget(action);
 
             if (target is { Kind: TargetKind.Unresolved })
             {
