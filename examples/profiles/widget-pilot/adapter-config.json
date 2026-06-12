@@ -1,0 +1,73 @@
+{
+  "SourceProjectName": "ArBilling.E2ETests",
+  "UiTargets": [
+    {
+      "SourceExpression": "page.User",
+      "TargetExpression": "GetByTestId(\"widget-user\")",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.Name",
+      "TargetExpression": "GetByTestId(\"user-name\")",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.WidgetSearch",
+      "TargetExpression": "GetByTestId(\"widget-search\")",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.FuterUser",
+      "TargetExpression": "GetByTestId(\"futer-user\")",
+      "TargetKind": "TestId"
+    }
+  ],
+  "PageObjects": [],
+  "Methods": [
+    {
+      "SourceMethod": "Navigation.OpenSearchPage()",
+      "TargetMethod": null,
+      "Description": "Navigate to search page — replace with actual Playwright navigation",
+      "TargetStatements": [
+        "await Page.GotoAsync(\"/search\");"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "pagef.Loader.ValidateLoading()",
+      "TargetMethod": null,
+      "Description": "Wait for loader to finish — replace with actual loading indicator locator",
+      "TargetStatements": [
+        "// TODO: map to actual loading indicator locator and uncomment:\n// await Expect(Page.GetByTestId(\"loading-indicator\")).ToBeHiddenAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Loader.ValidateLoading()",
+      "TargetMethod": null,
+      "Description": "Wait for loader to finish — replace with actual loading indicator locator",
+      "TargetStatements": [
+        "// TODO: map to actual loading indicator locator and uncomment:\n// await Expect(Page.GetByTestId(\"loading-indicator\")).ToBeHiddenAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "pagef.WidgetButton.ClickAndOpen<WidgetPage>()",
+      "TargetMethod": null,
+      "Description": "Click widget button to open widget page — needs actual target locator",
+      "TargetStatements": [
+        "await Page.GetByTestId(\"widget-button\").ClickAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page = lightbox",
+      "TargetMethod": null,
+      "Description": "Page variable assignment from lightbox open result",
+      "TargetStatements": [
+        "// page variable assigned from ClickAndOpen result — handled by Page context"
+      ],
+      "RequiresReview": false
+    }
+  ]
+}

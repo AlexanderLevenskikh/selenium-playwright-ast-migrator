@@ -153,6 +153,7 @@ public class DefaultProjectAdapter : IProjectAdapter
                 wa.Confidence) },
             MethodInvocationAction mi => TryResolveMethodMapping(mi),
             RawStatementAction raw => TryResolveRawStatement(raw),
+            LocalDeclarationAction lds => TryResolveLocalDeclaration(lds),
             _ => new[] { action }
         };
     }
@@ -224,5 +225,26 @@ public class DefaultProjectAdapter : IProjectAdapter
         }
 
         return new[] { raw };
+    }
+
+    IEnumerable<TestAction> TryResolveLocalDeclaration(LocalDeclarationAction lds)
+    {
+        var initExpr = lds.InitializationValue.Trim().TrimEnd(';');
+        if (initExpr.Contains('('))
+        {
+            if (_methodStatementsMap.TryGetValue(initExpr, out var mapping))
+            {
+                return new[]
+                {
+                    new MappedMethodInvocationAction(
+                        lds.SourceLine,
+                        $"{lds.VariableType} {lds.VariableName} = {lds.InitializationValue}",
+                        mapping.Statements,
+                        mapping.RequiresReview)
+                };
+            }
+        }
+
+        return new[] { lds };
     }
 }
