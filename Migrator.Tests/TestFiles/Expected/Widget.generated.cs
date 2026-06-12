@@ -19,10 +19,8 @@ public class WidgetPlaywright : PageTest
 		// TODO: manual review needed
 		// TODO: raw statement — review: var lightbox = pagef.WidgetButton.ClickAndOpen<WidgetPage>()
 		// TODO: raw statement — review: page = lightbox
-		// [EqualTo] page.User.Visible.Wait().EqualTo(true) // line 21
-		// TODO: manual review needed
-		// [EqualTo] page.FuterUser.Visible.Wait().EqualTo(true) // line 22
-		// TODO: manual review needed
+		await Expect(Page.GetByTestId("widget-user")).ToBeVisibleAsync(); // line 21
+		await Expect(Page.GetByTestId("futer-user")).ToBeVisibleAsync(); // line 22
 	}
 
 	[Category("QuickRunning")]
@@ -32,10 +30,9 @@ public class WidgetPlaywright : PageTest
 		await Page.GetByTestId("widget-user").ClickAsync(); // line 29
 		// [InputTextAndSelectValue] page.UserInput.InputTextAndSelectValue("Selenium-администатор") // line 30
 		// TODO: manual review needed
-		// [EqualTo] page.FuterUser.Visible.Wait().EqualTo(true) // line 31
-		// TODO: manual review needed
-		// [NotBeEmpty] page.FuterUser.Text.Get().Should().NotBeEmpty() // line 32
-		// TODO: manual review needed
+		await Expect(Page.GetByTestId("futer-user")).ToBeVisibleAsync(); // line 31
+		var textResult_0 = await Page.GetByTestId("futer-user").InnerTextAsync(); // line 32
+		Assert.That(textResult_0, Is.Not.Empty);
 	}
 
 	[Test]
@@ -45,10 +42,9 @@ public class WidgetPlaywright : PageTest
 		// TODO: manual review needed
 		// [ValidateLoading] page.Loader.ValidateLoading() // line 39
 		// TODO: manual review needed
-		// [EqualTo] page.FuterUser.Visible.Wait().EqualTo(true) // line 40
-		// TODO: manual review needed
-		// [NotBeEmpty] page.FuterUser.Text.Get().Should().NotBeEmpty() // line 41
-		// TODO: manual review needed
+		await Expect(Page.GetByTestId("futer-user")).ToBeVisibleAsync(); // line 40
+		var textResult_1 = await Page.GetByTestId("futer-user").InnerTextAsync(); // line 41
+		Assert.That(textResult_1, Is.Not.Empty);
 	}
 
 	[Test]
@@ -58,10 +54,9 @@ public class WidgetPlaywright : PageTest
 		await Page.GetByTestId("widget-search").PressAsync("Enter"); // line 48
 		// [ValidateLoading] page.Loader.ValidateLoading() // line 49
 		// TODO: manual review needed
-		// [WaitPresence] page.FuterUser.WaitPresence() // line 50
-		// TODO: manual review needed
-		// [NotBeEmpty] page.FuterUser.Text.Get().Should().NotBeEmpty() // line 51
-		// TODO: manual review needed
+		await Page.GetByTestId("futer-user").WaitForAsync(); // line 50
+		var textResult_2 = await Page.GetByTestId("futer-user").InnerTextAsync(); // line 51
+		Assert.That(textResult_2, Is.Not.Empty);
 	}
 
 }

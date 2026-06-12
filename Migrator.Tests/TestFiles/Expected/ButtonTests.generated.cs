@@ -25,20 +25,20 @@ public class ButtonTestsPlaywright : PageTest
 	public async Task CheckSearchButton()
 	{
 		await Page.GetByTestId("side-menu-search").ClickAsync(); // line 24
-		// [EqualTo] page.MenuItems.SearchTextArea.Visible.Wait().EqualTo(true) // line 25
-		// TODO: manual review needed
-		// [EqualTo] page.MenuItems.SearchTextArea.Visible.Wait().EqualTo(false) // line 26
-		// TODO: manual review needed
+		await Expect(Page.Locator("TODO: page.MenuItems.SearchTextArea")).ToBeVisibleAsync(); // line 25
+		// TODO: map source expression to Playwright locator: page.MenuItems.SearchTextArea
+		await Expect(Page.Locator("TODO: page.MenuItems.SearchTextArea")).ToBeHiddenAsync(); // line 26
+		// TODO: map source expression to Playwright locator: page.MenuItems.SearchTextArea
 	}
 
 	[Category("QuickRunning")]
 	[Test]
 	public async Task CheckFeedBackButton()
 	{
-		// [EqualTo] page.MenuItems.SideMenuButtonFeedback.Visible.Wait().EqualTo(true) // line 33
-		// TODO: manual review needed
-		// [Be] page.MenuItems.SideMenuButtonFeedback.Text.Get().Should().Be("Оставить отзыв") // line 34
-		// TODO: manual review needed
+		await Expect(Page.Locator("TODO: page.MenuItems.SideMenuButtonFeedback")).ToBeVisibleAsync(); // line 33
+		// TODO: map source expression to Playwright locator: page.MenuItems.SideMenuButtonFeedback
+		await Expect(Page.Locator("TODO: page.MenuItems.SideMenuButtonFeedback")).ToHaveTextAsync("Оставить отзыв"); // line 34
+		// TODO: map source expression to Playwright locator: page.MenuItems.SideMenuButtonFeedback
 	}
 
 	[Category("QuickRunning")]
@@ -47,10 +47,10 @@ public class ButtonTestsPlaywright : PageTest
 	{
 		await Page.GetByTestId("side-menu-catalogs").ClickAsync(); // line 41
 		await Page.GetByTestId("side-menu-catalogs-partners").ClickAsync(); // line 42
-		// [Be] WebDriver.Url.Should().Be(Urls.BaseUrlCatalogPartners) // line 43
-		// TODO: manual review needed
-		// [EqualTo] page.MenuItems.Error.Visible.Wait().EqualTo(false) // line 44
-		// TODO: manual review needed
+		// await Expect(Page).ToHaveURLAsync(Urls.BaseUrlCatalogPartners); // line 43
+		// TODO: URL assertion uses external variable — verify and uncomment
+		await Expect(Page.Locator("TODO: page.MenuItems.Error")).ToBeHiddenAsync(); // line 44
+		// TODO: map source expression to Playwright locator: page.MenuItems.Error
 	}
 
 }

@@ -86,7 +86,7 @@ public class ParserTests
 
         Assert.Contains(checkFilterSc.BodyActions, a => a is MethodInvocationAction mi && mi.MethodName.Contains("InputAndSelect"));
         Assert.Contains(checkFilterSc.BodyActions, a => a is MethodInvocationAction mi && mi.MethodName.Contains("ValidateLoading"));
-        Assert.Contains(checkFilterSc.BodyActions, a => a is MethodInvocationAction mi && mi.MethodName.Contains("Contain"));
+        Assert.Contains(checkFilterSc.BodyActions, a => a is TextAssertionAction ta && ta.Kind == TextAssertionKind.TextContains);
     }
 
     [Fact]
@@ -122,7 +122,8 @@ public class ParserTests
             Assert.True(
                 a is ClickAction or SendKeysAction or AssertThatAction or AssertAreEqualAction or
                 MethodInvocationAction or UnsupportedAction or PageObjectFieldAction or
-                RawStatementAction,
+                RawStatementAction or TextAssertionAction or VisibilityAssertionAction or
+                WaitForAction or UrlAssertionAction,
                 $"Action type {a.GetType().Name} should be one of the known types"
             );
         });
@@ -139,10 +140,15 @@ public class ParserTests
 
         var knownActions = allActions.OfType<ClickAction>().Cast<object>()
             .Concat(allActions.OfType<SendKeysAction>())
+            .Concat(allActions.OfType<PressAction>())
             .Concat(allActions.OfType<MethodInvocationAction>())
             .Concat(allActions.OfType<AssertThatAction>())
             .Concat(allActions.OfType<AssertAreEqualAction>())
             .Concat(allActions.OfType<RawStatementAction>())
+            .Concat(allActions.OfType<TextAssertionAction>())
+            .Concat(allActions.OfType<VisibilityAssertionAction>())
+            .Concat(allActions.OfType<WaitForAction>())
+            .Concat(allActions.OfType<UrlAssertionAction>())
             .ToList();
 
         Assert.True(knownActions.Count + unsupported.Count == allActions.Count,
@@ -523,5 +529,351 @@ public class ParserTests
 
         Assert.True(reportWithTodo.TodoComments > 0, "File with unmapped target should have TODO comments");
         Assert.True(reportClean.TodoComments == 0, "File with all mapped targets should have no TODO comments");
+    }
+
+    [Fact]
+    public void Recognizer_TextAssertion_Be_EqualsRecognized()
+    {
+        var model = _parser.Parse(Path.Combine(_testFilesDir, "ButtonTests.cs"));
+        var test = model.Tests.First(t => t.Name == "CheckFeedBackButton");
+
+        var textAction = test.BodyActions.OfType<TextAssertionAction>().FirstOrDefault();
+        Assert.NotNull(textAction);
+        Assert.Equal(TextAssertionKind.TextEquals, textAction!.Kind);
+        Assert.Equal("\"Оставить отзыв\"", textAction.ExpectedValue);
+        Assert.Equal("page.MenuItems.SideMenuButtonFeedback", textAction.Target.SourceExpression);
+    }
+
+    [Fact]
+    public void Recognizer_TextAssertion_NotEmptyRecognized()
+    {
+        var model = _parser.Parse(Path.Combine(_testFilesDir, "Widget.cs"));
+        var test = model.Tests.First(t => t.Name == "CheckSearchToWidget");
+
+        var textActions = test.BodyActions.OfType<TextAssertionAction>().ToList();
+        Assert.NotEmpty(textActions);
+        var notEmpty = textActions.First(ta => ta.Kind == TextAssertionKind.TextNotEmpty);
+        Assert.Null(notEmpty.ExpectedValue);
+        Assert.Equal("page.FuterUser", notEmpty.Target.SourceExpression);
+    }
+
+    [Fact]
+    public void Recognizer_Visibility_WaitEqualToRecognized()
+    {
+        var model = _parser.Parse(Path.Combine(_testFilesDir, "Widget.cs"));
+        var setupActions = model.SetUpActions.ToList();
+
+        var visActions = setupActions.OfType<VisibilityAssertionAction>().ToList();
+        Assert.Equal(2, visActions.Count);
+        Assert.All(visActions, a => Assert.Equal(VisibilityKind.Visible, a.Kind));
+    }
+
+    [Fact]
+    public void Recognizer_Visibility_TrueAndFalse()
+    {
+        var model = _parser.Parse(Path.Combine(_testFilesDir, "ButtonTests.cs"));
+        var test = model.Tests.First(t => t.Name == "CheckSearchButton");
+
+        var visActions = test.BodyActions.OfType<VisibilityAssertionAction>().ToList();
+        Assert.Equal(2, visActions.Count);
+        Assert.Equal(VisibilityKind.Visible, visActions[0].Kind);
+        Assert.Equal(VisibilityKind.Hidden, visActions[1].Kind);
+    }
+
+    [Fact]
+    public void Recognizer_WaitPresence_Recognized()
+    {
+        var model = _parser.Parse(Path.Combine(_testFilesDir, "Widget.cs"));
+        var test = model.Tests.First(t => t.Name == "CheckSearchToWidget");
+
+        var waitAction = test.BodyActions.OfType<WaitForAction>().FirstOrDefault();
+        Assert.NotNull(waitAction);
+        Assert.Equal("page.FuterUser", waitAction!.Target.SourceExpression);
+    }
+
+    [Fact]
+    public void Recognizer_UrlAssertion_BeRecognized()
+    {
+        var model = _parser.Parse(Path.Combine(_testFilesDir, "ButtonTests.cs"));
+        var test = model.Tests.First(t => t.Name == "CheckButtonCatalogsPartners");
+
+        var urlAction = test.BodyActions.OfType<UrlAssertionAction>().FirstOrDefault();
+        Assert.NotNull(urlAction);
+        Assert.Equal(UrlAssertionKind.UrlEquals, urlAction!.Kind);
+        Assert.Equal("Urls.BaseUrlCatalogPartners", urlAction.ExpectedValue);
+    }
+
+    [Fact]
+    public void Recognizer_TextAssertion_ContainsRecognized()
+    {
+        var model = _parser.Parse(Path.Combine(_testFilesDir, "RegistryFilter.cs"));
+        var test = model.Tests.First(t => t.Name == "CheckFilterScToRegistry");
+
+        var textAction = test.BodyActions.OfType<TextAssertionAction>().FirstOrDefault();
+        Assert.NotNull(textAction);
+        Assert.Equal(TextAssertionKind.TextContains, textAction!.Kind);
+        Assert.Equal("\"0004\"", textAction.ExpectedValue);
+    }
+
+    [Fact]
+    public void Render_TextAssertion_NotEmpty_Compileable()
+    {
+        var action = new TextAssertionAction(1, TargetExpression.Unresolved("page.Title"), TextAssertionKind.TextNotEmpty, null);
+        var model = CreateModel(action);
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+
+        Assert.Contains("InnerTextAsync()", output);
+        Assert.Contains("Assert.That(", output);
+        Assert.Contains("Is.Not.Empty", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void Render_Visibility_TobeVisible_Compileable()
+    {
+        var action = new VisibilityAssertionAction(1, TargetExpression.Unresolved("page.Btn"), VisibilityKind.Visible);
+        var model = CreateModel(action);
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+
+        Assert.Contains("ToBeVisibleAsync()", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void Render_Visibility_TobeHidden_Compileable()
+    {
+        var action = new VisibilityAssertionAction(1, TargetExpression.Unresolved("page.Btn"), VisibilityKind.Hidden);
+        var model = CreateModel(action);
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+
+        Assert.Contains("ToBeHiddenAsync()", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void Render_WaitFor_Compileable()
+    {
+        var action = new WaitForAction(1, TargetExpression.Unresolved("page.Result"));
+        var model = CreateModel(action);
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+
+        Assert.Contains("WaitForAsync()", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void Render_UrlAssertion_Literal_Compileable()
+    {
+        var action = new UrlAssertionAction(1, UrlAssertionKind.UrlEquals, "\"https://example.com\"");
+        var model = CreateModel(action);
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+
+        Assert.Contains("ToHaveURLAsync", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void Render_UrlAssertion_Contains_Literal_Compileable()
+    {
+        var action = new UrlAssertionAction(1, UrlAssertionKind.UrlContains, "\"/search\"");
+        var model = CreateModel(action);
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+
+        Assert.Contains("Does.Contain", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void Adapter_TextAssertion_TargetResolved()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            new[] { new UiTargetMapping("page.Title", "GetByTestId(\"title\")", "TestId") },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>());
+        var adapter = new DefaultProjectAdapter(config);
+        var parser = new RoslynTestFileParser();
+        var sourceModel = parser.Parse(Path.Combine(_testFilesDir, "ButtonTests.cs"));
+
+        var adapted = adapter.Adapt(sourceModel);
+        var test = adapted.Tests.First(t => t.Name == "CheckFeedBackButton");
+        var textActions = test.BodyActions.OfType<TextAssertionAction>().ToList();
+        Assert.NotEmpty(textActions);
+        var ta = textActions.First();
+        Assert.Equal("page.MenuItems.SideMenuButtonFeedback", ta.Target.SourceExpression);
+    }
+
+    [Fact]
+    public void ReportBuilder_NewActions_CountedInTargets()
+    {
+        var model = new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "T",
+            ClassName: "T",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(),
+                    new TestAction[]
+                    {
+                        new VisibilityAssertionAction(1, TargetExpression.Unresolved("page.X"), VisibilityKind.Visible),
+                        new WaitForAction(1, TargetExpression.Mapped("page.Y", "GetByTestId(\"y\")", TargetKind.PlaywrightLocator)),
+                        new TextAssertionAction(1, TargetExpression.Mapped("page.Z", "GetByTestId(\"z\")", TargetKind.PlaywrightLocator), TextAssertionKind.TextNotEmpty, null),
+                    })
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+        var report = ReportBuilder.Build(model, output);
+
+        Assert.Equal(1, report.UnmappedTargets);
+        Assert.Equal(2, report.MappedTargets);
+    }
+
+    [Fact]
+    public void ReportBuilder_SetupTodoCountsInFileWarnings()
+    {
+        var model = new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "T",
+            ClassName: "T",
+            BaseClassName: null,
+            SetUpActions: new TestAction[]
+            {
+                new RawStatementAction(5, "var page = Navigation.GoTo(\"/foo\")")
+            },
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(),
+                    new TestAction[] { new ClickAction(1, TargetExpression.Mapped("btn", "GetByTestId(\"btn\")", TargetKind.PlaywrightLocator)) })
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+        var report = ReportBuilder.Build(model, output);
+
+        Assert.True(report.TodoComments > 0, "Setup raw statement should produce TODO comments");
+    }
+
+    [Fact]
+    public void MethodMapping_TargetStatements_ReplacesSetupInvocation()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            new[]
+            {
+                new MethodMapping(
+                    "Navigation.GoToAsync(\"/registry\")",
+                    null,
+                    "navigate to registry",
+                    new[] { "await Page.GotoAsync(\"/registry\");" },
+                    false),
+                new MethodMapping(
+                    "page = pagef",
+                    null,
+                    "assign page variable",
+                    new[] { "// page is set up" },
+                    false)
+            });
+        var adapter = new DefaultProjectAdapter(config);
+        var parser = new RoslynTestFileParser();
+        var sourceModel = parser.Parse(Path.Combine(_testFilesDir, "NewPatternsFixture.cs"));
+
+        var adapted = adapter.Adapt(sourceModel);
+
+        var mappedActions = adapted.SetUpActions.OfType<MappedMethodInvocationAction>().ToList();
+        Assert.Equal(2, mappedActions.Count);
+        Assert.Equal("await Page.GotoAsync(\"/registry\");", mappedActions[0].TargetStatements[0]);
+        Assert.Equal("// page is set up", mappedActions[1].TargetStatements[0]);
+        Assert.False(mappedActions[0].RequiresReview);
+        Assert.False(mappedActions[1].RequiresReview);
+
+        // Renderer should output the target statements
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(adapted);
+        Assert.Contains("await Page.GotoAsync(\"/registry\");", output);
+        Assert.Contains("// page is set up", output);
+
+        // Setup actions are safe mapped — no other unmapped actions in setup
+        Assert.Empty(adapted.SetUpActions.OfType<RawStatementAction>());
+        Assert.Empty(adapted.SetUpActions.OfType<MethodInvocationAction>());
+    }
+
+    [Fact]
+    public void MethodMapping_RequiresReview_True_ProducesWarningHeader()
+    {
+        var model = new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "T",
+            ClassName: "T",
+            BaseClassName: null,
+            SetUpActions: new TestAction[]
+            {
+                new MappedMethodInvocationAction(1, "Setup.Init()", new[] { "await Page.GotoAsync(\"/\");" }, requiresReview: true)
+            },
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(),
+                    new TestAction[] { new ClickAction(1, TargetExpression.Mapped("btn", "GetByTestId(\"btn\")", TargetKind.PlaywrightLocator)) })
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+        Assert.Contains("WARNING", output);
+        Assert.Contains("TODO", output);
+    }
+
+    [Fact]
+    public void MethodMapping_RequiresReview_False_NoWarningHeader()
+    {
+        var model = new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "T",
+            ClassName: "T",
+            BaseClassName: null,
+            SetUpActions: new TestAction[]
+            {
+                new MappedMethodInvocationAction(1, "Setup.Init()", new[] { "await Page.GotoAsync(\"/\");" }, requiresReview: false)
+            },
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(),
+                    new TestAction[] { new ClickAction(1, TargetExpression.Mapped("btn", "GetByTestId(\"btn\")", TargetKind.PlaywrightLocator)) })
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+        Assert.DoesNotContain("WARNING", output);
+        Assert.DoesNotContain("TODO", output);
+    }
+
+    static TestFileModel CreateModel(TestAction action)
+    {
+        return new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "TC",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(),
+                    new[] { action })
+            });
     }
 }

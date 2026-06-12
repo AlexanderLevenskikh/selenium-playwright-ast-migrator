@@ -30,13 +30,17 @@ public class RoslynTestFileParser : ITestFileParser
         new ClickInvocationRecognizer(),
         new SendKeysInvocationRecognizer(),
         new AssertInvocationRecognizer(),
+        new FluentTextAssertionRecognizer(),
+        new VisibilityAssertionRecognizer(),
+        new WaitPresenceRecognizer(),
+        new UrlAssertionRecognizer(),
         new FluentAssertionsRecognizer(),
         new WaitInvocationRecognizer(),
-        new PageObjectMethodRecognizer(),
         new AsyncPlaywrightRecognizer(),
         new NavigationRecognizer(),
         new PlaywrightAssertionRecognizer(),
         new SelectValueRecognizer(),
+        new PageObjectMethodRecognizer(),
         new UnknownInvocationRecognizer(),
     };
 

@@ -1,21 +1,19 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Migrator.Core;
 using Migrator.Core.Models;
 using System.Text.Json;
 
 namespace Migrator.SeleniumCSharp;
 
-/// <summary>
-/// Concrete adapter implementation. Pure resolution — no side effects on ResolveTarget.
-/// Uses ProjectAdapterConfig (neutral models) to resolve source expressions to target expressions.
-/// </summary>
 public class DefaultProjectAdapter : IProjectAdapter
 {
     readonly Dictionary<string, MappedTarget> _targetMap = new();
     readonly Dictionary<string, string> _pageObjectMap = new();
     readonly Dictionary<string, string> _methodMap = new();
+    readonly Dictionary<string, (string[] Statements, bool RequiresReview)> _methodStatementsMap = new();
 
     public DefaultProjectAdapter()
     {
@@ -43,7 +41,12 @@ public class DefaultProjectAdapter : IProjectAdapter
             _pageObjectMap[po.SourceType] = po.VariableName;
 
         foreach (var m in config.Methods)
-            _methodMap[m.SourceMethod] = m.TargetMethod;
+        {
+            if (m.TargetMethod != null)
+                _methodMap[m.SourceMethod] = m.TargetMethod;
+            if (m.TargetStatements != null && m.TargetStatements.Length > 0)
+                _methodStatementsMap[m.SourceMethod] = (m.TargetStatements, m.RequiresReview);
+        }
     }
 
     public DefaultProjectAdapter(string configPath)
@@ -60,16 +63,11 @@ public class DefaultProjectAdapter : IProjectAdapter
         return config;
     }
 
-    /// <summary>
-    /// Pure resolution — no side effects. Returns MappedTarget if mapping exists,
-    /// UnresolvedTarget otherwise.
-    /// </summary>
     public TargetExpression ResolveTarget(string sourceExpression)
     {
         if (_targetMap.TryGetValue(sourceExpression, out var target))
             return target;
 
-        // Try prefix matching: "page.User.Click" should match "page.User"
         foreach (var entry in _targetMap)
         {
             if (sourceExpression.StartsWith(entry.Key + ".", StringComparison.Ordinal) ||
@@ -92,14 +90,10 @@ public class DefaultProjectAdapter : IProjectAdapter
         return _methodMap.GetValueOrDefault(sourceMethod);
     }
 
-    /// <summary>
-    /// Apply adapter mappings to a parsed file model, producing a target model
-    /// where ClickAction/SendKeysAction carry resolved TargetExpression.
-    /// </summary>
     public TestFileModel Adapt(TestFileModel sourceModel)
     {
         var adaptedTests = sourceModel.Tests.Select(AdaptTest).ToList();
-        var adaptedSetup = sourceModel.SetUpActions.Select(AdaptAction).ToList();
+        var adaptedSetup = sourceModel.SetUpActions.SelectMany(AdaptAction).ToList();
 
         return new TestFileModel(
             FilePath: sourceModel.FilePath,
@@ -113,7 +107,7 @@ public class DefaultProjectAdapter : IProjectAdapter
 
     TestModel AdaptTest(TestModel test)
     {
-        var adaptedActions = test.BodyActions.Select(AdaptAction).ToList();
+        var adaptedActions = test.BodyActions.SelectMany(AdaptAction).ToList();
 
         return new TestModel(
             Name: test.Name,
@@ -124,25 +118,111 @@ public class DefaultProjectAdapter : IProjectAdapter
         );
     }
 
-    TestAction AdaptAction(TestAction action)
+    IEnumerable<TestAction> AdaptAction(TestAction action)
     {
         return action switch
         {
-            ClickAction click => new ClickAction(
+            ClickAction click => new[] { new ClickAction(
                 click.SourceLine,
                 ResolveTarget(click.Target.SourceExpression),
-                click.Confidence),
-            SendKeysAction sendKeys => new SendKeysAction(
+                click.Confidence) },
+            SendKeysAction sendKeys => new[] { new SendKeysAction(
                 sendKeys.SourceLine,
                 ResolveTarget(sendKeys.Target.SourceExpression),
                 sendKeys.TextExpression,
-                sendKeys.Confidence),
-            PressAction press => new PressAction(
+                sendKeys.Confidence) },
+            PressAction press => new[] { new PressAction(
                 press.SourceLine,
                 ResolveTarget(press.Target.SourceExpression),
                 press.KeyName,
-                press.Confidence),
-            _ => action
+                press.Confidence) },
+            TextAssertionAction ta => new[] { new TextAssertionAction(
+                ta.SourceLine,
+                ResolveTarget(ta.Target.SourceExpression),
+                ta.Kind,
+                ta.ExpectedValue,
+                ta.Confidence) },
+            VisibilityAssertionAction va => new[] { new VisibilityAssertionAction(
+                va.SourceLine,
+                ResolveTarget(va.Target.SourceExpression),
+                va.Kind,
+                va.Confidence) },
+            WaitForAction wa => new[] { new WaitForAction(
+                wa.SourceLine,
+                ResolveTarget(wa.Target.SourceExpression),
+                wa.Confidence) },
+            MethodInvocationAction mi => TryResolveMethodMapping(mi),
+            RawStatementAction raw => TryResolveRawStatement(raw),
+            _ => new[] { action }
         };
+    }
+
+    IEnumerable<TestAction> TryResolveMethodMapping(MethodInvocationAction mi)
+    {
+        var fullText = mi.FullSourceText.TrimEnd(';');
+        if (_methodStatementsMap.TryGetValue(fullText, out var mapping))
+        {
+            return new[]
+            {
+                new MappedMethodInvocationAction(
+                    mi.SourceLine,
+                    mi.FullSourceText,
+                    mapping.Statements,
+                    mapping.RequiresReview)
+            };
+        }
+
+        if (!string.IsNullOrEmpty(mi.MethodName) && _methodStatementsMap.TryGetValue(mi.MethodName, out var methodMapping))
+        {
+            return new[]
+            {
+                new MappedMethodInvocationAction(
+                    mi.SourceLine,
+                    mi.FullSourceText,
+                    methodMapping.Statements,
+                    methodMapping.RequiresReview)
+            };
+        }
+
+        return new[] { mi };
+    }
+
+    IEnumerable<TestAction> TryResolveRawStatement(RawStatementAction raw)
+    {
+        var text = raw.SourceText.Trim().TrimEnd(';');
+
+        if (text.StartsWith("var ", StringComparison.Ordinal) && text.Contains('='))
+        {
+            var eqIndex = text.IndexOf('=');
+            var initExpr = text.Substring(eqIndex + 1).Trim();
+            if (initExpr.Contains('('))
+            {
+                if (_methodStatementsMap.TryGetValue(initExpr, out var mapping))
+                {
+                    return new[]
+                    {
+                        new MappedMethodInvocationAction(
+                            raw.SourceLine,
+                            raw.SourceText,
+                            mapping.Statements,
+                            mapping.RequiresReview)
+                    };
+                }
+            }
+        }
+
+        if (_methodStatementsMap.TryGetValue(text, out var stmtMapping))
+        {
+            return new[]
+            {
+                new MappedMethodInvocationAction(
+                    raw.SourceLine,
+                    raw.SourceText,
+                    stmtMapping.Statements,
+                    stmtMapping.RequiresReview)
+            };
+        }
+
+        return new[] { raw };
     }
 }

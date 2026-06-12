@@ -2,10 +2,6 @@ using Migrator.Core.Models;
 
 namespace Migrator.Core;
 
-/// <summary>
-/// Pure report builder. Takes a target model and generated output, produces a MigrationReport.
-/// No side effects — all counts derived from the model and output text.
-/// </summary>
 public static class ReportBuilder
 {
     public static MigrationReport Build(TestFileModel model, string generatedOutput)
@@ -48,6 +44,9 @@ public static class ReportBuilder
         if (action is ClickAction click) return click.Target;
         if (action is SendKeysAction sk) return sk.Target;
         if (action is PressAction p) return p.Target;
+        if (action is TextAssertionAction ta) return ta.Target;
+        if (action is VisibilityAssertionAction va) return va.Target;
+        if (action is WaitForAction wa) return wa.Target;
         return null;
     }
 }

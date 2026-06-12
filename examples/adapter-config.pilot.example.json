@@ -43,5 +43,24 @@
     }
   ],
   "PageObjects": [],
-  "Methods": []
+  "Methods": [
+    {
+      "SourceMethod": "Navigation.OpenTargetPage()",
+      "TargetMethod": null,
+      "Description": "Navigate to the target page from setup",
+      "TargetStatements": [
+        "await Page.GotoAsync(\"/target-page\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "page.Loader.ValidateLoading()",
+      "TargetMethod": null,
+      "Description": "Wait for page loading indicator to complete",
+      "TargetStatements": [
+        "await Expect(Page.GetByTestId(\"loading-indicator\")).ToBeHiddenAsync();"
+      ],
+      "RequiresReview": false
+    }
+  ]
 }
