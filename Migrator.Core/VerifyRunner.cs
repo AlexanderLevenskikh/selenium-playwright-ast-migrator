@@ -158,9 +158,13 @@ public static class VerifyRunner
 
             var rawExprCount = allActions.Count(a =>
                 a is ClickAction c && c.Target.Kind == TargetKind.Unresolved ||
-                a is SendKeysAction s && s.Target.Kind == TargetKind.Unresolved);
-            totalRawExpressions += allActions.OfType<MappedMethodInvocationAction>()
-                .Count(a => a.TargetStatements.Any(s => s.Contains("RawExpression")));
+                a is SendKeysAction s && s.Target.Kind == TargetKind.Unresolved ||
+                a is PressAction p && p.Target.Kind == TargetKind.Unresolved ||
+                a is TextAssertionAction ta && ta.Target.Kind == TargetKind.Unresolved ||
+                a is VisibilityAssertionAction va && va.Target.Kind == TargetKind.Unresolved ||
+                a is WaitForAction wa && wa.Target.Kind == TargetKind.Unresolved ||
+                a is MappedMethodInvocationAction mmi && mmi.TargetStatements.Any(s => s.Contains("RawExpression")));
+            totalRawExpressions += rawExprCount;
 
             var fileStatus = fileIssues.Any(i => i.Severity == IssueSeverity.Error) ? "failed" : "passed";
             var generatedName = $"{result.SourceModel.ClassName}Playwright.cs";
@@ -613,9 +617,11 @@ public static class VerifyRunner
 
     /// <summary>
     /// Apply quality gates to a verify report. Returns exit code.
-    /// 0 = passed, 1 = failed by gates, 3 = syntax errors.
+    /// 0 = passed, 1 = gate failure, 2 = config error, 3 = syntax error.
+    /// When gates is null, uses soft defaults: count thresholds = int.MaxValue,
+    /// boolean flags = true (but only fire when the corresponding count > 0).
     /// </summary>
-    public static int ApplyQualityGates(VerifyReport report, QualityGatesConfig? gates)
+    public static int ApplyQualityGates(VerifyReport report, QualityGatesConfig? gates, IReadOnlyList<VerifyIssue>? allIssues = null)
     {
         var gateDefaults = gates ?? new QualityGatesConfig();
         var maxTodo = gateDefaults.MaxTodoComments ?? int.MaxValue;
@@ -627,65 +633,77 @@ public static class VerifyRunner
         var failOnMultipleScopes = gateDefaults.FailOnMultipleMatchingScopes ?? true;
         var failOnPlaceholderLeftovers = gateDefaults.FailOnPlaceholderLeftovers ?? true;
         var failOnSuspiciousLiteralVariables = gateDefaults.FailOnSuspiciousLiteralVariables ?? true;
-        var failOnLeaks = gateDefaults.FailOnLocalProfileLeaks ?? true;
 
-        bool failed = false;
+        int exitCode = 0;
 
+        // Syntax errors → exit 3 (highest priority)
         if (failOnSyntax && report.SyntaxErrors > 0)
         {
             Console.Error.WriteLine($"Quality gate: {report.SyntaxErrors} generated syntax error(s) found.");
-            failed = true;
+            exitCode = 3;
         }
 
+        // Config errors → exit 2
+        var issues = allIssues ?? report.Issues;
+        if (issues.Any(i => i.Severity == IssueSeverity.Error && i.Category == "Config"))
+        {
+            var configErrors = issues.Where(i => i.Severity == IssueSeverity.Error && i.Category == "Config").ToList();
+            foreach (var ce in configErrors)
+                Console.Error.WriteLine($"Quality gate: {ce.Message}");
+            exitCode = Math.Max(exitCode, 2);
+        }
+
+        // Page.TODO_* calls → exit 1
         if (failOnPageTodo && report.PageTodoCalls > 0)
         {
             Console.Error.WriteLine($"Quality gate: {report.PageTodoCalls} Page.TODO_* call(s) found.");
-            failed = true;
+            exitCode = Math.Max(exitCode, 1);
         }
 
+        // Threshold gates → exit 1
         if (report.TodoComments > maxTodo)
         {
             Console.Error.WriteLine($"Quality gate: {report.TodoComments} TODO comments (max: {maxTodo}).");
-            failed = true;
+            exitCode = Math.Max(exitCode, 1);
         }
 
         if (report.UnsupportedActions > maxUnsupported)
         {
             Console.Error.WriteLine($"Quality gate: {report.UnsupportedActions} unsupported actions (max: {maxUnsupported}).");
-            failed = true;
+            exitCode = Math.Max(exitCode, 1);
         }
 
         if (report.UnmappedTargets > maxUnmapped)
         {
             Console.Error.WriteLine($"Quality gate: {report.UnmappedTargets} unmapped targets (max: {maxUnmapped}).");
-            failed = true;
+            exitCode = Math.Max(exitCode, 1);
         }
 
         if (report.RawExpressions > maxRaw)
         {
             Console.Error.WriteLine($"Quality gate: {report.RawExpressions} raw expressions (max: {maxRaw}).");
-            failed = true;
+            exitCode = Math.Max(exitCode, 1);
         }
 
         if (failOnMultipleScopes && report.ScopeWarnings > 0)
         {
             Console.Error.WriteLine($"Quality gate: {report.ScopeWarnings} scope conflict(s) found.");
-            failed = true;
+            exitCode = Math.Max(exitCode, 1);
         }
 
         if (failOnPlaceholderLeftovers && report.PlaceholderLeftovers > 0)
         {
             Console.Error.WriteLine($"Quality gate: {report.PlaceholderLeftovers} placeholder leftover(s) found.");
-            failed = true;
+            exitCode = Math.Max(exitCode, 1);
         }
 
         if (failOnSuspiciousLiteralVariables && report.SuspiciousLiteralVariables > 0)
         {
             Console.Error.WriteLine($"Quality gate: {report.SuspiciousLiteralVariables} suspicious literal variable(s) found.");
-            failed = true;
+            exitCode = Math.Max(exitCode, 1);
         }
 
-        return failed ? 1 : 0;
+        return exitCode;
     }
 }
 

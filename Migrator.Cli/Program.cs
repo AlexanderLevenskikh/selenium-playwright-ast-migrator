@@ -200,15 +200,8 @@ static int RunVerify(MigrationSummaryReport summary, string outPath, string form
     Console.WriteLine();
     Console.WriteLine($"Verify reports written to: {Path.GetFullPath(outPath)}");
 
-    // Derive exit code from status
-    return report.Status switch
-    {
-        "passed" => 0,
-        "failed" when report.SyntaxErrors > 0 => 3,
-        "failed" when report.ConfigWarnings > 0 && report.Issues.Any(i => i.Severity == IssueSeverity.Error && i.Category == "Config") => 2,
-        "failed" => 1,
-        _ => 1
-    };
+    // Apply quality gates for exit code
+    return VerifyRunner.ApplyQualityGates(report, config?.QualityGates, report.Issues);
 }
 
 static void PrintVerifyReport(VerifyReport report)
