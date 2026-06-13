@@ -20,10 +20,16 @@ string format = opts.Format;
 bool failOnUnsupported = opts.FailOnUnsupported;
 bool failOnTodo = opts.FailOnTodo;
 
-if (!File.Exists(inputPath) && !Directory.Exists(inputPath))
+if (mode != "discover-target" && !File.Exists(inputPath) && !Directory.Exists(inputPath))
 {
     Console.Error.WriteLine($"Input not found: {inputPath}");
     return 1;
+}
+
+if (mode == "discover-target" && !Directory.Exists(inputPath))
+{
+    Console.Error.WriteLine($"Discover-target mode expects a directory (target Playwright project): {inputPath}");
+    return 2;
 }
 
 var parser = new RoslynTestFileParser();
@@ -47,6 +53,13 @@ if (mode == "propose")
 {
     var proposeExitCode = RunPropose(inputPath, outPath, configPath, format);
     return proposeExitCode;
+}
+
+// Handle discover-target mode — scans a target Playwright .NET project
+if (mode == "discover-target")
+{
+    var discoverExitCode = RunDiscoverTarget(inputPath, outPath, configPath, format);
+    return discoverExitCode;
 }
 
 var pipeline = new MigrationPipeline(parser, renderer, adapter);
@@ -805,6 +818,86 @@ static int RunPropose(string inputPath, string outPath, string? configPath, stri
     return 0;
 }
 
+static int RunDiscoverTarget(string inputPath, string outPath, string? configPath, string format)
+{
+    if (!Directory.Exists(inputPath))
+    {
+        Console.Error.WriteLine($"Target project directory not found: {inputPath}");
+        return 2;
+    }
+
+    Console.WriteLine($"Scanning target project: {inputPath}");
+
+    var discovery = new TargetDiscovery(inputPath);
+    TargetInventory inventory;
+    try
+    {
+        inventory = discovery.Scan();
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Discovery failed: {ex.Message}");
+        return 1;
+    }
+
+    // Check for .csproj
+    var csprojCount = Directory.GetFiles(inputPath, "*.csproj", SearchOption.AllDirectories).Length;
+    if (csprojCount == 0)
+    {
+        Console.WriteLine("Warning: No .csproj file found. Framework detection may be incomplete.");
+    }
+
+    // Write output
+    Directory.CreateDirectory(outPath);
+
+    var writeJson = format == "json" || format == "both";
+    var writeMd = format == "md" || format == "txt" || format == "both";
+
+    // target-inventory.json
+    if (writeJson)
+    {
+        var jsonPath = Path.Combine(outPath, "target-inventory.json");
+        File.WriteAllText(jsonPath, DiscoveryWriter.ToInventoryJson(inventory));
+        Console.WriteLine($"Written: {jsonPath}");
+    }
+
+    // target-style-notes.md
+    if (writeMd)
+    {
+        var mdPath = Path.Combine(outPath, "target-style-notes.md");
+        File.WriteAllText(mdPath, DiscoveryWriter.ToStyleNotes(inventory));
+        Console.WriteLine($"Written: {mdPath}");
+    }
+
+    // adapter-config.draft.json (always write, regardless of format)
+    {
+        var draftPath = Path.Combine(outPath, "adapter-config.draft.json");
+        File.WriteAllText(draftPath, DiscoveryWriter.ToAdapterConfigDraft(inventory));
+        Console.WriteLine($"Written: {draftPath}");
+    }
+
+    // discovery-warnings.txt (always write)
+    {
+        var warningsPath = Path.Combine(outPath, "discovery-warnings.txt");
+        File.WriteAllText(warningsPath, DiscoveryWriter.ToWarningsText(inventory));
+        Console.WriteLine($"Written: {warningsPath}");
+    }
+
+    // Console summary
+    Console.WriteLine();
+    Console.WriteLine("=== Discovery Summary ===");
+    Console.WriteLine($"Framework: {string.Join(", ", inventory.DetectedFrameworks.Select(f => $"{f.Name} ({f.Confidence})"))}");
+    Console.WriteLine($"Base classes: {string.Join(", ", inventory.DetectedTestHosts.Select(h => $"{h.BaseClass} ({h.Occurrences} occurrences)"))}");
+    Console.WriteLine($"Locator attributes: {string.Join(", ", inventory.DetectedLocatorAttributes.Take(5).Select(a => $"{a.Attribute} ({a.Occurrences})"))}");
+    Console.WriteLine($"Navigation patterns: {inventory.DetectedNavigationPatterns.Count}");
+    Console.WriteLine($"Auth patterns: {inventory.DetectedAuthPatterns.Count}");
+    Console.WriteLine($"Helper methods: {inventory.DetectedHelperMethods.Count}");
+    Console.WriteLine($"Warnings: {inventory.Warnings.Count}");
+    Console.WriteLine($"Redactions: {inventory.RedactionCount}");
+
+    return 0;
+}
+
 static CliOptions? ParseArgs(string[] args)
 {
     string mode = "migrate";
@@ -891,9 +984,9 @@ static CliOptions? ParseArgs(string[] args)
         }
     }
 
-    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "propose")
+    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "propose" && mode != "discover-target")
     {
-        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify");
+        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|propose|discover-target");
         return null;
     }
 
@@ -912,6 +1005,7 @@ static CliOptions? ParseArgs(string[] args)
             "migrate" => "./generated-tests",
             "verify" => "./migration-verify",
             "propose" => "./mapping-proposals",
+            "discover-target" => "./target-discovery",
             _ => "./migration-output"
         };
     }
@@ -928,7 +1022,7 @@ static CliOptions? ParseArgs(string[] args)
 static void PrintHelp()
 {
     Console.WriteLine(@"
-Usage: Migrator.Cli --mode <analyze|migrate|verify|propose> --input <path> [options]
+Usage: Migrator.Cli --mode <analyze|migrate|verify|propose|discover-target> --input <path> [options]
 
 Modes:
   analyze  Parse and analyze Selenium tests without generating output files.
@@ -942,22 +1036,27 @@ Modes:
             generate mapping proposals. Reads report.json, unmapped-targets.json,
             unsupported-actions.json, verify-report.json. Outputs
             mapping-proposals.md and mapping-proposals.json. Does NOT modify config.
+  discover-target  Scan a target Playwright .NET project and collect infrastructure
+            facts. Outputs target-inventory.json, target-style-notes.md,
+            adapter-config.draft.json, and discovery-warnings.txt.
+            Does NOT modify config. Collects facts only — does not invent infrastructure.
 
 Options:
-   --mode <analyze|migrate|verify|propose>   Operation mode (required)
+   --mode <analyze|migrate|verify|propose|discover-target>   Operation mode (required)
    --input <file-or-directory>       Input .cs file or directory (required).
-                                      For propose mode: directory with report files.
-  --out <output-directory>          Output directory (optional, auto-defaults)
-  --config <adapter-config.json>    Adapter config for target mapping (optional)
-  --format <text|json|both>         Report format (default: both)
-  --fail-on-unsupported             Exit code 2 if unsupported actions exist
-  --fail-on-todo                    Exit code 3 if TODO comments exist
-  --help, -h                        Show this help
+                                      For propose: directory with report files.
+                                      For discover-target: target Playwright project root.
+   --out <output-directory>          Output directory (optional, auto-defaults)
+   --config <adapter-config.json>    Adapter config for target mapping (optional)
+   --format <text|json|both>         Report format (default: both)
+   --fail-on-unsupported             Exit code 2 if unsupported actions exist
+   --fail-on-todo                    Exit code 3 if TODO comments exist
+   --help, -h                        Show this help
 
 Exit codes:
   0  Success (passed quality gates)
   1  CLI usage error / failed quality gate (verify mode)
-  2  --fail-on-unsupported triggered / invalid config (verify mode)
+  2  --fail-on-unsupported triggered / invalid config / input not found (discover-target)
   3  --fail-on-todo triggered / syntax error (verify mode)
 
 Examples:
@@ -965,6 +1064,7 @@ Examples:
   Migrator.Cli --mode migrate --input ./OldTests --out ./Generated --config ./adapter-config.json
     Migrator.Cli --mode migrate --input ./OldTests --fail-on-unsupported --fail-on-todo
    Migrator.Cli --mode propose --input ./Generated --config ./adapter-config.json --format both
+    Migrator.Cli --mode discover-target --input ./team-playwright-tests --out ./target-discovery
 ");
 }
 
