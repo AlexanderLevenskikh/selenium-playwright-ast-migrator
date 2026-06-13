@@ -85,7 +85,7 @@ These body-level fixes are tracked by `// TODO: mapped method requires manual re
 
 ## Migrator Improvements Delivered
 
-This iteration added the `TestHost` config mechanism, enabling config-driven generation of:
+### Iteration 1: TestHost config
 - Project-specific namespace (no more `.Playwright` suffix)
 - Configured base class (`TestBase` instead of `PageTest`)
 - Class attributes (`[TestFixture]`, `[Parallelizable(ParallelScope.Self)]`)
@@ -93,28 +93,39 @@ This iteration added the `TestHost` config mechanism, enabling config-driven gen
 - Configured setup statements (login + navigation)
 - Class name override
 
-The class wrapper is now fully config-driven. No hardcoded project-specific values in Core/Roslyn/Renderer.
+### Iteration 2: Match strategy + Text target kind
+- **Match strategy** (`Match: "First"` / `"Nth"` + `Index`) — eliminates RawExpression for
+  `.First`/`.Nth(N)` selector suffixes.
+- **Text target kind** (`TargetKind: "Text"`) — renders `Page.GetByText("...")`, replaces
+  RawExpression for visible-text selectors.
+- RawExpression mappings in catalog profile reduced from 3 to 0.
+
+### Iteration 3: Parameterized method mappings + profile scoping
+- **Parameterized method mappings**: `SourceMethodPattern` with `{placeholder}` syntax.
+  Quote-aware placeholder substitution: raw placeholders replace with full source expression;
+  quoted placeholders (inside string literals) strip quotes for string-literal args or convert
+  to interpolated strings (`$""`) for variable args. Exact `SourceMethod` mappings take priority.
+  Falls back to TODO if unmatched. 13 unit tests added.
+- **Profile scoping**: `Scopes` in config allow per-file `TestHost`, `UiTargets`, and `Methods`
+  overrides. Global config remains base. Multiple matching scopes produce a warning, first scope
+  wins deterministically. 7 unit tests added.
+- **CatalogPrincipals profile updated**: `TestHost` moved into `CatalogPrincipals` scope.
+  `ParameterizedMethods` added for `Sort({sortOrder})` and `InputAndSelect({value})`.
+- **Migrator tests**: 111/111 passing (91 original + 20 new).
+
+The class wrapper is fully config-driven. No hardcoded project-specific values in Core/Roslyn/Renderer.
 
 ## Next Iteration
 
 See `catalog-mini-batch-gap-analysis.md` for full gap analysis from the 5-file mini-batch run.
 
-Implemented in mini-batch:
-- **Match strategy** (`Match: "First"` / `"Nth"` + `Index`) — eliminates RawExpression for
-  `.First`/`.Nth(N)` selector suffixes.
-- **Text target kind** (`TargetKind: "Text"`) — renders `Page.GetByText("...")`, replaces
-  RawExpression for visible-text selectors.
-
 Remaining from pilot findings:
 1. **Popup-scoped method mappings**: The `InputInputAndAccept` mapping in the config should
    generate the popup-scoped flow (click header, wait head-box, fill in headbox-search) rather
    than the flat pattern.
-
 2. **Row index mapping**: Assert actions like `Assert.That(page.Table.Items[2], ...)` should
    generate `.Nth(2)` automatically.
-
-3. **Parameterized method mappings**: `Sort(sortOrder)` with a variable argument cannot be mapped
-   via exact string matching. The adapter should support templated mappings (e.g., `Sort("{0}")`).
-
-4. **Per-page profiles**: Each catalog/registry/widget page needs its own TestHost + UiTargets
-   + Methods config. Currently one profile covers all.
+3. **Extend parameterized mappings**: Current regex captures raw argument text (including quotes).
+   May need quote-stripping or type-aware placeholder substitution for cleaner generated code.
+4. **Extend mini-batch to more files**: Add dedicated profiles for RegistryFilter, ButtonTests,
+   and Widget to validate broader applicability.

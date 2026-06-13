@@ -891,5 +891,914 @@ public class SnapshotTests
         Assert.DoesNotContain("TestBase", output);
     }
 
+    // --- Parameterized method mapping tests ---
+
+    [Fact]
+    public void ParameterizedMapping_ReplacesVariableArgument()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "page.NameSort.Sort({sortOrder})",
+                    new[]
+                    {
+                        "await Page.Locator(\"span:has-text('{sortOrder}')\").ClickAsync();",
+                    },
+                    true)
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/CatalogPrincipalsFilter.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(5, "page.NameSort", "Sort",
+                            "page.NameSort.Sort(sortOrder)",
+                            new[] { "sortOrder" }),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var bodyActions = adapted.Tests.First().BodyActions;
+        var mappedAction = bodyActions.OfType<MappedMethodInvocationAction>().First();
+
+        Assert.Contains("$\"span:has-text('{sortOrder}')\"", mappedAction.TargetStatements[0]);
+        Assert.True(mappedAction.RequiresReview);
+    }
+
+    [Fact]
+    public void ParameterizedMapping_ReplacesStringLiteralArgument()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "page.Principal.InputAndSelect({value})",
+                    new[]
+                    {
+                        "await popup.Locator(\"input\").FillAsync(\"{value}\");",
+                        "await popup.GetByText(\"{value}\").ClickAsync();",
+                    },
+                    true)
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/CatalogPrincipalsFilter.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(5, "page.Principal", "InputAndSelect",
+                            "page.Principal.InputAndSelect(\"Some principal\")",
+                            new[] { "\"Some principal\"" }),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var bodyActions = adapted.Tests.First().BodyActions;
+        var mappedAction = bodyActions.OfType<MappedMethodInvocationAction>().First();
+
+        Assert.Contains("FillAsync(\"Some principal\")", mappedAction.TargetStatements[0]);
+        Assert.Contains("GetByText(\"Some principal\")", mappedAction.TargetStatements[1]);
+        // Must NOT produce double quotes
+        Assert.DoesNotContain("\"\"Some principal\"\"", mappedAction.TargetStatements[0]);
+    }
+
+    [Fact]
+    public void ParameterizedMapping_ExactMappingWinsOverPattern()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            new[]
+            {
+                new MethodMapping(
+                    "page.NameSort.Sort(\"По возрастанию\")",
+                    null,
+                    "Exact mapping",
+                    new[] { "// EXACT-MATCH" },
+                    false)
+            },
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "page.NameSort.Sort({sortOrder})",
+                    new[] { "// PARAMETERIZED-{sortOrder}" },
+                    true)
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/CatalogPrincipalsFilter.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(5, "page.NameSort", "Sort",
+                            "page.NameSort.Sort(\"По возрастанию\")",
+                            new[] { "\"По возрастанию\"" }),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var bodyActions = adapted.Tests.First().BodyActions;
+        var mappedAction = bodyActions.OfType<MappedMethodInvocationAction>().First();
+
+        Assert.Contains("EXACT-MATCH", mappedAction.TargetStatements[0]);
+        Assert.DoesNotContain("PARAMETERIZED", mappedAction.TargetStatements[0]);
+        Assert.False(mappedAction.RequiresReview);
+    }
+
+    [Fact]
+    public void ParameterizedMapping_InvalidPatternProducesWarning()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "page.Name.Sort({", // invalid — unclosed brace
+                    new[] { "await DoSomething();"},
+                    false)
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/CatalogPrincipalsFilter.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(5, "page.Name", "Sort",
+                            "page.Name.Sort(\"value\")",
+                            new[] { "\"value\"" }),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var bodyActions = adapted.Tests.First().BodyActions;
+
+        // Must not silently drop — falls back to original MethodInvocationAction
+        Assert.Single(bodyActions);
+        Assert.IsType<MethodInvocationAction>(bodyActions.First());
+    }
+
+    [Fact]
+    public void ParameterizedMapping_UnmatchedInvocationFallsBackToTodo()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "page.Other.Sort({sortOrder})",
+                    new[] { "// should not match" },
+                    false)
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/CatalogPrincipalsFilter.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(5, "page.NameSort", "Sort",
+                            "page.NameSort.Sort(\"value\")",
+                            new[] { "\"value\"" }),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var bodyActions = adapted.Tests.First().BodyActions;
+
+        // Falls back to original MethodInvocationAction (renders as TODO in renderer)
+        Assert.Single(bodyActions);
+        Assert.IsType<MethodInvocationAction>(bodyActions.First());
+    }
+
+    [Fact]
+    public void ParameterizedMapping_DoesNotDropActionSilently()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: Array.Empty<ParameterizedMethodMapping>());
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/CatalogPrincipalsFilter.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(5, "page.NameSort", "Sort",
+                            "page.NameSort.Sort(\"value\")",
+                            new[] { "\"value\"" }),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var bodyActions = adapted.Tests.First().BodyActions;
+
+        Assert.Single(bodyActions);
+        Assert.IsType<MethodInvocationAction>(bodyActions.First());
+    }
+
+    // --- Profile scoping tests ---
+
+    [Fact]
+    public void ProfileScope_NoScopes_BackwardCompatible()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            new[]
+            {
+                new UiTargetMapping("page.User", "widget-user", "TestId")
+            },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            TestHost: new TestHostConfig
+            {
+                BaseClass = "TestBase",
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/CatalogPrincipalsFilter.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new ClickAction(5, "page.User"),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+
+        // Global TestHost is applied even when file path matches nothing (no scopes defined)
+        Assert.Equal("TestBase", adapted.TestHost?.BaseClass);
+    }
+
+    [Fact]
+    public void ProfileScope_AppliesTestHostForMatchingSourcePath()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            TestHost: new TestHostConfig
+            {
+                BaseClass = "PageTest",
+            },
+            Scopes: new[]
+            {
+                new ProfileScope
+                {
+                    Name = "CatalogPrincipals",
+                    SourcePathPatterns = new[] { "**/CatalogPrincipalsFilter.cs" },
+                    TestHost = new TestHostConfig
+                    {
+                        BaseClass = "TestBase",
+                        Namespace = "Scoped.Tests",
+                    }
+                }
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/CatalogPrincipalsFilter.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), Array.Empty<TestAction>()),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+
+        Assert.Equal("TestBase", adapted.TestHost?.BaseClass);
+        Assert.Equal("Scoped.Tests", adapted.TestHost?.Namespace);
+    }
+
+    [Fact]
+    public void ProfileScope_DoesNotApplyTestHostForNonMatchingSourcePath()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            TestHost: new TestHostConfig
+            {
+                BaseClass = "PageTest",
+            },
+            Scopes: new[]
+            {
+                new ProfileScope
+                {
+                    Name = "CatalogPrincipals",
+                    SourcePathPatterns = new[] { "**/CatalogPrincipalsFilter.cs" },
+                    TestHost = new TestHostConfig
+                    {
+                        BaseClass = "TestBase",
+                    }
+                }
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/Widget.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), Array.Empty<TestAction>()),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+
+        // Global TestHost remains, scope is NOT applied
+        Assert.Equal("PageTest", adapted.TestHost?.BaseClass);
+    }
+
+    [Fact]
+    public void ProfileScope_ScopedUiTargetOverridesGlobal()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            new[]
+            {
+                new UiTargetMapping("page.User", "global-user", "TestId"),
+            },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            Scopes: new[]
+            {
+                new ProfileScope
+                {
+                    Name = "CatalogPrincipals",
+                    SourcePathPatterns = new[] { "**/CatalogPrincipalsFilter.cs" },
+                    UiTargets = new[]
+                    {
+                        new UiTargetMapping("page.User", "scoped-user", "TestId"),
+                    }
+                }
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/CatalogPrincipalsFilter.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new ClickAction(5, "page.User"),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var clicks = adapted.Tests.First().BodyActions.OfType<ClickAction>().ToList();
+        Assert.Single(clicks);
+        var target = clicks.First().Target as MappedTarget;
+        Assert.NotNull(target);
+        Assert.Equal("scoped-user", target.TargetExpression);
+    }
+
+    [Fact]
+    public void ProfileScope_ScopedMethodOverridesGlobal()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            new[]
+            {
+                new MethodMapping(
+                    "page.Click.DoClick()",
+                    null,
+                    "Global",
+                    new[] { "// GLOBAL-CLICK" },
+                    false)
+            },
+            Scopes: new[]
+            {
+                new ProfileScope
+                {
+                    Name = "CatalogPrincipals",
+                    SourcePathPatterns = new[] { "**/CatalogPrincipalsFilter.cs" },
+                    Methods = new[]
+                    {
+                        new MethodMapping(
+                            "page.Click.DoClick()",
+                            null,
+                            "Scoped",
+                            new[] { "// SCOPED-CLICK" },
+                            true)
+                    }
+                }
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/CatalogPrincipalsFilter.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(5, "page.Click", "DoClick",
+                            "page.Click.DoClick()",
+                            Array.Empty<string>()),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var mapped = adapted.Tests.First().BodyActions
+            .OfType<MappedMethodInvocationAction>().First();
+
+        Assert.Contains("SCOPED-CLICK", mapped.TargetStatements[0]);
+        Assert.DoesNotContain("GLOBAL-CLICK", mapped.TargetStatements[0]);
+        Assert.True(mapped.RequiresReview);
+    }
+
+    [Fact]
+    public void ProfileScope_MultipleMatches_DeterministicSelection()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            TestHost: new TestHostConfig { BaseClass = "DefaultBase" },
+            Scopes: new[]
+            {
+                new ProfileScope
+                {
+                    Name = "ScopeA",
+                    SourcePathPatterns = new[] { "**/CatalogPrincipalsFilter.cs" },
+                    TestHost = new TestHostConfig { BaseClass = "ScopeABase" },
+                },
+                new ProfileScope
+                {
+                    Name = "ScopeB",
+                    SourcePathPatterns = new[] { "**/CatalogPrincipalsFilter.cs" },
+                    TestHost = new TestHostConfig { BaseClass = "ScopeBBase" },
+                },
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/CatalogPrincipalsFilter.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), Array.Empty<TestAction>()),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+
+        // First scope wins deterministically
+        Assert.Equal("ScopeABase", adapted.TestHost?.BaseClass);
+    }
+
+    // --- Quote-aware placeholder substitution tests ---
+
+    [Fact]
+    public void ParameterizedMapping_RawPlaceholder_StringLiteralArgument()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "page.Principal.InputAndSelect({value})",
+                    new[]
+                    {
+                        "await popup.Locator(\"input\").FillAsync({value});",
+                    },
+                    true)
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(5, "page.Principal", "InputAndSelect",
+                            "page.Principal.InputAndSelect(\"Some principal\")",
+                            new[] { "\"Some principal\"" }),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var mapped = adapted.Tests.First().BodyActions
+            .OfType<MappedMethodInvocationAction>().First();
+
+        Assert.Contains("FillAsync(\"Some principal\")", mapped.TargetStatements[0]);
+        Assert.DoesNotContain("\"\"Some principal\"\"", mapped.TargetStatements[0]);
+    }
+
+    [Fact]
+    public void ParameterizedMapping_RawPlaceholder_VariableArgument()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "page.Principal.InputAndSelect({value})",
+                    new[]
+                    {
+                        "await popup.Locator(\"input\").FillAsync({value});",
+                        "await popup.GetByText({value}).ClickAsync();",
+                    },
+                    true)
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(5, "page.Principal", "InputAndSelect",
+                            "page.Principal.InputAndSelect(principalName)",
+                            new[] { "principalName" }),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var mapped = adapted.Tests.First().BodyActions
+            .OfType<MappedMethodInvocationAction>().First();
+
+        Assert.Contains("FillAsync(principalName)", mapped.TargetStatements[0]);
+        Assert.Contains("GetByText(principalName)", mapped.TargetStatements[1]);
+    }
+
+    [Fact]
+    public void ParameterizedMapping_QuotedPlaceholder_StringLiteral_StripsQuotes()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "page.Principal.InputAndSelect({value})",
+                    new[]
+                    {
+                        "await popup.Locator(\"input\").FillAsync(\"{value}\");",
+                    },
+                    true)
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(5, "page.Principal", "InputAndSelect",
+                            "page.Principal.InputAndSelect(\"Some principal\")",
+                            new[] { "\"Some principal\"" }),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var mapped = adapted.Tests.First().BodyActions
+            .OfType<MappedMethodInvocationAction>().First();
+
+        Assert.Contains("FillAsync(\"Some principal\")", mapped.TargetStatements[0]);
+        Assert.DoesNotContain("\"\"Some principal\"\"", mapped.TargetStatements[0]);
+    }
+
+    [Fact]
+    public void ParameterizedMapping_QuotedPlaceholder_VariableArgument_Interpolated()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "page.Principal.InputAndSelect({value})",
+                    new[]
+                    {
+                        "await popup.Locator(\"input\").FillAsync(\"{value}\");",
+                    },
+                    true)
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(5, "page.Principal", "InputAndSelect",
+                            "page.Principal.InputAndSelect(principalName)",
+                            new[] { "principalName" }),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var mapped = adapted.Tests.First().BodyActions
+            .OfType<MappedMethodInvocationAction>().First();
+
+        Assert.Contains("$\"{principalName}\"", mapped.TargetStatements[0]);
+        Assert.DoesNotContain("FillAsync(\"principalName\")", mapped.TargetStatements[0]);
+    }
+
+    [Fact]
+    public void ParameterizedMapping_SelectorString_VariableArgument_Interpolated()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "page.NameSort.Sort({sortOrder})",
+                    new[]
+                    {
+                        "await Page.Locator(\"span:has-text('{sortOrder}')\").ClickAsync();",
+                    },
+                    true)
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(5, "page.NameSort", "Sort",
+                            "page.NameSort.Sort(sortOrder)",
+                            new[] { "sortOrder" }),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var mapped = adapted.Tests.First().BodyActions
+            .OfType<MappedMethodInvocationAction>().First();
+
+        Assert.Contains("$\"span:has-text('{sortOrder}')\"", mapped.TargetStatements[0]);
+        Assert.DoesNotContain("has-text('sortOrder')", mapped.TargetStatements[0].Replace("$", ""));
+    }
+
+    [Fact]
+    public void ParameterizedMapping_SelectorString_StringLiteral_StripsQuotes()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "page.NameSort.Sort({sortOrder})",
+                    new[]
+                    {
+                        "await Page.Locator(\"span:has-text('{sortOrder}')\").ClickAsync();",
+                    },
+                    true)
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(5, "page.NameSort", "Sort",
+                            "page.NameSort.Sort(\"asc\")",
+                            new[] { "\"asc\"" }),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var mapped = adapted.Tests.First().BodyActions
+            .OfType<MappedMethodInvocationAction>().First();
+
+        Assert.Contains("span:has-text('asc')", mapped.TargetStatements[0]);
+        Assert.DoesNotContain("$\"", mapped.TargetStatements[0]);
+    }
+
+    [Fact]
+    public void ParameterizedMapping_NoLiteralVariableNameInSelector()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "page.NameSort.Sort({sortOrder})",
+                    new[]
+                    {
+                        "await Page.Locator(\"span:has-text('{sortOrder}')\").ClickAsync();",
+                    },
+                    true)
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(5, "page.NameSort", "Sort",
+                            "page.NameSort.Sort(sortOrder)",
+                            new[] { "sortOrder" }),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var mapped = adapted.Tests.First().BodyActions
+            .OfType<MappedMethodInvocationAction>().First();
+
+        // Must NOT produce a literal sortOrder inside the string — must use interpolation
+        var stmt = mapped.TargetStatements[0];
+        Assert.Contains("$\"", stmt);
+        Assert.Contains("{sortOrder}", stmt);
+    }
+
+    [Fact]
+    public void ProfileScope_DoesNotHardcodeProjectSpecificValues()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            TestHost: new TestHostConfig { BaseClass = "TestBase" },
+            Scopes: new[]
+            {
+                new ProfileScope
+                {
+                    Name = "MyScope",
+                    SourcePathPatterns = new[] { "**/SomeFile.cs" },
+                    TestHost = new TestHostConfig { BaseClass = "MyBase" },
+                }
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/SomeFile.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("Test1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), Array.Empty<TestAction>()),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(adapted);
+
+        Assert.Contains("MyBase", output);
+        Assert.DoesNotContain("CatalogPrincipals", output);
+        Assert.DoesNotContain("DefaultEnvParams", output);
+        Assert.DoesNotContain("ArBilling", output);
+    }
+
     static string Normalize(string text) => text.Replace("\r\n", "\n").Trim();
 }

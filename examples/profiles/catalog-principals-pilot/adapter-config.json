@@ -9,22 +9,30 @@
       "data-test"
     ]
   },
-  "TestHost": {
-    "Namespace": "Example.E2ETests.Tests",
-    "BaseClass": "TestBase",
-    "ClassAttributes": [
-      "TestFixture",
-      "Parallelizable(ParallelScope.Self)"
-    ],
-    "Usings": [
-      "NUnit.Framework",
-      "Example.E2ETests.Infrastructure"
-    ],
-    "SetUpStatements": [
-      "await Page.GotoAsync(\"<test-login>\");",
-      "await Page.GotoAsync(\"/catalogs?activeTab=principals\");"
-    ]
-  },
+  "Scopes": [
+    {
+      "Name": "CatalogPrincipals",
+      "SourcePathPatterns": [
+        "**/CatalogPrincipalsFilter.cs"
+      ],
+      "TestHost": {
+        "Namespace": "Example.E2ETests.Tests",
+        "BaseClass": "TestBase",
+        "ClassAttributes": [
+          "TestFixture",
+          "Parallelizable(ParallelScope.Self)"
+        ],
+        "Usings": [
+          "NUnit.Framework",
+          "Example.E2ETests.Infrastructure"
+        ],
+        "SetUpStatements": [
+          "await Page.GotoAsync(\"<test-login>\");",
+          "await Page.GotoAsync(\"/catalogs?activeTab=principals\");"
+        ]
+      }
+    }
+  ],
   "UiTargets": [
     {
       "SourceExpression": "page.Inn",
@@ -153,7 +161,7 @@
     {
       "SourceMethod": "page.NameSort.Sort(\"По возрастанию\")",
       "TargetMethod": null,
-      "Description": "SortBox.Sort: click header, wait sort option by text, click. Source: SortBox.cs line 23-28.",
+      "Description": "SortBox.Sort: click header, wait sort option by text, click. Exact mapping takes priority over parameterized.",
       "TargetStatements": [
         "await Page.Locator(\"[data-test-id='t_principals_principal']\").ClickAsync();",
         "await Page.Locator(\"span:has-text('По возрастанию')\").WaitForAsync();",
@@ -180,6 +188,29 @@
         "await Page.Locator(\"[data-tid='Toggle__root']\").ClickAsync();"
       ],
       "RequiresReview": false
+    }
+  ],
+  "ParameterizedMethods": [
+    {
+      "SourceMethodPattern": "page.NameSort.Sort({sortOrder})",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test-id='t_principals_principal']\").ClickAsync();",
+        "await Page.Locator($\"span:has-text('{sortOrder}')\").WaitForAsync();",
+        "await Page.Locator($\"span:has-text('{sortOrder}')\").ClickAsync();"
+      ],
+      "RequiresReview": true,
+      "Description": "Parameterized SortBox.Sort: matches any sortOrder argument. Lower priority than exact SourceMethod mapping."
+    },
+    {
+      "SourceMethodPattern": "page.Principal.InputAndSelect({value})",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test-id='t_principals_principal']\").ClickAsync();",
+        "var popup = Page.Locator(\"[data-tid='Popup__root']\").Last;",
+        "await popup.Locator(\"input\").FillAsync({value});",
+        "await popup.GetByText({value}).ClickAsync();"
+      ],
+      "RequiresReview": true,
+      "Description": "Parameterized popup input/select: fills and selects by value. Popup locator may need review."
     }
   ]
 }
