@@ -62,6 +62,13 @@ if (mode == "discover-target")
     return discoverExitCode;
 }
 
+// Handle orchestrate mode — runs analyze → migrate → verify → propose pipeline
+if (mode == "orchestrate")
+{
+    var orchestrateExitCode = RunOrchestrate(inputPath, outPath, configPath, format, parser, renderer, adapter);
+    return orchestrateExitCode;
+}
+
 var pipeline = new MigrationPipeline(parser, renderer, adapter);
 
 IEnumerable<PipelineResult> results;
@@ -898,6 +905,556 @@ static int RunDiscoverTarget(string inputPath, string outPath, string? configPat
     return 0;
 }
 
+// --- Orchestrate mode ---
+
+static int RunOrchestrate(string inputPath, string outPath, string? configPath, string format, ITestFileParser parser, IRenderer renderer, IProjectAdapter? adapter)
+{
+    Console.WriteLine("=== Orchestrator Dry-Run ===");
+    Console.WriteLine();
+
+    // Sub-directories for each stage
+    var analyzeDir = Path.Combine(outPath, "analyze");
+    var generatedDir = Path.Combine(outPath, "generated");
+    var verifyDir = Path.Combine(outPath, "verify");
+    var proposeDir = Path.Combine(outPath, "propose");
+
+    Directory.CreateDirectory(analyzeDir);
+    Directory.CreateDirectory(generatedDir);
+    Directory.CreateDirectory(verifyDir);
+    Directory.CreateDirectory(proposeDir);
+
+    var stages = new List<OrchestrationStage>();
+    var warnings = new List<string>();
+    var issues = new List<string>();
+    VerifyReport? verifyReport = null;
+
+    // ---- Stage 1: Analyze ----
+    {
+        var stage = new OrchestrationStage("analyze", OrchestrationStageStatus.NotStarted, 0, null, Path.GetRelativePath(outPath, analyzeDir));
+        try
+        {
+            var pipeline = new MigrationPipeline(parser, renderer, adapter);
+            var resultsList = Directory.Exists(inputPath)
+                ? pipeline.ProcessDirectory(inputPath).ToList()
+                : new[] { pipeline.ProcessFile(inputPath) }.ToList();
+
+            if (resultsList.Count == 0)
+            {
+                stage = stage with { Status = OrchestrationStageStatus.Failed, Message = "No test files found" };
+                issues.Add("Analyze: no test files found in input");
+            }
+            else
+            {
+                var summary = BuildSummary(resultsList, out var allUnmapped);
+                var allUnsupported = CollectAllUnsupported(resultsList);
+                WriteReports(summary, analyzeDir, format, allUnmapped, allUnsupported);
+                GenerateDraftConfig(allUnmapped, analyzeDir, configPath);
+
+                // Copy summary to generated/ for later stages
+                WriteReports(summary, generatedDir, format, allUnmapped, allUnsupported);
+
+                stage = stage with
+                {
+                    Status = summary.UnsupportedActions > 0 ? OrchestrationStageStatus.PassedWithWarnings : OrchestrationStageStatus.Passed,
+                    Message = $"{summary.FilesProcessed} files, {summary.TestsFound} tests",
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            stage = stage with { Status = OrchestrationStageStatus.Failed, Message = ex.Message };
+            issues.Add($"Analyze stage failed: {ex.Message}");
+        }
+        stages.Add(stage);
+    }
+
+    // ---- Stage 2: Migrate ----
+    {
+        var stage = new OrchestrationStage("migrate", OrchestrationStageStatus.NotStarted, 0, null, Path.GetRelativePath(outPath, generatedDir));
+        try
+        {
+            var analyzeStage = stages[0];
+            if (analyzeStage.Status == OrchestrationStageStatus.Failed)
+            {
+                stage = stage with { Status = OrchestrationStageStatus.Skipped, Message = "Skipped — analyze failed" };
+            }
+            else
+            {
+                var pipeline = new MigrationPipeline(parser, renderer, adapter);
+                var resultsList = Directory.Exists(inputPath)
+                    ? pipeline.ProcessDirectory(inputPath).ToList()
+                    : new[] { pipeline.ProcessFile(inputPath) }.ToList();
+
+                var summary = BuildSummary(resultsList, out var allUnmapped);
+                var allUnsupported = CollectAllUnsupported(resultsList);
+
+                int generated = 0;
+                var writtenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var result in resultsList)
+                {
+                    string baseName = $"{result.SourceModel.ClassName}Playwright.cs";
+                    string outName = ResolveFileName(generatedDir, baseName, writtenNames);
+                    File.WriteAllText(Path.Combine(generatedDir, outName), result.GeneratedOutput);
+                    generated++;
+                }
+
+                var summaryWithGenerated = summary with { GeneratedFiles = generated };
+
+                // Write reports to both generated/ and generated/reports/
+                WriteReports(summaryWithGenerated, generatedDir, format, allUnmapped, allUnsupported);
+                GenerateDraftConfig(allUnmapped, generatedDir, configPath);
+
+                stage = stage with
+                {
+                    Status = OrchestrationStageStatus.Passed,
+                    Message = $"{generated} files generated",
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            stage = stage with { Status = OrchestrationStageStatus.Failed, Message = ex.Message };
+            issues.Add($"Migrate stage failed: {ex.Message}");
+        }
+        stages.Add(stage);
+    }
+
+    // ---- Stage 3: Verify ----
+    {
+        var stage = new OrchestrationStage("verify", OrchestrationStageStatus.NotStarted, 0, null, Path.GetRelativePath(outPath, verifyDir));
+        int verifyExitCode = 0;
+        try
+        {
+            var migrateStage = stages[1];
+            if (migrateStage.Status == OrchestrationStageStatus.Skipped || migrateStage.Status == OrchestrationStageStatus.Failed)
+            {
+                stage = stage with { Status = OrchestrationStageStatus.Skipped, Message = "Skipped — migrate not completed" };
+            }
+            else
+            {
+                // Rebuild pipeline results for verify
+                var pipeline = new MigrationPipeline(parser, renderer, adapter);
+                var resultsList = Directory.Exists(inputPath)
+                    ? pipeline.ProcessDirectory(inputPath).ToList()
+                    : new[] { pipeline.ProcessFile(inputPath) }.ToList();
+
+                // Roslyn syntax checker
+                SyntaxCheckerDelegate syntaxChecker = code =>
+                {
+                    var parseOptions = Microsoft.CodeAnalysis.CSharp.CSharpParseOptions.Default
+                        .WithLanguageVersion(Microsoft.CodeAnalysis.CSharp.LanguageVersion.CSharp12);
+                    var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(code, parseOptions);
+                    return tree.GetDiagnostics()
+                        .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+                        .Select(d => (d.Location.GetLineSpan().StartLinePosition.Line + 1, d.GetMessage()))
+                        .ToList();
+                };
+
+                Func<string, string?>? scopeChecker = adapter is DefaultProjectAdapter da
+                    ? (Func<string, string?>)(p => da.GetActiveScope(p))
+                    : null;
+
+                var config = configPath != null ? System.Text.Json.JsonSerializer.Deserialize<ProjectAdapterConfig>(File.ReadAllText(configPath)) : null;
+                verifyReport = VerifyRunner.Run(resultsList, config, syntaxChecker, scopeChecker);
+                verifyExitCode = VerifyRunner.ApplyQualityGates(verifyReport, config?.QualityGates, verifyReport.Issues);
+
+                // Write verify reports
+                File.WriteAllText(Path.Combine(verifyDir, "verify-report.txt"), VerifyReportWriter.ToText(verifyReport));
+                File.WriteAllText(Path.Combine(verifyDir, "verify-report.json"), VerifyReportWriter.ToJson(verifyReport));
+
+                string status;
+                if (verifyReport.SyntaxErrors > 0)
+                    status = OrchestrationStageStatus.Failed;
+                else if (verifyExitCode != 0)
+                    status = OrchestrationStageStatus.PassedWithWarnings;
+                else
+                    status = OrchestrationStageStatus.Passed;
+
+                stage = stage with { Status = status, ExitCode = verifyExitCode, Message = verifyReport.Status };
+
+                if (verifyReport.SyntaxErrors > 0)
+                    issues.Add($"Verify: {verifyReport.SyntaxErrors} syntax error(s)");
+            }
+        }
+        catch (Exception ex)
+        {
+            stage = stage with { Status = OrchestrationStageStatus.Failed, Message = ex.Message };
+            issues.Add($"Verify stage failed: {ex.Message}");
+        }
+        stages.Add(stage);
+    }
+
+    // ---- Stage 4: Propose ----
+    {
+        var stage = new OrchestrationStage("propose", OrchestrationStageStatus.NotStarted, 0, null, Path.GetRelativePath(outPath, proposeDir));
+        try
+        {
+            var migrateStage = stages[1];
+            if (migrateStage.Status == OrchestrationStageStatus.Skipped || migrateStage.Status == OrchestrationStageStatus.Failed)
+            {
+                stage = stage with { Status = OrchestrationStageStatus.Skipped, Message = "Skipped — migrate not completed" };
+            }
+            else
+            {
+                // Propose runs even if verify failed — it reads from generated/ reports
+                // Load report.json from generated/
+                var summary = System.Text.Json.JsonSerializer.Deserialize<MigrationSummaryReport>(
+                    File.ReadAllText(Path.Combine(generatedDir, "report.json")));
+
+                // Load unmapped-targets.json
+                var unmappedTargets = new List<UnmappedTargetInfo>();
+                var unmappedPath = Path.Combine(generatedDir, "unmapped-targets.json");
+                if (File.Exists(unmappedPath))
+                {
+                    unmappedTargets = System.Text.Json.JsonSerializer.Deserialize<List<UnmappedTargetInfo>>(File.ReadAllText(unmappedPath)) ?? new List<UnmappedTargetInfo>();
+                }
+                else if (summary?.TopUnmappedTargets != null)
+                {
+                    unmappedTargets = new List<UnmappedTargetInfo>(summary.TopUnmappedTargets);
+                }
+
+                // Load unsupported-actions.json
+                var unsupportedActions = new List<UnsupportedMethodInfo>();
+                var unsupportedPath = Path.Combine(generatedDir, "unsupported-actions.json");
+                if (File.Exists(unsupportedPath))
+                {
+                    unsupportedActions = System.Text.Json.JsonSerializer.Deserialize<List<UnsupportedMethodInfo>>(File.ReadAllText(unsupportedPath)) ?? new List<UnsupportedMethodInfo>();
+                }
+                else if (summary?.TopUnsupportedActions != null)
+                {
+                    unsupportedActions = new List<UnsupportedMethodInfo>(summary.TopUnsupportedActions);
+                }
+
+                // Use in-memory VerifyReport from verify stage (JSON format is custom, not directly deserializable)
+                VerifyReport? verifyRpt = verifyReport;
+
+                // Load generated file contents for proposal analysis
+                var generatedFiles = new Dictionary<string, string>();
+                foreach (var csFile in Directory.GetFiles(generatedDir, "*.cs"))
+                {
+                    generatedFiles[Path.GetFileName(csFile)] = File.ReadAllText(csFile);
+                }
+
+                var existingConfig = configPath != null ? System.Text.Json.JsonSerializer.Deserialize<ProjectAdapterConfig>(File.ReadAllText(configPath)) : null;
+
+                var proposalInput = new ProposalGenerator.ProposalInput
+                {
+                    MigrationReport = summary,
+                    VerifyReport = verifyRpt,
+                    UnmappedTargets = unmappedTargets,
+                    UnsupportedActions = unsupportedActions,
+                    ExistingConfig = existingConfig,
+                    GeneratedFiles = generatedFiles.Keys.ToList(),
+                    GeneratedFileContents = generatedFiles
+                };
+
+                var generator = new ProposalGenerator();
+                var proposals = generator.Generate(proposalInput);
+
+                // Write proposals
+                if (format == "json" || format == "both")
+                {
+                    File.WriteAllText(Path.Combine(proposeDir, "mapping-proposals.json"),
+                        ProposalWriter.ToJson(proposals));
+                }
+
+                if (format == "md" || format == "txt" || format == "both")
+                {
+                    File.WriteAllText(Path.Combine(proposeDir, "mapping-proposals.md"),
+                        ProposalWriter.ToMarkdown(proposals));
+                }
+
+                stage = stage with
+                {
+                    Status = OrchestrationStageStatus.Passed,
+                    Message = $"{proposals.Count} proposals generated",
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            stage = stage with { Status = OrchestrationStageStatus.Failed, Message = ex.Message };
+            warnings.Add($"Propose stage failed (non-critical): {ex.Message}");
+        }
+        stages.Add(stage);
+    }
+
+    // ---- Build orchestration report (safe-load, never crashes) ----
+    var analyzeSummary = TryLoadMigrationReport(Path.Combine(analyzeDir, "report.json"), warnings);
+    var generatedSummary = TryLoadMigrationReport(Path.Combine(generatedDir, "report.json"), warnings);
+
+    var overallStatus = DetermineOverallStatus(stages, verifyReport);
+
+    var metrics = new OrchestrationMetrics(
+        FilesProcessed: analyzeSummary?.FilesProcessed ?? 0,
+        TestsFound: analyzeSummary?.TestsFound ?? 0,
+        GeneratedFiles: generatedSummary?.GeneratedFiles ?? 0,
+        SyntaxErrors: verifyReport?.SyntaxErrors ?? 0,
+        TodoComments: analyzeSummary?.TodoComments ?? 0,
+        PageTodoCalls: verifyReport?.PageTodoCalls ?? 0,
+        Proposals: 0
+    );
+
+    // Count proposals from stage message
+    var proposeStage = stages.FirstOrDefault(s => s.Name == "propose");
+    if (proposeStage?.Message != null && int.TryParse(proposeStage.Message.Split(' ')[0], out var proposalCount))
+    {
+        metrics = metrics with { Proposals = proposalCount };
+    }
+
+    // Top proposals
+    var topProposals = new List<string>();
+    var proposalsJson = Path.Combine(proposeDir, "mapping-proposals.json");
+    if (File.Exists(proposalsJson))
+    {
+        try
+        {
+            var proposalOutput = System.Text.Json.JsonSerializer.Deserialize<ProposalJsonOutput>(File.ReadAllText(proposalsJson));
+            if (proposalOutput != null)
+            {
+                topProposals = proposalOutput.TopProposals
+                    .Select(p => $"[{p.Priority}] {p.Title} (score: {p.Score})")
+                    .ToList();
+                metrics = metrics with { Proposals = proposalOutput.TotalProposals };
+            }
+        }
+        catch
+        {
+            warnings.Add("propose/mapping-proposals.json is invalid — could not parse proposals");
+        }
+    }
+
+    // Recommended next actions
+    var recommendedActions = GenerateRecommendedNextActions(stages, verifyReport, analyzeSummary, topProposals);
+
+    var report = new OrchestrationReport(
+        Status: overallStatus,
+        InputPath: PathSanitizer.MakeSafePath(inputPath),
+        ConfigPath: configPath != null ? PathSanitizer.MakeSafePath(configPath) : null,
+        OutputPath: PathSanitizer.MakeSafePath(outPath),
+        Stages: stages,
+        Metrics: metrics,
+        Issues: issues,
+        TopProposals: topProposals,
+        RecommendedNextActions: recommendedActions,
+        Warnings: warnings
+    );
+
+    // Write orchestration reports
+    var reportJsonPath = Path.Combine(outPath, "orchestration-report.json");
+    File.WriteAllText(reportJsonPath, System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+
+    var reportMdPath = Path.Combine(outPath, "orchestration-report.md");
+    File.WriteAllText(reportMdPath, ToOrchestrationReportMarkdown(report));
+
+    // Console summary
+    Console.WriteLine();
+    Console.WriteLine("=== Orchestration Summary ===");
+    Console.WriteLine($"Status: {overallStatus}");
+    foreach (var s in stages)
+        Console.WriteLine($"  {s.Name}: {s.Status} {(s.Message != null ? "- " + s.Message : "")}");
+    Console.WriteLine();
+    Console.WriteLine($"Metrics: {metrics.FilesProcessed} files, {metrics.TestsFound} tests, {metrics.GeneratedFiles} generated, {metrics.SyntaxErrors} syntax errors, {metrics.TodoComments} TODOs, {metrics.PageTodoCalls} Page.TODO_*, {metrics.Proposals} proposals");
+    Console.WriteLine();
+    if (recommendedActions.Count > 0)
+    {
+        Console.WriteLine("Recommended next actions:");
+        for (int i = 0; i < recommendedActions.Count; i++)
+            Console.WriteLine($"  {i + 1}. {recommendedActions[i]}");
+    }
+    Console.WriteLine();
+    Console.WriteLine($"Reports written to: {Path.GetFullPath(outPath)}");
+
+    // Exit code
+    return DetermineExitCode(stages, verifyReport);
+}
+
+static MigrationSummaryReport? TryLoadMigrationReport(string path, List<string> warnings)
+{
+    if (!File.Exists(path))
+    {
+        warnings.Add($"{Path.GetFileName(Path.GetDirectoryName(path))}/report.json not found — stage may have failed before writing report");
+        return null;
+    }
+    try
+    {
+        return System.Text.Json.JsonSerializer.Deserialize<MigrationSummaryReport>(File.ReadAllText(path));
+    }
+    catch
+    {
+        warnings.Add($"{Path.GetFileName(Path.GetDirectoryName(path))}/report.json is invalid — could not parse");
+        return null;
+    }
+}
+
+static string DetermineOverallStatus(List<OrchestrationStage> stages, VerifyReport? verifyReport)
+{
+    var hasSyntaxErrors = verifyReport?.SyntaxErrors > 0;
+    var verifyStage = stages.FirstOrDefault(s => s.Name == "verify");
+    var verifyFailed = verifyStage?.Status == OrchestrationStageStatus.Failed;
+    var verifyWarnings = verifyStage?.Status == OrchestrationStageStatus.PassedWithWarnings;
+    var anyStageFailed = stages.Any(s => s.Status == OrchestrationStageStatus.Failed);
+
+    if (hasSyntaxErrors || verifyFailed || (anyStageFailed && stages.Any(s => s.Name != "propose" && s.Status == OrchestrationStageStatus.Failed)))
+        return OrchestrationStageStatus.Failed;
+    if (verifyWarnings || stages.Any(s => s.Status == OrchestrationStageStatus.PassedWithWarnings))
+        return OrchestrationStageStatus.PassedWithWarnings;
+    return OrchestrationStageStatus.Passed;
+}
+
+static int DetermineExitCode(List<OrchestrationStage> stages, VerifyReport? verifyReport)
+{
+    var analyzeStage = stages.FirstOrDefault(s => s.Name == "analyze");
+    var migrateStage = stages.FirstOrDefault(s => s.Name == "migrate");
+    var verifyStage = stages.FirstOrDefault(s => s.Name == "verify");
+
+    // analyze/migrate unexpected failure → 3
+    if (analyzeStage?.Status == OrchestrationStageStatus.Failed || migrateStage?.Status == OrchestrationStageStatus.Failed)
+        return 3;
+
+    // Syntax errors in generated code → 4 (highest)
+    if (verifyReport?.SyntaxErrors > 0)
+        return 4;
+
+    // Preserve verify exit code: 3=syntax, 2=config error, 1=quality gate
+    if (verifyStage != null && (verifyStage.Status == OrchestrationStageStatus.Failed
+        || verifyStage.Status == OrchestrationStageStatus.PassedWithWarnings))
+    {
+        if (verifyStage.ExitCode == 3)
+            return 4;
+        if (verifyStage.ExitCode == 2)
+            return 2;
+        if (verifyStage.ExitCode >= 1)
+            return 1;
+    }
+
+    if (stages.Any(s => s.Status == OrchestrationStageStatus.PassedWithWarnings))
+        return 1;
+
+    return 0;
+}
+
+static List<string> GenerateRecommendedNextActions(List<OrchestrationStage> stages, VerifyReport? verifyReport, MigrationSummaryReport? summary, IReadOnlyList<string> topProposals)
+{
+    var actions = new List<string>();
+
+    if (verifyReport?.SyntaxErrors > 0)
+    {
+        actions.Add($"Fix {verifyReport.SyntaxErrors} syntax error(s) in generated code before proceeding. Check verify/verify-report.json for details.");
+    }
+
+    if (verifyReport?.ConfigWarnings > 0)
+    {
+        actions.Add($"Review {verifyReport.ConfigWarnings} config warning(s). Fix adapter-config.json to match source project structure.");
+    }
+
+    if (verifyReport != null && verifyReport.PageTodoCalls > 0)
+    {
+        actions.Add($"Map {verifyReport.PageTodoCalls} unmapped Page.TODO_* calls. Review propose/mapping-proposals.md for suggested UiTarget mappings.");
+    }
+
+    if (summary?.UnmappedTargets > 0)
+    {
+        actions.Add($"Add source-truth UiTarget mappings for {summary.UnmappedTargets} unmapped target(s). Review analyze/unmapped-targets.json and source truth before adding mappings.");
+    }
+
+    if (topProposals.Count > 0)
+    {
+        actions.Add("Review mapping-proposals.md for suggested config improvements.");
+    }
+
+    if (actions.Count == 0)
+    {
+        actions.Add("All stages passed. Attempt compile smoke test and manual runtime proof on 3-5 tests.");
+    }
+
+    actions.Add("Re-run orchestrator after applying changes to verify improvement.");
+
+    return actions;
+}
+
+static string ToOrchestrationReportMarkdown(OrchestrationReport report)
+{
+    var sb = new System.Text.StringBuilder();
+
+    sb.AppendLine("# Orchestration Report");
+    sb.AppendLine();
+    sb.AppendLine($"**Status:** {report.Status}");
+    sb.AppendLine($"**Input:** {report.InputPath}");
+    if (report.ConfigPath != null)
+        sb.AppendLine($"**Config:** {report.ConfigPath}");
+    sb.AppendLine($"**Output:** {report.OutputPath}");
+    sb.AppendLine();
+
+    // Stages table
+    sb.AppendLine("## Stages");
+    sb.AppendLine();
+    sb.AppendLine("| Stage | Status | Exit Code | Message |");
+    sb.AppendLine("|---|---|---:|---|");
+    foreach (var stage in report.Stages)
+    {
+        sb.AppendLine($"| {stage.Name} | {stage.Status} | {stage.ExitCode} | {stage.Message ?? ""} |");
+    }
+    sb.AppendLine();
+
+    // Metrics table
+    sb.AppendLine("## Metrics");
+    sb.AppendLine();
+    sb.AppendLine("| Metric | Value |");
+    sb.AppendLine("|---|---:|");
+    sb.AppendLine($"| Files processed | {report.Metrics.FilesProcessed} |");
+    sb.AppendLine($"| Tests found | {report.Metrics.TestsFound} |");
+    sb.AppendLine($"| Generated files | {report.Metrics.GeneratedFiles} |");
+    sb.AppendLine($"| Syntax errors | {report.Metrics.SyntaxErrors} |");
+    sb.AppendLine($"| TODO comments | {report.Metrics.TodoComments} |");
+    sb.AppendLine($"| Page.TODO_* | {report.Metrics.PageTodoCalls} |");
+    sb.AppendLine($"| Proposals | {report.Metrics.Proposals} |");
+    sb.AppendLine();
+
+    // Issues
+    if (report.Issues.Count > 0)
+    {
+        sb.AppendLine("## Issues");
+        sb.AppendLine();
+        foreach (var issue in report.Issues)
+            sb.AppendLine($"- {issue}");
+        sb.AppendLine();
+    }
+
+    // Top proposals
+    if (report.TopProposals.Count > 0)
+    {
+        sb.AppendLine("## Top Proposals");
+        sb.AppendLine();
+        for (int i = 0; i < report.TopProposals.Count; i++)
+            sb.AppendLine($"{i + 1}. {report.TopProposals[i]}");
+        sb.AppendLine();
+    }
+
+    // Recommended next actions
+    if (report.RecommendedNextActions.Count > 0)
+    {
+        sb.AppendLine("## Recommended Next Actions");
+        sb.AppendLine();
+        for (int i = 0; i < report.RecommendedNextActions.Count; i++)
+            sb.AppendLine($"{i + 1}. {report.RecommendedNextActions[i]}");
+        sb.AppendLine();
+    }
+
+    // Warnings
+    if (report.Warnings.Count > 0)
+    {
+        sb.AppendLine("## Warnings");
+        sb.AppendLine();
+        foreach (var w in report.Warnings)
+            sb.AppendLine($"- {w}");
+        sb.AppendLine();
+    }
+
+    return sb.ToString();
+}
+
 static CliOptions? ParseArgs(string[] args)
 {
     string mode = "migrate";
@@ -984,9 +1541,9 @@ static CliOptions? ParseArgs(string[] args)
         }
     }
 
-    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "propose" && mode != "discover-target")
+    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "propose" && mode != "discover-target" && mode != "orchestrate")
     {
-        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|propose|discover-target");
+        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|propose|discover-target|orchestrate");
         return null;
     }
 
@@ -1006,6 +1563,7 @@ static CliOptions? ParseArgs(string[] args)
             "verify" => "./migration-verify",
             "propose" => "./mapping-proposals",
             "discover-target" => "./target-discovery",
+            "orchestrate" => "./orchestration",
             _ => "./migration-output"
         };
     }
@@ -1022,49 +1580,56 @@ static CliOptions? ParseArgs(string[] args)
 static void PrintHelp()
 {
     Console.WriteLine(@"
-Usage: Migrator.Cli --mode <analyze|migrate|verify|propose|discover-target> --input <path> [options]
+Usage: Migrator.Cli --mode <mode> --input <path> [options]
 
 Modes:
-  analyze  Parse and analyze Selenium tests without generating output files.
-            Produces reports and draft adapter-config.
-  migrate  Parse, adapt, and generate Playwright C# files. Produces reports.
-  verify   Validate generated code quality. Runs Roslyn syntax check,
-             TODO/placeholder detection, config validation, scope matching,
-             and quality gate evaluation. Outputs verify-report.json and
-             verify-report.txt.
-  propose  Analyze migration artifacts (reports, generated output) and
-            generate mapping proposals. Reads report.json, unmapped-targets.json,
-            unsupported-actions.json, verify-report.json. Outputs
-            mapping-proposals.md and mapping-proposals.json. Does NOT modify config.
-  discover-target  Scan a target Playwright .NET project and collect infrastructure
-            facts. Outputs target-inventory.json, target-style-notes.md,
-            adapter-config.draft.json, and discovery-warnings.txt.
-            Does NOT modify config. Collects facts only — does not invent infrastructure.
+  analyze         Parse and analyze Selenium tests without generating output files.
+                    Produces reports and draft adapter-config.
+  migrate         Parse, adapt, and generate Playwright C# files. Produces reports.
+  verify          Validate generated code quality. Runs Roslyn syntax check,
+                    TODO/placeholder detection, config validation, scope matching,
+                    and quality gate evaluation. Outputs verify-report.json and
+                    verify-report.txt.
+  propose         Analyze migration artifacts (reports, generated output) and
+                    generate mapping proposals. Reads report.json, unmapped-targets.json,
+                    unsupported-actions.json, verify-report.json. Outputs
+                    mapping-proposals.md and mapping-proposals.json. Does NOT modify config.
+  discover-target Scan a target Playwright .NET project and collect infrastructure
+                    facts. Outputs target-inventory.json, target-style-notes.md,
+                    adapter-config.draft.json, and discovery-warnings.txt.
+                    Does NOT modify config. Collects facts only.
+  orchestrate     Dry-run orchestration mode. Runs analyze → migrate → verify → propose
+                    in sequence, writes stage artifacts into subdirectories, and produces
+                    orchestration-report.md and orchestration-report.json. Does NOT modify
+                    adapter config, does NOT auto-apply proposals, does NOT run runtime tests.
 
 Options:
-   --mode <analyze|migrate|verify|propose|discover-target>   Operation mode (required)
-   --input <file-or-directory>       Input .cs file or directory (required).
-                                      For propose: directory with report files.
-                                      For discover-target: target Playwright project root.
-   --out <output-directory>          Output directory (optional, auto-defaults)
-   --config <adapter-config.json>    Adapter config for target mapping (optional)
-   --format <text|json|both>         Report format (default: both)
-   --fail-on-unsupported             Exit code 2 if unsupported actions exist
-   --fail-on-todo                    Exit code 3 if TODO comments exist
-   --help, -h                        Show this help
+   --mode <mode>                 Operation mode (required)
+                                   analyze|migrate|verify|propose|discover-target|orchestrate
+   --input <file-or-directory>   Input .cs file or directory (required).
+                                   For propose: directory with report files.
+                                   For discover-target: target Playwright project root.
+                                   For orchestrate: source Selenium tests directory.
+   --out <output-directory>      Output directory (optional, auto-defaults)
+   --config <adapter-config.json>  Adapter config for target mapping (optional)
+   --format <text|json|both>     Report format (default: both)
+   --fail-on-unsupported         Exit code 2 if unsupported actions exist
+   --fail-on-todo                Exit code 3 if TODO comments exist
+   --help, -h                    Show this help
 
 Exit codes:
-  0  Success (passed quality gates)
-  1  CLI usage error / failed quality gate (verify mode)
-  2  --fail-on-unsupported triggered / invalid config / input not found (discover-target)
-  3  --fail-on-todo triggered / syntax error (verify mode)
+  0  Success (all stages passed, verify passed)
+  1  Orchestration completed but verify/quality gates failed
+  2  --fail-on-unsupported triggered / invalid config / input not found
+  3  analyze/migrate stage failed / --fail-on-todo triggered
+  4  Generated syntax errors detected
 
 Examples:
   Migrator.Cli --mode analyze --input ./OldTests --out ./analysis --format both
   Migrator.Cli --mode migrate --input ./OldTests --out ./Generated --config ./adapter-config.json
-    Migrator.Cli --mode migrate --input ./OldTests --fail-on-unsupported --fail-on-todo
-   Migrator.Cli --mode propose --input ./Generated --config ./adapter-config.json --format both
-    Migrator.Cli --mode discover-target --input ./team-playwright-tests --out ./target-discovery
+  Migrator.Cli --mode propose --input ./Generated --config ./adapter-config.json --format both
+  Migrator.Cli --mode discover-target --input ./team-playwright-tests --out ./target-discovery
+  Migrator.Cli --mode orchestrate --input ./OldTests --config ./adapter-config.json --out ./orchestration --format both
 ");
 }
 

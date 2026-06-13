@@ -1,0 +1,15 @@
+{
+  "SourceProjectName": "Example.E2ETests",
+  "UiTargets": [
+    {
+      "SourceExpression": "page.User",
+      "TargetExpression": "GetByTestId(\"widget-user\")",
+      "TargetKind": "TestId"
+    }
+  ],
+  "PageObjects": [],
+  "Methods": [],
+  "QualityGates": {
+    "MaxTodoComments": 0
+  }
+}
