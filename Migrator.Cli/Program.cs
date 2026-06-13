@@ -175,9 +175,9 @@ static int RunVerify(MigrationSummaryReport summary, string outPath, string form
     // Roslyn syntax checker
     SyntaxCheckerDelegate? syntaxChecker = code =>
     {
-        var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(
-            code,
-            Microsoft.CodeAnalysis.CSharp.CSharpParseOptions.Default);
+        var parseOptions = Microsoft.CodeAnalysis.CSharp.CSharpParseOptions.Default
+            .WithLanguageVersion(Microsoft.CodeAnalysis.CSharp.LanguageVersion.CSharp12);
+        var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(code, parseOptions);
 
         return tree.GetDiagnostics()
             .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)

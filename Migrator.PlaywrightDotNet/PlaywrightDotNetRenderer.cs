@@ -642,7 +642,7 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     string EscapeString(string value)
     {
-        return value.Replace("\\", "\\\\").Replace("'", "\\'").Replace("\"", "\\\"");
+        return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
     }
 
     string ConvertExpression(string expr)

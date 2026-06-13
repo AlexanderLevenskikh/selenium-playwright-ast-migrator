@@ -1,0 +1,832 @@
+{
+  "SourceProjectName": "Example.E2ETests",
+  "LocatorSettings": {
+    "DefaultTestIdAttribute": "data-test-id",
+    "KnownTestIdAttributes": ["data-testid", "data-test-id", "data-tid", "data-test"]
+  },
+  "Scopes": [
+    {
+      "Name": "CatalogPrincipals",
+      "SourcePathPatterns": ["**/CatalogPrincipalsFilter.cs"],
+      "TestHost": {
+        "Namespace": "Example.E2ETests.Tests",
+        "BaseClass": "TestBase",
+        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
+        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "SetUpStatements": [
+          "await Page.GotoAsync(\"<test-login>\");",
+          "await Page.GotoAsync(\"/catalogs?activeTab=principals\");"
+        ]
+      }
+    },
+    {
+      "Name": "CatalogAwardTemplate",
+      "SourcePathPatterns": ["**/CatalogAwardTemplateFilter.cs"],
+      "TestHost": {
+        "Namespace": "Example.E2ETests.Tests",
+        "BaseClass": "TestBase",
+        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
+        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "SetUpStatements": [
+          "await Page.GotoAsync(\"<test-login>\");",
+          "await Page.GotoAsync(\"/catalogs?activeTab=awardTemplates\");"
+        ]
+      }
+    },
+    {
+      "Name": "CatalogBudgetItems",
+      "SourcePathPatterns": ["**/CatalogBudgetItemsFilter.cs"],
+      "TestHost": {
+        "Namespace": "Example.E2ETests.Tests",
+        "BaseClass": "TestBase",
+        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
+        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "SetUpStatements": [
+          "await Page.GotoAsync(\"<test-login>\");",
+          "await Page.GotoAsync(\"/catalogs?activeTab=budgetItems\");"
+        ]
+      }
+    },
+    {
+      "Name": "CatalogProjects",
+      "SourcePathPatterns": ["**/CatalogProjectsFilter.cs"],
+      "TestHost": {
+        "Namespace": "Example.E2ETests.Tests",
+        "BaseClass": "TestBase",
+        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
+        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "SetUpStatements": [
+          "await Page.GotoAsync(\"<test-login>\");",
+          "await Page.GotoAsync(\"/catalogs?activeTab=projects\");"
+        ]
+      }
+    },
+    {
+      "Name": "CatalogRegions",
+      "SourcePathPatterns": ["**/CatalogRegionFilter.cs"],
+      "TestHost": {
+        "Namespace": "Example.E2ETests.Tests",
+        "BaseClass": "TestBase",
+        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
+        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "SetUpStatements": [
+          "await Page.GotoAsync(\"<test-login>\");",
+          "await Page.GotoAsync(\"/catalogs?activeTab=regions\");"
+        ]
+      }
+    },
+    {
+      "Name": "CatalogStopReasons",
+      "SourcePathPatterns": ["**/CatalogStopReasonsFilter.cs"],
+      "TestHost": {
+        "Namespace": "Example.E2ETests.Tests",
+        "BaseClass": "TestBase",
+        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
+        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "SetUpStatements": [
+          "await Page.GotoAsync(\"<test-login>\");",
+          "await Page.GotoAsync(\"/catalogs?activeTab=stopReasons\");"
+        ]
+      }
+    },
+    {
+      "Name": "CatalogPartners",
+      "SourcePathPatterns": ["**/Partners/**/CatalogPartners*.cs"],
+      "TestHost": {
+        "Namespace": "Example.E2ETests.Tests",
+        "BaseClass": "TestBase",
+        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
+        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "SetUpStatements": [
+          "await Page.GotoAsync(\"<test-login>\");",
+          "await Page.GotoAsync(\"/catalogs?activeTab=partners&type=simple\");"
+        ]
+      }
+    },
+    {
+      "Name": "Widget",
+      "SourcePathPatterns": ["**/Widget.cs"],
+      "TestHost": {
+        "Namespace": "Example.E2ETests.Tests",
+        "BaseClass": "TestBase",
+        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
+        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "SetUpStatements": [
+          "await Page.GotoAsync(\"<test-login>\");",
+          "await Page.GotoAsync(\"/search/bills\");"
+        ]
+      }
+    },
+    {
+      "Name": "ButtonTests",
+      "SourcePathPatterns": ["**/ButtonTests.cs"],
+      "TestHost": {
+        "Namespace": "Example.E2ETests.Tests",
+        "BaseClass": "TestBase",
+        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
+        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "SetUpStatements": [
+          "await Page.GotoAsync(\"<test-login>\");",
+          "await Page.GotoAsync(\"/agentReports/\");"
+        ]
+      }
+    },
+    {
+      "Name": "Functional",
+      "SourcePathPatterns": ["**/Functional/AwardSettings.cs", "**/Functional/StopReasons.cs", "**/Functional/DeleteLightBox.cs"],
+      "TestHost": {
+        "Namespace": "Example.E2ETests.Tests",
+        "BaseClass": "TestBase",
+        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
+        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "SetUpStatements": [
+          "await Page.GotoAsync(\"<test-login>\");"
+        ]
+      }
+    }
+  ],
+  "UiTargets": [
+    {
+      "SourceExpression": "page.Table",
+      "TargetExpression": "table",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-test"
+    },
+    {
+      "SourceExpression": "page.Table.Items",
+      "TargetExpression": "t_table_row_item",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-test"
+    },
+    {
+      "SourceExpression": "page.TableLoader",
+      "TargetExpression": "table-loader",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-test"
+    },
+    {
+      "SourceExpression": "page.ResetLabel",
+      "TargetExpression": "reset-table-filters",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-test"
+    },
+    {
+      "SourceExpression": "page.Active",
+      "TargetExpression": "Toggle__root",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-tid"
+    },
+    {
+      "SourceExpression": "page.Count",
+      "TargetExpression": "CurrencyLabel__root",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-tid"
+    },
+    {
+      "SourceExpression": "page.Toggle",
+      "TargetExpression": "Toggle__root",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-tid"
+    },
+    {
+      "SourceExpression": "page.Inn",
+      "TargetExpression": "t_principals_inn",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.Kpp",
+      "TargetExpression": "t_principals_kpp",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.Name",
+      "TargetExpression": "t_principals_principal",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.NameSort",
+      "TargetExpression": "t_principals_principal",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.Name",
+      "TargetExpression": "t_asTemplates_name",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.Project",
+      "TargetExpression": "t_asTemplates_project",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.Principal",
+      "TargetExpression": "t_asTemplates_principal",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.Type",
+      "TargetExpression": "t_asTemplates_type",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.PlanSumType",
+      "TargetExpression": "t_asTemplates_planSumType",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.AccrualType",
+      "TargetExpression": "t_asTemplates_accrualType",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.ModifyUser",
+      "TargetExpression": "t_asTemplates_modifyDate",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.Name",
+      "TargetExpression": "t_budgetItems_name",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.Code",
+      "TargetExpression": "t_budgetItems_code",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.Code",
+      "TargetExpression": "t_projects_code",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.RewardProject",
+      "TargetExpression": "t_projects_rewardProject",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.RewardScheme",
+      "TargetExpression": "t_projects_rewardScheme",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.Products",
+      "TargetExpression": "t_projects_products",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.Code",
+      "TargetExpression": "t_regions_code",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.CodeSort",
+      "TargetExpression": "t_regions_code",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.Name",
+      "TargetExpression": "t_regions_name",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.NameSort",
+      "TargetExpression": "t_regions_name",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.Name",
+      "TargetExpression": "t_stopReasons_name",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.Sc",
+      "TargetExpression": "t_partners_partner",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.PartnerType",
+      "TargetExpression": "t_partners_partnerType",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.PartnerStatus",
+      "TargetExpression": "t_partners_status",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.Partner",
+      "TargetExpression": "t_allPartnerSuspensions_partner",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.CreatedUser",
+      "TargetExpression": "t_allPartnerSuspensions_created",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.CreatedDate",
+      "TargetExpression": "t_allPartnerSuspensions_created",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.Reason",
+      "TargetExpression": "t_allPartnerSuspensions_reason",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.ReasonSort",
+      "TargetExpression": "t_allPartnerSuspensions_reason",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.StopComment",
+      "TargetExpression": "t_allPartnerSuspensions_stopComment",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.PartnerType",
+      "TargetExpression": "t_partnersWithErrors_partnerType",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.Partner",
+      "TargetExpression": "t_partnersWithErrors_partner",
+      "TargetKind": "TestId",
+      "Match": "First"
+    },
+    {
+      "SourceExpression": "page.WidgetSearch",
+      "TargetExpression": "Input__root",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-tid"
+    },
+    {
+      "SourceExpression": "page.FuterUser",
+      "TargetExpression": "t_process_footer",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.User",
+      "TargetExpression": "t_widget_userfilter",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.Parameters",
+      "TargetExpression": "subTask-params-label",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.MenuItems.Error",
+      "TargetExpression": "Link__root",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-tid"
+    },
+    {
+      "SourceExpression": "page.MenuItems.SideMenuCatalogs",
+      "TargetExpression": "t_sideMenu_item_catalogs",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.MenuItems.SearchTextArea",
+      "TargetExpression": "textarea[placeholder='Поиск']",
+      "TargetKind": "Text"
+    },
+    {
+      "SourceExpression": "page.MenuItems.SideMenuButtonFeedback",
+      "TargetExpression": "t_button_feedback",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.MenuItems.SideMenuDocuments",
+      "TargetExpression": "t_sideMenu_item_documents",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.MenuItems.SideMenuCatalogsAwardTemplates",
+      "TargetExpression": "t_sideMenu_item_awardTemplates",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.MenuItems.SideMenuCatalogsBudgetItems",
+      "TargetExpression": "t_sideMenu_item_budgetItems",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.MenuItems.SideMenuCatalogsRegions",
+      "TargetExpression": "t_sideMenu_item_regions",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.MenuItems.SideMenuCatalogsPartners",
+      "TargetExpression": "t_sideMenu_item_partners",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.MenuItems.SideMenuCatalogsPrincipals",
+      "TargetExpression": "t_sideMenu_item_principals",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.MenuItems.SideMenuCatalogsStopReasons",
+      "TargetExpression": "t_sideMenu_item_stopReasons",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.MenuItems.SideMenuCatalogsFixedSaleTypeDate",
+      "TargetExpression": "t_sideMenu_item_fixedSaleTypeDates",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.MenuItems.SideMenuButtonSearch",
+      "TargetExpression": "t_button_search",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.MenuItems.SideMenuAnalyticReports",
+      "TargetExpression": "t_sideMenu_item_analyticReports",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.MenuItems.SideMenuDocumentsCalculations",
+      "TargetExpression": "t_sideMenu_item_calculations",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.MenuItems.SideMenuDocumentsAgreements",
+      "TargetExpression": "t_sideMenu_item_agreements",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.MenuItems.BillRows",
+      "TargetExpression": "t_billRows",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.MenuItems.DiadocErrors",
+      "TargetExpression": "t_diadocErrors",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.AcceptButton",
+      "TargetExpression": "//span[text()='Сохранить']",
+      "TargetKind": "Text"
+    },
+    {
+      "SourceExpression": "page.CancelButton",
+      "TargetExpression": "//span[text()='Отмена']",
+      "TargetKind": "Text"
+    },
+    {
+      "SourceExpression": "modal.Reason",
+      "TargetExpression": "Textarea__root",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-tid"
+    },
+    {
+      "SourceExpression": "modal.Modal",
+      "TargetExpression": "modal-content",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-tid"
+    }
+  ],
+  "PageObjects": [],
+  "Methods": [
+    {
+      "SourceMethod": "Navigation.OpenCatalogPrincipalPage()",
+      "TargetMethod": null,
+      "Description": "Navigate to catalog principals page",
+      "TargetStatements": [
+        "await Page.GotoAsync(\"/catalogs?activeTab=principals\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "Navigation.OpenCatalogAwardTemplatePage()",
+      "TargetMethod": null,
+      "Description": "Navigate to catalog award templates page",
+      "TargetStatements": [
+        "await Page.GotoAsync(\"/catalogs?activeTab=awardTemplates\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "Navigation.OpenCatalogBudgetItemsPage()",
+      "TargetMethod": null,
+      "Description": "Navigate to catalog budget items page",
+      "TargetStatements": [
+        "await Page.GotoAsync(\"/catalogs?activeTab=budgetItems\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "Navigation.OpenCatalogProjectsPage()",
+      "TargetMethod": null,
+      "Description": "Navigate to catalog projects page",
+      "TargetStatements": [
+        "await Page.GotoAsync(\"/catalogs?activeTab=projects\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "Navigation.OpenCatalogRegionsPage()",
+      "TargetMethod": null,
+      "Description": "Navigate to catalog regions page",
+      "TargetStatements": [
+        "await Page.GotoAsync(\"/catalogs?activeTab=regions\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "Navigation.OpenCatalogStopReasonsPage()",
+      "TargetMethod": null,
+      "Description": "Navigate to catalog stop reasons page",
+      "TargetStatements": [
+        "await Page.GotoAsync(\"/catalogs?activeTab=stopReasons\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "Navigation.OpenCatalogPartnersPage()",
+      "TargetMethod": null,
+      "Description": "Navigate to catalog partners page",
+      "TargetStatements": [
+        "await Page.GotoAsync(\"/catalogs?activeTab=partners&type=simple\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "Navigation.OpenCatalogPartnersStopReasonsPage()",
+      "TargetMethod": null,
+      "Description": "Navigate to catalog partners stop reasons page",
+      "TargetStatements": [
+        "await Page.GotoAsync(\"/catalogs?activeTab=partners&type=stopped\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "Navigation.OpenCatalogPartnersWarningPage()",
+      "TargetMethod": null,
+      "Description": "Navigate to catalog partners warning page",
+      "TargetStatements": [
+        "await Page.GotoAsync(\"/catalogs?activeTab=partners&type=withErrors\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "Navigation.OpenSearchPage()",
+      "TargetMethod": null,
+      "Description": "Navigate to search page",
+      "TargetStatements": [
+        "await Page.GotoAsync(\"/search/bills\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "Navigation.OpenRegistryAgentPage()",
+      "TargetMethod": null,
+      "Description": "Navigate to registry agent page",
+      "TargetStatements": [
+        "await Page.GotoAsync(\"/agentReports/\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "Navigation.OpenRegistryReferalsPage()",
+      "TargetMethod": null,
+      "Description": "Navigate to registry referals page",
+      "TargetStatements": [
+        "await Page.GotoAsync(\"/referralReports?activeTab=reports\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "page.Loader.ValidateLoading()",
+      "TargetMethod": null,
+      "Description": "Wait for table loader — simplified from retry/reload loop",
+      "TargetStatements": [
+        "var loader = Page.Locator(\"[data-test='table-loader']\");",
+        "if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Loader.ValidateLoadingPartner()",
+      "TargetMethod": null,
+      "Description": "Wait for partner loader — simplified to table-loader wait",
+      "TargetStatements": [
+        "var loader = Page.Locator(\"[data-test='table-loader']\");",
+        "if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "pagef.Loader.ValidateLoading()",
+      "TargetMethod": null,
+      "Description": "Wait for page loader at file scope",
+      "TargetStatements": [
+        "var loader = Page.Locator(\"[data-test='table-loader']\");",
+        "if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Inn.InputInputAndAccept(\"6673240328\")",
+      "TargetMethod": null,
+      "Description": "TextArea.InputInputAndAccept: click, wait apply, fill, click apply",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test-id='t_principals_inn']\").ClickAsync();",
+        "await Page.Locator(\"[data-test='apply-button']\").WaitForAsync();",
+        "await Page.Locator(\"[data-test='headbox-search'] input\").FillAsync(\"6673240328\");",
+        "await Page.Locator(\"[data-test='apply-button']\").ClickAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Kpp.InputInputAndAccept(\"668601001\")",
+      "TargetMethod": null,
+      "Description": "Same pattern as Inn.InputInputAndAccept",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test-id='t_principals_kpp']\").ClickAsync();",
+        "await Page.Locator(\"[data-test='apply-button']\").WaitForAsync();",
+        "await Page.Locator(\"[data-test='headbox-search'] input\").FillAsync(\"668601001\");",
+        "await Page.Locator(\"[data-test='apply-button']\").ClickAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Name.SelectValue(\"Контур\")",
+      "TargetMethod": null,
+      "Description": "Combobox.SelectValue: click, wait apply, find menu item, click, apply",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test-id='t_principals_principal']\").ClickAsync();",
+        "await Page.Locator(\"[data-test='apply-button']\").WaitForAsync();",
+        "await Page.Locator(\"[data-test='menu-item']\").Filter(new() { HasText = \"Контур\" }).First.ClickAsync();",
+        "await Page.Locator(\"[data-test='apply-button']\").ClickAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.NameSort.Sort(\"По возрастанию\")",
+      "TargetMethod": null,
+      "Description": "SortBox.Sort ascending",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test-id='t_principals_principal']\").ClickAsync();",
+        "await Page.Locator(\"span:has-text('По возрастанию')\").WaitForAsync();",
+        "await Page.Locator(\"span:has-text('По возрастанию')\").ClickAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.NameSort.Sort(\"По убыванию\")",
+      "TargetMethod": null,
+      "Description": "SortBox.Sort descending",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test-id='t_principals_principal']\").ClickAsync();",
+        "await Page.Locator(\"span:has-text('По убыванию')\").WaitForAsync();",
+        "await Page.Locator(\"span:has-text('По убыванию')\").ClickAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Active.Click()",
+      "TargetMethod": null,
+      "Description": "Toggle click",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-tid='Toggle__root']\").ClickAsync();"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "page.ResetLabel.Click()",
+      "TargetMethod": null,
+      "Description": "Reset filters button click",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test='reset-table-filters']\").ClickAsync();"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "page.Table.Items.ElementAt(0).Click()",
+      "TargetMethod": null,
+      "Description": "Click first cell in table row — TODO: table row strategy needed for ElementAt",
+      "TargetStatements": [
+        "// TODO: table row cell click — needs table/list strategy",
+        "await Page.Locator(\"[data-test='t_table_row_item']\").First.ClickAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Table.Items.ElementAt(1).Click()",
+      "TargetMethod": null,
+      "Description": "Click second cell in table row",
+      "TargetStatements": [
+        "// TODO: table row cell click — needs table/list strategy",
+        "await Page.Locator(\"[data-test='t_table_row_item']\").Nth(1).ClickAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Table.Items.ElementAt(2).Click()",
+      "TargetMethod": null,
+      "Description": "Click third cell in table row",
+      "TargetStatements": [
+        "// TODO: table row cell click — needs table/list strategy",
+        "await Page.Locator(\"[data-test='t_table_row_item']\").Nth(2).ClickAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Table.Items.ElementAt(3).Click()",
+      "TargetMethod": null,
+      "Description": "Click fourth cell in table row",
+      "TargetStatements": [
+        "// TODO: table row cell click — needs table/list strategy",
+        "await Page.Locator(\"[data-test='t_table_row_item']\").Nth(3).ClickAsync();"
+      ],
+      "RequiresReview": true
+    }
+  ],
+  "ParameterizedMethods": [
+    {
+      "SourceMethodPattern": "page.NameSort.Sort({sortOrder})",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test-id='t_principals_principal']\").ClickAsync();",
+        "await Page.Locator($\"span:has-text('{sortOrder}')\").WaitForAsync();",
+        "await Page.Locator($\"span:has-text('{sortOrder}')\").ClickAsync();"
+      ],
+      "RequiresReview": true,
+      "Description": "Parameterized SortBox.Sort: matches any sortOrder argument"
+    },
+    {
+      "SourceMethodPattern": "page.CodeSort.Sort({sortOrder})",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test-id='t_regions_code']\").ClickAsync();",
+        "await Page.Locator($\"span:has-text('{sortOrder}')\").WaitForAsync();",
+        "await Page.Locator($\"span:has-text('{sortOrder}')\").ClickAsync();"
+      ],
+      "RequiresReview": true,
+      "Description": "Parameterized sort for Code column"
+    },
+    {
+      "SourceMethodPattern": "page.ReasonSort.Sort({sortOrder})",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test-id='t_allPartnerSuspensions_reason']\").ClickAsync();",
+        "await Page.Locator($\"span:has-text('{sortOrder}')\").WaitForAsync();",
+        "await Page.Locator($\"span:has-text('{sortOrder}')\").ClickAsync();"
+      ],
+      "RequiresReview": true,
+      "Description": "Parameterized sort for Reason column"
+    },
+    {
+      "SourceMethodPattern": "page.Principal.InputAndSelect({value})",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test-id='t_principals_principal']\").ClickAsync();",
+        "var popup = Page.Locator(\"[data-tid='Popup__root']\").Last;",
+        "await popup.Locator(\"input\").FillAsync({value});",
+        "await popup.GetByText({value}).ClickAsync();"
+      ],
+      "RequiresReview": true,
+      "Description": "Parameterized popup input/select"
+    },
+    {
+      "SourceMethodPattern": "page.Table.Items.ElementAt({index}).Click()",
+      "TargetStatements": [
+        "// TODO: table row cell[{index}] click — needs table/list strategy",
+        "await Page.Locator(\"[data-test='t_table_row_item']\").Nth({index}).ClickAsync();"
+      ],
+      "RequiresReview": true,
+      "Description": "Parameterized ElementAt for table items — best-effort Nth mapping"
+    },
+    {
+      "SourceMethodPattern": "page.Table.Items.ElementAt({index}).Text.Get()",
+      "TargetStatements": [
+        "// TODO: table row cell[{index}] text — needs table/list strategy",
+        "await Page.Locator(\"[data-test='t_table_row_item']\").Nth({index}).InnerTextAsync()"
+      ],
+      "RequiresReview": true,
+      "Description": "Parameterized ElementAt for reading cell text"
+    }
+  ]
+}
