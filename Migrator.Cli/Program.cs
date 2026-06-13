@@ -67,7 +67,13 @@ switch (mode)
         RunMigrate(summary, outPath, format, configPath, resultsList, allUnmapped);
         break;
     case "verify":
-        RunVerify(summary, outPath, format, resultsList);
+        {
+            var verifyConfig = configPath != null ? System.Text.Json.JsonSerializer.Deserialize<ProjectAdapterConfig>(File.ReadAllText(configPath)) : null;
+            var verifyAdapter = adapter as DefaultProjectAdapter;
+            var verifyExitCode = RunVerify(summary, outPath, format, resultsList, verifyConfig, verifyAdapter);
+            if (verifyExitCode != 0)
+                return verifyExitCode;
+        }
         break;
     default:
         Console.Error.WriteLine($"Unknown mode: {mode}");
@@ -159,34 +165,91 @@ static string ResolveFileName(string dir, string baseName, ISet<string> usedName
     }
 }
 
-static void RunVerify(MigrationSummaryReport summary, string outPath, string format, List<PipelineResult> results)
+static int RunVerify(MigrationSummaryReport summary, string outPath, string format, List<PipelineResult> results, ProjectAdapterConfig? config, DefaultProjectAdapter? adapter)
 {
     Directory.CreateDirectory(outPath);
 
-    Console.WriteLine("Verify mode (experimental) — checking generated output...");
-    Console.WriteLine("  Note: verify currently does not perform full compile-smoke. It only validates generated file structure.");
+    Console.WriteLine("=== Verify Mode ===");
     Console.WriteLine();
 
-    foreach (var result in results)
+    // Roslyn syntax checker
+    SyntaxCheckerDelegate? syntaxChecker = code =>
     {
-        var canCheck = result.GeneratedOutput.Contains("class ") && result.GeneratedOutput.Contains("Task");
-        if (canCheck)
+        var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(
+            code,
+            Microsoft.CodeAnalysis.CSharp.CSharpParseOptions.Default);
+
+        return tree.GetDiagnostics()
+            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+            .Select(d => (d.Location.GetLineSpan().StartLinePosition.Line + 1, d.GetMessage()))
+            .ToList();
+    };
+
+    // Scope checker
+    Func<string, string?>? scopeChecker = adapter != null ? (Func<string, string?>)(path => adapter.GetActiveScope(path)) : null;
+
+    var report = VerifyRunner.Run(results, config, syntaxChecker, scopeChecker);
+
+    // Write reports
+    File.WriteAllText(Path.Combine(outPath, "verify-report.txt"), VerifyReportWriter.ToText(report));
+    File.WriteAllText(Path.Combine(outPath, "verify-report.json"), VerifyReportWriter.ToJson(report));
+
+    // Print summary to console
+    PrintVerifyReport(report);
+
+    Console.WriteLine();
+    Console.WriteLine($"Verify reports written to: {Path.GetFullPath(outPath)}");
+
+    // Derive exit code from status
+    return report.Status switch
+    {
+        "passed" => 0,
+        "failed" when report.SyntaxErrors > 0 => 3,
+        "failed" when report.ConfigWarnings > 0 && report.Issues.Any(i => i.Severity == IssueSeverity.Error && i.Category == "Config") => 2,
+        "failed" => 1,
+        _ => 1
+    };
+}
+
+static void PrintVerifyReport(VerifyReport report)
+{
+    Console.WriteLine("=== Verify Report ===");
+    Console.WriteLine($"Files checked: {report.FilesChecked}");
+    Console.WriteLine($"Syntax errors: {report.SyntaxErrors}");
+    Console.WriteLine($"TODO comments: {report.TodoComments}");
+    Console.WriteLine($"Page.TODO calls: {report.PageTodoCalls}");
+    Console.WriteLine($"Placeholder leftovers: {report.PlaceholderLeftovers}");
+    Console.WriteLine($"Suspicious literal variables: {report.SuspiciousLiteralVariables}");
+    Console.WriteLine($"Duplicate local variables: {report.DuplicateLocalVariables}");
+    Console.WriteLine($"Scope conflicts: {report.ScopeWarnings}");
+    Console.WriteLine($"Config warnings: {report.ConfigWarnings}");
+
+    if (report.Files.Count > 0)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Per-file issues:");
+        foreach (var file in report.Files)
         {
-            Console.WriteLine($"  [PASS] Has valid structure: {result.SourceModel.ClassName}Playwright.cs");
-        }
-        else
-        {
-            Console.WriteLine($"  [SKIP] No valid generated output for: {result.SourceModel.ClassName}");
+            if (file.Issues.Count > 0)
+            {
+                Console.WriteLine($"  {file.SourceFile}: {file.Issues.Count} issue(s)");
+                foreach (var issue in file.Issues)
+                {
+                    var severity = issue.Severity switch
+                    {
+                        IssueSeverity.Error => "ERROR",
+                        IssueSeverity.Warning => "WARN",
+                        _ => "INFO"
+                    };
+                    var lineInfo = issue.Line != null ? $" (line {issue.Line})" : "";
+                    Console.WriteLine($"    [{severity}] {issue.Message}{lineInfo}");
+                }
+            }
         }
     }
 
     Console.WriteLine();
-    Console.WriteLine("Verify complete (experimental): full compile-smoke is not yet implemented.");
-
-    var allUnsupported = CollectAllUnsupported(results);
-    var allUnmapped = CollectAllUnmapped(results);
-    WriteReports(summary, outPath, format, allUnmapped, allUnsupported);
-    PrintSummary(summary);
+    Console.WriteLine($"Verify result: {report.Status.ToUpper()}");
 }
 
 static void WriteReports(MigrationSummaryReport summary, string outPath, string format,
@@ -719,8 +782,10 @@ Modes:
   analyze  Parse and analyze Selenium tests without generating output files.
            Produces reports and draft adapter-config.
   migrate  Parse, adapt, and generate Playwright C# files. Produces reports.
-  verify   (experimental) Validate structure of generated files.
-           Not yet a full compile-smoke — use with caution.
+  verify   Validate generated code quality. Runs Roslyn syntax check,
+            TODO/placeholder detection, config validation, scope matching,
+            and quality gate evaluation. Outputs verify-report.json and
+            verify-report.txt.
 
 Options:
   --mode <analyze|migrate|verify>   Operation mode (required)
@@ -733,10 +798,10 @@ Options:
   --help, -h                        Show this help
 
 Exit codes:
-  0  Success (no quality gate failures)
-  1  CLI usage error
-  2  --fail-on-unsupported triggered
-  3  --fail-on-todo triggered
+  0  Success (passed quality gates)
+  1  CLI usage error / failed quality gate (verify mode)
+  2  --fail-on-unsupported triggered / invalid config (verify mode)
+  3  --fail-on-todo triggered / syntax error (verify mode)
 
 Examples:
   Migrator.Cli --mode analyze --input ./OldTests --out ./analysis --format both

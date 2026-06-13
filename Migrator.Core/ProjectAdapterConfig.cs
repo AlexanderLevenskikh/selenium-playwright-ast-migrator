@@ -40,11 +40,18 @@ public sealed class ProjectAdapterConfig
     [JsonPropertyName("Scopes")]
     public ProfileScope[] Scopes { get; init; } = Array.Empty<ProfileScope>();
 
+    /// <summary>
+    /// Optional quality gate settings for verify mode. Controls thresholds and fail conditions.
+    /// When absent, soft defaults are used (warnings reported, but verify does not fail unexpectedly).
+    /// </summary>
+    [JsonPropertyName("QualityGates")]
+    public QualityGatesConfig? QualityGates { get; init; }
+
     public ProjectAdapterConfig()
     {
     }
 
-    public ProjectAdapterConfig(string SourceProjectName, UiTargetMapping[] UiTargets, PageObjectMapping[] PageObjects, MethodMapping[] Methods, LocatorSettings? LocatorSettings = null, TestHostConfig? TestHost = null, ParameterizedMethodMapping[]? ParameterizedMethods = null, ProfileScope[]? Scopes = null)
+    public ProjectAdapterConfig(string SourceProjectName, UiTargetMapping[] UiTargets, PageObjectMapping[] PageObjects, MethodMapping[] Methods, LocatorSettings? LocatorSettings = null, TestHostConfig? TestHost = null, ParameterizedMethodMapping[]? ParameterizedMethods = null, ProfileScope[]? Scopes = null, QualityGatesConfig? QualityGates = null)
     {
         this.SourceProjectName = SourceProjectName;
         this.UiTargets = UiTargets;
@@ -54,7 +61,76 @@ public sealed class ProjectAdapterConfig
         this.TestHost = TestHost;
         this.ParameterizedMethods = ParameterizedMethods ?? Array.Empty<ParameterizedMethodMapping>();
         this.Scopes = Scopes ?? Array.Empty<ProfileScope>();
+        this.QualityGates = QualityGates;
     }
+}
+
+/// <summary>
+/// Quality gate settings for verify mode. All fields are optional — soft defaults apply when not set.
+/// </summary>
+public sealed class QualityGatesConfig
+{
+    /// <summary>
+    /// Maximum allowed TODO comments across all generated files.
+    /// Default: int.MaxValue (soft — warnings only).
+    /// </summary>
+    public int? MaxTodoComments { get; init; }
+
+    /// <summary>
+    /// Maximum allowed unsupported actions.
+    /// Default: int.MaxValue (soft — warnings only).
+    /// </summary>
+    public int? MaxUnsupportedActions { get; init; }
+
+    /// <summary>
+    /// Maximum allowed unmapped targets.
+    /// Default: int.MaxValue (soft — warnings only).
+    /// </summary>
+    public int? MaxUnmappedTargets { get; init; }
+
+    /// <summary>
+    /// Maximum allowed raw expressions.
+    /// Default: int.MaxValue (soft — warnings only).
+    /// </summary>
+    public int? MaxRawExpressions { get; init; }
+
+    /// <summary>
+    /// Fail verify if any Page.TODO_* calls remain in generated code.
+    /// Default: true.
+    /// </summary>
+    public bool? FailOnPageTodo { get; init; }
+
+    /// <summary>
+    /// Fail verify if generated code has C# syntax errors.
+    /// Default: true.
+    /// </summary>
+    public bool? FailOnInvalidGeneratedSyntax { get; init; }
+
+    /// <summary>
+    /// Fail verify if multiple scopes match a single source file.
+    /// Default: true.
+    /// </summary>
+    public bool? FailOnMultipleMatchingScopes { get; init; }
+
+    /// <summary>
+    /// Fail verify if unresolved placeholder tokens remain in generated output.
+    /// Default: true.
+    /// </summary>
+    public bool? FailOnPlaceholderLeftovers { get; init; }
+
+    /// <summary>
+    /// Fail verify if suspicious literal variable names are found in selectors.
+    /// Default: true.
+    /// </summary>
+    public bool? FailOnSuspiciousLiteralVariables { get; init; }
+
+    /// <summary>
+    /// Fail verify if local/private config values are detected in public profiles.
+    /// Default: true.
+    /// </summary>
+    public bool? FailOnLocalProfileLeaks { get; init; }
+
+    public QualityGatesConfig() { }
 }
 
 /// <summary>
