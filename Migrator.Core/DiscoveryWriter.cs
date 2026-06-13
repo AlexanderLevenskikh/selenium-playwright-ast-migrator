@@ -249,7 +249,10 @@ public static class DiscoveryWriter
         // If we have navigation patterns, use sanitized versions
         foreach (var nav in inventory.DetectedNavigationPatterns)
         {
-            statements.Add($"{nav.Example};");
+            var stmt = nav.Example;
+            if (!stmt.TrimEnd().EndsWith(";"))
+                stmt += ";";
+            statements.Add(stmt);
         }
 
         // If no navigation patterns but we have auth patterns, add placeholder

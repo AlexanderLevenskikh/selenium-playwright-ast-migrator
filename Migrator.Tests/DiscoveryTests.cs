@@ -220,4 +220,69 @@ public class DiscoveryTests
         Assert.Contains("\"RequiresReview\": true", draft);
         Assert.Contains("REVIEW_REQUIRED", draft);
     }
+
+    // 16. No double semicolon in generated SetUpStatements
+    [Fact]
+    public void DiscoverTarget_DraftSetUpStatements_NoDoubleSemicolon()
+    {
+        var projectPath = Path.Combine(FixturesDir, "NUnitTestBaseProject");
+        var discovery = new TargetDiscovery(projectPath);
+        var inventory = discovery.Scan();
+
+        var statements = DiscoveryWriter.BuildSetUpStatements(inventory);
+        foreach (var stmt in statements)
+        {
+            Assert.DoesNotContain(";;", stmt);
+        }
+
+        var draft = DiscoveryWriter.ToAdapterConfigDraft(inventory);
+        Assert.DoesNotContain(";;", draft);
+    }
+
+    // 17. Detects GotoAsync
+    [Fact]
+    public void DiscoverTarget_DetectsGotoAsync()
+    {
+        var projectPath = Path.Combine(FixturesDir, "NUnitTestBaseProject");
+        var discovery = new TargetDiscovery(projectPath);
+        var inventory = discovery.Scan();
+
+        var gotoAsync = inventory.DetectedNavigationPatterns.FirstOrDefault(p => p.Pattern.Contains("GotoAsync"));
+        Assert.NotNull(gotoAsync);
+    }
+
+    // 18. Detects GoToAsync
+    [Fact]
+    public void DiscoverTarget_DetectsGoToAsync()
+    {
+        var projectPath = Path.Combine(FixturesDir, "GoToAsyncProject");
+        var discovery = new TargetDiscovery(projectPath);
+        var inventory = discovery.Scan();
+
+        var goToAsync = inventory.DetectedNavigationPatterns.FirstOrDefault(p => p.Pattern.Contains("GoToAsync"));
+        Assert.NotNull(goToAsync);
+        Assert.Contains("GoToAsync", goToAsync.Example);
+    }
+
+    // 19. RedactionCount increments only for actual redactions (absolute URL)
+    [Fact]
+    public void DiscoverTarget_RedactionCount_IncrementsForRedactedUrl()
+    {
+        var projectPath = Path.Combine(FixturesDir, "NUnitTestBaseProject");
+        var discovery = new TargetDiscovery(projectPath);
+        var inventory = discovery.Scan();
+
+        Assert.True(inventory.RedactionCount > 0, "Absolute URLs should be redacted");
+    }
+
+    // 20. RedactionCount does not increment for relative routes
+    [Fact]
+    public void DiscoverTarget_RedactionCount_DoesNotIncrementForRelativeRoute()
+    {
+        var projectPath = Path.Combine(FixturesDir, "GoToAsyncProject");
+        var discovery = new TargetDiscovery(projectPath);
+        var inventory = discovery.Scan();
+
+        Assert.Equal(0, inventory.RedactionCount);
+    }
 }

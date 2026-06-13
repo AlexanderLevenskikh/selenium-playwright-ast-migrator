@@ -478,8 +478,8 @@ public sealed class TargetDiscovery
 
     List<DetectedNavigationPattern> DetectNavigationPatterns(Dictionary<string, string> csFiles)
     {
-        var gotoRegex = new Regex(@"\.GotoAsync\s*\(\s*[""']([^""']+)[""']\s*\)", RegexOptions.Compiled);
-        var gotoVarRegex = new Regex(@"\.GotoAsync\s*\((\w+)\s*\)", RegexOptions.Compiled);
+        var gotoRegex = new Regex(@"\.(GotoAsync|GoToAsync)\s*\(\s*[""']([^""']+)[""']\s*\)", RegexOptions.Compiled);
+        var gotoVarRegex = new Regex(@"\.(GotoAsync|GoToAsync)\s*\((\w+)\s*\)", RegexOptions.Compiled);
 
         var patterns = new List<(string Pattern, string Example, string File)>();
 
@@ -487,20 +487,23 @@ public sealed class TargetDiscovery
         {
             foreach (Match m in gotoRegex.Matches(content))
             {
-                var url = m.Groups[1].Value;
+                var methodName = m.Groups[1].Value;
+                var url = m.Groups[2].Value;
                 var redacted = RedactUrl(url);
-                redactionCount++;
-                patterns.Add(("Page.GotoAsync", $"await Page.GotoAsync(\"{redacted}\");", file));
+                if (redacted != url)
+                    redactionCount++;
+                patterns.Add(("Page." + methodName, $"await Page.{methodName}(\"{redacted}\");", file));
             }
 
             foreach (Match m in gotoVarRegex.Matches(content))
             {
-                var varName = m.Groups[1].Value;
+                var methodName = m.Groups[1].Value;
+                var varName = m.Groups[2].Value;
                 if (varName.Contains("Url", StringComparison.OrdinalIgnoreCase) ||
                     varName.Contains("Base", StringComparison.OrdinalIgnoreCase) ||
                     varName.Contains("Route", StringComparison.OrdinalIgnoreCase))
                 {
-                    patterns.Add(($"Page.GotoAsync(variable: {varName})", $"await Page.GotoAsync({varName});", file));
+                    patterns.Add(($"Page.{methodName}(variable: {varName})", $"await Page.{methodName}({varName});", file));
                 }
             }
         }
