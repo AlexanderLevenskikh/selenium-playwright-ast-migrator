@@ -26,7 +26,7 @@ Implemented `--mode discover-target` to scan existing Playwright .NET test proje
 
 ## Real project results
 
-Tested on arbilling-e2e-tests (33 .cs files, 2 .csproj):
+Tested on example-e2e-tests (33 .cs files, 2 .csproj):
 
 - Framework: NUnit (High)
 - Base classes: TestBase (4), PageBase (2), ControlBase (1)

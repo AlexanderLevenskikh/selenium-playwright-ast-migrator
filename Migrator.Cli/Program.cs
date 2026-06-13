@@ -875,7 +875,7 @@ static int RunPropose(string inputPath, string outPath, string? configPath, stri
     Directory.CreateDirectory(outPath);
 
     var writeJson = format == "json" || format == "both";
-    var writeMd = format == "md" || format == "txt" || format == "both";
+    var writeMd = format == "text" || format == "both";
 
     if (writeJson)
     {
@@ -936,7 +936,7 @@ static int RunDiscoverTarget(string inputPath, string outPath, string? configPat
     Directory.CreateDirectory(outPath);
 
     var writeJson = format == "json" || format == "both";
-    var writeMd = format == "md" || format == "txt" || format == "both";
+    var writeMd = format == "text" || format == "both";
 
     // target-inventory.json
     if (writeJson)
@@ -1237,7 +1237,7 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
                         ProposalWriter.ToJson(proposals));
                 }
 
-                if (format == "md" || format == "txt" || format == "both")
+                if (format == "text" || format == "both")
                 {
                     File.WriteAllText(Path.Combine(proposeDir, "mapping-proposals.md"),
                         ProposalWriter.ToMarkdown(proposals));

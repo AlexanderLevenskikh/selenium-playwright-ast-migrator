@@ -115,7 +115,7 @@ dotnet restore
 dotnet test
 ```
 
-Runs 188 tests: snapshot checks, parser tests, compile-smoke checks, orchestrator integration tests, and more.
+Runs 205 tests: snapshot checks, parser tests, compile-smoke checks, orchestrator integration tests, and more.
 
 ## Publish
 

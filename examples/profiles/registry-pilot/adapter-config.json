@@ -61,7 +61,7 @@
       "TargetMethod": null,
       "Description": "Login and navigate to registry agent reports page",
       "TargetStatements": [
-        "await Page.GotoAsync(DefaultEnvParams.TestLogin);",
+        "await Page.GotoAsync(TestSettings.LoginRoute);",
         "await Page.GotoAsync(\"/agentReports?activeTab=reports\");"
       ],
       "RequiresReview": true

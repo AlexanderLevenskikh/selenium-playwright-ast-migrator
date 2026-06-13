@@ -171,8 +171,8 @@ Controls how generated Playwright test classes integrate into your test infrastr
     "Namespace": "Example.PlaywrightTests",
     "BaseClass": "TestBase",
     "ClassName": null,
-    "ClassAttributes": ["[Category(\"Regression\")]"],
-    "Usings": ["using NUnit.Framework;", "using Microsoft.Playwright.NUnit;"],
+    "ClassAttributes": ["Category(\"Regression\")"],
+    "Usings": ["NUnit.Framework", "Microsoft.Playwright.NUnit"],
     "SetUpStatements": [
       "await Page.GotoAsync(\"<test-login>\");",
       "await Page.GotoAsync(\"/search\");"

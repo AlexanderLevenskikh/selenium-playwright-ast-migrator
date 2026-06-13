@@ -574,8 +574,8 @@ public class SnapshotTests
             {
                 SetUpStatements = new[]
                 {
-                    "await Page.GotoAsync(DefaultEnvParams.TestLogin);",
-                    "await Page.GotoAsync(\"/catalogs?activeTab=principals\");",
+                    "await Page.GotoAsync(TestSettings.LoginRoute);",
+                    "await Page.GotoAsync(\"/catalogs\");",
                 },
             }
         };
@@ -584,8 +584,8 @@ public class SnapshotTests
         var output = renderer.Render(targetModel);
 
         Assert.Contains("[SetUp]", output);
-        Assert.Contains("await Page.GotoAsync(DefaultEnvParams.TestLogin);", output);
-        Assert.Contains("await Page.GotoAsync(\"/catalogs?activeTab=principals\");", output);
+        Assert.Contains("await Page.GotoAsync(TestSettings.LoginRoute);", output);
+        Assert.Contains("await Page.GotoAsync(\"/catalogs\");", output);
         // Original setup preserved as comment
         Assert.Contains("// Original Selenium setup (mapped):", output);
         Assert.Contains("//   Navigation.OpenPage()", output);
@@ -648,7 +648,7 @@ public class SnapshotTests
                 Usings = new[] { "NUnit.Framework", "Example.E2ETests.Infrastructure" },
                 SetUpStatements = new[]
                 {
-                    "await Page.GotoAsync(DefaultEnvParams.TestLogin);",
+                    "await Page.GotoAsync(TestSettings.LoginRoute);",
                     "await Page.GotoAsync(\"/catalogs\");",
                 },
             }
@@ -670,7 +670,7 @@ public class SnapshotTests
 
         // Setup
         Assert.Contains("[SetUp]", output);
-        Assert.Contains("await Page.GotoAsync(DefaultEnvParams.TestLogin);", output);
+        Assert.Contains("await Page.GotoAsync(TestSettings.LoginRoute);", output);
         Assert.Contains("await Page.GotoAsync(\"/catalogs\");", output);
         Assert.Contains("// Original Selenium setup (mapped):", output);
 

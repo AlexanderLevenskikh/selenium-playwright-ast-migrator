@@ -115,7 +115,7 @@ dotnet restore
 dotnet test
 ```
 
-188 тестов: snapshot, парсер, compile-smoke, orchestrator integration и др.
+205 тестов: snapshot, парсер, compile-smoke, orchestrator integration и др.
 
 ## Публикация
 

@@ -1,6 +1,6 @@
 # Registry Source Truth Notes
 
-All selectors verified against PageObject source files in `ArBilling.E2ETests`.
+All selectors verified against PageObject source files in `Example.E2ETests`.
 
 ## UiTargets
 
@@ -70,7 +70,7 @@ Generated statement is simplified — only checks `table-loader` hidden. The ret
 
 | Element | Status | Notes |
 |---|---|---|
-| `Navigation.OpenRegistryAgentPage()` | Approximate | Uses `DefaultEnvParams.TestLogin` + route; actual runtime URL needed |
+| `Navigation.OpenRegistryAgentPage()` | Approximate | Uses `TestSettings.LoginRoute` + route; actual runtime URL needed |
 | `page.Sc.ExcludeValue` — `exclude` button | Verified | XPath by text `Исключить из результатов`, no `data-test-*` |
 | `page.Sc.SortSc` — sort option | Verified | XPath by text, no `data-test-*` |
 | `page.SalesAmount.Sort` — sort option | Verified | XPath by text, no `data-test-*` |

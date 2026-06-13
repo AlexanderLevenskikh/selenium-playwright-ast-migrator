@@ -309,7 +309,7 @@ public static class VerifyRunner
 
         var leakPatterns = new[]
         {
-            (@"DefaultEnvParams\.TestLogin", "corporate environment reference (DefaultEnvParams.TestLogin)"),
+            (@"DefaultEnvParams\.TestLogin", "internal environment reference (DefaultEnvParams.TestLogin)"),
             (@"[A-Z]:\\.*\\Users\\", "Windows local path"),
             (@"password", "potential password/token"),
             (@"secret", "potential secret"),
@@ -679,6 +679,7 @@ public static class VerifyRunner
         var failOnMultipleScopes = gateDefaults.FailOnMultipleMatchingScopes ?? true;
         var failOnPlaceholderLeftovers = gateDefaults.FailOnPlaceholderLeftovers ?? true;
         var failOnSuspiciousLiteralVariables = gateDefaults.FailOnSuspiciousLiteralVariables ?? true;
+        var failOnLocalProfileLeaks = gateDefaults.FailOnLocalProfileLeaks ?? true;
 
         int exitCode = 0;
 
@@ -747,6 +748,18 @@ public static class VerifyRunner
         {
             Console.Error.WriteLine($"Quality gate: {report.SuspiciousLiteralVariables} suspicious literal variable(s) found.");
             exitCode = Math.Max(exitCode, 1);
+        }
+
+        // Config leaks → exit 2
+        if (failOnLocalProfileLeaks)
+        {
+            var leakIssues = issues.Where(i => i.Category == "Config" && i.Message.StartsWith("Potential config leak")).ToList();
+            if (leakIssues.Count > 0)
+            {
+                foreach (var li in leakIssues)
+                    Console.Error.WriteLine($"Quality gate: {li.Message}");
+                exitCode = Math.Max(exitCode, 2);
+            }
         }
 
         return exitCode;

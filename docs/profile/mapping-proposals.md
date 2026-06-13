@@ -91,7 +91,7 @@ All new UiTarget proposals use `<SOURCE_TRUTH_REQUIRED>` placeholders, not real 
 
 ## Example Output
 
-After running on the ArBilling batch:
+After running on the Example.E2ETests batch:
 
 ```
 === Proposal Summary ===

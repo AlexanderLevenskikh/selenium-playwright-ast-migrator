@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-13
 **Scope:** 14 Selenium C# test files → Playwright .NET
-**Source:** `C:\Users\levenskikh\Desktop\Kontur\selenium_tests\ArBilling.E2ETests\Tests`
+**Source:** `<repo-root>/selenium_tests/Example.E2ETests/Tests`
 **Profile:** `examples\profiles\batch-migration\adapter-config.json`
 
 ---
@@ -212,7 +212,7 @@ mapping. Current adapter maps `TargetExpression` for click/sendkeys, but table a
 
 ## Appendix A: Compile Smoke Host
 
-The compile smoke uses a temporary project at `C:\Users\LEVENS~1\AppData\Local\Temp\opencode\CompileSmoke\`
+The compile smoke uses a temporary project at `<temp-dir>/CompileSmoke/`
 with `Microsoft.Playwright.NUnit` 1.55.0 and `NUnit` 4.4.0. A minimal `TestBase` mock
 provides `Page` property for files that extend `TestBase`.
 

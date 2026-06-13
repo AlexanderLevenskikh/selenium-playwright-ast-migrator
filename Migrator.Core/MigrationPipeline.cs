@@ -42,8 +42,13 @@ public class MigrationPipeline
     {
         var models = _parser.ParseDirectory(directoryPath);
         var results = new List<PipelineResult>();
-        foreach (var model in models)
-            results.Add(ProcessFile(model.FilePath));
+        foreach (var sourceModel in models)
+        {
+            var targetModel = _adapter != null ? _adapter.Adapt(sourceModel) : sourceModel;
+            var generated = _renderer.Render(targetModel);
+            var report = ReportBuilder.Build(targetModel, generated);
+            results.Add(new PipelineResult(sourceModel, targetModel, generated, report));
+        }
         return results;
     }
 }

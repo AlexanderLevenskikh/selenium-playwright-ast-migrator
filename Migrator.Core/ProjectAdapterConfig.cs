@@ -282,7 +282,7 @@ public sealed class TestHostConfig
     /// <summary>
     /// C# statements to render inside a [SetUp] method. When provided, replaces
     /// the original parsed setup actions (which are preserved as commented TODOs).
-    /// Example: ["await Page.GotoAsync(DefaultEnvParams.TestLogin);", "await Page.GotoAsync(\"/catalogs?activeTab=principals\");"]
+    /// Example: ["await Page.GotoAsync(\"<test-login>\");", "await Page.GotoAsync(\"/catalogs\");"]
     /// </summary>
     public string[]? SetUpStatements { get; init; }
 

@@ -1,5 +1,5 @@
 using System.Linq;
-using ArBilling.E2ETests.PageObjects;
+using Example.E2ETests.PageObjects;
 using FluentAssertions;
 using NUnit.Framework;
 

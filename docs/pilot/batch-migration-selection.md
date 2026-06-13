@@ -49,7 +49,7 @@
 
 All files under:
 ```
-C:\Users\levenskikh\Desktop\Kontur\selenium_tests\ArBilling.E2ETests\Tests\
+<repo-root>/selenium_tests/Example.E2ETests/Tests\
 ```
 
 ## Expected page routes

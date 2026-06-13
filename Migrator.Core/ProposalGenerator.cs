@@ -327,7 +327,7 @@ public sealed class ProposalGenerator
     {
         var proposals = new List<MappingProposal>();
 
-        if (input.VerifyReport == null)
+        if (input.VerifyReport == null || input.VerifyReport.Files == null)
             return proposals;
 
         // Detect scope-related issues from verify report

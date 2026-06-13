@@ -254,10 +254,10 @@ public void SearchPrincipals()
     "Namespace": "Example.PlaywrightTests",
     "BaseClass": "TestBase",
     "ClassName": null,
-    "ClassAttributes": ["[Category(\"Regression\")]"],
+    "ClassAttributes": ["Category(\"Regression\")"],
     "Usings": [
-      "using NUnit.Framework;",
-      "using Microsoft.Playwright.NUnit;"
+      "NUnit.Framework",
+      "Microsoft.Playwright.NUnit"
     ],
     "SetUpStatements": [
       "await Page.GotoAsync(\"<test-login>\");"

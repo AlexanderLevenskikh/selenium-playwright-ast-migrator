@@ -25,7 +25,7 @@ usings, namespace, and setup.
       "Example.E2ETests.Infrastructure"
     ],
     "SetUpStatements": [
-      "await Page.GotoAsync(DefaultEnvParams.TestLogin);",
+      "await Page.GotoAsync(\"<test-login>\");",
       "await Page.GotoAsync(\"/catalogs?activeTab=principals\");"
     ]
   }
@@ -45,7 +45,7 @@ usings, namespace, and setup.
 
 ## Why TestHost belongs in the profile, not Core/Roslyn/Renderer
 
-- `TestHost` carries **project-specific** values: `TestBase`, `DefaultEnvParams`, `arbilling-e2e-tests` namespace.
+- `TestHost` carries **project-specific** values: `TestBase`, `TestSettings.LoginRoute`, `Example.E2ETests` namespace.
 - Hardcoding these in the renderer would make Migrator non-generic and tied to one project.
 - By keeping `TestHost` in the adapter config, Migrator stays project-agnostic. Each target project
   maintains its own profile with the correct host settings.
@@ -72,7 +72,7 @@ Location: `profiles/<profile-name>/adapter-config.local.json`
 Contains real project values:
 ```json
 "SetUpStatements": [
-  "await Page.GotoAsync(DefaultEnvParams.TestLogin);",
+  "await Page.GotoAsync(TestSettings.LoginRoute);",
   "await Page.GotoAsync(\"/catalogs?activeTab=principals\");"
 ]
 ```
@@ -86,10 +86,9 @@ With `TestHost` configured, a generated file looks like:
 
 ```csharp
 using NUnit.Framework;
-using ArBilling.Infrastructure.Common;
-using ArBilling.Infrastructure.Constants;
+using Example.E2ETests.Infrastructure;
 
-namespace Tests.Tests;
+namespace Example.E2ETests.Tests;
 
 [TestFixture]
 [Parallelizable(ParallelScope.Self)]
@@ -98,7 +97,7 @@ public class CatalogPrincipalsFilterPlaywrightTests : TestBase
     [SetUp]
     public async Task SetUp()
     {
-        await Page.GotoAsync(DefaultEnvParams.TestLogin);
+        await Page.GotoAsync(TestSettings.LoginRoute);
         await Page.GotoAsync("/catalogs?activeTab=principals");
 
         // Original Selenium setup (mapped):

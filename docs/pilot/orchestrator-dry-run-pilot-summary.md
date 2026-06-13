@@ -113,6 +113,6 @@ Top Proposals:
 
 ## Next Steps
 
-- [ ] Run orchestrator on real batch (`arbilling-e2e-tests`) and capture pilot results
+- [ ] Run orchestrator on real batch (`example-e2e-tests`) and capture pilot results
 - [ ] Add orchestrator to CI pipeline as non-blocking validation
 - [ ] Consider incremental mode — skip stages whose input hasn't changed

@@ -28,7 +28,7 @@
 
 ## Playwright Reference (existing project)
 
-The ArBilling Playwright project already uses these patterns in hand-written tests:
+The Example.E2ETests Playwright project already uses these patterns in hand-written tests:
 
 ```csharp
 // Row access

@@ -23,13 +23,13 @@ The local profile includes `TestHost` config for runtime integration:
 - `Namespace`: `Tests.Tests`
 - `BaseClass`: `TestBase`
 - `ClassName`: `CatalogPrincipalsFilterPlaywrightTests`
-- `ClassAttributes`: `[TestFixture]`, `[Parallelizable(ParallelScope.Self)]`
-- `Usings`: `NUnit.Framework`, `ArBilling.Infrastructure.Common`, `ArBilling.Infrastructure.Constants`
+- `ClassAttributes`: `TestFixture`, `Parallelizable(ParallelScope.Self)`
+- `Usings`: `NUnit.Framework`, `Example.E2ETests.Infrastructure`
 - `SetUpStatements`: Login + navigate to `/catalogs?activeTab=principals`
 
 ## Runtime Results
 
-All 6 tests pass in `arbilling-e2e-tests`:
+All 6 tests pass in `example-e2e-tests`:
 - CheckActivityToPrincipals: PASS
 - CheckFilterInnToPrincipals: PASS
 - CheckFilterKppToPrincipals: PASS
