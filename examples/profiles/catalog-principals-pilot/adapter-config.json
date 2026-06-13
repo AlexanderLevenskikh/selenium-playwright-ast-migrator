@@ -1,0 +1,166 @@
+{
+  "SourceProjectName": "Example.E2ETests",
+  "LocatorSettings": {
+    "DefaultTestIdAttribute": "data-test-id",
+    "KnownTestIdAttributes": [
+      "data-testid",
+      "data-test-id",
+      "data-tid",
+      "data-test"
+    ]
+  },
+  "UiTargets": [
+    {
+      "SourceExpression": "page.Inn",
+      "TargetExpression": "t_principals_inn",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.Kpp",
+      "TargetExpression": "t_principals_kpp",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.Name",
+      "TargetExpression": "Page.Locator(\"[data-test-id='t_principals_principal']\").First",
+      "TargetKind": "RawExpression"
+    },
+    {
+      "SourceExpression": "page.NameSort",
+      "TargetExpression": "Page.Locator(\"[data-test-id='t_principals_principal']\").First",
+      "TargetKind": "RawExpression"
+    },
+    {
+      "SourceExpression": "page.Table.Items",
+      "TargetExpression": "Page.Locator(\"[data-test='t_table_row_item']\")",
+      "TargetKind": "RawExpression"
+    },
+    {
+      "SourceExpression": "page.Active",
+      "TargetExpression": "Toggle__root",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-tid"
+    },
+    {
+      "SourceExpression": "page.Count",
+      "TargetExpression": "CurrencyLabel__root",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-tid"
+    },
+    {
+      "SourceExpression": "page.TableLoader",
+      "TargetExpression": "table-loader",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-test"
+    }
+  ],
+  "PageObjects": [],
+  "Methods": [
+    {
+      "SourceMethod": "Navigation.OpenCatalogPrincipalPage()",
+      "TargetMethod": null,
+      "Description": "Navigate to catalog principals page — verified source: Urls.BaseUrlCatalogPrincipal = Host + '/catalogs?activeTab=principals'",
+      "TargetStatements": [
+        "// TODO: replace with actual runtime URL from config"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "pagef.Loader.ValidateLoading()",
+      "TargetMethod": null,
+      "Description": "Wait for page loader — verified source: data-test='table-loader'. Simplified from retry/reload loop.",
+      "TargetStatements": [
+        "var loader = Page.Locator(\"[data-test='table-loader']\");",
+        "if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Loader.ValidateLoading()",
+      "TargetMethod": null,
+      "Description": "Wait for table loader after action — verified source: data-test='table-loader'. Simplified from retry/reload loop.",
+      "TargetStatements": [
+        "var loader = Page.Locator(\"[data-test='table-loader']\");",
+        "if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Loader.ValidateLoadingPartner()",
+      "TargetMethod": null,
+      "Description": "Wait for partner loader — same as ValidateLoading but also checks partner-page-loader. Simplified to table-loader wait.",
+      "TargetStatements": [
+        "var loader = Page.Locator(\"[data-test='table-loader']\");",
+        "if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Inn.InputInputAndAccept(\"6673240328\")",
+      "TargetMethod": null,
+      "Description": "TextArea.InputInputAndAccept: click container, wait apply-button, fill input, click apply. Source: TextArea.cs line 33-38. InputBox uses [data-test='headbox-search']//input.",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test-id='t_principals_inn']\").ClickAsync();",
+        "await Page.Locator(\"[data-test='apply-button']\").WaitForAsync();",
+        "await Page.Locator(\"[data-test='headbox-search'] input\").FillAsync(\"6673240328\");",
+        "await Page.Locator(\"[data-test='apply-button']\").ClickAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Kpp.InputInputAndAccept(\"668601001\")",
+      "TargetMethod": null,
+      "Description": "Same pattern as Inn.InputInputAndAccept — click container, wait apply-button, fill input, click apply.",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test-id='t_principals_kpp']\").ClickAsync();",
+        "await Page.Locator(\"[data-test='apply-button']\").WaitForAsync();",
+        "await Page.Locator(\"[data-test='headbox-search'] input\").FillAsync(\"668601001\");",
+        "await Page.Locator(\"[data-test='apply-button']\").ClickAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Name.SelectValue(\"Контур\")",
+      "TargetMethod": null,
+      "Description": "Combobox.SelectValue: click, wait apply, find menu item by substring text, click, apply. Source: Combobox.cs line 31-36.",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test-id='t_principals_principal']\").ClickAsync();",
+        "await Page.Locator(\"[data-test='apply-button']\").WaitForAsync();",
+        "await Page.Locator(\"[data-test='menu-item']\").Filter(new() { HasText = \"Контур\" }).First.ClickAsync();",
+        "await Page.Locator(\"[data-test='apply-button']\").ClickAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.NameSort.Sort(\"По возрастанию\")",
+      "TargetMethod": null,
+      "Description": "SortBox.Sort: click header, wait sort option by text, click. Source: SortBox.cs line 23-28.",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test-id='t_principals_principal']\").ClickAsync();",
+        "await Page.Locator(\"span:has-text('По возрастанию')\").WaitForAsync();",
+        "await Page.Locator(\"span:has-text('По возрастанию')\").ClickAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.NameSort.Sort(\"По убыванию\")",
+      "TargetMethod": null,
+      "Description": "SortBox.Sort: click header, wait sort option by text, click.",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-test-id='t_principals_principal']\").ClickAsync();",
+        "await Page.Locator(\"span:has-text('По убыванию')\").WaitForAsync();",
+        "await Page.Locator(\"span:has-text('По убыванию')\").ClickAsync();"
+      ],
+      "RequiresReview": true
+    },
+    {
+      "SourceMethod": "page.Active.Click()",
+      "TargetMethod": null,
+      "Description": "Toggle click — verified source: data-tid='Toggle__root'",
+      "TargetStatements": [
+        "await Page.Locator(\"[data-tid='Toggle__root']\").ClickAsync();"
+      ],
+      "RequiresReview": false
+    }
+  ]
+}
