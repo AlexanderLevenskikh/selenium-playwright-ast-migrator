@@ -182,4 +182,110 @@ public class ScaffoldTests : IDisposable
             Assert.DoesNotContain("intra", content);
         }
     }
+
+    // --- Fix 1: ExampleSmokeTest compile readiness ---
+
+    [Fact]
+    public void Write_ExampleSmokeTest_HasPlaywrightUsing()
+    {
+        new ScaffoldWriter(new ScaffoldOptions { OutPath = _tmp }).Write();
+
+        var content = File.ReadAllText(Path.Combine(_tmp, "ExampleSmokeTest.cs"));
+
+        Assert.Contains("using Microsoft.Playwright;", content);
+        Assert.Contains("using NUnit.Framework;", content);
+    }
+
+    // --- Fix 2: Correct TestHost format ---
+
+    [Fact]
+    public void Write_DraftTestHost_UsesRendererCompatibleAttributes()
+    {
+        new ScaffoldWriter(new ScaffoldOptions { OutPath = _tmp }).Write();
+
+        var content = File.ReadAllText(Path.Combine(_tmp, "adapter-config.draft.json"));
+
+        var doc = System.Text.Json.JsonDocument.Parse(content);
+        var attrs = doc.RootElement.GetProperty("TestHost").GetProperty("ClassAttributes");
+        foreach (var attr in attrs.EnumerateArray())
+        {
+            var val = attr.GetString()!;
+            Assert.DoesNotContain("[", val);
+            Assert.DoesNotContain("]", val);
+        }
+    }
+
+    [Fact]
+    public void Write_DraftTestHost_UsesRendererCompatibleUsings()
+    {
+        new ScaffoldWriter(new ScaffoldOptions { OutPath = _tmp }).Write();
+
+        var content = File.ReadAllText(Path.Combine(_tmp, "adapter-config.draft.json"));
+
+        var doc = System.Text.Json.JsonDocument.Parse(content);
+        var usings = doc.RootElement.GetProperty("TestHost").GetProperty("Usings");
+        foreach (var u in usings.EnumerateArray())
+        {
+            var val = u.GetString()!;
+            Assert.DoesNotContain("using ", val);
+            Assert.DoesNotContain(";", val);
+        }
+    }
+
+    // --- Fix 3: Failed scaffold must not mutate non-empty out dir ---
+
+    [Fact]
+    public void Write_FailedNonEmptyOut_DoesNotWriteReports()
+    {
+        Directory.CreateDirectory(_tmp);
+        File.WriteAllText(Path.Combine(_tmp, "existing.txt"), "");
+
+        var existingFiles = Directory.GetFiles(_tmp).Select(Path.GetFileName).ToHashSet();
+
+        var result = new ScaffoldWriter(new ScaffoldOptions { OutPath = _tmp }).Write();
+
+        Assert.Equal("failed", result.Status);
+
+        var afterFiles = Directory.GetFiles(_tmp).Select(Path.GetFileName).ToHashSet();
+        Assert.Equal(existingFiles, afterFiles);
+        Assert.DoesNotContain("scaffold-report.json", afterFiles);
+        Assert.DoesNotContain("scaffold-report.md", afterFiles);
+    }
+
+    // --- Fix 4: Docs mention scaffold ---
+
+    [Fact]
+    public void DocsMentionScaffoldMode()
+    {
+        var repoRoot = GetRepoRoot();
+
+        var readme = File.ReadAllText(Path.Combine(repoRoot, "README.md"));
+        Assert.Contains("scaffold", readme);
+
+        var readmeRu = File.ReadAllText(Path.Combine(repoRoot, "README.ru.md"));
+        Assert.Contains("scaffold", readmeRu);
+
+        var quickStart = File.ReadAllText(Path.Combine(repoRoot, "docs/user-guide/quick-start.md"));
+        Assert.Contains("scaffold", quickStart);
+
+        var quickStartRu = File.ReadAllText(Path.Combine(repoRoot, "docs/user-guide/quick-start.ru.md"));
+        Assert.Contains("scaffold", quickStartRu);
+
+        var workflow = File.ReadAllText(Path.Combine(repoRoot, "docs/user-guide/migration-workflow.md"));
+        Assert.Contains("scaffold", workflow);
+
+        var workflowRu = File.ReadAllText(Path.Combine(repoRoot, "docs/user-guide/migration-workflow.ru.md"));
+        Assert.Contains("scaffold", workflowRu);
+
+        Assert.True(File.Exists(Path.Combine(repoRoot, "docs/user-guide/no-infra-scaffold.md")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "docs/user-guide/no-infra-scaffold.ru.md")));
+    }
+
+    static string GetRepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory.ToString());
+        while (dir != null && !dir.GetFiles("Migrator.sln").Any())
+            dir = dir.Parent;
+        return dir!.FullName;
+    }
 }

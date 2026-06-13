@@ -123,8 +123,20 @@ dotnet run --project Migrator.Cli -- --mode orchestrate --input "./my-selenium-t
 - `orchestration/orchestration-report.md` — человекочитаемое резюме
 - `orchestration/analyze/`, `generated/`, `verify/`, `propose/` — артефакты этапов
 
+## Нет существующей Playwright-инфраструктуры?
+
+Если у вашей команды ещё нет Playwright .NET проекта, начните с режима `scaffold`:
+
+```bash
+dotnet run --project Migrator.Cli -- --mode scaffold --out "./new-playwright-tests"
+```
+
+Создаёт минимальный, готовый к компиляции Playwright .NET проект с draft adapter config.
+Подробнее: [Scaffold без инфраструктуры](no-infra-scaffold.ru.md).
+
 ## Следующие шаги
 
 - [Процесс миграции](migration-workflow.md) — полный гайд
 - [Кукбук профиля](project-profile-cookbook.md) — детальный справочник по конфигам
 - [Типовые рецепты](common-recipes.md) — практические решения частых паттернов
+- [Scaffold без инфраструктуры](no-infra-scaffold.ru.md) — генерация Playwright проекта с нуля

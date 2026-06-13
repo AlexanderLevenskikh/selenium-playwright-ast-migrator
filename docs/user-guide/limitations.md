@@ -26,6 +26,17 @@ The tool generates code. It cannot:
 
 Runtime verification is the responsibility of the development team.
 
+## Scaffold output is compile-only, not runtime-ready
+
+`scaffold` mode generates a minimal Playwright .NET project structure with stub authentication and placeholder routes. This scaffold:
+
+- **Compiles cleanly** — the generated code is compile-ready
+- **Does NOT guarantee runtime pass** — no environment, auth, or test data is configured
+- **Uses placeholder routes** — `<test-login>` and `<ROUTE_SOURCE_TRUTH_REQUIRED>` must be replaced
+- **Requires manual configuration** — you must implement `LoginAsync`, set `E2E_BASE_URL`, and fill in `adapter-config.draft.json`
+
+The scaffold is a starting point for teams without existing Playwright infrastructure. Runtime verification is the responsibility of the development team.
+
 ## Discovery output requires review
 
 `discover-target` mode scans an existing Playwright project and produces a draft config. This draft contains:

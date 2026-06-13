@@ -172,7 +172,8 @@ public static class TestSettings
     void WriteSmokeTest(string dir, string ns, List<string> created)
     {
         var path = Path.Combine(dir, "ExampleSmokeTest.cs");
-        var content = $@"using NUnit.Framework;
+        var content = $@"using Microsoft.Playwright;
+using NUnit.Framework;
 
 namespace {ns};
 
@@ -218,8 +219,8 @@ public class ExampleSmokeTest : GeneratedTestBase
             {
                 Namespace = ns,
                 BaseClass = "GeneratedTestBase",
-                ClassAttributes = new[] { "[TestFixture]", "[Parallelizable(ParallelScope.Self)]" },
-                Usings = new[] { "using NUnit.Framework;", "using Microsoft.Playwright;" },
+                ClassAttributes = new[] { "TestFixture", "Parallelizable(ParallelScope.Self)" },
+                Usings = new[] { "NUnit.Framework", "Microsoft.Playwright" },
                 SetUpStatements = new[]
                 {
                     "await LoginAsync();",

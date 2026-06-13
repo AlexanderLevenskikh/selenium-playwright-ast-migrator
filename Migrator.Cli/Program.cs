@@ -66,8 +66,14 @@ if (mode == "discover-target")
 if (mode == "scaffold")
 {
     var scaffoldResult = new ScaffoldWriter(new ScaffoldOptions { OutPath = outPath, Format = format }).Write();
+    if (scaffoldResult.Status == "failed")
+    {
+        foreach (var w in scaffoldResult.Warnings)
+            Console.Error.WriteLine($"Scaffold failed: {w}");
+        return 1;
+    }
     WriteScaffoldReport(scaffoldResult, outPath, format);
-    return scaffoldResult.Status == "completed" ? 0 : 1;
+    return 0;
 }
 
 // Handle orchestrate mode — runs analyze → migrate → verify → propose pipeline

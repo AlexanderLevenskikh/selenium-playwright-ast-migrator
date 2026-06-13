@@ -44,6 +44,7 @@
 | `verify` | Проверка качества сгенерированного кода с quality gates |
 | `propose` | Генерация ранжированных предложений по улучшению профиля |
 | `discover-target` | Сканирование целевого Playwright проекта |
+| `scaffold` | Генерация минимального Playwright .NET проекта для команд без существующей инфраструктуры |
 | `orchestrate` | Полный пайплайн: analyze → migrate → verify → propose (dry-run) |
 
 ## Быстрый пример команды
@@ -71,6 +72,7 @@ dotnet run --project Migrator.Cli -- --mode orchestrate --input ./SeleniumTests 
 - [**Кукбук профиля**](docs/user-guide/project-profile-cookbook.md) — настройка UiTargets, Methods, Scopes и т.д.
 - [**Типовые рецепты**](docs/user-guide/common-recipes.md) — практические решения частых паттернов
 - [**Отчёты и Quality Gates**](docs/user-guide/reports-and-quality-gates.md) — чтение отчётов и настройка gate
+- [**Scaffold без инфраструктуры**](docs/user-guide/no-infra-scaffold.ru.md) — генерация Playwright проекта с нуля
 - [**Ограничения**](docs/user-guide/limitations.md) — честные границы возможностей инструмента
 - [**Agent Playbooks**](docs/agent-playbooks/README.md) — процедурные гайды для AI-агентов
 
