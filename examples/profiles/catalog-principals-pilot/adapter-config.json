@@ -9,6 +9,22 @@
       "data-test"
     ]
   },
+  "TestHost": {
+    "Namespace": "Example.E2ETests.Tests",
+    "BaseClass": "TestBase",
+    "ClassAttributes": [
+      "TestFixture",
+      "Parallelizable(ParallelScope.Self)"
+    ],
+    "Usings": [
+      "NUnit.Framework",
+      "Example.E2ETests.Infrastructure"
+    ],
+    "SetUpStatements": [
+      "await Page.GotoAsync(\"<test-login>\");",
+      "await Page.GotoAsync(\"/catalogs?activeTab=principals\");"
+    ]
+  },
   "UiTargets": [
     {
       "SourceExpression": "page.Inn",
@@ -22,18 +38,21 @@
     },
     {
       "SourceExpression": "page.Name",
-      "TargetExpression": "Page.Locator(\"[data-test-id='t_principals_principal']\").First",
-      "TargetKind": "RawExpression"
+      "TargetExpression": "t_principals_principal",
+      "TargetKind": "TestId",
+      "Match": "First"
     },
     {
       "SourceExpression": "page.NameSort",
-      "TargetExpression": "Page.Locator(\"[data-test-id='t_principals_principal']\").First",
-      "TargetKind": "RawExpression"
+      "TargetExpression": "t_principals_principal",
+      "TargetKind": "TestId",
+      "Match": "First"
     },
     {
       "SourceExpression": "page.Table.Items",
-      "TargetExpression": "Page.Locator(\"[data-test='t_table_row_item']\")",
-      "TargetKind": "RawExpression"
+      "TargetExpression": "t_table_row_item",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-test"
     },
     {
       "SourceExpression": "page.Active",
