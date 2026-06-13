@@ -85,20 +85,19 @@ public class PlaywrightDotNetRenderer : IRenderer
         // Setup method
         if (hasTestHostSetup)
         {
-            _methodScopeVars.Clear();
+            ResetMethodScope();
             RenderHostSetUp(sb, testHost!.SetUpStatements!, model.SetUpActions);
             sb.AppendLine();
         }
         else if (model.SetUpActions.Any())
         {
-            _methodScopeVars.Clear();
+            ResetMethodScope();
             RenderSetUp(sb, model.SetUpActions);
             sb.AppendLine();
         }
 
         foreach (var test in model.Tests)
         {
-            _methodScopeVars.Clear();
             RenderTest(sb, test);
             sb.AppendLine();
         }

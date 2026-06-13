@@ -43,8 +43,8 @@ public class WidgetPlaywright : PageTest
 		// [ValidateLoading] page.Loader.ValidateLoading() // line 39
 		// TODO: manual review needed
 		await Expect(Page.GetByTestId("futer-user")).ToBeVisibleAsync(); // line 40
-		var textResult_1 = await Page.GetByTestId("futer-user").InnerTextAsync(); // line 41
-		Assert.That(textResult_1, Is.Not.Empty);
+		var textResult_0 = await Page.GetByTestId("futer-user").InnerTextAsync(); // line 41
+		Assert.That(textResult_0, Is.Not.Empty);
 	}
 
 	[Test]
@@ -55,8 +55,8 @@ public class WidgetPlaywright : PageTest
 		// [ValidateLoading] page.Loader.ValidateLoading() // line 49
 		// TODO: manual review needed
 		await Page.GetByTestId("futer-user").WaitForAsync(); // line 50
-		var textResult_2 = await Page.GetByTestId("futer-user").InnerTextAsync(); // line 51
-		Assert.That(textResult_2, Is.Not.Empty);
+		var textResult_0 = await Page.GetByTestId("futer-user").InnerTextAsync(); // line 51
+		Assert.That(textResult_0, Is.Not.Empty);
 	}
 
 }

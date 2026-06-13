@@ -868,6 +868,11 @@ public class ParserTests
 
     static TestFileModel CreateModel(TestAction action)
     {
+        return CreateModel(new[] { action });
+    }
+
+    static TestFileModel CreateModel(TestAction[] actions)
+    {
         return new TestFileModel(
             FilePath: "t.cs",
             Namespace: "Test",
@@ -876,8 +881,22 @@ public class ParserTests
             SetUpActions: Array.Empty<TestAction>(),
             Tests: new[]
             {
-                new TestModel("T1", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(),
-                    new[] { action })
+                new TestModel("T1", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(), actions)
+            });
+    }
+
+    static TestFileModel CreateModelTwoTests(TestAction[] actions1, TestAction[] actions2)
+    {
+        return new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "TC",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(), actions1),
+                new TestModel("T2", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(), actions2)
             });
     }
 
@@ -1370,6 +1389,84 @@ public class ParserTests
         Assert.Contains("var loader_0", output);
         Assert.Contains("await loader_0.CountAsync()", output);
 
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    // --- Variable name tracking tests ---
+
+    [Fact]
+    public void Renderer_SourceVarMap_ResetBetweenTests()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var target0 = TargetExpression.Mapped("page.Table.Items.ElementAt(0)", "t_table_row_item", TargetKind.PlaywrightLocator, null, "Nth", 0);
+        var target1 = TargetExpression.Mapped("page.Table.Items.ElementAt(1)", "t_table_row_item", TargetKind.PlaywrightLocator, null, "Nth", 1);
+        var target2 = TargetExpression.Mapped("page.Table.Items.ElementAt(2)", "t_table_row_item", TargetKind.PlaywrightLocator, null, "Nth", 2);
+
+        var textAccess1 = new TableRowTextAccessAction(1, target0, "0", "var code = page.Table.Items.ElementAt(0).Text.Get()");
+        var assertion1 = new TextAssertionAction(2, target1, TextAssertionKind.TextEquals, "code");
+        var actions1 = new TestAction[] { textAccess1, assertion1 };
+
+        var textAccess2 = new TableRowTextAccessAction(3, target2, "2", "var code = page.Table.Items.ElementAt(2).Text.Get()");
+        var actions2 = new TestAction[] { textAccess2 };
+
+        var model = CreateModelTwoTests(actions1, actions2);
+        var output = renderer.Render(model);
+
+        var t1Start = output.IndexOf("public async Task T1(");
+        var t2Start = output.IndexOf("public async Task T2(");
+        var t1Block = output.Substring(t1Start, t2Start - t1Start);
+        var t2Block = output.Substring(t2Start);
+
+        Assert.Contains("ToHaveTextAsync(rowText_0)", t1Block);
+        Assert.DoesNotContain("ToHaveTextAsync(rowText_0)", t2Block);
+        Assert.DoesNotContain("ToHaveTextAsync(code)", t1Block);
+        Assert.DoesNotContain("ToHaveTextAsync(code)", t2Block);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void Renderer_MultiVariable_TracksCodeAndNameInSameTest()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var target0 = TargetExpression.Mapped("page.Table.Items.ElementAt(0)", "t_table_row_item", TargetKind.PlaywrightLocator, null, "Nth", 0);
+        var target1 = TargetExpression.Mapped("page.Table.Items.ElementAt(1)", "t_table_row_item", TargetKind.PlaywrightLocator, null, "Nth", 1);
+
+        var codeDecl = new TableRowTextAccessAction(1, target0, "0", "var code = page.Table.Items.ElementAt(0).Text.Get()");
+        var nameDecl = new TableRowTextAccessAction(2, target1, "1", "var name = page.Table.Items.ElementAt(1).Text.Get()");
+        var assertCode = new TextAssertionAction(3, target0, TextAssertionKind.TextEquals, "code");
+        var assertName = new TextAssertionAction(4, target1, TextAssertionKind.TextEquals, "name");
+
+        var model = CreateModel(new TestAction[] { codeDecl, nameDecl, assertCode, assertName });
+        var output = renderer.Render(model);
+
+        Assert.Contains("var rowText_0", output);
+        Assert.Contains("var rowText_1", output);
+        Assert.Contains("ToHaveTextAsync(rowText_0)", output);
+        Assert.Contains("ToHaveTextAsync(rowText_1)", output);
+        Assert.DoesNotContain("ToHaveTextAsync(code)", output);
+        Assert.DoesNotContain("ToHaveTextAsync(name)", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void Renderer_TableRowTextAccess_NoNth_WhenNoIndex()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var target = TargetExpression.Mapped("page.Count", "CurrencyLabel__root", TargetKind.PlaywrightLocator, "data-tid", null, null);
+        var textAccess = new TableRowTextAccessAction(1, target, "", "var count = page.Count.Text.Get()");
+        var model = CreateModel(textAccess);
+        var output = renderer.Render(model);
+
+        Assert.DoesNotContain(".Nth(", output);
+        Assert.Contains("rowText_0", output);
+        Assert.Contains("Page.Locator(\"[data-tid='CurrencyLabel__root']\")", output);
+        Assert.Contains("TextContentAsync()", output);
         Assert.True(CompileChecker.CompilesWithoutErrors(output),
             CompileChecker.FormatErrors(output));
     }

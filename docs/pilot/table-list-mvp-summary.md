@@ -4,9 +4,11 @@
 
 All 15 migrated files from the Catalog batch now compile with **0 CS errors** (excluding external dependencies like `TestBase`).
 
+**Note on batch size**: The initial batch migration proof (v2) processed 14 files from a broader scope (including non-Catalog files like `ButtonTests`, `Widget`, `DeleteLightBox`). The Table/List MVP (v3) narrowed scope to `**/Catalog/**`, which contains 15 source test files. The `+1` file reflects this focused scope, not an accidental inclusion.
+
 ## Metrics
 
-| Metric | Before (v2) | After (v3 final) |
+| Metric | Before (v2, 14 files) | After (v3, 15 files) |
 |---|---|---|
 | Files generated | 14 | 15 |
 | Compile clean | 8/14 (57%) | 15/15 (100%) |
@@ -15,7 +17,7 @@ All 15 migrated files from the Catalog batch now compile with **0 CS errors** (e
 | Semantic actions | 256/407 | 258/407 |
 | SyntaxFallback actions | 151/407 | 149/407 |
 | TODO comments | ~250 | 239 |
-| Unit tests passed | 129/130 | 129/130 |
+| Unit tests passed | 129/130 | 132/133 |
 
 ## What Was Fixed
 
@@ -72,6 +74,15 @@ The Table/List MVP is complete. The 15-file Catalog batch migrates with:
 - **100% compile success** (0 CS errors from migration)
 - **0 unmapped targets**
 - **258/407 semantic actions** (63%)
-- **129/130 unit tests** passing (1 pre-existing failure)
+- **132/133 unit tests** passing (1 pre-existing failure: `Adapter_TestIdAttribute_SpecialCharsEscaped`)
+
+## New Tests (v3)
+
+Three unit tests added to `ParserTests.cs`:
+- **`Renderer_SourceVarMap_ResetBetweenTests`**: Verifies that `_sourceVarMap` is cleared between test methods, preventing cross-test variable substitution.
+- **`Renderer_MultiVariable_TracksCodeAndNameInSameTest`**: Verifies that multiple local declarations (`code`, `name`) in the same test are tracked and substituted correctly.
+- **`Renderer_TableRowTextAccess_NoNth_WhenNoIndex`**: Verifies that `.Nth()` is not appended when the target has no index expression (e.g., `page.Count.Text.Get()`).
+
+Additionally, `Widget.generated.cs` snapshot was updated to reflect `_tempVarCounter` reset per method scope.
 
 The migration produces syntactically valid, well-structured Playwright code that requires manual review only for complex method mappings and table-specific strategies.
