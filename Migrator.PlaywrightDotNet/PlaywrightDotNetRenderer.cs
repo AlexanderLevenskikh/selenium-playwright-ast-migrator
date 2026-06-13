@@ -12,6 +12,7 @@ public class PlaywrightDotNetRenderer : IRenderer
     readonly string _indent;
     int _tempVarCounter = 0;
     readonly HashSet<string> _methodScopeVars = new();
+    bool _useAssertionsExpect = false;
 
     public PlaywrightDotNetRenderer(string indent = "\t")
     {
@@ -30,22 +31,27 @@ public class PlaywrightDotNetRenderer : IRenderer
         var targetNamespace = testHost?.Namespace ?? model.Namespace;
         var className = testHost?.ClassName ?? (model.ClassName + "Playwright");
         var baseClass = testHost?.BaseClass ?? "PageTest";
+        _useAssertionsExpect = baseClass != "PageTest";
         var hasTestHostSetup = testHost?.SetUpStatements != null && testHost.SetUpStatements.Length > 0;
 
         // Usings
         if (!string.IsNullOrEmpty(targetNamespace))
         {
-            // Render configured host usings first
+            // Playwright renderer always needs these core usings
+            sb.AppendLine("using Microsoft.Playwright.NUnit;");
+            sb.AppendLine("using NUnit.Framework;");
+            sb.AppendLine("using System.Threading.Tasks;");
+            if (_useAssertionsExpect)
+                sb.AppendLine("using Microsoft.Playwright;");
+            // Additional host-specific usings from config
             if (testHost?.Usings != null && testHost.Usings.Length > 0)
             {
+                var coreUsings = new HashSet<string> { "Microsoft.Playwright.NUnit", "NUnit.Framework", "System.Threading.Tasks" };
                 foreach (var @using in testHost.Usings)
-                    sb.AppendLine($"using {@using};");
-            }
-            else
-            {
-                sb.AppendLine("using Microsoft.Playwright.NUnit;");
-                sb.AppendLine("using NUnit.Framework;");
-                sb.AppendLine("using System.Threading.Tasks;");
+                {
+                    if (!coreUsings.Contains(@using))
+                        sb.AppendLine($"using {@using};");
+                }
             }
             sb.AppendLine();
             // Backward compatibility: without TestHost, use .Playwright suffix
@@ -342,7 +348,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         switch (action.Kind)
         {
             case TextAssertionKind.TextEquals:
-                sb.AppendLine($"{_indent}{_indent}await Expect({locator}).ToHaveTextAsync({ConvertExpression(action.ExpectedValue!)}); // line {action.SourceLine}");
+                sb.AppendLine($"{_indent}{_indent}await {ExpectCall()}({locator}).ToHaveTextAsync({ConvertExpression(action.ExpectedValue!)}); // line {action.SourceLine}");
                 break;
             case TextAssertionKind.TextNotEquals:
                 var nv = NextTempVar("textResult");
@@ -360,7 +366,7 @@ public class PlaywrightDotNetRenderer : IRenderer
                 sb.AppendLine($"{_indent}{_indent}Assert.That({nv3}, Is.Empty);");
                 break;
             case TextAssertionKind.TextContains:
-                sb.AppendLine($"{_indent}{_indent}await Expect({locator}).ToContainTextAsync({ConvertExpression(action.ExpectedValue!)}); // line {action.SourceLine}");
+                sb.AppendLine($"{_indent}{_indent}await {ExpectCall()}({locator}).ToContainTextAsync({ConvertExpression(action.ExpectedValue!)}); // line {action.SourceLine}");
                 break;
         }
 
@@ -379,11 +385,11 @@ public class PlaywrightDotNetRenderer : IRenderer
 
         if (action.Kind == VisibilityKind.Visible)
         {
-            sb.AppendLine($"{_indent}{_indent}await Expect({locator}).ToBeVisibleAsync(); // line {action.SourceLine}");
+            sb.AppendLine($"{_indent}{_indent}await {ExpectCall()}({locator}).ToBeVisibleAsync(); // line {action.SourceLine}");
         }
         else
         {
-            sb.AppendLine($"{_indent}{_indent}await Expect({locator}).ToBeHiddenAsync(); // line {action.SourceLine}");
+            sb.AppendLine($"{_indent}{_indent}await {ExpectCall()}({locator}).ToBeHiddenAsync(); // line {action.SourceLine}");
         }
 
         if (target.Kind == TargetKind.Unresolved)
@@ -416,11 +422,11 @@ public class PlaywrightDotNetRenderer : IRenderer
             case UrlAssertionKind.UrlEquals:
                 if (isLiteral)
                 {
-                    sb.AppendLine($"{_indent}{_indent}await Expect(Page).ToHaveURLAsync({expected}); // line {action.SourceLine}");
+                    sb.AppendLine($"{_indent}{_indent}await {ExpectCall()}(Page).ToHaveURLAsync({expected}); // line {action.SourceLine}");
                 }
                 else
                 {
-                    sb.AppendLine($"{_indent}{_indent}// await Expect(Page).ToHaveURLAsync({expected}); // line {action.SourceLine}");
+                    sb.AppendLine($"{_indent}{_indent}// await {ExpectCall()}(Page).ToHaveURLAsync({expected}); // line {action.SourceLine}");
                     sb.AppendLine($"{_indent}{_indent}// TODO: URL assertion uses external variable — verify and uncomment");
                 }
                 break;
@@ -443,7 +449,12 @@ public class PlaywrightDotNetRenderer : IRenderer
         var processed = DeduplicateInvocationVariables(action.TargetStatements);
         for (var i = 0; i < processed.Length; i++)
         {
-            sb.AppendLine($"{_indent}{_indent}{processed[i]} // line {action.SourceLine}");
+            var stmt = processed[i];
+            if (_useAssertionsExpect && stmt.Contains("Expect("))
+            {
+                stmt = stmt.Replace("Expect(", "Assertions.Expect(");
+            }
+            sb.AppendLine($"{_indent}{_indent}{stmt} // line {action.SourceLine}");
         }
         if (action.RequiresReview)
         {
@@ -642,7 +653,7 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     string EscapeString(string value)
     {
-        return value.Replace("\\", "\\\\").Replace("'", "\\'").Replace("\"", "\\\"");
+        return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
     }
 
     string ConvertExpression(string expr)
@@ -662,4 +673,6 @@ public class PlaywrightDotNetRenderer : IRenderer
     {
         return text.Replace("\n", " ").Replace("//", "/_/");
     }
+
+    string ExpectCall() => _useAssertionsExpect ? "Assertions.Expect" : "Expect";
 }

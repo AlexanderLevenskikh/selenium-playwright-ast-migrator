@@ -469,24 +469,39 @@ public static class VerifyRunner
                 var placeholderToken = "{" + ph + "}";
                 var inInterpolated = false;
 
-                // Check if this is inside a valid interpolated string
-                if (line.Contains('$'))
+                // Check if this is inside a valid interpolated string $"<...>"
+                // Scan the line for $" and track whether the placeholder falls within the string bounds.
+                var pi = 0;
+                while (pi < line.Length && line.IndexOf(placeholderToken, pi, System.StringComparison.Ordinal) >= 0)
                 {
-                    // If the placeholder appears inside a $"" string, it's valid C# interpolation
-                    // We need to check if the placeholder is preceded by a $" somewhere on the line
-                    // or if the line contains the placeholder within quotes after a $
-                    var quoteIdx = line.LastIndexOf($"\"{placeholderToken}", -1, System.StringComparison.Ordinal);
-                    if (quoteIdx >= 0)
+                    var phIdx = line.IndexOf(placeholderToken, pi, System.StringComparison.Ordinal);
+
+                    // Find the nearest $" before this placeholder position
+                    var dollarQuoteIdx = -1;
+                    for (var si = phIdx - 1; si >= 0; si--)
                     {
-                        var beforeQuote = line.Substring(0, quoteIdx);
-                        // Look for $ before the opening quote
-                        var dollarIdx = beforeQuote.LastIndexOf('$');
-                        if (dollarIdx >= 0 && beforeQuote.Substring(dollarIdx + 1).TrimStart() == string.Empty ||
-                            beforeQuote.EndsWith("$\""))
+                        if (si + 1 < phIdx && line[si] == '$' && line[si + 1] == '"')
+                        {
+                            dollarQuoteIdx = si + 1; // points to the opening "
+                            break;
+                        }
+                        // If we hit another " that isn't preceded by $, this $" can't cover the placeholder
+                        if (line[si] == '"' && (si == 0 || line[si - 1] != '$'))
+                            break;
+                    }
+
+                    if (dollarQuoteIdx >= 0)
+                    {
+                        // Check if placeholder is before the closing " of this interpolated string
+                        var closingQuote = FindClosingQuote(line, dollarQuoteIdx);
+                        if (closingQuote > phIdx)
                         {
                             inInterpolated = true;
+                            break;
                         }
                     }
+
+                    pi = phIdx + placeholderToken.Length;
                 }
 
                 if (!inInterpolated && trimmed.Contains(placeholderToken))
@@ -498,6 +513,37 @@ public static class VerifyRunner
                 }
             }
         }
+    }
+
+    static int FindClosingQuote(string line, int openQuoteIdx)
+    {
+        var i = openQuoteIdx + 1;
+        while (i < line.Length)
+        {
+            if (line[i] == '\\')
+            {
+                i += 2;
+                continue;
+            }
+            if (line[i] == '"')
+            {
+                return i;
+            }
+            if (line[i] == '{')
+            {
+                var depth = 1;
+                i++;
+                while (i < line.Length && depth > 0)
+                {
+                    if (line[i] == '{') depth++;
+                    else if (line[i] == '}') depth--;
+                    i++;
+                }
+                continue;
+            }
+            i++;
+        }
+        return line.Length;
     }
 
     static void CheckSuspiciousLiteralVariables(string generatedCode, string sourceFile, ProjectAdapterConfig? config, List<VerifyIssue> issues)

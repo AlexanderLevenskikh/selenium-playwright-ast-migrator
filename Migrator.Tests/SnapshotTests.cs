@@ -548,7 +548,7 @@ public class SnapshotTests
 
         Assert.Contains("using NUnit.Framework;", output);
         Assert.Contains("using Example.E2ETests.Infrastructure;", output);
-        Assert.DoesNotContain("using Microsoft.Playwright.NUnit;", output);
+        Assert.Contains("using Microsoft.Playwright.NUnit;", output);
     }
 
     [Fact]
@@ -662,7 +662,7 @@ public class SnapshotTests
         Assert.Contains("[TestFixture]", output);
         Assert.Contains("[Parallelizable(ParallelScope.Self)]", output);
         Assert.Contains("public class FullHostPlaywrightTests : TestBase", output);
-        Assert.DoesNotContain(".Playwright", output);
+        Assert.DoesNotContain("namespace Example.E2ETests.Tests.Playwright;", output);
 
         // Usings
         Assert.Contains("using NUnit.Framework;", output);

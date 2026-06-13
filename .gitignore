@@ -87,6 +87,12 @@ GeneratedRegistryRuntime/
 # Generated report artifacts
 report.txt
 report.json
+verify-report.txt
+verify-report.json
+verify-*/
+analysis-batch-*/
+generated-batch/
+batch-input/
 unmapped-targets.csv
 unmapped-targets.json
 unsupported-actions.csv

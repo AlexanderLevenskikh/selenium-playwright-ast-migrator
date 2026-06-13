@@ -490,13 +490,19 @@ public class DefaultProjectAdapter : IProjectAdapter
 
         while (i < statement.Length)
         {
-            // Check if we're entering a string literal
+            // Check if we're entering a string literal (possibly interpolated)
             if (statement[i] == '"')
             {
+                var hasDollarPrefix = (i > 0 && statement[i - 1] == '$' && result.Length > 0 && result[result.Length - 1] == '$');
                 var (litText, endIdx) = ExtractStringLiteral(statement, i);
                 if (litText.Length > 0)
                 {
                     var substituted = SubstituteInStringLiteral(litText, placeholders);
+                    // If original had $ prefix and substitution also added $, avoid $$
+                    if (hasDollarPrefix && substituted.StartsWith("$\""))
+                    {
+                        result.Remove(result.Length - 1, 1); // remove the original $
+                    }
                     result.Append(substituted);
                     i = endIdx;
                 }
