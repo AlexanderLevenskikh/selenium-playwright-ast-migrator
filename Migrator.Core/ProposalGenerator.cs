@@ -81,6 +81,9 @@ public sealed class ProposalGenerator
         // Manual migration proposals for clearly unsupported patterns
         proposals.AddRange(GenerateManualMigrationProposals(input, ref proposalIndex));
 
+        // Normalize paths to relative
+        NormalizeFilePaths(proposals);
+
         // Phase 3: Sort by score descending
         return proposals.OrderByDescending(p => p.Score).ToList();
     }
@@ -608,6 +611,64 @@ public sealed class ProposalGenerator
     }
 
     // --- Helpers ---
+
+    void NormalizeFilePaths(List<MappingProposal> proposals)
+    {
+        var allFiles = proposals.SelectMany(p => p.AffectedFiles).ToList();
+        if (!allFiles.Any())
+            return;
+
+        // Find common root: try input directory first, then fall back to shared prefix
+        var root = FindCommonRoot(allFiles);
+        if (string.IsNullOrEmpty(root))
+            return;
+
+        foreach (var proposal in proposals)
+        {
+            proposal.AffectedFiles = proposal.AffectedFiles
+                .Select(f => ToRelative(f, root))
+                .ToList();
+        }
+    }
+
+    string? FindCommonRoot(IReadOnlyList<string> paths)
+    {
+        if (paths.Count == 0) return null;
+
+        var trimmed = paths.Where(p => !string.IsNullOrEmpty(p)).ToList();
+        if (trimmed.Count == 0) return null;
+
+        // Start with the first path's directory
+        var common = Path.GetDirectoryName(trimmed[0]) ?? trimmed[0];
+
+        foreach (var path in trimmed.Skip(1))
+        {
+            var dir = Path.GetDirectoryName(path) ?? path;
+            // Find common prefix
+            while (!dir.StartsWith(common, StringComparison.OrdinalIgnoreCase) && common.Length > 1)
+            {
+                common = Path.GetDirectoryName(common) ?? "";
+            }
+        }
+
+        // Ensure root ends with directory separator
+        if (!common.EndsWith(Path.DirectorySeparatorChar.ToString()) && !common.EndsWith(Path.AltDirectorySeparatorChar.ToString()))
+            common += Path.DirectorySeparatorChar;
+
+        return common;
+    }
+
+    string ToRelative(string path, string root)
+    {
+        if (path.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        {
+            var relative = path.Substring(root.Length);
+            // Normalize separators to forward slash for cross-platform readability
+            return relative.Replace('\\', '/');
+        }
+        // If path doesn't share root, just return filename
+        return Path.GetFileName(path);
+    }
 
     (string BaseSignature, string FullSignature) NormalizeMethodSignature(string text)
     {

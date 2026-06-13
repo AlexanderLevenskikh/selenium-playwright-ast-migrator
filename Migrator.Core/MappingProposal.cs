@@ -85,7 +85,7 @@ public sealed class MappingProposal
     /// Affected source files.
     /// </summary>
     [JsonPropertyName("AffectedFiles")]
-    public IReadOnlyList<string> AffectedFiles { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> AffectedFiles { get; set; } = Array.Empty<string>();
 
     /// <summary>
     /// Affected test methods (optional).
