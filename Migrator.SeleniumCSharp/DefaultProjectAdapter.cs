@@ -31,6 +31,7 @@ public class DefaultProjectAdapter : IProjectAdapter
             {
                 "TestId" => TargetKind.PlaywrightLocator,
                 "Locator" => TargetKind.PlaywrightLocator,
+                "Text" => TargetKind.Text,
                 "PageObjectProperty" => TargetKind.PageObjectProperty,
                 "RawExpression" => TargetKind.RawExpression,
                 _ => TargetKind.PlaywrightLocator
@@ -44,7 +45,8 @@ public class DefaultProjectAdapter : IProjectAdapter
             }
 
             _targetMap[mapping.SourceExpression] = new MappedTarget(
-                mapping.SourceExpression, mapping.TargetExpression, kind, testIdAttribute);
+                mapping.SourceExpression, mapping.TargetExpression, kind,
+                testIdAttribute, mapping.Match, mapping.Index);
         }
 
         foreach (var po in config.PageObjects)

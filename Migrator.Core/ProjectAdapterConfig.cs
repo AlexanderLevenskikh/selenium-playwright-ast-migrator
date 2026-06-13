@@ -81,13 +81,26 @@ public sealed class UiTargetMapping
     /// </summary>
     public string? TestIdAttribute { get; init; }
 
+    /// <summary>
+    /// Match strategy for selecting elements when multiple matches exist.
+    /// Values: "First" (emits .First), "Nth" (emits .Nth(Index), requires Index).
+    /// </summary>
+    public string? Match { get; init; }
+
+    /// <summary>
+    /// Index for "Nth" match strategy. Ignored when Match is not "Nth".
+    /// </summary>
+    public int? Index { get; init; }
+
     public UiTargetMapping() { }
-    public UiTargetMapping(string sourceExpression, string targetExpression, string targetKind, string? testIdAttribute = null)
+    public UiTargetMapping(string sourceExpression, string targetExpression, string targetKind, string? testIdAttribute = null, string? match = null, int? index = null)
     {
         SourceExpression = sourceExpression;
         TargetExpression = targetExpression;
         TargetKind = targetKind;
         TestIdAttribute = testIdAttribute;
+        Match = match;
+        Index = index;
     }
 }
 

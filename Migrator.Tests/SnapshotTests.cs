@@ -680,5 +680,216 @@ public class SnapshotTests
         Assert.Contains("[Category(\"QuickRunning\")]", output);
     }
 
+    // --- Match strategy tests ---
+
+    [Fact]
+    public void Renderer_UiTargetMatch_First()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "MatchFirstTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("CheckFirst", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new ClickAction(
+                            5,
+                            TargetExpression.Mapped("page.Row", "row", TargetKind.PlaywrightLocator, null, "First")),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains(".First", output);
+        Assert.Contains("GetByTestId(\"row\").First", output);
+        Assert.DoesNotContain(".Nth(", output);
+    }
+
+    [Fact]
+    public void Renderer_UiTargetMatch_Nth()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "MatchNthTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("CheckNth", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new ClickAction(
+                            5,
+                            TargetExpression.Mapped("page.Row", "row", TargetKind.PlaywrightLocator, null, "Nth", 2)),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("GetByTestId(\"row\").Nth(2)", output);
+        Assert.DoesNotContain(".First", output);
+    }
+
+    [Fact]
+    public void Renderer_UiTargetMatch_None_NoSuffix()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "NoMatchTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("CheckNoMatch", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new ClickAction(
+                            5,
+                            TargetExpression.Mapped("page.Row", "row", TargetKind.PlaywrightLocator)),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("GetByTestId(\"row\")", output);
+        Assert.DoesNotContain(".First", output);
+        Assert.DoesNotContain(".Nth(", output);
+    }
+
+    [Fact]
+    public void Renderer_UiTargetMatch_WithTestIdAttribute_First()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "MatchAttrTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("CheckAttr", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new ClickAction(
+                            5,
+                            TargetExpression.Mapped("page.Row", "row-item", TargetKind.PlaywrightLocator, "data-test", "First")),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("Locator(\"[data-test='row-item']\").First", output);
+    }
+
+    [Fact]
+    public void Renderer_TextTarget_RendersGetByText()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TextTargetTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("CheckText", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new ClickAction(
+                            5,
+                            TargetExpression.Mapped("page.NameHeader", "Наименование", TargetKind.Text)),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("GetByText(\"Наименование\")", output);
+        Assert.DoesNotContain("GetByTestId", output);
+        Assert.DoesNotContain("TODO:", output);
+    }
+
+    [Fact]
+    public void Renderer_TextTarget_WithMatch_First()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TextMatchTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("CheckTextMatch", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new ClickAction(
+                            5,
+                            TargetExpression.Mapped("page.Header", "Sort", TargetKind.Text, null, "First")),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("GetByText(\"Sort\").First", output);
+    }
+
+    [Fact]
+    public void Renderer_Match_BackwardCompatible_ExistingTestsUnchanged()
+    {
+        // Verify that existing snapshot tests are not affected by Match/Text additions
+        var adapterConfigPath = Path.Combine(_testFilesDir, "adapter-config.json");
+        var adapter = new DefaultProjectAdapter(adapterConfigPath);
+        var parser = new RoslynTestFileParser();
+        var renderer = new PlaywrightDotNetRenderer();
+        var pipeline = new MigrationPipeline(parser, renderer, adapter);
+
+        var result = pipeline.ProcessFile(Path.Combine(_testFilesDir, "Widget.cs"));
+        var output = result.GeneratedOutput;
+
+        Assert.DoesNotContain(".First", output);
+        Assert.DoesNotContain(".Nth(", output);
+        Assert.DoesNotContain("GetByText", output);
+    }
+
+    [Fact]
+    public void Renderer_Match_DoesNotHardcodeValues()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "NoHardcodeTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("DoClick", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new ClickAction(
+                            5,
+                            TargetExpression.Mapped("page.El", "el", TargetKind.PlaywrightLocator)),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("GetByTestId(\"el\")", output);
+        Assert.DoesNotContain("CatalogPrincipals", output);
+        Assert.DoesNotContain("TestBase", output);
+    }
+
     static string Normalize(string text) => text.Replace("\r\n", "\n").Trim();
 }

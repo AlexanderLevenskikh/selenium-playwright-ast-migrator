@@ -564,13 +564,15 @@ public class PlaywrightDotNetRenderer : IRenderer
         {
             var attr = EscapeAttribute(mapped.TestIdAttribute);
             var value = EscapeString(mapped.TargetExpression);
-            return $"Page.Locator(\"[{attr}='{value}']\")";
+            var expr = $"Page.Locator(\"[{attr}='{value}']\")";
+            return ApplyMatchStrategy(expr, mapped);
         }
 
         var rendered = target.RenderLocator();
         return target.Kind switch
         {
             TargetKind.PlaywrightLocator => RenderPlaywrightLocator(mapped: target as MappedTarget, rendered),
+            TargetKind.Text => RenderTextLocator(mapped: target as MappedTarget),
             TargetKind.PageObjectProperty => rendered,
             TargetKind.RawExpression => rendered,
             _ => $"Page.Locator(\"TODO: {target.SourceExpression}\")"
@@ -580,17 +582,45 @@ public class PlaywrightDotNetRenderer : IRenderer
     string RenderPlaywrightLocator(MappedTarget? mapped, string rendered)
     {
         if (rendered.StartsWith("Page."))
-            return rendered;
+            return ApplyMatchStrategy(rendered, mapped);
 
         // Legacy: TargetExpression already contains Playwright call like GetByTestId("x")
         if (IsLegacyPlaywrightFragment(rendered))
-            return $"Page.{rendered}";
+        {
+            var expr = $"Page.{rendered}";
+            return ApplyMatchStrategy(expr, mapped);
+        }
 
         // Semantic: TargetExpression is a raw test-id value like "submit"
         if (mapped != null)
-            return $"Page.GetByTestId(\"{mapped.TargetExpression}\")";
+        {
+            var expr = $"Page.GetByTestId(\"{mapped.TargetExpression}\")";
+            return ApplyMatchStrategy(expr, mapped);
+        }
 
         return $"Page.{rendered}";
+    }
+
+    string RenderTextLocator(MappedTarget? mapped)
+    {
+        if (mapped == null)
+            return "Page.GetByText(\"TODO\")";
+
+        var expr = $"Page.GetByText(\"{EscapeString(mapped.TargetExpression)}\")";
+        return ApplyMatchStrategy(expr, mapped);
+    }
+
+    string ApplyMatchStrategy(string locatorExpr, MappedTarget? mapped)
+    {
+        if (mapped == null || string.IsNullOrEmpty(mapped.Match))
+            return locatorExpr;
+
+        return mapped.Match switch
+        {
+            "First" => $"{locatorExpr}.First",
+            "Nth" => $"{locatorExpr}.Nth({mapped.NthIndex ?? 0})",
+            _ => locatorExpr
+        };
     }
 
     static bool IsLegacyPlaywrightFragment(string expr)

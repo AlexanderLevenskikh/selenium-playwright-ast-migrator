@@ -38,18 +38,21 @@
     },
     {
       "SourceExpression": "page.Name",
-      "TargetExpression": "Page.Locator(\"[data-test-id='t_principals_principal']\").First",
-      "TargetKind": "RawExpression"
+      "TargetExpression": "t_principals_principal",
+      "TargetKind": "TestId",
+      "Match": "First"
     },
     {
       "SourceExpression": "page.NameSort",
-      "TargetExpression": "Page.Locator(\"[data-test-id='t_principals_principal']\").First",
-      "TargetKind": "RawExpression"
+      "TargetExpression": "t_principals_principal",
+      "TargetKind": "TestId",
+      "Match": "First"
     },
     {
       "SourceExpression": "page.Table.Items",
-      "TargetExpression": "Page.Locator(\"[data-test='t_table_row_item']\")",
-      "TargetKind": "RawExpression"
+      "TargetExpression": "t_table_row_item",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-test"
     },
     {
       "SourceExpression": "page.Active",

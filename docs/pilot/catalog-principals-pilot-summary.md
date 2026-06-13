@@ -97,17 +97,24 @@ The class wrapper is now fully config-driven. No hardcoded project-specific valu
 
 ## Next Iteration
 
-Recommended improvements:
-1. **Header selector discovery**: When `t_${table}_${column}_header` doesn't exist, fall back
-   to `GetByText(columnName)` in the adapter config. Could be automated via a `HeaderStrategy`
-   field in `UiTargetMapping`.
+See `catalog-mini-batch-gap-analysis.md` for full gap analysis from the 5-file mini-batch run.
 
-2. **Popup-scoped method mappings**: The `InputInputAndAccept` mapping in the config should
+Implemented in mini-batch:
+- **Match strategy** (`Match: "First"` / `"Nth"` + `Index`) — eliminates RawExpression for
+  `.First`/`.Nth(N)` selector suffixes.
+- **Text target kind** (`TargetKind: "Text"`) — renders `Page.GetByText("...")`, replaces
+  RawExpression for visible-text selectors.
+
+Remaining from pilot findings:
+1. **Popup-scoped method mappings**: The `InputInputAndAccept` mapping in the config should
    generate the popup-scoped flow (click header, wait head-box, fill in headbox-search) rather
-   than the flat pattern. This requires knowing the popup structure per filter type.
+   than the flat pattern.
 
-3. **Row index mapping**: Assert actions like `Assert.That(page.Table.Items[2], ...)` should
-   generate `.Nth(2)` automatically. Currently maps to the full locator without index.
+2. **Row index mapping**: Assert actions like `Assert.That(page.Table.Items[2], ...)` should
+   generate `.Nth(2)` automatically.
 
-4. **Parameterized method mappings**: `Sort(sortOrder)` with a variable argument cannot be mapped
+3. **Parameterized method mappings**: `Sort(sortOrder)` with a variable argument cannot be mapped
    via exact string matching. The adapter should support templated mappings (e.g., `Sort("{0}")`).
+
+4. **Per-page profiles**: Each catalog/registry/widget page needs its own TestHost + UiTargets
+   + Methods config. Currently one profile covers all.
