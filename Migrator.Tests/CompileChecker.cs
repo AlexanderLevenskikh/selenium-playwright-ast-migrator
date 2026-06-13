@@ -14,8 +14,7 @@ namespace Migrator.Tests;
 
 public static class CompileChecker
 {
-    public static Diagnostic[] CompileErrors(string generatedSource, params string[] additionalSources)
-    {
+    public static Diagnostic[] CompileErrors(string generatedSource, params string[] additionalSources) {
         var compilation = BuildCompilation(generatedSource, additionalSources);
         return compilation.GetDiagnostics()
             .Where(d => d.Severity == DiagnosticSeverity.Error)

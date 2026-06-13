@@ -20,7 +20,7 @@ string format = opts.Format;
 bool failOnUnsupported = opts.FailOnUnsupported;
 bool failOnTodo = opts.FailOnTodo;
 
-if (mode != "discover-target" && !File.Exists(inputPath) && !Directory.Exists(inputPath))
+if (mode != "discover-target" && mode != "scaffold" && !File.Exists(inputPath) && !Directory.Exists(inputPath))
 {
     Console.Error.WriteLine($"Input not found: {inputPath}");
     return 1;
@@ -60,6 +60,20 @@ if (mode == "discover-target")
 {
     var discoverExitCode = RunDiscoverTarget(inputPath, outPath, configPath, format);
     return discoverExitCode;
+}
+
+// Handle scaffold mode — generates a minimal, compile-ready Playwright .NET test project
+if (mode == "scaffold")
+{
+    var scaffoldResult = new ScaffoldWriter(new ScaffoldOptions { OutPath = outPath, Format = format }).Write();
+    if (scaffoldResult.Status == "failed")
+    {
+        foreach (var w in scaffoldResult.Warnings)
+            Console.Error.WriteLine($"Scaffold failed: {w}");
+        return 1;
+    }
+    WriteScaffoldReport(scaffoldResult, outPath, format);
+    return 0;
 }
 
 // Handle orchestrate mode — runs analyze → migrate → verify → propose pipeline
@@ -673,6 +687,70 @@ static void PrintSummary(MigrationSummaryReport summary)
 }
 
 // --- Arg parsing ---
+
+static void WriteScaffoldReport(ScaffoldResult result, string outPath, string format)
+{
+    Directory.CreateDirectory(outPath);
+
+    var reportObject = new
+    {
+        GeneratedBy = "Migrator scaffold",
+        Timestamp = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+        Status = result.Status,
+        OutputPath = result.OutputPath,
+        FilesCreated = result.CreatedFiles.Length,
+        CreatedFiles = result.CreatedFiles,
+        SkippedFiles = result.SkippedFiles,
+        Warnings = result.Warnings,
+        NextSteps = result.NextSteps,
+        CompileOnly = true,
+        RuntimePassClaimed = false
+    };
+
+    if (format != "text")
+    {
+        var jsonPath = Path.Combine(outPath, "scaffold-report.json");
+        File.WriteAllText(jsonPath, System.Text.Json.JsonSerializer.Serialize(reportObject, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine($"Scaffold report: {jsonPath}");
+    }
+
+    if (format != "json")
+    {
+        var mdPath = Path.Combine(outPath, "scaffold-report.md");
+        var md = new System.Text.StringBuilder();
+        md.AppendLine($"# Scaffold Report");
+        md.AppendLine();
+        md.AppendLine($"- **Generated**: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss UTC}");
+        md.AppendLine($"- **Status**: {result.Status}");
+        md.AppendLine($"- **Output**: `{result.OutputPath}`");
+        md.AppendLine();
+        md.AppendLine("## Files Created");
+        md.AppendLine();
+        foreach (var f in result.CreatedFiles)
+        {
+            md.AppendLine($"- `{f}`");
+        }
+        if (result.Warnings.Length > 0)
+        {
+            md.AppendLine();
+            md.AppendLine("## Warnings");
+            md.AppendLine();
+            foreach (var w in result.Warnings)
+            {
+                md.AppendLine($"- {w}");
+            }
+        }
+        md.AppendLine();
+        md.AppendLine("## Next Steps");
+        md.AppendLine();
+        foreach (var s in result.NextSteps)
+        {
+            md.AppendLine($"1. {s}");
+        }
+        File.WriteAllText(mdPath, md.ToString());
+        Console.WriteLine($"Scaffold report: {mdPath}");
+    }
+}
 
 static int RunPropose(string inputPath, string outPath, string? configPath, string format)
 {
@@ -1541,13 +1619,13 @@ static CliOptions? ParseArgs(string[] args)
         }
     }
 
-    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "propose" && mode != "discover-target" && mode != "orchestrate")
+    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "propose" && mode != "discover-target" && mode != "orchestrate" && mode != "scaffold")
     {
-        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|propose|discover-target|orchestrate");
+        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|propose|discover-target|orchestrate|scaffold");
         return null;
     }
 
-    if (string.IsNullOrEmpty(input))
+    if (mode != "scaffold" && string.IsNullOrEmpty(input))
     {
         Console.Error.WriteLine("--input is required");
         PrintHelp();
@@ -1564,6 +1642,7 @@ static CliOptions? ParseArgs(string[] args)
             "propose" => "./mapping-proposals",
             "discover-target" => "./target-discovery",
             "orchestrate" => "./orchestration",
+            "scaffold" => "./generated-scaffold",
             _ => "./migration-output"
         };
     }
@@ -1574,7 +1653,7 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
-    return new CliOptions(mode, input, outDir, config, format, failOnUnsupported, failOnTodo);
+    return new CliOptions(mode, input ?? "", outDir, config, format, failOnUnsupported, failOnTodo);
 }
 
 static void PrintHelp()
@@ -1599,17 +1678,22 @@ Modes:
                     adapter-config.draft.json, and discovery-warnings.txt.
                     Does NOT modify config. Collects facts only.
   orchestrate     Dry-run orchestration mode. Runs analyze → migrate → verify → propose
-                    in sequence, writes stage artifacts into subdirectories, and produces
-                    orchestration-report.md and orchestration-report.json. Does NOT modify
-                    adapter config, does NOT auto-apply proposals, does NOT run runtime tests.
+                     in sequence, writes stage artifacts into subdirectories, and produces
+                     orchestration-report.md and orchestration-report.json. Does NOT modify
+                     adapter config, does NOT auto-apply proposals, does NOT run runtime tests.
+  scaffold        Generate a minimal, compile-ready Playwright .NET test project scaffold
+                     with draft adapter config. Creates .csproj, GeneratedTestBase,
+                     TestSettings, ExampleSmokeTest, adapter-config.draft.json, README,
+                     and .gitignore. Does NOT require --input. Outputs scaffold-report.
 
 Options:
-   --mode <mode>                 Operation mode (required)
-                                   analyze|migrate|verify|propose|discover-target|orchestrate
-   --input <file-or-directory>   Input .cs file or directory (required).
-                                   For propose: directory with report files.
-                                   For discover-target: target Playwright project root.
-                                   For orchestrate: source Selenium tests directory.
+    --mode <mode>                 Operation mode (required)
+                                    analyze|migrate|verify|propose|discover-target|orchestrate|scaffold
+    --input <file-or-directory>   Input .cs file or directory (required).
+                                    For propose: directory with report files.
+                                    For discover-target: target Playwright project root.
+                                    For orchestrate: source Selenium tests directory.
+                                    For scaffold: not required.
    --out <output-directory>      Output directory (optional, auto-defaults)
    --config <adapter-config.json>  Adapter config for target mapping (optional)
    --format <text|json|both>     Report format (default: both)
@@ -1628,8 +1712,9 @@ Examples:
   Migrator.Cli --mode analyze --input ./OldTests --out ./analysis --format both
   Migrator.Cli --mode migrate --input ./OldTests --out ./Generated --config ./adapter-config.json
   Migrator.Cli --mode propose --input ./Generated --config ./adapter-config.json --format both
-  Migrator.Cli --mode discover-target --input ./team-playwright-tests --out ./target-discovery
-  Migrator.Cli --mode orchestrate --input ./OldTests --config ./adapter-config.json --out ./orchestration --format both
+   Migrator.Cli --mode discover-target --input ./team-playwright-tests --out ./target-discovery
+   Migrator.Cli --mode orchestrate --input ./OldTests --config ./adapter-config.json --out ./orchestration --format both
+   Migrator.Cli --mode scaffold --out ./new-playwright-tests
 ");
 }
 

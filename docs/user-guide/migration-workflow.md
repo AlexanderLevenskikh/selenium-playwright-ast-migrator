@@ -12,6 +12,17 @@ analyze → configure profile → migrate → verify → propose → iterate
 
 Each iteration improves the quality of generated code. The goal is not one perfect pass, but a controlled loop that converges on working Playwright tests.
 
+## Choosing your path
+
+Before starting, determine which path applies to your team:
+
+| Path | Situation | Starting mode |
+|---|---|---|
+| **Path A: Existing Playwright infra** | You have a Playwright .NET project with tests, base classes, and auth flow | `discover-target` → review draft config → `orchestrate` |
+| **Path B: No Playwright infra** | You have Selenium tests but no Playwright .NET project at all | `scaffold` → implement auth/routes → review draft config → `migrate`/`verify` |
+
+See [No-Infra Scaffold](no-infra-scaffold.md) for details on Path B.
+
 ## Step 1. Start with a small pilot
 
 Do not start with your largest or most complex test suite.

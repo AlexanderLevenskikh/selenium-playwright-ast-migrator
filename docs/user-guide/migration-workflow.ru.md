@@ -12,6 +12,17 @@ analyze → configure profile → migrate → verify → propose → iterate
 
 Цель — не один идеальный проход, а контролируемый цикл, который сходится к рабочим Playwright-тестам.
 
+## Выбор пути
+
+Прежде чем начать, определите, какой путь подходит вашей команде:
+
+| Путь | Ситуация | Стартовый режим |
+|---|---|---|
+| **Путь A: Есть Playwright-инфра** | Есть Playwright .NET проект с тестами, base-классами и auth-флоу | `discover-target` → проверить draft конфиг → `orchestrate` |
+| **Путь B: Нет Playwright-инфры** | Есть Selenium-тесты, но Playwright .NET проекта нет | `scaffold` → реализовать auth/routes → проверить draft конфиг → `migrate`/`verify` |
+
+Подробнее о Пути B: [Scaffold без инфраструктуры](no-infra-scaffold.ru.md).
+
 ## Шаг 1. Начните с маленького пилота
 
 Не начинайте с самого большого или сложного набора тестов.

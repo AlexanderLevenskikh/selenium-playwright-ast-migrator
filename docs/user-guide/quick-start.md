@@ -123,8 +123,20 @@ This runs all four stages in sequence and produces a unified report:
 - `orchestration/orchestration-report.md` — human-readable summary
 - `orchestration/analyze/`, `generated/`, `verify/`, `propose/` — stage artifacts
 
+## No existing Playwright infrastructure?
+
+If your team has no Playwright .NET project yet, start with `scaffold` mode:
+
+```bash
+dotnet run --project Migrator.Cli -- --mode scaffold --out "./new-playwright-tests"
+```
+
+This generates a minimal, compile-ready Playwright .NET project with a draft adapter config.
+See [No-Infra Scaffold](no-infra-scaffold.md) for details.
+
 ## Next steps
 
 - [Migration Workflow](migration-workflow.md) — full process guide
 - [Profile Cookbook](project-profile-cookbook.md) — detailed config reference
 - [Common Recipes](common-recipes.md) — practical solutions for frequent patterns
+- [No-Infra Scaffold](no-infra-scaffold.md) — generate a Playwright project from scratch

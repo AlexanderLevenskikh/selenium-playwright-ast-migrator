@@ -44,6 +44,7 @@ output file (.cs) + report
 | `verify` | Validate generated code quality with quality gates |
 | `propose` | Generate ranked mapping improvement proposals |
 | `discover-target` | Scan target Playwright project for infrastructure facts |
+| `scaffold` | Generate a minimal Playwright .NET project for teams without existing infrastructure |
 | `orchestrate` | Run full pipeline: analyze → migrate → verify → propose (dry-run) |
 
 ## Quick command example
@@ -71,6 +72,7 @@ dotnet run --project Migrator.Cli -- --mode orchestrate --input ./SeleniumTests 
 - [**Profile Cookbook**](docs/user-guide/project-profile-cookbook.md) — configure UiTargets, Methods, Scopes, etc.
 - [**Common Recipes**](docs/user-guide/common-recipes.md) — practical solutions for frequent migration patterns
 - [**Reports & Quality Gates**](docs/user-guide/reports-and-quality-gates.md) — reading reports and configuring gates
+- [**No-Infra Scaffold**](docs/user-guide/no-infra-scaffold.md) — generating a Playwright project from scratch
 - [**Limitations**](docs/user-guide/limitations.md) — honest boundaries of what the tool can and cannot do
 - [**Agent Playbooks**](docs/agent-playbooks/README.md) — procedural guides for AI agents
 
