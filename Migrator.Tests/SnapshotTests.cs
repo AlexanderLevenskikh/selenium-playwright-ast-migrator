@@ -435,5 +435,250 @@ public class SnapshotTests
         Assert.DoesNotContain("Page.Locator(\"User\")", output);
     }
 
+    // --- TestHost config tests ---
+
+    [Fact]
+    public void Renderer_DefaultHost_RemainsBackwardCompatible()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Example.Tests",
+            ClassName: "BackwardCompat",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("ClickTest", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    { new ClickAction(1, "btn") }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("class BackwardCompatPlaywright : PageTest", output);
+        Assert.Contains("namespace Example.Tests.Playwright;", output);
+        Assert.Contains("using Microsoft.Playwright.NUnit;", output);
+        Assert.Contains("using NUnit.Framework;", output);
+    }
+
+    [Fact]
+    public void Renderer_TestHost_AddsClassAttributes()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Example.Tests",
+            ClassName: "AttributedTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("DoClick", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    { new ClickAction(1, "btn") }),
+            })
+        {
+            TestHost = new TestHostConfig
+            {
+                Namespace = "Example.E2ETests.Tests",
+                ClassAttributes = new[] { "TestFixture", "Parallelizable(ParallelScope.Self)" },
+            }
+        };
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("[TestFixture]", output);
+        Assert.Contains("[Parallelizable(ParallelScope.Self)]", output);
+    }
+
+    [Fact]
+    public void Renderer_TestHost_UsesConfiguredBaseClass()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Example.Tests",
+            ClassName: "BaseClassTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("DoClick", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    { new ClickAction(1, "btn") }),
+            })
+        {
+            TestHost = new TestHostConfig
+            {
+                BaseClass = "TestBase",
+            }
+        };
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("class BaseClassTestPlaywright : TestBase", output);
+        Assert.DoesNotContain(": PageTest", output);
+    }
+
+    [Fact]
+    public void Renderer_TestHost_AddsConfiguredUsings()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Example.Tests",
+            ClassName: "UsingsTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("DoClick", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    { new ClickAction(1, "btn") }),
+            })
+        {
+            TestHost = new TestHostConfig
+            {
+                Usings = new[] { "NUnit.Framework", "Example.E2ETests.Infrastructure" },
+            }
+        };
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("using NUnit.Framework;", output);
+        Assert.Contains("using Example.E2ETests.Infrastructure;", output);
+        Assert.DoesNotContain("using Microsoft.Playwright.NUnit;", output);
+    }
+
+    [Fact]
+    public void Renderer_TestHost_RendersConfiguredSetUpStatements()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Example.Tests",
+            ClassName: "SetUpTest",
+            BaseClassName: null,
+            SetUpActions: new TestAction[]
+            {
+                new MethodInvocationAction(10, "Navigation", "OpenPage", "Navigation.OpenPage()"),
+            },
+            Tests: new[]
+            {
+                new TestModel("DoClick", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    { new ClickAction(1, "btn") }),
+            })
+        {
+            TestHost = new TestHostConfig
+            {
+                SetUpStatements = new[]
+                {
+                    "await Page.GotoAsync(DefaultEnvParams.TestLogin);",
+                    "await Page.GotoAsync(\"/catalogs?activeTab=principals\");",
+                },
+            }
+        };
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("[SetUp]", output);
+        Assert.Contains("await Page.GotoAsync(DefaultEnvParams.TestLogin);", output);
+        Assert.Contains("await Page.GotoAsync(\"/catalogs?activeTab=principals\");", output);
+        // Original setup preserved as comment
+        Assert.Contains("// Original Selenium setup (mapped):", output);
+        Assert.Contains("//   Navigation.OpenPage()", output);
+    }
+
+    [Fact]
+    public void Renderer_TestHost_DoesNotHardcodeProjectSpecificValues()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Example.Tests",
+            ClassName: "CleanTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("DoClick", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    { new ClickAction(1, "btn") }),
+            })
+        {
+            TestHost = new TestHostConfig(), // empty config
+        };
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.DoesNotContain("TestBase", output);
+        Assert.DoesNotContain("DefaultEnvParams", output);
+        Assert.Contains(": PageTest", output); // defaults to PageTest
+        Assert.DoesNotContain("[TestFixture]", output);
+        Assert.Contains("namespace Example.Tests;", output); // no .Playwright suffix
+    }
+
+    [Fact]
+    public void Renderer_TestHost_FullOutput_CompilesAndMatchesExpected()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Example.Tests",
+            ClassName: "FullHostTest",
+            BaseClassName: null,
+            SetUpActions: new TestAction[]
+            {
+                new MethodInvocationAction(10, "Navigation", "OpenPage", "Navigation.OpenPage()"),
+            },
+            Tests: new[]
+            {
+                new TestModel("CheckClick", "QuickRunning", Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    { new ClickAction(5, "el") }),
+            })
+        {
+            TestHost = new TestHostConfig
+            {
+                Namespace = "Example.E2ETests.Tests",
+                BaseClass = "TestBase",
+                ClassName = "FullHostPlaywrightTests",
+                ClassAttributes = new[] { "TestFixture", "Parallelizable(ParallelScope.Self)" },
+                Usings = new[] { "NUnit.Framework", "Example.E2ETests.Infrastructure" },
+                SetUpStatements = new[]
+                {
+                    "await Page.GotoAsync(DefaultEnvParams.TestLogin);",
+                    "await Page.GotoAsync(\"/catalogs\");",
+                },
+            }
+        };
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        // Class wrapper
+        Assert.Contains("namespace Example.E2ETests.Tests;", output);
+        Assert.Contains("[TestFixture]", output);
+        Assert.Contains("[Parallelizable(ParallelScope.Self)]", output);
+        Assert.Contains("public class FullHostPlaywrightTests : TestBase", output);
+        Assert.DoesNotContain(".Playwright", output);
+
+        // Usings
+        Assert.Contains("using NUnit.Framework;", output);
+        Assert.Contains("using Example.E2ETests.Infrastructure;", output);
+
+        // Setup
+        Assert.Contains("[SetUp]", output);
+        Assert.Contains("await Page.GotoAsync(DefaultEnvParams.TestLogin);", output);
+        Assert.Contains("await Page.GotoAsync(\"/catalogs\");", output);
+        Assert.Contains("// Original Selenium setup (mapped):", output);
+
+        // Test body preserved
+        Assert.Contains("[Test]", output);
+        Assert.Contains("public async Task CheckClick()", output);
+        Assert.Contains("[Category(\"QuickRunning\")]", output);
+    }
+
     static string Normalize(string text) => text.Replace("\r\n", "\n").Trim();
 }

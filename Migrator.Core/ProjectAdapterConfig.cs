@@ -19,17 +19,25 @@ public sealed class ProjectAdapterConfig
     [JsonPropertyName("LocatorSettings")]
     public LocatorSettings? LocatorSettings { get; init; }
 
+    /// <summary>
+    /// Optional runtime host rendering settings. When present, the renderer generates
+    /// a test class wrapper matching the target project's conventions (base class, attributes, usings, setup).
+    /// </summary>
+    [JsonPropertyName("TestHost")]
+    public TestHostConfig? TestHost { get; init; }
+
     public ProjectAdapterConfig()
     {
     }
 
-    public ProjectAdapterConfig(string SourceProjectName, UiTargetMapping[] UiTargets, PageObjectMapping[] PageObjects, MethodMapping[] Methods, LocatorSettings? LocatorSettings = null)
+    public ProjectAdapterConfig(string SourceProjectName, UiTargetMapping[] UiTargets, PageObjectMapping[] PageObjects, MethodMapping[] Methods, LocatorSettings? LocatorSettings = null, TestHostConfig? TestHost = null)
     {
         this.SourceProjectName = SourceProjectName;
         this.UiTargets = UiTargets;
         this.PageObjects = PageObjects;
         this.Methods = Methods;
         this.LocatorSettings = LocatorSettings;
+        this.TestHost = TestHost;
     }
 }
 
@@ -117,4 +125,49 @@ public sealed class MethodMapping
         TargetStatements = targetStatements;
         RequiresReview = requiresReview;
     }
+}
+
+/// <summary>
+/// Optional section in adapter config that controls how the generated test class
+/// wraps into a real test host project (e.g. NUnit + TestBase + auth setup).
+/// Lives in config/profile only — never hardcoded in Core/Roslyn/Renderer.
+/// </summary>
+public sealed class TestHostConfig
+{
+    /// <summary>
+    /// Target namespace for generated file. Overrides source namespace when set.
+    /// Example: "Example.E2ETests.Tests"
+    /// </summary>
+    public string? Namespace { get; init; }
+
+    /// <summary>
+    /// Base class for generated test class. Defaults to "PageTest" when not set.
+    /// Example: "TestBase"
+    /// </summary>
+    public string? BaseClass { get; init; }
+
+    /// <summary>
+    /// Additional C# attributes to place above the class declaration.
+    /// Example: ["TestFixture", "Parallelizable(ParallelScope.Self)"]
+    /// </summary>
+    public string[]? ClassAttributes { get; init; }
+
+    /// <summary>
+    /// Additional using directives to prepend to the generated file.
+    /// Example: ["NUnit.Framework", "Example.E2ETests.Infrastructure"]
+    /// </summary>
+    public string[]? Usings { get; init; }
+
+    /// <summary>
+    /// C# statements to render inside a [SetUp] method. When provided, replaces
+    /// the original parsed setup actions (which are preserved as commented TODOs).
+    /// Example: ["await Page.GotoAsync(DefaultEnvParams.TestLogin);", "await Page.GotoAsync(\"/catalogs?activeTab=principals\");"]
+    /// </summary>
+    public string[]? SetUpStatements { get; init; }
+
+    /// <summary>
+    /// Class name override. When set, replaces the generated "{ClassName}Playwright" suffix.
+    /// Example: "CatalogPrincipalsFilterPlaywrightTests"
+    /// </summary>
+    public string? ClassName { get; init; }
 }

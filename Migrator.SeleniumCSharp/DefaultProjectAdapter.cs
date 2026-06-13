@@ -14,6 +14,7 @@ public class DefaultProjectAdapter : IProjectAdapter
     readonly Dictionary<string, string> _pageObjectMap = new();
     readonly Dictionary<string, string> _methodMap = new();
     readonly Dictionary<string, (string[] Statements, bool RequiresReview)> _methodStatementsMap = new();
+    readonly ProjectAdapterConfig? _config;
 
     public DefaultProjectAdapter()
     {
@@ -21,6 +22,7 @@ public class DefaultProjectAdapter : IProjectAdapter
 
     public DefaultProjectAdapter(ProjectAdapterConfig config)
     {
+        _config = config;
         if (config == null) return;
 
         foreach (var mapping in config.UiTargets)
@@ -109,8 +111,10 @@ public class DefaultProjectAdapter : IProjectAdapter
             ClassName: sourceModel.ClassName,
             BaseClassName: sourceModel.BaseClassName,
             SetUpActions: adaptedSetup,
-            Tests: adaptedTests
-        );
+            Tests: adaptedTests)
+        {
+            TestHost = sourceModel.TestHost ?? _config?.TestHost
+        };
     }
 
     TestModel AdaptTest(TestModel test)

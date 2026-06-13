@@ -9,6 +9,22 @@
       "data-test"
     ]
   },
+  "TestHost": {
+    "Namespace": "Example.E2ETests.Tests",
+    "BaseClass": "TestBase",
+    "ClassAttributes": [
+      "TestFixture",
+      "Parallelizable(ParallelScope.Self)"
+    ],
+    "Usings": [
+      "NUnit.Framework",
+      "Example.E2ETests.Infrastructure"
+    ],
+    "SetUpStatements": [
+      "await Page.GotoAsync(\"<test-login>\");",
+      "await Page.GotoAsync(\"/catalogs?activeTab=principals\");"
+    ]
+  },
   "UiTargets": [
     {
       "SourceExpression": "page.Inn",
