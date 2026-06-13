@@ -65,35 +65,47 @@ Semantic actions **doubled** (6→12). All unmapped targets eliminated (2→0). 
 
 ## Runtime Status
 
-**BLOCKED BEFORE RUN** — cannot execute without:
-1. A running application with matching `data-test-id` attributes
-2. Actual navigation URL (currently mapped to TODO comment)
-3. Auth/session setup
-4. Test data in the target system
+**Infrastructure ready for local runtime attempt.** The following files are in place:
 
-This is expected for a sanitized pilot with example selectors.
+| File | Purpose |
+|---|---|
+| `profiles/registry-pilot/adapter-config.local.json` | Local profile with `REPLACE-*` placeholders for real values |
+| `manual-proof-registry-runtime/runtime-precheck.md` | Runtime precheck checklist |
+| `manual-proof-registry-runtime/source-truth-verification.md` | Selector verification table |
+| `manual-proof-registry-runtime/run-report.md` | Runtime result report template |
+
+To run: replace `REPLACE-*` placeholders in the local profile with real selectors and the navigation URL, then follow the runtime precheck.
 
 ## Blockers
 
 | Blocker | Category | Evidence | Next Action |
 |---|---|---|---|
-| No runtime URL for navigation | missing base URL / route | `OpenRegistryAgentPage` mapped to TODO comment | Use local profile with real URL |
-| Example selectors not deployed | wrong locator | `sc-filter`, `table-row` are placeholder values | Deploy matching `data-test-id` or use real selectors |
-| No running application | environment/backend | Sanitized pilot has no live target | Run against real project or staging |
-| No auth/session setup | auth/session | No credential injection | Configure auth for target app |
-| Filter helpers not fully mapped | filter helper semantics | `ExcludeValue`, `SortSc`, `Sort` left as TODO | Map remaining helpers when source truth available |
-| Table assertion not mapped | table/pagination needed | `page.Table.Items.ElementAt(4).Sum.Get().Should().Be(text)` — TODO | Defer — needs table strategy |
+| Real selectors not yet filled | profile incomplete | `adapter-config.local.json` has `REPLACE-*` placeholders | Fill from DOM / page object source |
+| Navigation URL not set | missing route | `OpenRegistryAgentPage` → `REPLACE-registry-route` | Fill with real registry page route |
+| Filter helper semantics unverified | filter helper semantics | `ExcludeValue`, `SortSc`, `Sort` left as TODO | Verify in DOM, update local profile |
+| Table assertion needs real locator | table/pagination | `page.Table.Items.ElementAt(4).Sum.Get()` — TODO | Verify table row and sum cell selectors |
+
+## Runtime Instructions
+
+```bash
+# 1. Edit profiles/registry-pilot/adapter-config.local.json with real values
+# 2. Generate
+dotnet run --project Migrator.Cli -- ^
+  --mode migrate ^
+  --input "Migrator.Tests\TestFiles\RegistryFilter.cs" ^
+  --out <output-dir> ^
+  --config "profiles\registry-pilot\adapter-config.local.json" ^
+  --format both
+# 3. Copy generated RegistryFilterPlaywright.cs into your runtime test project
+# 4. Run
+dotnet test --filter "CheckFilterScToRegistry"
+```
 
 ## Recommendations
 
-**Next iteration: Real project integration.** The config-driven approach is proven — RegistryFilter generates compile-clean code with 100% of targets mapped. The remaining work is operational, not architectural:
+**Next iteration: Fill local profile and run.** The pipeline, config schema, and renderer are all proven. Replace the `REPLACE-*` placeholders in `adapter-config.local.json` with real values from your application's page objects or DOM inspector, generate, and run the single test.
 
-1. Get a real project's local profile with actual selectors and URLs
-2. Deploy matching `data-test-id` attributes to a staging app
-3. Run the generated RegistryFilter test against the staging app
-4. Fix any locator mismatches discovered at runtime
-
-**Alternative: More UiTargets expansion** for ButtonTests (8 unmapped targets) if staging environment is not available.
+**Alternative: More UiTargets expansion** for ButtonTests if Registry staging is unavailable.
 
 ## Renderer Bug Fix
 

@@ -12,37 +12,39 @@
   "UiTargets": [
     {
       "SourceExpression": "page.Sc",
-      "TargetExpression": "sc-filter",
-      "TargetKind": "TestId"
+      "TargetExpression": "t_dropdownMenu_reports_sc",
+      "TargetKind": "TestId",
+      "TestIdAttribute": "data-test-id",
+      "Note": "dropdown caption — verified runtime: t_reports_sc is container, t_dropdownMenu_reports_sc is the click target that opens dropdown"
     },
     {
       "SourceExpression": "page.SalesAmount",
-      "TargetExpression": "sales-amount-sort",
+      "TargetExpression": "t_reports_salesAmount",
       "TargetKind": "TestId"
     },
     {
       "SourceExpression": "page.Table.Items.ElementAt(2)",
-      "TargetExpression": "Page.Locator(\"[data-test-id='table-row']\").Nth(2)",
+      "TargetExpression": "Page.Locator(\"[data-test='t_table_row_item']\").Nth(2)",
       "TargetKind": "RawExpression"
     },
     {
       "SourceExpression": "page.Table.Items.ElementAt(4)",
-      "TargetExpression": "Page.Locator(\"[data-test-id='table-row']\").Nth(4)",
+      "TargetExpression": "Page.Locator(\"[data-test='t_table_row_item']\").Nth(4)",
       "TargetKind": "RawExpression"
     },
     {
       "SourceExpression": "page.ReportsSubtotalSalesAmount",
-      "TargetExpression": "subtotal-sales",
+      "TargetExpression": "t_reports_subTotal_salesAmount",
       "TargetKind": "TestId"
     },
     {
       "SourceExpression": "page.ReportsSubtotalAddCalcAmount",
-      "TargetExpression": "subtotal-add-calc",
+      "TargetExpression": "t_reports_subTotal_addCalcAmount",
       "TargetKind": "TestId"
     },
     {
       "SourceExpression": "page.ReportsSubtotalReward",
-      "TargetExpression": "subtotal-reward",
+      "TargetExpression": "t_reports_subTotal_reward",
       "TargetKind": "TestId"
     },
     {
@@ -57,16 +59,17 @@
     {
       "SourceMethod": "Navigation.OpenRegistryAgentPage()",
       "TargetMethod": null,
-      "Description": "Navigate to registry agent page — needs runtime URL from config",
+      "Description": "Login and navigate to registry agent reports page",
       "TargetStatements": [
-        "// TODO: replace with actual runtime URL from config"
+        "await Page.GotoAsync(DefaultEnvParams.TestLogin);",
+        "await Page.GotoAsync(\"/agentReports?activeTab=reports\");"
       ],
       "RequiresReview": true
     },
     {
       "SourceMethod": "pagef.Loader.ValidateLoading()",
       "TargetMethod": null,
-      "Description": "Wait for loader to finish — uses data-test='table-loader'",
+      "Description": "Wait for table loader to disappear — verified: Loader.ValidateLoading waits loadingMain(data-test='table-loader') and loadingText to become hidden",
       "TargetStatements": [
         "var loader = Page.Locator(\"[data-test='table-loader']\");",
         "if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync();"
@@ -76,7 +79,7 @@
     {
       "SourceMethod": "page.Loader.ValidateLoading()",
       "TargetMethod": null,
-      "Description": "Wait for loader to finish — uses data-test='table-loader'",
+      "Description": "Wait for table loader to disappear — verified: Loader.ValidateLoading waits loadingMain(data-test='table-loader') and loadingText to become hidden",
       "TargetStatements": [
         "var loader = Page.Locator(\"[data-test='table-loader']\");",
         "if (await loader.CountAsync() > 0) await Expect(loader).ToBeHiddenAsync();"
@@ -86,49 +89,65 @@
     {
       "SourceMethod": "page.Sc.InputAndSelect(\"1000000001\")",
       "TargetMethod": null,
-      "Description": "Fill filter input and select first match — simplified to FillAsync + PressAsync(Enter)",
+      "Description": "SC combobox: click dropdown to open, wait search input visible, clear+type, click matching menu item, click apply. Verified against ScCombobox.InputAndSelect:102-109",
       "TargetStatements": [
-        "await Page.Locator(\"[data-test-id='sc-filter']\").FillAsync(\"1000000001\");",
-        "await Page.Locator(\"[data-test-id='sc-filter']\").PressAsync(\"Enter\");"
+        "await Page.Locator(\"[data-test-id='t_dropdownMenu_reports_sc']\").ClickAsync();",
+        "var scInput = Page.Locator(\"[data-test*='headbox-search'] input\");",
+        "await scInput.WaitForAsync();",
+        "await scInput.FillAsync(\"1000000001\");",
+        "await Page.Locator(\"[data-test='menu-item']\").Filter(new() { HasText = \"1000000001\" }).First.ClickAsync();",
+        "await Page.Locator(\"[data-test='apply-button']\").ClickAsync();"
       ],
       "RequiresReview": true
     },
     {
       "SourceMethod": "page.Sc.ExcludeValue(\"1000000001\")",
       "TargetMethod": null,
-      "Description": "Exclude value from filter — complex interaction, needs manual review",
+      "Description": "Exclude value: click dropdown, wait apply visible, clear+type, click menu item, click exclude, click apply. Verified against ScCombobox.ExcludeValue:131-139",
       "TargetStatements": [
-        "// TODO: ExcludeValue for filter — complex interaction, needs manual migration",
-        "// Original: page.Sc.ExcludeValue(\"1000000001\")"
+        "await Page.Locator(\"[data-test-id='t_dropdownMenu_reports_sc']\").ClickAsync();",
+        "await Page.Locator(\"[data-test='apply-button']\").WaitForAsync();",
+        "var scInput = Page.Locator(\"[data-test*='headbox-search'] input\");",
+        "await scInput.FillAsync(\"1000000001\");",
+        "await Page.Locator(\"[data-test='menu-item']\").Filter(new() { HasText = \"1000000001\" }).First.ClickAsync();",
+        "await Page.Locator(\"span:has-text('Исключить из результатов')\").ClickAsync();",
+        "await Page.Locator(\"[data-test='apply-button']\").ClickAsync();"
       ],
       "RequiresReview": true
     },
     {
       "SourceMethod": "page.Sc.SortSc(sortOrder)",
       "TargetMethod": null,
-      "Description": "Sort by SC — complex interaction, needs manual review",
+      "Description": "Sort by SC: click dropdown, click sort button, wait for sort option text, click. Verified against ScCombobox.SortSc:141-148",
       "TargetStatements": [
-        "// TODO: SortSc for filter — complex interaction, needs manual migration",
-        "// Original: page.Sc.SortSc(sortOrder)"
+        "await Page.Locator(\"[data-test-id='t_dropdownMenu_reports_sc']\").ClickAsync();",
+        "await Page.Locator(\"span:has-text('СОРТИРОВКА')\").ClickAsync();",
+        "var sortOption = Page.Locator(\"span:has-text('\" + sortOrder + \"')\");",
+        "await sortOption.WaitForAsync();",
+        "await sortOption.ClickAsync();"
       ],
       "RequiresReview": true
     },
     {
       "SourceMethod": "page.Sc.ClearSort()",
       "TargetMethod": null,
-      "Description": "Clear sort — simplified to click",
+      "Description": "Clear sort: click dropdown, wait label-reset visible, click. Verified against ScCombobox.ClearSort:163-168",
       "TargetStatements": [
-        "await Page.Locator(\"[data-test-id='sc-filter']\").ClickAsync();"
+        "await Page.Locator(\"[data-test-id='t_dropdownMenu_reports_sc']\").ClickAsync();",
+        "await Page.Locator(\"[data-test='label-reset']\").WaitForAsync();",
+        "await Page.Locator(\"[data-test='label-reset']\").ClickAsync();"
       ],
       "RequiresReview": true
     },
     {
       "SourceMethod": "page.SalesAmount.Sort(sortOrder)",
       "TargetMethod": null,
-      "Description": "Sort by sales amount — complex interaction, needs manual review",
+      "Description": "Sort by sales amount: click SortBox, find sort option by text, click. Verified against SortBox.Sort:24-29",
       "TargetStatements": [
-        "// TODO: Sort for sales amount — complex interaction, needs manual migration",
-        "// Original: page.SalesAmount.Sort(sortOrder)"
+        "await Page.Locator(\"[data-test-id='t_reports_salesAmount']\").ClickAsync();",
+        "var sortOption = Page.Locator(\"span:has-text('\" + sortOrder + \"')\");",
+        "await sortOption.WaitForAsync();",
+        "await sortOption.ClickAsync();"
       ],
       "RequiresReview": true
     }
