@@ -1,0 +1,128 @@
+# Migrator — Selenium C# → Playwright .NET
+
+Инструмент миграции UI-автотестов с Selenium WebDriver (C#/NUnit) на Playwright .NET через контролируемый workflow: **analyze → configure → migrate → verify → propose → iterate**.
+
+Инструмент не обещает полностью автоматическую миграцию. Он заменяет построчный перевод сгенерированным кодом, который вы проверяете, дорабатываете и улучшаете итерациями.
+
+## Что делает
+
+- Парсит Selenium C# тесты через Roslyn AST
+- Распознает UI действия: клики, ввод, ожидания, ассерты, навигация
+- Маппит source-выражения на Playwright-локаторы через JSON-конфиг профиля
+- Генерирует Playwright .NET C# код с TODO-комментариями для мест, требующих ручной проверки
+- Проверяет качество сгенерированного кода через compile-smoke и verify
+- Генерирует ранжированные предложения по улучшению профиля
+- Сканирует целевые Playwright проекты для сбора фактов об инфраструктуре
+- Оркеструет весь пайплайн в режиме dry-run
+
+## Для кого
+
+- Команды, мигрирующие Selenium C# / NUnit тесты на Playwright .NET
+- Разработчики, которые хотят сгенерированный скелет вместо написания каждого теста с нуля
+- AI-агенты, которые безопасно улучшают миграционные профили без фантазий
+
+## Архитектура
+
+```
+исходный файл (.cs)
+    │
+    ▼  [parse]      Roslyn-парсер: AST → промежуточное представление (IR)
+    ▼  [recognize]  Recognizer'ы: клик, ввод, ассерт, wait, unsupported
+    ▼  [adapt]      Adapter: source → Playwright-локатор (через JSON-конфиг)
+    ▼  [render]     Renderer: IR → сгенерированный C# код (Playwright .NET)
+    ▼  [report]     ReportBuilder: статистика конвертации
+    │
+сгенерированный файл (.cs) + отчёт
+```
+
+## Режимы
+
+| Режим | Описание |
+|---|---|
+| `analyze` | Анализ тестов, отчёты и draft-конфиг |
+| `migrate` | Генерация Playwright C# файлов |
+| `verify` | Проверка качества сгенерированного кода с quality gates |
+| `propose` | Генерация ранжированных предложений по улучшению профиля |
+| `discover-target` | Сканирование целевого Playwright проекта |
+| `orchestrate` | Полный пайплайн: analyze → migrate → verify → propose (dry-run) |
+
+## Быстрый пример команды
+
+```bash
+dotnet run --project Migrator.Cli -- --mode orchestrate --input ./SeleniumTests --config ./adapter-config.json --out ./orchestration --format both
+```
+
+## Рекомендуемый workflow
+
+```
+1. Начните с 1-5 файлов (пилот)
+2. Запустите analyze, оцените что понимает инструмент
+3. Добавьте mappings из source truth в adapter-config
+4. Сгенерируйте код, проверьте качество
+5. Compile smoke, затем runtime proof
+6. Используйте propose для следующих mappings
+7. Итерация до прохождения quality gates
+```
+
+## Документация
+
+- [**Быстрый старт**](docs/user-guide/quick-start.md) — попробуйте инструмент за 10-15 минут
+- [**Процесс миграции**](docs/user-guide/migration-workflow.md) — полный процесс от пилота до продакшена
+- [**Кукбук профиля**](docs/user-guide/project-profile-cookbook.md) — настройка UiTargets, Methods, Scopes и т.д.
+- [**Типовые рецепты**](docs/user-guide/common-recipes.md) — практические решения частых паттернов
+- [**Отчёты и Quality Gates**](docs/user-guide/reports-and-quality-gates.md) — чтение отчётов и настройка gate
+- [**Ограничения**](docs/user-guide/limitations.md) — честные границы возможностей инструмента
+- [**Agent Playbooks**](docs/agent-playbooks/README.md) — процедурные гайды для AI-агентов
+
+## Справочная документация
+
+- [Архитектура](docs/architecture.md) — структура проектов и ответственность
+- [Locator Matching](docs/profile/locator-matching.md) — TargetKind и Match стратегия
+- [Method Mappings](docs/profile/method-mappings.md) — точные и шаблонные маппинги методов
+- [Parameterized Methods](docs/profile/parameterized-method-mappings.md) — паттерн-маппинги с подстановкой
+- [Profile Scoping](docs/profile/profile-scoping.md) — файловые override через Scopes
+- [Runtime Host](docs/profile/runtime-host.md) — TestHost-конфиг для генерации обёрток классов
+- [Target Discovery](docs/profile/target-discovery.md) — режим discover-target
+- [Mapping Proposals](docs/profile/mapping-proposals.md) — режим propose
+- [Orchestrator Dry-Run](docs/profile/orchestrator-dry-run.md) — режим orchestrate
+
+## Ограничения
+
+- Не 100% автоматическая миграция — проектно-специфичная семантика требует профилирования
+- Runtime-прогон требует окружения, авторизации и тестовых данных
+- Discovery-вывод требует проверки перед использованием как конфиг
+- Сложные таблицы/пагинация могут потребовать ручной миграции
+- Некоторые сгенерированные тесты требуют правок на уровне body
+- Playwright TypeScript не поддерживается
+
+## Важно
+
+**Никогда не выдумывайте селекторы.** Все локаторы должны приходить из source truth (PageObject-код, HTML, или discovery). Инструмент использует `<SOURCE_TRUTH_REQUIRED>` placeholder, когда маппингу нужен проверенный селектор.
+
+## Установка
+
+```bash
+git clone <repo-url>
+cd Migrator
+dotnet restore
+```
+
+## Тесты
+
+```bash
+dotnet test
+```
+
+188 тестов: snapshot, парсер, compile-smoke, orchestrator integration и др.
+
+## Публикация
+
+```bash
+dotnet publish Migrator.Cli -c Release -o ./publish
+```
+
+## Почему такой подход?
+
+Инструмент не заменяет экспертизу миграции. Он превращает миграцию из построчного переписывания в контролируемый workflow: сгенерировать, проверить, классифицировать, улучшить профиль, повторить.
+
+Даже частичная миграция экономит значительное время, потому что разработчики проверяют и дорабатывают сгенерированные тесты вместо написания каждого теста с нуля.
