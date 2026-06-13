@@ -11,6 +11,10 @@ namespace Migrator.SeleniumCSharp;
 
 public class DefaultProjectAdapter : IProjectAdapter
 {
+    static readonly Regex ElementAtRegex = new(@"\.\s*Items\s*\.\s*ElementAt\s*\(\s*([^)]+)\s*\)", RegexOptions.Compiled);
+    static readonly Regex TableTextAccessRegex = new(@"\.\s*Items\s*\.\s*ElementAt\s*\(\s*([^)]+)\s*\)\s*\.\s*Text\s*\.\s*Get\s*\(\s*\)", RegexOptions.Compiled);
+    static readonly Regex TableItemsRegex = new(@"\.Elements?\s*\.\s*Items\s*\.", RegexOptions.Compiled);
+    static readonly Regex CountGetShouldRegex = new(@"\.Elements?\s*\.\s*Items\s*\.\s*Count\s*\.\s*Get\s*\(\s*\)\s*\.\s*Should\s*\(\s*\)\s*\.\s*(Be|BeGreaterThan|BeLessThan)\s*\(\s*([^)]+)\s*\)", RegexOptions.Compiled);
     readonly ProjectAdapterConfig? _globalConfig;
 
     /// <summary>
@@ -288,6 +292,11 @@ public class DefaultProjectAdapter : IProjectAdapter
         if (resolved._targetMap.TryGetValue(sourceExpression, out var target))
             return target;
 
+        // Try table-aware resolution for ElementAt patterns
+        var tableResult = resolved.ResolveTableAwareTarget(sourceExpression);
+        if (tableResult is MappedTarget)
+            return tableResult;
+
         foreach (var entry in resolved._targetMap)
         {
             if (sourceExpression.StartsWith(entry.Key + ".", StringComparison.Ordinal) ||
@@ -324,6 +333,25 @@ public class DefaultProjectAdapter : IProjectAdapter
                 ta.Kind,
                 ta.ExpectedValue,
                 ta.Confidence) },
+            TableRowTextAccessAction trt => new[] { new TableRowTextAccessAction(
+                trt.SourceLine,
+                ResolveTarget(trt.Target.SourceExpression, resolved),
+                trt.IndexExpression,
+                trt.SourceText,
+                trt.Confidence) },
+            TableCountAssertionAction tca => new[] { new TableCountAssertionAction(
+                tca.SourceLine,
+                ResolveTarget(tca.Target.SourceExpression, resolved),
+                tca.Kind,
+                tca.ExpectedCount,
+                tca.SourceText,
+                tca.Confidence) },
+            TableRowAccessAction tra => new[] { new TableRowAccessAction(
+                tra.SourceLine,
+                ResolveTarget(tra.Target.SourceExpression, resolved),
+                tra.IndexExpression,
+                tra.SourceText,
+                tra.Confidence) },
             VisibilityAssertionAction va => new[] { new VisibilityAssertionAction(
                 va.SourceLine,
                 ResolveTarget(va.Target.SourceExpression, resolved),
@@ -719,7 +747,110 @@ public class DefaultProjectAdapter : IProjectAdapter
             }
         }
 
+        // Try to recognize table row text access: page.Table.Items.ElementAt(N).Text.Get()
+        var tableTextMatch = TableTextAccessRegex.Match(initExpr);
+            if (tableTextMatch.Success)
+            {
+                var index = tableTextMatch.Groups[1].Value.Trim();
+                var tableSource = ExtractTableItemsSource(initExpr);
+                if (tableSource != null)
+                {
+                    var targetExpr = resolved.ResolveTableAwareTarget(initExpr);
+                    return new[]
+                    {
+                        new TableRowTextAccessAction(
+                            lds.SourceLine,
+                            targetExpr,
+                            index,
+                            $"{lds.VariableType} {lds.VariableName} = {initExpr}")
+                    };
+                }
+            }
+
+            // Try to recognize table row access: page.Table.Items.ElementAt(N)
+            var elementAtMatch = ElementAtRegex.Match(initExpr);
+            if (elementAtMatch.Success && !initExpr.Contains(".Text.Get()"))
+            {
+                var index = elementAtMatch.Groups[1].Value.Trim();
+                var tableSource = ExtractTableItemsSource(initExpr);
+                if (tableSource != null)
+                {
+                    var targetExpr = resolved.ResolveTableAwareTarget(initExpr);
+                    return new[]
+                    {
+                        new TableRowTextAccessAction(
+                            lds.SourceLine,
+                            targetExpr,
+                            index,
+                            $"{lds.VariableType} {lds.VariableName} = {initExpr}")
+                    };
+                }
+            }
+
+        // Try to recognize simple .Text.Get() on a known UI target: page.Count.Text.Get()
+        if (initExpr.EndsWith(".Text.Get()"))
+        {
+            var targetBase = initExpr.Substring(0, initExpr.Length - ".Text.Get()".Length);
+            var mappedTarget = ResolveTarget(targetBase, resolved);
+            if (mappedTarget.Kind != TargetKind.Unresolved)
+            {
+                return new[]
+                {
+                    new TableRowTextAccessAction(
+                        lds.SourceLine,
+                        mappedTarget,
+                        "",
+                        $"{lds.VariableType} {lds.VariableName} = {initExpr}")
+                };
+            }
+        }
+
+        // Fallback: if init expression contains .Text.Get(), try to resolve page targets inside
+        if (initExpr.Contains(".Text.Get()"))
+        {
+            var resolvedInitExpr = TryResolveTextGetInExpression(initExpr, resolved);
+            if (resolvedInitExpr != initExpr)
+            {
+                return new[]
+                {
+                    new LocalDeclarationAction(
+                        lds.SourceLine,
+                        lds.VariableName,
+                        lds.VariableType,
+                        resolvedInitExpr)
+                };
+            }
+        }
+
         return new[] { lds };
+    }
+
+    string TryResolveTextGetInExpression(string expr, ResolvedFileConfig resolved)
+    {
+        // Find all occurrences of page.XXX.Text.Get() in the expression and replace with Playwright locators
+        var textGetRegex = new Regex(@"(\w+(?:\.\w+)*?)\.Text\.Get\(\)");
+        var result = textGetRegex.Replace(expr, match =>
+        {
+            var targetExpr = match.Groups[1].Value;
+            var mapped = ResolveTarget(targetExpr, resolved);
+            if (mapped.Kind != TargetKind.Unresolved)
+            {
+                return $"await Page.Locator(\"{mapped.RenderLocator()}\").TextContentAsync()";
+            }
+            return match.Value;
+        });
+
+        return result;
+    }
+
+    static string? ExtractTableItemsSource(string expr)
+    {
+        // Extract "page.Table.Items" from expressions like "page.Table.Items.ElementAt(0).Text.Get()"
+        // Find the first ".Items" occurrence and return everything up to and including it.
+        var itemsIdx = expr.IndexOf(".Items");
+        if (itemsIdx < 0) return null;
+
+        return expr.Substring(0, itemsIdx + 6);
     }
 
     // --- Internal resolved config holder ---
@@ -755,6 +886,46 @@ public class DefaultProjectAdapter : IProjectAdapter
             }
 
             return new UnresolvedTarget(sourceExpression);
+        }
+
+        /// <summary>
+        /// Resolve a source expression that may contain ElementAt(N) or table count patterns.
+        /// Uses table config mappings to resolve the base expression and apply Nth strategy.
+        /// </summary>
+        public TargetExpression ResolveTableAwareTarget(string sourceExpression)
+        {
+            // First try standard resolution
+            var standardResult = ResolveTarget(sourceExpression);
+            if (standardResult is MappedTarget mapped && mapped.Match == "Nth")
+                return standardResult;
+
+            // Check for ElementAt pattern
+            if (ElementAtRegex.IsMatch(sourceExpression))
+            {
+                var match = ElementAtRegex.Match(sourceExpression);
+                if (match.Success)
+                {
+                    var indexText = match.Groups[1].Value.Trim();
+                    var tableItemsExpr = ExtractTableItemsSource(sourceExpression) ?? sourceExpression;
+
+                    // Try to resolve the table items expression from config
+                    var tableResult = ResolveTarget(tableItemsExpr);
+                    if (tableResult is MappedTarget tableMapped)
+                    {
+                        var index = 0;
+                        int.TryParse(indexText, out index);
+                        return new MappedTarget(
+                            sourceExpression,
+                            tableMapped.TargetExpression,
+                            tableMapped.Kind,
+                            tableMapped.TestIdAttribute,
+                            "Nth",
+                            index);
+                    }
+                }
+            }
+
+            return standardResult;
         }
     }
 

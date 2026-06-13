@@ -47,11 +47,25 @@ public sealed class ProjectAdapterConfig
     [JsonPropertyName("QualityGates")]
     public QualityGatesConfig? QualityGates { get; init; }
 
+    /// <summary>
+    /// Optional table/list mappings. Maps source expressions like "page.Table" to row targets
+    /// for ElementAt(N) and count access patterns. Config-driven, no project-specific hardcode.
+    /// </summary>
+    [JsonPropertyName("Tables")]
+    public TableConfig[] Tables { get; init; } = Array.Empty<TableConfig>();
+
+    /// <summary>
+    /// Optional pagination mappings. Maps source expressions like "page.Pagination.Forward"
+    /// to Playwright targets for navigation actions.
+    /// </summary>
+    [JsonPropertyName("Pagination")]
+    public PaginationConfig[] Pagination { get; init; } = Array.Empty<PaginationConfig>();
+
     public ProjectAdapterConfig()
     {
     }
 
-    public ProjectAdapterConfig(string SourceProjectName, UiTargetMapping[] UiTargets, PageObjectMapping[] PageObjects, MethodMapping[] Methods, LocatorSettings? LocatorSettings = null, TestHostConfig? TestHost = null, ParameterizedMethodMapping[]? ParameterizedMethods = null, ProfileScope[]? Scopes = null, QualityGatesConfig? QualityGates = null)
+    public ProjectAdapterConfig(string SourceProjectName, UiTargetMapping[] UiTargets, PageObjectMapping[] PageObjects, MethodMapping[] Methods, LocatorSettings? LocatorSettings = null, TestHostConfig? TestHost = null, ParameterizedMethodMapping[]? ParameterizedMethods = null, ProfileScope[]? Scopes = null, QualityGatesConfig? QualityGates = null, TableConfig[]? Tables = null, PaginationConfig[]? Pagination = null)
     {
         this.SourceProjectName = SourceProjectName;
         this.UiTargets = UiTargets;
@@ -62,6 +76,8 @@ public sealed class ProjectAdapterConfig
         this.ParameterizedMethods = ParameterizedMethods ?? Array.Empty<ParameterizedMethodMapping>();
         this.Scopes = Scopes ?? Array.Empty<ProfileScope>();
         this.QualityGates = QualityGates;
+        this.Tables = Tables ?? Array.Empty<TableConfig>();
+        this.Pagination = Pagination ?? Array.Empty<PaginationConfig>();
     }
 }
 
@@ -377,4 +393,124 @@ public sealed class ProfileScope
         Methods = methods ?? Array.Empty<MethodMapping>();
         ParameterizedMethods = parameterizedMethods ?? Array.Empty<ParameterizedMethodMapping>();
     }
+
+    /// <summary>
+    /// Scope-specific table mappings. Merged with global Tables.
+    /// Scope entries override global entries for the same SourceExpression.
+    /// </summary>
+    [JsonPropertyName("Tables")]
+    public TableConfig[] Tables { get; init; } = Array.Empty<TableConfig>();
+
+    /// <summary>
+    /// Scope-specific pagination mappings. Merged with global Pagination.
+    /// Scope entries override global entries for the same SourceExpression.
+    /// </summary>
+    [JsonPropertyName("Pagination")]
+    public PaginationConfig[] Pagination { get; init; } = Array.Empty<PaginationConfig>();
+}
+
+/// <summary>
+/// Table/list mapping config. Maps a source expression (e.g. "page.Table") to a row target
+/// for ElementAt(N) access, row text assertions, and table count checks.
+/// Config-driven — no project-specific selectors hardcoded in Core/Roslyn/Renderer.
+/// </summary>
+public sealed class TableConfig
+{
+    /// <summary>
+    /// Source expression that identifies this table (e.g. "page.Table").
+    /// Used to match ElementAt/indexer/count access patterns.
+    /// </summary>
+    [JsonPropertyName("SourceExpression")]
+    public string SourceExpression { get; init; } = null!;
+
+    /// <summary>
+    /// Target expression for individual table rows. Used for ElementAt(N) → .Nth(N) mapping.
+    /// </summary>
+    [JsonPropertyName("RowTarget")]
+    public TargetMappingEntry? RowTarget { get; init; }
+
+    /// <summary>
+    /// Optional pagination config embedded in table mapping.
+    /// </summary>
+    [JsonPropertyName("Pagination")]
+    public PaginationMappingEntry? Pagination { get; init; }
+
+    public TableConfig() { }
+}
+
+/// <summary>
+/// Target mapping entry for a table row or pagination element.
+/// Supports existing TargetKind values: TestId, Text, RawExpression (last resort).
+/// </summary>
+public sealed class TargetMappingEntry
+{
+    /// <summary>
+    /// Target expression (e.g. "t_table_row_item").
+    /// For TestId kind, this is the attribute value (e.g. the value of data-test="t_table_row_item").
+    /// </summary>
+    [JsonPropertyName("TargetExpression")]
+    public string TargetExpression { get; init; } = null!;
+
+    /// <summary>
+    /// Target kind: "TestId", "Text", or "RawExpression".
+    /// "TestId" is recommended — renders as Page.Locator("[{TestIdAttribute}='{TargetExpression}']").
+    /// </summary>
+    [JsonPropertyName("TargetKind")]
+    public string TargetKind { get; init; } = "TestId";
+
+    /// <summary>
+    /// HTML attribute name for TestId targets. Overrides LocatorSettings.DefaultTestIdAttribute when set.
+    /// Examples: "data-test", "data-tid", "data-test-id".
+    /// </summary>
+    [JsonPropertyName("TestIdAttribute")]
+    public string? TestIdAttribute { get; init; }
+
+    public TargetMappingEntry() { }
+}
+
+/// <summary>
+/// Pagination mapping for embedded table pagination.
+/// </summary>
+public sealed class PaginationMappingEntry
+{
+    /// <summary>
+    /// Target expression for the forward (next page) button.
+    /// </summary>
+    [JsonPropertyName("Forward")]
+    public TargetMappingEntry? Forward { get; init; }
+
+    public PaginationMappingEntry() { }
+}
+
+/// <summary>
+/// Pagination config at global/profile level. Maps source expressions like
+/// "page.Pagination.Forward" to Playwright targets for click actions.
+/// </summary>
+public sealed class PaginationConfig
+{
+    /// <summary>
+    /// Source expression to match (e.g. "page.Pagination.Forward").
+    /// </summary>
+    [JsonPropertyName("SourceExpression")]
+    public string SourceExpression { get; init; } = null!;
+
+    /// <summary>
+    /// Target expression for the pagination element.
+    /// </summary>
+    [JsonPropertyName("TargetExpression")]
+    public string TargetExpression { get; init; } = null!;
+
+    /// <summary>
+    /// Target kind: "TestId", "Text", or "RawExpression".
+    /// </summary>
+    [JsonPropertyName("TargetKind")]
+    public string TargetKind { get; init; } = "TestId";
+
+    /// <summary>
+    /// HTML attribute name for TestId targets.
+    /// </summary>
+    [JsonPropertyName("TestIdAttribute")]
+    public string? TestIdAttribute { get; init; }
+
+    public PaginationConfig() { }
 }

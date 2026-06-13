@@ -30,6 +30,7 @@ public class RoslynTestFileParser : ITestFileParser
         new ClickInvocationRecognizer(),
         new SendKeysInvocationRecognizer(),
         new AssertInvocationRecognizer(),
+        new TableInvocationRecognizer(),
         new FluentTextAssertionRecognizer(),
         new VisibilityAssertionRecognizer(),
         new WaitPresenceRecognizer(),
@@ -405,6 +406,7 @@ public class RoslynTestFileParser : ITestFileParser
     static readonly HashSet<string> MeaningfulVariableNames = new(StringComparer.Ordinal)
     {
         "name", "code", "text", "value", "result", "response",
+        "count", "totalCount",
         "displayName", "itemCode", "userName", "entryCode",
         "searchText", "filterText", "inputValue", "selectedValue",
     };
