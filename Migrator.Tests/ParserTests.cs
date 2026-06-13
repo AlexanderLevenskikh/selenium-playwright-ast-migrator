@@ -150,6 +150,9 @@ public class ParserTests
             .Concat(allActions.OfType<VisibilityAssertionAction>())
             .Concat(allActions.OfType<WaitForAction>())
             .Concat(allActions.OfType<UrlAssertionAction>())
+            .Concat(allActions.OfType<TableRowAccessAction>())
+            .Concat(allActions.OfType<TableRowTextAccessAction>())
+            .Concat(allActions.OfType<TableCountAssertionAction>())
             .ToList();
 
         Assert.True(knownActions.Count + unsupported.Count == allActions.Count,

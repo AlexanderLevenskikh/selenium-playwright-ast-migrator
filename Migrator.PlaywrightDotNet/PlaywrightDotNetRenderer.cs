@@ -12,6 +12,7 @@ public class PlaywrightDotNetRenderer : IRenderer
     readonly string _indent;
     int _tempVarCounter = 0;
     readonly HashSet<string> _methodScopeVars = new();
+    readonly Dictionary<string, string> _sourceVarMap = new();
     bool _useAssertionsExpect = false;
 
     public PlaywrightDotNetRenderer(string indent = "\t")
@@ -203,6 +204,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         var paramList = RenderParameters(test.Parameters);
         sb.AppendLine($"{_indent}public async Task {test.Name}({paramList})");
         sb.AppendLine($"{_indent}{{");
+        ResetMethodScope();
 
         foreach (var action in test.BodyActions)
             RenderAction(sb, action);
@@ -274,6 +276,15 @@ public class PlaywrightDotNetRenderer : IRenderer
                 break;
             case LocalDeclarationAction localDecl:
                 RenderLocalDeclaration(sb, localDecl);
+                break;
+            case TableRowTextAccessAction tableTextAccess:
+                RenderTableRowTextAccess(sb, tableTextAccess);
+                break;
+            case TableCountAssertionAction tableCountAssert:
+                RenderTableCountAssertion(sb, tableCountAssert);
+                break;
+            case TableRowAccessAction tableRowAccess:
+                RenderTableRowAccess(sb, tableRowAccess);
                 break;
             default:
                 sb.AppendLine($"{_indent}{_indent}// [unknown action: {action.GetType().Name}]");
@@ -544,6 +555,7 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     void RenderLocalDeclaration(StringBuilder sb, LocalDeclarationAction action)
     {
+        RegisterSourceVar(action.VariableName, action.VariableName);
         sb.AppendLine($"{_indent}{_indent}{action.VariableType} {action.VariableName} = {action.InitializationValue}; // line {action.SourceLine}");
     }
 
@@ -661,6 +673,10 @@ public class PlaywrightDotNetRenderer : IRenderer
         if (expr.StartsWith('"') && expr.EndsWith('"'))
             return expr;
 
+        var trimmed = expr.Trim();
+        if (_sourceVarMap.TryGetValue(trimmed, out var mapped))
+            return mapped;
+
         return expr;
     }
 
@@ -671,8 +687,141 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     string EscapeComment(string text)
     {
-        return text.Replace("\n", " ").Replace("//", "/_/");
+        return text.Replace("\r\n", " ").Replace("\n", " ").Replace("\r", " ").Replace("//", "/_/");
     }
 
     string ExpectCall() => _useAssertionsExpect ? "Assertions.Expect" : "Expect";
+
+    void RenderTableRowTextAccess(StringBuilder sb, TableRowTextAccessAction action)
+    {
+        var target = action.Target;
+        var indexExpr = action.IndexExpression;
+        var locator = RenderTableRowLocator(target, indexExpr);
+
+        if (target.Kind == TargetKind.Unresolved)
+        {
+            sb.AppendLine($"{_indent}{_indent}// TODO: table row text access — map source expression: {EscapeComment(action.SourceText)}");
+            sb.AppendLine($"{_indent}{_indent}// var {NextTempVar("rowText")} = await Page.Locator(\"TODO: {action.SourceText}\").TextContentAsync();");
+        }
+        else
+        {
+            var varName = NextTempVar("rowText");
+            var originalVarName = ExtractVariableName(action.SourceText);
+            if (!string.IsNullOrEmpty(originalVarName))
+            {
+                RegisterSourceVar(originalVarName, varName);
+            }
+            sb.AppendLine($"{_indent}{_indent}var {varName} = await {locator}.TextContentAsync(); // line {action.SourceLine}");
+        }
+    }
+
+    void ResetMethodScope()
+    {
+        _tempVarCounter = 0;
+        _methodScopeVars.Clear();
+        _sourceVarMap.Clear();
+    }
+
+    void RegisterSourceVar(string originalName, string generatedName)
+    {
+        originalName = originalName.Trim();
+        if (!string.IsNullOrEmpty(originalName))
+        {
+            _sourceVarMap[originalName] = generatedName;
+        }
+    }
+
+    string? ExtractVariableName(string sourceText)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(sourceText, @"^\s*var\s+(\w+)\s*=");
+        if (match.Success) return match.Groups[1].Value;
+        match = System.Text.RegularExpressions.Regex.Match(sourceText, @"^\s*\w+\s+(\w+)\s*=");
+        if (match.Success) return match.Groups[1].Value;
+        return null;
+    }
+
+    void RenderTableCountAssertion(StringBuilder sb, TableCountAssertionAction action)
+    {
+        var target = action.Target;
+        var locator = target.Kind != TargetKind.Unresolved
+            ? RenderTargetExpression(target)
+            : $"Page.Locator(\"TODO: {target.SourceExpression}\")";
+
+        var expectCall = ExpectCall();
+        var countExpr = action.ExpectedCount ?? "0";
+
+        switch (action.Kind)
+        {
+            case TableCountKind.CountEquals:
+                sb.AppendLine($"{_indent}{_indent}await {expectCall}({locator}).ToHaveCountAsync({countExpr}); // line {action.SourceLine}");
+                break;
+            case TableCountKind.CountGreaterThanZero:
+                var nv = NextTempVar("tableCount");
+                sb.AppendLine($"{_indent}{_indent}var {nv} = await {locator}.CountAsync(); // line {action.SourceLine}");
+                sb.AppendLine($"{_indent}{_indent}Assert.That({nv}, Is.GreaterThan(0));");
+                break;
+            case TableCountKind.CountLessThanOne:
+                var nv2 = NextTempVar("tableCount");
+                sb.AppendLine($"{_indent}{_indent}var {nv2} = await {locator}.CountAsync(); // line {action.SourceLine}");
+                sb.AppendLine($"{_indent}{_indent}Assert.That({nv2}, Is.LessThan(1));");
+                break;
+            case TableCountKind.CountGreaterThanOrEqualTo:
+                var nv3 = NextTempVar("tableCount");
+                sb.AppendLine($"{_indent}{_indent}var {nv3} = await {locator}.CountAsync(); // line {action.SourceLine}");
+                sb.AppendLine($"{_indent}{_indent}Assert.That({nv3}, Is.GreaterThanOrEqualTo({countExpr}));");
+                break;
+            default:
+                sb.AppendLine($"{_indent}{_indent}// TODO: table count assertion — {action.Kind}");
+                sb.AppendLine($"{_indent}{_indent}//   {EscapeComment(action.SourceText)}");
+                break;
+        }
+
+        if (target.Kind == TargetKind.Unresolved)
+        {
+            sb.AppendLine($"{_indent}{_indent}// TODO: map table row target: {target.SourceExpression}");
+        }
+    }
+
+    void RenderTableRowAccess(StringBuilder sb, TableRowAccessAction action)
+    {
+        // This action represents a table row access that wasn't resolved to a specific operation
+        // (click, text, etc). Render as TODO for manual review.
+        var target = action.Target;
+        var locator = RenderTableRowLocator(target, action.IndexExpression);
+
+        if (target.Kind == TargetKind.Unresolved)
+        {
+            sb.AppendLine($"{_indent}{_indent}// TODO: table row access — map source expression: {EscapeComment(action.SourceText)}");
+            sb.AppendLine($"{_indent}{_indent}// var {NextTempVar("row")} = Page.Locator(\"TODO: {action.SourceText}\").Nth({action.IndexExpression});");
+        }
+        else
+        {
+            var varName = NextTempVar("row");
+            sb.AppendLine($"{_indent}{_indent}var {varName} = {locator}; // line {action.SourceLine}");
+        }
+    }
+
+    string RenderTableRowLocator(TargetExpression target, string indexExpr)
+    {
+        var rowIdx = 0;
+        var hasIndex = int.TryParse(indexExpr, out rowIdx);
+
+        if (target is MappedTarget mapped)
+        {
+            var locator = RenderTargetExpression(target);
+            if (hasIndex)
+            {
+                if (string.IsNullOrEmpty(mapped.Match) || mapped.Match != "Nth")
+                {
+                    locator += $".Nth({rowIdx})";
+                }
+            }
+            return locator;
+        }
+
+        if (hasIndex)
+            return $"Page.Locator(\"TODO: {target.SourceExpression}\").Nth({rowIdx})";
+
+        return $"Page.Locator(\"TODO: {target.SourceExpression}\")";
+    }
 }
