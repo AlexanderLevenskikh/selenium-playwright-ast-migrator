@@ -49,7 +49,7 @@
 
 All files under:
 ```
-<repo-root>/selenium_tests/Example.E2ETests/Tests\
+<repo-root>/selenium_tests/Example.E2ETests/Tests/
 ```
 
 ## Expected page routes

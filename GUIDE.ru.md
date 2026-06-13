@@ -165,11 +165,7 @@ ProjectB.PlaywrightTests    новый Playwright-проект
 Для этого запускаем:
 
 ```bash
-dotnet run --project Migrator.Cli -- \
-  --mode discover-target \
-  --input "./ProjectB.PlaywrightTests" \
-  --out "./migration/discovery" \
-  --format both
+dotnet run --project Migrator.Cli -- --mode discover-target --input "./ProjectB.PlaywrightTests" --out "./migration/discovery" --format both
 ```
 
 После запуска появятся файлы:
@@ -198,6 +194,12 @@ migration/discovery/
 
 ```bash
 cp ./migration/discovery/adapter-config.draft.json ./migration/adapter-config.json
+```
+
+В PowerShell:
+
+```powershell
+Copy-Item .\migration\discovery\adapter-config.draft.json .\migration\adapter-config.json
 ```
 
 Дальше вручную проверяем:
@@ -239,12 +241,7 @@ cp ./migration/discovery/adapter-config.draft.json ./migration/adapter-config.js
 Теперь запускаем анализ старых тестов:
 
 ```bash
-dotnet run --project Migrator.Cli -- \
-  --mode analyze \
-  --input "./ProjectA.SeleniumTests/Tests" \
-  --config "./migration/adapter-config.json" \
-  --out "./migration/analyze" \
-  --format both
+dotnet run --project Migrator.Cli -- --mode analyze --input "./ProjectA.SeleniumTests/Tests" --config "./migration/adapter-config.json" --out "./migration/analyze" --format both
 ```
 
 Инструмент создаст отчёты:
@@ -362,12 +359,7 @@ await Page.Locator("[data-test-id='t_name']").FillAsync("Иванов");
 Запускаем:
 
 ```bash
-dotnet run --project Migrator.Cli -- \
-  --mode migrate \
-  --input "./ProjectA.SeleniumTests/Tests" \
-  --config "./migration/adapter-config.json" \
-  --out "./migration/generated" \
-  --format both
+dotnet run --project Migrator.Cli -- --mode migrate --input "./ProjectA.SeleniumTests/Tests" --config "./migration/adapter-config.json" --out "./migration/generated" --format both
 ```
 
 На выходе:
@@ -412,12 +404,7 @@ public async Task CheckFilterNameToPrincipals()
 Теперь проверяем сгенерированные файлы:
 
 ```bash
-dotnet run --project Migrator.Cli -- \
-  --mode verify \
-  --input "./migration/generated" \
-  --config "./migration/adapter-config.json" \
-  --out "./migration/verify" \
-  --format both
+dotnet run --project Migrator.Cli -- --mode verify --input "./migration/generated" --config "./migration/adapter-config.json" --out "./migration/verify" --format both
 ```
 
 На выходе:
@@ -465,12 +452,7 @@ migration/verify/
 После анализа и проверки можно попросить инструмент подсказать, какие настройки стоит добавить:
 
 ```bash
-dotnet run --project Migrator.Cli -- \
-  --mode propose \
-  --input "./migration/generated" \
-  --config "./migration/adapter-config.json" \
-  --out "./migration/propose" \
-  --format both
+dotnet run --project Migrator.Cli -- --mode propose --input "./migration/generated" --config "./migration/adapter-config.json" --out "./migration/propose" --format both
 ```
 
 На выходе:
@@ -568,12 +550,7 @@ analyze → migrate → verify → propose
 Команда:
 
 ```bash
-dotnet run --project Migrator.Cli -- \
-  --mode orchestrate \
-  --input "./ProjectA.SeleniumTests/Tests" \
-  --config "./migration/adapter-config.json" \
-  --out "./migration/orchestration" \
-  --format both
+dotnet run --project Migrator.Cli -- --mode orchestrate --input "./ProjectA.SeleniumTests/Tests" --config "./migration/adapter-config.json" --out "./migration/orchestration" --format both
 ```
 
 На выходе:
@@ -666,10 +643,7 @@ ProjectB.PlaywrightTests ещё нет
 ## Шаг 1. Создать стартовый Playwright-проект
 
 ```bash
-dotnet run --project Migrator.Cli -- \
-  --mode scaffold \
-  --out "./ProjectB.PlaywrightTests" \
-  --format both
+dotnet run --project Migrator.Cli -- --mode scaffold --out "./ProjectB.PlaywrightTests" --format both
 ```
 
 Инструмент создаст:
@@ -806,6 +780,12 @@ ProjectB.PlaywrightTests/adapter-config.draft.json
 cp ./ProjectB.PlaywrightTests/adapter-config.draft.json ./migration/adapter-config.json
 ```
 
+В PowerShell:
+
+```powershell
+Copy-Item .\ProjectB.PlaywrightTests\adapter-config.draft.json .\migration\adapter-config.json
+```
+
 И дальше действуем как в сценарии 1:
 
 ```text
@@ -830,50 +810,50 @@ cp ./ProjectB.PlaywrightTests/adapter-config.draft.json ./migration/adapter-conf
 
 # Раздельный ручной прогон: Selenium → Playwright
 
-Если хочется пройти всё по шагам руками:
+Если хочется пройти всё по шагам руками, запускайте команды по очереди:
+
+**1. Изучить целевой Playwright-проект:**
 
 ```bash
-# 1. Изучить целевой Playwright-проект
-dotnet run --project Migrator.Cli -- \
-  --mode discover-target \
-  --input "./ProjectB.PlaywrightTests" \
-  --out "./migration/discovery" \
-  --format both
+dotnet run --project Migrator.Cli -- --mode discover-target --input "./ProjectB.PlaywrightTests" --out "./migration/discovery" --format both
+```
 
-# 2. Подготовить adapter-config.json
+**2. Подготовить adapter-config.json:**
+
+Скопируйте черновик:
+
+```bash
 cp ./migration/discovery/adapter-config.draft.json ./migration/adapter-config.json
+```
 
-# 3. Проанализировать Selenium-тесты
-dotnet run --project Migrator.Cli -- \
-  --mode analyze \
-  --input "./ProjectA.SeleniumTests/Tests" \
-  --config "./migration/adapter-config.json" \
-  --out "./migration/analyze" \
-  --format both
+В PowerShell вместо `cp` используйте `Copy-Item`:
 
-# 4. Сгенерировать Playwright
-dotnet run --project Migrator.Cli -- \
-  --mode migrate \
-  --input "./ProjectA.SeleniumTests/Tests" \
-  --config "./migration/adapter-config.json" \
-  --out "./migration/generated" \
-  --format both
+```powershell
+Copy-Item .\migration\discovery\adapter-config.draft.json .\migration\adapter-config.json
+```
 
-# 5. Проверить сгенерированный код
-dotnet run --project Migrator.Cli -- \
-  --mode verify \
-  --input "./migration/generated" \
-  --config "./migration/adapter-config.json" \
-  --out "./migration/verify" \
-  --format both
+**3. Проанализировать Selenium-тесты:**
 
-# 6. Получить предложения по улучшению профиля
-dotnet run --project Migrator.Cli -- \
-  --mode propose \
-  --input "./migration/generated" \
-  --config "./migration/adapter-config.json" \
-  --out "./migration/propose" \
-  --format both
+```bash
+dotnet run --project Migrator.Cli -- --mode analyze --input "./ProjectA.SeleniumTests/Tests" --config "./migration/adapter-config.json" --out "./migration/analyze" --format both
+```
+
+**4. Сгенерировать Playwright:**
+
+```bash
+dotnet run --project Migrator.Cli -- --mode migrate --input "./ProjectA.SeleniumTests/Tests" --config "./migration/adapter-config.json" --out "./migration/generated" --format both
+```
+
+**5. Проверить сгенерированный код:**
+
+```bash
+dotnet run --project Migrator.Cli -- --mode verify --input "./migration/generated" --config "./migration/adapter-config.json" --out "./migration/verify" --format both
+```
+
+**6. Получить предложения по улучшению профиля:**
+
+```bash
+dotnet run --project Migrator.Cli -- --mode propose --input "./migration/generated" --config "./migration/adapter-config.json" --out "./migration/propose" --format both
 ```
 
 ---
@@ -883,12 +863,7 @@ dotnet run --project Migrator.Cli -- \
 Когда профиль уже примерно настроен:
 
 ```bash
-dotnet run --project Migrator.Cli -- \
-  --mode orchestrate \
-  --input "./ProjectA.SeleniumTests/Tests" \
-  --config "./migration/adapter-config.json" \
-  --out "./migration/orchestration" \
-  --format both
+dotnet run --project Migrator.Cli -- --mode orchestrate --input "./ProjectA.SeleniumTests/Tests" --config "./migration/adapter-config.json" --out "./migration/orchestration" --format both
 ```
 
 После этого смотрим:
