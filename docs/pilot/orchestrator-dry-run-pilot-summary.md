@@ -39,7 +39,7 @@ orchestration-report.json / .md  ← unified report
 
 ### Key Design Decisions
 
-1. **Reuses existing modes** — no duplication; each stage delegates to the same logic used by `--mode analyze`, `--mode migrate`, etc.
+1. **Reuses existing pipeline components** — orchestrator reuses the same parser, renderer, and adapter logic used by individual modes. Stage orchestration glue lives in `Program.cs`.
 2. **Propose runs on verify failure** — proposals are most actionable when quality gates fail, so propose stage always runs if analyze + migrate succeeded.
 3. **In-memory VerifyReport** — verify stage passes `VerifyReport` object directly to propose stage, avoiding JSON round-trip issues (custom JSON format doesn't match the positional record).
 4. **GeneratedFiles from generated/report.json** — metrics read generated file count from the migrate stage's report, not the analyze stage's report (where it's 0 before migration).

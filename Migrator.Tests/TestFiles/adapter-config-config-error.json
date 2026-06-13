@@ -1,0 +1,13 @@
+{
+  "SourceProjectName": "Example.E2ETests",
+  "UiTargets": [
+    {
+      "SourceExpression": "page.User",
+      "TargetExpression": "GetByTestId(\"widget-user\")",
+      "TargetKind": "TestId",
+      "Match": "Nth"
+    }
+  ],
+  "PageObjects": [],
+  "Methods": []
+}

@@ -1180,13 +1180,9 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
         stages.Add(stage);
     }
 
-    // ---- Build orchestration report ----
-    var analyzeSummary = System.Text.Json.JsonSerializer.Deserialize<MigrationSummaryReport>(
-        File.ReadAllText(Path.Combine(analyzeDir, "report.json")));
-
-    // Read generated count from generated/report.json (not analyze, where it's 0 before migration)
-    var generatedSummary = System.Text.Json.JsonSerializer.Deserialize<MigrationSummaryReport>(
-        File.ReadAllText(Path.Combine(generatedDir, "report.json")));
+    // ---- Build orchestration report (safe-load, never crashes) ----
+    var analyzeSummary = TryLoadMigrationReport(Path.Combine(analyzeDir, "report.json"), warnings);
+    var generatedSummary = TryLoadMigrationReport(Path.Combine(generatedDir, "report.json"), warnings);
 
     var overallStatus = DetermineOverallStatus(stages, verifyReport);
 
@@ -1212,13 +1208,20 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
     var proposalsJson = Path.Combine(proposeDir, "mapping-proposals.json");
     if (File.Exists(proposalsJson))
     {
-        var proposalOutput = System.Text.Json.JsonSerializer.Deserialize<ProposalJsonOutput>(File.ReadAllText(proposalsJson));
-        if (proposalOutput != null)
+        try
         {
-            topProposals = proposalOutput.TopProposals
-                .Select(p => $"[{p.Priority}] {p.Title} (score: {p.Score})")
-                .ToList();
-            metrics = metrics with { Proposals = proposalOutput.TotalProposals };
+            var proposalOutput = System.Text.Json.JsonSerializer.Deserialize<ProposalJsonOutput>(File.ReadAllText(proposalsJson));
+            if (proposalOutput != null)
+            {
+                topProposals = proposalOutput.TopProposals
+                    .Select(p => $"[{p.Priority}] {p.Title} (score: {p.Score})")
+                    .ToList();
+                metrics = metrics with { Proposals = proposalOutput.TotalProposals };
+            }
+        }
+        catch
+        {
+            warnings.Add("propose/mapping-proposals.json is invalid — could not parse proposals");
         }
     }
 
@@ -1267,6 +1270,24 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
     return DetermineExitCode(stages, verifyReport);
 }
 
+static MigrationSummaryReport? TryLoadMigrationReport(string path, List<string> warnings)
+{
+    if (!File.Exists(path))
+    {
+        warnings.Add($"{Path.GetFileName(Path.GetDirectoryName(path))}/report.json not found — stage may have failed before writing report");
+        return null;
+    }
+    try
+    {
+        return System.Text.Json.JsonSerializer.Deserialize<MigrationSummaryReport>(File.ReadAllText(path));
+    }
+    catch
+    {
+        warnings.Add($"{Path.GetFileName(Path.GetDirectoryName(path))}/report.json is invalid — could not parse");
+        return null;
+    }
+}
+
 static string DetermineOverallStatus(List<OrchestrationStage> stages, VerifyReport? verifyReport)
 {
     var hasSyntaxErrors = verifyReport?.SyntaxErrors > 0;
@@ -1286,16 +1307,27 @@ static int DetermineExitCode(List<OrchestrationStage> stages, VerifyReport? veri
 {
     var analyzeStage = stages.FirstOrDefault(s => s.Name == "analyze");
     var migrateStage = stages.FirstOrDefault(s => s.Name == "migrate");
+    var verifyStage = stages.FirstOrDefault(s => s.Name == "verify");
 
+    // analyze/migrate unexpected failure → 3
     if (analyzeStage?.Status == OrchestrationStageStatus.Failed || migrateStage?.Status == OrchestrationStageStatus.Failed)
         return 3;
 
+    // Syntax errors in generated code → 4 (highest)
     if (verifyReport?.SyntaxErrors > 0)
         return 4;
 
-    var verifyStage = stages.FirstOrDefault(s => s.Name == "verify");
-    if (verifyStage?.Status == OrchestrationStageStatus.Failed || verifyStage?.Status == OrchestrationStageStatus.PassedWithWarnings)
-        return 1;
+    // Preserve verify exit code: 3=syntax, 2=config error, 1=quality gate
+    if (verifyStage != null && (verifyStage.Status == OrchestrationStageStatus.Failed
+        || verifyStage.Status == OrchestrationStageStatus.PassedWithWarnings))
+    {
+        if (verifyStage.ExitCode == 3)
+            return 4;
+        if (verifyStage.ExitCode == 2)
+            return 2;
+        if (verifyStage.ExitCode >= 1)
+            return 1;
+    }
 
     if (stages.Any(s => s.Status == OrchestrationStageStatus.PassedWithWarnings))
         return 1;
