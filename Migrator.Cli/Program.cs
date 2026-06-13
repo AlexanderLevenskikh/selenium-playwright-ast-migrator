@@ -42,6 +42,13 @@ if (!string.IsNullOrEmpty(configPath))
     Console.WriteLine($"Loaded adapter config: {configPath}");
 }
 
+// Handle propose mode separately — input is a directory with report artifacts, not source files
+if (mode == "propose")
+{
+    var proposeExitCode = RunPropose(inputPath, outPath, configPath, format);
+    return proposeExitCode;
+}
+
 var pipeline = new MigrationPipeline(parser, renderer, adapter);
 
 IEnumerable<PipelineResult> results;
@@ -647,6 +654,157 @@ static void PrintSummary(MigrationSummaryReport summary)
 
 // --- Arg parsing ---
 
+static int RunPropose(string inputPath, string outPath, string? configPath, string format)
+{
+    if (!Directory.Exists(inputPath))
+    {
+        Console.Error.WriteLine($"Propose mode expects a directory with report files: {inputPath}");
+        return 1;
+    }
+
+    var warnings = new List<string>();
+
+    // Load report.json
+    MigrationSummaryReport? migrationReport = null;
+    var reportJsonPath = Path.Combine(inputPath, "report.json");
+    if (File.Exists(reportJsonPath))
+    {
+        migrationReport = System.Text.Json.JsonSerializer.Deserialize<MigrationSummaryReport>(File.ReadAllText(reportJsonPath));
+        if (migrationReport == null)
+            warnings.Add("report.json is empty or invalid");
+    }
+    else
+    {
+        warnings.Add("report.json not found, migration-based proposals skipped");
+    }
+
+    // Load unmapped-targets.json
+    var unmappedTargets = new List<UnmappedTargetInfo>();
+    var unmappedPath = Path.Combine(inputPath, "unmapped-targets.json");
+    if (File.Exists(unmappedPath))
+    {
+        unmappedTargets = System.Text.Json.JsonSerializer.Deserialize<List<UnmappedTargetInfo>>(File.ReadAllText(unmappedPath)) ?? new List<UnmappedTargetInfo>();
+    }
+    else
+    {
+        // Try to extract from report
+        if (migrationReport?.TopUnmappedTargets != null)
+            unmappedTargets = new List<UnmappedTargetInfo>(migrationReport.TopUnmappedTargets);
+        else
+            warnings.Add("unmapped-targets.json not found, UiTarget proposals skipped");
+    }
+
+    // Load unsupported-actions.json
+    var unsupportedActions = new List<UnsupportedMethodInfo>();
+    var unsupportedPath = Path.Combine(inputPath, "unsupported-actions.json");
+    if (File.Exists(unsupportedPath))
+    {
+        unsupportedActions = System.Text.Json.JsonSerializer.Deserialize<List<UnsupportedMethodInfo>>(File.ReadAllText(unsupportedPath)) ?? new List<UnsupportedMethodInfo>();
+    }
+    else
+    {
+        if (migrationReport?.TopUnsupportedActions != null)
+            unsupportedActions = new List<UnsupportedMethodInfo>(migrationReport.TopUnsupportedActions);
+        else
+            warnings.Add("unsupported-actions.json not found, method proposals skipped");
+    }
+
+    // Load verify-report.json
+    VerifyReport? verifyReport = null;
+    var verifyPath = Path.Combine(inputPath, "verify-report.json");
+    if (File.Exists(verifyPath))
+    {
+        verifyReport = System.Text.Json.JsonSerializer.Deserialize<VerifyReport>(File.ReadAllText(verifyPath));
+        if (verifyReport == null)
+            warnings.Add("verify-report.json is empty or invalid");
+    }
+    else
+    {
+        warnings.Add("verify-report.json not found, verify-based proposals skipped");
+    }
+
+    // Load adapter config
+    ProjectAdapterConfig? existingConfig = null;
+    if (!string.IsNullOrEmpty(configPath))
+    {
+        if (File.Exists(configPath))
+        {
+            existingConfig = System.Text.Json.JsonSerializer.Deserialize<ProjectAdapterConfig>(File.ReadAllText(configPath));
+        }
+        else
+        {
+            Console.Error.WriteLine($"Config not found: {configPath}");
+            return 1;
+        }
+    }
+
+    // Load generated files for additional context
+    var generatedFiles = new List<string>();
+    var generatedContents = new Dictionary<string, string>();
+    var csFiles = Directory.GetFiles(inputPath, "*.cs");
+    foreach (var cs in csFiles)
+    {
+        generatedFiles.Add(cs);
+        generatedContents[cs] = File.ReadAllText(cs);
+    }
+
+    // Print warnings
+    foreach (var w in warnings)
+        Console.WriteLine($"Warning: {w}");
+
+    // Generate proposals
+    var input = new ProposalGenerator.ProposalInput
+    {
+        MigrationReport = migrationReport,
+        VerifyReport = verifyReport,
+        UnmappedTargets = unmappedTargets,
+        UnsupportedActions = unsupportedActions,
+        ExistingConfig = existingConfig,
+        GeneratedFiles = generatedFiles,
+        GeneratedFileContents = generatedContents
+    };
+
+    var generator = new ProposalGenerator();
+    var proposals = generator.Generate(input);
+
+    // Output
+    if (proposals.Count == 0)
+    {
+        Console.WriteLine("No proposals generated. Current config appears to cover all detected patterns.");
+    }
+
+    // Write output
+    Directory.CreateDirectory(outPath);
+
+    var writeJson = format == "json" || format == "both";
+    var writeMd = format == "md" || format == "txt" || format == "both";
+
+    if (writeJson)
+    {
+        var jsonPath = Path.Combine(outPath, "mapping-proposals.json");
+        File.WriteAllText(jsonPath, ProposalWriter.ToJson(proposals));
+        Console.WriteLine($"Written: {jsonPath}");
+    }
+
+    if (writeMd)
+    {
+        var mdPath = Path.Combine(outPath, "mapping-proposals.md");
+        File.WriteAllText(mdPath, ProposalWriter.ToMarkdown(proposals));
+        Console.WriteLine($"Written: {mdPath}");
+    }
+
+    // Console summary
+    Console.WriteLine();
+    Console.WriteLine($"=== Proposal Summary ===");
+    Console.WriteLine($"Total proposals: {proposals.Count}");
+    Console.WriteLine($"  High:   {proposals.Count(p => p.Priority == ProposalPriority.High)}");
+    Console.WriteLine($"  Medium: {proposals.Count(p => p.Priority == ProposalPriority.Medium)}");
+    Console.WriteLine($"  Low:    {proposals.Count(p => p.Priority == ProposalPriority.Low)}");
+    Console.WriteLine($"  Requires source truth: {proposals.Count(p => p.RequiresSourceTruth)}");
+
+    return 0;
+}
+
 static CliOptions? ParseArgs(string[] args)
 {
     string mode = "migrate";
@@ -666,7 +824,7 @@ static CliOptions? ParseArgs(string[] args)
                     mode = args[++i];
                 else
                 {
-                    Console.Error.WriteLine("--mode requires a value: analyze|migrate|verify");
+                    Console.Error.WriteLine("--mode requires a value: analyze|migrate|verify|propose");
                     return null;
                 }
                 break;
@@ -733,7 +891,7 @@ static CliOptions? ParseArgs(string[] args)
         }
     }
 
-    if (mode != "analyze" && mode != "migrate" && mode != "verify")
+    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "propose")
     {
         Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify");
         return null;
@@ -753,6 +911,7 @@ static CliOptions? ParseArgs(string[] args)
             "analyze" => "./migration-analysis",
             "migrate" => "./generated-tests",
             "verify" => "./migration-verify",
+            "propose" => "./mapping-proposals",
             _ => "./migration-output"
         };
     }
@@ -769,20 +928,25 @@ static CliOptions? ParseArgs(string[] args)
 static void PrintHelp()
 {
     Console.WriteLine(@"
-Usage: Migrator.Cli --mode <analyze|migrate|verify> --input <path> [options]
+Usage: Migrator.Cli --mode <analyze|migrate|verify|propose> --input <path> [options]
 
 Modes:
   analyze  Parse and analyze Selenium tests without generating output files.
-           Produces reports and draft adapter-config.
+            Produces reports and draft adapter-config.
   migrate  Parse, adapt, and generate Playwright C# files. Produces reports.
   verify   Validate generated code quality. Runs Roslyn syntax check,
-            TODO/placeholder detection, config validation, scope matching,
-            and quality gate evaluation. Outputs verify-report.json and
-            verify-report.txt.
+             TODO/placeholder detection, config validation, scope matching,
+             and quality gate evaluation. Outputs verify-report.json and
+             verify-report.txt.
+  propose  Analyze migration artifacts (reports, generated output) and
+            generate mapping proposals. Reads report.json, unmapped-targets.json,
+            unsupported-actions.json, verify-report.json. Outputs
+            mapping-proposals.md and mapping-proposals.json. Does NOT modify config.
 
 Options:
-  --mode <analyze|migrate|verify>   Operation mode (required)
-  --input <file-or-directory>       Input .cs file or directory (required)
+   --mode <analyze|migrate|verify|propose>   Operation mode (required)
+   --input <file-or-directory>       Input .cs file or directory (required).
+                                      For propose mode: directory with report files.
   --out <output-directory>          Output directory (optional, auto-defaults)
   --config <adapter-config.json>    Adapter config for target mapping (optional)
   --format <text|json|both>         Report format (default: both)
@@ -800,6 +964,7 @@ Examples:
   Migrator.Cli --mode analyze --input ./OldTests --out ./analysis --format both
   Migrator.Cli --mode migrate --input ./OldTests --out ./Generated --config ./adapter-config.json
     Migrator.Cli --mode migrate --input ./OldTests --fail-on-unsupported --fail-on-todo
+   Migrator.Cli --mode propose --input ./Generated --config ./adapter-config.json --format both
 ");
 }
 
