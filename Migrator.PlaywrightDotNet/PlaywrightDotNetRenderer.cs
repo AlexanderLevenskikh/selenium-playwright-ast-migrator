@@ -134,25 +134,25 @@ public class PlaywrightDotNetRenderer : IRenderer
         switch (action)
         {
             case MethodInvocationAction mi:
-                sb.AppendLine($"{_indent}{_indent}//   {mi.FullSourceText}");
+                sb.AppendLine($"{_indent}{_indent}//   {EscapeComment(mi.FullSourceText)}");
                 break;
             case MappedMethodInvocationAction mm:
-                sb.AppendLine($"{_indent}{_indent}//   {mm.FullSourceText}");
+                sb.AppendLine($"{_indent}{_indent}//   {EscapeComment(mm.FullSourceText)}");
                 break;
             case ClickAction click:
-                sb.AppendLine($"{_indent}{_indent}//   click: {click.Target.SourceExpression}");
+                sb.AppendLine($"{_indent}{_indent}//   click: {EscapeComment(click.Target.SourceExpression)}");
                 break;
             case SendKeysAction sk:
-                sb.AppendLine($"{_indent}{_indent}//   sendKeys: {sk.Target.SourceExpression} = {sk.TextExpression}");
+                sb.AppendLine($"{_indent}{_indent}//   sendKeys: {EscapeComment(sk.Target.SourceExpression)} = {EscapeComment(sk.TextExpression)}");
                 break;
             case RawStatementAction raw:
-                sb.AppendLine($"{_indent}{_indent}//   raw: {raw.SourceText}");
+                sb.AppendLine($"{_indent}{_indent}//   raw: {EscapeComment(raw.SourceText)}");
                 break;
             case UnsupportedAction unsupported:
-                sb.AppendLine($"{_indent}{_indent}//   unsupported: {unsupported.SourceText}");
+                sb.AppendLine($"{_indent}{_indent}//   unsupported: {EscapeComment(unsupported.SourceText)}");
                 break;
             case LocalDeclarationAction lds:
-                sb.AppendLine($"{_indent}{_indent}//   var: {lds.VariableType} {lds.VariableName} = {lds.InitializationValue}");
+                sb.AppendLine($"{_indent}{_indent}//   var: {EscapeComment(lds.VariableType)} {EscapeComment(lds.VariableName)} = {EscapeComment(lds.InitializationValue)}");
                 break;
             default:
                 sb.AppendLine($"{_indent}{_indent}//   [{action.GetType().Name}]");
@@ -300,8 +300,10 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
         else
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {target.SourceExpression}");
-            sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {target.SourceExpression}\").ClickAsync(); // line {action.SourceLine}");
+            var escaped = EscapeComment(target.SourceExpression);
+            var locator = EscapeStringLiteral(target.SourceExpression);
+            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {escaped}");
+            sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {locator}\").ClickAsync(); // line {action.SourceLine}");
         }
     }
 
@@ -309,12 +311,14 @@ public class PlaywrightDotNetRenderer : IRenderer
     {
         var target = action.Target;
         var text = ConvertExpression(action.TextExpression);
+        var escaped = EscapeComment(target.SourceExpression);
+        var locator = EscapeStringLiteral(target.SourceExpression);
 
         if (target.Kind != TargetKind.Unresolved)
         {
             if (string.IsNullOrWhiteSpace(text))
             {
-                sb.AppendLine($"{_indent}{_indent}// TODO: source input call has no value argument: {target.SourceExpression}");
+                sb.AppendLine($"{_indent}{_indent}// TODO: source input call has no value argument: {escaped}");
                 sb.AppendLine($"{_indent}{_indent}// await {RenderTargetExpression(target)}.FillAsync(/* TODO */); // line {action.SourceLine}");
             }
             else
@@ -324,11 +328,11 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
         else
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {target.SourceExpression}");
+            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {escaped}");
             if (string.IsNullOrWhiteSpace(text))
-                sb.AppendLine($"{_indent}{_indent}// await Page.Locator(\"TODO: {target.SourceExpression}\").FillAsync(/* TODO */); // line {action.SourceLine}");
+                sb.AppendLine($"{_indent}{_indent}// await Page.Locator(\"TODO: {locator}\").FillAsync(/* TODO */); // line {action.SourceLine}");
             else
-                sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {target.SourceExpression}\").FillAsync({text}); // line {action.SourceLine}");
+                sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {locator}\").FillAsync({text}); // line {action.SourceLine}");
         }
     }
 
@@ -336,6 +340,8 @@ public class PlaywrightDotNetRenderer : IRenderer
     {
         var target = action.Target;
         var keyName = ExtractKeyName(action.KeyName);
+        var escaped = EscapeComment(target.SourceExpression);
+        var locator = EscapeStringLiteral(target.SourceExpression);
 
         if (target.Kind != TargetKind.Unresolved)
         {
@@ -343,8 +349,8 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
         else
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {target.SourceExpression}");
-            sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {target.SourceExpression}\").PressAsync(\"{keyName}\"); // line {action.SourceLine}");
+            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {escaped}");
+            sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {locator}\").PressAsync(\"{keyName}\"); // line {action.SourceLine}");
         }
     }
 
@@ -353,7 +359,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         var target = action.Target;
         var locator = target.Kind != TargetKind.Unresolved
             ? RenderTargetExpression(target)
-            : $"Page.Locator(\"TODO: {target.SourceExpression}\")";
+            : $"Page.Locator(\"TODO: {EscapeStringLiteral(target.SourceExpression)}\")";
 
         switch (action.Kind)
         {
@@ -382,7 +388,7 @@ public class PlaywrightDotNetRenderer : IRenderer
 
         if (target.Kind == TargetKind.Unresolved)
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {target.SourceExpression}");
+            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {EscapeComment(target.SourceExpression)}");
         }
     }
 
@@ -391,7 +397,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         var target = action.Target;
         var locator = target.Kind != TargetKind.Unresolved
             ? RenderTargetExpression(target)
-            : $"Page.Locator(\"TODO: {target.SourceExpression}\")";
+            : $"Page.Locator(\"TODO: {EscapeStringLiteral(target.SourceExpression)}\")";
 
         if (action.Kind == VisibilityKind.Visible)
         {
@@ -404,21 +410,23 @@ public class PlaywrightDotNetRenderer : IRenderer
 
         if (target.Kind == TargetKind.Unresolved)
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {target.SourceExpression}");
+            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {EscapeComment(target.SourceExpression)}");
         }
     }
 
     void RenderWaitFor(StringBuilder sb, WaitForAction action)
     {
         var target = action.Target;
+        var escaped = EscapeComment(target.SourceExpression);
+        var locator = EscapeStringLiteral(target.SourceExpression);
         if (target.Kind != TargetKind.Unresolved)
         {
             sb.AppendLine($"{_indent}{_indent}await {RenderTargetExpression(target)}.WaitForAsync(); // line {action.SourceLine}");
         }
         else
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {target.SourceExpression}");
-            sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {target.SourceExpression}\").WaitForAsync(); // line {action.SourceLine}");
+            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {escaped}");
+            sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {locator}\").WaitForAsync(); // line {action.SourceLine}");
         }
     }
 
@@ -535,9 +543,9 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     void RenderMethodInvocation(StringBuilder sb, MethodInvocationAction action)
     {
-        var converted = ConvertExpression(action.FullSourceText);
+        var escaped = EscapeComment(action.FullSourceText);
 
-        sb.AppendLine($"{_indent}{_indent}// [{action.MethodName}] {converted} // line {action.SourceLine}");
+        sb.AppendLine($"{_indent}{_indent}// [{action.MethodName}] {escaped} // line {action.SourceLine}");
         sb.AppendLine($"{_indent}{_indent}// TODO: manual review needed");
     }
 
@@ -684,9 +692,31 @@ public class PlaywrightDotNetRenderer : IRenderer
         return constraint;
     }
 
-    string EscapeComment(string text)
+    static string EscapeComment(string? text)
     {
-        return text.Replace("\r\n", " ").Replace("\n", " ").Replace("\r", " ").Replace("//", "/_/");
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        return text
+            .Replace("\r\n", " ")
+            .Replace("\n", " ")
+            .Replace("\r", " ")
+            .Replace("\t", " ")
+            .Replace("//", "/_/")
+            .Trim();
+    }
+
+    static string EscapeStringLiteral(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+
+        return value
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"")
+            .Replace("\r\n", " ")
+            .Replace("\n", " ")
+            .Replace("\r", " ");
     }
 
     string ExpectCall() => _useAssertionsExpect ? "Assertions.Expect" : "Expect";
@@ -699,8 +729,10 @@ public class PlaywrightDotNetRenderer : IRenderer
 
         if (target.Kind == TargetKind.Unresolved)
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: table row text access — map source expression: {EscapeComment(action.SourceText)}");
-            sb.AppendLine($"{_indent}{_indent}// var {NextTempVar("rowText")} = await Page.Locator(\"TODO: {action.SourceText}\").TextContentAsync();");
+            var escapedComment = EscapeComment(action.SourceText);
+            var escapedLocator = EscapeStringLiteral(action.SourceText);
+            sb.AppendLine($"{_indent}{_indent}// TODO: table row text access — map source expression: {escapedComment}");
+            sb.AppendLine($"{_indent}{_indent}// var {NextTempVar("rowText")} = await Page.Locator(\"TODO: {escapedLocator}\").TextContentAsync();");
         }
         else
         {
@@ -744,7 +776,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         var target = action.Target;
         var locator = target.Kind != TargetKind.Unresolved
             ? RenderTargetExpression(target)
-            : $"Page.Locator(\"TODO: {target.SourceExpression}\")";
+            : $"Page.Locator(\"TODO: {EscapeStringLiteral(target.SourceExpression)}\")";
 
         var expectCall = ExpectCall();
         var countExpr = action.ExpectedCount ?? "0";
@@ -777,7 +809,7 @@ public class PlaywrightDotNetRenderer : IRenderer
 
         if (target.Kind == TargetKind.Unresolved)
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: map table row target: {target.SourceExpression}");
+            sb.AppendLine($"{_indent}{_indent}// TODO: map table row target: {EscapeComment(target.SourceExpression)}");
         }
     }
 
