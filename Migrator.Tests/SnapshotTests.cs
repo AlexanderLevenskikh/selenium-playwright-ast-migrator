@@ -1800,5 +1800,625 @@ public class SnapshotTests
         Assert.DoesNotContain("ArBilling", output);
     }
 
+    #region Low-priority and trivial statement tests
+
+    [Fact]
+    public void LowPriority_Window_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(1, "page", "Window", "page.Window()"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("[Window]", output);
+        Assert.Contains("TODO: manual review needed", output);
+    }
+
+    [Fact]
+    public void LowPriority_ExecuteScript_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(1, "driver", "ExecuteScript",
+                            "driver.ExecuteScript(\"return document.title\")"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("[ExecuteScript]", output);
+        Assert.Contains("TODO: manual review needed", output);
+    }
+
+    [Fact]
+    public void LowPriority_SettingPeriod_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(1, "page", "SettingPeriod", "page.SettingPeriod()"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("[SettingPeriod]", output);
+        Assert.Contains("TODO: manual review needed", output);
+    }
+
+    [Fact]
+    public void LowPriority_ValidateLoadingPrintForm_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(1, "page.Loader", "ValidateLoadingPrintForm",
+                            "page.Loader.ValidateLoadingPrintForm()"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("[ValidateLoadingPrintForm]", output);
+        Assert.Contains("TODO: manual review needed", output);
+    }
+
+    [Fact]
+    public void LowPriority_ValidateLoading_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(1, "page.Loader", "ValidateLoading",
+                            "page.Loader.ValidateLoading()"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("[ValidateLoading]", output);
+        Assert.Contains("TODO: manual review needed", output);
+    }
+
+    [Fact]
+    public void LowPriority_UnknownMethod_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(1, "page", "RemoveItem", "page.RemoveItem()"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("[RemoveItem]", output);
+        Assert.Contains("TODO: manual review needed", output);
+    }
+
+    [Fact]
+    public void LowPriority_Refresh_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(1, "driver", "Refresh", "driver.Refresh()"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("TODO: manual review needed", output);
+    }
+
+    [Fact]
+    public void LowPriority_ClickAndOpen_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(1, "page", "ClickAndOpen", "page.ClickAndOpen<MyPage>()"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("TODO: manual review needed", output);
+    }
+
+    [Fact]
+    public void LowPriority_NavigationOpen_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(1, "Navigation", "OpenPage", "Navigation.OpenPage()"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("TODO: manual review needed", output);
+    }
+
+    [Fact]
+    public void LowPriority_ClearSort_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(1, "page", "ClearSort", "page.ClearSort()"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("TODO: manual review needed", output);
+    }
+
+    [Fact]
+    public void LowPriority_WaitAbsence_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(1, "page", "WaitAbsence", "page.WaitAbsence()"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("TODO: manual review needed", output);
+    }
+
+    [Fact]
+    public void LowPriority_InputTextAndSelectValue_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(1, "page", "InputTextAndSelectValue",
+                            "page.InputTextAndSelectValue(\"value\")"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("TODO: manual review needed", output);
+    }
+
+    [Fact]
+    public void LowPriority_ManualInputValue_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(1, "page", "ManualInputValue",
+                            "page.ManualInputValue(\"value\")"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("TODO: manual review needed", output);
+    }
+
+    [Fact]
+    public void LowPriority_SetBeginDate_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(1, "page", "SetBeginDate",
+                            "page.SetBeginDate(\"2024-01-01\")"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("TODO: manual review needed", output);
+    }
+
+    [Fact]
+    public void LowPriority_InsertAnotherTab_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(1, "page", "InsertAnotherTab", "page.InsertAnotherTab()"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("TODO: manual review needed", output);
+    }
+
+    [Fact]
+    public void LowPriority_InsertAndExcludeAnotherTab_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(1, "page", "InsertAndExcludeAnotherTab",
+                            "page.InsertAndExcludeAnotherTab()"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("TODO: manual review needed", output);
+    }
+
+    [Fact]
+    public void LowPriority_ShouldUrlTableItem_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(1, "page", "ShouldUrlTableItem",
+                            "page.ShouldUrlTableItem(\"expected\")"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("TODO: manual review needed", output);
+    }
+
+    [Fact]
+    public void LowPriority_equalTo_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(1, "Assert", "EqualTo", "Assert.EqualTo(expected, actual)"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("TODO: manual review needed", output);
+    }
+
+    [Fact]
+    public void TrivialRaw_VisibleGet_NoAssignment_NoTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new RawStatementAction(1, "page.Loader.Visible.Get()"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("source:", output);
+        Assert.DoesNotContain("TODO: raw statement", output);
+    }
+
+    [Fact]
+    public void TrivialRaw_TextGet_NoAssignment_NoTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new RawStatementAction(1, "page.Header.Text.Get()"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("source:", output);
+        Assert.DoesNotContain("TODO: raw statement", output);
+    }
+
+    [Fact]
+    public void TrivialRaw_VarInn_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new RawStatementAction(1, "var inn = GetInn()"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("TODO: raw statement", output);
+    }
+
+    [Fact]
+    public void TrivialRaw_VarLineCount_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new RawStatementAction(1, "var lineCount = page.Table.Items.Count()"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("TODO: raw statement", output);
+    }
+
+    [Fact]
+    public void TrivialRaw_VarTrim_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new RawStatementAction(1, "var trim = TrimText(page.Header.Text.Get())"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("TODO: raw statement", output);
+    }
+
+    [Fact]
+    public void TrivialRaw_NavigationOpen_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new RawStatementAction(1, "Navigation.OpenPage()"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("TODO: raw statement", output);
+    }
+
+    [Fact]
+    public void TrivialRaw_ClickAndOpen_RemainsTODO()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new RawStatementAction(1, "page.ClickAndOpen<Modal>()"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("TODO: raw statement", output);
+    }
+
+    #endregion
+
     static string Normalize(string text) => text.Replace("\r\n", "\n").Trim();
 }

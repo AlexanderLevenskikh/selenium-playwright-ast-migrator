@@ -546,7 +546,10 @@ public class PlaywrightDotNetRenderer : IRenderer
         var escaped = EscapeComment(action.FullSourceText);
 
         sb.AppendLine($"{_indent}{_indent}// [{action.MethodName}] {escaped} // line {action.SourceLine}");
-        sb.AppendLine($"{_indent}{_indent}// TODO: manual review needed");
+        if (!IsLowPriorityMethod(action.MethodName, action.FullSourceText))
+        {
+            sb.AppendLine($"{_indent}{_indent}// TODO: manual review needed");
+        }
     }
 
     void RenderUnsupported(StringBuilder sb, UnsupportedAction action)
@@ -557,7 +560,57 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     void RenderRawStatement(StringBuilder sb, RawStatementAction action)
     {
-        sb.AppendLine($"{_indent}{_indent}// TODO: raw statement — review: {EscapeComment(action.SourceText)}");
+        if (IsTrivialRawStatement(action.SourceText))
+        {
+            sb.AppendLine($"{_indent}{_indent}// source: {EscapeComment(action.SourceText)} // line {action.SourceLine}");
+        }
+        else
+        {
+            sb.AppendLine($"{_indent}{_indent}// TODO: raw statement — review: {EscapeComment(action.SourceText)}");
+        }
+    }
+
+    /// <summary>
+    /// Returns true for methods proven to have no runtime side effects.
+    /// Currently conservative — no methods are suppressed globally.
+    /// Use adapter config MethodMapping instead of adding entries here.
+    /// </summary>
+    static bool IsLowPriorityMethod(string methodName, string? fullSourceText)
+    {
+        // Reject patterns that always have side effects — never suppress.
+        if (methodName.StartsWith("ClickAndOpen", StringComparison.Ordinal))
+            return false;
+        if (methodName.StartsWith("Open", StringComparison.Ordinal))
+            return false;
+        if (fullSourceText is not null && fullSourceText.Contains("Navigation.", StringComparison.Ordinal))
+            return false;
+
+        // No methods currently suppressed globally.
+        // Methods like ValidateLoading, ExecuteScript, Window, SettingPeriod may have side effects
+        // and should be handled via adapter config MethodMapping per-project.
+        return false;
+    }
+
+    /// <summary>
+    /// Returns true for raw statements that are provably trivial (no variable capture, no side effects).
+    /// Does NOT suppress variable declarations — they may be used later.
+    /// </summary>
+    static bool IsTrivialRawStatement(string sourceText)
+    {
+        var text = sourceText.Trim().TrimEnd(';');
+
+        // Variable declarations are NOT trivial — the variable may be used later.
+        if (text.StartsWith("var ", StringComparison.Ordinal))
+            return false;
+
+        // Standalone property access on known read-only patterns — no assignment, no side effect.
+        // These are visibility/text checks that returned a value not used elsewhere in this statement.
+        if (text.EndsWith(".Visible.Get()", StringComparison.Ordinal))
+            return true;
+        if (text.EndsWith(".Text.Get()", StringComparison.Ordinal))
+            return true;
+
+        return false;
     }
 
     void RenderLocalDeclaration(StringBuilder sb, LocalDeclarationAction action)
