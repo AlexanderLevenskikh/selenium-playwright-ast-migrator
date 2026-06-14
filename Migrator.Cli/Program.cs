@@ -44,7 +44,17 @@ if (!string.IsNullOrEmpty(configPath))
         Console.Error.WriteLine($"Config not found: {configPath}");
         return 1;
     }
-    adapter = new DefaultProjectAdapter(configPath);
+    try
+    {
+        adapter = new DefaultProjectAdapter(configPath);
+    }
+    catch (ConfigValidationError cvex)
+    {
+        Console.Error.WriteLine("Config error:");
+        foreach (var err in cvex.Errors)
+            Console.Error.WriteLine(err);
+        return 2;
+    }
     Console.WriteLine($"Loaded adapter config: {configPath}");
 }
 
@@ -109,7 +119,7 @@ switch (mode)
         break;
     case "verify":
         {
-            var verifyConfig = configPath != null ? System.Text.Json.JsonSerializer.Deserialize<ProjectAdapterConfig>(File.ReadAllText(configPath)) : null;
+            var verifyConfig = configPath != null ? ConfigValidator.ValidateJson(File.ReadAllText(configPath), configPath) : null;
             var verifyAdapter = adapter as DefaultProjectAdapter;
             var verifyExitCode = RunVerify(summary, outPath, format, resultsList, verifyConfig, verifyAdapter);
             if (verifyExitCode != 0)

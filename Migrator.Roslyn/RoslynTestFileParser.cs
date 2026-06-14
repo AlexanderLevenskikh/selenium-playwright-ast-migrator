@@ -115,7 +115,30 @@ public class RoslynTestFileParser : ITestFileParser
     {
         var files = Directory.GetFiles(directoryPath, "*.cs", SearchOption.AllDirectories)
             .Where(IsInputFixtureFile);
-        return files.Select(Parse).ToList();
+        var results = new List<TestFileModel>();
+        foreach (var file in files)
+        {
+            try
+            {
+                var model = Parse(file);
+                var testCount = model.Tests.ToList().Count;
+                if (model != null && testCount > 0)
+                    results.Add(model);
+                else if (model != null && testCount == 0)
+                {
+                    Console.Error.WriteLine($"Warning: no tests found in {file} — skipping.");
+                }
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("No test class found"))
+            {
+                Console.Error.WriteLine($"Warning: skipped non-test file {file}");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Warning: could not parse {file}: {ex.Message}");
+            }
+        }
+        return results;
     }
 
     static bool IsInputFixtureFile(string filePath)

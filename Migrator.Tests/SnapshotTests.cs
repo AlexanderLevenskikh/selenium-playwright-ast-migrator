@@ -2652,5 +2652,489 @@ public class SnapshotTests
 
     #endregion
 
+    #region Config validation tests
+
+    [Fact]
+    public void Methods_SourceExpressionInsteadOfSourceMethod_ThrowsConfigValidationError()
+    {
+        var json = @"{
+            ""SourceProjectName"": ""Test"",
+            ""UiTargets"": [],
+            ""Methods"": [
+                {
+                    ""SourceExpression"": ""page.Table.ValidateUnvisibleTextLoader()"",
+                    ""TargetStatements"": [""await WaitForTableLoaderAsync();""]
+                }
+            ]
+        }";
+
+        var ex = Assert.Throws<ConfigValidationError>(() => ConfigValidator.ValidateJson(json));
+
+        var allErrors = string.Join(" ", ex.Errors);
+        Assert.Contains("Methods[0]", allErrors);
+        Assert.Contains("SourceExpression", allErrors);
+        Assert.Contains("SourceMethod", allErrors);
+        Assert.Contains("Did you mean", allErrors);
+    }
+
+    [Fact]
+    public void Methods_MissingSourceMethod_ThrowsConfigValidationError()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            new[]
+            {
+                new MethodMapping("", null, null, new[] { "await X();" }, false)
+            });
+
+        var ex = Assert.Throws<ConfigValidationError>(() => ConfigValidator.Validate(config));
+
+        var allErrors = string.Join(" ", ex.Errors);
+        Assert.Contains("Methods[0]", allErrors);
+        Assert.Contains("missing SourceMethod", allErrors);
+    }
+
+    [Fact]
+    public void Methods_NoTargetMethodOrStatements_ThrowsConfigValidationError()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            new[]
+            {
+                new MethodMapping("page.X()", null, null, null, false)
+            });
+
+        var ex = Assert.Throws<ConfigValidationError>(() => ConfigValidator.Validate(config));
+
+        var allErrors = string.Join(" ", ex.Errors);
+        Assert.Contains("Methods[0]", allErrors);
+        Assert.Contains("no TargetMethod or TargetStatements", allErrors);
+    }
+
+    [Fact]
+    public void UiTargets_MissingSourceExpression_ThrowsConfigValidationError()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            new[]
+            {
+                new UiTargetMapping("", "", "TestId", null)
+            },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>());
+
+        var ex = Assert.Throws<ConfigValidationError>(() => ConfigValidator.Validate(config));
+
+        var allErrors = string.Join(" ", ex.Errors);
+        Assert.Contains("UiTargets[0]", allErrors);
+        Assert.Contains("missing SourceExpression", allErrors);
+    }
+
+    [Fact]
+    public void UiTargets_MissingTargetExpression_ThrowsConfigValidationError()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            new[]
+            {
+                new UiTargetMapping("page.X", "", "TestId", "")
+            },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>());
+
+        var ex = Assert.Throws<ConfigValidationError>(() => ConfigValidator.Validate(config));
+
+        var allErrors = string.Join(" ", ex.Errors);
+        Assert.Contains("UiTargets[0]", allErrors);
+        Assert.Contains("missing TargetExpression", allErrors);
+    }
+
+    [Fact]
+    public void ParameterizedMethods_MissingSourceMethodPattern_ThrowsConfigValidationError()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            null,
+            null,
+            new[]
+            {
+                new ParameterizedMethodMapping("", new[] { "await X({0});" }, false)
+            });
+
+        var ex = Assert.Throws<ConfigValidationError>(() => ConfigValidator.Validate(config));
+
+        var allErrors = string.Join(" ", ex.Errors);
+        Assert.Contains("ParameterizedMethods[0]", allErrors);
+        Assert.Contains("missing SourceMethodPattern", allErrors);
+    }
+
+    [Fact]
+    public void ParameterizedMethods_MissingTargetStatements_ThrowsConfigValidationError()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            null,
+            null,
+            new[]
+            {
+                new ParameterizedMethodMapping("page.ValidateRow({0})", null, false)
+            });
+
+        var ex = Assert.Throws<ConfigValidationError>(() => ConfigValidator.Validate(config));
+
+        var allErrors = string.Join(" ", ex.Errors);
+        Assert.Contains("ParameterizedMethods[0]", allErrors);
+        Assert.Contains("missing TargetStatements", allErrors);
+    }
+
+    [Fact]
+    public void Scope_Methods_MissingSourceMethod_ReturnsScopedConfigError()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            Scopes: new[]
+            {
+                new ProfileScope(
+                    "CatalogPrincipals",
+                    new[] { "**/CatalogPrincipals*.cs" },
+                    methods: new[]
+                    {
+                        new MethodMapping("", null, null, new[] { "await X();" }, false)
+                    })
+            });
+
+        var ex = Assert.Throws<ConfigValidationError>(() => ConfigValidator.Validate(config));
+
+        var firstError = ex.Errors[0];
+        Assert.Contains("Scopes[CatalogPrincipals]", firstError);
+        Assert.Contains("Methods[0]", firstError);
+        Assert.Contains("missing SourceMethod", firstError);
+    }
+
+    [Fact]
+    public void Scope_ByName_MissingSourceMethodPattern_ReturnsScopedConfigError()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            Scopes: new[]
+            {
+                new ProfileScope(
+                    "MyScope",
+                    new[] { "**/Test*.cs" },
+                    parameterizedMethods: new[]
+                    {
+                        new ParameterizedMethodMapping("", new[] { "await X();" }, false)
+                    })
+            });
+
+        var ex = Assert.Throws<ConfigValidationError>(() => ConfigValidator.Validate(config));
+
+        var firstError = ex.Errors[0];
+        Assert.Contains("Scopes[MyScope]", firstError);
+        Assert.Contains("ParameterizedMethods[0]", firstError);
+        Assert.Contains("missing SourceMethodPattern", firstError);
+    }
+
+    [Fact]
+    public void QualityGates_NegativeMaxTodoComments_ThrowsConfigValidationError()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            QualityGates: new QualityGatesConfig { MaxTodoComments = -1 });
+
+        var ex = Assert.Throws<ConfigValidationError>(() => ConfigValidator.Validate(config));
+
+        var allErrors = string.Join(" ", ex.Errors);
+        Assert.Contains("QualityGates.MaxTodoComments", allErrors);
+        Assert.Contains("cannot be negative", allErrors);
+    }
+
+    [Fact]
+    public void QualityGates_NegativeMaxUnsupportedActions_ThrowsConfigValidationError()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            QualityGates: new QualityGatesConfig { MaxUnsupportedActions = -5 });
+
+        var ex = Assert.Throws<ConfigValidationError>(() => ConfigValidator.Validate(config));
+
+        var allErrors = string.Join(" ", ex.Errors);
+        Assert.Contains("QualityGates.MaxUnsupportedActions", allErrors);
+        Assert.Contains("cannot be negative", allErrors);
+    }
+
+    [Fact]
+    public void ValidConfig_PassesValidation()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            new[] { new UiTargetMapping("page.X", "tid_x", "TestId") },
+            Array.Empty<PageObjectMapping>(),
+            new[] { new MethodMapping("page.X()", "targetMethod", null, null, false) });
+
+        ConfigValidator.Validate(config);
+    }
+
+    [Fact]
+    public void ValidConfig_WithOptionalSections_PassesValidation()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            new[] { new UiTargetMapping("page.X", "tid_x", "TestId") },
+            Array.Empty<PageObjectMapping>(),
+            new[] { new MethodMapping("page.Y()", null, null, new[] { "await X();" }, false) },
+            LocatorSettings: new LocatorSettings("data-tid", null),
+            TestHost: new TestHostConfig { BaseClass = "TestBase" },
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping("page.Sort({order})", new[] { "await Page.GetByTestId(\"{order}\").ClickAsync();" }, false)
+            },
+            Scopes: new[]
+            {
+                new ProfileScope("Scope1", new[] { "**/Foo*.cs" })
+            },
+            QualityGates: new QualityGatesConfig { MaxTodoComments = 100 });
+
+        ConfigValidator.Validate(config);
+    }
+
+    [Fact]
+    public void MultipleErrors_AllReportedTogether()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            new[]
+            {
+                new UiTargetMapping("", "", "TestId"),
+            },
+            Array.Empty<PageObjectMapping>(),
+            new[]
+            {
+                new MethodMapping("", null, null, null, false),
+            },
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping("", null, false),
+            },
+            QualityGates: new QualityGatesConfig { MaxTodoComments = -1 });
+
+        var ex = Assert.Throws<ConfigValidationError>(() => ConfigValidator.Validate(config));
+
+        Assert.True(ex.Errors.Count >= 5, $"Expected at least 5 errors, got {ex.Errors.Count}: {string.Join(", ", ex.Errors)}");
+        Assert.Contains(ex.Errors, e => e.Contains("UiTargets[0]") && e.Contains("missing SourceExpression"));
+        Assert.Contains(ex.Errors, e => e.Contains("UiTargets[0]") && e.Contains("missing TargetExpression"));
+        Assert.Contains(ex.Errors, e => e.Contains("Methods[0]") && e.Contains("missing SourceMethod"));
+        Assert.Contains(ex.Errors, e => e.Contains("ParameterizedMethods[0]") && e.Contains("missing SourceMethodPattern"));
+        Assert.Contains(ex.Errors, e => e.Contains("ParameterizedMethods[0]") && e.Contains("missing TargetStatements"));
+        Assert.Contains(ex.Errors, e => e.Contains("cannot be negative"));
+    }
+
+    [Fact]
+    public void ConfigValidationError_MessageIsUserReadable()
+    {
+        var ex = new ConfigValidationError(new[]
+        {
+            "Methods[0] uses SourceExpression, but Methods mappings require SourceMethod.",
+            "Did you mean \"SourceMethod\": \"page.Table.Validate()\"?",
+        });
+
+        Assert.Contains("Invalid adapter-config.json:", ex.Message);
+        Assert.Contains("Methods[0]", ex.Message);
+        Assert.DoesNotContain("StackTrace", ex.Message);
+    }
+
+    [Fact]
+    public void DefaultProjectAdapter_WithInvalidConfigJson_ThrowsConfigValidationError()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"migrator_test_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var configPath = Path.Combine(tempDir, "adapter-config.json");
+        File.WriteAllText(configPath, @"{
+            ""SourceProjectName"": ""Test"",
+            ""UiTargets"": [],
+            ""Methods"": [
+                {
+                    ""SourceExpression"": ""page.X()"",
+                    ""TargetStatements"": [""await Y();""]
+                }
+            ]
+        }");
+
+        var ex = Assert.Throws<ConfigValidationError>(() => new DefaultProjectAdapter(configPath));
+        Assert.Contains("Methods[0]", string.Join("\n", ex.Errors));
+        Assert.Contains("SourceExpression", string.Join("\n", ex.Errors));
+
+        Directory.Delete(tempDir, true);
+    }
+
+    [Fact]
+    public void DefaultProjectAdapter_WithValidConfigJson_ConstructsSuccessfully()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            new[] { new UiTargetMapping("page.X", "tid_x", "TestId") },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>());
+
+        _ = new DefaultProjectAdapter(config);
+    }
+
+    #endregion
+
+    #region Support file tests
+
+    [Fact]
+    public void Parser_SupportFileWithoutTests_DoesNotFail()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"migrator_test_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        var supportFile = Path.Combine(tempDir, "TestBase.cs");
+        File.WriteAllText(supportFile, @"
+using NUnit.Framework;
+
+namespace Tests;
+
+[TestFixture]
+public class TestBase
+{
+    public void Login() { }
+    public void Navigate() { }
+}
+");
+
+        var parser = new RoslynTestFileParser();
+        var results = parser.ParseDirectory(tempDir).ToList();
+
+        Assert.Empty(results);
+
+        Directory.Delete(tempDir, true);
+    }
+
+    [Fact]
+    public void Parser_DirectoryWithSupportAndTestFiles_OnlyReturnsTestFiles()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"migrator_test_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        var supportFile = Path.Combine(tempDir, "TestBase.cs");
+        File.WriteAllText(supportFile, @"
+using NUnit.Framework;
+
+namespace Tests;
+
+public class TestBase
+{
+    public void Setup() { }
+}
+");
+
+        var testFile = Path.Combine(tempDir, "SomeTests.cs");
+        File.WriteAllText(testFile, @"
+using NUnit.Framework;
+
+namespace Tests;
+
+[TestFixture]
+public class SomeTests
+{
+    [Test]
+    public void Test1()
+    {
+        System.Console.WriteLine(""hello"");
+    }
+}
+");
+
+        var parser = new RoslynTestFileParser();
+        var results = parser.ParseDirectory(tempDir).ToList();
+
+        Assert.Single(results);
+        Assert.Equal("SomeTests", results[0].ClassName);
+        Assert.Single(results[0].Tests);
+
+        Directory.Delete(tempDir, true);
+    }
+
+    [Fact]
+    public void Parser_DirectoryWithOnlySupportFiles_ReturnsEmpty()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"migrator_test_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        File.WriteAllText(Path.Combine(tempDir, "PageBase.cs"), @"
+namespace Tests;
+public class PageBase { }
+");
+        File.WriteAllText(Path.Combine(tempDir, "ControlBase.cs"), @"
+namespace Tests;
+public class ControlBase { }
+");
+
+        var parser = new RoslynTestFileParser();
+        var results = parser.ParseDirectory(tempDir).ToList();
+
+        Assert.Empty(results);
+
+        Directory.Delete(tempDir, true);
+    }
+
+    [Fact]
+    public void Parser_DirectoryWithSyntaxErrorFile_DoesNotCrash()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"migrator_test_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        File.WriteAllText(Path.Combine(tempDir, "Broken.cs"), @"
+namespace Tests;
+public class Broken { this is not valid C# }}}
+");
+        var testFile = Path.Combine(tempDir, "GoodTests.cs");
+        File.WriteAllText(testFile, @"
+using NUnit.Framework;
+
+namespace Tests;
+
+[TestFixture]
+public class GoodTests
+{
+    [Test]
+    public void T1() { }
+}
+");
+
+        var parser = new RoslynTestFileParser();
+        var results = parser.ParseDirectory(tempDir).ToList();
+
+        Assert.Single(results);
+        Assert.Equal("GoodTests", results[0].ClassName);
+
+        Directory.Delete(tempDir, true);
+    }
+
+    #endregion
+
     static string Normalize(string text) => text.Replace("\r\n", "\n").Trim();
 }

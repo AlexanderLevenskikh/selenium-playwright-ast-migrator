@@ -34,14 +34,14 @@ public class DefaultProjectAdapter : IProjectAdapter
 
     public DefaultProjectAdapter(ProjectAdapterConfig config)
     {
+        ConfigValidator.Validate(config);
         _globalConfig = config;
     }
 
     public DefaultProjectAdapter(string configPath)
     {
         var json = File.ReadAllText(configPath);
-        _globalConfig = JsonSerializer.Deserialize<ProjectAdapterConfig>(json)
-            ?? throw new InvalidOperationException($"Failed to deserialize adapter config from {configPath}");
+        _globalConfig = ConfigValidator.ValidateJson(json, configPath);
     }
 
     public TargetExpression ResolveTarget(string sourceExpression)
