@@ -827,20 +827,93 @@ public class DefaultProjectAdapter : IProjectAdapter
 
     string TryResolveTextGetInExpression(string expr, ResolvedFileConfig resolved)
     {
-        // Find all occurrences of page.XXX.Text.Get() in the expression and replace with Playwright locators
         var textGetRegex = new Regex(@"(\w+(?:\.\w+)*?)\.Text\.Get\(\)");
         var result = textGetRegex.Replace(expr, match =>
         {
             var targetExpr = match.Groups[1].Value;
             var mapped = ResolveTarget(targetExpr, resolved);
-            if (mapped.Kind != TargetKind.Unresolved)
+            if (mapped is MappedTarget mt)
             {
-                return $"await Page.Locator(\"{mapped.RenderLocator()}\").TextContentAsync()";
+                var locatorExpr = BuildLocatorExpression(mt);
+                return $"await {locatorExpr}.TextContentAsync()";
             }
             return match.Value;
         });
 
         return result;
+    }
+
+    /// <summary>
+    /// Builds a Playwright locator expression from a resolved MappedTarget.
+    /// Mirrors the renderer's RenderPlaywrightLocator logic to avoid double-wrapping.
+    /// </summary>
+    string BuildLocatorExpression(MappedTarget mapped)
+    {
+        // TestId target with attribute — render as Page.Locator("[attr='value']")
+        if (mapped.TestIdAttribute != null && mapped.Kind == TargetKind.PlaywrightLocator)
+        {
+            var attr = EscapeAttr(mapped.TestIdAttribute);
+            var value = EscapeStr(mapped.TargetExpression);
+            return ApplyMatchStrategy($"Page.Locator(\"[{attr}='{value}']\")", mapped);
+        }
+
+        var rendered = mapped.RenderLocator();
+
+        switch (mapped.Kind)
+        {
+            case TargetKind.RawExpression:
+                // Already a full expression like "Page.GetByTestId(\"x\")"
+                return ApplyMatchStrategy(rendered, mapped);
+
+            case TargetKind.PageObjectProperty:
+                return rendered;
+
+            case TargetKind.Text:
+                var textValue = EscapeStr(mapped.TargetExpression);
+                return ApplyMatchStrategy($"Page.GetByText(\"{textValue}\")", mapped);
+
+            case TargetKind.PlaywrightLocator:
+            default:
+                // Already starts with "Page." — full expression
+                if (rendered.StartsWith("Page.", StringComparison.Ordinal))
+                    return ApplyMatchStrategy(rendered, mapped);
+
+                // Legacy fragment like GetByTestId("x")
+                if (IsLegacyPlaywrightFragment(rendered))
+                    return ApplyMatchStrategy($"Page.{rendered}", mapped);
+
+                // Semantic: raw test-id value — render as Page.GetByTestId
+                var tv = EscapeStr(mapped.TargetExpression);
+                return ApplyMatchStrategy($"Page.GetByTestId(\"{tv}\")", mapped);
+        }
+    }
+
+    static string EscapeStr(string value) => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+    static string EscapeAttr(string value) => value.Replace("]", "\\]").Replace("[", "\\[");
+
+    static bool IsLegacyPlaywrightFragment(string expr)
+    {
+        var trimmed = expr.Trim();
+        return trimmed.StartsWith("GetByTestId(") ||
+               trimmed.StartsWith("Locator(") ||
+               trimmed.StartsWith("GetByText(") ||
+               trimmed.StartsWith("GetByRole(") ||
+               trimmed.StartsWith("GetByLabel(") ||
+               trimmed.StartsWith("GetByPlaceholder(") ||
+               trimmed.StartsWith("GetByAltText(");
+    }
+
+    string ApplyMatchStrategy(string locatorExpr, MappedTarget mapped)
+    {
+        if (string.IsNullOrEmpty(mapped.Match))
+            return locatorExpr;
+
+        return mapped.Match switch
+        {
+            "First" => $"{locatorExpr}.First",
+            "Nth" => $"{locatorExpr}.Nth({mapped.NthIndex ?? 0})",
+            _ => locatorExpr
+        };
     }
 
     static string? ExtractTableItemsSource(string expr)

@@ -2420,5 +2420,237 @@ public class SnapshotTests
 
     #endregion
 
+    #region Text.Get() in expression — locator double-wrapping regression
+
+    [Fact]
+    public void TextGetInsideIntParse_WithTestIdTarget_RendersValidLocator()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            new[]
+            {
+                new UiTargetMapping("page.Count", "CurrencyLabel__root", "TestId")
+            },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>());
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new LocalDeclarationAction(1, "var", "count",
+                            "int.Parse(page.Count.Text.Get()) - 1"),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(adapted);
+
+        Assert.Contains("int.Parse(await Page.GetByTestId(\"CurrencyLabel__root\").TextContentAsync())", output);
+        Assert.DoesNotContain("Page.Locator(\"GetByTestId", output);
+        Assert.DoesNotContain("Page.Locator(\"Page.GetByTestId", output);
+    }
+
+    [Fact]
+    public void TextGetInsideIntParse_WithTestIdTargetAndAttribute_RendersValidLocator()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            new[]
+            {
+                new UiTargetMapping("page.Count", "CurrencyLabel__root", "TestId", "data-tid")
+            },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>());
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new LocalDeclarationAction(1, "var", "count",
+                            "int.Parse(page.Count.Text.Get()) - 1"),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(adapted);
+
+        Assert.Contains("Page.Locator(\"[data-tid='CurrencyLabel__root']\")", output);
+        Assert.Contains("TextContentAsync()", output);
+        Assert.DoesNotContain("Page.Locator(\"GetByTestId", output);
+    }
+
+    [Fact]
+    public void TextGetInsideIntParse_WithRawExpressionTarget_NoDoubleWrap()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            new[]
+            {
+                new UiTargetMapping("page.Count", "Page.GetByTestId(\"CurrencyLabel__root\")", "RawExpression")
+            },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>());
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new LocalDeclarationAction(1, "var", "count",
+                            "int.Parse(page.Count.Text.Get()) - 1"),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(adapted);
+
+        Assert.Contains("int.Parse(await Page.GetByTestId(\"CurrencyLabel__root\").TextContentAsync())", output);
+        Assert.DoesNotContain("Page.Locator(\"Page.GetByTestId", output);
+    }
+
+    [Fact]
+    public void TextGetInsideIntParse_WithLegacyPlaywrightFragment_NoDoubleWrap()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            new[]
+            {
+                new UiTargetMapping("page.Count", "GetByTestId(\"CurrencyLabel__root\")", "Locator")
+            },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>());
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new LocalDeclarationAction(1, "var", "count",
+                            "int.Parse(page.Count.Text.Get()) - 1"),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(adapted);
+
+        Assert.Contains("Page.GetByTestId(\"CurrencyLabel__root\")", output);
+        Assert.DoesNotContain("Page.Locator(\"GetByTestId", output);
+        Assert.DoesNotContain("Page.Locator(\"Page.GetByTestId", output);
+    }
+
+    [Fact]
+    public void TextGetInsideIntParse_GeneratedCodeCompiles()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            new[]
+            {
+                new UiTargetMapping("page.Count", "CurrencyLabel__root", "TestId")
+            },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>());
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new LocalDeclarationAction(1, "var", "count",
+                            "int.Parse(page.Count.Text.Get()) - 1"),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(adapted);
+
+        Assert.Contains("int.Parse(await Page.GetByTestId(\"CurrencyLabel__root\").TextContentAsync())", output);
+        Assert.DoesNotContain("Page.Locator(\"GetByTestId", output);
+        Assert.DoesNotContain("Page.Locator(\"Page.GetByTestId", output);
+    }
+
+    [Fact]
+    public void TextGetInsideArithmetic_MultipleTextGetInOneExpression()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            new[]
+            {
+                new UiTargetMapping("page.A", "id_a", "TestId"),
+                new UiTargetMapping("page.B", "id_b", "TestId"),
+            },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>());
+
+        var adapter = new DefaultProjectAdapter(config);
+        var sourceModel = new TestFileModel(
+            FilePath: "Tests/fake.cs",
+            Namespace: "Test",
+            ClassName: "TestCls",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new LocalDeclarationAction(1, "var", "result",
+                            "int.Parse(page.A.Text.Get()) + int.Parse(page.B.Text.Get())"),
+                    }),
+            });
+
+        var adapted = adapter.Adapt(sourceModel);
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(adapted);
+
+        Assert.Contains("Page.GetByTestId(\"id_a\").TextContentAsync()", output);
+        Assert.Contains("Page.GetByTestId(\"id_b\").TextContentAsync()", output);
+        Assert.DoesNotContain("Page.Locator(\"GetByTestId", output);
+    }
+
+    #endregion
+
     static string Normalize(string text) => text.Replace("\r\n", "\n").Trim();
 }
