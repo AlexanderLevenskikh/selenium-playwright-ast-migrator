@@ -13,6 +13,8 @@ public class PlaywrightDotNetRenderer : IRenderer
     int _tempVarCounter = 0;
     readonly HashSet<string> _methodScopeVars = new();
     readonly Dictionary<string, string> _sourceVarMap = new();
+    readonly HashSet<string> _blockedSymbols = new(StringComparer.Ordinal);
+    HashSet<string> _sourceOnlyIdentifiers = new(StringComparer.Ordinal);
     bool _useAssertionsExpect = false;
 
     public PlaywrightDotNetRenderer(string indent = "\t")
@@ -29,6 +31,9 @@ public class PlaywrightDotNetRenderer : IRenderer
         sb.AppendLine();
 
         var testHost = model.TestHost;
+        _sourceOnlyIdentifiers = new HashSet<string>(
+            model.SourceOnlyIdentifiers ?? Array.Empty<string>(),
+            StringComparer.Ordinal);
         var targetNamespace = testHost?.Namespace ?? model.Namespace;
         var className = testHost?.ClassName ?? (model.ClassName + "Playwright");
         var baseClass = testHost?.BaseClass ?? "PageTest";
@@ -41,13 +46,14 @@ public class PlaywrightDotNetRenderer : IRenderer
             // Playwright renderer always needs these core usings
             sb.AppendLine("using Microsoft.Playwright.NUnit;");
             sb.AppendLine("using NUnit.Framework;");
+            sb.AppendLine("using System;");
             sb.AppendLine("using System.Threading.Tasks;");
             if (_useAssertionsExpect)
                 sb.AppendLine("using Microsoft.Playwright;");
             // Additional host-specific usings from config
             if (testHost?.Usings != null && testHost.Usings.Length > 0)
             {
-                var coreUsings = new HashSet<string> { "Microsoft.Playwright.NUnit", "NUnit.Framework", "System.Threading.Tasks" };
+                var coreUsings = new HashSet<string> { "Microsoft.Playwright.NUnit", "NUnit.Framework", "System", "System.Threading.Tasks" };
                 foreach (var @using in testHost.Usings)
                 {
                     if (!coreUsings.Contains(@using))
@@ -167,7 +173,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         sb.AppendLine($"{_indent}{{");
 
         foreach (var action in actions)
-            RenderAction(sb, action);
+            RenderActionWithSafety(sb, action);
 
         sb.AppendLine($"{_indent}}}");
     }
@@ -206,7 +212,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         ResetMethodScope();
 
         foreach (var action in test.BodyActions)
-            RenderAction(sb, action);
+            RenderActionWithSafety(sb, action);
 
         sb.AppendLine($"{_indent}}}");
     }
@@ -298,6 +304,57 @@ public class PlaywrightDotNetRenderer : IRenderer
                 sb.AppendLine($"{_indent}{_indent}// [unknown action: {action.GetType().Name}]");
                 break;
         }
+    }
+
+    void RenderActionWithSafety(StringBuilder sb, TestAction action)
+    {
+        var sourceText = GetActionSourceText(action);
+        var declaredVariables = ExtractVariableNames(sourceText).ToArray();
+
+        var sourceOnlyIdentifier = FindReferencedSymbol(sourceText, _sourceOnlyIdentifiers);
+        if (sourceOnlyIdentifier != null)
+        {
+            foreach (var variable in declaredVariables)
+                BlockSymbol(variable);
+
+            RenderBlockedActionAsComment(
+                sb,
+                action,
+                $"uses source-only identifier '{sourceOnlyIdentifier}'",
+                sourceText);
+            return;
+        }
+
+        var blockedSymbol = FindReferencedSymbol(sourceText, _blockedSymbols);
+        if (blockedSymbol != null)
+        {
+            foreach (var variable in declaredVariables)
+                BlockSymbol(variable);
+
+            RenderBlockedActionAsComment(
+                sb,
+                action,
+                $"depends on unresolved symbol '{blockedSymbol}'",
+                sourceText);
+            return;
+        }
+
+        RenderAction(sb, action);
+
+        if (action is RawStatementAction raw && IsResolvedRawLocatorAssignment(raw.SourceText))
+            return;
+
+        if (action is RawStatementAction or UnsupportedAction)
+        {
+            foreach (var variable in declaredVariables)
+                BlockSymbol(variable);
+        }
+    }
+
+    void RenderBlockedActionAsComment(StringBuilder sb, TestAction action, string reason, string sourceText)
+    {
+        sb.AppendLine($"{_indent}{_indent}// TODO: {reason}");
+        AppendCommentBlock(sb, _indent + _indent, sourceText, "  ");
     }
 
     void RenderClick(StringBuilder sb, ClickAction action)
@@ -789,7 +846,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
 
         RegisterSourceVar(action.VariableName, action.VariableName);
-        sb.AppendLine($"{_indent}{_indent}{action.VariableType} {action.VariableName} = {action.InitializationValue}; // line {action.SourceLine}");
+        sb.AppendLine($"{_indent}{_indent}{action.VariableType} {action.VariableName} = {ConvertExpression(action.InitializationValue)}; // line {action.SourceLine}");
     }
 
     static bool ContainsUnresolvedSourceObjectAccess(string expr)
@@ -817,14 +874,14 @@ public class PlaywrightDotNetRenderer : IRenderer
         sb.AppendLine($"{_indent}{_indent}if ({action.ConditionExpression})");
         sb.AppendLine($"{_indent}{_indent}{{");
         foreach (var a in action.IfActions)
-            RenderAction(sb, a);
+            RenderActionWithSafety(sb, a);
 
         foreach (var elseIf in action.ElseIfActions)
         {
             sb.AppendLine($"{_indent}{_indent}}} else if ({elseIf.Condition})");
             sb.AppendLine($"{_indent}{_indent}{{");
             foreach (var a in elseIf.Actions)
-                RenderAction(sb, a);
+                RenderActionWithSafety(sb, a);
         }
 
         if (action.ElseActions.Any())
@@ -832,7 +889,7 @@ public class PlaywrightDotNetRenderer : IRenderer
             sb.AppendLine($"{_indent}{_indent}}} else");
             sb.AppendLine($"{_indent}{_indent}{{");
             foreach (var a in action.ElseActions)
-                RenderAction(sb, a);
+                RenderActionWithSafety(sb, a);
         }
 
         sb.AppendLine($"{_indent}{_indent}}}");
@@ -874,11 +931,33 @@ public class PlaywrightDotNetRenderer : IRenderer
         return target.Kind switch
         {
             TargetKind.PlaywrightLocator => RenderPlaywrightLocator(mapped: target as MappedTarget, rendered),
+            TargetKind.CssSelector => RenderCssSelectorLocator(mapped: target as MappedTarget),
+            TargetKind.TestIdBeginning => RenderTestIdBeginningLocator(mapped: target as MappedTarget),
+            TargetKind.ClassNameBeginning => RenderClassNameBeginningLocator(mapped: target as MappedTarget),
             TargetKind.Text => RenderTextLocator(mapped: target as MappedTarget),
             TargetKind.PageObjectProperty => rendered,
             TargetKind.RawExpression => rendered,
             _ => $"Page.Locator(\"TODO: {target.SourceExpression}\")"
         };
+    }
+
+    string RenderCssSelectorLocator(MappedTarget? mapped)
+    {
+        var selector = EscapeStringLiteral(mapped?.TargetExpression ?? "TODO");
+        return ApplyMatchStrategy($"Page.Locator(\"{selector}\")", mapped);
+    }
+
+    string RenderTestIdBeginningLocator(MappedTarget? mapped)
+    {
+        var attr = EscapeAttribute(mapped?.TestIdAttribute ?? "data-testid");
+        var prefix = EscapeAttributeValue(mapped?.TargetExpression ?? "TODO");
+        return ApplyMatchStrategy($"Page.Locator(\"[{attr}^='{prefix}']\")", mapped);
+    }
+
+    string RenderClassNameBeginningLocator(MappedTarget? mapped)
+    {
+        var prefix = EscapeAttributeValue(mapped?.TargetExpression ?? "TODO");
+        return ApplyMatchStrategy($"Page.Locator(\"[class^='{prefix}']\")", mapped);
     }
 
     string RenderPlaywrightLocator(MappedTarget? mapped, string rendered)
@@ -944,6 +1023,11 @@ public class PlaywrightDotNetRenderer : IRenderer
         return attr.Replace("\\", "\\\\").Replace("\"", "\\\"");
     }
 
+    string EscapeAttributeValue(string value)
+    {
+        return value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("'", "\\'");
+    }
+
     string EscapeString(string value)
     {
         return value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("'", "&#39;");
@@ -958,7 +1042,15 @@ public class PlaywrightDotNetRenderer : IRenderer
         if (_sourceVarMap.TryGetValue(trimmed, out var mapped))
             return mapped;
 
-        return expr;
+        return ConvertHoursExtensions(expr);
+    }
+
+    static string ConvertHoursExtensions(string expr)
+    {
+        return Regex.Replace(
+            expr,
+            @"(?<![\w.])(?<value>\d+|[A-Za-z_]\w*)\s*\.\s*Hours\s*\(\s*\)",
+            "TimeSpan.FromHours(${value})");
     }
 
     string ConvertConstraint(string constraint)
@@ -1054,6 +1146,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         _tempVarCounter = 0;
         _methodScopeVars.Clear();
         _sourceVarMap.Clear();
+        _blockedSymbols.Clear();
     }
 
     void RegisterSourceVar(string originalName, string generatedName)
@@ -1062,16 +1155,132 @@ public class PlaywrightDotNetRenderer : IRenderer
         if (!string.IsNullOrEmpty(originalName))
         {
             _sourceVarMap[originalName] = generatedName;
+            _blockedSymbols.Remove(originalName);
         }
+    }
+
+    void BlockSymbol(string symbol)
+    {
+        symbol = symbol.Trim();
+        if (string.IsNullOrEmpty(symbol) || symbol == "_")
+            return;
+
+        _sourceVarMap.Remove(symbol);
+        _blockedSymbols.Add(symbol);
     }
 
     string? ExtractVariableName(string sourceText)
     {
-        var match = System.Text.RegularExpressions.Regex.Match(sourceText, @"^\s*var\s+(\w+)\s*=");
-        if (match.Success) return match.Groups[1].Value;
-        match = System.Text.RegularExpressions.Regex.Match(sourceText, @"^\s*\w+\s+(\w+)\s*=");
-        if (match.Success) return match.Groups[1].Value;
+        return ExtractVariableNames(sourceText).FirstOrDefault();
+    }
+
+    static IReadOnlyList<string> ExtractVariableNames(string? sourceText)
+    {
+        if (string.IsNullOrWhiteSpace(sourceText))
+            return Array.Empty<string>();
+
+        var text = StripLeadingCommentPrefix(sourceText.Trim()).Trim().TrimEnd(';');
+        var result = new List<string>();
+
+        var deconstruction = Regex.Match(text, @"^\s*(?:var\s*)?\(([^)]+)\)\s*=");
+        if (deconstruction.Success)
+        {
+            AddDeconstructionNames(result, deconstruction.Groups[1].Value);
+            return result;
+        }
+
+        var simpleDeclaration = Regex.Match(text, @"^\s*(?:var|[\w<>\[\].?]+)\s+(@?\w+)\s*=");
+        if (simpleDeclaration.Success)
+        {
+            AddName(result, simpleDeclaration.Groups[1].Value);
+            return result;
+        }
+
+        var assignment = Regex.Match(text, @"^\s*(@?\w+)\s*=");
+        if (assignment.Success && !text.StartsWith("==", StringComparison.Ordinal))
+        {
+            AddName(result, assignment.Groups[1].Value);
+            return result;
+        }
+
+        return result;
+    }
+
+    static void AddDeconstructionNames(List<string> result, string namesText)
+    {
+        foreach (var part in namesText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var name = part.Trim();
+            if (name.StartsWith("var ", StringComparison.Ordinal))
+                name = name.Substring("var ".Length).Trim();
+
+            AddName(result, name);
+        }
+    }
+
+    static void AddName(List<string> result, string name)
+    {
+        name = name.Trim().TrimStart('@');
+        if (string.IsNullOrEmpty(name) || name == "_")
+            return;
+
+        if (Regex.IsMatch(name, @"^[A-Za-z_]\w*$") && !result.Contains(name))
+            result.Add(name);
+    }
+
+    static string StripLeadingCommentPrefix(string text)
+    {
+        var trimmed = text.TrimStart();
+        return trimmed.StartsWith("//", StringComparison.Ordinal)
+            ? trimmed.Substring(2).TrimStart()
+            : text;
+    }
+
+    string GetActionSourceText(TestAction action)
+    {
+        return action switch
+        {
+            ClickAction a => $"{a.Target.SourceExpression}.Click()",
+            SendKeysAction a => $"{a.Target.SourceExpression}.SendKeys({a.TextExpression})",
+            PressAction a => $"{a.Target.SourceExpression}.Press({a.KeyName})",
+            AssertThatAction a => $"Assert.That({a.ActualExpression}, {a.ConstraintExpression})",
+            AssertAreEqualAction a => $"Assert.AreEqual({a.ExpectedExpression}, {a.ActualExpression})",
+            TextAssertionAction a => $"{a.Target.SourceExpression}.Text.Should({a.ExpectedValue})",
+            VisibilityAssertionAction a => $"{a.Target.SourceExpression}.Visible.Should()",
+            WaitForAction a => $"{a.Target.SourceExpression}.WaitFor()",
+            UrlAssertionAction a => $"UrlAssertion({a.ExpectedValue})",
+            MethodInvocationAction a => a.FullSourceText,
+            MappedMethodInvocationAction a => a.FullSourceText,
+            UnsupportedAction a => a.SourceText,
+            RawStatementAction a => a.SourceText,
+            LocalDeclarationAction a => $"{a.VariableType} {a.VariableName} = {a.InitializationValue}",
+            LocatorDeclarationAction a => $"var {a.VariableName} = {a.SourceText}",
+            NavigationAction a => a.SourceText ?? $"Navigation.OpenPage({a.UrlExpression})",
+            ConditionalBlockAction a => a.ConditionExpression,
+            TableRowTextAccessAction a => a.SourceText,
+            TableRowAccessAction a => a.SourceText,
+            TableCountAssertionAction a => a.SourceText,
+            _ => string.Empty
+        };
+    }
+
+    static string? FindReferencedSymbol(string sourceText, IEnumerable<string> symbols)
+    {
+        foreach (var symbol in symbols.Where(s => !string.IsNullOrWhiteSpace(s)).OrderByDescending(s => s.Length))
+        {
+            if (Regex.IsMatch(sourceText, $@"(?<![\w@]){Regex.Escape(symbol)}(?!\w)"))
+                return symbol;
+        }
+
         return null;
+    }
+
+    static bool IsResolvedRawLocatorAssignment(string sourceText)
+    {
+        var text = sourceText.Trim().TrimEnd(';');
+        return Regex.IsMatch(
+            text,
+            @"^\s*@?\w+\s*=\s*WebDriver\s*\.\s*FindElement\s*\(\s*By\s*\.\s*(XPath|CssSelector)\s*\(\s*""[^""]*""\s*\)\s*\)\s*$");
     }
 
     void RenderTableCountAssertion(StringBuilder sb, TableCountAssertionAction action)

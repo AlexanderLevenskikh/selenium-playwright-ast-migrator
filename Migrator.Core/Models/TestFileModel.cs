@@ -21,6 +21,13 @@ public sealed record TestFileModel
     /// </summary>
     public TestHostConfig? TestHost { get; init; }
 
+    /// <summary>
+    /// Identifiers that exist only in the Selenium/source project and must not be
+    /// emitted as active C# in generated Playwright tests.
+    /// Set by the adapter from config.
+    /// </summary>
+    public IReadOnlyList<string> SourceOnlyIdentifiers { get; init; } = Array.Empty<string>();
+
     public TestFileModel(
         string FilePath,
         string Namespace,

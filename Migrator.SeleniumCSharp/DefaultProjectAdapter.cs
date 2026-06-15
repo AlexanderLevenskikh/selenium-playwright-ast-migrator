@@ -97,7 +97,8 @@ public class DefaultProjectAdapter : IProjectAdapter
             SetUpActions: adaptedSetup,
             Tests: adaptedTests)
         {
-            TestHost = testHost
+            TestHost = testHost,
+            SourceOnlyIdentifiers = resolved._sourceOnlyIdentifiers
         };
     }
 
@@ -175,6 +176,9 @@ public class DefaultProjectAdapter : IProjectAdapter
                 "Text" => TargetKind.Text,
                 "PageObjectProperty" => TargetKind.PageObjectProperty,
                 "RawExpression" => TargetKind.RawExpression,
+                "CssSelector" => TargetKind.CssSelector,
+                "TestIdBeginning" => TargetKind.TestIdBeginning,
+                "ClassNameBeginning" => TargetKind.ClassNameBeginning,
                 _ => TargetKind.PlaywrightLocator
             };
 
@@ -1184,6 +1188,18 @@ targetExpr: null,
                 // Already a full expression like "Page.GetByTestId(\"x\")"
                 return ApplyMatchStrategy(rendered, mapped);
 
+            case TargetKind.CssSelector:
+                return ApplyMatchStrategy($"Page.Locator(\"{EscapeStr(mapped.TargetExpression)}\")", mapped);
+
+            case TargetKind.TestIdBeginning:
+                var prefixAttr = EscapeAttr(mapped.TestIdAttribute ?? "data-testid");
+                var prefixValue = EscapeAttrValue(mapped.TargetExpression);
+                return ApplyMatchStrategy($"Page.Locator(\"[{prefixAttr}^='{prefixValue}']\")", mapped);
+
+            case TargetKind.ClassNameBeginning:
+                var classPrefix = EscapeAttrValue(mapped.TargetExpression);
+                return ApplyMatchStrategy($"Page.Locator(\"[class^='{classPrefix}']\")", mapped);
+
             case TargetKind.PageObjectProperty:
                 return rendered;
 
@@ -1209,6 +1225,7 @@ targetExpr: null,
 
     static string EscapeStr(string value) => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
     static string EscapeAttr(string value) => value.Replace("]", "\\]").Replace("[", "\\[");
+    static string EscapeAttrValue(string value) => value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("'", "\\'");
 
     static bool IsLegacyPlaywrightFragment(string expr)
     {
@@ -1264,6 +1281,7 @@ targetExpr: null,
         internal readonly Dictionary<string, string> _methodMap = new();
         internal readonly Dictionary<string, (string[] Statements, bool RequiresReview)> _methodStatementsMap = new();
         internal IList<ParameterizedMethodMapping> _parameterizedMethods = Array.Empty<ParameterizedMethodMapping>();
+        internal IReadOnlyList<string> _sourceOnlyIdentifiers = Array.Empty<string>();
         internal readonly TestHostConfig? _testHost;
         internal readonly ProjectAdapterConfig _globalConfig;
 
@@ -1271,6 +1289,7 @@ targetExpr: null,
         {
             _globalConfig = globalConfig;
             _testHost = testHost;
+            _sourceOnlyIdentifiers = globalConfig.SourceOnlyIdentifiers ?? Array.Empty<string>();
         }
 
         /// <summary>
@@ -1290,6 +1309,25 @@ targetExpr: null,
 
             if (mapped.Kind == TargetKind.RawExpression)
                 return rendered;
+
+            if (mapped.Kind == TargetKind.CssSelector)
+            {
+                var selector = mapped.TargetExpression.Replace("\\", "\\\\").Replace("\"", "\\\"");
+                return $"Page.Locator(\"{selector}\")";
+            }
+
+            if (mapped.Kind == TargetKind.TestIdBeginning)
+            {
+                var attr = (mapped.TestIdAttribute ?? "data-testid").Replace("]", "\\]").Replace("[", "\\[");
+                var value = mapped.TargetExpression.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("'", "\\'");
+                return $"Page.Locator(\"[{attr}^='{value}']\")";
+            }
+
+            if (mapped.Kind == TargetKind.ClassNameBeginning)
+            {
+                var value = mapped.TargetExpression.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("'", "\\'");
+                return $"Page.Locator(\"[class^='{value}']\")";
+            }
 
             if (mapped.Kind == TargetKind.PageObjectProperty)
                 return rendered;

@@ -2,6 +2,7 @@
 
 using Microsoft.Playwright.NUnit;
 using NUnit.Framework;
+using System;
 using System.Threading.Tasks;
 
 namespace Example.E2ETests.Tests.NonCategory.Playwright;
@@ -15,9 +16,10 @@ public class ButtonTestsPlaywright : PageTest
 	public async Task SetUp()
 	{
 		// TODO: raw statement — review: var pagef = Navigation.OpenRegistryAgentPage()
-		// TODO: raw statement — review: page = pagef
-		// [ValidateLoading] page.Loader.ValidateLoading() // line 17
-		// TODO: manual review needed
+		// TODO: depends on unresolved symbol 'pagef'
+		//   page = pagef
+		// TODO: depends on unresolved symbol 'page'
+		//   page.Loader.ValidateLoading()
 	}
 
 	[Category("QuickRunning")]

@@ -57,7 +57,7 @@ public class SnapshotTests
         Assert.DoesNotContain("TODO: page.WidgetSearch", output);
 
         Assert.Contains("// TODO:", output);
-        Assert.Contains("// TODO: manual review needed", output);
+        Assert.Contains("// TODO: depends on unresolved symbol", output);
 
         Assert.Equal(
             Normalize(File.ReadAllText(Path.Combine(_testFilesDir, "Expected", "Widget.generated.cs"))),
@@ -107,7 +107,7 @@ public class SnapshotTests
         Assert.DoesNotContain("TODO: page.MenuItems.SideMenuCatalogsPartners", output);
 
         Assert.Contains("// TODO:", output);
-        Assert.Contains("// TODO: manual review needed", output);
+        Assert.Contains("// TODO: depends on unresolved symbol", output);
 
         Assert.Equal(
             Normalize(File.ReadAllText(Path.Combine(_testFilesDir, "Expected", "ButtonTests.generated.cs"))),
@@ -3768,6 +3768,217 @@ public class ElementAtTests
         Assert.DoesNotContain(".Nth(0)", output);
         Assert.True(CompileChecker.CompilesWithoutErrors(output),
             CompileChecker.FormatErrors(output));
+    }
+}
+
+public class CompileSafetyTests
+{
+    static TestFileModel CreateModel(params TestAction[] bodyActions)
+    {
+        return new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "CompileSafetyTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(), bodyActions)
+            });
+    }
+
+    [Fact]
+    public void RawDeconstructionDeclaration_BlocksDownstreamVariable()
+    {
+        var model = CreateModel(
+            new RawStatementAction(1, "var (_, promoCodeSidePage) = OpenEditSidePagePromoCodes(discount)"),
+            new ClickAction(2, "promoCodeSidePage.PromoCodeBlocks.First()"));
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("TODO: depends on unresolved symbol 'promoCodeSidePage'", output);
+        Assert.DoesNotContain("await Page.Locator(\"TODO: promoCodeSidePage", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void RawSimpleDeclaration_BlocksDownstreamVariable()
+    {
+        var model = CreateModel(
+            new RawStatementAction(1, "var page = UnknownOpenPage()"),
+            new ClickAction(2, "page.Button"));
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("TODO: depends on unresolved symbol 'page'", output);
+        Assert.DoesNotContain("await Page.Locator(\"TODO: page.Button", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void RawAssignment_BlocksDownstreamVariable()
+    {
+        var model = CreateModel(
+            new RawStatementAction(1, "page = UnknownOpenPage()"),
+            new ClickAction(2, "page.Button"));
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("TODO: depends on unresolved symbol 'page'", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void Discard_IsNotTrackedAsBlockedSymbol()
+    {
+        var model = CreateModel(
+            new RawStatementAction(1, "var (_, page) = UnknownOpenPage()"),
+            new ClickAction(2, "_"));
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.DoesNotContain("depends on unresolved symbol '_'", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void SourceOnlyIdentifier_BlocksDeclarationAndDownstreamUsage()
+    {
+        var model = CreateModel(
+            new LocalDeclarationAction(1, "name", "var", "DataGenerator.GenRussianString(10)"),
+            new SendKeysAction(2, TargetExpression.Mapped("page.Name", "Page.Locator(\"#name\")", TargetKind.RawExpression), "name"))
+            with
+            {
+                SourceOnlyIdentifiers = new[] { "DataGenerator" }
+            };
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("TODO: uses source-only identifier 'DataGenerator'", output);
+        Assert.Contains("TODO: depends on unresolved symbol 'name'", output);
+        Assert.DoesNotContain("FillAsync(name)", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void EmptySourceOnlyIdentifiers_PreservesOldBehavior()
+    {
+        var model = CreateModel(
+            new LocalDeclarationAction(1, "name", "var", "DataGenerator.GenRussianString(10)"));
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("var name = DataGenerator.GenRussianString(10);", output);
+    }
+
+    [Fact]
+    public void HoursExtension_IsConvertedInLocalDeclaration()
+    {
+        var model = CreateModel(
+            new LocalDeclarationAction(1, "offset", "var", "DateTimeOffset.UtcNow.ToOffset(3.Hours())"));
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("using System;", output);
+        Assert.Contains("TimeSpan.FromHours(3)", output);
+    }
+
+    [Fact]
+    public void TargetKind_CssSelector_RendersLocator()
+    {
+        var model = CreateModel(
+            new ClickAction(1, TargetExpression.Mapped("page.Menu", "a[href='/discounts']", TargetKind.CssSelector)));
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("Page.Locator(\"a[href='/discounts']\").ClickAsync()", output);
+    }
+
+    [Fact]
+    public void TargetKind_TestIdBeginning_RendersPrefixSelector()
+    {
+        var model = CreateModel(
+            new ClickAction(1, TargetExpression.Mapped("row", "row-cost-rule-setting-", TargetKind.TestIdBeginning, "data-testid")));
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("Page.Locator(\"[data-testid^='row-cost-rule-setting-']\").ClickAsync()", output);
+        Assert.DoesNotContain("GetByTestId(\"row-cost-rule-setting-\")", output);
+    }
+
+    [Fact]
+    public void TargetKind_ClassNameBeginning_RendersPrefixSelector()
+    {
+        var model = CreateModel(
+            new ClickAction(1, TargetExpression.Mapped("page.Menu", "App-components-Menu--menuBlock", TargetKind.ClassNameBeginning)));
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("Page.Locator(\"[class^='App-components-Menu--menuBlock']\").ClickAsync()", output);
+    }
+
+    [Fact]
+    public void UnknownTargetKind_FailsConfigValidation()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            new[] { new UiTargetMapping("page.Bad", "bad", "UnknownKind") },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>());
+
+        var ex = Assert.Throws<ConfigValidationError>(() => ConfigValidator.Validate(config));
+
+        Assert.Contains("TargetKind = \"UnknownKind\" is not supported", string.Join("\n", ex.Errors));
+    }
+
+    [Fact]
+    public void UnknownTableRowTargetKind_FailsConfigValidation()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            Tables: new[]
+            {
+                new TableConfig
+                {
+                    SourceExpression = "page.Rows",
+                    RowTarget = new TargetMappingEntry { TargetExpression = ".row", TargetKind = "UnknownKind" }
+                }
+            });
+
+        var ex = Assert.Throws<ConfigValidationError>(() => ConfigValidator.Validate(config));
+
+        Assert.Contains("Tables[0].RowTarget.TargetKind = \"UnknownKind\" is not supported", string.Join("\n", ex.Errors));
+    }
+
+    [Fact]
+    public void UnknownPaginationTargetKind_FailsConfigValidation()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            Pagination: new[]
+            {
+                new PaginationConfig
+                {
+                    SourceExpression = "page.Pagination.Forward",
+                    TargetExpression = "next",
+                    TargetKind = "UnknownKind"
+                }
+            });
+
+        var ex = Assert.Throws<ConfigValidationError>(() => ConfigValidator.Validate(config));
+
+        Assert.Contains("Pagination[0].TargetKind = \"UnknownKind\" is not supported", string.Join("\n", ex.Errors));
     }
 }
 

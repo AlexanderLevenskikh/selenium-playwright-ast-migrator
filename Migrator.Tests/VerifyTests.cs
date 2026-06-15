@@ -42,6 +42,34 @@ public class VerifyTests
     #region Exit code: 0 — clean verify passes
 
     [Fact]
+    public void Verify_ClassifiesCompileSafetyTodoDiagnostics()
+    {
+        var model = new TestFileModel(
+            FilePath: "CompileSafety.cs",
+            Namespace: "Test",
+            ClassName: "CompileSafety",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: Array.Empty<TestModel>());
+
+        var generated = string.Join("\n", new[]
+        {
+            "// TODO: raw statement requires manual review:",
+            "// TODO: uses source-only identifier 'DataGenerator'",
+            "// TODO: depends on unresolved symbol 'name'"
+        });
+        var migrationReport = ReportBuilder.Build(model, generated);
+        var result = new PipelineResult(model, model, generated, migrationReport);
+
+        var report = VerifyRunner.Run(new List<PipelineResult> { result }, config: null, CleanSyntaxChecker);
+
+        Assert.Contains(report.Issues, i => i.Category == "RawDeclarationVariablesBlocked");
+        Assert.Contains(report.Issues, i => i.Category == "SourceOnlyIdentifierUsage");
+        Assert.Contains(report.Issues, i => i.Category == "BlockedSymbolUsage");
+        Assert.Contains(report.Issues, i => i.Category == "DownstreamStatementBlocked");
+    }
+
+    [Fact]
     public void Verify_CleanReport_NoGates_ReturnsExitCode0()
     {
         var report = new VerifyReport(

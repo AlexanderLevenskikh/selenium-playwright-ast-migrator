@@ -431,10 +431,13 @@ public static class VerifyRunner
             if (trimmed.StartsWith("// TODO:"))
             {
                 todoCount++;
+                var todoMessage = trimmed.Substring(8).Trim();
                 issues.Add(new VerifyIssue(
                     "Todo", IssueSeverity.Warning,
-                    $"TODO comment found: {trimmed.Substring(8).Trim()}",
+                    $"TODO comment found: {todoMessage}",
                     sourceFile, i + 1));
+
+                AddTodoDiagnosticIssues(todoMessage, sourceFile, i + 1, issues);
             }
 
             // Detect Page.TODO_ calls (actual code, not comments)
@@ -446,6 +449,37 @@ public static class VerifyRunner
                     $"Page.TODO_* call found: {trimmed}",
                     sourceFile, i + 1));
             }
+        }
+    }
+
+    static void AddTodoDiagnosticIssues(string todoMessage, string sourceFile, int line, List<VerifyIssue> issues)
+    {
+        if (todoMessage.Contains("depends on unresolved symbol", StringComparison.OrdinalIgnoreCase))
+        {
+            issues.Add(new VerifyIssue(
+                "BlockedSymbolUsage", IssueSeverity.Warning,
+                todoMessage,
+                sourceFile, line));
+            issues.Add(new VerifyIssue(
+                "DownstreamStatementBlocked", IssueSeverity.Warning,
+                todoMessage,
+                sourceFile, line));
+        }
+
+        if (todoMessage.Contains("uses source-only identifier", StringComparison.OrdinalIgnoreCase))
+        {
+            issues.Add(new VerifyIssue(
+                "SourceOnlyIdentifierUsage", IssueSeverity.Warning,
+                todoMessage,
+                sourceFile, line));
+        }
+
+        if (todoMessage.Contains("raw statement", StringComparison.OrdinalIgnoreCase))
+        {
+            issues.Add(new VerifyIssue(
+                "RawDeclarationVariablesBlocked", IssueSeverity.Info,
+                todoMessage,
+                sourceFile, line));
         }
     }
 

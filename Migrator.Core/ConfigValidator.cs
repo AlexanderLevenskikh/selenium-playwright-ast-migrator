@@ -8,6 +8,18 @@ namespace Migrator.Core;
 /// </summary>
 public static class ConfigValidator
 {
+    static readonly HashSet<string> SupportedTargetKinds = new(StringComparer.Ordinal)
+    {
+        "TestId",
+        "Locator",
+        "Text",
+        "PageObjectProperty",
+        "RawExpression",
+        "CssSelector",
+        "TestIdBeginning",
+        "ClassNameBeginning"
+    };
+
     /// <summary>
     /// Validates the config, throwing ConfigValidationError if any issues found.
     /// </summary>
@@ -22,6 +34,7 @@ public static class ConfigValidator
         ValidateQualityGates(config.QualityGates, errors);
         ValidateTables(config.Tables, "Tables", errors);
         ValidatePagination(config.Pagination, "Pagination", errors);
+        ValidateSourceOnlyIdentifiers(config.SourceOnlyIdentifiers, errors);
 
         if (errors.Count > 0)
             throw new ConfigValidationError(errors);
@@ -149,6 +162,20 @@ public static class ConfigValidator
 
             if (string.IsNullOrEmpty(t.TargetExpression))
                 errors.Add($"{prefix} has missing TargetExpression.");
+
+            ValidateTargetKind(t.TargetKind, $"{prefix}.TargetKind", errors);
+        }
+    }
+
+    private static void ValidateTargetKind(string? targetKind, string path, List<string> errors)
+    {
+        if (string.IsNullOrEmpty(targetKind))
+        {
+            errors.Add($"{path} is missing.");
+        }
+        else if (!SupportedTargetKinds.Contains(targetKind))
+        {
+            errors.Add($"{path} = \"{targetKind}\" is not supported. Supported values: {string.Join(", ", SupportedTargetKinds)}.");
         }
     }
 
@@ -241,6 +268,15 @@ public static class ConfigValidator
             errors.Add("QualityGates.MaxRawExpressions cannot be negative.");
     }
 
+    private static void ValidateSourceOnlyIdentifiers(string[] identifiers, List<string> errors)
+    {
+        for (var i = 0; i < identifiers.Length; i++)
+        {
+            if (string.IsNullOrWhiteSpace(identifiers[i]))
+                errors.Add($"SourceOnlyIdentifiers[{i}] is empty.");
+        }
+    }
+
     private static void ValidateTables(TableConfig[] tables, string section, List<string> errors)
     {
         for (int i = 0; i < tables.Length; i++)
@@ -252,9 +288,24 @@ public static class ConfigValidator
                 errors.Add($"{prefix} has missing SourceExpression.");
 
             if (t.RowTarget == null)
+            {
                 errors.Add($"{prefix} has missing RowTarget.");
-            else if (string.IsNullOrEmpty(t.RowTarget.TargetExpression))
-                errors.Add($"{prefix}.RowTarget has missing TargetExpression.");
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(t.RowTarget.TargetExpression))
+                    errors.Add($"{prefix}.RowTarget has missing TargetExpression.");
+
+                ValidateTargetKind(t.RowTarget.TargetKind, $"{prefix}.RowTarget.TargetKind", errors);
+            }
+
+            if (t.Pagination?.Forward != null)
+            {
+                if (string.IsNullOrEmpty(t.Pagination.Forward.TargetExpression))
+                    errors.Add($"{prefix}.Pagination.Forward has missing TargetExpression.");
+
+                ValidateTargetKind(t.Pagination.Forward.TargetKind, $"{prefix}.Pagination.Forward.TargetKind", errors);
+            }
         }
     }
 
@@ -270,6 +321,8 @@ public static class ConfigValidator
 
             if (string.IsNullOrEmpty(p.TargetExpression))
                 errors.Add($"{prefix} has missing TargetExpression.");
+
+            ValidateTargetKind(p.TargetKind, $"{prefix}.TargetKind", errors);
         }
     }
 }

@@ -6,7 +6,10 @@ public enum TargetKind
     PageObjectProperty,
     RawExpression,
     Unresolved,
-    Text
+    Text,
+    CssSelector,
+    TestIdBeginning,
+    ClassNameBeginning
 }
 
 /// <summary>

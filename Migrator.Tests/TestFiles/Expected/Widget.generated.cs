@@ -2,6 +2,7 @@
 
 using Microsoft.Playwright.NUnit;
 using NUnit.Framework;
+using System;
 using System.Threading.Tasks;
 
 namespace Example.E2ETests.Tests.Functional.Playwright;
@@ -15,12 +16,16 @@ public class WidgetPlaywright : PageTest
 	public async Task SetUp()
 	{
 		// TODO: raw statement — review: var pagef = Navigation.OpenSearchPage()
-		// [ValidateLoading] pagef.Loader.ValidateLoading() // line 18
-		// TODO: manual review needed
-		// TODO: raw statement — review: var lightbox = pagef.WidgetButton.ClickAndOpen<WidgetPage>()
-		// TODO: raw statement — review: page = lightbox
-		await Expect(Page.GetByTestId("widget-user")).ToBeVisibleAsync(); // line 21
-		await Expect(Page.GetByTestId("futer-user")).ToBeVisibleAsync(); // line 22
+		// TODO: depends on unresolved symbol 'pagef'
+		//   pagef.Loader.ValidateLoading()
+		// TODO: depends on unresolved symbol 'pagef'
+		//   var lightbox = pagef.WidgetButton.ClickAndOpen<WidgetPage>()
+		// TODO: depends on unresolved symbol 'lightbox'
+		//   page = lightbox
+		// TODO: depends on unresolved symbol 'page'
+		//   page.User.Visible.Should()
+		// TODO: depends on unresolved symbol 'page'
+		//   page.FuterUser.Visible.Should()
 	}
 
 	[Category("QuickRunning")]

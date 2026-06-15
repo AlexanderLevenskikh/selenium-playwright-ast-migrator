@@ -14,6 +14,14 @@ public sealed class ProjectAdapterConfig
     public MethodMapping[] Methods { get; init; } = Array.Empty<MethodMapping>();
 
     /// <summary>
+    /// Identifiers that are available in the Selenium/source project but not in the
+    /// target Playwright project. Statements that reference them are rendered as
+    /// safe TODO comments instead of active C#.
+    /// </summary>
+    [JsonPropertyName("SourceOnlyIdentifiers")]
+    public string[] SourceOnlyIdentifiers { get; init; } = Array.Empty<string>();
+
+    /// <summary>
     /// Parameterized method mappings with placeholder support.
     /// Pattern uses {placeholderName} syntax. Priority: exact SourceMethod wins over SourceMethodPattern.
     /// </summary>
@@ -65,7 +73,7 @@ public sealed class ProjectAdapterConfig
     {
     }
 
-    public ProjectAdapterConfig(string SourceProjectName, UiTargetMapping[] UiTargets, PageObjectMapping[] PageObjects, MethodMapping[] Methods, LocatorSettings? LocatorSettings = null, TestHostConfig? TestHost = null, ParameterizedMethodMapping[]? ParameterizedMethods = null, ProfileScope[]? Scopes = null, QualityGatesConfig? QualityGates = null, TableConfig[]? Tables = null, PaginationConfig[]? Pagination = null)
+    public ProjectAdapterConfig(string SourceProjectName, UiTargetMapping[] UiTargets, PageObjectMapping[] PageObjects, MethodMapping[] Methods, LocatorSettings? LocatorSettings = null, TestHostConfig? TestHost = null, ParameterizedMethodMapping[]? ParameterizedMethods = null, ProfileScope[]? Scopes = null, QualityGatesConfig? QualityGates = null, TableConfig[]? Tables = null, PaginationConfig[]? Pagination = null, string[]? SourceOnlyIdentifiers = null)
     {
         this.SourceProjectName = SourceProjectName;
         this.UiTargets = UiTargets;
@@ -78,6 +86,7 @@ public sealed class ProjectAdapterConfig
         this.QualityGates = QualityGates;
         this.Tables = Tables ?? Array.Empty<TableConfig>();
         this.Pagination = Pagination ?? Array.Empty<PaginationConfig>();
+        this.SourceOnlyIdentifiers = SourceOnlyIdentifiers ?? Array.Empty<string>();
     }
 }
 
