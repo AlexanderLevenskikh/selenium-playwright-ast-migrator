@@ -35,7 +35,7 @@ public static class ReportWriter
             for (int i = 0; i < report.TopUnmappedTargets.Count; i++)
             {
                 var t = report.TopUnmappedTargets[i];
-                sb.AppendLine($"  {i + 1}. {t.SourceExpression} — {t.Usages} usages");
+                sb.AppendLine($"  {i + 1}. {t.SourceExpression} — {t.Usages} usages in {PathRedaction.Redact(t.ExampleFile)}:{t.ExampleLine}");
             }
             sb.AppendLine();
         }
@@ -46,7 +46,7 @@ public static class ReportWriter
             for (int i = 0; i < report.TopUnsupportedActions.Count; i++)
             {
                 var a = report.TopUnsupportedActions[i];
-                sb.AppendLine($"  {i + 1}. {a.MethodOrSourceText} — {a.Count} usages");
+                sb.AppendLine($"  {i + 1}. {a.MethodOrSourceText} — {a.Count} usages in {PathRedaction.Redact(a.ExampleFile)}:{a.ExampleLine}");
             }
             sb.AppendLine();
         }
@@ -69,12 +69,12 @@ public static class ReportWriter
             TodoComments = report.TodoComments,
             FilesWithWarnings = report.FilesWithWarnings,
             GeneratedFiles = report.GeneratedFiles,
-            ProcessedFiles = report.ProcessedFiles.ToArray(),
+            ProcessedFiles = PathRedaction.RedactAll(report.ProcessedFiles).ToArray(),
             TopUnmappedTargets = report.TopUnmappedTargets.Select(t => new
             {
                 SourceExpression = t.SourceExpression,
                 Usages = t.Usages,
-                ExampleFile = t.ExampleFile,
+                ExampleFile = PathRedaction.Redact(t.ExampleFile),
                 ExampleLine = t.ExampleLine,
                 SuggestedTargetExpression = t.SuggestedTargetExpression
             }).ToArray(),
@@ -82,12 +82,12 @@ public static class ReportWriter
             {
                 MethodOrSourceText = a.MethodOrSourceText,
                 Count = a.Count,
-                ExampleFile = a.ExampleFile,
+                ExampleFile = PathRedaction.Redact(a.ExampleFile),
                 ExampleLine = a.ExampleLine
             }).ToArray(),
             PerFileReports = report.PerFileReports.Select(r => new
             {
-                SourceFilePath = r.SourceFilePath,
+                SourceFilePath = PathRedaction.Redact(r.SourceFilePath),
                 TotalTests = r.TotalTests,
                 SuccessfullyConvertedTests = r.SuccessfullyConvertedTests,
                 UnsupportedCount = r.UnsupportedCount,
@@ -108,7 +108,7 @@ public static class ReportWriter
         {
             SourceExpression = t.SourceExpression,
             Usages = t.Usages,
-            ExampleFile = t.ExampleFile,
+            ExampleFile = PathRedaction.Redact(t.ExampleFile),
             ExampleLine = t.ExampleLine,
             SuggestedTargetExpression = t.SuggestedTargetExpression
         }).ToArray();
@@ -122,7 +122,7 @@ public static class ReportWriter
         sb.AppendLine("SourceExpression,Usages,ExampleFile,ExampleLine,SuggestedTargetExpression");
         foreach (var t in report.TopUnmappedTargets)
         {
-            sb.AppendLine($"{EscapeCsv(t.SourceExpression)},{t.Usages},{EscapeCsv(t.ExampleFile)},{t.ExampleLine},{EscapeCsv(t.SuggestedTargetExpression)}");
+            sb.AppendLine($"{EscapeCsv(t.SourceExpression)},{t.Usages},{EscapeCsv(PathRedaction.Redact(t.ExampleFile))},{t.ExampleLine},{EscapeCsv(t.SuggestedTargetExpression)}");
         }
         return sb.ToString();
     }
@@ -133,7 +133,7 @@ public static class ReportWriter
         {
             MethodOrSourceText = a.MethodOrSourceText,
             Count = a.Count,
-            ExampleFile = a.ExampleFile,
+            ExampleFile = PathRedaction.Redact(a.ExampleFile),
             ExampleLine = a.ExampleLine
         }).ToArray();
 
@@ -146,7 +146,7 @@ public static class ReportWriter
         sb.AppendLine("MethodOrSourceText,Count,ExampleFile,ExampleLine");
         foreach (var a in report.TopUnsupportedActions)
         {
-            sb.AppendLine($"{EscapeCsv(a.MethodOrSourceText)},{a.Count},{EscapeCsv(a.ExampleFile)},{a.ExampleLine}");
+            sb.AppendLine($"{EscapeCsv(a.MethodOrSourceText)},{a.Count},{EscapeCsv(PathRedaction.Redact(a.ExampleFile))},{a.ExampleLine}");
         }
         return sb.ToString();
     }

@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Migrator.Core;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -27,6 +28,7 @@ public class RoslynTestFileParser : ITestFileParser
 
     static List<IInvocationRecognizer> CreateDefaultRecognizers() => new()
     {
+        new WebDriverFindElementRecognizer(),
         new ClickInvocationRecognizer(),
         new SendKeysInvocationRecognizer(),
         new AssertInvocationRecognizer(),
@@ -235,11 +237,25 @@ public class RoslynTestFileParser : ITestFileParser
         // Local declarations — try to extract meaningful declarations
         if (statement is LocalDeclarationStatementSyntax lds)
         {
+            // First try to extract navigation declarations (Navigation.OpenPage<T>)
+            if (TryExtractNavigationDeclaration(lds, line) is { } navDecl)
+                return navDecl;
+
+            // Then try to extract locator declarations (WebDriver.FindElement)
+            if (TryExtractLocatorDeclaration(lds, line) is { } locatorDecl)
+                return locatorDecl;
+
             if (TryExtractLocalDeclaration(lds, line) is { } localDecl)
                 return localDecl;
 
             var text = lds.ToString().Trim().Trim(';');
             return new RawStatementAction(line, text);
+        }
+
+        // if/else if/else blocks — extract as ConditionalBlockAction
+        if (statement is IfStatementSyntax ifStmt)
+        {
+            return TryExtractConditionalBlock(ifStmt, semanticModel, line);
         }
 
         // Assignments in expression statements — preserve as raw statements
@@ -442,5 +458,140 @@ public class RoslynTestFileParser : ITestFileParser
 
         var lower = name.ToLowerInvariant();
         return lower.Contains("name") || lower.Contains("code") || lower.Contains("text") || lower.Contains("value");
+    }
+
+    static readonly Regex NavigationOpenPageRegex = new(
+        @"^\s*var\s+(\w+)\s*=\s*Navigation\s*\.\s*OpenPage\s*<\w+>\s*\(([^)]+)\)\s*;",
+        RegexOptions.Compiled);
+
+    static NavigationAction? TryExtractNavigationDeclaration(LocalDeclarationStatementSyntax lds, int line)
+    {
+        var declaration = lds.Declaration;
+        if (declaration.Variables.Count == 0) return null;
+
+        var variable = declaration.Variables[0];
+        var varName = variable.Identifier.Text;
+        var initValue = variable.Initializer?.Value?.ToString() ?? string.Empty;
+
+        var match = NavigationOpenPageRegex.Match(initValue);
+        if (match.Success)
+        {
+            var urlExpr = match.Groups[2].Value.Trim();
+            return new NavigationAction(line, urlExpr, varName, initValue);
+        }
+
+        return null;
+    }
+
+    static ConditionalBlockAction? TryExtractConditionalBlock(IfStatementSyntax ifStmt, SemanticModel semanticModel, int line)
+    {
+        var condition = ifStmt.Condition.ToString().Trim();
+        var ifActions = ParseBlockStatements(ifStmt.Statement, semanticModel).ToList();
+
+        var elseIfActions = new List<(string Condition, IReadOnlyList<TestAction> Actions)>();
+        var elseActions = new List<TestAction>();
+
+        var elseClause = ifStmt.Else;
+        while (elseClause != null)
+        {
+            if (elseClause.Statement is IfStatementSyntax nestedIf)
+            {
+                // else if
+                var nestedCondition = nestedIf.Condition.ToString().Trim();
+                var nestedActions = ParseBlockStatements(nestedIf.Statement, semanticModel).ToList();
+                elseIfActions.Add((nestedCondition, nestedActions));
+                elseClause = nestedIf.Else;
+            }
+            else
+            {
+                // else
+                elseActions = ParseBlockStatements(elseClause.Statement, semanticModel).ToList();
+                elseClause = null;
+            }
+        }
+
+        var allActions = ifActions.Concat(elseIfActions.SelectMany(e => e.Actions))
+            .Concat(elseActions).ToList();
+
+        // Only create ConditionalBlockAction if there are at least some actions inside
+        if (allActions.Count == 0)
+            return null;
+
+        return new ConditionalBlockAction(
+            line,
+            condition,
+            ifActions,
+            elseIfActions.Select(e => (e.Condition, (IReadOnlyList<TestAction>)e.Actions)).ToList(),
+            elseActions);
+    }
+
+    static IEnumerable<TestAction> ParseBlockStatements(BlockSyntax? block, SemanticModel semanticModel)
+    {
+        if (block == null) yield break;
+        foreach (var stmt in block.Statements)
+        {
+            var line = stmt.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+            if (TryExtractAction(stmt, semanticModel, line) is { } action)
+                yield return action;
+        }
+    }
+
+    static IEnumerable<TestAction> ParseBlockStatements(StatementSyntax stmt, SemanticModel semanticModel)
+    {
+        if (stmt is BlockSyntax block)
+        {
+            foreach (var action in ParseBlockStatements(block, semanticModel))
+                yield return action;
+        }
+        else
+        {
+            // Single statement (no braces)
+            var line = stmt.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+            if (TryExtractAction(stmt, semanticModel, line) is { } action)
+                yield return action;
+        }
+    }
+
+    static readonly Regex WebDriverXPathRegex = new(
+        @"^\s*var\s+(\w+)\s*=\s*WebDriver\s*\.\s*FindElement\s*\(\s*By\s*\.\s*XPath\s*\(\s*""([^""]*)""\s*\)\s*\)\s*;",
+        RegexOptions.Compiled);
+
+    static readonly Regex WebDriverCssRegex = new(
+        @"^\s*var\s+(\w+)\s*=\s*WebDriver\s*\.\s*FindElement\s*\(\s*By\s*\.\s*CssSelector\s*\(\s*""([^""]*)""\s*\)\s*\)\s*;",
+        RegexOptions.Compiled);
+
+    static LocatorDeclarationAction? TryExtractLocatorDeclaration(LocalDeclarationStatementSyntax lds, int line)
+    {
+        var declaration = lds.Declaration;
+        if (declaration.Variables.Count == 0) return null;
+
+        var variable = declaration.Variables[0];
+        var varName = variable.Identifier.Text;
+        var initValue = variable.Initializer?.Value?.ToString() ?? string.Empty;
+
+        // Check for WebDriver.FindElement(By.XPath("..."))
+        var xpathMatch = WebDriverXPathRegex.Match(initValue);
+        if (xpathMatch.Success)
+        {
+            var selector = xpathMatch.Groups[2].Value;
+            var locatorExpr = $"Page.Locator(\"xpath={EscapeString(selector)}\")";
+            return new LocatorDeclarationAction(line, varName, locatorExpr, initValue);
+        }
+
+        // Check for WebDriver.FindElement(By.CssSelector("..."))
+        var cssMatch = WebDriverCssRegex.Match(initValue);
+        if (cssMatch.Success)
+        {
+            var selector = cssMatch.Groups[2].Value;
+            var locatorExpr = $"Page.Locator(\"{EscapeString(selector)}\")";
+            return new LocatorDeclarationAction(line, varName, locatorExpr, initValue);
+        }
+
+        return null;
+    }
+
+    static string EscapeString(string value)
+    {
+        return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
     }
 }

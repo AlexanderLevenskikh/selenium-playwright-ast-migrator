@@ -276,7 +276,24 @@ public class DefaultProjectAdapter : IProjectAdapter
 
     TestModel AdaptTest(TestModel test, ResolvedFileConfig resolved)
     {
-        var adaptedActions = test.BodyActions.SelectMany(a => AdaptAction(a, resolved)).ToList();
+        // Track local variable → locator mappings as we process actions
+        var localVariableMappings = new Dictionary<string, TargetExpression>();
+        var adaptedActions = new List<TestAction>();
+
+        foreach (var action in test.BodyActions)
+        {
+            // Update local variable mappings from LocatorDeclarationAction
+            if (action is LocatorDeclarationAction lds)
+            {
+                localVariableMappings[lds.VariableName] = TargetExpression.Mapped(
+                    lds.SourceText,
+                    lds.LocatorExpression,
+                    TargetKind.RawExpression);
+            }
+
+            var adapted = AdaptActionWithLocalVars(action, resolved, localVariableMappings);
+            adaptedActions.AddRange(adapted);
+        }
 
         return new TestModel(
             Name: test.Name,
@@ -287,15 +304,179 @@ public class DefaultProjectAdapter : IProjectAdapter
         );
     }
 
+    IEnumerable<TestAction> AdaptConditionalBlock(ConditionalBlockAction cond, ResolvedFileConfig resolved)
+    {
+        var adaptedIfActions = cond.IfActions.SelectMany(a => AdaptAction(a, resolved)).ToList();
+        var adaptedElseIfActions = cond.ElseIfActions.Select(e =>
+            (e.Condition, (IReadOnlyList<TestAction>)e.Actions.SelectMany(a => AdaptAction(a, resolved)).ToList())).ToList();
+        var adaptedElseActions = cond.ElseActions.SelectMany(a => AdaptAction(a, resolved)).ToList();
+
+        return new[]
+        {
+            new ConditionalBlockAction(
+                cond.SourceLine,
+                cond.ConditionExpression,
+                adaptedIfActions,
+                adaptedElseIfActions,
+                adaptedElseActions,
+                cond.Confidence)
+        };
+    }
+
+    IEnumerable<TestAction> AdaptConditionalBlockWithLocalVars(
+        ConditionalBlockAction cond,
+        ResolvedFileConfig resolved,
+        Dictionary<string, TargetExpression> localVariableMappings)
+    {
+        var adaptedIfActions = cond.IfActions.SelectMany(a => AdaptActionWithLocalVars(a, resolved, localVariableMappings)).ToList();
+        var adaptedElseIfActions = cond.ElseIfActions.Select(e =>
+            (e.Condition, (IReadOnlyList<TestAction>)e.Actions.SelectMany(a => AdaptActionWithLocalVars(a, resolved, localVariableMappings)).ToList())).ToList();
+        var adaptedElseActions = cond.ElseActions.SelectMany(a => AdaptActionWithLocalVars(a, resolved, localVariableMappings)).ToList();
+
+        return new[]
+        {
+            new ConditionalBlockAction(
+                cond.SourceLine,
+                cond.ConditionExpression,
+                adaptedIfActions,
+                adaptedElseIfActions,
+                adaptedElseActions,
+                cond.Confidence)
+        };
+    }
+
+    static readonly Regex FindElementXPathPattern = new(
+        @"^\s*WebDriver\s*\.\s*FindElement\s*\(\s*By\s*\.\s*XPath\s*\(\s*""([^""]*)""\s*\)\s*\)\s*$",
+        RegexOptions.Compiled);
+
+    static readonly Regex FindElementCssPattern = new(
+        @"^\s*WebDriver\s*\.\s*FindElement\s*\(\s*By\s*\.\s*CssSelector\s*\(\s*""([^""]*)""\s*\)\s*\)\s*$",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    /// Resolves target expressions that are inline WebDriver.FindElement(By.XPath/CssSelector(...)) calls.
+    /// Handles: WebDriver.FindElement(By.XPath("//div//input")).Click()
+    /// </summary>
+    TargetExpression ResolveInlineFindElementTarget(string sourceExpression)
+    {
+        var xpathMatch = FindElementXPathPattern.Match(sourceExpression);
+        if (xpathMatch.Success)
+        {
+            var selector = xpathMatch.Groups[1].Value;
+            var locatorExpr = $"Page.Locator(\"xpath={EscapeForLocator(selector)}\")";
+            return TargetExpression.Mapped(sourceExpression, locatorExpr, TargetKind.RawExpression);
+        }
+
+        var cssMatch = FindElementCssPattern.Match(sourceExpression);
+        if (cssMatch.Success)
+        {
+            var selector = cssMatch.Groups[1].Value;
+            var locatorExpr = $"Page.Locator(\"{EscapeForLocator(selector)}\")";
+            return TargetExpression.Mapped(sourceExpression, locatorExpr, TargetKind.RawExpression);
+        }
+
+        return new UnresolvedTarget(sourceExpression);
+    }
+
+    static string EscapeForLocator(string value)
+    {
+        return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+    }
+
+    TargetExpression ResolveTargetWithLocalVars(
+        string sourceExpression,
+        ResolvedFileConfig resolved,
+        Dictionary<string, TargetExpression> localVariableMappings)
+    {
+        // First check local variable mappings
+        if (localVariableMappings.TryGetValue(sourceExpression, out var localMapping))
+            return localMapping;
+
+        return ResolveTarget(sourceExpression, resolved);
+    }
+
+    IEnumerable<TestAction> AdaptActionWithLocalVars(
+        TestAction action,
+        ResolvedFileConfig resolved,
+        Dictionary<string, TargetExpression> localVariableMappings)
+    {
+        return action switch
+        {
+            ClickAction click => new[] { new ClickAction(
+                click.SourceLine,
+                ResolveTargetWithLocalVars(click.Target.SourceExpression, resolved, localVariableMappings),
+                click.Confidence) },
+            SendKeysAction sendKeys => new[] { new SendKeysAction(
+                sendKeys.SourceLine,
+                ResolveTargetWithLocalVars(sendKeys.Target.SourceExpression, resolved, localVariableMappings),
+                sendKeys.TextExpression,
+                sendKeys.Confidence) },
+            PressAction press => new[] { new PressAction(
+                press.SourceLine,
+                ResolveTargetWithLocalVars(press.Target.SourceExpression, resolved, localVariableMappings),
+                press.KeyName,
+                press.Confidence) },
+            TextAssertionAction ta => new[] { new TextAssertionAction(
+                ta.SourceLine,
+                ResolveTargetWithLocalVars(ta.Target.SourceExpression, resolved, localVariableMappings),
+                ta.Kind,
+                ta.ExpectedValue,
+                ta.Confidence) },
+            VisibilityAssertionAction va => new[] { new VisibilityAssertionAction(
+                va.SourceLine,
+                ResolveTargetWithLocalVars(va.Target.SourceExpression, resolved, localVariableMappings),
+                va.Kind,
+                va.Confidence) },
+            WaitForAction wa => new[] { new WaitForAction(
+                wa.SourceLine,
+                ResolveTargetWithLocalVars(wa.Target.SourceExpression, resolved, localVariableMappings),
+                wa.Confidence) },
+            TableRowTextAccessAction trt => new[] { new TableRowTextAccessAction(
+                trt.SourceLine,
+                ResolveTargetWithLocalVars(trt.Target.SourceExpression, resolved, localVariableMappings),
+                trt.IndexExpression,
+                trt.SourceText,
+                trt.Confidence) },
+            TableRowAccessAction tra => new[] { new TableRowAccessAction(
+                tra.SourceLine,
+                ResolveTargetWithLocalVars(tra.Target.SourceExpression, resolved, localVariableMappings),
+                tra.IndexExpression,
+                tra.SourceText,
+                tra.Confidence) },
+            TableCountAssertionAction tca => new[] { new TableCountAssertionAction(
+                tca.SourceLine,
+                ResolveTargetWithLocalVars(tca.Target.SourceExpression, resolved, localVariableMappings),
+                tca.Kind,
+                tca.ExpectedCount,
+                tca.SourceText,
+                tca.Confidence) },
+            MethodInvocationAction mi => TryResolveMethodMapping(mi, resolved),
+            RawStatementAction raw => TryResolveRawStatement(raw, resolved),
+            LocalDeclarationAction lds => TryResolveLocalDeclaration(lds, resolved),
+            ConditionalBlockAction cond => AdaptConditionalBlockWithLocalVars(cond, resolved, localVariableMappings),
+            _ => new[] { action }
+        };
+    }
+
     TargetExpression ResolveTarget(string sourceExpression, ResolvedFileConfig resolved)
     {
         if (resolved._targetMap.TryGetValue(sourceExpression, out var target))
             return target;
 
+        // Try inline WebDriver.FindElement(By.XPath/CssSelector) resolution
+        var inlineFindElement = ResolveInlineFindElementTarget(sourceExpression);
+        if (inlineFindElement is MappedTarget)
+            return inlineFindElement;
+
         // Try table-aware resolution for ElementAt patterns
         var tableResult = resolved.ResolveTableAwareTarget(sourceExpression);
         if (tableResult is MappedTarget)
             return tableResult;
+
+        // Try general ElementAt resolution: collection.ElementAt(index) where collection has a mapping
+        var elementAtResult = resolved.ResolveGeneralElementAt(sourceExpression);
+        if (elementAtResult is MappedTarget)
+            return elementAtResult;
 
         foreach (var entry in resolved._targetMap)
         {
@@ -364,6 +545,7 @@ public class DefaultProjectAdapter : IProjectAdapter
             MethodInvocationAction mi => TryResolveMethodMapping(mi, resolved),
             RawStatementAction raw => TryResolveRawStatement(raw, resolved),
             LocalDeclarationAction lds => TryResolveLocalDeclaration(lds, resolved),
+            ConditionalBlockAction cond => AdaptConditionalBlock(cond, resolved),
             _ => new[] { action }
         };
     }
@@ -371,6 +553,7 @@ public class DefaultProjectAdapter : IProjectAdapter
     IEnumerable<TestAction> TryResolveMethodMapping(MethodInvocationAction mi, ResolvedFileConfig resolved)
     {
         var fullText = mi.FullSourceText.TrimEnd(';');
+        var resolvedTarget = TryResolveReceiverTarget(mi.ReceiverExpression, resolved);
 
         // 1. Exact match by full text (highest priority)
         if (resolved._methodStatementsMap.TryGetValue(fullText, out var mapping))
@@ -381,7 +564,9 @@ public class DefaultProjectAdapter : IProjectAdapter
                     mi.SourceLine,
                     mi.FullSourceText,
                     mapping.Statements,
-                    mapping.RequiresReview)
+                    mapping.RequiresReview,
+                    resolvedTarget,
+                    fullText)
             };
         }
 
@@ -394,7 +579,9 @@ public class DefaultProjectAdapter : IProjectAdapter
                     mi.SourceLine,
                     mi.FullSourceText,
                     methodMapping.Statements,
-                    methodMapping.RequiresReview)
+                    methodMapping.RequiresReview,
+                    resolvedTarget,
+                    mi.MethodName)
             };
         }
 
@@ -405,6 +592,18 @@ public class DefaultProjectAdapter : IProjectAdapter
 
         // 4. No match — return original action (will render as TODO)
         return new[] { mi };
+    }
+
+    TargetExpression? TryResolveReceiverTarget(string receiverExpression, ResolvedFileConfig resolved)
+    {
+        var receiver = receiverExpression.Trim().TrimEnd('.');
+        var target = resolved.ResolveTarget(receiver);
+        if (target.Kind != TargetKind.Unresolved)
+            return target;
+        var fullTarget = resolved.ResolveTarget(receiverExpression);
+        if (fullTarget.Kind != TargetKind.Unresolved)
+            return fullTarget;
+        return null;
     }
 
     MappedMethodInvocationAction? TryMatchParameterized(MethodInvocationAction mi, ResolvedFileConfig resolved)
@@ -428,11 +627,14 @@ public class DefaultProjectAdapter : IProjectAdapter
                     resolvedStatements = Array.Empty<string>();
                 }
 
+                var resolvedTarget = TryResolveReceiverTarget(mi.ReceiverExpression, resolved);
                 return new MappedMethodInvocationAction(
                     mi.SourceLine,
                     mi.FullSourceText,
                     resolvedStatements,
-                    mapping.RequiresReview);
+                    mapping.RequiresReview,
+                    resolvedTarget,
+                    mapping.SourceMethodPattern);
             }
         }
 
@@ -708,7 +910,9 @@ public class DefaultProjectAdapter : IProjectAdapter
                             raw.SourceLine,
                             raw.SourceText,
                             mapping.Statements,
-                            mapping.RequiresReview)
+                            mapping.RequiresReview,
+targetExpr: null,
+                            sourceMethod: null)
                     };
                 }
             }
@@ -722,7 +926,9 @@ public class DefaultProjectAdapter : IProjectAdapter
                     raw.SourceLine,
                     raw.SourceText,
                     stmtMapping.Statements,
-                    stmtMapping.RequiresReview)
+                    stmtMapping.RequiresReview,
+                    targetExpr: null,
+                    sourceMethod: null)
             };
         }
 
@@ -742,7 +948,9 @@ public class DefaultProjectAdapter : IProjectAdapter
                         lds.SourceLine,
                         $"{lds.VariableType} {lds.VariableName} = {lds.InitializationValue}",
                         mapping.Statements,
-                        mapping.RequiresReview)
+                        mapping.RequiresReview,
+                        targetExpr: null,
+                        sourceMethod: null)
                 };
             }
         }
@@ -944,6 +1152,56 @@ public class DefaultProjectAdapter : IProjectAdapter
             _testHost = testHost;
         }
 
+        /// <summary>
+        /// Builds a Playwright locator expression from a resolved MappedTarget.
+        /// Mirrors the renderer's RenderPlaywrightLocator logic.
+        /// </summary>
+        string BuildLocatorExpression(MappedTarget mapped)
+        {
+            if (mapped.TestIdAttribute != null && mapped.Kind == TargetKind.PlaywrightLocator)
+            {
+                var attr = mapped.TestIdAttribute.Replace("]", "\\]").Replace("[", "\\[");
+                var value = mapped.TargetExpression.Replace("\\", "\\\\").Replace("\"", "\\\"");
+                return $"Page.Locator(\"[{attr}='{value}']\")";
+            }
+
+            var rendered = mapped.RenderLocator();
+
+            if (mapped.Kind == TargetKind.RawExpression)
+                return rendered;
+
+            if (mapped.Kind == TargetKind.PageObjectProperty)
+                return rendered;
+
+            if (mapped.Kind == TargetKind.Text)
+            {
+                var tv = mapped.TargetExpression.Replace("\\", "\\\\").Replace("\"", "\\\"");
+                return $"Page.GetByText(\"{tv}\")";
+            }
+
+            // PlaywrightLocator
+            if (rendered.StartsWith("Page.", StringComparison.Ordinal))
+                return rendered;
+
+            if (IsLegacyPlaywrightFragment(rendered))
+                return $"Page.{rendered}";
+
+            var tv2 = mapped.TargetExpression.Replace("\\", "\\\\").Replace("\"", "\\\"");
+            return $"Page.GetByTestId(\"{tv2}\")";
+        }
+
+        static bool IsLegacyPlaywrightFragment(string expr)
+        {
+            var trimmed = expr.Trim();
+            return trimmed.StartsWith("GetByTestId(") ||
+                   trimmed.StartsWith("Locator(") ||
+                   trimmed.StartsWith("GetByText(") ||
+                   trimmed.StartsWith("GetByRole(") ||
+                   trimmed.StartsWith("GetByLabel(") ||
+                   trimmed.StartsWith("GetByPlaceholder(") ||
+                   trimmed.StartsWith("GetByAltText(");
+        }
+
         public TargetExpression ResolveTarget(string sourceExpression)
         {
             if (_targetMap.TryGetValue(sourceExpression, out var target))
@@ -956,6 +1214,40 @@ public class DefaultProjectAdapter : IProjectAdapter
                 {
                     return entry.Value;
                 }
+            }
+
+            return new UnresolvedTarget(sourceExpression);
+        }
+
+        /// <summary>
+        /// Resolves collection.ElementAt(index) where "collection" is a mapped UI target.
+        /// Handles: icon.ElementAt(1), currencyLabel.ElementAt(elementOrder), etc.
+        /// </summary>
+        public TargetExpression ResolveGeneralElementAt(string sourceExpression)
+        {
+            var generalElementAtRegex = new Regex(@"^(\w+)\s*\.\s*ElementAt\s*\(\s*([^)]+)\s*\)");
+            var match = generalElementAtRegex.Match(sourceExpression);
+            if (!match.Success)
+                return new UnresolvedTarget(sourceExpression);
+
+            var receiver = match.Groups[1].Value;
+            var indexText = match.Groups[2].Value.Trim();
+
+            // Check if receiver is a known mapped target
+            if (_targetMap.TryGetValue(receiver, out var mappedTarget))
+            {
+                var index = 0;
+                int.TryParse(indexText, out index);
+
+                // Return the mapped target's expression with Nth appended
+                var locatorExpr = BuildLocatorExpression(mappedTarget);
+                var combinedExpr = $"{locatorExpr}.Nth({indexText})";
+
+                return new MappedTarget(
+                    sourceExpression,
+                    combinedExpr,
+                    TargetKind.RawExpression,
+                    null);
             }
 
             return new UnresolvedTarget(sourceExpression);

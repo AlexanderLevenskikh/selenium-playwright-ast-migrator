@@ -3138,3 +3138,431 @@ public class GoodTests
 
     static string Normalize(string text) => text.Replace("\r\n", "\n").Trim();
 }
+
+
+public class MultilineCommentTests
+{
+    #region Multiline comment safety — multiline expressions in // comments must not leak
+
+    [Fact]
+    public void MultilineAssert_That_ActualExpression_DoesNotBreakComment()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "MultilineAssert",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new AssertThatAction(
+                            10,
+                            "async () =>\r\n{\r\n    await DoSomething();\r\n}",
+                            "Throws.Nothing"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        var lines = output.Split('\n');
+        foreach (var line in lines)
+        {
+            var trimmed = line.TrimStart();
+            if (trimmed.Length == 0) continue;
+
+            // Every non-empty line must either be valid C# or a comment
+            if (!trimmed.StartsWith("//") && !trimmed.StartsWith("/*") &&
+                !trimmed.StartsWith("using") && !trimmed.StartsWith("namespace") &&
+                !trimmed.StartsWith("public") && !trimmed.StartsWith("private") &&
+                !trimmed.StartsWith("protected") && !trimmed.StartsWith("internal") &&
+                !trimmed.StartsWith("class") && !trimmed.StartsWith("{") &&
+                !trimmed.StartsWith("}") && !trimmed.StartsWith("[") &&
+                !trimmed.StartsWith("static") && !trimmed.StartsWith("async") &&
+                !trimmed.StartsWith("var ") && !trimmed.StartsWith("#region") &&
+                !trimmed.StartsWith("#endregion"))
+            {
+                Assert.Fail($"Line is neither comment nor valid C# start: '{line}' — multiline comment leak detected");
+            }
+        }
+
+        Assert.Contains("// Assert.That(async () =>", output);
+        Assert.Contains("// TODO: convert constraint to Playwright assertion", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void MultilineAssert_That_ConstraintExpression_DoesNotBreakComment()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "MultilineConstraint",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new AssertThatAction(
+                            20,
+                            "someValue",
+                            "Is.Not.Null.And\r\n    .Not.Empty"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        var lines = output.Split('\n');
+        foreach (var line in lines)
+        {
+            var trimmed = line.TrimStart();
+            if (trimmed.Length == 0) continue;
+
+            if (!trimmed.StartsWith("//") && !trimmed.StartsWith("/*") &&
+                !trimmed.StartsWith("using") && !trimmed.StartsWith("namespace") &&
+                !trimmed.StartsWith("public") && !trimmed.StartsWith("private") &&
+                !trimmed.StartsWith("protected") && !trimmed.StartsWith("internal") &&
+                !trimmed.StartsWith("class") && !trimmed.StartsWith("{") &&
+                !trimmed.StartsWith("}") && !trimmed.StartsWith("[") &&
+                !trimmed.StartsWith("static") && !trimmed.StartsWith("async") &&
+                !trimmed.StartsWith("var ") && !trimmed.StartsWith("#region") &&
+                !trimmed.StartsWith("#endregion"))
+            {
+                Assert.Fail($"Line is neither comment nor valid C# start: '{line}' — multiline comment leak detected");
+            }
+        }
+
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void SimpleAssert_That_RemainsSingleLine()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "SimpleAssert",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new AssertThatAction(5, "value", "Is.Not.Null"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.Contains("// Assert.That(value, Is.Not.Null);", output);
+        Assert.Contains("/_/ line 5", output);
+        Assert.Contains("// TODO: convert constraint to Playwright assertion", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void AppendComment_Helper_MultilineInput_PrefixedPerLine()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "AppendCommentTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new AssertThatAction(
+                            5,
+                            "a\nb\nc",
+                            "d\ne"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        // Each line of the multiline expression must be prefixed with //
+        var lines = output.Split('\n');
+        Assert.Contains(lines, l => l.Contains("// Assert.That(a"));
+        Assert.Contains(lines, l => l.Contains("// b"));
+        Assert.Contains(lines, l => l.Contains("// c"));
+
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void MultilineRawStatement_DoesNotBreakComment()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "MultilineRaw",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new RawStatementAction(
+                            15,
+                            "var x = new Func<Task>(() =>\r\n{\r\n    DoIt();\r\n});"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void MultilineUnsupportedAction_DoesNotBreakComment()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "MultilineUnsupported",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new UnsupportedAction(
+                            25,
+                            "driver.ExecuteScript(\"return fn() => {\r\n    return 1;\r\n}\")",
+                            "ExecuteScript"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void MultilineMethodInvocation_DoesNotBreakComment()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "MultilineMethodInv",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MethodInvocationAction(
+                            30,
+                            "obj",
+                            "ComplexCall",
+                            "obj.ComplexCall(\r\n    param1,\r\n    param2\r\n)"),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void MultilineMappedMethodInvocation_DoesNotBreakComment()
+    {
+        var targetModel = new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "MultilineMappedInv",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), new TestAction[]
+                    {
+                        new MappedMethodInvocationAction(
+                            40,
+                            "obj.DoThing(\r\n    param1\r\n)",
+                            Array.Empty<string>(),
+                            true),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(targetModel);
+
+        // The FullSourceText in the TODO comment must be safely escaped
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    #endregion
+}
+
+public class MethodMappingPlaceholderTests
+{
+    #region MethodMapping {TARGET} placeholder substitution
+
+    [Fact]
+    public void MethodMapping_TargetPlaceholder_IsSubstituted()
+    {
+        var clickAction = new ClickAction(1, TargetExpression.Mapped("page.Loader", "Page.Locator(\"[data-test='loader']\")", TargetKind.PlaywrightLocator));
+
+        // Simulate adapter producing a MappedMethodInvocationAction with {TARGET}
+        var mappedAction = new MappedMethodInvocationAction(
+            1,
+            "page.Loader.ClickCustom()",
+            new[] { "await {TARGET}.ClickAsync();" },
+            targetExpr: TargetExpression.Mapped("page.Loader", "Page.Locator(\"[data-test='loader']\")", TargetKind.PlaywrightLocator),
+            sourceMethod: "ClickCustom");
+
+        var model = CreateModel(new TestAction[] { mappedAction });
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("await Page.Locator(\"[data-test='loader']\").ClickAsync();", output);
+        Assert.DoesNotContain("{TARGET}", output);
+        Assert.DoesNotContain("await .ClickAsync", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void MethodMapping_TargetPlaceholder_MultipleOccurrences()
+    {
+        var mappedAction = new MappedMethodInvocationAction(
+            1,
+            "page.Loader.WaitVisible()",
+            new[]
+            {
+                "await {TARGET}.ClickAsync();",
+                "await Expect({TARGET}).ToBeVisibleAsync();"
+            },
+            targetExpr: TargetExpression.Mapped("page.Loader", "Page.Locator(\"[data-test='loader']\")", TargetKind.PlaywrightLocator),
+            sourceMethod: "WaitVisible");
+
+        var model = CreateModel(new TestAction[] { mappedAction });
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("await Page.Locator(\"[data-test='loader']\").ClickAsync();", output);
+        Assert.Contains("await Expect(Page.Locator(\"[data-test='loader']\")).ToBeVisibleAsync();", output);
+        Assert.DoesNotContain("{TARGET}", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void MethodMapping_TargetPlaceholder_Unresolved_DoesNotBreakSyntax()
+    {
+        var mappedAction = new MappedMethodInvocationAction(
+            5,
+            "page.Unknown.WaitVisible()",
+            new[] { "await {TARGET}.ClickAsync();" },
+            targetExpr: null,
+            sourceMethod: "WaitVisible");
+
+        var model = CreateModel(new TestAction[] { mappedAction });
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.DoesNotContain("await .ClickAsync", output);
+        Assert.Contains("TODO: unresolved MethodMapping placeholder", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void MethodMapping_WithoutTargetPlaceholder_BehaviorUnchanged()
+    {
+        var mappedAction = new MappedMethodInvocationAction(
+            1,
+            "Setup.Init()",
+            new[] { "await Page.GotoAsync(\"/test\");" });
+
+        var model = CreateModel(new TestAction[] { mappedAction });
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("await Page.GotoAsync(\"/test\");", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void DeduplicateInvocationVariables_DoesNotEraseTargetPlaceholder()
+    {
+        var mappedAction = new MappedMethodInvocationAction(
+            1,
+            "page.Loader.DoThing()",
+            new[]
+            {
+                "var loader = Page.Locator(\"x\");",
+                "await {TARGET}.ClickAsync();"
+            },
+            targetExpr: TargetExpression.Mapped("page.Loader", "Page.Locator(\"[data-test='loader']\")", TargetKind.PlaywrightLocator),
+            sourceMethod: "DoThing");
+
+        var model = CreateModel(new TestAction[] { mappedAction });
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("await Page.Locator(\"[data-test='loader']\").ClickAsync();", output);
+        Assert.DoesNotContain("await .ClickAsync", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void UnknownPlaceholder_IsDiagnosticNotBrokenCode()
+    {
+        var mappedAction = new MappedMethodInvocationAction(
+            10,
+            "obj.Foo()",
+            new[] { "await {UNKNOWN}.DoAsync();" },
+            sourceMethod: "Foo");
+
+        var model = CreateModel(new TestAction[] { mappedAction });
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.DoesNotContain("await .DoAsync", output);
+        Assert.Contains("TODO: unresolved MethodMapping placeholder", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    #endregion
+
+    static TestFileModel CreateModel(TestAction[] bodyActions)
+    {
+        return new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "PlaceholderTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), bodyActions)
+            });
+    }
+}

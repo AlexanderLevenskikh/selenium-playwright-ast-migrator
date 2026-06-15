@@ -276,6 +276,15 @@ public class PlaywrightDotNetRenderer : IRenderer
             case LocalDeclarationAction localDecl:
                 RenderLocalDeclaration(sb, localDecl);
                 break;
+            case LocatorDeclarationAction locatorDecl:
+                RenderLocatorDeclaration(sb, locatorDecl);
+                break;
+            case NavigationAction nav:
+                RenderNavigation(sb, nav);
+                break;
+            case ConditionalBlockAction condBlock:
+                RenderConditionalBlock(sb, condBlock);
+                break;
             case TableRowTextAccessAction tableTextAccess:
                 RenderTableRowTextAccess(sb, tableTextAccess);
                 break;
@@ -468,16 +477,87 @@ public class PlaywrightDotNetRenderer : IRenderer
         for (var i = 0; i < processed.Length; i++)
         {
             var stmt = processed[i];
-            if (_useAssertionsExpect && stmt.Contains("Expect("))
+            var (substituted, hasUnresolved) = SubstituteTargetPlaceholder(stmt, action);
+
+            if (_useAssertionsExpect && substituted.Contains("Expect("))
             {
-                stmt = stmt.Replace("Expect(", "Assertions.Expect(");
+                substituted = substituted.Replace("Expect(", "Assertions.Expect(");
             }
-            sb.AppendLine($"{_indent}{_indent}{stmt} // line {action.SourceLine}");
+
+            if (hasUnresolved)
+            {
+                RenderMappedTargetStatementAsComment(sb, substituted, action.SourceMethod, action.SourceLine);
+            }
+            else
+            {
+                sb.AppendLine($"{_indent}{_indent}{substituted} // line {action.SourceLine}");
+            }
         }
         if (action.RequiresReview)
         {
             sb.AppendLine($"{_indent}{_indent}// TODO: mapped method requires manual review — {EscapeComment(action.FullSourceText)}");
         }
+    }
+
+    /// <summary>
+    /// Substitutes {TARGET} in a target statement with the resolved target expression.
+    /// Also detects unknown placeholders (e.g. {UNKNOWN}) that cannot be resolved.
+    /// Returns (substitutedStatement, hasUnresolvedPlaceholders).
+    /// </summary>
+    (string substituted, bool hasUnresolved) SubstituteTargetPlaceholder(string statement, MappedMethodInvocationAction action)
+    {
+        var substituted = statement;
+        var hasUnresolved = false;
+
+        // Resolve {TARGET} if target expression is available
+        if (substituted.Contains("{TARGET}"))
+        {
+            if (action.TargetExpr != null && action.TargetExpr.Kind != TargetKind.Unresolved)
+            {
+                var targetExpr = RenderTargetExpression(action.TargetExpr);
+                substituted = substituted.Replace("{TARGET}", targetExpr);
+            }
+            else
+            {
+                hasUnresolved = true;
+            }
+        }
+
+        // Check for any remaining unknown placeholders
+        if (!hasUnresolved)
+        {
+            var remaining = FindRemainingPlaceholders(substituted);
+            if (remaining.Length > 0)
+            {
+                hasUnresolved = true;
+            }
+        }
+
+        return (substituted, hasUnresolved);
+    }
+
+    /// <summary>
+    /// Finds remaining {PLACEHOLDER} tokens in a statement after substitution.
+    /// </summary>
+    static string[] FindRemainingPlaceholders(string statement)
+    {
+        var matches = Regex.Matches(statement, @"\{(\w+)\}");
+        var result = new string[matches.Count];
+        for (int i = 0; i < matches.Count; i++)
+        {
+            result[i] = "{" + matches[i].Groups[1].Value + "}";
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Renders a target statement as a safe TODO comment when placeholder substitution failed.
+    /// </summary>
+    void RenderMappedTargetStatementAsComment(StringBuilder sb, string statement, string? sourceMethod, int sourceLine)
+    {
+        var methodInfo = !string.IsNullOrEmpty(sourceMethod) ? $" sourceMethod: {sourceMethod}" : string.Empty;
+        sb.AppendLine($"{_indent}{_indent}// TODO: unresolved MethodMapping placeholder{methodInfo} (line {sourceLine})");
+        sb.AppendLine($"{_indent}{_indent}//   Original: {EscapeComment(statement)}");
     }
 
     string[] DeduplicateInvocationVariables(IReadOnlyList<string> statements)
@@ -516,20 +596,55 @@ public class PlaywrightDotNetRenderer : IRenderer
                 }
             }
 
-            var resolved = stmt;
+            var resolved = ProtectPlaceholders(stmt, out var placeholders);
             foreach (var (orig, renamed) in seenInInvocation)
                 resolved = Regex.Replace(resolved, $@"\b{Regex.Escape(orig)}\b", renamed);
-            result[i] = resolved;
+            result[i] = RestorePlaceholders(resolved, placeholders);
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Temporarily replaces {PLACEHOLDER} tokens with unique markers to prevent
+    /// DeduplicateInvocationVariables from treating placeholder names as variable references.
+    /// </summary>
+    static string ProtectPlaceholders(string stmt, out string[] placeholders)
+    {
+        var matches = Regex.Matches(stmt, @"\{(\w+)\}");
+        placeholders = new string[matches.Count];
+        var protectedStmt = stmt;
+        for (int i = 0; i < matches.Count; i++)
+        {
+            var ph = matches[i].Value;
+            placeholders[i] = ph;
+            protectedStmt = protectedStmt.Replace(ph, $"__PH_{i}__");
+        }
+        return protectedStmt;
+    }
+
+    /// <summary>
+    /// Restores placeholder tokens after deduplication.
+    /// </summary>
+    static string RestorePlaceholders(string stmt, string[] placeholders)
+    {
+        for (int i = 0; i < placeholders.Length; i++)
+        {
+            stmt = stmt.Replace($"__PH_{i}__", placeholders[i]);
+        }
+        return stmt;
     }
 
     void RenderAssertThat(StringBuilder sb, AssertThatAction action)
     {
         var actual = ConvertExpression(action.ActualExpression);
         var constraint = ConvertConstraint(action.ConstraintExpression);
-        sb.AppendLine($"{_indent}{_indent}// Assert.That({actual}, {constraint}); // line {action.SourceLine}");
+        var sourceLine = action.SourceLine;
+
+        // Multiline-safe: if expression contains newlines, prefix every line with //
+        var commentBody = $"Assert.That({actual}, {constraint}); // line {sourceLine}";
+        AppendComment(sb, _indent + _indent, commentBody);
+
         sb.AppendLine($"{_indent}{_indent}// TODO: convert constraint to Playwright assertion");
     }
 
@@ -554,8 +669,10 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     void RenderUnsupported(StringBuilder sb, UnsupportedAction action)
     {
-        sb.AppendLine($"{_indent}{_indent}// TODO: UNSUPPORTED [{action.Reason}]");
-        sb.AppendLine($"{_indent}{_indent}//   {EscapeComment(action.SourceText)}");
+        var reason = EscapeComment(action.Reason);
+        var sourceComment = EscapeComment(action.SourceText);
+        sb.AppendLine($"{_indent}{_indent}// TODO: UNSUPPORTED [{reason}]");
+        sb.AppendLine($"{_indent}{_indent}//   {sourceComment}");
     }
 
     void RenderRawStatement(StringBuilder sb, RawStatementAction action)
@@ -617,6 +734,52 @@ public class PlaywrightDotNetRenderer : IRenderer
     {
         RegisterSourceVar(action.VariableName, action.VariableName);
         sb.AppendLine($"{_indent}{_indent}{action.VariableType} {action.VariableName} = {action.InitializationValue}; // line {action.SourceLine}");
+    }
+
+    void RenderLocatorDeclaration(StringBuilder sb, LocatorDeclarationAction action)
+    {
+        RegisterSourceVar(action.VariableName, action.LocatorExpression);
+        sb.AppendLine($"{_indent}{_indent}var {action.VariableName} = {action.LocatorExpression}; // line {action.SourceLine}");
+    }
+
+    void RenderNavigation(StringBuilder sb, NavigationAction action)
+    {
+        sb.AppendLine($"{_indent}{_indent}await Page.GotoAsync({action.UrlExpression}); // line {action.SourceLine}");
+        if (!string.IsNullOrEmpty(action.PageVariableName))
+        {
+            RegisterSourceVar(action.PageVariableName, "Page");
+        }
+    }
+
+    void RenderConditionalBlock(StringBuilder sb, ConditionalBlockAction action)
+    {
+        sb.AppendLine($"{_indent}{_indent}if ({action.ConditionExpression})");
+        RenderBlock(sb, action.IfActions, 2);
+
+        foreach (var elseIf in action.ElseIfActions)
+        {
+            sb.AppendLine($"{_indent}}} else if ({elseIf.Condition})");
+            RenderBlock(sb, elseIf.Actions, 2);
+        }
+
+        if (action.ElseActions.Any())
+        {
+            sb.AppendLine($"{_indent}}} else");
+            RenderBlock(sb, action.ElseActions, 2);
+        }
+        else if (!action.ElseIfActions.Any())
+        {
+            sb.AppendLine($"{_indent}}}");
+        }
+    }
+
+    void RenderBlock(StringBuilder sb, IReadOnlyList<TestAction> actions, int indentLevel)
+    {
+        sb.AppendLine($"{_indent}{_indent}{{");
+        foreach (var action in actions)
+        {
+            RenderAction(sb, action);
+        }
     }
 
     string ExtractKeyName(string keyExpression)
@@ -743,6 +906,28 @@ public class PlaywrightDotNetRenderer : IRenderer
     string ConvertConstraint(string constraint)
     {
         return constraint;
+    }
+
+    /// <summary>
+    /// Appends text as a C# single-line comment. If the text contains newlines,
+    /// each line is prefixed with <c>// </c> to prevent multiline leak bugs.
+    /// </summary>
+    void AppendComment(StringBuilder sb, string indent, string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            sb.AppendLine($"{indent}//");
+            return;
+        }
+
+        var lines = text.Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i].TrimEnd('\r');
+            // Escape any embedded // to prevent accidentally closing the comment
+            line = line.Replace("//", "/_/");
+            sb.AppendLine($"{indent}// {line}");
+        }
     }
 
     static string EscapeComment(string? text)

@@ -100,7 +100,7 @@ public static class ProposalWriter
                     sb.AppendLine("**Affected files:**");
                     sb.AppendLine();
                     foreach (var f in p.AffectedFiles)
-                        sb.AppendLine($"- {f}");
+                        sb.AppendLine($"- {PathRedaction.Redact(f)}");
                     sb.AppendLine();
                 }
 
@@ -165,7 +165,7 @@ public static class ProposalWriter
             Priority = p.Priority,
             Confidence = p.Confidence,
             Evidence = p.Evidence,
-            AffectedFiles = p.AffectedFiles,
+            AffectedFiles = PathRedaction.RedactAll(p.AffectedFiles),
             AffectedTests = p.AffectedTests,
             Occurrences = p.Occurrences,
             SuggestedConfigSnippet = p.SuggestedConfigSnippet,
