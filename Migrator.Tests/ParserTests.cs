@@ -173,7 +173,8 @@ public class ParserTests
         Assert.Contains("[Test]", output);
         Assert.Contains("[Category(\"QuickRunning\")]", output);
         Assert.Contains("async Task CheckSearchButton", output);
-        Assert.Contains("ClickAsync", output);
+        // Without adapter, all targets unresolved and page blocked from setup — actions become TODO comments
+        Assert.Contains("// TODO:", output);
     }
 
     [Fact]
@@ -437,9 +438,11 @@ public class ParserTests
         var renderer = new PlaywrightDotNetRenderer();
         var output = renderer.Render(model);
 
-        Assert.Contains(".PressAsync(\"Enter\")", output);
-        Assert.Contains("var code", output);
-        Assert.Contains("var name", output);
+        // Without adapter, all targets unresolved and page blocked from setup — actions become TODO comments
+        Assert.Contains("// TODO:", output);
+        Assert.Contains("CheckPressAsync", output);
+        Assert.Contains("CheckClickAsync", output);
+        Assert.Contains("CheckFillAsync", output);
     }
 
     [Fact]
@@ -897,6 +900,160 @@ public class ParserTests
                 new TestModel("T1", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(), actions1),
                 new TestModel("T2", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(), actions2)
             });
+    }
+
+    static TestFileModel CreateModelWithSetup(TestAction[] setupActions, TestAction[] bodyActions)
+    {
+        return new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "TC",
+            BaseClassName: null,
+            SetUpActions: setupActions,
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(), bodyActions)
+            });
+    }
+
+    // --- Compile safety regression tests ---
+
+    [Fact]
+    public void CompileSafety_SetupUnresolvedPropagatesToTest()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var setupDecl = new RawStatementAction(1, "var page = Navigation.OpenPage()");
+        var setupAssign = new RawStatementAction(2, "page = pagef");
+        var click = new ClickAction(3, TargetExpression.Unresolved("page.Button"));
+        var model = CreateModelWithSetup(new[] { setupDecl, setupAssign }, new[] { click });
+        var output = renderer.Render(model);
+
+        Assert.Contains("// TODO:", output);
+        Assert.DoesNotContain(".ClickAsync()", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void CompileSafety_UnavailableSymbolInSetup_BlocksDownstream()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var setupDecl = new RawStatementAction(1, "var nav = new CustomNav()");
+        var click = new ClickAction(2, TargetExpression.Mapped("page.Button", "btn", TargetKind.PlaywrightLocator, "data-tid", null, null));
+        var model = CreateModelWithSetup(new[] { setupDecl }, new[] { click });
+        var output = renderer.Render(model);
+
+        Assert.Contains("// TODO:", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void CompileSafety_DeconstructionWithDiscard_OnlyBlocksNamedVariables()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var decon = new RawStatementAction(1, "var (a, _) = Parse(x)");
+        var usage = new RawStatementAction(2, "Assert.That(a)");
+        var click = new ClickAction(3, TargetExpression.Mapped("page.Button", "btn", TargetKind.PlaywrightLocator, "data-tid", null, null));
+        var model = CreateModelWithSetup(new TestAction[] { decon }, new TestAction[] { usage, click });
+        var output = renderer.Render(model);
+
+        Assert.Contains("// TODO:", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void CompileSafety_MappedTarget_WithoutSetup_Blocking_Compiles()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var click = new ClickAction(1, TargetExpression.Mapped("page.Button", "btn", TargetKind.PlaywrightLocator, "data-tid", null, null));
+        var model = CreateModel(click);
+        var output = renderer.Render(model);
+
+        Assert.Contains(".ClickAsync()", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void CompileSafety_SourceOnlyType_Blocking_DoesNotAffectOtherActions()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var sourceOnlyDecl = new RawStatementAction(1, "var driver = new WebDriver()");
+        var click = new ClickAction(2, TargetExpression.Mapped("page.Button", "btn", TargetKind.PlaywrightLocator, "data-tid", null, null));
+        var model = CreateModelWithSetup(new[] { sourceOnlyDecl }, new[] { click });
+        var modelWithConfig = model with { SourceOnlyIdentifiers = new List<string> { "WebDriver" } };
+        var output = renderer.Render(modelWithConfig);
+
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void CompileSafety_RawStatementUnresolved_BlocksDeclaredVariables()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var decl = new RawStatementAction(1, "var helper = new CustomHelper()");
+        var usage = new RawStatementAction(2, "helper.DoSomething()");
+        var model = CreateModel(new[] { decl, usage });
+        var output = renderer.Render(model);
+
+        Assert.Contains("// TODO:", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void CompileSafety_SemanticAction_WithResolvedTarget_UsesLocatorForCheck()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var setupDecl = new RawStatementAction(1, "var helper = CustomHelper.Create()");
+        var click = new ClickAction(2, TargetExpression.Mapped("page.Button", "btn", TargetKind.PlaywrightLocator, "data-tid", null, null));
+        var model = CreateModelWithSetup(new[] { setupDecl }, new[] { click });
+        var output = renderer.Render(model);
+
+        Assert.Contains(".ClickAsync()", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void CompileSafety_MethodInvocation_BlockedVariables_CarryToTest()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var setupCall = new RawStatementAction(1, "var data = UnavailableMethod()");
+        var sendKeys = new SendKeysAction(2, TargetExpression.Mapped("page.Input", "inp", TargetKind.PlaywrightLocator, "data-tid", null, null), "test");
+        var model = CreateModelWithSetup(new[] { setupCall }, new[] { sendKeys });
+        var output = renderer.Render(model);
+
+        Assert.Contains("// TODO:", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void CompileSafety_FrameworkKeywords_NeverBlocked()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var click = new ClickAction(1, TargetExpression.Mapped("page.Button", "btn", TargetKind.PlaywrightLocator, "data-tid", null, null));
+        var raw = new RawStatementAction(2, "Assert.That(true)");
+        var model = CreateModel(new TestAction[] { click, raw });
+        var output = renderer.Render(model);
+
+        Assert.Contains(".ClickAsync()", output);
+        Assert.Contains("Assert.That(true)", output.Replace("// ", "").Replace("await ", ""));
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
     }
 
     // --- LocatorSettings / TestIdAttribute tests ---

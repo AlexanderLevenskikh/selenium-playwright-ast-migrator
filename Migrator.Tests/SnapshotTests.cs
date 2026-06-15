@@ -216,7 +216,7 @@ public class SnapshotTests
 
         Assert.Equal(0, report.MappedTargets);
         Assert.True(report.UnmappedTargets > 0, "Without adapter, all Click/SendKeys targets should be unresolved");
-        Assert.Contains("TODO: map source expression to Playwright locator: page.User", output);
+        Assert.Contains("// TODO:", output);
     }
 
     [Fact]

@@ -15,6 +15,8 @@ public class PlaywrightDotNetRenderer : IRenderer
     readonly Dictionary<string, string> _sourceVarMap = new();
     readonly HashSet<string> _blockedSymbols = new(StringComparer.Ordinal);
     HashSet<string> _sourceOnlyIdentifiers = new(StringComparer.Ordinal);
+    HashSet<string> _setupBlockedSymbols = new(StringComparer.Ordinal);
+    HashSet<string> _setupDeclaredVars = new(StringComparer.Ordinal);
     bool _useAssertionsExpect = false;
 
     public PlaywrightDotNetRenderer(string indent = "\t")
@@ -88,7 +90,9 @@ public class PlaywrightDotNetRenderer : IRenderer
         sb.AppendLine("{");
         sb.AppendLine();
 
-        // Setup method
+        // Setup method — collect fixture-scoped blocked symbols for downstream test body blocking
+        _setupBlockedSymbols.Clear();
+        _setupDeclaredVars.Clear();
         if (hasTestHostSetup)
         {
             ResetMethodScope();
@@ -99,6 +103,9 @@ public class PlaywrightDotNetRenderer : IRenderer
         {
             ResetMethodScope();
             RenderSetUp(sb, model.SetUpActions);
+            // After rendering setup, transfer blocked symbols to a fixture-level set
+            foreach (var symbol in _blockedSymbols)
+                _setupBlockedSymbols.Add(symbol);
             sb.AppendLine();
         }
 
@@ -211,6 +218,10 @@ public class PlaywrightDotNetRenderer : IRenderer
         sb.AppendLine($"{_indent}{{");
         ResetMethodScope();
 
+        // Carry over fixture-scoped blocked symbols from setup
+        foreach (var symbol in _setupBlockedSymbols)
+            _blockedSymbols.Add(symbol);
+
         foreach (var action in test.BodyActions)
             RenderActionWithSafety(sb, action);
 
@@ -311,7 +322,12 @@ public class PlaywrightDotNetRenderer : IRenderer
         var sourceText = GetActionSourceText(action);
         var declaredVariables = ExtractVariableNames(sourceText).ToArray();
 
-        var sourceOnlyIdentifier = FindReferencedSymbol(sourceText, _sourceOnlyIdentifiers);
+        // For semantic actions with resolved targets (Click, SendKeys, etc.), use the rendered
+        // target expression for symbol checks instead of source expression. This prevents
+        // blocked setup symbols from incorrectly blocking actions that have safe Playwright locators.
+        var checkText = GetCheckableSourceText(action, sourceText);
+
+        var sourceOnlyIdentifier = FindReferencedSymbol(checkText, _sourceOnlyIdentifiers);
         if (sourceOnlyIdentifier != null)
         {
             foreach (var variable in declaredVariables)
@@ -325,7 +341,7 @@ public class PlaywrightDotNetRenderer : IRenderer
             return;
         }
 
-        var blockedSymbol = FindReferencedSymbol(sourceText, _blockedSymbols);
+        var blockedSymbol = FindReferencedSymbol(checkText, _blockedSymbols);
         if (blockedSymbol != null)
         {
             foreach (var variable in declaredVariables)
@@ -349,6 +365,46 @@ public class PlaywrightDotNetRenderer : IRenderer
             foreach (var variable in declaredVariables)
                 BlockSymbol(variable);
         }
+
+        // Detect references to unavailable symbols: identifiers in sourceText that are
+        // not declared in current scope, not known types, and not framework built-ins.
+        // Only applies to RawStatement, MethodInvocation, MappedMethodInvocation, LocalDeclaration,
+        // Navigation — i.e. actions where sourceText carries real identifiers.
+        // Semantic actions like ClickAction/SendKeys have synthetic sourceText and are handled
+        // by their own target resolution logic.
+        var unavailableRefs = FindUnavailableSymbolsForAction(action, sourceText, declaredVariables);
+        if (unavailableRefs.Count > 0)
+        {
+            foreach (var variable in declaredVariables)
+                BlockSymbol(variable);
+            foreach (var refName in unavailableRefs)
+                BlockSymbol(refName);
+
+            var refList = string.Join(", ", unavailableRefs.Select(r => $"'{r}'"));
+            sb.AppendLine($"{_indent}{_indent}// TODO: references unavailable symbol(s) {refList} — verify in target");
+        }
+    }
+
+    /// <summary>
+    /// Returns the text to use for symbol safety checks.
+    /// For semantic actions with resolved targets, returns the rendered Playwright locator
+    /// (which contains no source-only identifiers). For other actions, returns original sourceText.
+    /// </summary>
+    string GetCheckableSourceText(TestAction action, string sourceText)
+    {
+        return action switch
+        {
+            ClickAction c when c.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(c.Target),
+            SendKeysAction s when s.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(s.Target),
+            PressAction p when p.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(p.Target),
+            WaitForAction w when w.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(w.Target),
+            TextAssertionAction t when t.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(t.Target),
+            VisibilityAssertionAction v when v.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(v.Target),
+            TableCountAssertionAction t when t.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(t.Target),
+            TableRowAccessAction t when t.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(t.Target),
+            TableRowTextAccessAction t when t.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(t.Target),
+            _ => sourceText
+        };
     }
 
     void RenderBlockedActionAsComment(StringBuilder sb, TestAction action, string reason, string sourceText)
@@ -1302,6 +1358,118 @@ public class PlaywrightDotNetRenderer : IRenderer
 
         return null;
     }
+
+    /// <summary>
+    /// For supported action types, finds identifiers in sourceText that are unavailable in the target context.
+    /// Only checks RawStatementAction, MethodInvocationAction, MappedMethodInvocationAction,
+    /// LocalDeclarationAction, and NavigationAction — where sourceText carries real identifiers.
+    /// Semantic actions (ClickAction, SendKeysAction, etc.) use synthetic sourceText and are excluded.
+    /// </summary>
+    HashSet<string> FindUnavailableSymbolsForAction(TestAction action, string sourceText, IReadOnlyList<string> declaredVariables)
+    {
+        // Only check actions that carry real source identifiers and generate active C# from them.
+        // MappedMethodInvocationAction is excluded — its target statements are already processed
+        // with placeholder substitution and safety checks. NavigationAction is excluded — URL
+        // expressions are handled by their own logic. LocalDeclarationAction is excluded — it
+        // has its own ContainsUnresolvedSourceObjectAccess check in RenderLocalDeclaration.
+        if (action is RawStatementAction or MethodInvocationAction)
+        {
+            return FindUnavailableSymbols(sourceText, declaredVariables);
+        }
+
+        return new HashSet<string>();
+    }
+
+    /// <summary>
+    /// Finds identifiers in sourceText that are unavailable in the target context:
+    /// not declared in current scope, not known types, not framework built-ins,
+    // and not source-only identifiers (already handled separately).
+    /// Returns unique set of unavailable symbol names.
+    /// </summary>
+    HashSet<string> FindUnavailableSymbols(string sourceText, IReadOnlyList<string> declaredVariables)
+    {
+        var unavailable = new HashSet<string>();
+
+        // Build set of known symbols: declared vars, method scope vars, source var map keys
+        var knownSymbols = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var v in declaredVariables) knownSymbols.Add(v);
+        foreach (var v in _methodScopeVars) knownSymbols.Add(v);
+        foreach (var v in _sourceVarMap.Keys) knownSymbols.Add(v);
+
+        // Extract identifiers from source text
+        var identifiers = ExtractIdentifiers(sourceText);
+        foreach (var id in identifiers)
+        {
+            if (IsKnownType(id)) continue;
+            if (IsFrameworkKeyword(id)) continue;
+            if (IsFrameworkBuiltIn(id)) continue;
+            if (knownSymbols.Contains(id)) continue;
+
+            // Check if it's a property/method chain on a known receiver
+            // e.g. "page.User.Click()" — "page" is known (Playwright Page property)
+            if (id == "Page" || id == "page") continue;
+
+            unavailable.Add(id);
+        }
+
+        return unavailable;
+    }
+
+    static HashSet<string> ExtractIdentifiers(string text)
+    {
+        return new HashSet<string>(
+            Regex.Matches(text, @"(?<![\w@])[A-Za-z_]\w*").Select(m => m.Value));
+    }
+
+    static HashSet<string> KnownTypes = new(StringComparer.Ordinal)
+    {
+        // BCL types
+        "string", "int", "long", "double", "float", "bool", "byte", "char", "short", "uint",
+        "decimal", "object", "var", "void", "sbyte", "ushort", "ulong", "nint", "nuint",
+        "DateTime", "DateTimeOffset", "TimeSpan", "Guid", "Uri",
+        "Array", "List", "Dictionary", "HashSet", "KeyValuePair",
+        "Action", "Func", "Predicate", "EventHandler",
+        "Task", "ValueTask", "CancellationToken", "IQueryable", "IEnumerable",
+        "Exception", "NullReferenceException", "InvalidOperationException",
+        "ArgumentException", "ArgumentNullException", "ArgumentOutOfRangeException",
+        "IndexOutOfRangeException", "FormatException", "IOException",
+        "Type", "Assembly", "MemberInfo",
+        "Console", "Math", "Convert", "Enum", "Delegate",
+        "Environment", "AppDomain", "Process", "Thread",
+        "StringBuilder", "StringComparer", "StringSplitOptions",
+        "Regex", "Match", "MatchCollection", "Groups",
+        "Enumerable", "Queryable",
+        // Common test types
+        "Assert", "Is", "Does", "Contains",
+        "Expect", "Assertions",
+        "Keys",
+    };
+
+    static HashSet<string> FrameworkKeywords = new(StringComparer.Ordinal)
+    {
+        "await", "async", "if", "else", "for", "foreach", "while", "do", "switch", "case",
+        "break", "continue", "return", "throw", "try", "catch", "finally", "using",
+        "new", "this", "base", "typeof", "nameof", "default", "checked", "unchecked",
+        "is", "as", "in", "out", "ref", "params", "yield", "from", "where", "select",
+        "let", "group", "orderby", "join", "into",
+        "true", "false", "null",
+        "public", "private", "protected", "internal", "static", "virtual", "override",
+        "sealed", "abstract", "readonly", "const", "volatile", "unsafe",
+        "class", "interface", "struct", "enum", "namespace", "delegate", "event",
+        "get", "set", "add", "remove",
+    };
+
+    static bool IsKnownType(string id) => KnownTypes.Contains(id);
+    static bool IsFrameworkKeyword(string id) => FrameworkKeywords.Contains(id);
+
+    static HashSet<string> FrameworkBuiltIns = new(StringComparer.Ordinal)
+    {
+        // Playwright / NUnit / common runtime
+        "Page", "Locator", "APIResponse", "Browser", "BrowserContext",
+        "TestContext", "Assert",
+    };
+
+    static bool IsFrameworkBuiltIn(string id) => FrameworkBuiltIns.Contains(id);
 
     static bool IsResolvedRawLocatorAssignment(string sourceText)
     {

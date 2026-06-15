@@ -16,6 +16,7 @@ public class ButtonTestsPlaywright : PageTest
 	public async Task SetUp()
 	{
 		// TODO: raw statement — review: var pagef = Navigation.OpenRegistryAgentPage()
+		// TODO: references unavailable symbol(s) 'Navigation', 'OpenRegistryAgentPage' — verify in target
 		// TODO: depends on unresolved symbol 'pagef'
 		//   page = pagef
 		// TODO: depends on unresolved symbol 'page'
@@ -27,20 +28,20 @@ public class ButtonTestsPlaywright : PageTest
 	public async Task CheckSearchButton()
 	{
 		await Page.GetByTestId("side-menu-search").ClickAsync(); // line 24
-		// await Expect((locator)).ToBeVisibleAsync(); // line 25
-		// TODO: map source expression to Playwright locator: page.MenuItems.SearchTextArea
-		// await Expect((locator)).ToBeHiddenAsync(); // line 26
-		// TODO: map source expression to Playwright locator: page.MenuItems.SearchTextArea
+		// TODO: depends on unresolved symbol 'page'
+		//   page.MenuItems.SearchTextArea.Visible.Should()
+		// TODO: depends on unresolved symbol 'page'
+		//   page.MenuItems.SearchTextArea.Visible.Should()
 	}
 
 	[Category("QuickRunning")]
 	[Test]
 	public async Task CheckFeedBackButton()
 	{
-		// await Expect((locator)).ToBeVisibleAsync(); // line 33
-		// TODO: map source expression to Playwright locator: page.MenuItems.SideMenuButtonFeedback
-		// await Expect((locator)).ToHaveTextAsync("Leave feedback"); // line 34
-		// TODO: map source expression to Playwright locator: page.MenuItems.SideMenuButtonFeedback
+		// TODO: depends on unresolved symbol 'page'
+		//   page.MenuItems.SideMenuButtonFeedback.Visible.Should()
+		// TODO: depends on unresolved symbol 'page'
+		//   page.MenuItems.SideMenuButtonFeedback.Text.Should("Leave feedback")
 	}
 
 	[Category("QuickRunning")]
@@ -51,8 +52,8 @@ public class ButtonTestsPlaywright : PageTest
 		await Page.GetByTestId("side-menu-catalogs-partners").ClickAsync(); // line 42
 		// await Expect(Page).ToHaveURLAsync(Urls.BaseUrlCatalogPartners); // line 43
 		// TODO: URL assertion uses external variable — verify and uncomment
-		// await Expect((locator)).ToBeHiddenAsync(); // line 44
-		// TODO: map source expression to Playwright locator: page.MenuItems.Error
+		// TODO: depends on unresolved symbol 'page'
+		//   page.MenuItems.Error.Visible.Should()
 	}
 
 }
