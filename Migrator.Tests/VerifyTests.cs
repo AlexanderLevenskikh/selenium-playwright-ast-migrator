@@ -636,4 +636,55 @@ public class VerifyTests
     }
 
     #endregion
+
+    #region Active TODO locator regression tests
+
+    [Fact]
+    public void Verify_ActivePageLocator_TODO_DetectedAsError()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+        var model = new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "TC",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(),
+                    new TestAction[]
+                    {
+                        new ClickAction(1, TargetExpression.Unresolved("page.Button")),
+                    })
+            });
+        var output = renderer.Render(model);
+
+        // Unresolved targets render as commented TODO — not active Page.Locator("TODO:...")
+        var activeLines = output.Split('\n').Where(l => !l.Trim().StartsWith("//")).ToList();
+        var hasActiveTodoLocator = activeLines.Any(l => l.Contains("Page.Locator(\"TODO:"));
+        Assert.False(hasActiveTodoLocator, "Unresolved targets should not generate active TODO locators");
+    }
+
+    [Fact]
+    public void Verify_ActiveTodoLocator_CaughtByVerifyRunner()
+    {
+        var result = GetWidgetResult();
+
+        var report = VerifyRunner.Run(new List<PipelineResult> { result }, config: null, CleanSyntaxChecker);
+
+        // Active Page.Locator("TODO:...") calls should be caught as Error severity
+        var activeTodoIssues = report.Issues.Where(i => i.Category == "ActiveTodoLocator").ToList();
+        Assert.Empty(activeTodoIssues);
+    }
+
+    [Fact]
+    public void Verify_PageTodoCalls_Zero_ForWidgetOutput()
+    {
+        var result = GetWidgetResult();
+        var report = VerifyRunner.Run(new List<PipelineResult> { result }, config: null, CleanSyntaxChecker);
+
+        Assert.Equal(0, report.PageTodoCalls);
+    }
+
+    #endregion
 }

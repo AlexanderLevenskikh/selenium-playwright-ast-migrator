@@ -130,6 +130,18 @@ public class PlaywrightDotNetRenderer : IRenderer
         foreach (var stmt in hostStatements)
             sb.AppendLine($"{_indent}{_indent}{stmt}");
 
+        // Analyze original setup actions for blocked symbols — even though they are not
+        // rendered as active code, variables declared/assigned in unresolved original actions
+        // must be blocked so downstream test body actions are not left active.
+        _blockedSymbols.Clear();
+        foreach (var action in originalActions)
+        {
+            AnalyzeSetupActionForBlocking(action);
+        }
+        // Transfer to fixture-level blocked symbols for downstream test body blocking
+        foreach (var symbol in _blockedSymbols)
+            _setupBlockedSymbols.Add(symbol);
+
         // Preserve original mapped setup actions as comments for reference
         if (originalActions.Any())
         {
@@ -140,6 +152,51 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
 
         sb.AppendLine($"{_indent}}}");
+    }
+
+    /// <summary>
+    /// Analyzes a setup action for declared/assigned variables that should be blocked.
+    /// Used by RenderSetUp (active rendering) and RenderHostSetUp (comment-only rendering).
+    /// </summary>
+    void AnalyzeSetupActionForBlocking(TestAction action)
+    {
+        var sourceText = GetActionSourceText(action);
+        var declaredVariables = ExtractVariableNames(sourceText).ToArray();
+
+        var sourceOnlyIdentifier = FindReferencedSymbol(sourceText, _sourceOnlyIdentifiers);
+        if (sourceOnlyIdentifier != null)
+        {
+            foreach (var variable in declaredVariables)
+                BlockSymbol(variable);
+            foreach (var refName in declaredVariables)
+                BlockSymbol(refName);
+            return;
+        }
+
+        var blockedSymbol = FindReferencedSymbol(sourceText, _blockedSymbols);
+        if (blockedSymbol != null)
+        {
+            foreach (var variable in declaredVariables)
+                BlockSymbol(variable);
+            return;
+        }
+
+        // If action is raw/unsupported, declared variables are blocked (not resolved)
+        if (action is RawStatementAction or UnsupportedAction)
+        {
+            foreach (var variable in declaredVariables)
+                BlockSymbol(variable);
+        }
+
+        // Check for unavailable symbols
+        var unavailableRefs = FindUnavailableSymbolsForAction(action, sourceText, declaredVariables);
+        if (unavailableRefs.Count > 0)
+        {
+            foreach (var variable in declaredVariables)
+                BlockSymbol(variable);
+            foreach (var refName in unavailableRefs)
+                BlockSymbol(refName);
+        }
     }
 
     void RenderActionAsComment(StringBuilder sb, TestAction action)
@@ -322,9 +379,49 @@ public class PlaywrightDotNetRenderer : IRenderer
         var sourceText = GetActionSourceText(action);
         var declaredVariables = ExtractVariableNames(sourceText).ToArray();
 
-        // For semantic actions with resolved targets (Click, SendKeys, etc.), use the rendered
-        // target expression for symbol checks instead of source expression. This prevents
-        // blocked setup symbols from incorrectly blocking actions that have safe Playwright locators.
+        // Source-level blocked check: extract root symbol from original source expression.
+        // If the root symbol is blocked (from unresolved setup/source-only), the action
+        // must be commented regardless of whether the target has a valid Playwright mapping.
+        var sourceRootSymbol = ExtractRootSymbol(sourceText);
+        if (sourceRootSymbol != null)
+        {
+            var rootSourceOnly = _sourceOnlyIdentifiers.Contains(sourceRootSymbol)
+                ? sourceRootSymbol
+                : null;
+
+            if (rootSourceOnly != null)
+            {
+                foreach (var variable in declaredVariables)
+                    BlockSymbol(variable);
+
+                RenderBlockedActionAsComment(
+                    sb,
+                    action,
+                    $"uses source-only identifier '{rootSourceOnly}'",
+                    sourceText);
+                return;
+            }
+
+            var rootBlocked = _blockedSymbols.Contains(sourceRootSymbol)
+                ? sourceRootSymbol
+                : null;
+
+            if (rootBlocked != null)
+            {
+                foreach (var variable in declaredVariables)
+                    BlockSymbol(variable);
+
+                RenderBlockedActionAsComment(
+                    sb,
+                    action,
+                    $"depends on unresolved symbol '{rootBlocked}'",
+                    sourceText);
+                return;
+            }
+        }
+
+        // For semantic actions with resolved targets, use rendered Playwright locator for
+        // remaining symbol checks (e.g. secondary identifiers in assertion expressions).
         var checkText = GetCheckableSourceText(action, sourceText);
 
         var sourceOnlyIdentifier = FindReferencedSymbol(checkText, _sourceOnlyIdentifiers);
@@ -1318,6 +1415,64 @@ public class PlaywrightDotNetRenderer : IRenderer
         return trimmed.StartsWith("//", StringComparison.Ordinal)
             ? trimmed.Substring(2).TrimStart()
             : text;
+    }
+
+    /// <summary>
+    /// Extracts the root symbol from a source expression.
+    /// "page.Button.Click()" → "page"
+    /// "promoCodeSidePage.PromoCodeBlocks.First()" → "promoCodeSidePage"
+    /// "Assert.That(x)" → "Assert"
+    /// "var code = page.Table.Text.Get()" → "page" (from RHS of assignment)
+    /// Returns null if no identifiable root symbol found.
+    /// </summary>
+    static string? ExtractRootSymbol(string sourceText)
+    {
+        if (string.IsNullOrWhiteSpace(sourceText))
+            return null;
+
+        var text = StripLeadingCommentPrefix(sourceText.Trim()).Trim().TrimEnd(';');
+
+        // Handle assignments: extract root from RHS
+        var assignMatch = Regex.Match(text, @"^\s*(?:var\s+|[\w<>\[\].?]+\s+)?(@?\w+)\s*=\s*(.+)$");
+        if (assignMatch.Success)
+        {
+            var rhs = assignMatch.Groups[2].Value.Trim();
+            return ExtractRootFromExpression(rhs);
+        }
+
+        // Handle deconstruction: "var (a, b) = Parse(x)" — root is from RHS
+        var deconMatch = Regex.Match(text, @"^\s*(?:var\s*)?\([^)]+\)\s*=\s*(.+)$");
+        if (deconMatch.Success)
+        {
+            var rhs = deconMatch.Groups[1].Value.Trim();
+            return ExtractRootFromExpression(rhs);
+        }
+
+        return ExtractRootFromExpression(text);
+    }
+
+    static string? ExtractRootFromExpression(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        // Skip leading keywords/var/typeof etc.
+        var skipKeywords = new[] { "var ", "typeof(", "nameof(", "default(", "new " };
+        foreach (var kw in skipKeywords)
+        {
+            if (text.StartsWith(kw, StringComparison.Ordinal))
+            {
+                text = text.Substring(kw.Length).Trim();
+                break;
+            }
+        }
+
+        // Match leading identifier, possibly followed by . or [
+        var rootMatch = Regex.Match(text, @"^(@?[A-Za-z_]\w*)");
+        if (!rootMatch.Success)
+            return null;
+
+        return rootMatch.Groups[1].Value.TrimStart('@');
     }
 
     string GetActionSourceText(TestAction action)

@@ -50,14 +50,13 @@ public class SnapshotTests
         Assert.Contains("async Task CheckDateToWidget", output);
         Assert.Contains("async Task CheckSearchToWidget", output);
 
-        Assert.Contains("GetByTestId(\"widget-user\")", output);
-        Assert.Contains("GetByTestId(\"widget-search\")", output);
-
-        Assert.DoesNotContain("TODO: page.User", output);
-        Assert.DoesNotContain("TODO: page.WidgetSearch", output);
-
+        // With source-root safety, page.* actions are blocked because page is unresolved from setup.
+        // Mapped targets are not rendered as active code when source root is blocked.
         Assert.Contains("// TODO:", output);
-        Assert.Contains("// TODO: depends on unresolved symbol", output);
+        Assert.Contains("// TODO: depends on unresolved symbol 'page'", output);
+        Assert.Contains("TODO: depends on unresolved symbol 'page'", output);
+        Assert.Contains("page.User.Click()", output);
+        Assert.Contains("page.WidgetSearch.SendKeys", output);
 
         Assert.Equal(
             Normalize(File.ReadAllText(Path.Combine(_testFilesDir, "Expected", "Widget.generated.cs"))),
@@ -98,16 +97,13 @@ public class SnapshotTests
         Assert.Contains("async Task CheckFeedBackButton", output);
         Assert.Contains("async Task CheckButtonCatalogsPartners", output);
 
-        Assert.Contains("GetByTestId(\"side-menu-search\")", output);
-        Assert.Contains("GetByTestId(\"side-menu-catalogs\")", output);
-        Assert.Contains("GetByTestId(\"side-menu-catalogs-partners\")", output);
-
-        Assert.DoesNotContain("TODO: page.MenuItems.SideMenuButtonSearch", output);
-        Assert.DoesNotContain("TODO: page.MenuItems.SideMenuCatalogs", output);
-        Assert.DoesNotContain("TODO: page.MenuItems.SideMenuCatalogsPartners", output);
-
+        // With source-root safety, page.* actions are blocked because page is unresolved from setup.
+        // Mapped targets (side-menu-search, side-menu-catalogs, etc.) are not rendered as active code.
         Assert.Contains("// TODO:", output);
-        Assert.Contains("// TODO: depends on unresolved symbol", output);
+        Assert.Contains("// TODO: depends on unresolved symbol 'page'", output);
+        Assert.Contains("page.MenuItems.SideMenuButtonSearch.Click()", output);
+        Assert.Contains("page.MenuItems.SideMenuCatalogs.Click()", output);
+        Assert.Contains("page.MenuItems.SideMenuCatalogsPartners.Click()", output);
 
         Assert.Equal(
             Normalize(File.ReadAllText(Path.Combine(_testFilesDir, "Expected", "ButtonTests.generated.cs"))),
@@ -233,12 +229,13 @@ public class SnapshotTests
         Assert.True(results.Count >= 2, "Should process at least 2 fixture files");
 
         var buttonResult = results.First(r => r.SourceModel.ClassName == "ButtonTests");
-        Assert.Contains("GetByTestId(\"side-menu-search\")", buttonResult.GeneratedOutput);
+        // Mapped targets remain resolved in the model, but source-root safety prevents active rendering
         Assert.True(buttonResult.Report.MappedTargets > 0);
+        Assert.Contains("// TODO: depends on unresolved symbol 'page'", buttonResult.GeneratedOutput);
 
         var widgetResult = results.First(r => r.SourceModel.ClassName == "Widget");
-        Assert.Contains("GetByTestId(\"widget-user\")", widgetResult.GeneratedOutput);
         Assert.True(widgetResult.Report.MappedTargets > 0);
+        Assert.Contains("// TODO: depends on unresolved symbol 'page'", widgetResult.GeneratedOutput);
     }
 
     [Fact]

@@ -27,7 +27,8 @@ public class ButtonTestsPlaywright : PageTest
 	[Test]
 	public async Task CheckSearchButton()
 	{
-		await Page.GetByTestId("side-menu-search").ClickAsync(); // line 24
+		// TODO: depends on unresolved symbol 'page'
+		//   page.MenuItems.SideMenuButtonSearch.Click()
 		// TODO: depends on unresolved symbol 'page'
 		//   page.MenuItems.SearchTextArea.Visible.Should()
 		// TODO: depends on unresolved symbol 'page'
@@ -48,8 +49,10 @@ public class ButtonTestsPlaywright : PageTest
 	[Test]
 	public async Task CheckButtonCatalogsPartners()
 	{
-		await Page.GetByTestId("side-menu-catalogs").ClickAsync(); // line 41
-		await Page.GetByTestId("side-menu-catalogs-partners").ClickAsync(); // line 42
+		// TODO: depends on unresolved symbol 'page'
+		//   page.MenuItems.SideMenuCatalogs.Click()
+		// TODO: depends on unresolved symbol 'page'
+		//   page.MenuItems.SideMenuCatalogsPartners.Click()
 		// await Expect(Page).ToHaveURLAsync(Urls.BaseUrlCatalogPartners); // line 43
 		// TODO: URL assertion uses external variable — verify and uncomment
 		// TODO: depends on unresolved symbol 'page'

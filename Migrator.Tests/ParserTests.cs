@@ -241,6 +241,8 @@ public class ParserTests
     [Fact]
     public void Adapter_MappedClick_GeneratesCleanLocator()
     {
+        // This test verifies that when a mapped target's root symbol is NOT blocked,
+        // the action renders as active Playwright code.
         var config = new ProjectAdapterConfig(
             SourceProjectName: "TestProject",
             UiTargets: new[]
@@ -256,9 +258,11 @@ public class ParserTests
         var result = pipeline.ProcessFile(Path.Combine(_testFilesDir, "Widget.cs"));
         var output = result.GeneratedOutput;
 
-        Assert.Contains("GetByTestId(\"widget-user\")", output);
-        Assert.Contains(".ClickAsync()", output);
-        Assert.DoesNotContain("TODO: page.User", output);
+        // Widget setup has unresolved Navigation -> pagef blocked -> page blocked.
+        // With source-root safety, page.User.Click() is blocked despite valid mapping.
+        Assert.Contains("// TODO: depends on unresolved symbol 'page'", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
     }
 
     [Fact]
@@ -1054,6 +1058,199 @@ public class ParserTests
         Assert.Contains("Assert.That(true)", output.Replace("// ", "").Replace("await ", ""));
         Assert.True(CompileChecker.CompilesWithoutErrors(output),
             CompileChecker.FormatErrors(output));
+    }
+
+    static void AssertNoActiveReference(string output, string blockedSymbol)
+    {
+        // Check that the blocked symbol does not appear in any active (non-commented) line.
+        var lines = output.Split('\n');
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (string.IsNullOrEmpty(trimmed))
+                continue;
+            if (trimmed.StartsWith("//"))
+                continue;
+
+            // Check for word-boundary match of the symbol in active code
+            if (Regex.IsMatch(trimmed, $@"(?<!\w){Regex.Escape(blockedSymbol)}(?!\w)"))
+            {
+                Assert.Fail($"Active reference to blocked symbol '{blockedSymbol}' found in line: {trimmed}");
+            }
+        }
+    }
+
+    // --- Part 1: Mapped downstream action with blocked root symbol ---
+
+    [Fact]
+    public void ContextSafety_MappedClick_BlockedByUnresolvedSetup_SourceRootCheck()
+    {
+        var config = new ProjectAdapterConfig(
+            SourceProjectName: "Test",
+            UiTargets: new[]
+            {
+                new UiTargetMapping("page.Button", "button", "TestId"),
+            },
+            PageObjects: Array.Empty<PageObjectMapping>(),
+            Methods: Array.Empty<MethodMapping>()
+        );
+        var adapter = new DefaultProjectAdapter(config);
+        var renderer = new PlaywrightDotNetRenderer();
+
+        // Setup declares page from unresolved Navigation
+        var setupDecl = new RawStatementAction(1, "var page = UnknownOpenPage()");
+        // Test body has mapped click on page.Button
+        var click = new ClickAction(2, TargetExpression.Mapped("page.Button", "button", TargetKind.PlaywrightLocator, "data-tid", null, null));
+        var model = CreateModelWithSetup(new[] { setupDecl }, new[] { click });
+        var adapted = adapter.Adapt(model);
+        var output = renderer.Render(adapted);
+
+        // page must be blocked from setup, click must NOT render as active ClickAsync
+        Assert.Contains("// TODO: depends on unresolved symbol 'page'", output);
+        Assert.DoesNotContain(".ClickAsync()", output);
+        AssertNoActiveReference(output, "page");
+        AssertNoActiveReference(output, "UnknownOpenPage");
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    // --- Part 2: Deconstruction setup blocks mapped downstream ---
+
+    [Fact]
+    public void ContextSafety_DeconstructionSetup_BlocksMappedDownstream()
+    {
+        var config = new ProjectAdapterConfig(
+            SourceProjectName: "Test",
+            UiTargets: new[]
+            {
+                new UiTargetMapping("promoCodeSidePage.SaveButton", "save-button", "TestId"),
+            },
+            PageObjects: Array.Empty<PageObjectMapping>(),
+            Methods: Array.Empty<MethodMapping>()
+        );
+        var adapter = new DefaultProjectAdapter(config);
+        var renderer = new PlaywrightDotNetRenderer();
+
+        // Deconstruction with discard — promoCodeSidePage should be extracted and blocked
+        var decon = new RawStatementAction(1, "var (_, promoCodeSidePage) = OpenEditSidePagePromoCodes()");
+        var click = new ClickAction(2, TargetExpression.Mapped("promoCodeSidePage.SaveButton", "save-button", TargetKind.PlaywrightLocator, "data-tid", null, null));
+        var model = CreateModelWithSetup(new[] { decon }, new[] { click });
+        var adapted = adapter.Adapt(model);
+        var output = renderer.Render(adapted);
+
+        Assert.Contains("// TODO:", output);
+        Assert.DoesNotContain(".ClickAsync()", output);
+        AssertNoActiveReference(output, "promoCodeSidePage");
+        AssertNoActiveReference(output, "OpenEditSidePagePromoCodes");
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    // --- Part 3: TestHost setup blocks original setup dependencies ---
+
+    [Fact]
+    public void ContextSafety_TestHostSetup_BlockOriginalSetupDependencies()
+    {
+        var config = new ProjectAdapterConfig(
+            SourceProjectName: "Test",
+            UiTargets: new[]
+            {
+                new UiTargetMapping("page.Button", "button", "TestId"),
+            },
+            PageObjects: Array.Empty<PageObjectMapping>(),
+            Methods: Array.Empty<MethodMapping>(),
+            TestHost: new TestHostConfig
+            {
+                Namespace = "Test.Playwright",
+                BaseClass = "PageTest",
+                ClassName = "TCPlaywright",
+                SetUpStatements = new[] { "await Page.GotoAsync(\"/test\");" }
+            }
+        );
+        var adapter = new DefaultProjectAdapter(config);
+        var renderer = new PlaywrightDotNetRenderer();
+
+        // Original setup has unresolved assignment: page = UnknownOpenPage()
+        var setupAssign = new RawStatementAction(1, "page = UnknownOpenPage()");
+        // Test body uses mapped click
+        var click = new ClickAction(2, TargetExpression.Mapped("page.Button", "button", TargetKind.PlaywrightLocator, "data-tid", null, null));
+        var model = CreateModelWithSetup(new[] { setupAssign }, new[] { click });
+        var adapted = adapter.Adapt(model);
+        var output = renderer.Render(adapted);
+
+        // Original setup analysis must still mark page as blocked
+        Assert.Contains("// TODO: depends on unresolved symbol 'page'", output);
+        Assert.DoesNotContain(".ClickAsync()", output);
+        AssertNoActiveReference(output, "page");
+        AssertNoActiveReference(output, "UnknownOpenPage");
+        // Host setup should be rendered
+        Assert.Contains("await Page.GotoAsync", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    // --- Part 4: Source-only setup blocks mapped downstream ---
+
+    [Fact]
+    public void ContextSafety_SourceOnlySetup_BlocksMappedDownstream()
+    {
+        var config = new ProjectAdapterConfig(
+            SourceProjectName: "Test",
+            UiTargets: new[]
+            {
+                new UiTargetMapping("builder.Build", "build-result", "TestId"),
+            },
+            PageObjects: Array.Empty<PageObjectMapping>(),
+            Methods: Array.Empty<MethodMapping>(),
+            SourceOnlyIdentifiers: new[] { "KbaBuilder" }
+        );
+        var adapter = new DefaultProjectAdapter(config);
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var setupDecl = new RawStatementAction(1, "var builder = new KbaBuilder()");
+        var click = new ClickAction(2, TargetExpression.Mapped("builder.Build", "build-result", TargetKind.PlaywrightLocator, "data-tid", null, null));
+        var model = CreateModelWithSetup(new[] { setupDecl }, new[] { click });
+        var adapted = adapter.Adapt(model);
+        var output = renderer.Render(adapted);
+
+        // builder blocked by source-only KbaBuilder
+        Assert.Contains("// TODO:", output);
+        Assert.DoesNotContain(".ClickAsync()", output);
+        AssertNoActiveReference(output, "builder");
+        AssertNoActiveReference(output, "KbaBuilder");
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    // --- Part 5: AssertNoActiveReference regression ---
+
+    [Fact]
+    public void ContextSafety_AssertNoActiveReference_DetectsActiveReference()
+    {
+        var output = @"
+            // TODO: depends on unresolved symbol 'page'
+            //   page.Button.Click()
+            await page.Other.ClickAsync();
+        ";
+        // Verify helper correctly detects active reference by using regex directly
+        // (same logic as AssertNoActiveReference)
+        var activeLines = output.Split('\n')
+            .Select(l => l.Trim())
+            .Where(l => !string.IsNullOrEmpty(l) && !l.StartsWith("//"));
+        var hasActiveRef = activeLines.Any(l => Regex.IsMatch(l, @"(?<!\w)page(?!\w)"));
+        Assert.True(hasActiveRef, "Helper should detect 'page' in active line");
+    }
+
+    [Fact]
+    public void ContextSafety_AssertNoActiveReference_AllowsCommentedReference()
+    {
+        var output = @"
+            // TODO: depends on unresolved symbol 'page'
+            //   page.Button.Click()
+            //   page.Other.Click()
+        ";
+        // Should NOT detect 'page' — all references are commented
+        AssertNoActiveReference(output, "page");
     }
 
     // --- LocatorSettings / TestIdAttribute tests ---
