@@ -3789,3 +3789,128 @@ public class WebDriverFindElementTests
             CompileChecker.FormatErrors(output));
     }
 }
+
+public class PipelineIntegrationTests
+{
+    readonly string _testFilesDir = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!, "TestFiles");
+
+    PipelineResult RunPipeline(string inputFileName)
+    {
+        var adapterConfigPath = Path.Combine(_testFilesDir, "adapter-config.json");
+        var adapter = new DefaultProjectAdapter(adapterConfigPath);
+        var parser = new RoslynTestFileParser();
+        var renderer = new PlaywrightDotNetRenderer();
+        var pipeline = new MigrationPipeline(parser, renderer, adapter);
+
+        var filePath = Path.Combine(_testFilesDir, inputFileName);
+        return pipeline.ProcessFile(filePath);
+    }
+
+    [Fact]
+    public void NavigationOpenPage_FullPipeline_ParsesAndRenders()
+    {
+        var result = RunPipeline("PipelineNavigationTests.cs");
+        var output = result.GeneratedOutput;
+        var model = result.TargetModel;
+
+        // Parser recognizes Navigation.OpenPage and creates NavigationAction
+        var test = model.Tests.First();
+        Assert.Contains(test.BodyActions, a => a is NavigationAction nav && nav.PageVariableName == "page");
+
+        // Renderer generates GotoAsync
+        Assert.Contains("GotoAsync", output);
+
+        // Output compiles
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void WebDriverXpath_FullPipeline_ParsesAndRenders()
+    {
+        var result = RunPipeline("PipelineWebDriverXpathTests.cs");
+        var output = result.GeneratedOutput;
+        var model = result.TargetModel;
+
+        // Parser recognizes WebDriver.FindElement(By.XPath(...))
+        var test = model.Tests.First();
+        Assert.Contains(test.BodyActions, a => a is LocatorDeclarationAction decl && decl.VariableName == "inputElement");
+
+        // Output contains the locator
+        Assert.Contains("Page.Locator(\"xpath=", output);
+        Assert.Contains("//input[@id='username']", output);
+
+        // Output compiles
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void WebDriverCss_FullPipeline_ParsesAndRenders()
+    {
+        var result = RunPipeline("PipelineWebDriverCssTests.cs");
+        var output = result.GeneratedOutput;
+        var model = result.TargetModel;
+
+        // Parser recognizes WebDriver.FindElement(By.CssSelector(...))
+        var test = model.Tests.First();
+        Assert.Contains(test.BodyActions, a => a is LocatorDeclarationAction decl && decl.VariableName == "button");
+
+        // Output contains the locator
+        Assert.Contains("Page.Locator(\"[data-test='submit-button']\")", output);
+
+        // Click is rendered
+        Assert.Contains("ClickAsync", output);
+
+        // Output compiles
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void DynamicCssSelector_FullPipeline_RemainsTodo()
+    {
+        var result = RunPipeline("PipelineDynamicSelectorTests.cs");
+        var output = result.GeneratedOutput;
+
+        // Dynamic selector should not be converted to a fake locator
+        Assert.DoesNotContain("Page.Locator(\"selectorVariable\")", output);
+
+        // Should produce TODO or comment for the unresolvable selector
+        Assert.Contains("TODO", output);
+
+        // Output compiles
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void NthWithoutIndex_Renderer_NoNthZero()
+    {
+        // Renderer-level: mapped target with Nth=null should not produce .Nth(0)
+        var click = new ClickAction(
+            1,
+            TargetExpression.Mapped("items.ElementAt(idx)", "Page.Locator(\".item\")", TargetKind.PlaywrightLocator, null, "Nth", null),
+            RecognitionConfidence.Semantic);
+
+        var model = new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "NthTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(),
+                    new[] { click })
+            });
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.DoesNotContain(".Nth(0)", output);
+        Assert.DoesNotContain(".Nth()", output);
+        Assert.Contains("Page.Locator(\".item\")", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+}

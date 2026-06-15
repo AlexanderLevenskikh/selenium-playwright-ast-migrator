@@ -461,7 +461,7 @@ public class RoslynTestFileParser : ITestFileParser
     }
 
     static readonly Regex NavigationOpenPageRegex = new(
-        @"^\s*Navigation\s*\.\s*OpenPage\s*<\w+>\s*\(([^)]+)\)\s*;",
+        @"^\s*Navigation\s*\.\s*OpenPage\s*<\w+>\s*\(([^)]+)\)\s*;?",
         RegexOptions.Compiled);
 
     static NavigationAction? TryExtractNavigationDeclaration(LocalDeclarationStatementSyntax lds, int line)
@@ -553,11 +553,11 @@ public class RoslynTestFileParser : ITestFileParser
     }
 
     static readonly Regex WebDriverXPathRegex = new(
-        @"^\s*WebDriver\s*\.\s*FindElement\s*\(\s*By\s*\.\s*XPath\s*\(\s*""([^""]*)""\s*\)\s*\)\s*;",
+        @"^\s*WebDriver\s*\.\s*FindElement\s*\(\s*By\s*\.\s*XPath\s*\(\s*""([^""]*)""\s*\)\s*\)\s*;?",
         RegexOptions.Compiled);
 
     static readonly Regex WebDriverCssRegex = new(
-        @"^\s*WebDriver\s*\.\s*FindElement\s*\(\s*By\s*\.\s*CssSelector\s*\(\s*""([^""]*)""\s*\)\s*\)\s*;",
+        @"^\s*WebDriver\s*\.\s*FindElement\s*\(\s*By\s*\.\s*CssSelector\s*\(\s*""([^""]*)""\s*\)\s*\)\s*;?",
         RegexOptions.Compiled);
 
     static LocatorDeclarationAction? TryExtractLocatorDeclaration(LocalDeclarationStatementSyntax lds, int line)

@@ -792,7 +792,7 @@ public class PlaywrightDotNetRenderer : IRenderer
 
         foreach (var elseIf in action.ElseIfActions)
         {
-            sb.AppendLine($"{_indent}}} else if ({elseIf.Condition})");
+            sb.AppendLine($"{_indent}{_indent}}} else if ({elseIf.Condition})");
             sb.AppendLine($"{_indent}{_indent}{{");
             foreach (var a in elseIf.Actions)
                 RenderAction(sb, a);
@@ -800,13 +800,13 @@ public class PlaywrightDotNetRenderer : IRenderer
 
         if (action.ElseActions.Any())
         {
-            sb.AppendLine($"{_indent}}} else");
+            sb.AppendLine($"{_indent}{_indent}}} else");
             sb.AppendLine($"{_indent}{_indent}{{");
             foreach (var a in action.ElseActions)
                 RenderAction(sb, a);
         }
 
-        sb.AppendLine($"{_indent}}}");
+        sb.AppendLine($"{_indent}{_indent}}}");
     }
 
     string ExtractKeyName(string keyExpression)

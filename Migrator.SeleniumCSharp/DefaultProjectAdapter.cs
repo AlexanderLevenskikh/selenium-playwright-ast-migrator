@@ -1119,7 +1119,8 @@ targetExpr: null,
         return mapped.Match switch
         {
             "First" => $"{locatorExpr}.First",
-            "Nth" => $"{locatorExpr}.Nth({mapped.NthIndex ?? 0})",
+            "Nth" when mapped.NthIndex.HasValue => $"{locatorExpr}.Nth({mapped.NthIndex.Value})",
+            "Nth" => locatorExpr,
             _ => locatorExpr
         };
     }
