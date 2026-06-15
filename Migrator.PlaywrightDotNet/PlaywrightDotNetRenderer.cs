@@ -357,6 +357,13 @@ public class PlaywrightDotNetRenderer : IRenderer
         AppendCommentBlock(sb, _indent + _indent, sourceText, "  ");
     }
 
+    void RenderUnresolvedTargetComment(StringBuilder sb, TargetExpression target, string actionDescription, int sourceLine)
+    {
+        var escaped = EscapeComment(target.SourceExpression);
+        sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {escaped}");
+        sb.AppendLine($"{_indent}{_indent}// {actionDescription} // line {sourceLine}");
+    }
+
     void RenderClick(StringBuilder sb, ClickAction action)
     {
         var target = action.Target;
@@ -366,10 +373,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
         else
         {
-            var escaped = EscapeComment(target.SourceExpression);
-            var locator = EscapeStringLiteral(target.SourceExpression);
-            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {escaped}");
-            sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {locator}\").ClickAsync(); // line {action.SourceLine}");
+            RenderUnresolvedTargetComment(sb, target, "await (locator).ClickAsync()", action.SourceLine);
         }
     }
 
@@ -378,7 +382,6 @@ public class PlaywrightDotNetRenderer : IRenderer
         var target = action.Target;
         var text = ConvertExpression(action.TextExpression);
         var escaped = EscapeComment(target.SourceExpression);
-        var locator = EscapeStringLiteral(target.SourceExpression);
 
         if (target.Kind != TargetKind.Unresolved)
         {
@@ -394,11 +397,10 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
         else
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {escaped}");
             if (string.IsNullOrWhiteSpace(text))
-                sb.AppendLine($"{_indent}{_indent}// await Page.Locator(\"TODO: {locator}\").FillAsync(/* TODO */); // line {action.SourceLine}");
+                RenderUnresolvedTargetComment(sb, target, "await (locator).FillAsync(/* TODO */)", action.SourceLine);
             else
-                sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {locator}\").FillAsync({text}); // line {action.SourceLine}");
+                RenderUnresolvedTargetComment(sb, target, $"await (locator).FillAsync({text})", action.SourceLine);
         }
     }
 
@@ -406,8 +408,6 @@ public class PlaywrightDotNetRenderer : IRenderer
     {
         var target = action.Target;
         var keyName = ExtractKeyName(action.KeyName);
-        var escaped = EscapeComment(target.SourceExpression);
-        var locator = EscapeStringLiteral(target.SourceExpression);
 
         if (target.Kind != TargetKind.Unresolved)
         {
@@ -415,8 +415,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
         else
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {escaped}");
-            sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {locator}\").PressAsync(\"{keyName}\"); // line {action.SourceLine}");
+            RenderUnresolvedTargetComment(sb, target, $"await (locator).PressAsync(\"{keyName}\")", action.SourceLine);
         }
     }
 
@@ -425,7 +424,36 @@ public class PlaywrightDotNetRenderer : IRenderer
         var target = action.Target;
         var locator = target.Kind != TargetKind.Unresolved
             ? RenderTargetExpression(target)
-            : $"Page.Locator(\"TODO: {EscapeStringLiteral(target.SourceExpression)}\")";
+            : "(locator)";
+
+        if (target.Kind == TargetKind.Unresolved)
+        {
+            string methodLine;
+            switch (action.Kind)
+            {
+                case TextAssertionKind.TextEquals:
+                    methodLine = $"await {ExpectCall()}({locator}).ToHaveTextAsync({ConvertExpression(action.ExpectedValue!)}); // line {action.SourceLine}";
+                    break;
+                case TextAssertionKind.TextNotEquals:
+                    methodLine = $"Assert.That(await {locator}.InnerTextAsync(), Is.Not.EqualTo({ConvertExpression(action.ExpectedValue!)})); // line {action.SourceLine}";
+                    break;
+                case TextAssertionKind.TextNotEmpty:
+                    methodLine = $"Assert.That(await {locator}.InnerTextAsync(), Is.Not.Empty); // line {action.SourceLine}";
+                    break;
+                case TextAssertionKind.TextEmpty:
+                    methodLine = $"Assert.That(await {locator}.InnerTextAsync(), Is.Empty); // line {action.SourceLine}";
+                    break;
+                case TextAssertionKind.TextContains:
+                    methodLine = $"await {ExpectCall()}({locator}).ToContainTextAsync({ConvertExpression(action.ExpectedValue!)}); // line {action.SourceLine}";
+                    break;
+                default:
+                    methodLine = $"// TODO: unsupported text assertion kind {action.Kind}";
+                    break;
+            }
+            sb.AppendLine($"{_indent}{_indent}// {methodLine}");
+            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {EscapeComment(target.SourceExpression)}");
+            return;
+        }
 
         switch (action.Kind)
         {
@@ -433,66 +461,66 @@ public class PlaywrightDotNetRenderer : IRenderer
                 sb.AppendLine($"{_indent}{_indent}await {ExpectCall()}({locator}).ToHaveTextAsync({ConvertExpression(action.ExpectedValue!)}); // line {action.SourceLine}");
                 break;
             case TextAssertionKind.TextNotEquals:
-                var nv = NextTempVar("textResult");
-                sb.AppendLine($"{_indent}{_indent}var {nv} = await {locator}.InnerTextAsync(); // line {action.SourceLine}");
-                sb.AppendLine($"{_indent}{_indent}Assert.That({nv}, Is.Not.EqualTo({ConvertExpression(action.ExpectedValue!)}));");
-                break;
+                {
+                    var nv = NextTempVar("textResult");
+                    sb.AppendLine($"{_indent}{_indent}var {nv} = await {locator}.InnerTextAsync(); // line {action.SourceLine}");
+                    sb.AppendLine($"{_indent}{_indent}Assert.That({nv}, Is.Not.EqualTo({ConvertExpression(action.ExpectedValue!)}));");
+                    break;
+                }
             case TextAssertionKind.TextNotEmpty:
-                var nv2 = NextTempVar("textResult");
-                sb.AppendLine($"{_indent}{_indent}var {nv2} = await {locator}.InnerTextAsync(); // line {action.SourceLine}");
-                sb.AppendLine($"{_indent}{_indent}Assert.That({nv2}, Is.Not.Empty);");
-                break;
+                {
+                    var nv2 = NextTempVar("textResult");
+                    sb.AppendLine($"{_indent}{_indent}var {nv2} = await {locator}.InnerTextAsync(); // line {action.SourceLine}");
+                    sb.AppendLine($"{_indent}{_indent}Assert.That({nv2}, Is.Not.Empty);");
+                    break;
+                }
             case TextAssertionKind.TextEmpty:
-                var nv3 = NextTempVar("textResult");
-                sb.AppendLine($"{_indent}{_indent}var {nv3} = await {locator}.InnerTextAsync(); // line {action.SourceLine}");
-                sb.AppendLine($"{_indent}{_indent}Assert.That({nv3}, Is.Empty);");
-                break;
+                {
+                    var nv3 = NextTempVar("textResult");
+                    sb.AppendLine($"{_indent}{_indent}var {nv3} = await {locator}.InnerTextAsync(); // line {action.SourceLine}");
+                    sb.AppendLine($"{_indent}{_indent}Assert.That({nv3}, Is.Empty);");
+                    break;
+                }
             case TextAssertionKind.TextContains:
                 sb.AppendLine($"{_indent}{_indent}await {ExpectCall()}({locator}).ToContainTextAsync({ConvertExpression(action.ExpectedValue!)}); // line {action.SourceLine}");
                 break;
-        }
-
-        if (target.Kind == TargetKind.Unresolved)
-        {
-            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {EscapeComment(target.SourceExpression)}");
         }
     }
 
     void RenderVisibilityAssertion(StringBuilder sb, VisibilityAssertionAction action)
     {
         var target = action.Target;
-        var locator = target.Kind != TargetKind.Unresolved
-            ? RenderTargetExpression(target)
-            : $"Page.Locator(\"TODO: {EscapeStringLiteral(target.SourceExpression)}\")";
-
-        if (action.Kind == VisibilityKind.Visible)
-        {
-            sb.AppendLine($"{_indent}{_indent}await {ExpectCall()}({locator}).ToBeVisibleAsync(); // line {action.SourceLine}");
-        }
-        else
-        {
-            sb.AppendLine($"{_indent}{_indent}await {ExpectCall()}({locator}).ToBeHiddenAsync(); // line {action.SourceLine}");
-        }
 
         if (target.Kind == TargetKind.Unresolved)
         {
+            var method = action.Kind == VisibilityKind.Visible ? "ToBeVisibleAsync" : "ToBeHiddenAsync";
+            sb.AppendLine($"{_indent}{_indent}// await {ExpectCall()}((locator)).{method}(); // line {action.SourceLine}");
             sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {EscapeComment(target.SourceExpression)}");
+        }
+        else
+        {
+            var locator = RenderTargetExpression(target);
+            if (action.Kind == VisibilityKind.Visible)
+            {
+                sb.AppendLine($"{_indent}{_indent}await {ExpectCall()}({locator}).ToBeVisibleAsync(); // line {action.SourceLine}");
+            }
+            else
+            {
+                sb.AppendLine($"{_indent}{_indent}await {ExpectCall()}({locator}).ToBeHiddenAsync(); // line {action.SourceLine}");
+            }
         }
     }
 
     void RenderWaitFor(StringBuilder sb, WaitForAction action)
     {
         var target = action.Target;
-        var escaped = EscapeComment(target.SourceExpression);
-        var locator = EscapeStringLiteral(target.SourceExpression);
         if (target.Kind != TargetKind.Unresolved)
         {
             sb.AppendLine($"{_indent}{_indent}await {RenderTargetExpression(target)}.WaitForAsync(); // line {action.SourceLine}");
         }
         else
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {escaped}");
-            sb.AppendLine($"{_indent}{_indent}await Page.Locator(\"TODO: {locator}\").WaitForAsync(); // line {action.SourceLine}");
+            RenderUnresolvedTargetComment(sb, target, "await (locator).WaitForAsync()", action.SourceLine);
         }
     }
 
@@ -1288,30 +1316,31 @@ public class PlaywrightDotNetRenderer : IRenderer
         var target = action.Target;
         var locator = target.Kind != TargetKind.Unresolved
             ? RenderTargetExpression(target)
-            : $"Page.Locator(\"TODO: {EscapeStringLiteral(target.SourceExpression)}\")";
+            : "(locator)";
 
         var expectCall = ExpectCall();
         var countExpr = action.ExpectedCount ?? "0";
+        var prefix = target.Kind == TargetKind.Unresolved ? "// " : "";
 
         switch (action.Kind)
         {
             case TableCountKind.CountEquals:
-                sb.AppendLine($"{_indent}{_indent}await {expectCall}({locator}).ToHaveCountAsync({countExpr}); // line {action.SourceLine}");
+                sb.AppendLine($"{_indent}{_indent}{prefix}await {expectCall}({locator}).ToHaveCountAsync({countExpr}); // line {action.SourceLine}");
                 break;
             case TableCountKind.CountGreaterThanZero:
                 var nv = NextTempVar("tableCount");
-                sb.AppendLine($"{_indent}{_indent}var {nv} = await {locator}.CountAsync(); // line {action.SourceLine}");
-                sb.AppendLine($"{_indent}{_indent}Assert.That({nv}, Is.GreaterThan(0));");
+                sb.AppendLine($"{_indent}{_indent}{prefix}var {nv} = await {locator}.CountAsync(); // line {action.SourceLine}");
+                sb.AppendLine($"{_indent}{_indent}{prefix}Assert.That({nv}, Is.GreaterThan(0));");
                 break;
             case TableCountKind.CountLessThanOne:
                 var nv2 = NextTempVar("tableCount");
-                sb.AppendLine($"{_indent}{_indent}var {nv2} = await {locator}.CountAsync(); // line {action.SourceLine}");
-                sb.AppendLine($"{_indent}{_indent}Assert.That({nv2}, Is.LessThan(1));");
+                sb.AppendLine($"{_indent}{_indent}{prefix}var {nv2} = await {locator}.CountAsync(); // line {action.SourceLine}");
+                sb.AppendLine($"{_indent}{_indent}{prefix}Assert.That({nv2}, Is.LessThan(1));");
                 break;
             case TableCountKind.CountGreaterThanOrEqualTo:
                 var nv3 = NextTempVar("tableCount");
-                sb.AppendLine($"{_indent}{_indent}var {nv3} = await {locator}.CountAsync(); // line {action.SourceLine}");
-                sb.AppendLine($"{_indent}{_indent}Assert.That({nv3}, Is.GreaterThanOrEqualTo({countExpr}));");
+                sb.AppendLine($"{_indent}{_indent}{prefix}var {nv3} = await {locator}.CountAsync(); // line {action.SourceLine}");
+                sb.AppendLine($"{_indent}{_indent}{prefix}Assert.That({nv3}, Is.GreaterThanOrEqualTo({countExpr}));");
                 break;
             default:
                 sb.AppendLine($"{_indent}{_indent}// TODO: table count assertion — {action.Kind}");
@@ -1321,7 +1350,8 @@ public class PlaywrightDotNetRenderer : IRenderer
 
         if (target.Kind == TargetKind.Unresolved)
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: map table row target: {EscapeComment(target.SourceExpression)}");
+            RenderUnresolvedTargetComment(sb, target, "table count assertion", action.SourceLine);
+
         }
     }
 

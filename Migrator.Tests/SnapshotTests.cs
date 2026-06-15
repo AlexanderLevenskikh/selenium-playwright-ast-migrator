@@ -216,7 +216,7 @@ public class SnapshotTests
 
         Assert.Equal(0, report.MappedTargets);
         Assert.True(report.UnmappedTargets > 0, "Without adapter, all Click/SendKeys targets should be unresolved");
-        Assert.Contains("TODO: page.User", output);
+        Assert.Contains("TODO: map source expression to Playwright locator: page.User", output);
     }
 
     [Fact]
@@ -4210,6 +4210,87 @@ public class PipelineIntegrationTests
         Assert.DoesNotContain(".Nth(0)", output);
         Assert.DoesNotContain(".Nth()", output);
         Assert.Contains("Page.Locator(\".item\")", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+}
+
+public class TestIdBeginningPipelineTests
+{
+    readonly string _testFilesDir = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!, "TestFiles");
+
+    [Fact]
+    public void TestIdBeginning_FullPipeline_ConfigToRenderer()
+    {
+        // adapter-config.json has page.RowCostRuleSetting mapped as TestIdBeginning
+        // with TestIdAttribute = "data-testid". Full pipeline should produce:
+        // Page.Locator("[data-testid^='row-cost-rule-setting-']").ClickAsync()
+
+        var adapterConfigPath = Path.Combine(_testFilesDir, "adapter-config.json");
+        var adapter = new DefaultProjectAdapter(adapterConfigPath);
+        var parser = new RoslynTestFileParser();
+        var renderer = new PlaywrightDotNetRenderer();
+        var pipeline = new MigrationPipeline(parser, renderer, adapter);
+
+        var result = pipeline.ProcessFile(Path.Combine(_testFilesDir, "PipelineTestIdBeginningTests.cs"));
+        var output = result.GeneratedOutput;
+        var model = result.TargetModel;
+
+        // Target is resolved as TestIdBeginning with TestIdAttribute
+        var test = model.Tests.First();
+        var click = test.BodyActions.OfType<ClickAction>().First();
+        Assert.IsType<MappedTarget>(click.Target);
+        var mapped = (MappedTarget)click.Target;
+        Assert.Equal(TargetKind.TestIdBeginning, mapped.Kind);
+        Assert.Equal("data-testid", mapped.TestIdAttribute);
+        Assert.Equal("row-cost-rule-setting-", mapped.TargetExpression);
+
+        // Output uses prefix selector with custom TestIdAttribute
+        Assert.Contains("[data-testid^='row-cost-rule-setting-']", output);
+        Assert.DoesNotContain("GetByTestId(\"row-cost-rule-setting-\")", output);
+
+        // Output compiles
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void TestIdBeginning_DefaultAttribute_UsesDataTestId()
+    {
+        // When TestIdAttribute is not set on the mapping, adapter should use
+        // LocatorSettings.DefaultTestIdAttribute ("data-testid" by default).
+        var config = new ProjectAdapterConfig(
+            SourceProjectName: "Test",
+            UiTargets: new[]
+            {
+                new UiTargetMapping("page.Row", "row-", "TestIdBeginning"),
+            },
+            PageObjects: Array.Empty<PageObjectMapping>(),
+            Methods: Array.Empty<MethodMapping>()
+        );
+        var adapter = new DefaultProjectAdapter(config);
+
+        var click = new ClickAction(1, "page.Row", RecognitionConfidence.Semantic);
+        var testModel = new TestModel(
+            "T1", null, Array.Empty<TestCaseData>(),
+            Array.Empty<MethodParameterModel>(),
+            new[] { click });
+        var fileModel = new TestFileModel(
+            "t.cs", "Test", "TestIdBegTest", null,
+            Array.Empty<TestAction>(),
+            new[] { testModel });
+
+        var adapted = adapter.Adapt(fileModel);
+        var test = adapted.Tests.First();
+        var adaptedClick = test.BodyActions.OfType<ClickAction>().First();
+
+        Assert.IsType<MappedTarget>(adaptedClick.Target);
+        var mapped = (MappedTarget)adaptedClick.Target;
+        Assert.Equal(TargetKind.TestIdBeginning, mapped.Kind);
+        Assert.Equal("data-testid", mapped.TestIdAttribute);
+
+        var output = new PlaywrightDotNetRenderer().Render(adapted);
+        Assert.Contains("[data-testid^='row-']", output);
         Assert.True(CompileChecker.CompilesWithoutErrors(output),
             CompileChecker.FormatErrors(output));
     }

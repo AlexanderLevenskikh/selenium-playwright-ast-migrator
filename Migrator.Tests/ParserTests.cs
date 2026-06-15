@@ -334,7 +334,6 @@ public class ParserTests
         var output = renderer.Render(fileModel);
 
         Assert.Contains("TODO: map source expression to Playwright locator: page.UnknownElement", output);
-        Assert.Contains("TODO: page.UnknownElement", output);
     }
 
     [Fact]
@@ -477,7 +476,7 @@ public class ParserTests
 
         Assert.Equal(1, report.UnmappedTargets);
         Assert.Equal(0, report.MappedTargets);
-        Assert.Contains("TODO: page.UnknownSearch", output);
+        Assert.Contains("TODO: map source expression to Playwright locator: page.UnknownSearch", output);
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Migrator.Core.Models;
 
 namespace Migrator.Core;
@@ -447,6 +448,16 @@ public static class VerifyRunner
                 issues.Add(new VerifyIssue(
                     "PageTodo", IssueSeverity.Error,
                     $"Page.TODO_* call found: {trimmed}",
+                    sourceFile, i + 1));
+            }
+
+            // Detect active Page.Locator("TODO: ...") calls (not commented out)
+            if (!trimmed.StartsWith("//") && Regex.Match(trimmed, @"Page\.\w+\(\""TODO:").Success)
+            {
+                pageTodoCount++;
+                issues.Add(new VerifyIssue(
+                    "ActiveTodoLocator", IssueSeverity.Error,
+                    $"Active Page.Locator/GetBy... with TODO target found: {trimmed}",
                     sourceFile, i + 1));
             }
         }

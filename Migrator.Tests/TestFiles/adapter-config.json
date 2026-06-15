@@ -40,6 +40,12 @@
       "SourceExpression": "page.SearchButton",
       "TargetExpression": "search-button",
       "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.RowCostRuleSetting",
+      "TargetExpression": "row-cost-rule-setting-",
+      "TargetKind": "TestIdBeginning",
+      "TestIdAttribute": "data-testid"
     }
   ],
   "PageObjects": [

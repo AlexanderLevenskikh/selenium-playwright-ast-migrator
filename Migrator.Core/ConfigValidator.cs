@@ -47,7 +47,10 @@ public static class ConfigValidator
     /// </summary>
     public static ProjectAdapterConfig ValidateJson(string json, string? configPath = null)
     {
-        var config = JsonSerializer.Deserialize<ProjectAdapterConfig>(json);
+        var config = JsonSerializer.Deserialize<ProjectAdapterConfig>(json, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
         if (config == null)
         {
             var path = !string.IsNullOrEmpty(configPath) ? configPath : "adapter-config.json";

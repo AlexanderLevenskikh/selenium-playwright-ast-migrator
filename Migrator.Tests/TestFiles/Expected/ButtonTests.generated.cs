@@ -27,9 +27,9 @@ public class ButtonTestsPlaywright : PageTest
 	public async Task CheckSearchButton()
 	{
 		await Page.GetByTestId("side-menu-search").ClickAsync(); // line 24
-		await Expect(Page.Locator("TODO: page.MenuItems.SearchTextArea")).ToBeVisibleAsync(); // line 25
+		// await Expect((locator)).ToBeVisibleAsync(); // line 25
 		// TODO: map source expression to Playwright locator: page.MenuItems.SearchTextArea
-		await Expect(Page.Locator("TODO: page.MenuItems.SearchTextArea")).ToBeHiddenAsync(); // line 26
+		// await Expect((locator)).ToBeHiddenAsync(); // line 26
 		// TODO: map source expression to Playwright locator: page.MenuItems.SearchTextArea
 	}
 
@@ -37,9 +37,9 @@ public class ButtonTestsPlaywright : PageTest
 	[Test]
 	public async Task CheckFeedBackButton()
 	{
-		await Expect(Page.Locator("TODO: page.MenuItems.SideMenuButtonFeedback")).ToBeVisibleAsync(); // line 33
+		// await Expect((locator)).ToBeVisibleAsync(); // line 33
 		// TODO: map source expression to Playwright locator: page.MenuItems.SideMenuButtonFeedback
-		await Expect(Page.Locator("TODO: page.MenuItems.SideMenuButtonFeedback")).ToHaveTextAsync("Leave feedback"); // line 34
+		// await Expect((locator)).ToHaveTextAsync("Leave feedback"); // line 34
 		// TODO: map source expression to Playwright locator: page.MenuItems.SideMenuButtonFeedback
 	}
 
@@ -51,7 +51,7 @@ public class ButtonTestsPlaywright : PageTest
 		await Page.GetByTestId("side-menu-catalogs-partners").ClickAsync(); // line 42
 		// await Expect(Page).ToHaveURLAsync(Urls.BaseUrlCatalogPartners); // line 43
 		// TODO: URL assertion uses external variable — verify and uncomment
-		await Expect(Page.Locator("TODO: page.MenuItems.Error")).ToBeHiddenAsync(); // line 44
+		// await Expect((locator)).ToBeHiddenAsync(); // line 44
 		// TODO: map source expression to Playwright locator: page.MenuItems.Error
 	}
 

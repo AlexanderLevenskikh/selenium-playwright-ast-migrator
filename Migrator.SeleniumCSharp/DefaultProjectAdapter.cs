@@ -189,6 +189,18 @@ public class DefaultProjectAdapter : IProjectAdapter
                     ?? config.LocatorSettings?.DefaultTestIdAttribute;
             }
 
+            if (kind == TargetKind.TestIdBeginning)
+            {
+                testIdAttribute = mapping.TestIdAttribute
+                    ?? config.LocatorSettings?.DefaultTestIdAttribute
+                    ?? "data-testid";
+            }
+
+            if (kind == TargetKind.ClassNameBeginning)
+            {
+                testIdAttribute = mapping.TestIdAttribute;
+            }
+
             resolved._targetMap[mapping.SourceExpression] = new MappedTarget(
                 mapping.SourceExpression, mapping.TargetExpression, kind,
                 testIdAttribute, mapping.Match, mapping.Index);
