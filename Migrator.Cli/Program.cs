@@ -223,18 +223,7 @@ static int RunVerify(MigrationSummaryReport summary, string outPath, string form
     Console.WriteLine("=== Verify Mode ===");
     Console.WriteLine();
 
-    // Roslyn syntax checker
-    SyntaxCheckerDelegate? syntaxChecker = code =>
-    {
-        var parseOptions = Microsoft.CodeAnalysis.CSharp.CSharpParseOptions.Default
-            .WithLanguageVersion(Microsoft.CodeAnalysis.CSharp.LanguageVersion.CSharp12);
-        var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(code, parseOptions);
-
-        return tree.GetDiagnostics()
-            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
-            .Select(d => (d.Location.GetLineSpan().StartLinePosition.Line + 1, d.GetMessage()))
-            .ToList();
-    };
+    var syntaxChecker = CreateGeneratedCodeChecker();
 
     // Scope checker
     Func<string, string?>? scopeChecker = adapter != null ? (Func<string, string?>)(path => adapter.GetActiveScope(path)) : null;
@@ -253,6 +242,92 @@ static int RunVerify(MigrationSummaryReport summary, string outPath, string form
 
     // Apply quality gates for exit code
     return VerifyRunner.ApplyQualityGates(report, config?.QualityGates, report.Issues);
+}
+
+static SyntaxCheckerDelegate CreateGeneratedCodeChecker()
+{
+    return code =>
+    {
+        var parseOptions = Microsoft.CodeAnalysis.CSharp.CSharpParseOptions.Default
+            .WithLanguageVersion(Microsoft.CodeAnalysis.CSharp.LanguageVersion.CSharp12);
+        var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(code, parseOptions);
+
+        var parseErrors = tree.GetDiagnostics()
+            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+            .Select(ToVerifyDiagnostic)
+            .ToList();
+        if (parseErrors.Count > 0)
+            return parseErrors;
+
+        var compilation = Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create(
+            "MigratorGeneratedVerify",
+            new[] { tree },
+            GetGeneratedCodeReferences(),
+            new Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions(Microsoft.CodeAnalysis.OutputKind.DynamicallyLinkedLibrary));
+
+        return compilation.GetDiagnostics()
+            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+            .Where(d => d.Id != "CS8019")
+            .Select(ToVerifyDiagnostic)
+            .ToList();
+    };
+}
+
+static (int Line, string Message) ToVerifyDiagnostic(Microsoft.CodeAnalysis.Diagnostic diagnostic)
+{
+    var line = diagnostic.Location.IsInSource
+        ? diagnostic.Location.GetLineSpan().StartLinePosition.Line + 1
+        : 0;
+    return (line, $"{diagnostic.Id}: {diagnostic.GetMessage()}");
+}
+
+static IEnumerable<Microsoft.CodeAnalysis.MetadataReference> GetGeneratedCodeReferences()
+{
+    var refs = new Dictionary<string, Microsoft.CodeAnalysis.MetadataReference>(StringComparer.OrdinalIgnoreCase);
+
+    void AddAssembly(System.Reflection.Assembly assembly)
+    {
+        if (!string.IsNullOrEmpty(assembly.Location) && File.Exists(assembly.Location))
+            AddFile(assembly.Location);
+    }
+
+    void AddFile(string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        if (!refs.ContainsKey(fullPath))
+            refs[fullPath] = Microsoft.CodeAnalysis.MetadataReference.CreateFromFile(fullPath);
+    }
+
+    AddAssembly(typeof(object).Assembly);
+    AddAssembly(typeof(Console).Assembly);
+    AddAssembly(typeof(Enumerable).Assembly);
+    AddAssembly(typeof(Task).Assembly);
+
+    var trustedPlatformAssemblies = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string;
+    if (!string.IsNullOrEmpty(trustedPlatformAssemblies))
+    {
+        foreach (var path in trustedPlatformAssemblies.Split(Path.PathSeparator))
+        {
+            if (File.Exists(path))
+                AddFile(path);
+        }
+    }
+
+    var basePath = AppContext.BaseDirectory;
+    foreach (var name in new[]
+    {
+        "Microsoft.Playwright.NUnit.dll",
+        "Microsoft.Playwright.dll",
+        "nunit.framework.dll",
+        "Microsoft.Bcl.AsyncInterfaces.dll"
+    })
+    {
+        var path = Path.Combine(basePath, name);
+        if (File.Exists(path))
+            AddFile(path);
+    }
+
+    return refs.Values;
 }
 
 static void PrintVerifyReport(VerifyReport report)
@@ -1127,17 +1202,7 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
                     ? pipeline.ProcessDirectory(inputPath).ToList()
                     : new[] { pipeline.ProcessFile(inputPath) }.ToList();
 
-                // Roslyn syntax checker
-                SyntaxCheckerDelegate syntaxChecker = code =>
-                {
-                    var parseOptions = Microsoft.CodeAnalysis.CSharp.CSharpParseOptions.Default
-                        .WithLanguageVersion(Microsoft.CodeAnalysis.CSharp.LanguageVersion.CSharp12);
-                    var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(code, parseOptions);
-                    return tree.GetDiagnostics()
-                        .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
-                        .Select(d => (d.Location.GetLineSpan().StartLinePosition.Line + 1, d.GetMessage()))
-                        .ToList();
-                };
+                var syntaxChecker = CreateGeneratedCodeChecker();
 
                 Func<string, string?>? scopeChecker = adapter is DefaultProjectAdapter da
                     ? (Func<string, string?>)(p => da.GetActiveScope(p))

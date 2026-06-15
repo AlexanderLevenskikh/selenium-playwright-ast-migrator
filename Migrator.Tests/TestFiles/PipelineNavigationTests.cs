@@ -8,6 +8,6 @@ public class PipelineNavigationTests
     public void NavigationWithPageVariable()
     {
         var page = Navigation.OpenPage<RegistryAgentHeadPage>("https://example.com/registry");
-        page.DoSomething();
+        page.SearchButton.Click();
     }
 }

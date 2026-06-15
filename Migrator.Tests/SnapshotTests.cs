@@ -3820,6 +3820,11 @@ public class PipelineIntegrationTests
         // Renderer generates GotoAsync
         Assert.Contains("GotoAsync", output);
 
+        // The page variable is mapped for subsequent configured UI target usage.
+        Assert.Contains("Page.GetByTestId(\"search-button\").ClickAsync()", output);
+        Assert.DoesNotContain("TODO: map source expression to Playwright locator: page.SearchButton", output);
+        Assert.DoesNotContain("page.SearchButton", output);
+
         // Output compiles
         Assert.True(CompileChecker.CompilesWithoutErrors(output),
             CompileChecker.FormatErrors(output));
@@ -3880,6 +3885,32 @@ public class PipelineIntegrationTests
         Assert.Contains("TODO", output);
 
         // Output compiles
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void ReassignedLocatorVariable_FullPipeline_DoesNotUseOldLocator()
+    {
+        var result = RunPipeline("PipelineReassignedLocatorTests.cs");
+        var output = result.GeneratedOutput;
+
+        Assert.Contains("Page.Locator(\"xpath=//input[@id='a']\")", output);
+        Assert.Contains("Page.Locator(\"xpath=//input[@id='b']\")", output);
+        Assert.Contains("await Page.Locator(\"xpath=//input[@id='b']\").ClickAsync();", output);
+        Assert.DoesNotContain("await Page.Locator(\"xpath=//input[@id='a']\").ClickAsync();", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void BareFindElement_FullPipeline_DoesNotBecomeClick()
+    {
+        var result = RunPipeline("PipelineBareFindElementTests.cs");
+        var output = result.GeneratedOutput;
+
+        Assert.Contains("TODO: UNSUPPORTED", output);
+        Assert.DoesNotContain("ClickAsync", output);
         Assert.True(CompileChecker.CompilesWithoutErrors(output),
             CompileChecker.FormatErrors(output));
     }

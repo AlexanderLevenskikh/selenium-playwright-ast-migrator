@@ -35,6 +35,11 @@
       "SourceExpression": "page.FuterUser",
       "TargetExpression": "GetByTestId(\"futer-user\")",
       "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.SearchButton",
+      "TargetExpression": "search-button",
+      "TargetKind": "TestId"
     }
   ],
   "PageObjects": [

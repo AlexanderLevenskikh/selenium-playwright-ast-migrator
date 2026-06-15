@@ -226,27 +226,8 @@ public static class VerifyRunner
         }
 
         // Check parameterized mappings: placeholders in TargetStatements that don't exist in pattern
-        foreach (var pm in config.ParameterizedMethods)
-        {
-            var patternPlaceholders = ExtractPlaceholders(pm.SourceMethodPattern);
-            if (pm.TargetStatements != null)
-            {
-                foreach (var stmt in pm.TargetStatements)
-                {
-                    var stmtPlaceholders = ExtractPlaceholders(stmt);
-                    foreach (var ph in stmtPlaceholders)
-                    {
-                        if (!patternPlaceholders.Contains(ph))
-                        {
-                            issues.Add(new VerifyIssue(
-                                "Config", IssueSeverity.Warning,
-                                $"ParameterizedMapping '{pm.SourceMethodPattern}' uses unknown placeholder '{{{ph}}}' in TargetStatements",
-                                null, null));
-                        }
-                    }
-                }
-            }
-        }
+        foreach (var (pm, prefix) in EnumerateParameterizedMappings(config))
+            CheckParameterizedMappingPlaceholders(pm, prefix, issues);
 
         // Check for duplicate SourceMethod in Methods
         var methodNames = config.Methods.Select(m => m.SourceMethod).ToList();
@@ -325,6 +306,44 @@ public static class VerifyRunner
                     issues.Add(new VerifyIssue(
                         "Config", IssueSeverity.Warning,
                         $"Potential config leak: {description} found in config value",
+                        null, null));
+                }
+            }
+        }
+    }
+
+    static IEnumerable<(ParameterizedMethodMapping Mapping, string Prefix)> EnumerateParameterizedMappings(ProjectAdapterConfig config)
+    {
+        foreach (var pm in config.ParameterizedMethods)
+            yield return (pm, "ParameterizedMapping");
+
+        foreach (var scope in config.Scopes)
+        {
+            var scopeName = string.IsNullOrEmpty(scope.Name) ? "<unnamed>" : scope.Name;
+            foreach (var pm in scope.ParameterizedMethods)
+                yield return (pm, $"Scope '{scopeName}' ParameterizedMapping");
+        }
+    }
+
+    static void CheckParameterizedMappingPlaceholders(
+        ParameterizedMethodMapping pm,
+        string prefix,
+        List<VerifyIssue> issues)
+    {
+        var patternPlaceholders = ExtractPlaceholders(pm.SourceMethodPattern);
+        if (pm.TargetStatements == null)
+            return;
+
+        foreach (var stmt in pm.TargetStatements)
+        {
+            var stmtPlaceholders = ExtractPlaceholders(stmt);
+            foreach (var ph in stmtPlaceholders)
+            {
+                if (!patternPlaceholders.Contains(ph))
+                {
+                    issues.Add(new VerifyIssue(
+                        "Config", IssueSeverity.Warning,
+                        $"{prefix} '{pm.SourceMethodPattern}' uses unknown placeholder '{{{ph}}}' in TargetStatements",
                         null, null));
                 }
             }
@@ -432,26 +451,7 @@ public static class VerifyRunner
 
     static void CheckPlaceholderLeftovers(string generatedCode, string sourceFile, ProjectAdapterConfig? config, List<VerifyIssue> issues)
     {
-        // Known placeholders from parameterized mappings
-        var knownPlaceholders = new HashSet<string>();
-        if (config != null)
-        {
-            foreach (var pm in config.ParameterizedMethods)
-            {
-                foreach (var ph in ExtractPlaceholders(pm.SourceMethodPattern))
-                    knownPlaceholders.Add(ph);
-
-                // Also check scoped parameterized methods
-                foreach (var scope in config.Scopes)
-                {
-                    foreach (var spm in scope.ParameterizedMethods)
-                    {
-                        foreach (var ph2 in ExtractPlaceholders(spm.SourceMethodPattern))
-                            knownPlaceholders.Add(ph2);
-                    }
-                }
-            }
-        }
+        var knownPlaceholders = CollectParameterizedPlaceholderNames(config);
 
         if (knownPlaceholders.Count == 0) return;
 
@@ -548,25 +548,7 @@ public static class VerifyRunner
 
     static void CheckSuspiciousLiteralVariables(string generatedCode, string sourceFile, ProjectAdapterConfig? config, List<VerifyIssue> issues)
     {
-        // Collect known placeholder names from parameterized mappings
-        var knownPlaceholders = new HashSet<string>();
-        if (config != null)
-        {
-            foreach (var pm in config.ParameterizedMethods)
-            {
-                foreach (var ph in ExtractPlaceholders(pm.SourceMethodPattern))
-                    knownPlaceholders.Add(ph);
-
-                foreach (var scope in config.Scopes)
-                {
-                    foreach (var spm in scope.ParameterizedMethods)
-                    {
-                        foreach (var ph2 in ExtractPlaceholders(spm.SourceMethodPattern))
-                            knownPlaceholders.Add(ph2);
-                    }
-                }
-            }
-        }
+        var knownPlaceholders = CollectParameterizedPlaceholderNames(config);
 
         if (knownPlaceholders.Count == 0) return;
 
@@ -659,6 +641,21 @@ public static class VerifyRunner
             placeholders.Add(m.Groups[1].Value);
         }
         return placeholders;
+    }
+
+    static HashSet<string> CollectParameterizedPlaceholderNames(ProjectAdapterConfig? config)
+    {
+        var knownPlaceholders = new HashSet<string>();
+        if (config == null)
+            return knownPlaceholders;
+
+        foreach (var (pm, _) in EnumerateParameterizedMappings(config))
+        {
+            foreach (var ph in ExtractPlaceholders(pm.SourceMethodPattern))
+                knownPlaceholders.Add(ph);
+        }
+
+        return knownPlaceholders;
     }
 
     /// <summary>

@@ -290,6 +290,10 @@ public class DefaultProjectAdapter : IProjectAdapter
                     lds.LocatorExpression,
                     TargetKind.RawExpression);
             }
+            else if (action is RawStatementAction raw)
+            {
+                UpdateLocalVariableMappingFromAssignment(raw.SourceText, localVariableMappings);
+            }
 
             var adapted = AdaptActionWithLocalVars(action, resolved, localVariableMappings);
             adaptedActions.AddRange(adapted);
@@ -353,6 +357,18 @@ public class DefaultProjectAdapter : IProjectAdapter
         @"^\s*WebDriver\s*\.\s*FindElement\s*\(\s*By\s*\.\s*CssSelector\s*\(\s*""([^""]*)""\s*\)\s*\)\s*$",
         RegexOptions.Compiled);
 
+    static readonly Regex FindElementXPathAssignmentPattern = new(
+        @"^\s*(\w+)\s*=\s*WebDriver\s*\.\s*FindElement\s*\(\s*By\s*\.\s*XPath\s*\(\s*""([^""]*)""\s*\)\s*\)\s*$",
+        RegexOptions.Compiled);
+
+    static readonly Regex FindElementCssAssignmentPattern = new(
+        @"^\s*(\w+)\s*=\s*WebDriver\s*\.\s*FindElement\s*\(\s*By\s*\.\s*CssSelector\s*\(\s*""([^""]*)""\s*\)\s*\)\s*$",
+        RegexOptions.Compiled);
+
+    static readonly Regex AssignmentPattern = new(
+        @"^\s*(\w+)\s*=",
+        RegexOptions.Compiled);
+
     /// <summary>
     /// Resolves target expressions that are inline WebDriver.FindElement(By.XPath/CssSelector(...)) calls.
     /// Handles: WebDriver.FindElement(By.XPath("//div//input")).Click()
@@ -376,6 +392,36 @@ public class DefaultProjectAdapter : IProjectAdapter
         }
 
         return new UnresolvedTarget(sourceExpression);
+    }
+
+    void UpdateLocalVariableMappingFromAssignment(
+        string sourceText,
+        Dictionary<string, TargetExpression> localVariableMappings)
+    {
+        var text = sourceText.Trim().TrimEnd(';');
+        var assignment = AssignmentPattern.Match(text);
+        if (!assignment.Success)
+            return;
+
+        var variableName = assignment.Groups[1].Value;
+        localVariableMappings.Remove(variableName);
+
+        var xpathMatch = FindElementXPathAssignmentPattern.Match(text);
+        if (xpathMatch.Success)
+        {
+            var selector = xpathMatch.Groups[2].Value;
+            var locatorExpr = $"Page.Locator(\"xpath={EscapeForLocator(selector)}\")";
+            localVariableMappings[variableName] = TargetExpression.Mapped(variableName, locatorExpr, TargetKind.RawExpression);
+            return;
+        }
+
+        var cssMatch = FindElementCssAssignmentPattern.Match(text);
+        if (cssMatch.Success)
+        {
+            var selector = cssMatch.Groups[2].Value;
+            var locatorExpr = $"Page.Locator(\"{EscapeForLocator(selector)}\")";
+            localVariableMappings[variableName] = TargetExpression.Mapped(variableName, locatorExpr, TargetKind.RawExpression);
+        }
     }
 
     static string EscapeForLocator(string value)
@@ -1030,7 +1076,22 @@ targetExpr: null,
             }
         }
 
+        if (ContainsUnresolvedPageObjectAccess(initExpr))
+        {
+            return new[]
+            {
+                new RawStatementAction(
+                    lds.SourceLine,
+                    $"{lds.VariableType} {lds.VariableName} = {lds.InitializationValue}")
+            };
+        }
+
         return new[] { lds };
+    }
+
+    static bool ContainsUnresolvedPageObjectAccess(string expr)
+    {
+        return Regex.IsMatch(expr, @"\bpage\.", RegexOptions.IgnoreCase);
     }
 
     string TryResolveTextGetInExpression(string expr, ResolvedFileConfig resolved)

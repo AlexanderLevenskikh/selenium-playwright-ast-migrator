@@ -4,9 +4,8 @@ using Migrator.Core.Models;
 namespace Migrator.Roslyn.Recognizers;
 
 /// <summary>
-/// Recognizes WebDriver.FindElement(By.XPath("...")) and WebDriver.FindElement(By.CssSelector("..."))
-/// and produces a ClickAction targeting the resolved locator expression.
-/// Handles static string literals only.
+/// Recognizes bare WebDriver.FindElement(By.XPath/CssSelector(...)) calls.
+/// A bare lookup is not an interaction, so it must not become a ClickAction.
 /// </summary>
 public class WebDriverFindElementRecognizer : IInvocationRecognizer
 {
@@ -36,27 +35,9 @@ public class WebDriverFindElementRecognizer : IInvocationRecognizer
 
         var fullText = ctx.FullText.Trim();
 
-        // Static XPath
-        var xpathMatch = XPathPattern.Match(fullText);
-        if (xpathMatch.Success)
-        {
-            var selector = xpathMatch.Groups[1].Value;
-            var locator = $"Page.Locator(\"xpath={EscapeString(selector)}\")";
-            return new ClickAction(ctx.SourceLine,
-                TargetExpression.Mapped($"WebDriver.FindElement(By.XPath(...))", locator, TargetKind.RawExpression),
-                RecognitionConfidence.SyntaxFallback);
-        }
-
-        // Static CSS
-        var cssMatch = CssPattern.Match(fullText);
-        if (cssMatch.Success)
-        {
-            var selector = cssMatch.Groups[1].Value;
-            var locator = $"Page.Locator(\"{EscapeString(selector)}\")";
-            return new ClickAction(ctx.SourceLine,
-                TargetExpression.Mapped($"WebDriver.FindElement(By.CssSelector(...))", locator, TargetKind.RawExpression),
-                RecognitionConfidence.SyntaxFallback);
-        }
+        if (XPathPattern.IsMatch(fullText) || CssPattern.IsMatch(fullText))
+            return new UnsupportedAction(ctx.SourceLine, fullText,
+                "Bare WebDriver.FindElement lookup has no Playwright interaction — review manually");
 
         // Dynamic selector — produce a TODO action
         if (ByXPathDynamic.IsMatch(fullText) || ByCssDynamic.IsMatch(fullText))

@@ -456,6 +456,49 @@ public class VerifyTests
     }
 
     [Fact]
+    public void Verify_ScopedParameterizedPlaceholders_AreCheckedWithoutGlobalParameterizedMappings()
+    {
+        var model = new TestFileModel(
+            FilePath: "Scoped.cs",
+            Namespace: "Test",
+            ClassName: "Scoped",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(),
+                    Array.Empty<TestAction>())
+            });
+        var report = new MigrationReport("Scoped.cs", 1, 1, Array.Empty<UnsupportedAction>(),
+            "await Page.Locator(\"{name}\").ClickAsync();", 0, 0, 0, 0, 0, 0);
+        var result = new PipelineResult(model, model, report.GeneratedOutput!, report);
+        var config = new ProjectAdapterConfig
+        {
+            SourceProjectName = "Test",
+            Scopes = new[]
+            {
+                new ProfileScope
+                {
+                    Name = "Scoped",
+                    SourcePathPatterns = new[] { "Scoped.cs" },
+                    ParameterizedMethods = new[]
+                    {
+                        new ParameterizedMethodMapping(
+                            "Open({name})",
+                            new[] { "await Page.Locator(\"{name}\").ClickAsync();" },
+                            requiresReview: false)
+                    }
+                }
+            }
+        };
+
+        var verify = VerifyRunner.Run(new List<PipelineResult> { result }, config, CleanSyntaxChecker);
+
+        Assert.Equal(1, verify.PlaceholderLeftovers);
+        Assert.Contains(verify.Issues, i => i.Category == "PlaceholderLeftover");
+    }
+
+    [Fact]
     public void Verify_MaxRawExpressionsZero_WithUnresolved_ReturnsExitCode1()
     {
         var report = new VerifyReport(

@@ -764,8 +764,19 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     void RenderLocalDeclaration(StringBuilder sb, LocalDeclarationAction action)
     {
+        if (ContainsUnresolvedSourceObjectAccess(action.InitializationValue))
+        {
+            sb.AppendLine($"{_indent}{_indent}// TODO: raw local declaration — review: {EscapeComment(action.VariableType)} {EscapeComment(action.VariableName)} = {EscapeComment(action.InitializationValue)}");
+            return;
+        }
+
         RegisterSourceVar(action.VariableName, action.VariableName);
         sb.AppendLine($"{_indent}{_indent}{action.VariableType} {action.VariableName} = {action.InitializationValue}; // line {action.SourceLine}");
+    }
+
+    static bool ContainsUnresolvedSourceObjectAccess(string expr)
+    {
+        return Regex.IsMatch(expr, @"\bpage\.");
     }
 
     void RenderLocatorDeclaration(StringBuilder sb, LocatorDeclarationAction action)
