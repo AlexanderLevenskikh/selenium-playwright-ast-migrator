@@ -451,8 +451,8 @@ public static class VerifyRunner
                     sourceFile, i + 1));
             }
 
-            // Detect active Page.Locator("TODO: ...") calls (not commented out)
-            if (!trimmed.StartsWith("//") && Regex.Match(trimmed, @"Page\.\w+\(\""TODO:").Success)
+            // Detect active Page.Locator/GetBy... calls with TODO targets (not commented out).
+            if (!trimmed.StartsWith("//") && IsActiveTodoLocatorCall(trimmed))
             {
                 pageTodoCount++;
                 issues.Add(new VerifyIssue(
@@ -461,6 +461,14 @@ public static class VerifyRunner
                     sourceFile, i + 1));
             }
         }
+    }
+
+    static bool IsActiveTodoLocatorCall(string line)
+    {
+        return Regex.IsMatch(
+            line,
+            @"\bPage\.(?:Locator|GetBy\w+)\s*\([^;\r\n]*""\s*TODO",
+            RegexOptions.IgnoreCase);
     }
 
     static void AddTodoDiagnosticIssues(string todoMessage, string sourceFile, int line, List<VerifyIssue> issues)

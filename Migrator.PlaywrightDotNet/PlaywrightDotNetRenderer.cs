@@ -492,14 +492,14 @@ public class PlaywrightDotNetRenderer : IRenderer
         return action switch
         {
             ClickAction c when c.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(c.Target),
-            SendKeysAction s when s.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(s.Target),
+            SendKeysAction s when s.Target.Kind != TargetKind.Unresolved => $"{RenderTargetExpression(s.Target)} {s.TextExpression}",
             PressAction p when p.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(p.Target),
             WaitForAction w when w.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(w.Target),
-            TextAssertionAction t when t.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(t.Target),
+            TextAssertionAction t when t.Target.Kind != TargetKind.Unresolved => $"{RenderTargetExpression(t.Target)} {t.ExpectedValue}",
             VisibilityAssertionAction v when v.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(v.Target),
-            TableCountAssertionAction t when t.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(t.Target),
-            TableRowAccessAction t when t.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(t.Target),
-            TableRowTextAccessAction t when t.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(t.Target),
+            TableCountAssertionAction t when t.Target.Kind != TargetKind.Unresolved => $"{RenderTargetExpression(t.Target)} {t.ExpectedCount}",
+            TableRowAccessAction t when t.Target.Kind != TargetKind.Unresolved => $"{RenderTargetExpression(t.Target)} {t.IndexExpression}",
+            TableRowTextAccessAction t when t.Target.Kind != TargetKind.Unresolved => $"{RenderTargetExpression(t.Target)} {t.IndexExpression}",
             _ => sourceText
         };
     }

@@ -665,16 +665,40 @@ public class VerifyTests
         Assert.False(hasActiveTodoLocator, "Unresolved targets should not generate active TODO locators");
     }
 
-    [Fact]
-    public void Verify_ActiveTodoLocator_CaughtByVerifyRunner()
+    [Theory]
+    [InlineData("await Page.Locator(\"TODO: page.Button\").ClickAsync();")]
+    [InlineData("await Page.GetByTestId(\"TODO_button\").ClickAsync();")]
+    [InlineData("await Page.GetByText(\"TODO something\").ClickAsync();")]
+    [InlineData("await Page.GetByRole(AriaRole.Button, new() { Name = \"TODO button\" }).ClickAsync();")]
+    public void Verify_ActiveTodoLocator_CaughtByVerifyRunner(string activeTodoLine)
     {
-        var result = GetWidgetResult();
+        var model = new TestFileModel(
+            FilePath: "ActiveTodo.cs",
+            Namespace: "Test",
+            ClassName: "ActiveTodo",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: Array.Empty<TestModel>());
+        var generated = string.Join("\n", new[]
+        {
+            "using Microsoft.Playwright.NUnit;",
+            "using NUnit.Framework;",
+            "public class ActiveTodo : PageTest",
+            "{",
+            "\t[Test]",
+            "\tpublic async Task T1()",
+            "\t{",
+            "\t\t" + activeTodoLine,
+            "\t}",
+            "}"
+        });
+        var result = new PipelineResult(model, model, generated, ReportBuilder.Build(model, generated));
 
         var report = VerifyRunner.Run(new List<PipelineResult> { result }, config: null, CleanSyntaxChecker);
 
-        // Active Page.Locator("TODO:...") calls should be caught as Error severity
         var activeTodoIssues = report.Issues.Where(i => i.Category == "ActiveTodoLocator").ToList();
-        Assert.Empty(activeTodoIssues);
+        Assert.Single(activeTodoIssues);
+        Assert.Equal(IssueSeverity.Error, activeTodoIssues[0].Severity);
     }
 
     [Fact]

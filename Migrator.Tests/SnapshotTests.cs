@@ -3863,6 +3863,46 @@ public class CompileSafetyTests
     }
 
     [Fact]
+    public void BlockedValueExpression_BlocksResolvedSendKeys()
+    {
+        var model = CreateModel(
+            new LocalDeclarationAction(1, "name", "var", "DataGenerator.GenRussianString(10)"),
+            new SendKeysAction(2, TargetExpression.Mapped("page.Email", "Page.Locator(\"#email\")", TargetKind.RawExpression), "name"))
+            with
+            {
+                SourceOnlyIdentifiers = new[] { "DataGenerator" }
+            };
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("TODO: depends on unresolved symbol 'name'", output);
+        Assert.DoesNotContain("FillAsync(name)", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void SourceOnlyValueExpression_BlocksResolvedSendKeys()
+    {
+        var model = CreateModel(
+            new SendKeysAction(
+                1,
+                TargetExpression.Mapped("page.Email", "Page.Locator(\"#email\")", TargetKind.RawExpression),
+                "DataGenerator.GenRussianString(10)"))
+            with
+            {
+                SourceOnlyIdentifiers = new[] { "DataGenerator" }
+            };
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("TODO: uses source-only identifier 'DataGenerator'", output);
+        Assert.DoesNotContain("FillAsync(DataGenerator", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
     public void EmptySourceOnlyIdentifiers_PreservesOldBehavior()
     {
         var model = CreateModel(
