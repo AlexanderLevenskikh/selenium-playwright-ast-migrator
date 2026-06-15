@@ -3566,3 +3566,226 @@ public class MethodMappingPlaceholderTests
             });
     }
 }
+
+public class ConditionalBlockTests
+{
+    static TestFileModel CreateModel(params TestAction[] bodyActions)
+    {
+        return new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "BlockTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(), bodyActions)
+            });
+    }
+
+    [Fact]
+    public void ConditionalBlock_If_RendersClosedBlock()
+    {
+        var condBlock = new ConditionalBlockAction(
+            1,
+            "true",
+            new[]
+            {
+                new RawStatementAction(1, "await Page.Locator(\"x\").ClickAsync();")
+            },
+            Array.Empty<(string Condition, IReadOnlyList<TestAction> Actions)>(),
+            Array.Empty<TestAction>());
+
+        var model = CreateModel(condBlock);
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Matches(@"if\s*\(", output);
+        Assert.Contains("{", output);
+        Assert.Contains("}", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void ConditionalBlock_IfElse_RendersClosedBlocks()
+    {
+        var condBlock = new ConditionalBlockAction(
+            1,
+            "true",
+            new[]
+            {
+                new RawStatementAction(1, "await Page.Locator(\"a\").ClickAsync();")
+            },
+            Array.Empty<(string Condition, IReadOnlyList<TestAction> Actions)>(),
+            new[]
+            {
+                new RawStatementAction(2, "await Page.Locator(\"b\").ClickAsync();")
+            });
+
+        var model = CreateModel(condBlock);
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("else", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void ConditionalBlock_IfElseIfElse_RendersClosedBlocks()
+    {
+        var condBlock = new ConditionalBlockAction(
+            1,
+            "true",
+            new[]
+            {
+                new RawStatementAction(1, "await Page.Locator(\"a\").ClickAsync();")
+            },
+            new[]
+            {
+                ("false", new[] { new RawStatementAction(2, "await Page.Locator(\"b\").ClickAsync();") } as IReadOnlyList<TestAction>)
+            },
+            new[]
+            {
+                new RawStatementAction(3, "await Page.Locator(\"c\").ClickAsync();")
+            });
+
+        var model = CreateModel(condBlock);
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("else if", output);
+        Assert.Contains("else", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+}
+
+public class ElementAtTests
+{
+    static TestFileModel CreateModel(params TestAction[] bodyActions)
+    {
+        return new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "ElementAtTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(), bodyActions)
+            });
+    }
+
+    [Fact]
+    public void ElementAt_LiteralIndex_RendersNthLiteral()
+    {
+        // MappedTarget with Nth strategy and literal index renders as .Nth(2)
+        var click = new ClickAction(
+            1,
+            TargetExpression.Mapped("items.ElementAt(2)", "Page.Locator(\".item\")", TargetKind.PlaywrightLocator, null, "Nth", 2),
+            RecognitionConfidence.Semantic);
+
+        var model = CreateModel(click);
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains(".Nth(2)", output);
+        Assert.DoesNotContain(".Nth(0)", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void ElementAt_NoNthIndex_DoesNotRenderNth()
+    {
+        // MappedTarget with Match="Nth" but no NthIndex — should not render .Nth(0)
+        var click = new ClickAction(
+            1,
+            TargetExpression.Mapped("items.ElementAt(count)", "Page.Locator(\".item\")", TargetKind.PlaywrightLocator, null, "Nth", null),
+            RecognitionConfidence.Semantic);
+
+        var model = CreateModel(click);
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.DoesNotContain(".Nth(0)", output);
+        Assert.DoesNotContain(".Nth()", output);
+        Assert.Contains("Page.Locator(\".item\")", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+}
+
+public class NavigationOpenPageTests
+{
+    [Fact]
+    public void NavigationOpenPage_RegistersSourceVariable()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+        var model = new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "NavTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(),
+                    new[] { new NavigationAction(1, "\"https://example.com\"", "page", @"Navigation.OpenPage<Page>(""https://example.com"")") })
+            });
+
+        var output = renderer.Render(model);
+        Assert.Contains("GotoAsync", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+}
+
+public class WebDriverFindElementTests
+{
+    static TestFileModel CreateModel(params TestAction[] bodyActions)
+    {
+        return new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "WDTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), bodyActions)
+            });
+    }
+
+    [Fact]
+    public void WebDriverFindElement_Renderer_RendersLocatorDeclaration()
+    {
+        var decl = new LocatorDeclarationAction(
+            1, "inputElement", "Page.Locator(\"xpath=//input[@id='x']\")", "WebDriver.FindElement(By.XPath(\"//input\"))");
+
+        var model = CreateModel(decl);
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("var inputElement = Page.Locator(\"xpath=//input[@id='x']\");", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void WebDriverFindElement_LocalVar_Click_UsesMappedLocator()
+    {
+        var decl = new LocatorDeclarationAction(
+            1, "el", "Page.Locator(\"xpath=//button\")", "WebDriver.FindElement(By.XPath(\"//button\"))");
+        var click = new ClickAction(
+            2,
+            TargetExpression.Mapped("el", "el", TargetKind.RawExpression),
+            RecognitionConfidence.Semantic);
+
+        var model = CreateModel(decl, click);
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("var el = Page.Locator(\"xpath=//button\");", output);
+        Assert.Contains("el", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+}

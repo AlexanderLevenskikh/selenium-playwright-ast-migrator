@@ -1236,18 +1236,21 @@ targetExpr: null,
             // Check if receiver is a known mapped target
             if (_targetMap.TryGetValue(receiver, out var mappedTarget))
             {
-                var index = 0;
-                int.TryParse(indexText, out index);
-
-                // Return the mapped target's expression with Nth appended
                 var locatorExpr = BuildLocatorExpression(mappedTarget);
-                var combinedExpr = $"{locatorExpr}.Nth({indexText})";
 
-                return new MappedTarget(
-                    sourceExpression,
-                    combinedExpr,
-                    TargetKind.RawExpression,
-                    null);
+                // If index is a literal, safely use it; otherwise mark as unresolved
+                if (int.TryParse(indexText, out var literalIndex))
+                {
+                    var combinedExpr = $"{locatorExpr}.Nth({literalIndex})";
+                    return new MappedTarget(
+                        sourceExpression,
+                        combinedExpr,
+                        TargetKind.RawExpression,
+                        null);
+                }
+
+                // Dynamic index — return unresolved to trigger TODO
+                return new UnresolvedTarget(sourceExpression);
             }
 
             return new UnresolvedTarget(sourceExpression);
@@ -1277,15 +1280,19 @@ targetExpr: null,
                     var tableResult = ResolveTarget(tableItemsExpr);
                     if (tableResult is MappedTarget tableMapped)
                     {
-                        var index = 0;
-                        int.TryParse(indexText, out index);
-                        return new MappedTarget(
-                            sourceExpression,
-                            tableMapped.TargetExpression,
-                            tableMapped.Kind,
-                            tableMapped.TestIdAttribute,
-                            "Nth",
-                            index);
+                        if (int.TryParse(indexText, out var literalIndex))
+                        {
+                            return new MappedTarget(
+                                sourceExpression,
+                                tableMapped.TargetExpression,
+                                tableMapped.Kind,
+                                tableMapped.TestIdAttribute,
+                                "Nth",
+                                literalIndex);
+                        }
+
+                        // Dynamic index — return unresolved to trigger TODO
+                        return new UnresolvedTarget(sourceExpression);
                     }
                 }
             }

@@ -541,13 +541,45 @@ public class PlaywrightDotNetRenderer : IRenderer
     /// </summary>
     static string[] FindRemainingPlaceholders(string statement)
     {
-        var matches = Regex.Matches(statement, @"\{(\w+)\}");
-        var result = new string[matches.Count];
-        for (int i = 0; i < matches.Count; i++)
+        var result = new List<string>();
+        var inQuote = false;
+        var quoteChar = '\0';
+
+        for (int i = 0; i < statement.Length; i++)
         {
-            result[i] = "{" + matches[i].Groups[1].Value + "}";
+            var c = statement[i];
+
+            if (inQuote)
+            {
+                if (c == quoteChar && statement[i - 1] != '\\')
+                    inQuote = false;
+                continue;
+            }
+
+            if (c == '"' || c == '\'')
+            {
+                inQuote = true;
+                quoteChar = c;
+                continue;
+            }
+
+            if (c == '{' && i + 1 < statement.Length)
+            {
+                int start = i;
+                int j = i + 1;
+                while (j < statement.Length && char.IsLetterOrDigit(statement[j]))
+                    j++;
+                if (j < statement.Length && statement[j] == '}')
+                {
+                    var name = statement.Substring(start + 1, j - start - 1);
+                    if (!string.IsNullOrEmpty(name))
+                        result.Add("{" + name + "}");
+                    i = j;
+                }
+            }
         }
-        return result;
+
+        return result.ToArray();
     }
 
     /// <summary>
@@ -754,32 +786,27 @@ public class PlaywrightDotNetRenderer : IRenderer
     void RenderConditionalBlock(StringBuilder sb, ConditionalBlockAction action)
     {
         sb.AppendLine($"{_indent}{_indent}if ({action.ConditionExpression})");
-        RenderBlock(sb, action.IfActions, 2);
+        sb.AppendLine($"{_indent}{_indent}{{");
+        foreach (var a in action.IfActions)
+            RenderAction(sb, a);
 
         foreach (var elseIf in action.ElseIfActions)
         {
             sb.AppendLine($"{_indent}}} else if ({elseIf.Condition})");
-            RenderBlock(sb, elseIf.Actions, 2);
+            sb.AppendLine($"{_indent}{_indent}{{");
+            foreach (var a in elseIf.Actions)
+                RenderAction(sb, a);
         }
 
         if (action.ElseActions.Any())
         {
             sb.AppendLine($"{_indent}}} else");
-            RenderBlock(sb, action.ElseActions, 2);
+            sb.AppendLine($"{_indent}{_indent}{{");
+            foreach (var a in action.ElseActions)
+                RenderAction(sb, a);
         }
-        else if (!action.ElseIfActions.Any())
-        {
-            sb.AppendLine($"{_indent}}}");
-        }
-    }
 
-    void RenderBlock(StringBuilder sb, IReadOnlyList<TestAction> actions, int indentLevel)
-    {
-        sb.AppendLine($"{_indent}{_indent}{{");
-        foreach (var action in actions)
-        {
-            RenderAction(sb, action);
-        }
+        sb.AppendLine($"{_indent}}}");
     }
 
     string ExtractKeyName(string keyExpression)
@@ -864,7 +891,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         return mapped.Match switch
         {
             "First" => $"{locatorExpr}.First",
-            "Nth" => $"{locatorExpr}.Nth({mapped.NthIndex ?? 0})",
+            "Nth" => mapped.NthIndex.HasValue ? $"{locatorExpr}.Nth({mapped.NthIndex.Value})" : locatorExpr,
             _ => locatorExpr
         };
     }
