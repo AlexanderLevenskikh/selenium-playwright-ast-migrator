@@ -3265,7 +3265,7 @@ public class MultilineCommentTests
         var output = renderer.Render(targetModel);
 
         Assert.Contains("// Assert.That(value, Is.Not.Null);", output);
-        Assert.Contains("/_/ line 5", output);
+        Assert.Contains("// Assert.That(value, Is.Not.Null); // line 5", output);
         Assert.Contains("// TODO: convert constraint to Playwright assertion", output);
         Assert.True(CompileChecker.CompilesWithoutErrors(output),
             CompileChecker.FormatErrors(output));
@@ -3708,6 +3708,64 @@ public class ElementAtTests
         Assert.DoesNotContain(".Nth(0)", output);
         Assert.DoesNotContain(".Nth()", output);
         Assert.Contains("Page.Locator(\".item\")", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void ElementAt_VariableIndex_RendersNthVariable()
+    {
+        var indexDecl = new LocalDeclarationAction(1, "elementOrder", "var", "1");
+        var click = new ClickAction(
+            2,
+            TargetExpression.MappedWithIndexExpression(
+                "items.ElementAt(elementOrder)",
+                "Page.Locator(\".item\")",
+                TargetKind.PlaywrightLocator,
+                null,
+                "Nth",
+                "elementOrder"),
+            RecognitionConfidence.Semantic);
+
+        var model = CreateModel(indexDecl, click);
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains(".Nth(elementOrder)", output);
+        Assert.DoesNotContain(".Nth(0)", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void ElementAt_UnresolvedIndex_DoesNotDefaultToZero()
+    {
+        var click = new ClickAction(
+            1,
+            TargetExpression.Mapped("items.ElementAt(elementOrder)", "Page.Locator(\".item\")", TargetKind.PlaywrightLocator, null, "Nth", null),
+            RecognitionConfidence.Semantic);
+
+        var model = CreateModel(click);
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.DoesNotContain(".Nth(0)", output);
+        Assert.DoesNotContain(".Nth()", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void ElementAt_UnmappedReceiver_LeavesTodo()
+    {
+        var click = new ClickAction(
+            1,
+            TargetExpression.Unresolved("unknownItems.ElementAt(elementOrder)"),
+            RecognitionConfidence.SyntaxFallback);
+
+        var model = CreateModel(click);
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("TODO: map source expression to Playwright locator", output);
+        Assert.DoesNotContain(".Nth(0)", output);
         Assert.True(CompileChecker.CompilesWithoutErrors(output),
             CompileChecker.FormatErrors(output));
     }

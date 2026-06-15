@@ -134,25 +134,25 @@ public class PlaywrightDotNetRenderer : IRenderer
         switch (action)
         {
             case MethodInvocationAction mi:
-                sb.AppendLine($"{_indent}{_indent}//   {EscapeComment(mi.FullSourceText)}");
+                AppendCommentBlock(sb, _indent + _indent, mi.FullSourceText, "  ");
                 break;
             case MappedMethodInvocationAction mm:
-                sb.AppendLine($"{_indent}{_indent}//   {EscapeComment(mm.FullSourceText)}");
+                AppendCommentBlock(sb, _indent + _indent, mm.FullSourceText, "  ");
                 break;
             case ClickAction click:
-                sb.AppendLine($"{_indent}{_indent}//   click: {EscapeComment(click.Target.SourceExpression)}");
+                AppendCommentBlock(sb, _indent + _indent, $"click: {click.Target.SourceExpression}", "  ");
                 break;
             case SendKeysAction sk:
-                sb.AppendLine($"{_indent}{_indent}//   sendKeys: {EscapeComment(sk.Target.SourceExpression)} = {EscapeComment(sk.TextExpression)}");
+                AppendCommentBlock(sb, _indent + _indent, $"sendKeys: {sk.Target.SourceExpression} = {sk.TextExpression}", "  ");
                 break;
             case RawStatementAction raw:
-                sb.AppendLine($"{_indent}{_indent}//   raw: {EscapeComment(raw.SourceText)}");
+                AppendCommentBlock(sb, _indent + _indent, $"raw: {raw.SourceText}", "  ");
                 break;
             case UnsupportedAction unsupported:
-                sb.AppendLine($"{_indent}{_indent}//   unsupported: {EscapeComment(unsupported.SourceText)}");
+                AppendCommentBlock(sb, _indent + _indent, $"unsupported: {unsupported.SourceText}", "  ");
                 break;
             case LocalDeclarationAction lds:
-                sb.AppendLine($"{_indent}{_indent}//   var: {EscapeComment(lds.VariableType)} {EscapeComment(lds.VariableName)} = {EscapeComment(lds.InitializationValue)}");
+                AppendCommentBlock(sb, _indent + _indent, $"var: {lds.VariableType} {lds.VariableName} = {lds.InitializationValue}", "  ");
                 break;
             default:
                 sb.AppendLine($"{_indent}{_indent}//   [{action.GetType().Name}]");
@@ -589,7 +589,7 @@ public class PlaywrightDotNetRenderer : IRenderer
     {
         var methodInfo = !string.IsNullOrEmpty(sourceMethod) ? $" sourceMethod: {sourceMethod}" : string.Empty;
         sb.AppendLine($"{_indent}{_indent}// TODO: unresolved MethodMapping placeholder{methodInfo} (line {sourceLine})");
-        sb.AppendLine($"{_indent}{_indent}//   Original: {EscapeComment(statement)}");
+        AppendCommentBlock(sb, _indent + _indent, $"Original: {statement}", "  ");
     }
 
     string[] DeduplicateInvocationVariables(IReadOnlyList<string> statements)
@@ -673,9 +673,8 @@ public class PlaywrightDotNetRenderer : IRenderer
         var constraint = ConvertConstraint(action.ConstraintExpression);
         var sourceLine = action.SourceLine;
 
-        // Multiline-safe: if expression contains newlines, prefix every line with //
         var commentBody = $"Assert.That({actual}, {constraint}); // line {sourceLine}";
-        AppendComment(sb, _indent + _indent, commentBody);
+        AppendCommentBlock(sb, _indent + _indent, commentBody);
 
         sb.AppendLine($"{_indent}{_indent}// TODO: convert constraint to Playwright assertion");
     }
@@ -690,9 +689,7 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     void RenderMethodInvocation(StringBuilder sb, MethodInvocationAction action)
     {
-        var escaped = EscapeComment(action.FullSourceText);
-
-        sb.AppendLine($"{_indent}{_indent}// [{action.MethodName}] {escaped} // line {action.SourceLine}");
+        AppendCommentBlock(sb, _indent + _indent, $"[{action.MethodName}] {action.FullSourceText} // line {action.SourceLine}");
         if (!IsLowPriorityMethod(action.MethodName, action.FullSourceText))
         {
             sb.AppendLine($"{_indent}{_indent}// TODO: manual review needed");
@@ -702,13 +699,27 @@ public class PlaywrightDotNetRenderer : IRenderer
     void RenderUnsupported(StringBuilder sb, UnsupportedAction action)
     {
         var reason = EscapeComment(action.Reason);
-        var sourceComment = EscapeComment(action.SourceText);
         sb.AppendLine($"{_indent}{_indent}// TODO: UNSUPPORTED [{reason}]");
-        sb.AppendLine($"{_indent}{_indent}//   {sourceComment}");
+        AppendCommentBlock(sb, _indent + _indent, action.SourceText, "  ");
     }
 
     void RenderRawStatement(StringBuilder sb, RawStatementAction action)
     {
+        if (HasLineBreak(action.SourceText))
+        {
+            if (IsTrivialRawStatement(action.SourceText))
+            {
+                AppendCommentBlock(sb, _indent + _indent, $"source: {action.SourceText} // line {action.SourceLine}");
+            }
+            else
+            {
+                sb.AppendLine($"{_indent}{_indent}// TODO: raw statement requires manual review:");
+                AppendCommentBlock(sb, _indent + _indent, action.SourceText, "  ");
+            }
+
+            return;
+        }
+
         if (IsTrivialRawStatement(action.SourceText))
         {
             sb.AppendLine($"{_indent}{_indent}// source: {EscapeComment(action.SourceText)} // line {action.SourceLine}");
@@ -764,6 +775,13 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     void RenderLocalDeclaration(StringBuilder sb, LocalDeclarationAction action)
     {
+        if (ContainsUnresolvedSourceObjectAccess(action.InitializationValue) && HasLineBreak(action.InitializationValue))
+        {
+            sb.AppendLine($"{_indent}{_indent}// TODO: raw local declaration requires manual review:");
+            AppendCommentBlock(sb, _indent + _indent, $"{action.VariableType} {action.VariableName} = {action.InitializationValue}", "  ");
+            return;
+        }
+
         if (ContainsUnresolvedSourceObjectAccess(action.InitializationValue))
         {
             sb.AppendLine($"{_indent}{_indent}// TODO: raw local declaration — review: {EscapeComment(action.VariableType)} {EscapeComment(action.VariableName)} = {EscapeComment(action.InitializationValue)}");
@@ -902,7 +920,9 @@ public class PlaywrightDotNetRenderer : IRenderer
         return mapped.Match switch
         {
             "First" => $"{locatorExpr}.First",
-            "Nth" => mapped.NthIndex.HasValue ? $"{locatorExpr}.Nth({mapped.NthIndex.Value})" : locatorExpr,
+            "Nth" when mapped.NthIndex.HasValue => $"{locatorExpr}.Nth({mapped.NthIndex.Value})",
+            "Nth" when IsSafeIndexExpression(mapped.NthIndexExpression) => $"{locatorExpr}.Nth({mapped.NthIndexExpression})",
+            "Nth" => locatorExpr,
             _ => locatorExpr
         };
     }
@@ -946,40 +966,47 @@ public class PlaywrightDotNetRenderer : IRenderer
         return constraint;
     }
 
-    /// <summary>
-    /// Appends text as a C# single-line comment. If the text contains newlines,
-    /// each line is prefixed with <c>// </c> to prevent multiline leak bugs.
-    /// </summary>
-    void AppendComment(StringBuilder sb, string indent, string text)
+    void AppendCommentBlock(StringBuilder sb, string indent, string? text, string prefix = "")
     {
-        if (string.IsNullOrWhiteSpace(text))
+        if (string.IsNullOrEmpty(text))
         {
-            sb.AppendLine($"{indent}//");
+            AppendCommentLine(sb, indent, prefix);
             return;
         }
 
-        var lines = text.Split('\n');
-        for (int i = 0; i < lines.Length; i++)
-        {
-            var line = lines[i].TrimEnd('\r');
-            // Escape any embedded // to prevent accidentally closing the comment
-            line = line.Replace("//", "/_/");
-            sb.AppendLine($"{indent}// {line}");
-        }
+        var normalized = text.Replace("\r\n", "\n").Replace('\r', '\n');
+        foreach (var line in normalized.Split('\n'))
+            AppendCommentLine(sb, indent, prefix + EscapeComment(line));
+    }
+
+    void AppendCommentLine(StringBuilder sb, string indent, string? text)
+    {
+        sb.AppendLine($"{indent}// {EscapeComment(text)}".TrimEnd());
+    }
+
+    static bool HasLineBreak(string? text)
+    {
+        return text?.IndexOfAny(new[] { '\r', '\n' }) >= 0;
     }
 
     static string EscapeComment(string? text)
     {
-        if (string.IsNullOrWhiteSpace(text))
+        if (string.IsNullOrEmpty(text))
             return string.Empty;
 
         return text
             .Replace("\r\n", " ")
             .Replace("\n", " ")
             .Replace("\r", " ")
-            .Replace("\t", " ")
-            .Replace("//", "/_/")
-            .Trim();
+            .Replace("\t", " ");
+    }
+
+    static bool IsSafeIndexExpression(string? indexExpression)
+    {
+        if (string.IsNullOrWhiteSpace(indexExpression))
+            return false;
+
+        return !indexExpression.Any(c => c is '\r' or '\n' or ';' or '{' or '}');
     }
 
     static string EscapeStringLiteral(string? value)

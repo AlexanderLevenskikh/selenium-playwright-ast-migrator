@@ -35,6 +35,9 @@ public abstract class TargetExpression
     public static TargetExpression Mapped(string source, string targetExpression, TargetKind kind, string? testIdAttribute, string? match, int? nthIndex = null) =>
         new MappedTarget(source, targetExpression, kind, testIdAttribute, match, nthIndex);
 
+    public static TargetExpression MappedWithIndexExpression(string source, string targetExpression, TargetKind kind, string? testIdAttribute, string? match, string nthIndexExpression) =>
+        new MappedTarget(source, targetExpression, kind, testIdAttribute, match, null, nthIndexExpression);
+
     public static TargetExpression Unresolved(string source) =>
         new UnresolvedTarget(source);
 }
@@ -61,13 +64,20 @@ public sealed class MappedTarget : TargetExpression
     /// </summary>
     public int? NthIndex { get; }
 
-    public MappedTarget(string source, string targetExpression, TargetKind kind, string? testIdAttribute = null, string? match = null, int? nthIndex = null)
+    /// <summary>
+    /// C# index expression for "Nth" match strategy when the source used a dynamic index.
+    /// Ignored when Match is not "Nth" or NthIndex is set.
+    /// </summary>
+    public string? NthIndexExpression { get; }
+
+    public MappedTarget(string source, string targetExpression, TargetKind kind, string? testIdAttribute = null, string? match = null, int? nthIndex = null, string? nthIndexExpression = null)
         : base(source, kind)
     {
         TargetExpression = targetExpression;
         TestIdAttribute = testIdAttribute;
         Match = match;
         NthIndex = nthIndex;
+        NthIndexExpression = nthIndexExpression;
     }
 
     public override string RenderLocator() => TargetExpression;

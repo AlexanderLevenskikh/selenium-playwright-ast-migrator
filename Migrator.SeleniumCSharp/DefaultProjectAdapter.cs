@@ -519,6 +519,10 @@ public class DefaultProjectAdapter : IProjectAdapter
         if (tableResult is MappedTarget)
             return tableResult;
 
+        var dynamicElementAt = ResolveDynamicElementAt(sourceExpression, resolved);
+        if (dynamicElementAt is MappedTarget)
+            return dynamicElementAt;
+
         // Try general ElementAt resolution: collection.ElementAt(index) where collection has a mapping
         var elementAtResult = resolved.ResolveGeneralElementAt(sourceExpression);
         if (elementAtResult is MappedTarget)
@@ -530,6 +534,52 @@ public class DefaultProjectAdapter : IProjectAdapter
                 sourceExpression == entry.Key)
             {
                 return entry.Value;
+            }
+        }
+
+        return new UnresolvedTarget(sourceExpression);
+    }
+
+    TargetExpression ResolveDynamicElementAt(string sourceExpression, ResolvedFileConfig resolved)
+    {
+        var tableMatch = ElementAtRegex.Match(sourceExpression);
+        if (tableMatch.Success)
+        {
+            var indexText = tableMatch.Groups[1].Value.Trim();
+            if (!IsSafeIndexExpression(indexText) || int.TryParse(indexText, out _))
+                return new UnresolvedTarget(sourceExpression);
+
+            var tableItemsExpr = ExtractTableItemsSource(sourceExpression);
+            if (tableItemsExpr != null && resolved.ResolveTarget(tableItemsExpr) is MappedTarget tableMapped)
+            {
+                return new MappedTarget(
+                    sourceExpression,
+                    tableMapped.TargetExpression,
+                    tableMapped.Kind,
+                    tableMapped.TestIdAttribute,
+                    "Nth",
+                    null,
+                    indexText);
+            }
+        }
+
+        var generalMatch = Regex.Match(sourceExpression, @"^(\w+)\s*\.\s*ElementAt\s*\(\s*([^)]+)\s*\)");
+        if (generalMatch.Success)
+        {
+            var receiver = generalMatch.Groups[1].Value;
+            var indexText = generalMatch.Groups[2].Value.Trim();
+            if (!IsSafeIndexExpression(indexText) || int.TryParse(indexText, out _))
+                return new UnresolvedTarget(sourceExpression);
+
+            var receiverTarget = resolved.ResolveTarget(receiver);
+            if (receiverTarget is MappedTarget mappedTarget)
+            {
+                var locatorExpr = BuildLocatorExpression(mappedTarget);
+                return new MappedTarget(
+                    sourceExpression,
+                    $"{locatorExpr}.Nth({indexText})",
+                    TargetKind.RawExpression,
+                    null);
             }
         }
 
@@ -1181,9 +1231,18 @@ targetExpr: null,
         {
             "First" => $"{locatorExpr}.First",
             "Nth" when mapped.NthIndex.HasValue => $"{locatorExpr}.Nth({mapped.NthIndex.Value})",
+            "Nth" when IsSafeIndexExpression(mapped.NthIndexExpression) => $"{locatorExpr}.Nth({mapped.NthIndexExpression})",
             "Nth" => locatorExpr,
             _ => locatorExpr
         };
+    }
+
+    static bool IsSafeIndexExpression(string? indexExpression)
+    {
+        if (string.IsNullOrWhiteSpace(indexExpression))
+            return false;
+
+        return !indexExpression.Any(c => c is '\r' or '\n' or ';' or '{' or '}');
     }
 
     static string? ExtractTableItemsSource(string expr)
