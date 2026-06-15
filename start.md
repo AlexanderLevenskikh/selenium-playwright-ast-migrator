@@ -1,9 +1,9 @@
-Начинай работу с `migration/BOOTSTRAP.md`.
+Начинай работу с `BOOTSTRAP.md`.
 
 Порядок обязателен:
 
-1. Прочитай `migration/BOOTSTRAP.md`.
-2. Прочитай `migration/POLICIES.md`.
+1. Прочитай `BOOTSTRAP.md`.
+2. Прочитай `POLICIES.md`.
 3. Создай или обнови:
 
     * `migration/agent-state.md`
