@@ -1823,4 +1823,133 @@ public class ParserTests
         Assert.True(CompileChecker.CompilesWithoutErrors(output),
             CompileChecker.FormatErrors(output));
     }
+
+    // --- MT-1: Target-safe raw declarations ---
+
+    [Fact]
+    public void RawTargetSafe_PageLocatorDeclaration_IsPreserved()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var decl = new RawStatementAction(1, "var loader = Page.Locator(\"[data-test='table-loader']\")");
+        var usage = new RawStatementAction(2, "await Expect(loader).ToBeHiddenAsync()");
+        var model = CreateModel(new[] { decl, usage });
+        var output = renderer.Render(model);
+
+        // Declaration should be active
+        Assert.Contains("var loader = Page.Locator(\"[data-test='table-loader']\")", output);
+        // Downstream usage should be active (not blocked)
+        Assert.Contains("await Expect(loader).ToBeHiddenAsync()", output);
+        // No active references to blocked symbols
+        AssertNoActiveReference(output, "loader");
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void RawTargetSafe_GetByTestIdDeclaration_IsPreserved()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var decl = new RawStatementAction(1, "var button = Page.GetByTestId(\"save-button\")");
+        var usage = new RawStatementAction(2, "await button.ClickAsync()");
+        var model = CreateModel(new[] { decl, usage });
+        var output = renderer.Render(model);
+
+        Assert.Contains("var button = Page.GetByTestId(\"save-button\")", output);
+        Assert.Contains("await button.ClickAsync()", output);
+        AssertNoActiveReference(output, "button");
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void RawTargetSafe_LocatorAlias_IsPreserved()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var tableDecl = new RawStatementAction(1, "var table = Page.Locator(\"[data-test='table']\")");
+        var rowDecl = new RawStatementAction(2, "var row = table.Locator(\"tr\")");
+        var model = CreateModel(new[] { tableDecl, rowDecl });
+        var output = renderer.Render(model);
+
+        Assert.Contains("var table = Page.Locator(\"[data-test='table']\")", output);
+        Assert.Contains("var row = table.Locator(\"tr\")", output);
+        AssertNoActiveReference(output, "table");
+        AssertNoActiveReference(output, "row");
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    // --- MT-2: Unavailable symbols ignore string literals ---
+
+    [Fact]
+    public void UnavailableSymbols_IgnoresCssSelectorStringTokens()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        // The CSS selector string contains tokens like "data", "test", "table", "loader"
+        // that must NOT be extracted as unavailable symbols.
+        var decl = new RawStatementAction(1, "var loader = Page.Locator(\"[data-test='table-loader']\")");
+        var usage = new RawStatementAction(2, "await Expect(loader).ToBeHiddenAsync()");
+        var model = CreateModel(new[] { decl, usage });
+        var output = renderer.Render(model);
+
+        // No TODO about any string-literal tokens being unavailable
+        Assert.DoesNotContain("'data'", output);
+        Assert.DoesNotContain("'test'", output);
+        Assert.DoesNotContain("'table'", output);
+        Assert.DoesNotContain("'loader'", output);
+        // Active code should be present
+        Assert.Contains("var loader = Page.Locator", output);
+        Assert.Contains("await Expect(loader)", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void UnavailableSymbols_IgnoresUrlStringTokens()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        // URL string contains "https", "arbilling3", "testkontur", "ru", "foo"
+        var nav = new RawStatementAction(1, "await Page.GotoAsync(\"https://arbilling3.testkontur.ru/foo\")");
+        var model = CreateModel(nav);
+        var output = renderer.Render(model);
+
+        // No TODO about URL tokens being unavailable
+        Assert.DoesNotContain("'https'", output);
+        Assert.DoesNotContain("'arbilling3'", output);
+        Assert.DoesNotContain("'testkontur'", output);
+        Assert.DoesNotContain("'ru'", output);
+        Assert.DoesNotContain("'foo'", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void UnavailableSymbols_StillFindsRealIdentifiersOutsideStrings()
+    {
+        var config = new ProjectAdapterConfig(
+            SourceProjectName: "Test",
+            UiTargets: Array.Empty<UiTargetMapping>(),
+            PageObjects: Array.Empty<PageObjectMapping>(),
+            Methods: Array.Empty<MethodMapping>()
+        );
+        var adapter = new DefaultProjectAdapter(config);
+        var renderer = new PlaywrightDotNetRenderer();
+
+        // Real identifiers outside strings should still be detected
+        var stmt = new RawStatementAction(1, "SomeUnknownBuilder.Create()");
+        var model = CreateModel(stmt);
+        var adapted = adapter.Adapt(model);
+        var output = renderer.Render(adapted);
+
+        // SomeUnknownBuilder is a real identifier, should be flagged as unavailable or blocked
+        Assert.Contains("SomeUnknownBuilder", output);
+        // The statement should still appear (as TODO or commented)
+        Assert.True(output.Contains("TODO") || output.Contains("//"));
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
 }

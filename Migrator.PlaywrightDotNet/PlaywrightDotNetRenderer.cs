@@ -17,6 +17,7 @@ public class PlaywrightDotNetRenderer : IRenderer
     HashSet<string> _sourceOnlyIdentifiers = new(StringComparer.Ordinal);
     HashSet<string> _setupBlockedSymbols = new(StringComparer.Ordinal);
     HashSet<string> _setupDeclaredVars = new(StringComparer.Ordinal);
+    readonly HashSet<string> _localAliases = new(StringComparer.Ordinal);
     bool _useAssertionsExpect = false;
 
     public PlaywrightDotNetRenderer(string indent = "\t")
@@ -449,6 +450,43 @@ public class PlaywrightDotNetRenderer : IRenderer
                 action,
                 $"depends on unresolved symbol '{blockedSymbol}'",
                 sourceText);
+            return;
+        }
+
+        // Target-safe declaration: render as active code, register variables, skip blocking.
+        if (action is RawStatementAction rawSafe && IsTargetSafeDeclaration(rawSafe.SourceText))
+        {
+            var safeRoot = ExtractTargetSafeRootSymbol(rawSafe.SourceText);
+            if (safeRoot != null && safeRoot != "Page" && _blockedSymbols.Contains(safeRoot))
+            {
+                // The alias root (e.g. "table") is blocked — this declaration is unsafe
+                foreach (var variable in declaredVariables)
+                    BlockSymbol(variable);
+                RenderBlockedActionAsComment(
+                    sb,
+                    action,
+                    $"depends on unresolved symbol '{safeRoot}'",
+                    sourceText);
+                return;
+            }
+
+            RenderTargetSafeDeclaration(sb, rawSafe);
+
+            // Register declared variables as local aliases
+            foreach (var variable in declaredVariables)
+                _localAliases.Add(variable);
+
+            // No unavailable symbols check needed — the statement is target-safe
+            return;
+        }
+
+        // Resolved raw statement: if a raw statement only references known symbols
+        // (local aliases, framework built-ins, known types, etc.), render as active code
+        // instead of TODO. This covers usages like `await Expect(loader).ToBeHiddenAsync()`
+        // where `loader` is a known local alias.
+        if (action is RawStatementAction rawResolved && AllSymbolsResolved(rawResolved.SourceText, declaredVariables))
+        {
+            RenderResolvedRawStatement(sb, rawResolved);
             return;
         }
 
@@ -968,6 +1006,15 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
     }
 
+    void RenderTargetSafeDeclaration(StringBuilder sb, RawStatementAction action)
+    {
+        var source = action.SourceText.Trim();
+        var line = source.EndsWith(";", StringComparison.Ordinal)
+            ? $"{source} // line {action.SourceLine}"
+            : $"{source}; // line {action.SourceLine}";
+        sb.AppendLine($"{_indent}{_indent}{line}");
+    }
+
     /// <summary>
     /// Returns true for methods proven to have no runtime side effects.
     /// Currently conservative — no methods are suppressed globally.
@@ -1328,6 +1375,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         _methodScopeVars.Clear();
         _sourceVarMap.Clear();
         _blockedSymbols.Clear();
+        _localAliases.Clear();
     }
 
     void RegisterSourceVar(string originalName, string generatedName)
@@ -1545,11 +1593,12 @@ public class PlaywrightDotNetRenderer : IRenderer
     {
         var unavailable = new HashSet<string>();
 
-        // Build set of known symbols: declared vars, method scope vars, source var map keys
+        // Build set of known symbols: declared vars, method scope vars, source var map keys, local aliases
         var knownSymbols = new HashSet<string>(StringComparer.Ordinal);
         foreach (var v in declaredVariables) knownSymbols.Add(v);
         foreach (var v in _methodScopeVars) knownSymbols.Add(v);
         foreach (var v in _sourceVarMap.Keys) knownSymbols.Add(v);
+        foreach (var v in _localAliases) knownSymbols.Add(v);
 
         // Extract identifiers from source text
         var identifiers = ExtractIdentifiers(sourceText);
@@ -1572,8 +1621,172 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     static HashSet<string> ExtractIdentifiers(string text)
     {
+        // Strip string literals (regular, verbatim, interpolated) before extracting identifiers.
+        // This prevents false positives like "data", "test", "table" from CSS selectors
+        // and "https", "arbilling3", "testkontur", "ru" from URLs.
+        var stripped = StripStringLiterals(text);
         return new HashSet<string>(
-            Regex.Matches(text, @"(?<![\w@])[A-Za-z_]\w*").Select(m => m.Value));
+            Regex.Matches(stripped, @"(?<![\w@])[A-Za-z_]\w*").Select(m => m.Value));
+    }
+
+    /// <summary>
+    /// Removes C# string literals from source text to prevent identifier extraction from string content.
+    /// Handles: regular strings ("..."), verbatim strings (@""...""), and interpolated strings ($"..." / @$"...").
+    /// Interpolation expressions (${...}) are preserved for analysis.
+    /// </summary>
+    static string StripStringLiterals(string text)
+    {
+        var sb = new StringBuilder();
+        var i = 0;
+        while (i < text.Length)
+        {
+            // Verbatim string: @"..." or @$"..." or $"...
+            if (i < text.Length && text[i] == '"')
+            {
+                var prefixStart = i;
+                var isVerbatim = false;
+
+                // Check for @ prefix
+                if (i > 0 && text[i - 1] == '@')
+                    isVerbatim = true;
+
+                if (isVerbatim)
+                {
+                    // Verbatim string — find closing @"" (escaped as """)
+                    i++; // skip opening "
+                    while (i < text.Length)
+                    {
+                        if (text[i] == '"')
+                        {
+                            if (i + 1 < text.Length && text[i + 1] == '"')
+                            {
+                                // Escaped quote ""
+                                sb.Append("  ");
+                                i += 2;
+                            }
+                            else
+                            {
+                                // End of string
+                                i++;
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            sb.Append(' ');
+                            i++;
+                        }
+                    }
+                }
+                else
+                {
+                    // Regular or interpolated string
+                    i++; // skip opening "
+                    while (i < text.Length)
+                    {
+                        if (text[i] == '\\' && i + 1 < text.Length)
+                        {
+                            // Escaped character — skip both
+                            sb.Append("  ");
+                            i += 2;
+                        }
+                        else if (text[i] == '{')
+                        {
+                            // Interpolation ${...} — preserve the expression inside
+                            var depth = 1;
+                            sb.Append('{');
+                            i++;
+                            while (i < text.Length && depth > 0)
+                            {
+                                if (text[i] == '{') depth++;
+                                else if (text[i] == '}') depth--;
+                                sb.Append(text[i]);
+                                i++;
+                            }
+                        }
+                        else if (text[i] == '"')
+                        {
+                            // End of string
+                            i++;
+                            break;
+                        }
+                        else
+                        {
+                            sb.Append(' ');
+                            i++;
+                        }
+                    }
+                }
+            }
+            // Character literal: '...'
+            else if (i < text.Length && text[i] == '\'')
+            {
+                i++; // skip opening '
+                while (i < text.Length)
+                {
+                    if (text[i] == '\\' && i + 1 < text.Length)
+                    {
+                        sb.Append("  ");
+                        i += 2;
+                    }
+                    else if (text[i] == '\'')
+                    {
+                        i++;
+                        break;
+                    }
+                    else
+                    {
+                        sb.Append(' ');
+                        i++;
+                    }
+                }
+            }
+            else
+            {
+                sb.Append(text[i]);
+                i++;
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Returns true if all identifiers in the source text are resolved:
+    /// known types, framework keywords, framework built-ins, local aliases,
+    /// declared variables, method scope variables, or source var map entries.
+    /// String literal content is stripped before analysis.
+    /// </summary>
+    bool AllSymbolsResolved(string sourceText, IReadOnlyList<string> declaredVariables)
+    {
+        var stripped = StripStringLiterals(sourceText);
+        var identifiers = ExtractIdentifiers(stripped);
+
+        foreach (var id in identifiers)
+        {
+            if (IsKnownType(id)) continue;
+            if (IsFrameworkKeyword(id)) continue;
+            if (IsFrameworkBuiltIn(id)) continue;
+            if (id == "Page" || id == "page") continue;
+            if (declaredVariables.Contains(id)) continue;
+            if (_localAliases.Contains(id)) continue;
+            if (_methodScopeVars.Contains(id)) continue;
+            if (_sourceVarMap.ContainsKey(id)) continue;
+
+            // Found an unresolved symbol
+            return false;
+        }
+
+        return true;
+    }
+
+    void RenderResolvedRawStatement(StringBuilder sb, RawStatementAction action)
+    {
+        var source = action.SourceText.Trim();
+        var line = source.EndsWith(";", StringComparison.Ordinal)
+            ? $"{source} // line {action.SourceLine}"
+            : $"{source}; // line {action.SourceLine}";
+        sb.AppendLine($"{_indent}{_indent}{line}");
     }
 
     static HashSet<string> KnownTypes = new(StringComparer.Ordinal)
@@ -1632,6 +1845,65 @@ public class PlaywrightDotNetRenderer : IRenderer
         return Regex.IsMatch(
             text,
             @"^\s*@?\w+\s*=\s*WebDriver\s*\.\s*FindElement\s*\(\s*By\s*\.\s*(XPath|CssSelector)\s*\(\s*""[^""]*""\s*\)\s*\)\s*$");
+    }
+
+    /// <summary>
+    /// Returns true if the statement is a variable declaration that assigns a Playwright locator.
+    /// These are target-safe: the RHS uses Page.Locator, Page.GetByTestId, etc. or chains off
+    /// a known resolved locator. Such declarations should be rendered as active code, their
+    /// declared variables registered as local aliases, and NOT blocked.
+    /// </summary>
+    static bool IsTargetSafeDeclaration(string sourceText)
+    {
+        var text = sourceText.Trim().TrimEnd(';');
+
+        // Match: var name = Page.Locator("...");
+        //        var name = Page.GetByTestId("...");
+        //        var name = Page.GetByText("...");
+        //        var name = Page.GetByRole(AriaRole.Button);
+        //        ILocator name = Page.Locator("...");
+        //        Locator name = Page.Locator("...");
+        if (Regex.IsMatch(text, @"^\s*(?:var|(?:I)?Locator)\s+\w+\s*=\s*Page\s*\.\s*(?:Locator|GetByTestId|GetByText|GetByRole)\s*\("))
+            return true;
+
+        // Match: var name = knownAlias.Locator("...") — where knownAlias will be checked separately
+        if (Regex.IsMatch(text, @"^\s*var\s+\w+\s*=\s*(\w+)\s*\.\s*Locator\s*\("))
+            return true;
+
+        // Match: var name = knownAlias.GetByTestId("...")
+        if (Regex.IsMatch(text, @"^\s*var\s+\w+\s*=\s*(\w+)\s*\.\s*GetByTestId\s*\("))
+            return true;
+
+        // Match: var name = knownAlias.GetByText("...")
+        if (Regex.IsMatch(text, @"^\s*var\s+\w+\s*=\s*(\w+)\s*\.\s*GetByText\s*\("))
+            return true;
+
+        // Match: ILocator name = knownAlias.Locator("...")
+        if (Regex.IsMatch(text, @"^\s*(?:I)?Locator\s+\w+\s*=\s*(\w+)\s*\.\s*Locator\s*\("))
+            return true;
+
+        return false;
+    }
+
+    /// <summary>
+    /// For a target-safe declaration, extracts the root symbol from the RHS
+    /// (e.g. "Page" from "Page.Locator(...)" or "table" from "table.Locator(...)").
+    /// Returns null if the declaration does not use a known receiver.
+    /// </summary>
+    static string? ExtractTargetSafeRootSymbol(string sourceText)
+    {
+        var text = sourceText.Trim().TrimEnd(';');
+
+        // Direct Page.* call
+        if (Regex.IsMatch(text, @"^\s*(?:var|(?:I)?Locator)\s+\w+\s*=\s*Page\s*\.\s*(?:Locator|GetByTestId|GetByText|GetByRole)\s*\("))
+            return "Page";
+
+        // Alias.* call — extract the alias identifier
+        var aliasMatch = Regex.Match(text, @"^\s*(?:var|(?:I)?Locator)\s+\w+\s*=\s*(\w+)\s*\.\s*(?:Locator|GetByTestId|GetByText)\s*\(");
+        if (aliasMatch.Success)
+            return aliasMatch.Groups[1].Value;
+
+        return null;
     }
 
     void RenderTableCountAssertion(StringBuilder sb, TableCountAssertionAction action)
