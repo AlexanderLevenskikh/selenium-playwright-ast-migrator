@@ -1080,6 +1080,57 @@ public class ParserTests
         }
     }
 
+    static void AssertActiveLineContains(string output, string expectedFragment)
+    {
+        // Verifies that expectedFragment appears in a non-commented active line
+        var lines = output.Split('\n');
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (string.IsNullOrEmpty(trimmed))
+                continue;
+            if (trimmed.StartsWith("//"))
+                continue;
+            if (trimmed.Contains(expectedFragment))
+                return;
+        }
+        Assert.Fail($"No active line containing '{expectedFragment}' found in output.\n{output}");
+    }
+
+    static void AssertNoTodoLineContaining(string output, string symbol)
+    {
+        // Verifies that no TODO comment line references the given symbol
+        var lines = output.Split('\n');
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (!trimmed.StartsWith("// TODO"))
+                continue;
+            if (trimmed.Contains(symbol))
+            {
+                Assert.Fail($"TODO line referencing '{symbol}' found: {trimmed}");
+            }
+        }
+    }
+
+    static void AssertNoActiveLineContaining(string output, string fragment)
+    {
+        // Verifies that no active (non-commented) line contains the fragment
+        var lines = output.Split('\n');
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (string.IsNullOrEmpty(trimmed))
+                continue;
+            if (trimmed.StartsWith("//"))
+                continue;
+            if (trimmed.Contains(fragment))
+            {
+                Assert.Fail($"Active line containing '{fragment}' found: {trimmed}");
+            }
+        }
+    }
+
     // --- Part 1: Mapped downstream action with blocked root symbol ---
 
     [Fact]
@@ -1836,12 +1887,11 @@ public class ParserTests
         var model = CreateModel(new[] { decl, usage });
         var output = renderer.Render(model);
 
-        // Declaration should be active
-        Assert.Contains("var loader = Page.Locator(\"[data-test='table-loader']\")", output);
-        // Downstream usage should be active (not blocked)
-        Assert.Contains("await Expect(loader).ToBeHiddenAsync()", output);
-        // No active references to blocked symbols
-        AssertNoActiveReference(output, "loader");
+        // Declaration rendered as active code
+        AssertActiveLineContains(output, "var loader = Page.Locator(\"[data-test='table-loader']\")");
+        // Downstream usage rendered as active code, not TODO
+        AssertActiveLineContains(output, "await Expect(loader).ToBeHiddenAsync()");
+        AssertNoTodoLineContaining(output, "loader");
         Assert.True(CompileChecker.CompilesWithoutErrors(output),
             CompileChecker.FormatErrors(output));
     }
@@ -1856,9 +1906,9 @@ public class ParserTests
         var model = CreateModel(new[] { decl, usage });
         var output = renderer.Render(model);
 
-        Assert.Contains("var button = Page.GetByTestId(\"save-button\")", output);
-        Assert.Contains("await button.ClickAsync()", output);
-        AssertNoActiveReference(output, "button");
+        AssertActiveLineContains(output, "var button = Page.GetByTestId(\"save-button\")");
+        AssertActiveLineContains(output, "await button.ClickAsync()");
+        AssertNoTodoLineContaining(output, "button");
         Assert.True(CompileChecker.CompilesWithoutErrors(output),
             CompileChecker.FormatErrors(output));
     }
@@ -1873,10 +1923,29 @@ public class ParserTests
         var model = CreateModel(new[] { tableDecl, rowDecl });
         var output = renderer.Render(model);
 
-        Assert.Contains("var table = Page.Locator(\"[data-test='table']\")", output);
-        Assert.Contains("var row = table.Locator(\"tr\")", output);
-        AssertNoActiveReference(output, "table");
-        AssertNoActiveReference(output, "row");
+        AssertActiveLineContains(output, "var table = Page.Locator(\"[data-test='table']\")");
+        AssertActiveLineContains(output, "var row = table.Locator(\"tr\")");
+        AssertNoTodoLineContaining(output, "table");
+        AssertNoTodoLineContaining(output, "row");
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    // --- Negative: unknown alias chain must NOT be accepted as target-safe ---
+
+    [Fact]
+    public void RawTargetSafe_UnknownAliasChain_IsBlocked()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        // "unknown" is not Page, not a known local alias — should be blocked
+        var decl = new RawStatementAction(1, "var row = unknown.Locator(\"tr\")");
+        var model = CreateModel(decl);
+        var output = renderer.Render(model);
+
+        // Must be rendered as TODO comment, not active code
+        AssertNoActiveLineContaining(output, "var row = unknown.Locator(\"tr\")");
+        Assert.Contains("// TODO:", output);
         Assert.True(CompileChecker.CompilesWithoutErrors(output),
             CompileChecker.FormatErrors(output));
     }
@@ -1949,6 +2018,129 @@ public class ParserTests
         Assert.Contains("SomeUnknownBuilder", output);
         // The statement should still appear (as TODO or commented)
         Assert.True(output.Contains("TODO") || output.Contains("//"));
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    // --- Fix #2: Member names after dot must NOT be treated as unresolved symbols ---
+
+    [Fact]
+    public void AllSymbolsResolved_ExpectToBeHiddenAsync_IsActive()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var decl = new RawStatementAction(1, "var loader = Page.Locator(\"[data-test='loader']\")");
+        var usage = new RawStatementAction(2, "await Expect(loader).ToBeHiddenAsync()");
+        var model = CreateModel(new[] { decl, usage });
+        var output = renderer.Render(model);
+
+        // Both lines should be active code, not TODO
+        AssertActiveLineContains(output, "var loader = Page.Locator(\"[data-test='loader']\")");
+        AssertActiveLineContains(output, "await Expect(loader).ToBeHiddenAsync()");
+        AssertNoTodoLineContaining(output, "ToBeHiddenAsync");
+        AssertNoTodoLineContaining(output, "loader");
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void AllSymbolsResolved_ButtonClickAsync_IsActive()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var decl = new RawStatementAction(1, "var button = Page.GetByTestId(\"submit\")");
+        var usage = new RawStatementAction(2, "await button.ClickAsync()");
+        var model = CreateModel(new[] { decl, usage });
+        var output = renderer.Render(model);
+
+        AssertActiveLineContains(output, "var button = Page.GetByTestId(\"submit\")");
+        AssertActiveLineContains(output, "await button.ClickAsync()");
+        AssertNoTodoLineContaining(output, "ClickAsync");
+        AssertNoTodoLineContaining(output, "button");
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void AllSymbolsResolved_GotoAsync_IsActive()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var usage = new RawStatementAction(1, "await Page.GotoAsync(\"/test\")");
+        var model = CreateModel(usage);
+        var output = renderer.Render(model);
+
+        AssertActiveLineContains(output, "await Page.GotoAsync(\"/test\")");
+        AssertNoTodoLineContaining(output, "GotoAsync");
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void AllSymbolsResolved_UnknownRoot_RemainsUnresolved()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        // SomeUnknownBuilder is a real root identifier — must remain unresolved
+        var stmt = new RawStatementAction(1, "SomeUnknownBuilder.Create()");
+        var model = CreateModel(stmt);
+        var output = renderer.Render(model);
+
+        // Must be TODO/commented, not active code
+        AssertNoActiveLineContaining(output, "SomeUnknownBuilder.Create()");
+        Assert.Contains("// TODO", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void AllSymbolsResolved_MultipleChainedMembers_OnlyChecksRoots()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        // baseUrl and selectorFromHelper are unknown roots — should be flagged
+        // but .Trim(), .Substring(), etc. are members — should NOT be flagged
+        var stmt = new RawStatementAction(1, "var result = baseUrl.Trim() + selectorFromHelper.Substring(0)");
+        var model = CreateModel(stmt);
+        var output = renderer.Render(model);
+
+        // baseUrl and selectorFromHelper should appear as unavailable
+        Assert.Contains("TODO", output);
+        // Trim and Substring should NOT appear as TODO symbols
+        Assert.DoesNotContain("'Trim'", output);
+        Assert.DoesNotContain("'Substring'", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    // --- Fix #4: Compile coverage for ILocator and GetByRole ---
+
+    [Fact]
+    public void CompileCoverage_ILocatorDeclaration_Compiles()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var decl = new RawStatementAction(1, "ILocator loader = Page.Locator(\"[data-test='loader']\")");
+        var model = CreateModel(decl);
+        var output = renderer.Render(model);
+
+        AssertActiveLineContains(output, "ILocator loader = Page.Locator(\"[data-test='loader']\")");
+        Assert.Contains("using Microsoft.Playwright;", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void CompileCoverage_GetByRoleDeclaration_Compiles()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var decl = new RawStatementAction(1, "var button = Page.GetByRole(AriaRole.Button)");
+        var model = CreateModel(decl);
+        var output = renderer.Render(model);
+
+        AssertActiveLineContains(output, "var button = Page.GetByRole(AriaRole.Button)");
+        Assert.Contains("using Microsoft.Playwright;", output);
         Assert.True(CompileChecker.CompilesWithoutErrors(output),
             CompileChecker.FormatErrors(output));
     }

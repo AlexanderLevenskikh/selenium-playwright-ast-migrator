@@ -47,16 +47,15 @@ public class PlaywrightDotNetRenderer : IRenderer
         if (!string.IsNullOrEmpty(targetNamespace))
         {
             // Playwright renderer always needs these core usings
+            sb.AppendLine("using Microsoft.Playwright;");
             sb.AppendLine("using Microsoft.Playwright.NUnit;");
             sb.AppendLine("using NUnit.Framework;");
             sb.AppendLine("using System;");
             sb.AppendLine("using System.Threading.Tasks;");
-            if (_useAssertionsExpect)
-                sb.AppendLine("using Microsoft.Playwright;");
             // Additional host-specific usings from config
             if (testHost?.Usings != null && testHost.Usings.Length > 0)
             {
-                var coreUsings = new HashSet<string> { "Microsoft.Playwright.NUnit", "NUnit.Framework", "System", "System.Threading.Tasks" };
+                var coreUsings = new HashSet<string> { "Microsoft.Playwright", "Microsoft.Playwright.NUnit", "NUnit.Framework", "System", "System.Threading.Tasks" };
                 foreach (var @using in testHost.Usings)
                 {
                     if (!coreUsings.Contains(@using))
@@ -457,17 +456,22 @@ public class PlaywrightDotNetRenderer : IRenderer
         if (action is RawStatementAction rawSafe && IsTargetSafeDeclaration(rawSafe.SourceText))
         {
             var safeRoot = ExtractTargetSafeRootSymbol(rawSafe.SourceText);
-            if (safeRoot != null && safeRoot != "Page" && _blockedSymbols.Contains(safeRoot))
+            if (safeRoot != null && safeRoot != "Page")
             {
-                // The alias root (e.g. "table") is blocked — this declaration is unsafe
-                foreach (var variable in declaredVariables)
-                    BlockSymbol(variable);
-                RenderBlockedActionAsComment(
-                    sb,
-                    action,
-                    $"depends on unresolved symbol '{safeRoot}'",
-                    sourceText);
-                return;
+                // Alias chain (e.g. "table.Locator(...)"): only allowed if alias is known
+                // — previously declared as a local alias or in method scope.
+                // Blocked aliases and unknown aliases are both rejected.
+                if (_blockedSymbols.Contains(safeRoot) || !_localAliases.Contains(safeRoot))
+                {
+                    foreach (var variable in declaredVariables)
+                        BlockSymbol(variable);
+                    RenderBlockedActionAsComment(
+                        sb,
+                        action,
+                        $"depends on unresolved symbol '{safeRoot}'",
+                        sourceText);
+                    return;
+                }
             }
 
             RenderTargetSafeDeclaration(sb, rawSafe);
@@ -572,6 +576,8 @@ public class PlaywrightDotNetRenderer : IRenderer
     {
         var target = action.Target;
         var text = ConvertExpression(action.TextExpression);
+        // Ensure text is a valid C# string expression — bare values should be quoted
+        text = EnsureStringExpression(text);
         var escaped = EscapeComment(target.SourceExpression);
 
         if (target.Kind != TargetKind.Unresolved)
@@ -593,6 +599,22 @@ public class PlaywrightDotNetRenderer : IRenderer
             else
                 RenderUnresolvedTargetComment(sb, target, $"await (locator).FillAsync({text})", action.SourceLine);
         }
+    }
+
+    /// <summary>
+    /// Ensures the expression is a valid C# string argument.
+    /// Already-quoted strings pass through. Numeric literals are left as-is.
+    /// Bare identifiers are wrapped in quotes since SendKeys text is always a literal.
+    /// </summary>
+    static string EnsureStringExpression(string expr)
+    {
+        var trimmed = expr.Trim();
+        if (trimmed.StartsWith('"'))
+            return trimmed;
+        if (trimmed.All(char.IsDigit) || trimmed.All(c => c == '.' || char.IsDigit(c)))
+            return trimmed;
+        // Bare identifier — treat as string literal
+        return $"\"{trimmed.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"";
     }
 
     void RenderPress(StringBuilder sb, PressAction action)
@@ -1553,9 +1575,11 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     static string? FindReferencedSymbol(string sourceText, IEnumerable<string> symbols)
     {
+        // Strip string literals to avoid false matches inside string content
+        var stripped = StripStringLiterals(sourceText);
         foreach (var symbol in symbols.Where(s => !string.IsNullOrWhiteSpace(s)).OrderByDescending(s => s.Length))
         {
-            if (Regex.IsMatch(sourceText, $@"(?<![\w@]){Regex.Escape(symbol)}(?!\w)"))
+            if (Regex.IsMatch(stripped, $@"(?<![\w@]){Regex.Escape(symbol)}(?!\w)"))
                 return symbol;
         }
 
@@ -1584,9 +1608,10 @@ public class PlaywrightDotNetRenderer : IRenderer
     }
 
     /// <summary>
-    /// Finds identifiers in sourceText that are unavailable in the target context:
+    /// Finds root identifiers in sourceText that are unavailable in the target context:
     /// not declared in current scope, not known types, not framework built-ins,
-    // and not source-only identifiers (already handled separately).
+    /// and not source-only identifiers (already handled separately).
+    /// Member names after '.' are ignored (e.g. Trim, Substring, ClickAsync).
     /// Returns unique set of unavailable symbol names.
     /// </summary>
     HashSet<string> FindUnavailableSymbols(string sourceText, IReadOnlyList<string> declaredVariables)
@@ -1600,8 +1625,8 @@ public class PlaywrightDotNetRenderer : IRenderer
         foreach (var v in _sourceVarMap.Keys) knownSymbols.Add(v);
         foreach (var v in _localAliases) knownSymbols.Add(v);
 
-        // Extract identifiers from source text
-        var identifiers = ExtractIdentifiers(sourceText);
+        // Extract only root identifiers — member names after '.' are ignored
+        var identifiers = ExtractRootIdentifiers(sourceText);
         foreach (var id in identifiers)
         {
             if (IsKnownType(id)) continue;
@@ -1610,8 +1635,8 @@ public class PlaywrightDotNetRenderer : IRenderer
             if (knownSymbols.Contains(id)) continue;
 
             // Check if it's a property/method chain on a known receiver
-            // e.g. "page.User.Click()" — "page" is known (Playwright Page property)
-            if (id == "Page" || id == "page") continue;
+            // e.g. "Page.Locator(...)" — "Page" is known (Playwright Page property, uppercase only)
+            if (id == "Page") continue;
 
             unavailable.Add(id);
         }
@@ -1756,18 +1781,20 @@ public class PlaywrightDotNetRenderer : IRenderer
     /// known types, framework keywords, framework built-ins, local aliases,
     /// declared variables, method scope variables, or source var map entries.
     /// String literal content is stripped before analysis.
+    /// Only checks root identifiers — member names after '.' are ignored
+    /// (e.g. ToBeHiddenAsync, ClickAsync, GotoAsync are not checked).
     /// </summary>
     bool AllSymbolsResolved(string sourceText, IReadOnlyList<string> declaredVariables)
     {
         var stripped = StripStringLiterals(sourceText);
-        var identifiers = ExtractIdentifiers(stripped);
+        var identifiers = ExtractRootIdentifiers(stripped);
 
         foreach (var id in identifiers)
         {
             if (IsKnownType(id)) continue;
             if (IsFrameworkKeyword(id)) continue;
             if (IsFrameworkBuiltIn(id)) continue;
-            if (id == "Page" || id == "page") continue;
+            if (id == "Page") continue; // Playwright Page property (uppercase only)
             if (declaredVariables.Contains(id)) continue;
             if (_localAliases.Contains(id)) continue;
             if (_methodScopeVars.Contains(id)) continue;
@@ -1778,6 +1805,46 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Extracts root identifiers from source text, ignoring member names after '.'.
+    /// "await Expect(loader).ToBeHiddenAsync()" → {Expect, loader}
+    /// "await button.ClickAsync()" → {button}
+    /// "SomeUnknownBuilder.Create()" → {SomeUnknownBuilder}
+    /// "var x = Page.Locator(\"tr\").First" → {x, Page}
+    /// </summary>
+    static HashSet<string> ExtractRootIdentifiers(string text)
+    {
+        var roots = new HashSet<string>();
+        var i = 0;
+        while (i < text.Length)
+        {
+            // Find an identifier start
+            if (char.IsLetter(text[i]) || text[i] == '_')
+            {
+                bool precededByDot = false;
+                // Look backward to find if preceded by '.'
+                int j = i - 1;
+                while (j >= 0 && char.IsWhiteSpace(text[j])) j--;
+                if (j >= 0 && text[j] == '.')
+                    precededByDot = true;
+
+                // Extract identifier
+                int start = i;
+                while (i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] == '_'))
+                    i++;
+                var id = text.Substring(start, i - start);
+
+                if (!precededByDot)
+                    roots.Add(id);
+            }
+            else
+            {
+                i++;
+            }
+        }
+        return roots;
     }
 
     void RenderResolvedRawStatement(StringBuilder sb, RawStatementAction action)
@@ -1833,8 +1900,9 @@ public class PlaywrightDotNetRenderer : IRenderer
     static HashSet<string> FrameworkBuiltIns = new(StringComparer.Ordinal)
     {
         // Playwright / NUnit / common runtime
-        "Page", "Locator", "APIResponse", "Browser", "BrowserContext",
+        "Page", "Locator", "ILocator", "APIResponse", "Browser", "BrowserContext",
         "TestContext", "Assert",
+        "AriaRole",
     };
 
     static bool IsFrameworkBuiltIn(string id) => FrameworkBuiltIns.Contains(id);
