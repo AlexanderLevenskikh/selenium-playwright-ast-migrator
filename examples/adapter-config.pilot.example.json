@@ -1,5 +1,18 @@
 {
   "SourceProjectName": "ExampleTestProject",
+  "SourceOnlyIdentifiers": [
+    "page",
+    "pagef",
+    "Driver",
+    "WebDriver"
+  ],
+  "TargetKnownTypes": [
+    "Product",
+    "Navigation"
+  ],
+  "TargetKnownIdentifiers": [
+    "Navigation"
+  ],
   "UiTargets": [
     {
       "SourceExpression": "page.User",

@@ -34,7 +34,9 @@ public static class ConfigValidator
         ValidateQualityGates(config.QualityGates, errors);
         ValidateTables(config.Tables, "Tables", errors);
         ValidatePagination(config.Pagination, "Pagination", errors);
-        ValidateSourceOnlyIdentifiers(config.SourceOnlyIdentifiers, errors);
+        ValidateIdentifierList(config.SourceOnlyIdentifiers, "SourceOnlyIdentifiers", errors);
+        ValidateIdentifierList(config.TargetKnownTypes, "TargetKnownTypes", errors);
+        ValidateIdentifierList(config.TargetKnownIdentifiers, "TargetKnownIdentifiers", errors);
 
         if (errors.Count > 0)
             throw new ConfigValidationError(errors);
@@ -251,6 +253,9 @@ public static class ConfigValidator
 
             if (scope.Pagination.Length > 0)
                 ValidatePagination(scope.Pagination, $"{prefix}.Pagination", errors);
+
+            ValidateIdentifierList(scope.TargetKnownTypes, $"{prefix}.TargetKnownTypes", errors);
+            ValidateIdentifierList(scope.TargetKnownIdentifiers, $"{prefix}.TargetKnownIdentifiers", errors);
         }
     }
 
@@ -271,12 +276,19 @@ public static class ConfigValidator
             errors.Add("QualityGates.MaxRawExpressions cannot be negative.");
     }
 
-    private static void ValidateSourceOnlyIdentifiers(string[] identifiers, List<string> errors)
+    private static void ValidateIdentifierList(string[] identifiers, string section, List<string> errors)
     {
         for (var i = 0; i < identifiers.Length; i++)
         {
             if (string.IsNullOrWhiteSpace(identifiers[i]))
-                errors.Add($"SourceOnlyIdentifiers[{i}] is empty.");
+            {
+                errors.Add($"{section}[{i}] is empty.");
+                continue;
+            }
+
+            var value = identifiers[i].Trim();
+            if (!System.Text.RegularExpressions.Regex.IsMatch(value, @"^@?[A-Za-z_]\w*$"))
+                errors.Add($"{section}[{i}] must be a C# identifier, got '{value}'.");
         }
     }
 

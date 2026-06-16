@@ -116,3 +116,15 @@ Migrator.sln
 
 Никогда не добавляйте логику в `Migrator.Core` для поддержки нового recognizer'а —
 ядро должно оставаться нейтральным.
+
+## Config-driven symbol policy
+
+Renderer must not contain project-specific symbol knowledge. Project/domain symbols are passed from adapter config through `TestFileModel`:
+
+- `SourceOnlyIdentifiers` — Selenium/source-only roots that must not render as active target code.
+- `TargetKnownTypes` — target-side type/enum/static class names accepted by renderer safety checks.
+- `TargetKnownIdentifiers` — target-side helper identifiers accepted by renderer safety checks.
+
+The renderer also maintains method-scoped target locals. When an active target statement declares a local variable, the renderer registers it for downstream safety checks inside the same method. This is generic symbol-table mechanics; it is not adapter/project knowledge.
+
+Config owns the knowledge. Renderer owns only scope tracking and safe rendering mechanics.

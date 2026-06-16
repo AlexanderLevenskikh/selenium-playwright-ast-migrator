@@ -128,3 +128,28 @@ dotnet publish Migrator.Cli -c Release -o ./publish
 Инструмент не заменяет экспертизу миграции. Он превращает миграцию из построчного переписывания в контролируемый workflow: сгенерировать, проверить, классифицировать, улучшить профиль, повторить.
 
 Даже частичная миграция экономит значительное время, потому что разработчики проверяют и дорабатывают сгенерированные тесты вместо написания каждого теста с нуля.
+
+## Adapter-config: known target symbols
+
+Проектные знания должны жить в `adapter-config.json`, а не в renderer’е.
+
+Для source-only Selenium/POM roots используйте:
+
+```json
+{
+  "SourceOnlyIdentifiers": ["page", "pagef", "Driver", "WebDriver"]
+}
+```
+
+Для типов/enum/static helpers, которые реально доступны в целевом Playwright test project, используйте:
+
+```json
+{
+  "TargetKnownTypes": ["Product", "Navigation"],
+  "TargetKnownIdentifiers": ["Navigation"]
+}
+```
+
+Локальные переменные, объявленные active `TargetStatements`, renderer регистрирует автоматически в рамках текущего метода. Их не нужно и нельзя вести глобальным списком в config.
+
+Подробнее: `docs/agent-config-guidelines.md`.

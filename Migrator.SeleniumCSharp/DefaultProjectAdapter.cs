@@ -98,7 +98,9 @@ public class DefaultProjectAdapter : IProjectAdapter
             Tests: adaptedTests)
         {
             TestHost = testHost,
-            SourceOnlyIdentifiers = resolved._sourceOnlyIdentifiers
+            SourceOnlyIdentifiers = resolved._sourceOnlyIdentifiers,
+            TargetKnownTypes = resolved._targetKnownTypes,
+            TargetKnownIdentifiers = resolved._targetKnownIdentifiers
         };
     }
 
@@ -156,16 +158,21 @@ public class DefaultProjectAdapter : IProjectAdapter
         var mergedParamMethods = _globalConfig.ParameterizedMethods.Concat(scope.ParameterizedMethods).ToList();
 
         var testHost = scope.TestHost ?? _globalConfig.TestHost;
+        var mergedTargetKnownTypes = MergeStrings(_globalConfig.TargetKnownTypes, scope.TargetKnownTypes);
+        var mergedTargetKnownIdentifiers = MergeStrings(_globalConfig.TargetKnownIdentifiers, scope.TargetKnownIdentifiers);
 
         return CreateResolvedConfig(_globalConfig, mergedTargets, mergedMethods,
-            mergedParamMethods, testHost, _globalConfig.PageObjects);
+            mergedParamMethods, testHost, _globalConfig.PageObjects,
+            mergedTargetKnownTypes, mergedTargetKnownIdentifiers);
     }
 
     ResolvedFileConfig CreateResolvedConfig(ProjectAdapterConfig config, UiTargetMapping[] uiTargets,
         MethodMapping[] methods, IList<ParameterizedMethodMapping> paramMethods,
-        TestHostConfig? testHost, PageObjectMapping[] pageObjects)
+        TestHostConfig? testHost, PageObjectMapping[] pageObjects,
+        IReadOnlyList<string>? targetKnownTypes = null,
+        IReadOnlyList<string>? targetKnownIdentifiers = null)
     {
-        var resolved = new ResolvedFileConfig(config, testHost);
+        var resolved = new ResolvedFileConfig(config, testHost, targetKnownTypes, targetKnownIdentifiers);
 
         foreach (var mapping in uiTargets)
         {
@@ -246,6 +253,22 @@ public class DefaultProjectAdapter : IProjectAdapter
             result[s.SourceMethod] = s;
 
         return result.Values.ToArray();
+    }
+
+    static IReadOnlyList<string> MergeStrings(IEnumerable<string>? global, IEnumerable<string>? scope)
+    {
+        var result = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in global ?? Array.Empty<string>())
+        {
+            if (!string.IsNullOrWhiteSpace(item))
+                result.Add(item.Trim());
+        }
+        foreach (var item in scope ?? Array.Empty<string>())
+        {
+            if (!string.IsNullOrWhiteSpace(item))
+                result.Add(item.Trim());
+        }
+        return result.ToArray();
     }
 
     static ProfileScope[] FindMatchingScopes(ProfileScope[] scopes, string sourceFilePath)
@@ -1294,14 +1317,20 @@ targetExpr: null,
         internal readonly Dictionary<string, (string[] Statements, bool RequiresReview)> _methodStatementsMap = new();
         internal IList<ParameterizedMethodMapping> _parameterizedMethods = Array.Empty<ParameterizedMethodMapping>();
         internal IReadOnlyList<string> _sourceOnlyIdentifiers = Array.Empty<string>();
+        internal IReadOnlyList<string> _targetKnownTypes = Array.Empty<string>();
+        internal IReadOnlyList<string> _targetKnownIdentifiers = Array.Empty<string>();
         internal readonly TestHostConfig? _testHost;
         internal readonly ProjectAdapterConfig _globalConfig;
 
-        public ResolvedFileConfig(ProjectAdapterConfig globalConfig, TestHostConfig? testHost)
+        public ResolvedFileConfig(ProjectAdapterConfig globalConfig, TestHostConfig? testHost,
+            IReadOnlyList<string>? targetKnownTypes = null,
+            IReadOnlyList<string>? targetKnownIdentifiers = null)
         {
             _globalConfig = globalConfig;
             _testHost = testHost;
             _sourceOnlyIdentifiers = globalConfig.SourceOnlyIdentifiers ?? Array.Empty<string>();
+            _targetKnownTypes = targetKnownTypes ?? globalConfig.TargetKnownTypes ?? Array.Empty<string>();
+            _targetKnownIdentifiers = targetKnownIdentifiers ?? globalConfig.TargetKnownIdentifiers ?? Array.Empty<string>();
         }
 
         /// <summary>

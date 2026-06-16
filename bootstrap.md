@@ -788,3 +788,34 @@ Generated code компилируется и Verify проходит.
 - что осталось manual-review/deferred/tickets;
 - какие top learning opportunities дадут следующий прирост.
 ```
+
+---
+
+# 12. Adapter-config и project knowledge
+
+Проектные знания не должны попадать в renderer хардкодом.
+
+Если видишь символы вроде `Product`, `Navigation`, `Browser`, `DataGenerator`, `Urls`, `Client`, сначала классифицируй их:
+
+```text
+- source-only: существует только в Selenium/source мире → SourceOnlyIdentifiers или TODO;
+- target-known: существует в целевом Playwright test project → TargetKnownTypes / TargetKnownIdentifiers;
+- POM target: нужен UiTarget/Method/ParameterizedMethod mapping;
+- generic migrator blocker: нужен тикет или разрешённая generic-правка мигратора.
+```
+
+Заполняй config/profile, а не renderer:
+
+```json
+{
+  "SourceOnlyIdentifiers": ["page", "pagef", "Driver", "WebDriver"],
+  "TargetKnownTypes": ["Product", "Navigation"],
+  "TargetKnownIdentifiers": ["Navigation"]
+}
+```
+
+Локальные переменные, которые объявлены active `TargetStatements`, не перечисляй руками в config. Renderer сам регистрирует target locals в рамках текущего метода.
+
+Если target local не регистрируется и downstream usage становится TODO — это generic blocker мигратора. Оформи `migration/migrator-tickets.md` или, если задача разрешает, делай только generic-fix без бизнес-хардкода.
+
+Перед наполнением config прочитай `docs/agent-config-guidelines.md`.

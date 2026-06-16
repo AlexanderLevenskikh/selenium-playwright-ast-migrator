@@ -14,6 +14,21 @@ public sealed class ProjectAdapterConfig
     public MethodMapping[] Methods { get; init; } = Array.Empty<MethodMapping>();
 
     /// <summary>
+    /// Target-side type names that are valid in generated Playwright code.
+    /// Use this for project/domain enums and static helper types such as Product or Navigation.
+    /// These values live in adapter config/profile, not in the renderer.
+    /// </summary>
+    [JsonPropertyName("TargetKnownTypes")]
+    public string[] TargetKnownTypes { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Target-side identifiers that are valid in generated Playwright code but are not
+    /// framework built-ins. Use this sparingly for configured target helpers.
+    /// </summary>
+    [JsonPropertyName("TargetKnownIdentifiers")]
+    public string[] TargetKnownIdentifiers { get; init; } = Array.Empty<string>();
+
+    /// <summary>
     /// Identifiers that are available in the Selenium/source project but not in the
     /// target Playwright project. Statements that reference them are rendered as
     /// safe TODO comments instead of active C#.
@@ -73,7 +88,7 @@ public sealed class ProjectAdapterConfig
     {
     }
 
-    public ProjectAdapterConfig(string SourceProjectName, UiTargetMapping[] UiTargets, PageObjectMapping[] PageObjects, MethodMapping[] Methods, LocatorSettings? LocatorSettings = null, TestHostConfig? TestHost = null, ParameterizedMethodMapping[]? ParameterizedMethods = null, ProfileScope[]? Scopes = null, QualityGatesConfig? QualityGates = null, TableConfig[]? Tables = null, PaginationConfig[]? Pagination = null, string[]? SourceOnlyIdentifiers = null)
+    public ProjectAdapterConfig(string SourceProjectName, UiTargetMapping[] UiTargets, PageObjectMapping[] PageObjects, MethodMapping[] Methods, LocatorSettings? LocatorSettings = null, TestHostConfig? TestHost = null, ParameterizedMethodMapping[]? ParameterizedMethods = null, ProfileScope[]? Scopes = null, QualityGatesConfig? QualityGates = null, TableConfig[]? Tables = null, PaginationConfig[]? Pagination = null, string[]? SourceOnlyIdentifiers = null, string[]? TargetKnownTypes = null, string[]? TargetKnownIdentifiers = null)
     {
         this.SourceProjectName = SourceProjectName;
         this.UiTargets = UiTargets;
@@ -87,6 +102,8 @@ public sealed class ProjectAdapterConfig
         this.Tables = Tables ?? Array.Empty<TableConfig>();
         this.Pagination = Pagination ?? Array.Empty<PaginationConfig>();
         this.SourceOnlyIdentifiers = SourceOnlyIdentifiers ?? Array.Empty<string>();
+        this.TargetKnownTypes = TargetKnownTypes ?? Array.Empty<string>();
+        this.TargetKnownIdentifiers = TargetKnownIdentifiers ?? Array.Empty<string>();
     }
 }
 
@@ -390,10 +407,23 @@ public sealed class ProfileScope
     [JsonPropertyName("ParameterizedMethods")]
     public ParameterizedMethodMapping[] ParameterizedMethods { get; init; } = Array.Empty<ParameterizedMethodMapping>();
 
+    /// <summary>
+    /// Scope-specific target-known type additions. Unioned with global TargetKnownTypes.
+    /// </summary>
+    [JsonPropertyName("TargetKnownTypes")]
+    public string[] TargetKnownTypes { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Scope-specific target-known identifier additions. Unioned with global TargetKnownIdentifiers.
+    /// </summary>
+    [JsonPropertyName("TargetKnownIdentifiers")]
+    public string[] TargetKnownIdentifiers { get; init; } = Array.Empty<string>();
+
     public ProfileScope() { }
     public ProfileScope(string name, string[] sourcePathPatterns, TestHostConfig? testHost = null,
         UiTargetMapping[]? uiTargets = null, MethodMapping[]? methods = null,
-        ParameterizedMethodMapping[]? parameterizedMethods = null)
+        ParameterizedMethodMapping[]? parameterizedMethods = null,
+        string[]? targetKnownTypes = null, string[]? targetKnownIdentifiers = null)
     {
         Name = name;
         SourcePathPatterns = sourcePathPatterns;
@@ -401,6 +431,8 @@ public sealed class ProfileScope
         UiTargets = uiTargets ?? Array.Empty<UiTargetMapping>();
         Methods = methods ?? Array.Empty<MethodMapping>();
         ParameterizedMethods = parameterizedMethods ?? Array.Empty<ParameterizedMethodMapping>();
+        TargetKnownTypes = targetKnownTypes ?? Array.Empty<string>();
+        TargetKnownIdentifiers = targetKnownIdentifiers ?? Array.Empty<string>();
     }
 
     /// <summary>

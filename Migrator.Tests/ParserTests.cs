@@ -2195,4 +2195,97 @@ public class ParserTests
         Assert.True(CompileChecker.CompilesWithoutErrors(output),
             CompileChecker.FormatErrors(output));
     }
+
+    // --- Target-local registration and config-driven target-known symbols ---
+
+    [Fact]
+    public void MappedMethodInvocation_RegistersTypedDeclaredVariable_ForDownstreamUsage()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var open = new MappedMethodInvocationAction(
+            1,
+            "OpenDiscount()",
+            new[] { "string discountTitle = \"Discount\";" },
+            requiresReview: false);
+        var usage = new RawStatementAction(2, "Assert.That(discountTitle, Is.EqualTo(\"Discount\"))");
+        var model = CreateModel(new TestAction[] { open, usage });
+        var output = renderer.Render(model);
+
+        AssertActiveLineContains(output, "string discountTitle = \"Discount\";");
+        AssertActiveLineContains(output, "Assert.That(discountTitle, Is.EqualTo(\"Discount\"))");
+        AssertNoTodoLineContaining(output, "discountTitle");
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void MappedMethodInvocation_DoesNotRegisterVariable_WhenRenderedAsTodoOrBlocked()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var blocked = new MappedMethodInvocationAction(
+            1,
+            "OpenDiscount()",
+            new[] { "var discountRow = {TARGET};" },
+            requiresReview: false,
+            targetExpr: null,
+            sourceMethod: "OpenDiscount");
+        var usage = new RawStatementAction(2, "await discountRow.ClickAsync()");
+        var model = CreateModel(new TestAction[] { blocked, usage });
+        var output = renderer.Render(model);
+
+        AssertNoActiveLineContaining(output, "var discountRow =");
+        AssertNoActiveLineContaining(output, "await discountRow.ClickAsync()");
+        Assert.Contains("TODO", output);
+        Assert.Contains("discountRow", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void ConfigKnownType_Product_IsNotUnavailableSymbol()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+        var action = new RawStatementAction(1, "var product = Product.Travel");
+        var model = CreateModel(action) with
+        {
+            TargetKnownTypes = new[] { "Product" }
+        };
+        var output = renderer.Render(model);
+
+        AssertActiveLineContains(output, "var product = Product.Travel");
+        AssertNoTodoLineContaining(output, "Product");
+    }
+
+    [Fact]
+    public void UnknownType_StillBlocked_WhenNotConfigured()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+        var action = new RawStatementAction(1, "var product = Product.Travel");
+        var model = CreateModel(action);
+        var output = renderer.Render(model);
+
+        AssertNoActiveLineContaining(output, "var product = Product.Travel");
+        Assert.Contains("'Product'", output);
+    }
+
+    [Fact]
+    public void Adapter_PropagatesTargetKnownTypes_ToRendererModel()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            TargetKnownTypes: new[] { "Product" },
+            TargetKnownIdentifiers: new[] { "Navigation" });
+        var adapter = new DefaultProjectAdapter(config);
+
+        var adapted = adapter.Adapt(CreateModel(new RawStatementAction(1, "var product = Product.Travel")));
+
+        Assert.Contains("Product", adapted.TargetKnownTypes);
+        Assert.Contains("Navigation", adapted.TargetKnownIdentifiers);
+    }
+
 }

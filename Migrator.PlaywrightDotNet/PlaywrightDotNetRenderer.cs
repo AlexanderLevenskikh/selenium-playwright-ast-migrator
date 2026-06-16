@@ -18,6 +18,9 @@ public class PlaywrightDotNetRenderer : IRenderer
     HashSet<string> _setupBlockedSymbols = new(StringComparer.Ordinal);
     HashSet<string> _setupDeclaredVars = new(StringComparer.Ordinal);
     readonly HashSet<string> _localAliases = new(StringComparer.Ordinal);
+    readonly HashSet<string> _targetLocals = new(StringComparer.Ordinal);
+    HashSet<string> _targetKnownTypes = new(StringComparer.Ordinal);
+    HashSet<string> _targetKnownIdentifiers = new(StringComparer.Ordinal);
     bool _useAssertionsExpect = false;
 
     public PlaywrightDotNetRenderer(string indent = "\t")
@@ -36,6 +39,12 @@ public class PlaywrightDotNetRenderer : IRenderer
         var testHost = model.TestHost;
         _sourceOnlyIdentifiers = new HashSet<string>(
             model.SourceOnlyIdentifiers ?? Array.Empty<string>(),
+            StringComparer.Ordinal);
+        _targetKnownTypes = new HashSet<string>(
+            model.TargetKnownTypes ?? Array.Empty<string>(),
+            StringComparer.Ordinal);
+        _targetKnownIdentifiers = new HashSet<string>(
+            model.TargetKnownIdentifiers ?? Array.Empty<string>(),
             StringComparer.Ordinal);
         var targetNamespace = testHost?.Namespace ?? model.Namespace;
         var className = testHost?.ClassName ?? (model.ClassName + "Playwright");
@@ -789,6 +798,7 @@ public class PlaywrightDotNetRenderer : IRenderer
             else
             {
                 sb.AppendLine($"{_indent}{_indent}{substituted} // line {action.SourceLine}");
+                RegisterTargetLocalsFromActiveStatement(substituted);
             }
         }
         if (action.RequiresReview)
@@ -906,18 +916,16 @@ public class PlaywrightDotNetRenderer : IRenderer
                     var varName = stmt.Substring(4, eqIdx - 4).Trim();
                     string finalName;
 
-                    if (_methodScopeVars.Contains(varName))
+                    if (_methodScopeVars.Contains(varName) || seenInInvocation.ContainsValue(varName))
                     {
                         var newVar = NextTempVar(varName);
-                        while (_methodScopeVars.Contains(newVar))
+                        while (_methodScopeVars.Contains(newVar) || seenInInvocation.ContainsValue(newVar))
                             newVar = NextTempVar(varName);
                         finalName = newVar;
-                        _methodScopeVars.Add(finalName);
                     }
                     else
                     {
                         finalName = varName;
-                        _methodScopeVars.Add(varName);
                     }
 
                     seenInInvocation[varName] = finalName;
@@ -1035,6 +1043,7 @@ public class PlaywrightDotNetRenderer : IRenderer
             ? $"{source} // line {action.SourceLine}"
             : $"{source}; // line {action.SourceLine}";
         sb.AppendLine($"{_indent}{_indent}{line}");
+        RegisterTargetLocalsFromActiveStatement(source);
     }
 
     /// <summary>
@@ -1096,6 +1105,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
 
         RegisterSourceVar(action.VariableName, action.VariableName);
+        RegisterTargetLocal(action.VariableName);
         sb.AppendLine($"{_indent}{_indent}{action.VariableType} {action.VariableName} = {ConvertExpression(action.InitializationValue)}; // line {action.SourceLine}");
     }
 
@@ -1107,6 +1117,8 @@ public class PlaywrightDotNetRenderer : IRenderer
     void RenderLocatorDeclaration(StringBuilder sb, LocatorDeclarationAction action)
     {
         RegisterSourceVar(action.VariableName, action.LocatorExpression);
+        RegisterTargetLocal(action.VariableName);
+        _localAliases.Add(action.VariableName);
         sb.AppendLine($"{_indent}{_indent}var {action.VariableName} = {action.LocatorExpression}; // line {action.SourceLine}");
     }
 
@@ -1398,6 +1410,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         _sourceVarMap.Clear();
         _blockedSymbols.Clear();
         _localAliases.Clear();
+        _targetLocals.Clear();
     }
 
     void RegisterSourceVar(string originalName, string generatedName)
@@ -1408,6 +1421,23 @@ public class PlaywrightDotNetRenderer : IRenderer
             _sourceVarMap[originalName] = generatedName;
             _blockedSymbols.Remove(originalName);
         }
+    }
+
+    void RegisterTargetLocalsFromActiveStatement(string statement)
+    {
+        foreach (var variable in ExtractDeclaredVariableNames(statement))
+            RegisterTargetLocal(variable);
+    }
+
+    void RegisterTargetLocal(string variableName)
+    {
+        variableName = variableName.Trim().TrimStart('@');
+        if (string.IsNullOrEmpty(variableName) || variableName == "_")
+            return;
+
+        _targetLocals.Add(variableName);
+        _methodScopeVars.Add(variableName);
+        _blockedSymbols.Remove(variableName);
     }
 
     void BlockSymbol(string symbol)
@@ -1431,6 +1461,26 @@ public class PlaywrightDotNetRenderer : IRenderer
             return Array.Empty<string>();
 
         var text = StripLeadingCommentPrefix(sourceText.Trim()).Trim().TrimEnd(';');
+        var result = ExtractDeclaredVariableNames(text).ToList();
+        if (result.Count > 0)
+            return result;
+
+        var assignment = Regex.Match(text, @"^\s*(@?\w+)\s*=");
+        if (assignment.Success && !text.StartsWith("==", StringComparison.Ordinal))
+        {
+            AddName(result, assignment.Groups[1].Value);
+            return result;
+        }
+
+        return result;
+    }
+
+    static IReadOnlyList<string> ExtractDeclaredVariableNames(string? sourceText)
+    {
+        if (string.IsNullOrWhiteSpace(sourceText))
+            return Array.Empty<string>();
+
+        var text = StripLeadingCommentPrefix(sourceText.Trim()).Trim().TrimEnd(';');
         var result = new List<string>();
 
         var deconstruction = Regex.Match(text, @"^\s*(?:var\s*)?\(([^)]+)\)\s*=");
@@ -1440,19 +1490,11 @@ public class PlaywrightDotNetRenderer : IRenderer
             return result;
         }
 
-        var simpleDeclaration = Regex.Match(text, @"^\s*(?:var|[\w<>\[\].?]+)\s+(@?\w+)\s*=");
+        var simpleDeclaration = Regex.Match(
+            text,
+            @"^\s*(?:(?:const|readonly)\s+)?(?:var|[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*(?:\s*<[^=;]+>)?(?:\s*\[\s*\])?\??)\s+(@?[A-Za-z_]\w*)\s*=");
         if (simpleDeclaration.Success)
-        {
             AddName(result, simpleDeclaration.Groups[1].Value);
-            return result;
-        }
-
-        var assignment = Regex.Match(text, @"^\s*(@?\w+)\s*=");
-        if (assignment.Success && !text.StartsWith("==", StringComparison.Ordinal))
-        {
-            AddName(result, assignment.Groups[1].Value);
-            return result;
-        }
 
         return result;
     }
@@ -1624,6 +1666,8 @@ public class PlaywrightDotNetRenderer : IRenderer
         foreach (var v in _methodScopeVars) knownSymbols.Add(v);
         foreach (var v in _sourceVarMap.Keys) knownSymbols.Add(v);
         foreach (var v in _localAliases) knownSymbols.Add(v);
+        foreach (var v in _targetLocals) knownSymbols.Add(v);
+        foreach (var v in _targetKnownIdentifiers) knownSymbols.Add(v);
 
         // Extract only root identifiers — member names after '.' are ignored
         var identifiers = ExtractRootIdentifiers(sourceText);
@@ -1797,6 +1841,8 @@ public class PlaywrightDotNetRenderer : IRenderer
             if (id == "Page") continue; // Playwright Page property (uppercase only)
             if (declaredVariables.Contains(id)) continue;
             if (_localAliases.Contains(id)) continue;
+            if (_targetLocals.Contains(id)) continue;
+            if (_targetKnownIdentifiers.Contains(id)) continue;
             if (_methodScopeVars.Contains(id)) continue;
             if (_sourceVarMap.ContainsKey(id)) continue;
 
@@ -1856,6 +1902,7 @@ public class PlaywrightDotNetRenderer : IRenderer
             ? $"{source} // line {action.SourceLine}"
             : $"{source}; // line {action.SourceLine}";
         sb.AppendLine($"{_indent}{_indent}{line}");
+        RegisterTargetLocalsFromActiveStatement(source);
     }
 
     static HashSet<string> KnownTypes = new(StringComparer.Ordinal)
@@ -1896,7 +1943,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         "get", "set", "add", "remove",
     };
 
-    static bool IsKnownType(string id) => KnownTypes.Contains(id);
+    bool IsKnownType(string id) => KnownTypes.Contains(id) || _targetKnownTypes.Contains(id);
     static bool IsFrameworkKeyword(string id) => FrameworkKeywords.Contains(id);
 
     static HashSet<string> FrameworkBuiltIns = new(StringComparer.Ordinal)
@@ -1907,7 +1954,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         "AriaRole",
     };
 
-    static bool IsFrameworkBuiltIn(string id) => FrameworkBuiltIns.Contains(id);
+    bool IsFrameworkBuiltIn(string id) => FrameworkBuiltIns.Contains(id) || _targetKnownIdentifiers.Contains(id);
 
     static bool IsResolvedRawLocatorAssignment(string sourceText)
     {

@@ -28,6 +28,18 @@ public sealed record TestFileModel
     /// </summary>
     public IReadOnlyList<string> SourceOnlyIdentifiers { get; init; } = Array.Empty<string>();
 
+    /// <summary>
+    /// Target-side type names that should be treated as available in generated code.
+    /// Set by the adapter from config; used by renderer safety checks.
+    /// </summary>
+    public IReadOnlyList<string> TargetKnownTypes { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Target-side identifiers that should be treated as available in generated code.
+    /// Set by the adapter from config; used by renderer safety checks.
+    /// </summary>
+    public IReadOnlyList<string> TargetKnownIdentifiers { get; init; } = Array.Empty<string>();
+
     public TestFileModel(
         string FilePath,
         string Namespace,

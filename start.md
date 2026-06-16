@@ -1,8 +1,8 @@
-Начинай работу с `BOOTSTRAP.md`.
+Начинай работу с `bootstrap.md`.
 
 Порядок обязателен:
 
-1. Прочитай `BOOTSTRAP.md`.
+1. Прочитай `bootstrap.md`.
 2. Прочитай `POLICIES.md`.
 3. Создай или обнови:
 
@@ -17,3 +17,12 @@
 10. Пиши пользователю только на русском.
 
 Начинай автономно. Не проси подтверждения на безопасные действия. Остановись только при критическом блокере или когда `pre-stop-checklist.md` разрешает остановку.
+
+Дополнительно перед config-итерациями:
+
+11. Прочитай `docs/agent-config-guidelines.md`.
+12. Project-specific знания добавляй в `adapter-config.json` / profile, не в renderer.
+13. Для valid target-side enum/static helpers используй `TargetKnownTypes` / `TargetKnownIdentifiers`.
+14. Для старых Selenium/POM roots используй `SourceOnlyIdentifiers` или честные TODO, не dummy declarations.
+15. Не перечисляй локальные переменные метода в config: active target declarations регистрируются renderer’ом автоматически.
+16. Если config-only режим упёрся в generic blocker, создай `migration/migrator-tickets.md` и остановись или запроси разрешение на generic-fix.

@@ -47,3 +47,12 @@ dotnet publish Migrator.Cli -c Release -o ./publish
 - **Никогда** не деплоить и не менять инфраструктуру — приложения нет.
 - **Никогда** не запрашивать подтверждение у пользователя перед изменениями в коде.
 - Если задача требует доступа к внешним ресурсам (API, базы, окружения) — сообщить пользователю и остановиться.
+
+## Adapter-config/profile policy для агентов
+
+- Project-specific знания держи в `adapter-config.json`, profile или scope, не в renderer.
+- Для target-side enum/static helpers используй `TargetKnownTypes` / `TargetKnownIdentifiers`.
+- Для Selenium-only roots используй `SourceOnlyIdentifiers`.
+- Не добавляй dummy declarations в renderer/generated output.
+- Active target declarations из `TargetStatements` регистрируются renderer’ом как method-scoped target locals; не веди глобальный список локальных переменных в config.
+- Перед изменениями migration profile прочитай `docs/agent-config-guidelines.md`.

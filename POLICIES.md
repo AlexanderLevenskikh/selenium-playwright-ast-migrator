@@ -2667,3 +2667,105 @@ Manual-review items:
 - оставлять unsupported TargetKind без validator/adapter support;
 - маскировать unresolved variables через default!/null placeholders.
 ```
+
+---
+
+# 16. Project knowledge должен жить в config/profile
+
+Renderer не должен содержать project/domain-specific знания.
+
+Запрещено хардкодить в renderer:
+
+```text
+Product
+Navigation
+Browser
+DataGenerator
+Urls
+Client
+конкретные PageObject классы
+DiscountsTests
+названия конкретных POM-полей проекта
+```
+
+Если такой символ нужен в generated target-коде, используй config:
+
+```json
+{
+  "TargetKnownTypes": ["Product", "Navigation"],
+  "TargetKnownIdentifiers": ["Navigation"]
+}
+```
+
+Если символ существует только в Selenium/source мире, используй:
+
+```json
+{
+  "SourceOnlyIdentifiers": ["page", "pagef", "Driver", "WebDriver"]
+}
+```
+
+`TargetKnownTypes` и `TargetKnownIdentifiers` не являются способом скрыть ошибку. Добавляй туда только то, что реально существует в целевом Playwright test project и будет доступно через `TestHost.Usings`/base class/namespace.
+
+---
+
+# 17. Target locals
+
+`target local` — переменная, объявленная active target-кодом, например:
+
+```csharp
+var productChoosingPage = await OpenProductChoosingPageAsync();
+string discountTitle = "...";
+ILocator discountRow = Page.Locator("...");
+```
+
+Такие переменные не надо перечислять руками в config. Renderer обязан регистрировать declared locals из active target statements в method scope.
+
+Агент должен заполнять `TargetStatements`, а не глобальный список локальных переменных.
+
+Правильно:
+
+```json
+{
+  "SourceMethod": "Browser.Open<ProductChoosingPage>()",
+  "TargetStatements": [
+    "var productChoosingPage = await OpenProductChoosingPageAsync();"
+  ]
+}
+```
+
+Неправильно:
+
+```json
+{
+  "KnownTargetLocals": ["productChoosingPage"]
+}
+```
+
+Если active target declaration не разблокирует downstream usage, это generic migrator blocker. Не обходи его dummy declarations. Оформи тикет или, при явном разрешении, делай generic-fix renderer’а.
+
+---
+
+# 18. Временные файлы и debug context
+
+Агент может создавать временные/управляющие файлы в `migration/`, например:
+
+```text
+migration/agent-state.md
+migration/pre-stop-checklist.md
+migration/learning-backlog.md
+migration/migrator-tickets.md
+migration/manual-review-items.md
+migration/deferred-items.md
+migration/blocked-report.md
+migration/todo-audit.md
+migration/migration-context.generated.json
+```
+
+`migration-context.generated.json` — debug/report artifact. Его можно использовать для анализа known/blocked/unresolved symbols, но нельзя считать основным source of truth и нельзя использовать как ручной способ “разрешить” локальные переменные.
+
+Source of truth:
+
+```text
+POM/source code → adapter-config/profile → generated output/report
+```
