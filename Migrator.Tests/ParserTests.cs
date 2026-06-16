@@ -2113,6 +2113,57 @@ public class ParserTests
             CompileChecker.FormatErrors(output));
     }
 
+    // --- MT-2 (continued): String-literal stripping in FindUnavailableSymbols ---
+
+    [Fact]
+    public void UnavailableSymbols_StringLiteralTokens_NotFlagged_AsUnavailable()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var stmt = new RawStatementAction(1, "SomeUnknownBuilder.Create(\"[data-test='table-loader']\")");
+        var model = CreateModel(stmt);
+        var output = renderer.Render(model);
+
+        Assert.Contains("TODO", output);
+        Assert.Contains("'SomeUnknownBuilder'", output);
+        Assert.DoesNotContain("'data'", output);
+        Assert.DoesNotContain("'test'", output);
+        Assert.DoesNotContain("'table'", output);
+        Assert.DoesNotContain("'loader'", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void UnavailableSymbols_GotoAsync_OnlyFlagsRealIdentifiers()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var stmt = new RawStatementAction(1, "await Page.GotoAsync(baseUrl + \"/foo\")");
+        var model = CreateModel(stmt);
+        var output = renderer.Render(model);
+
+        Assert.Contains("'baseUrl'", output);
+        Assert.DoesNotContain("'foo'", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void UnavailableSymbols_GotoAsync_TwoRealIdentifiers_BothFlagged()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+
+        var stmt = new RawStatementAction(1, "await Page.GotoAsync(baseUrl + path)");
+        var model = CreateModel(stmt);
+        var output = renderer.Render(model);
+
+        Assert.Contains("'baseUrl'", output);
+        Assert.Contains("'path'", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
     // --- Fix #4: Compile coverage for ILocator and GetByRole ---
 
     [Fact]

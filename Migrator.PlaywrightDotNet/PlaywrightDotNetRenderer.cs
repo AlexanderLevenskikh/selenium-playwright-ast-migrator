@@ -1786,8 +1786,8 @@ public class PlaywrightDotNetRenderer : IRenderer
     /// </summary>
     bool AllSymbolsResolved(string sourceText, IReadOnlyList<string> declaredVariables)
     {
-        var stripped = StripStringLiterals(sourceText);
-        var identifiers = ExtractRootIdentifiers(stripped);
+        // ExtractRootIdentifiers already strips string literals internally
+        var identifiers = ExtractRootIdentifiers(sourceText);
 
         foreach (var id in identifiers)
         {
@@ -1809,6 +1809,7 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     /// <summary>
     /// Extracts root identifiers from source text, ignoring member names after '.'.
+    /// String literals are stripped before analysis to avoid false positives.
     /// "await Expect(loader).ToBeHiddenAsync()" → {Expect, loader}
     /// "await button.ClickAsync()" → {button}
     /// "SomeUnknownBuilder.Create()" → {SomeUnknownBuilder}
@@ -1816,25 +1817,26 @@ public class PlaywrightDotNetRenderer : IRenderer
     /// </summary>
     static HashSet<string> ExtractRootIdentifiers(string text)
     {
+        var stripped = StripStringLiterals(text);
         var roots = new HashSet<string>();
         var i = 0;
-        while (i < text.Length)
+        while (i < stripped.Length)
         {
             // Find an identifier start
-            if (char.IsLetter(text[i]) || text[i] == '_')
+            if (char.IsLetter(stripped[i]) || stripped[i] == '_')
             {
                 bool precededByDot = false;
                 // Look backward to find if preceded by '.'
                 int j = i - 1;
-                while (j >= 0 && char.IsWhiteSpace(text[j])) j--;
-                if (j >= 0 && text[j] == '.')
+                while (j >= 0 && char.IsWhiteSpace(stripped[j])) j--;
+                if (j >= 0 && stripped[j] == '.')
                     precededByDot = true;
 
                 // Extract identifier
                 int start = i;
-                while (i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] == '_'))
+                while (i < stripped.Length && (char.IsLetterOrDigit(stripped[i]) || stripped[i] == '_'))
                     i++;
-                var id = text.Substring(start, i - start);
+                var id = stripped.Substring(start, i - start);
 
                 if (!precededByDot)
                     roots.Add(id);
