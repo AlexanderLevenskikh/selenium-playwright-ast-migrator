@@ -2701,7 +2701,7 @@ DiscountsTests
 
 ```json
 {
-  "SourceOnlyIdentifiers": ["page", "pagef", "Driver", "WebDriver"]
+  "SourceOnlyIdentifiers": ["page", "pagef", "lightbox", "modal", "dialog", "popup", "Driver", "WebDriver"]
 }
 ```
 
@@ -2934,3 +2934,7 @@ selenium-pw-migrator --mode config-schema --out schema --format both
 
 See `docs/runtime-failure-classifier.md` and `docs/config-schema-workflow.md`.
 
+
+## TypeScript target policy
+
+`--target ts` is experimental and project-aware only. It must be used with `--ts-project` pointing to a real Playwright TypeScript project. The migrator may generate `.spec.ts` files, but helpers/imports/fixtures must be backed by the TS project and TS-specific profiles. Missing TS helpers should produce TODO or escalation, not guesses.

@@ -90,3 +90,19 @@ Generated code may include TODO markers such as:
 `explain-todo` reads these markers from generated `.cs` files when they are present in the artifact directory and adds them as additional insights. This helps explain TODOs that do not appear in `unmapped-targets.json` or `unsupported-actions.json`, for example raw statements, unresolved placeholders, and source-only cascades.
 
 The marker format is intentionally backward compatible: the first line still starts with `// TODO:` so existing TODO counters continue to work.
+
+## SOURCE_ONLY_IDENTIFIER interpretation
+
+A large number of `SOURCE_ONLY_IDENTIFIER(page/pagef)` TODO must not be interpreted as “all these lines are manual”. It means the source line contains a Selenium/POM root. The agent must inspect the full `Source:` line and group TODO by concrete source expression/pattern.
+
+Examples:
+
+| Source TODO | Correct next step |
+|---|---|
+| `page.Loader.ValidateLoading()` | method/wait mapping |
+| `page.Save.Click()` | `UiTargets` mapping for `page.Save` |
+| `page.Filter.Name.SendKeys(value)` | `UiTargets` + fill/action mapping |
+| `page.Table.Items.ElementAt(i).Text` | `Tables`/list recognizer or escalation for table pattern |
+| `page.AddReasons.ClickAndOpen<T>()` | click/open/modal recognizer or method mapping |
+
+Do not escalate root-level `page` statistics. Build the pattern backlog described in `docs/agent-playbooks/source-only-pattern-backlog.md`.

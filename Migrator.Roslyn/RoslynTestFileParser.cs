@@ -53,6 +53,19 @@ public class RoslynTestFileParser : ITestFileParser
         var tree = CSharpSyntaxTree.ParseText(source);
         var root = tree.GetRoot();
 
+        var syntaxErrors = tree.GetDiagnostics()
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .ToArray();
+        if (syntaxErrors.Length > 0)
+        {
+            var first = syntaxErrors[0];
+            var span = first.Location.GetLineSpan();
+            var line = span.IsValid ? span.StartLinePosition.Line + 1 : 0;
+            var column = span.IsValid ? span.StartLinePosition.Character + 1 : 0;
+            var location = line > 0 ? $"line {line}, column {column}" : "unknown location";
+            throw new InvalidOperationException($"Syntax error in {filePath} at {location}: {first.Id} {first.GetMessage()}");
+        }
+
         var compilation = CSharpCompilation.Create(
             "MigratorTemp",
             new[] { tree },

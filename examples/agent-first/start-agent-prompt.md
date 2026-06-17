@@ -18,6 +18,7 @@
 - docs/agent-config-guidelines.md
 - docs/project-verification.md
 - docs/runtime-readiness.md
+- docs/agent-playbooks/source-only-pattern-backlog.md
 
 Ограничения:
 - Пиши пользователю только на русском.
@@ -35,5 +36,6 @@
 5. Прочитай agent-next-task.md.
 6. Сделай одну безопасную config/profile итерацию.
 7. Запусти config-validate, migrate/verify-project, guard, config-diff.
-8. Остановись с русским отчётом и вопросом “Продолжить?”.
+8. Если TODO доминируют `SOURCE_ONLY_IDENTIFIER(page/pagef)`, сначала построи source-pattern backlog, а не root-level escalation.
+9. Остановись с русским отчётом и вопросом “Продолжить?”.
 ```

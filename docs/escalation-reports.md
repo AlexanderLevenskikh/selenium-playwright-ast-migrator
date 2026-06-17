@@ -81,3 +81,23 @@ Escalation report нужен, когда агент не должен продо
 
 Escalation report должен быть понятен человеку, который не читал весь чат агента.
 Не используй формулировки вроде “оно не работает”; показывай конкретный source/generated/report пример.
+
+## Before escalating SOURCE_ONLY_IDENTIFIER floods
+
+Do not create an escalation report that says only “`page` has many TODO”. That is root-level noise.
+
+Before escalation, the agent must provide:
+
+- top source expressions / patterns;
+- counts per pattern;
+- examples from source and generated output;
+- why each top pattern cannot be fixed through config/profile;
+- the smallest generic migrator change needed.
+
+Escalate concrete patterns:
+
+```text
+Good: `page.AddReasons.ClickAndOpen<CatalogStopReasonsModalPage>()` needs a generic click/open/modal recognizer.
+Good: `page.Table.Items.ElementAt(i).Text` needs table/list chain support.
+Bad: `page` has 1540 TODO, config cannot help.
+```

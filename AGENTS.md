@@ -52,7 +52,7 @@ dotnet publish Migrator.Cli -c Release -o ./publish
 
 - Project-specific знания держи в `adapter-config.json`, profile или scope, не в renderer.
 - Для target-side enum/static helpers используй `TargetKnownTypes` / `TargetKnownIdentifiers`.
-- Для Selenium-only roots используй `SourceOnlyIdentifiers`.
+- Для Selenium-only roots используй `SourceOnlyIdentifiers` (`page`, `pagef`, `lightbox`, `modal`, `dialog`, `popup`, `Driver`, `WebDriver`).
 - Не добавляй dummy declarations в renderer/generated output.
 - Active target declarations из `TargetStatements` регистрируются renderer’ом как method-scoped target locals; не веди глобальный список локальных переменных в config.
 - Перед изменениями migration profile прочитай `docs/agent-config-guidelines.md`.
@@ -230,3 +230,27 @@ selenium-pw-migrator --mode config-schema --out schema --format both
 
 See `docs/runtime-failure-classifier.md` and `docs/config-schema-workflow.md`.
 
+
+## Playwright TypeScript target guardrails
+
+- Use `--target ts` only when the user provides an existing Playwright TypeScript project via `--ts-project`.
+- Never generate TS migrations "in vacuum" without package.json, tsconfig.json and playwright.config.*.
+- Prefer TS-specific profile/config overrides; do not blindly reuse .NET TargetStatements.
+- After `migrate --target ts`, run `verify-ts-project` before claiming the generated TS is usable.
+- Do not edit generated `.spec.ts` manually. Fix mappings/profile rules instead.
+
+## SOURCE_ONLY_IDENTIFIER pattern backlog rule
+
+`SOURCE_ONLY_IDENTIFIER(page/pagef)` is a symptom, not a final root cause.
+
+Agents must not conclude that all `page.*` TODO are manual or impossible to fix through config. The root `page` is source-only, but concrete expressions under it can often be mapped through `UiTargets`, `Methods`, `ParameterizedMethods`, `Tables`, `Pagination`, or `TestHost`.
+
+Hard rules:
+
+- Never group TODO only by root identifier (`page`, `pagef`, `lightbox`, `modal`).
+- Never remove Selenium/POM roots from `SourceOnlyIdentifiers` only to reduce TODO.
+- Never add Selenium/POM roots to `TargetKnownIdentifiers` unless they truly exist in target Playwright code.
+- Before escalation, build a top-50 backlog by full source expression and normalized pattern.
+- Escalate concrete generic blockers such as `ClickAndOpen<T>()` or `Table.Items.ElementAt(...)`, not the entire root `page`.
+
+Read and follow `docs/agent-playbooks/source-only-pattern-backlog.md` whenever TODO are dominated by `SOURCE_ONLY_IDENTIFIER`.

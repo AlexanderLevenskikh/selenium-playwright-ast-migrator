@@ -72,7 +72,7 @@
   "$defs": {
     "targetKind": {
       "type": "string",
-      "enum": ["TestId", "Text", "Css", "XPath", "RawExpression", "Unresolved"],
+      "enum": ["TestId", "Locator", "Text", "PageObjectProperty", "RawExpression", "CssSelector", "TestIdBeginning", "ClassNameBeginning"],
       "description": "Target locator strategy. Prefer TestId; RawExpression is a last resort."
     },
     "uiTarget": {

@@ -35,6 +35,27 @@ public class ParserTests
         Assert.NotEmpty(searchBtn.BodyActions);
     }
 
+
+    [Fact]
+    public void Parse_SyntaxError_ThrowsReadableParseError()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-invalid-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file, "namespace Broken { public class BrokenTests { [Test] public void T() { var x = ; } } }");
+
+        try
+        {
+            var ex = Assert.Throws<InvalidOperationException>(() => _parser.Parse(file));
+
+            Assert.Contains("Syntax error in", ex.Message);
+            Assert.Contains("line", ex.Message);
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
     [Fact]
     public void Parse_ButtonTests_SetUp_OnFileLevel()
     {

@@ -208,3 +208,12 @@ selenium-pw-migrator --mode config-schema --out schema --format both
 
 See `docs/runtime-failure-classifier.md` and `docs/config-schema-workflow.md`.
 
+
+## TS target quick start
+
+For Selenium C# → Playwright TypeScript, first ensure a real Playwright TS project exists. Then use:
+
+```powershell
+selenium-pw-migrator --mode migrate --target ts --ts-project "<ts-project>" --input "<selenium-tests>" --config "<base-profile>" --config "<ts-project-profile>" --out "ts-migrate" --format both
+selenium-pw-migrator --mode verify-ts-project --input "migration/ts-migrate" --ts-project "<ts-project>" --out "ts-verify" --format both
+```

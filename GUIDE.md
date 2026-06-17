@@ -1297,3 +1297,34 @@ wait strategy.
 ```
 
 Если после каждой итерации метрики становятся лучше, вы двигаетесь в правильную сторону.
+
+
+## Playwright TypeScript target constraints
+
+The TypeScript target is intentionally project-aware. Do not run it as a standalone code generator.
+
+Required command shape:
+
+```bash
+selenium-pw-migrator \
+  --mode migrate \
+  --target ts \
+  --ts-project ./path/to/existing-playwright-ts-project \
+  --input ./selenium-tests \
+  --config ./profiles/infrastructure-base.adapter.json \
+  --out ./migration/generated-ts
+```
+
+`--target ts` requires `--ts-project`. The directory must contain `package.json`, `tsconfig.json`, and `playwright.config.*`. If the argument is missing or invalid, the CLI must fail during preflight with a clear message instead of generating `.spec.ts` files in isolation.
+
+After generation, validate inside the same TS project context:
+
+```bash
+selenium-pw-migrator \
+  --mode verify-ts-project \
+  --input ./migration/generated-ts \
+  --ts-project ./path/to/existing-playwright-ts-project \
+  --out ./migration/verify-ts
+```
+
+For Selenium/POM roots such as `page`, `pagef`, `lightbox`, `modal`, `dialog`, and `popup`, keep them in `SourceOnlyIdentifiers` unless the whole expression is mapped through adapter-config. Do not mark these roots as target-known.

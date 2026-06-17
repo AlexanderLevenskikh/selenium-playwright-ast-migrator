@@ -30,6 +30,7 @@
     <ProjectReference Include="..\Migrator.Roslyn\Migrator.Roslyn.csproj" />
     <ProjectReference Include="..\Migrator.SeleniumCSharp\Migrator.SeleniumCSharp.csproj" />
     <ProjectReference Include="..\Migrator.PlaywrightDotNet\Migrator.PlaywrightDotNet.csproj" />
+    <ProjectReference Include="..\Migrator.PlaywrightTypeScript\Migrator.PlaywrightTypeScript.csproj" />
   </ItemGroup>
 
   <ItemGroup>

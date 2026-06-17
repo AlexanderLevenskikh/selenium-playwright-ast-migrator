@@ -13,6 +13,7 @@
 
 1. Прочитай `agent-next-task.md` из последнего output, если он есть.
 2. Найди top issue с максимальным impact.
+   If TODO are dominated by `SOURCE_ONLY_IDENTIFIER`, do **not** group by `page/pagef`; first run the pattern-backlog analysis from `docs/agent-playbooks/source-only-pattern-backlog.md`.
 3. Найди source truth в POM/helper/base class.
 4. Внеси минимальное изменение в project profile/config.
 5. Запусти `config-validate`.
@@ -32,3 +33,4 @@
 - Все output находятся внутри `migration/`.
 - Есть before/after metrics.
 - Есть next step.
+- Если основная проблема `SOURCE_ONLY_IDENTIFIER`, есть top source-pattern backlog, а не только root-level статистика `page/pagef`.

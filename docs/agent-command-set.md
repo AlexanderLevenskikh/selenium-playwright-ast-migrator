@@ -117,3 +117,17 @@ selenium-pw-migrator --mode config-schema --out schema --format both
 
 See `docs/runtime-failure-classifier.md` and `docs/config-schema-workflow.md`.
 
+## Source-only pattern backlog command policy
+
+There is no separate CLI command for source-only pattern backlog yet. Use existing artifacts from `migrate`, `explain-todo`, and `migration-board`, then apply `docs/agent-playbooks/source-only-pattern-backlog.md` manually.
+
+Required command sequence after a config/profile attempt:
+
+```powershell
+selenium-pw-migrator --mode config-validate --config "<profile-stack>" --out config-validate
+selenium-pw-migrator --mode migrate --input "<tests>" --config "<profile-stack>" --out "<run>" --format both
+selenium-pw-migrator --mode explain-todo --input "migration/<run>" --out "<run>-explain" --format both
+selenium-pw-migrator --mode guard --before "migration/<before>" --after "migration/<run>" --out "<run>-guard"
+```
+
+If `SOURCE_ONLY_IDENTIFIER` remains dominant, report top source-patterns, not only root identifiers.

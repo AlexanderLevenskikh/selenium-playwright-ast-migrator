@@ -17,6 +17,7 @@ Each playbook describes a specific task: what input you need, step-by-step actio
 | [Runtime Proof](runtime-proof.md) | Safely attempt runtime verification |
 | [Classify Failures](classify-failures.md) | Categorize test failures |
 | [Safety Rules](safety-rules.md) | Hard rules — read before starting any task |
+| [Source-only Pattern Backlog](source-only-pattern-backlog.md) | Turn `SOURCE_ONLY_IDENTIFIER(page/pagef)` floods into actionable source-pattern backlog |
 | [Run Agent Migration Iteration](run-agent-migration-iteration.md) | One safe config/profile iteration |
 | [Escalate to Developer](escalate-to-developer.md) | Create a developer escalation package |
 | [Reuse Existing Profile](reuse-existing-profile.md) | Apply a base migration profile to a similar project |
@@ -28,7 +29,8 @@ Each playbook describes a specific task: what input you need, step-by-step actio
 2. **One change at a time**: Apply one mapping, re-run, verify improvement.
 3. **No config mutation by tool**: The tool does not modify `adapter-config.json`. You edit the config, then re-run.
 4. **Report metrics**: Always report before/after metrics for each change.
-5. **Never auto-apply**: Proposals are suggestions, not instructions to blindly apply.
+5. **Pattern before escalation**: If TODO are dominated by `SOURCE_ONLY_IDENTIFIER`, group by full source expression/pattern before creating an escalation.
+6. **Never auto-apply**: Proposals are suggestions, not instructions to blindly apply.
 
 ## Workflow for agents
 

@@ -137,7 +137,7 @@ dotnet publish Migrator.Cli -c Release -o ./publish
 
 ```json
 {
-  "SourceOnlyIdentifiers": ["page", "pagef", "Driver", "WebDriver"]
+  "SourceOnlyIdentifiers": ["page", "pagef", "lightbox", "modal", "dialog", "popup", "Driver", "WebDriver"]
 }
 ```
 
@@ -373,3 +373,32 @@ selenium-pw-migrator --mode config-schema --out schema --format both
 
 See `docs/runtime-failure-classifier.md` and `docs/config-schema-workflow.md`.
 
+
+## Experimental: Selenium C# → Playwright TypeScript
+
+Начиная с Milestone 13 мигратор умеет экспериментально генерировать Playwright TypeScript `.spec.ts` файлы:
+
+```powershell
+selenium-pw-migrator --mode migrate `
+  --target ts `
+  --ts-project "C:\path\to\playwright-ts-project" `
+  --input "C:\path\to\selenium-csharp-tests" `
+  --config "profiles\infrastructure-base.adapter.json" `
+  --config "profiles\projects\project-ts.adapter.json" `
+  --out "project-ts-migrate" `
+  --format both
+```
+
+Режим `--target ts` специально требует настоящий Playwright TS project через `--ts-project`: там должны быть `package.json`, `tsconfig.json` и `playwright.config.*`.
+
+Проверка generated TS выполняется отдельно:
+
+```powershell
+selenium-pw-migrator --mode verify-ts-project `
+  --input "migration\project-ts-migrate" `
+  --ts-project "C:\path\to\playwright-ts-project" `
+  --out "project-ts-verify" `
+  --format both
+```
+
+Подробнее: `docs/typescript-target.md` и `docs/agent-playbooks/typescript-target.md`.

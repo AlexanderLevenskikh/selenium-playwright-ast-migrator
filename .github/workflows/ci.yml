@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  dotnet:
+    name: Build and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore Migrator.sln
+
+      - name: Build
+        run: dotnet build Migrator.sln --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test Migrator.sln --no-build --configuration Release --verbosity normal
+
+      - name: Verify formatting
+        run: dotnet format Migrator.sln --verify-no-changes --no-restore --verbosity minimal

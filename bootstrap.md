@@ -808,7 +808,7 @@ Generated code компилируется и Verify проходит.
 
 ```json
 {
-  "SourceOnlyIdentifiers": ["page", "pagef", "Driver", "WebDriver"],
+  "SourceOnlyIdentifiers": ["page", "pagef", "lightbox", "modal", "dialog", "popup", "Driver", "WebDriver"],
   "TargetKnownTypes": ["Product", "Navigation"],
   "TargetKnownIdentifiers": ["Navigation"]
 }
@@ -971,3 +971,7 @@ selenium-pw-migrator --mode config-schema --out schema --format both
 
 See `docs/runtime-failure-classifier.md` and `docs/config-schema-workflow.md`.
 
+
+## Bootstrap note for TypeScript target
+
+If the target is Playwright TypeScript, bootstrap the TS project context first. The agent must know the `--ts-project` path and should create a TS-specific project profile layer instead of reusing .NET TargetStatements blindly.

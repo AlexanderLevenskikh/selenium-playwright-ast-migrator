@@ -7,6 +7,7 @@ using System.Xml.Linq;
 using Migrator.Core;
 using Migrator.Core.Models;
 using Migrator.PlaywrightDotNet;
+using Migrator.PlaywrightTypeScript;
 using Migrator.Roslyn;
 using Migrator.SeleniumCSharp;
 
@@ -27,6 +28,8 @@ bool failOnUnsupported = opts.FailOnUnsupported;
 bool failOnTodo = opts.FailOnTodo;
 string? beforePath = opts.Before;
 string? afterPath = opts.After;
+string target = opts.Target;
+string? tsProjectPath = opts.TsProject;
 
 // Agent-safety modes operate on config/report artifacts and do not process source files.
 if (mode == "config-validate")
@@ -63,7 +66,9 @@ if (mode == "discover-target" && !Directory.Exists(inputPath))
 }
 
 var parser = new RoslynTestFileParser();
-var renderer = new PlaywrightDotNetRenderer();
+IRenderer renderer = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
+    ? new PlaywrightTypeScriptRenderer()
+    : new PlaywrightDotNetRenderer();
 
 IProjectAdapter? adapter = null;
 
@@ -94,6 +99,24 @@ if (configPaths.Length > 0)
     Console.WriteLine(configPaths.Length == 1
         ? $"Loaded adapter config: {configPaths[0]}"
         : $"Loaded adapter config layers: {string.Join(" -> ", configPaths)}");
+}
+
+if (string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase) && mode == "orchestrate")
+{
+    Console.Error.WriteLine("--target ts is not supported in orchestrate yet. Use --mode migrate --target ts, then --mode verify-ts-project.");
+    return 2;
+}
+
+if (string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase) && mode == "migrate")
+{
+    var tsProjectCheck = ValidateTypeScriptPlaywrightProject(tsProjectPath);
+    if (!tsProjectCheck.IsValid)
+    {
+        Console.Error.WriteLine("TypeScript target requires a real Playwright TS project. Use --ts-project <path-to-project>.");
+        foreach (var message in tsProjectCheck.Messages)
+            Console.Error.WriteLine($"- {message}");
+        return 2;
+    }
 }
 
 // Handle doctor mode — validates environment/input/config/project context before migration.
@@ -166,6 +189,14 @@ if (mode == "profile-match")
     return profileMatchExitCode;
 }
 
+
+// Handle verify-ts-project mode — validates generated .spec.ts files inside a real Playwright TS project.
+if (mode == "verify-ts-project")
+{
+    var verifyTsExitCode = RunVerifyTsProject(inputPath, outPath, format, tsProjectPath);
+    return verifyTsExitCode;
+}
+
 // Handle scaffold mode — generates a minimal, compile-ready Playwright .NET test project
 if (mode == "scaffold")
 {
@@ -190,7 +221,7 @@ if (mode == "bootstrap-project")
 // Handle orchestrate mode — runs analyze → migrate → verify → propose pipeline
 if (mode == "orchestrate")
 {
-    var orchestrateExitCode = RunOrchestrate(inputPath, outPath, primaryConfigPath, format, parser, renderer, adapter, loadedConfig);
+    var orchestrateExitCode = RunOrchestrate(inputPath, outPath, primaryConfigPath, format, parser, renderer, adapter, loadedConfig, target);
     return orchestrateExitCode;
 }
 
@@ -198,13 +229,26 @@ var pipeline = new MigrationPipeline(parser, renderer, adapter);
 
 IEnumerable<PipelineResult> results;
 
-if (Directory.Exists(inputPath))
+try
 {
-    results = pipeline.ProcessDirectory(inputPath);
+    if (Directory.Exists(inputPath))
+    {
+        results = pipeline.ProcessDirectory(inputPath);
+    }
+    else
+    {
+        results = new[] { pipeline.ProcessFile(inputPath) };
+    }
 }
-else
+catch (InvalidOperationException ex) when (ex.Message.StartsWith("Syntax error in", StringComparison.Ordinal))
 {
-    results = new[] { pipeline.ProcessFile(inputPath) };
+    Console.Error.WriteLine($"Input parse error: {ex.Message}");
+    return 2;
+}
+catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+{
+    Console.Error.WriteLine($"Input read error: {ex.Message}");
+    return 2;
 }
 
 var resultsList = results.ToList();
@@ -216,7 +260,7 @@ switch (mode)
         RunAnalyze(summary, outPath, format, loadedConfig, resultsList, allUnmapped);
         break;
     case "migrate":
-        RunMigrate(summary, outPath, format, loadedConfig, resultsList, allUnmapped);
+        RunMigrate(summary, outPath, format, loadedConfig, resultsList, allUnmapped, target);
         break;
     case "verify":
         {
@@ -277,7 +321,7 @@ static void RunAnalyze(MigrationSummaryReport summary, string outPath, string fo
     Console.WriteLine($"Analysis written to: {Path.GetFullPath(outPath)}");
 }
 
-static void RunMigrate(MigrationSummaryReport summary, string outPath, string format, ProjectAdapterConfig? config, List<PipelineResult> results, IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped)
+static void RunMigrate(MigrationSummaryReport summary, string outPath, string format, ProjectAdapterConfig? config, List<PipelineResult> results, IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped, string target = "dotnet")
 {
     Directory.CreateDirectory(outPath);
 
@@ -286,7 +330,9 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
 
     foreach (var result in results)
     {
-        string baseName = $"{result.SourceModel.ClassName}Playwright.cs";
+        string baseName = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
+            ? $"{ToKebabCase(result.SourceModel.ClassName)}.spec.ts"
+            : $"{result.SourceModel.ClassName}Playwright.cs";
         string outName = ResolveFileName(outPath, baseName, writtenNames);
         var fullOut = Path.Combine(outPath, outName);
         File.WriteAllText(fullOut, result.GeneratedOutput);
@@ -4357,7 +4403,7 @@ static int RunBootstrapProject(string inputPath, string outPath, string format)
         PageObjects: Array.Empty<PageObjectMapping>(),
         Methods: Array.Empty<MethodMapping>(),
         LocatorSettings: new LocatorSettings("data-tid", new[] { "data-tid", "data-test", "data-testid" }),
-        SourceOnlyIdentifiers: new[] { "page", "pagef", "Driver", "WebDriver" },
+        SourceOnlyIdentifiers: new[] { "page", "pagef", "lightbox", "modal", "dialog", "popup", "Driver", "WebDriver" },
         TargetKnownTypes: Array.Empty<string>(),
         TargetKnownIdentifiers: Array.Empty<string>(),
         Verification: new VerificationConfig
@@ -4522,7 +4568,7 @@ static string BuildBootstrapProjectReport(BootstrapProjectReport report)
 
 // --- Orchestrate mode ---
 
-static int RunOrchestrate(string inputPath, string outPath, string? configPath, string format, ITestFileParser parser, IRenderer renderer, IProjectAdapter? adapter, ProjectAdapterConfig? config)
+static int RunOrchestrate(string inputPath, string outPath, string? configPath, string format, ITestFileParser parser, IRenderer renderer, IProjectAdapter? adapter, ProjectAdapterConfig? config, string target = "dotnet")
 {
     Console.WriteLine("=== Orchestrator Dry-Run ===");
     Console.WriteLine();
@@ -4608,7 +4654,9 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
 
                 foreach (var result in resultsList)
                 {
-                    string baseName = $"{result.SourceModel.ClassName}Playwright.cs";
+                    string baseName = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
+            ? $"{ToKebabCase(result.SourceModel.ClassName)}.spec.ts"
+            : $"{result.SourceModel.ClassName}Playwright.cs";
                     string outName = ResolveFileName(generatedDir, baseName, writtenNames);
                     File.WriteAllText(Path.Combine(generatedDir, outName), result.GeneratedOutput);
                     generated++;
@@ -5639,7 +5687,7 @@ static ConfigMetric[] BuildConfigMetrics(ProjectAdapterConfig config)
 static IEnumerable<ConfigSafetyIssue> AnalyzeConfigSafety(ProjectAdapterConfig config)
 {
     var issues = new List<ConfigSafetyIssue>();
-    var forbiddenTargetKnown = new HashSet<string>(new[] { "page", "pagef", "driver", "webdriver" }, StringComparer.OrdinalIgnoreCase);
+    var forbiddenTargetKnown = new HashSet<string>(new[] { "page", "pagef", "lightbox", "modal", "dialog", "popup", "driver", "webdriver" }, StringComparer.OrdinalIgnoreCase);
     var sourceOnly = FlattenSourceOnlyIdentifiers(config).ToHashSet(StringComparer.OrdinalIgnoreCase);
     var targetKnown = FlattenTargetKnownIdentifiers(config).Concat(FlattenTargetKnownTypes(config)).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -5654,7 +5702,7 @@ static IEnumerable<ConfigSafetyIssue> AnalyzeConfigSafety(ProjectAdapterConfig c
     {
         issues.Add(new ConfigSafetyIssue("error", "FORBIDDEN_TARGET_KNOWN_SYMBOL",
             $"'{symbol}' looks like a Selenium/source-only root and must not be target-known.", "TargetKnownTypes/TargetKnownIdentifiers",
-            "Keep page/pagef/Driver/WebDriver source-only, or map the whole expression through adapter-config."));
+            "Keep page/pagef/lightbox/modal/dialog/popup/Driver/WebDriver source-only, or map the whole expression through adapter-config."));
     }
 
     AddDuplicateIssues(config.UiTargets.Select(x => x.SourceExpression), "UiTargets.SourceExpression", "DUPLICATE_UI_TARGET", issues);
@@ -5761,7 +5809,7 @@ static IEnumerable<ConfigDiffChange> DiffStringSet(string section, IEnumerable<s
 static IEnumerable<ConfigSafetyIssue> BuildConfigDiffRisks(ProjectAdapterConfig before, ProjectAdapterConfig after)
 {
     var risks = new List<ConfigSafetyIssue>();
-    var forbiddenTargetKnown = new HashSet<string>(new[] { "page", "pagef", "driver", "webdriver" }, StringComparer.OrdinalIgnoreCase);
+    var forbiddenTargetKnown = new HashSet<string>(new[] { "page", "pagef", "lightbox", "modal", "dialog", "popup", "driver", "webdriver" }, StringComparer.OrdinalIgnoreCase);
     var removedSourceOnly = before.SourceOnlyIdentifiers.Except(after.SourceOnlyIdentifiers, StringComparer.OrdinalIgnoreCase).ToArray();
     foreach (var symbol in removedSourceOnly)
     {
@@ -5925,6 +5973,307 @@ static string WriteGuardMarkdown(GuardReport report)
     return sb.ToString();
 }
 
+
+// --- TypeScript Playwright target / verification ---
+
+static (bool IsValid, string[] Messages) ValidateTypeScriptPlaywrightProject(string? tsProjectPath)
+{
+    var messages = new List<string>();
+    if (string.IsNullOrWhiteSpace(tsProjectPath))
+    {
+        messages.Add("--ts-project is required for --target ts.");
+        return (false, messages.ToArray());
+    }
+
+    var root = Path.GetFullPath(tsProjectPath);
+    if (!Directory.Exists(root))
+    {
+        messages.Add($"TS project directory not found: {root}");
+        return (false, messages.ToArray());
+    }
+
+    if (!File.Exists(Path.Combine(root, "package.json")))
+        messages.Add("package.json not found in TS project root.");
+
+    if (!Directory.EnumerateFiles(root, "playwright.config.*", SearchOption.TopDirectoryOnly).Any())
+        messages.Add("playwright.config.* not found in TS project root.");
+
+    if (!File.Exists(Path.Combine(root, "tsconfig.json")))
+        messages.Add("tsconfig.json not found in TS project root.");
+
+    return (messages.Count == 0, messages.ToArray());
+}
+
+static int RunVerifyTsProject(string inputPath, string outPath, string format, string? tsProjectPath)
+{
+    Directory.CreateDirectory(outPath);
+
+    var projectCheck = ValidateTypeScriptPlaywrightProject(tsProjectPath);
+    if (!projectCheck.IsValid)
+    {
+        var failed = new TypeScriptVerifyReport(
+            DateTimeOffset.UtcNow,
+            "failed",
+            inputPath,
+            tsProjectPath ?? "",
+            Array.Empty<string>(),
+            "",
+            "",
+            "",
+            -1,
+            "",
+            string.Join(Environment.NewLine, projectCheck.Messages),
+            projectCheck.Messages,
+            projectCheck.Messages.Select(x => new TypeScriptVerifyDiagnostic(
+                x,
+                "project-context",
+                "error",
+                "Missing TypeScript Playwright project context",
+                "The TS target requires an existing Playwright TypeScript project as compilation context.",
+                "Pass --ts-project pointing to a real Playwright TS project with package.json, tsconfig.json and playwright.config.*.")).ToArray());
+        WriteTypeScriptVerifyArtifacts(failed, outPath, format);
+        return 2;
+    }
+
+    var tsProjectRoot = Path.GetFullPath(tsProjectPath!);
+    var generatedFiles = FindGeneratedTypeScriptFiles(inputPath).ToArray();
+    if (generatedFiles.Length == 0)
+    {
+        var failed = new TypeScriptVerifyReport(
+            DateTimeOffset.UtcNow,
+            "failed",
+            inputPath,
+            tsProjectRoot,
+            Array.Empty<string>(),
+            "",
+            "",
+            "",
+            -1,
+            "",
+            "No generated .ts/.spec.ts files found in input.",
+            new[] { "No generated .ts/.spec.ts files found in input." },
+            new[] { new TypeScriptVerifyDiagnostic(
+                "No generated .ts/.spec.ts files found in input.",
+                "generated-files",
+                "error",
+                "Generated files not found",
+                "verify-ts-project can only check TypeScript files generated by migrate --target ts.",
+                "Run migrate with --target ts first, then pass that migration output folder to verify-ts-project.") });
+        WriteTypeScriptVerifyArtifacts(failed, outPath, format);
+        return 2;
+    }
+
+    var verifyDir = Path.Combine(outPath, "ts-verify");
+    Directory.CreateDirectory(verifyDir);
+    var copied = new List<string>();
+    foreach (var file in generatedFiles)
+    {
+        var relative = MakeSafeRelativeName(inputPath, file);
+        var destination = Path.Combine(verifyDir, relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        File.Copy(file, destination, overwrite: true);
+        copied.Add(destination);
+    }
+
+    var tsconfigPath = Path.Combine(verifyDir, "tsconfig.migrator.json");
+    WriteTypeScriptVerifyTsConfig(tsconfigPath, tsProjectRoot, copied);
+
+    var command = "npx tsc -p " + QuoteForShell(tsconfigPath) + " --noEmit";
+    var result = RunSimpleProcess("npx", new[] { "tsc", "-p", tsconfigPath, "--noEmit" }, tsProjectRoot);
+    var diagnostics = ExtractTypeScriptDiagnostics(result.StdOut + Environment.NewLine + result.StdErr).ToArray();
+    var status = result.ExitCode == 0 ? "passed" : "failed";
+
+    var report = new TypeScriptVerifyReport(
+        DateTimeOffset.UtcNow,
+        status,
+        inputPath,
+        tsProjectRoot,
+        copied.ToArray(),
+        verifyDir,
+        tsconfigPath,
+        command,
+        result.ExitCode,
+        result.StdOut,
+        result.StdErr,
+        diagnostics.Select(x => x.Raw).ToArray(),
+        diagnostics);
+
+    WriteTypeScriptVerifyArtifacts(report, outPath, format);
+    Console.WriteLine($"TypeScript project verification: {status}");
+    Console.WriteLine($"Report written to: {Path.GetFullPath(outPath)}");
+    return result.ExitCode == 0 ? 0 : 2;
+}
+
+static IEnumerable<string> FindGeneratedTypeScriptFiles(string inputPath)
+{
+    if (File.Exists(inputPath) && (inputPath.EndsWith(".ts", StringComparison.OrdinalIgnoreCase) || inputPath.EndsWith(".tsx", StringComparison.OrdinalIgnoreCase)))
+        return new[] { Path.GetFullPath(inputPath) };
+
+    if (!Directory.Exists(inputPath))
+        return Array.Empty<string>();
+
+    var root = Path.GetFullPath(inputPath);
+    var candidates = Directory.EnumerateFiles(root, "*.ts", SearchOption.AllDirectories)
+        .Where(x => !x.Contains($"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+        .Where(x => !Path.GetFileName(x).Equals("tsconfig.migrator.json", StringComparison.OrdinalIgnoreCase))
+        .ToArray();
+
+    var specFiles = candidates.Where(x => x.EndsWith(".spec.ts", StringComparison.OrdinalIgnoreCase) || x.EndsWith(".test.ts", StringComparison.OrdinalIgnoreCase)).ToArray();
+    return specFiles.Length > 0 ? specFiles : candidates;
+}
+
+static string MakeSafeRelativeName(string basePath, string filePath)
+{
+    var root = Directory.Exists(basePath) ? Path.GetFullPath(basePath) : Path.GetDirectoryName(Path.GetFullPath(basePath)) ?? Directory.GetCurrentDirectory();
+    var full = Path.GetFullPath(filePath);
+    var relative = Path.GetRelativePath(root, full);
+    if (relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative))
+        relative = Path.GetFileName(full);
+    return relative;
+}
+
+static void WriteTypeScriptVerifyTsConfig(string path, string tsProjectRoot, IReadOnlyList<string> files)
+{
+    var projectTsconfig = Path.Combine(tsProjectRoot, "tsconfig.json");
+    var extendsPath = NormalizeJsonPath(Path.GetRelativePath(Path.GetDirectoryName(path)!, projectTsconfig));
+    var fileItems = files.Select(x => "    " + System.Text.Json.JsonSerializer.Serialize(NormalizeJsonPath(Path.GetRelativePath(Path.GetDirectoryName(path)!, x))));
+    var content = $$"""
+{
+  "extends": "{{extendsPath}}",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "files": [
+{{string.Join(",\n", fileItems)}}
+  ]
+}
+""";
+    File.WriteAllText(path, content);
+}
+
+static string NormalizeJsonPath(string path) => path.Replace('\\', '/');
+
+static IEnumerable<TypeScriptVerifyDiagnostic> ExtractTypeScriptDiagnostics(string text)
+{
+    foreach (var rawLine in text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+    {
+        var line = rawLine.Trim();
+        if (line.Length == 0)
+            continue;
+        if (!line.Contains("error TS", StringComparison.OrdinalIgnoreCase)
+            && !line.Contains("Cannot find module", StringComparison.OrdinalIgnoreCase)
+            && !line.Contains("not found", StringComparison.OrdinalIgnoreCase))
+            continue;
+
+        var codeMatch = System.Text.RegularExpressions.Regex.Match(line, @"\bTS\d+\b");
+        var code = codeMatch.Success ? codeMatch.Value : "ts-runtime";
+        var category = ClassifyTypeScriptDiagnostic(line, code);
+        yield return new TypeScriptVerifyDiagnostic(line, code, "error", category.Category, category.LikelyCause, category.SuggestedAction);
+    }
+}
+
+static (string Category, string LikelyCause, string SuggestedAction) ClassifyTypeScriptDiagnostic(string line, string code)
+{
+    if (line.Contains("Cannot find module", StringComparison.OrdinalIgnoreCase) || code == "TS2307")
+        return ("missing-module-or-import", "Generated TS code imports a helper/module that the TS project cannot resolve.", "Check TS profile imports, tsconfig paths and package/project dependencies.");
+    if (line.Contains("Cannot find name", StringComparison.OrdinalIgnoreCase) || code == "TS2304")
+        return ("unknown-identifier", "Generated TS code references an identifier that is not declared/imported.", "Add TS-specific mapping/import or keep source-only code as TODO.");
+    if (line.Contains("Property", StringComparison.OrdinalIgnoreCase) && line.Contains("does not exist", StringComparison.OrdinalIgnoreCase))
+        return ("missing-member", "Generated TS code calls a property/method that does not exist on the target type.", "Check mapping target API and TS fixture/helper types.");
+    if (line.Contains("is not assignable", StringComparison.OrdinalIgnoreCase) || code == "TS2322" || code == "TS2345")
+        return ("type-mismatch", "Generated TS expression has incompatible type/signature.", "Adjust TS mapping, helper signature or generated expression.");
+    return ("typescript-compile", "TypeScript compiler reported an error.", "Inspect diagnostic and update TS profile/mapping or project references.");
+}
+
+static void WriteTypeScriptVerifyArtifacts(TypeScriptVerifyReport report, string outPath, string format)
+{
+    Directory.CreateDirectory(outPath);
+    if (format is "json" or "both")
+        File.WriteAllText(Path.Combine(outPath, "ts-project-verify-report.json"), System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    if (format is "text" or "both")
+    {
+        File.WriteAllText(Path.Combine(outPath, "ts-project-verify-report.md"), BuildTypeScriptVerifyMarkdown(report));
+        File.WriteAllText(Path.Combine(outPath, "agent-ts-verify-next-task.md"), BuildAgentTypeScriptVerifyNextTask(report));
+    }
+}
+
+static string BuildTypeScriptVerifyMarkdown(TypeScriptVerifyReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# TypeScript Project Verification Report");
+    sb.AppendLine();
+    sb.AppendLine($"Status: **{report.Status}**");
+    sb.AppendLine($"TS project: `{report.TsProjectPath}`");
+    sb.AppendLine($"Input: `{report.InputPath}`");
+    sb.AppendLine($"Generated files: {report.GeneratedFiles.Length}");
+    sb.AppendLine($"Exit code: {report.ExitCode}");
+    sb.AppendLine();
+    sb.AppendLine("## Diagnostics");
+    if (report.ClassifiedDiagnostics.Length == 0)
+    {
+        sb.AppendLine("No TypeScript diagnostics captured.");
+    }
+    else
+    {
+        foreach (var group in report.ClassifiedDiagnostics.GroupBy(x => x.Category).OrderByDescending(x => x.Count()))
+        {
+            sb.AppendLine($"### {group.Key} ({group.Count()})");
+            foreach (var item in group.Take(10))
+            {
+                sb.AppendLine($"- `{item.Code}` {item.Raw}");
+                sb.AppendLine($"  - Cause: {item.LikelyCause}");
+                sb.AppendLine($"  - Next: {item.SuggestedAction}");
+            }
+            sb.AppendLine();
+        }
+    }
+    return sb.ToString();
+}
+
+static string BuildAgentTypeScriptVerifyNextTask(TypeScriptVerifyReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Agent next task: TypeScript verification");
+    sb.AppendLine();
+    sb.AppendLine($"Status: **{report.Status}**");
+    sb.AppendLine();
+    if (report.Status == "passed")
+    {
+        sb.AppendLine("TS compile verification passed. Next: run smoke-plan/runtime readiness or execute one selected Playwright test in the real TS project.");
+        return sb.ToString();
+    }
+    sb.AppendLine("## What to do");
+    sb.AppendLine("- Do not edit generated .spec.ts manually.");
+    sb.AppendLine("- Prefer TS-specific profile/config mappings and imports.");
+    sb.AppendLine("- If a missing identifier is source-only Selenium/C# helper, keep it TODO or map it to a real TS helper.");
+    sb.AppendLine("- If a module/import is missing, check TS project paths, package deps and profile imports.");
+    sb.AppendLine();
+    sb.AppendLine("## Top categories");
+    foreach (var group in report.ClassifiedDiagnostics.GroupBy(x => x.Category).OrderByDescending(x => x.Count()).Take(5))
+        sb.AppendLine($"- {group.Key}: {group.Count()}");
+    return sb.ToString();
+}
+
+static string ToKebabCase(string value)
+{
+    if (string.IsNullOrWhiteSpace(value))
+        return "generated-test";
+    var sb = new StringBuilder();
+    for (int i = 0; i < value.Length; i++)
+    {
+        var ch = value[i];
+        if (char.IsUpper(ch) && i > 0 && (char.IsLower(value[i - 1]) || (i + 1 < value.Length && char.IsLower(value[i + 1]))))
+            sb.Append('-');
+        if (char.IsLetterOrDigit(ch))
+            sb.Append(char.ToLowerInvariant(ch));
+        else if (sb.Length > 0 && sb[^1] != '-')
+            sb.Append('-');
+    }
+    return sb.ToString().Trim('-');
+}
+
+static string QuoteForShell(string value) => value.Contains(' ') ? $"\"{value}\"" : value;
+
 static CliOptions? ParseArgs(string[] args)
 {
     string mode = "migrate";
@@ -5938,6 +6287,8 @@ static CliOptions? ParseArgs(string[] args)
     bool failOnTodo = false;
     string? before = null;
     string? after = null;
+    string target = "dotnet";
+    string? tsProject = null;
 
     for (int i = 0; i < args.Length; i++)
     {
@@ -6009,6 +6360,24 @@ static CliOptions? ParseArgs(string[] args)
                     return null;
                 }
                 break;
+            case "--target":
+                if (i + 1 < args.Length)
+                    target = args[++i];
+                else
+                {
+                    Console.Error.WriteLine("--target requires a value: dotnet|ts");
+                    return null;
+                }
+                break;
+            case "--ts-project":
+                if (i + 1 < args.Length)
+                    tsProject = args[++i];
+                else
+                {
+                    Console.Error.WriteLine("--ts-project requires a value");
+                    return null;
+                }
+                break;
             case "--format":
                 if (i + 1 < args.Length)
                     format = args[++i];
@@ -6045,9 +6414,9 @@ static CliOptions? ParseArgs(string[] args)
         }
     }
 
-    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "doctor" && mode != "explain-todo" && mode != "smoke-plan" && mode != "runtime-classify" && mode != "migration-board" && mode != "profile-match" && mode != "config-schema" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "orchestrate" && mode != "scaffold" && mode != "bootstrap-project")
+    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "verify-ts-project" && mode != "doctor" && mode != "explain-todo" && mode != "smoke-plan" && mode != "runtime-classify" && mode != "migration-board" && mode != "profile-match" && mode != "config-schema" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "orchestrate" && mode != "scaffold" && mode != "bootstrap-project")
     {
-        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|verify-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project");
+        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project");
         return null;
     }
 
@@ -6068,6 +6437,21 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
+    if (!string.Equals(target, "dotnet", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase))
+    {
+        Console.Error.WriteLine($"Invalid --target: {target}. Use: dotnet|ts");
+        return null;
+    }
+
+    if (string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase) &&
+        mode == "migrate" &&
+        string.IsNullOrWhiteSpace(tsProject))
+    {
+        Console.Error.WriteLine("--target ts requires --ts-project <path-to-existing-playwright-ts-project>.");
+        return null;
+    }
+
     if (string.IsNullOrEmpty(workspace))
     {
         Console.Error.WriteLine("--workspace must not be empty");
@@ -6082,6 +6466,7 @@ static CliOptions? ParseArgs(string[] args)
             "migrate" => "generated-tests",
             "verify" => "verify",
             "verify-project" => "verify-project",
+            "verify-ts-project" => "verify-ts-project",
             "doctor" => "doctor",
             "explain-todo" => "explain-todo",
             "smoke-plan" => "smoke-plan",
@@ -6110,7 +6495,13 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
-    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after);
+    if (target != "dotnet" && target != "ts")
+    {
+        Console.Error.WriteLine($"Invalid target: {target}. Use: dotnet|ts");
+        return null;
+    }
+
+    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, tsProject);
 }
 
 static string ResolveOutputDirectory(string outDir, string workspace)
@@ -6674,6 +7065,12 @@ Modes:
                     .csproj/transitive ProjectReference/build props when enabled,
                     runs dotnet build, and classifies build diagnostics.
                     Does NOT modify source project files.
+  verify-ts-project
+                  TypeScript project-aware verification for generated .spec.ts files.
+                    Requires --ts-project pointing to a real Playwright TS project with
+                    package.json, tsconfig.json and playwright.config.*. Copies generated
+                    files into workspace, creates tsconfig.migrator.json, and runs
+                    npx tsc --noEmit. Does NOT modify the TS project.
   doctor          Preflight diagnostics for agent/user workflows. Checks input scope,
                     adapter-config layers, config safety, nearest .csproj/.sln,
                     verification references, NuGet/build files, POM/source-truth
@@ -6736,7 +7133,7 @@ Modes:
 
 Options:
     --mode <mode>                 Operation mode (required)
-                                    analyze|migrate|verify|verify-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project
+                                    analyze|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project
     --input <file-or-directory>   Input .cs file or directory (required).
                                     For propose/explain-todo/migration-board: directory with report files.
                                     For runtime-classify: runtime log file or directory with logs/reports.
@@ -6748,12 +7145,18 @@ Options:
                                       project refs come from adapter-config Verification,
                                       nearest .csproj auto-discovery, and transitive
                                       ProjectReference discovery when enabled.
+                                    For verify-ts-project: generated TS migration folder or .spec.ts file.
                                     For scaffold/bootstrap-project/config-schema: not required.
    --out <output-directory>      Output directory inside --workspace by default.
                                   Relative paths like orchestration-7 become migration/orchestration-7.
                                   Use an absolute path to write outside workspace.
    --workspace <directory>        Migration artifacts root (default: migration).
                                   All relative --out paths are kept under this root.
+   --target <dotnet|ts>            Generation target for migrate/orchestrate (default: dotnet).
+                                  --target ts requires --ts-project.
+   --ts-project <directory>        Existing Playwright TypeScript project root for --target ts
+                                  and verify-ts-project. Must contain package.json,
+                                  tsconfig.json and playwright.config.*.
    --config <adapter-config.json>  Adapter config layer. Can be repeated.
                                   Layers are merged left-to-right; later/project configs override base profiles.
    --before <path>                Previous config/artifact path for config-diff/guard
@@ -6903,6 +7306,10 @@ record PomFact(string SourceExpression, string OwnerType, string MemberName, str
 record PomUsageCandidate(string SourceExpression, string SuggestedTargetExpression, string SuggestedTargetKind, int Usages, string ExampleFile, int ExampleLine, string Confidence, bool RequiresSourceTruth, string Notes);
 
 
+
+record TypeScriptVerifyReport(DateTimeOffset GeneratedAtUtc, string Status, string InputPath, string TsProjectPath, string[] GeneratedFiles, string VerifyDirectory, string TsConfigPath, string Command, int ExitCode, string StdOut, string StdErr, string[] Diagnostics, TypeScriptVerifyDiagnostic[] ClassifiedDiagnostics);
+record TypeScriptVerifyDiagnostic(string Raw, string Code, string Severity, string Category, string LikelyCause, string SuggestedAction);
+
 record RuntimeFailureReport(DateTimeOffset GeneratedAtUtc, string Source, int FilesScanned, int Observations, RuntimeFailureGroup[] Groups, string[] RecommendedNextActions);
 record RuntimeFailureGroup(string Category, int Count, string Severity, string LikelyCause, string SuggestedAction, RuntimeFailureObservation[] Examples);
 record RuntimeFailureObservation(string Category, string File, int Line, string? TestName, string Message, string Snippet);
@@ -6920,4 +7327,4 @@ record DoctorReport(DateTimeOffset GeneratedAtUtc, string Status, string InputPa
 record DoctorCheck(string Status, string Code, string Message, string? Location, string SuggestedAction);
 record SimpleProcessResult(int ExitCode, string StdOut, string StdErr);
 
-record CliOptions(string Mode, string Input, string Out, string? Config, string[] Configs, string Format, bool FailOnUnsupported, bool FailOnTodo, string Workspace, string? Before, string? After);
+record CliOptions(string Mode, string Input, string Out, string? Config, string[] Configs, string Format, bool FailOnUnsupported, bool FailOnTodo, string Workspace, string? Before, string? After, string Target, string? TsProject);

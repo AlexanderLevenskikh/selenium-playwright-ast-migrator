@@ -180,3 +180,17 @@ selenium-pw-migrator --mode config-schema --out schema --format both
 
 See `docs/runtime-failure-classifier.md` and `docs/config-schema-workflow.md`.
 
+## SOURCE_ONLY_IDENTIFIER workflow
+
+If `explain-todo` / `migration-board` shows that most TODO are `SOURCE_ONLY_IDENTIFIER` for `page`, `pagef`, `lightbox`, or `modal`, the agent must switch to pattern-backlog mode before escalating.
+
+Required behavior:
+
+1. Keep Selenium/POM roots in `SourceOnlyIdentifiers`.
+2. Do not add these roots to `TargetKnownIdentifiers` unless the target Playwright project really defines them.
+3. Extract full source expressions from TODO `Source:` lines.
+4. Group by normalized pattern: loader/wait, click/open/modal, input/fill, assertions, table/list, navigation/WebDriver, modal/lightbox scope.
+5. Apply safe high-frequency config/profile mappings first.
+6. Escalate only concrete generic blockers, for example `ClickAndOpen<T>()` or `Table.Items.ElementAt(...)`.
+
+Detailed playbook: `docs/agent-playbooks/source-only-pattern-backlog.md`.

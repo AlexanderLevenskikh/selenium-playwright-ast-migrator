@@ -80,3 +80,24 @@ For every change, report:
 - After metrics: same
 - What changed: specific config entry added or modified
 - Verification: confirm the change produced the expected result
+
+## Never treat source-only root statistics as final root cause
+
+`SOURCE_ONLY_IDENTIFIER(page)` means the root belongs to Selenium/POM source code. It does **not** mean every `page.*` line is manual.
+
+Bad analysis:
+
+```text
+page: 1540 TODO, impossible to fix through config.
+```
+
+Required analysis:
+
+```text
+page.Loader.ValidateLoading()      -> method/wait mapping
+page.Save.Click()                  -> UiTarget + click mapping
+page.Table.Items.ElementAt(i).Text -> table/list recognizer
+page.AddReasons.ClickAndOpen<T>()  -> generic click/open/modal blocker
+```
+
+Do not remove source-only roots or promote them to target-known just to silence TODO. Build a source-pattern backlog first.

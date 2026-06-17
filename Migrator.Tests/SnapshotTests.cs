@@ -4,6 +4,7 @@ using System.Reflection;
 using Migrator.Core;
 using Migrator.Core.Models;
 using Migrator.PlaywrightDotNet;
+using Migrator.PlaywrightTypeScript;
 using Migrator.Roslyn;
 using Migrator.SeleniumCSharp;
 using Xunit;
@@ -4313,6 +4314,42 @@ public class TestIdBeginningPipelineTests
         // Output compiles
         Assert.True(CompileChecker.CompilesWithoutErrors(output),
             CompileChecker.FormatErrors(output));
+    }
+
+
+    [Fact]
+    public void TypeScriptRenderer_RendersBasicPlaywrightSpecAndSmartTodo()
+    {
+        var model = new TestFileModel(
+            "ButtonTests.cs",
+            "Example.Tests",
+            "ButtonTests",
+            null,
+            Array.Empty<TestAction>(),
+            new[]
+            {
+                new TestModel(
+                    "CheckSearchButton",
+                    null,
+                    Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(),
+                    new TestAction[]
+                    {
+                        new ClickAction(10, TargetExpression.Mapped("page.SearchButton", "SearchButton", TargetKind.PlaywrightLocator, "data-tid")),
+                        new SendKeysAction(11, TargetExpression.Mapped("page.Query", "QueryInput", TargetKind.PlaywrightLocator, "data-tid"), "\"hello\"", RecognitionConfidence.Semantic),
+                        new AssertAreEqualAction(12, "\"hello\"", "result", RecognitionConfidence.Semantic),
+                        new RawStatementAction(13, "page.LegacyHelper.DoSomething();")
+                    })
+            });
+
+        var output = new PlaywrightTypeScriptRenderer().Render(model);
+
+        Assert.Contains("import { test, expect } from '@playwright/test';", output);
+        Assert.Contains("test('CheckSearchButton', async ({ page }) => {", output);
+        Assert.Contains("await page.locator('[data-tid=\\'SearchButton\\']').click();", output);
+        Assert.Contains("await page.locator('[data-tid=\\'QueryInput\\']').fill(\"hello\");", output);
+        Assert.Contains("expect(result).toEqual(\"hello\");", output);
+        Assert.Contains("[MIGRATOR:RAW_STATEMENT]", output);
     }
 
     [Fact]
