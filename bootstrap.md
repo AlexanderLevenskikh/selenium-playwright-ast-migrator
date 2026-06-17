@@ -887,3 +887,19 @@ dotnet run --project .\Migrator.Cli -- --mode bootstrap-project --input "<tests>
 
 После `migrate`/`verify-project` можно запустить `--mode smoke-plan`, чтобы выбрать самые близкие к runtime запуску тесты. Режим читает generated `.cs`, `project-verify-report.json` и `explain-todo.json`, затем пишет `smoke-plan.md/json`, `runtime-checklist.md` и `agent-runtime-next-task.md`. Агент должен брать Level 4/5 кандидаты по одному, не запускать весь пакет сразу и не править generated `.cs` вручную. Подробности: `docs/runtime-readiness.md`.
 
+## Bootstrap для распространения инструмента
+
+Для нового проекта лучше зафиксировать версию мигратора через local tool manifest:
+
+```powershell
+dotnet new tool-manifest
+dotnet tool install SeleniumPlaywrightAstMigrator --version 0.6.0-preview.1 --add-source company-nuget
+dotnet tool restore
+```
+
+После этого агент и CI должны запускать мигратор через:
+
+```powershell
+dotnet tool run selenium-pw-migrator -- --mode bootstrap-project --input "<tests>" --out "project-bootstrap"
+```
+

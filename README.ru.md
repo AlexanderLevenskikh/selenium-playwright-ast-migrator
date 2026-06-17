@@ -242,3 +242,34 @@ dotnet run --project .\Migrator.Cli -- --mode bootstrap-project --input "<tests>
 
 После `migrate`/`verify-project` можно запустить `--mode smoke-plan`, чтобы выбрать самые близкие к runtime запуску тесты. Режим читает generated `.cs`, `project-verify-report.json` и `explain-todo.json`, затем пишет `smoke-plan.md/json`, `runtime-checklist.md` и `agent-runtime-next-task.md`. Агент должен брать Level 4/5 кандидаты по одному, не запускать весь пакет сразу и не править generated `.cs` вручную. Подробности: `docs/runtime-readiness.md`.
 
+## Milestone 6: упаковка и распространение
+
+CLI можно упаковать как внутренний `dotnet tool` и распространять через корпоративный NuGet.
+
+Быстрая упаковка:
+
+```powershell
+.\scripts\pack-tool.ps1 -Version 0.6.0-preview.1
+```
+
+Локальная проверка установленного tool:
+
+```powershell
+.\scripts\install-local-tool.ps1 -Version 0.6.0-preview.1
+```
+
+Публикация во внутренний feed:
+
+```powershell
+.\scripts\push-tool.ps1 -Version 0.6.0-preview.1 -Source company-nuget -ApiKey $env:NUGET_API_KEY
+```
+
+Рекомендуемый способ для проектов — local tool manifest:
+
+```powershell
+dotnet tool restore
+dotnet tool run selenium-pw-migrator -- --mode verify-project --input "Tests/DiscountsTests" --config "profiles/infrastructure-base.adapter.json" --config "profiles/projects/discounts.adapter.json" --out "discounts-verify" --format both
+```
+
+Подробнее: `docs/packaging-and-distribution.md` и `docs/tool-installation.md`.
+

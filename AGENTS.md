@@ -138,3 +138,16 @@ dotnet run --project .\Migrator.Cli -- --mode bootstrap-project --input "<tests>
 
 После `migrate`/`verify-project` можно запустить `--mode smoke-plan`, чтобы выбрать самые близкие к runtime запуску тесты. Режим читает generated `.cs`, `project-verify-report.json` и `explain-todo.json`, затем пишет `smoke-plan.md/json`, `runtime-checklist.md` и `agent-runtime-next-task.md`. Агент должен брать Level 4/5 кандидаты по одному, не запускать весь пакет сразу и не править generated `.cs` вручную. Подробности: `docs/runtime-readiness.md`.
 
+## Milestone 6: правила для агента при упаковке tool
+
+Если пользователь просит упаковать или опубликовать мигратор, работай по `docs/agent-playbooks/package-and-publish-tool.md`.
+
+Обязательные правила:
+
+- не публикуй пакет без явного разрешения пользователя;
+- не записывай реальные токены/API keys в файлы;
+- перед pack запускай `dotnet test --no-restore`;
+- после pack проверяй локальную установку через `scripts/install-local-tool.ps1`;
+- для команд рекомендуй local tool manifest, а не global install;
+- публикуй preview-версии, пока CLI/config активно меняются.
+

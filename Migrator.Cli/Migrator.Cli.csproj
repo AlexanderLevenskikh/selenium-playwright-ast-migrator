@@ -1,10 +1,26 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+
+    <!-- Milestone 6: package the CLI as an internal dotnet tool.
+         Override PackageId/Version at pack time if your internal feed uses another naming convention:
+         dotnet pack ./Migrator.Cli/Migrator.Cli.csproj -c Release -o ./artifacts/nuget /p:PackageId=Company.SeleniumPlaywrightMigrator /p:Version=0.6.0-preview.1
+    -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>selenium-pw-migrator</ToolCommandName>
+    <PackageId>SeleniumPlaywrightAstMigrator</PackageId>
+    <Version>0.6.0-preview.1</Version>
+    <Authors>Migration Toolkit Team</Authors>
+    <Company>Internal</Company>
+    <Description>Agent-assisted Selenium C# to Playwright .NET AST migration toolkit.</Description>
+    <PackageTags>selenium;playwright;migration;testing;dotnet-tool</PackageTags>
+    <PackageReadmeFile>README_TOOL.md</PackageReadmeFile>
+    <RepositoryType>git</RepositoryType>
+    <IsPackable>true</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,5 +31,21 @@
     <ProjectReference Include="..\Migrator.SeleniumCSharp\Migrator.SeleniumCSharp.csproj" />
     <ProjectReference Include="..\Migrator.PlaywrightDotNet\Migrator.PlaywrightDotNet.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README_TOOL.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!-- Dotnet tool packages do not run from the source tree.
+       Include project-reference outputs in the tool package so the installed tool can load Migrator.Core/Roslyn/etc. -->
+  <PropertyGroup>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);CopyProjectReferencesToPackage</TargetsForTfmSpecificBuildOutput>
+  </PropertyGroup>
+
+  <Target Name="CopyProjectReferencesToPackage" DependsOnTargets="ResolveReferences">
+    <ItemGroup>
+      <BuildOutputInPackage Include="@(ReferenceCopyLocalPaths)" Condition="'%(ReferenceCopyLocalPaths.ReferenceSourceTarget)' == 'ProjectReference'" />
+    </ItemGroup>
+  </Target>
 
 </Project>

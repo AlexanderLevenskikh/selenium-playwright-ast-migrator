@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "seleniumplaywrightastmigrator": {
+      "version": "0.6.0-preview.1",
+      "commands": [
+        "selenium-pw-migrator"
+      ],
+      "rollForward": false
+    }
+  }
+}

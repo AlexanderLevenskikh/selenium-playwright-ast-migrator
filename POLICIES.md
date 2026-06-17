@@ -2855,3 +2855,12 @@ dotnet run --project .\Migrator.Cli -- --mode bootstrap-project --input "<tests>
 
 После `migrate`/`verify-project` можно запустить `--mode smoke-plan`, чтобы выбрать самые близкие к runtime запуску тесты. Режим читает generated `.cs`, `project-verify-report.json` и `explain-todo.json`, затем пишет `smoke-plan.md/json`, `runtime-checklist.md` и `agent-runtime-next-task.md`. Агент должен брать Level 4/5 кандидаты по одному, не запускать весь пакет сразу и не править generated `.cs` вручную. Подробности: `docs/runtime-readiness.md`.
 
+## Packaging / internal NuGet policy
+
+- Публикация во внутренний NuGet разрешена только после явного подтверждения пользователя.
+- Запрещено коммитить токены, API keys и реальные credentials.
+- `nuget/NuGet.internal.template.config` — только шаблон, реальные секреты туда не добавлять.
+- Перед публикацией должны проходить `dotnet test --no-restore` и локальный smoke установленного tool.
+- Для пилотных команд предпочтителен local tool manifest (`.config/dotnet-tools.json`), чтобы версия мигратора была закреплена в проекте.
+- Если пакет опубликован неудачно, не пытайся перетирать стабильную версию: выпускай новую preview-версию.
+
