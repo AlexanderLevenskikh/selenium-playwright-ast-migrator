@@ -187,3 +187,20 @@ dotnet run --project .\Migrator.Cli -- --mode doctor --input "<tests>" --config 
 
 Режим ничего не меняет: он проверяет input, config layers, ближайший `.csproj`/`.sln`, `NuGet.config`, `Verification`, POM/source-truth кандидаты и доступность `dotnet`. Артефакты: `doctor-report.md/json` и `agent-doctor-next-task.md`. Подробности: `docs/doctor-mode.md`.
 
+
+## Milestone 9 agent notes: smart TODO + schema
+
+Generated TODO comments may contain `MIGRATOR:<CODE>` markers. Agents should use these codes to choose the next action:
+
+- `MISSING_MAPPING` → inspect POM/source truth and add adapter mapping.
+- `SOURCE_ONLY_IDENTIFIER` → do not mark the root as target-known; map the whole expression or leave TODO.
+- `UNRESOLVED_SYMBOL` → find the first earlier TODO that blocked the symbol.
+- `UNAVAILABLE_SYMBOLS` → add `TargetKnownTypes`/`TargetKnownIdentifiers` only when the symbol is truly available in target code.
+- `UNRESOLVED_PLACEHOLDER` → fix `SourceMethodPattern`/`TargetStatements` placeholders.
+- `TABLE_MAPPING_REQUIRED` → add `Tables` mapping with source-backed `RowTarget`.
+
+Use `schemas/adapter-config.schema.json` in config/profile files for editor hints. JSON Schema does not replace `config-validate`; always run safety validation after config changes.
+
+## Migration Board rule
+
+После `migrate` / `verify-project` / `smoke-plan` агент должен смотреть `migration-board.html` или `migration-board.md`, если файл есть. Не заставляй пользователя читать сырые JSON/MD отчёты, если доска уже собрана. Используй блок `Recommended next actions` как следующий план.

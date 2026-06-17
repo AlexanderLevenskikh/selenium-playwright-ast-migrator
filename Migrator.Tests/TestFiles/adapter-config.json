@@ -1,4 +1,5 @@
 {
+  "$schema": "../../schemas/adapter-config.schema.json",
   "SourceProjectName": "Example.E2ETests",
   "UiTargets": [
     {

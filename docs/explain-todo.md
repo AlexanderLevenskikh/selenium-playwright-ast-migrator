@@ -78,3 +78,15 @@ dotnet run --project .\Migrator.Cli -- --mode explain-todo --input "migration/ve
 ```
 
 Результат будет в `migration/explain-todo-1`.
+
+## Smart TODO markers
+
+Generated code may include TODO markers such as:
+
+```csharp
+// TODO: depends on unresolved symbol 'discountRow' [MIGRATOR:UNRESOLVED_SYMBOL]
+```
+
+`explain-todo` reads these markers from generated `.cs` files when they are present in the artifact directory and adds them as additional insights. This helps explain TODOs that do not appear in `unmapped-targets.json` or `unsupported-actions.json`, for example raw statements, unresolved placeholders, and source-only cascades.
+
+The marker format is intentionally backward compatible: the first line still starts with `// TODO:` so existing TODO counters continue to work.

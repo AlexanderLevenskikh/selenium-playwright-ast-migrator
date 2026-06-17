@@ -1,4 +1,5 @@
 {
+  "$schema": "../../../../schemas/adapter-config.schema.json",
   "SourceProjectName": "DiscountsTests",
   "UiTargets": [
     {
@@ -12,7 +13,9 @@
       "TargetKind": "TestId"
     }
   ],
-  "TargetKnownTypes": ["DiscountStatus"],
+  "TargetKnownTypes": [
+    "DiscountStatus"
+  ],
   "Verification": {
     "ProjectReferences": [
       "TODO/path/to/Discounts.E2ETests.csproj"

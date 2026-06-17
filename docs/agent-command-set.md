@@ -77,3 +77,17 @@ dotnet run --project .\Migrator.Cli -- --mode doctor --input "<tests>" --config 
 
 Режим ничего не меняет: он проверяет input, config layers, ближайший `.csproj`/`.sln`, `NuGet.config`, `Verification`, POM/source-truth кандидаты и доступность `dotnet`. Артефакты: `doctor-report.md/json` и `agent-doctor-next-task.md`. Подробности: `docs/doctor-mode.md`.
 
+
+## Smart TODO codes
+
+Agents may read generated code and use `[MIGRATOR:<CODE>]` TODO markers as input for the next iteration. The code explains why a line stayed TODO and which class of action is expected. See `docs/smart-todo-comments.md`.
+
+### migration-board
+
+Read-only команда для сборки HTML-доски по существующим артефактам:
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode migration-board --input migration/verify-project --out board --format both
+```
+
+Агент должен использовать её для финальной сводки итерации.

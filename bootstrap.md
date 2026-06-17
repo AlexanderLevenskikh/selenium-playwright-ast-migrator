@@ -935,3 +935,13 @@ dotnet run --project .\Migrator.Cli -- --mode doctor --input "<tests>" --config 
 
 Режим ничего не меняет: он проверяет input, config layers, ближайший `.csproj`/`.sln`, `NuGet.config`, `Verification`, POM/source-truth кандидаты и доступность `dotnet`. Артефакты: `doctor-report.md/json` и `agent-doctor-next-task.md`. Подробности: `docs/doctor-mode.md`.
 
+
+## Milestone 9 bootstrap reminder
+
+New profile/config skeletons should include a `$schema` property that points to `schemas/adapter-config.schema.json`.
+
+Generated TODO comments now include machine-readable `MIGRATOR:<CODE>` markers. Bootstrap/agent prompts should instruct agents to classify TODOs by these codes before changing config.
+
+## Migration board
+
+Для нового проекта после первого `verify-project` запусти или открой автоматически созданный `migration-board.html`. Он покажет, что чинить первым и какие тесты ближе всего к runtime.

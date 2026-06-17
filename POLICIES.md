@@ -2897,3 +2897,14 @@ dotnet run --project .\Migrator.Cli -- --mode doctor --input "<tests>" --config 
 
 Режим ничего не меняет: он проверяет input, config layers, ближайший `.csproj`/`.sln`, `NuGet.config`, `Verification`, POM/source-truth кандидаты и доступность `dotnet`. Артефакты: `doctor-report.md/json` и `agent-doctor-next-task.md`. Подробности: `docs/doctor-mode.md`.
 
+
+## Smart TODO and JSON Schema policy
+
+- Do not remove `MIGRATOR:<CODE>` markers from generated TODO comments.
+- Do not hide TODO by adding dummy declarations or by marking source-only roots as target-known.
+- JSON Schema metadata such as `SourceTruth`, `Confidence`, and `RequiresReview` is review metadata. Unknown metadata may be ignored by the runtime migrator unless explicitly supported.
+- JSON Schema is an editor aid; `config-validate`, `guard`, and `verify-project` remain the source of migration safety.
+
+## Migration Board policy
+
+`migration-board` является read-only режимом. Он может читать migration artifacts и generated code, но не имеет права менять `adapter-config`, source project или generated `.cs`. Агент может использовать доску для принятия решения, но не должен скрывать ошибки, отмеченные в `Top TODO / migration insights`.

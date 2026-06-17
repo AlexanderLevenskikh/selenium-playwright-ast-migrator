@@ -308,3 +308,42 @@ dotnet run --project .\Migrator.Cli -- --mode doctor --input "<tests>" --config 
 
 Режим ничего не меняет: он проверяет input, config layers, ближайший `.csproj`/`.sln`, `NuGet.config`, `Verification`, POM/source-truth кандидаты и доступность `dotnet`. Артефакты: `doctor-report.md/json` и `agent-doctor-next-task.md`. Подробности: `docs/doctor-mode.md`.
 
+
+## Milestone 9: Smart TODO comments + JSON Schema
+
+В generated-коде TODO стали полезнее: первая строка по-прежнему начинается с `// TODO:`, но теперь содержит код причины, например:
+
+```csharp
+// TODO: map source expression to Playwright locator: page.SaveButton [MIGRATOR:MISSING_MAPPING]
+//   Reason: Source UI target has no adapter mapping yet.
+//   Next: Find PageObject/source truth and add UiTarget/Table/Pagination mapping to adapter-config.
+```
+
+Это не ломает старые счётчики TODO, но помогает человеку и агенту быстрее понять следующий шаг.
+
+Документация:
+
+```text
+docs/smart-todo-comments.md
+```
+
+Также добавлена JSON Schema для `adapter-config` и profile layers:
+
+```text
+schemas/adapter-config.schema.json
+docs/json-schema.md
+```
+
+В конфиг можно добавить:
+
+```json
+{
+  "$schema": "./schemas/adapter-config.schema.json"
+}
+```
+
+Schema нужна для подсказок редактора и более безопасного заполнения профилей агентом. Runtime safety всё равно проверяется через `config-validate`.
+
+## Migration Board
+
+Добавлен режим `--mode migration-board`: он собирает `report`, `explain-todo`, `verify-project`, `smoke-plan` и generated-файлы в одну HTML-доску `migration-board.html`. Это главная навигационная точка для человека и агента после прогона. Подробнее: `docs/migration-board.md`.

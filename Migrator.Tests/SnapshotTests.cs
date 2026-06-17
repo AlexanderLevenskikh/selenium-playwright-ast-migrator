@@ -3133,7 +3133,31 @@ public class GoodTests
 
     #endregion
 
-    static string Normalize(string text) => text.Replace("\r\n", "\n").Trim();
+    static string Normalize(string text)
+    {
+        var lines = text.Replace("\r\n", "\n").Split('\n')
+            .Select(line =>
+            {
+                var markerIndex = line.IndexOf(" [MIGRATOR:");
+                if (markerIndex >= 0)
+                {
+                    var markerEnd = line.IndexOf(']', markerIndex);
+                    if (markerEnd >= 0)
+                        line = line.Remove(markerIndex, markerEnd - markerIndex + 1);
+                }
+
+                return line;
+            })
+            .Where(line =>
+            {
+                var trimmed = line.TrimStart();
+                return !trimmed.StartsWith("//   Reason:") &&
+                       !trimmed.StartsWith("//   Next:") &&
+                       !trimmed.StartsWith("//   Source:");
+            });
+
+        return string.Join("\n", lines).Trim();
+    }
 }
 
 

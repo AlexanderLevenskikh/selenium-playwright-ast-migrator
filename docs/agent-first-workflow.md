@@ -151,3 +151,6 @@ dotnet run --project .\Migrator.Cli -- --mode doctor --input "<tests>" --config 
 
 Режим ничего не меняет: он проверяет input, config layers, ближайший `.csproj`/`.sln`, `NuGet.config`, `Verification`, POM/source-truth кандидаты и доступность `dotnet`. Артефакты: `doctor-report.md/json` и `agent-doctor-next-task.md`. Подробности: `docs/doctor-mode.md`.
 
+## Migration Board в agent-first workflow
+
+После `verify-project`, `explain-todo` и `smoke-plan` агент должен ориентироваться по `migration-board.html/md`: это единая панель состояния миграции, root-cause TODO и runtime-кандидатов.

@@ -1,12 +1,27 @@
 {
+  "$schema": "../../../schemas/adapter-config.schema.json",
   "SourceProjectName": "Infrastructure Selenium POM Base",
   "LocatorSettings": {
     "DefaultTestIdAttribute": "data-tid",
-    "KnownTestIdAttributes": ["data-tid", "data-test", "data-testid"]
+    "KnownTestIdAttributes": [
+      "data-tid",
+      "data-test",
+      "data-testid"
+    ]
   },
-  "SourceOnlyIdentifiers": ["page", "pagef", "Driver", "WebDriver"],
-  "TargetKnownTypes": ["Product", "Navigation"],
-  "TargetKnownIdentifiers": ["Navigation"],
+  "SourceOnlyIdentifiers": [
+    "page",
+    "pagef",
+    "Driver",
+    "WebDriver"
+  ],
+  "TargetKnownTypes": [
+    "Product",
+    "Navigation"
+  ],
+  "TargetKnownIdentifiers": [
+    "Navigation"
+  ],
   "UiTargets": [
     {
       "SourceExpression": "page.SaveButton",

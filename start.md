@@ -161,3 +161,24 @@ dotnet run --project .\Migrator.Cli -- --mode doctor --input "<tests>" --config 
 
 Режим ничего не меняет: он проверяет input, config layers, ближайший `.csproj`/`.sln`, `NuGet.config`, `Verification`, POM/source-truth кандидаты и доступность `dotnet`. Артефакты: `doctor-report.md/json` и `agent-doctor-next-task.md`. Подробности: `docs/doctor-mode.md`.
 
+
+## Milestone 9 start reminder
+
+Before editing `adapter-config.json`, enable schema hints where possible:
+
+```json
+{
+  "$schema": "./schemas/adapter-config.schema.json"
+}
+```
+
+When reading generated code, use `MIGRATOR:<CODE>` TODO markers to decide the next action. See:
+
+```text
+docs/smart-todo-comments.md
+docs/json-schema.md
+```
+
+## После прогона
+
+Если появился `migration-board.html`, начинай анализ с него. В нём собраны TODO, verify-project, smoke candidates и следующий рекомендуемый шаг.

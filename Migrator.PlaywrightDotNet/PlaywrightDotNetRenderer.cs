@@ -529,7 +529,12 @@ public class PlaywrightDotNetRenderer : IRenderer
                 BlockSymbol(refName);
 
             var refList = string.Join(", ", unavailableRefs.Select(r => $"'{r}'"));
-            sb.AppendLine($"{_indent}{_indent}// TODO: references unavailable symbol(s) {refList} — verify in target");
+            AppendSmartTodo(
+                sb,
+                $"references unavailable symbol(s) {refList} — verify in target",
+                "UNAVAILABLE_SYMBOLS",
+                "The statement contains identifiers that are not known in the generated target method/project context.",
+                "Add target-known identifiers/types only when they are real target symbols; otherwise map or comment the source expression.");
         }
     }
 
@@ -557,15 +562,67 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     void RenderBlockedActionAsComment(StringBuilder sb, TestAction action, string reason, string sourceText)
     {
-        sb.AppendLine($"{_indent}{_indent}// TODO: {reason}");
+        AppendSmartTodo(
+            sb,
+            reason,
+            ClassifyBlockedTodoCode(reason),
+            ExplainBlockedTodo(reason),
+            NextActionForBlockedTodo(reason),
+            sourceText);
         AppendCommentBlock(sb, _indent + _indent, sourceText, "  ");
     }
 
     void RenderUnresolvedTargetComment(StringBuilder sb, TargetExpression target, string actionDescription, int sourceLine)
     {
         var escaped = EscapeComment(target.SourceExpression);
-        sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {escaped}");
+        AppendSmartTodo(
+            sb,
+            $"map source expression to Playwright locator: {escaped}",
+            "MISSING_MAPPING",
+            "Source UI target has no adapter mapping yet.",
+            "Find PageObject/source truth and add UiTarget/Table/Pagination mapping to adapter-config.");
         sb.AppendLine($"{_indent}{_indent}// {actionDescription} // line {sourceLine}");
+    }
+
+    void AppendSmartTodo(StringBuilder sb, string message, string code, string? reason = null, string? nextAction = null, string? source = null)
+    {
+        sb.AppendLine($"{_indent}{_indent}// TODO: {message} [MIGRATOR:{code}]");
+
+        if (!string.IsNullOrWhiteSpace(reason))
+            sb.AppendLine($"{_indent}{_indent}//   Reason: {EscapeComment(reason)}");
+
+        if (!string.IsNullOrWhiteSpace(nextAction))
+            sb.AppendLine($"{_indent}{_indent}//   Next: {EscapeComment(nextAction)}");
+
+        if (!string.IsNullOrWhiteSpace(source))
+            sb.AppendLine($"{_indent}{_indent}//   Source: {EscapeComment(source)}");
+    }
+
+    static string ClassifyBlockedTodoCode(string reason)
+    {
+        if (reason.StartsWith("uses source-only identifier", StringComparison.Ordinal))
+            return "SOURCE_ONLY_IDENTIFIER";
+        if (reason.StartsWith("depends on unresolved symbol", StringComparison.Ordinal))
+            return "UNRESOLVED_SYMBOL";
+        return "BLOCKED_ACTION";
+    }
+
+    static string ExplainBlockedTodo(string reason)
+    {
+        if (reason.StartsWith("uses source-only identifier", StringComparison.Ordinal))
+            return "The statement references a Selenium/source-side symbol that must not be emitted as active Playwright code.";
+        if (reason.StartsWith("depends on unresolved symbol", StringComparison.Ordinal))
+            return "A previously unresolved or blocked symbol is required by this statement, so rendering it active would hide a migration problem.";
+        return "Safety checks blocked this statement from active rendering.";
+    }
+
+    static string NextActionForBlockedTodo(string reason)
+    {
+        if (reason.StartsWith("uses source-only identifier", StringComparison.Ordinal))
+            return "Map the whole source expression through adapter-config or leave it as TODO; do not mark source-only roots as target-known.";
+        if (reason.StartsWith("depends on unresolved symbol", StringComparison.Ordinal))
+            return "Find the first TODO that blocks this symbol, then add a source-backed mapping or escalate if it is a generic migrator issue.";
+        return "Inspect source truth and decide whether this is a missing mapping, source-only code, or unsupported semantics.";
     }
 
     void RenderClick(StringBuilder sb, ClickAction action)
@@ -673,7 +730,12 @@ public class PlaywrightDotNetRenderer : IRenderer
                     break;
             }
             sb.AppendLine($"{_indent}{_indent}// {methodLine}");
-            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {EscapeComment(target.SourceExpression)}");
+            AppendSmartTodo(
+                sb,
+                $"map source expression to Playwright locator: {EscapeComment(target.SourceExpression)}",
+                "MISSING_MAPPING",
+                "Source UI target has no adapter mapping yet.",
+                "Find PageObject/source truth and add UiTarget/Table/Pagination mapping to adapter-config.");
             return;
         }
 
@@ -717,7 +779,12 @@ public class PlaywrightDotNetRenderer : IRenderer
         {
             var method = action.Kind == VisibilityKind.Visible ? "ToBeVisibleAsync" : "ToBeHiddenAsync";
             sb.AppendLine($"{_indent}{_indent}// await {ExpectCall()}((locator)).{method}(); // line {action.SourceLine}");
-            sb.AppendLine($"{_indent}{_indent}// TODO: map source expression to Playwright locator: {EscapeComment(target.SourceExpression)}");
+            AppendSmartTodo(
+                sb,
+                $"map source expression to Playwright locator: {EscapeComment(target.SourceExpression)}",
+                "MISSING_MAPPING",
+                "Source UI target has no adapter mapping yet.",
+                "Find PageObject/source truth and add UiTarget/Table/Pagination mapping to adapter-config.");
         }
         else
         {
@@ -761,7 +828,12 @@ public class PlaywrightDotNetRenderer : IRenderer
                 else
                 {
                     sb.AppendLine($"{_indent}{_indent}// await {ExpectCall()}(Page).ToHaveURLAsync({expected}); // line {action.SourceLine}");
-                    sb.AppendLine($"{_indent}{_indent}// TODO: URL assertion uses external variable — verify and uncomment");
+                    AppendSmartTodo(
+                        sb,
+                        "URL assertion uses external variable — verify and uncomment",
+                        "EXTERNAL_URL_VARIABLE",
+                        "Expected URL depends on a variable that may need target-project setup/context.",
+                        "Ensure the variable is available in target code or map it via adapter-config.");
                 }
                 break;
             case UrlAssertionKind.UrlContains:
@@ -772,7 +844,12 @@ public class PlaywrightDotNetRenderer : IRenderer
                 else
                 {
                     sb.AppendLine($"{_indent}{_indent}// Assert.That(Page.Url, Does.Contain({expected})); // line {action.SourceLine}");
-                    sb.AppendLine($"{_indent}{_indent}// TODO: URL assertion uses external variable — verify and uncomment");
+                    AppendSmartTodo(
+                        sb,
+                        "URL assertion uses external variable — verify and uncomment",
+                        "EXTERNAL_URL_VARIABLE",
+                        "Expected URL depends on a variable that may need target-project setup/context.",
+                        "Ensure the variable is available in target code or map it via adapter-config.");
                 }
                 break;
         }
@@ -803,7 +880,12 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
         if (action.RequiresReview)
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: mapped method requires manual review — {EscapeComment(action.FullSourceText)}");
+            AppendSmartTodo(
+                sb,
+                $"mapped method requires manual review — {EscapeComment(action.FullSourceText)}",
+                "MAPPED_REQUIRES_REVIEW",
+                "Adapter config explicitly marked this mapping as requiring review.",
+                "Verify target semantics; remove RequiresReview only when the mapping is proven safe.");
         }
     }
 
@@ -896,7 +978,12 @@ public class PlaywrightDotNetRenderer : IRenderer
     void RenderMappedTargetStatementAsComment(StringBuilder sb, string statement, string? sourceMethod, int sourceLine)
     {
         var methodInfo = !string.IsNullOrEmpty(sourceMethod) ? $" sourceMethod: {sourceMethod}" : string.Empty;
-        sb.AppendLine($"{_indent}{_indent}// TODO: unresolved MethodMapping placeholder{methodInfo} (line {sourceLine})");
+        AppendSmartTodo(
+            sb,
+            $"unresolved MethodMapping placeholder{methodInfo} (line {sourceLine})",
+            "UNRESOLVED_PLACEHOLDER",
+            "A TargetStatement placeholder could not be substituted from the matched source method.",
+            "Fix SourceMethodPattern placeholders or TargetStatements in adapter-config.");
         AppendCommentBlock(sb, _indent + _indent, $"Original: {statement}", "  ");
     }
 
@@ -982,7 +1069,12 @@ public class PlaywrightDotNetRenderer : IRenderer
         var commentBody = $"Assert.That({actual}, {constraint}); // line {sourceLine}";
         AppendCommentBlock(sb, _indent + _indent, commentBody);
 
-        sb.AppendLine($"{_indent}{_indent}// TODO: convert constraint to Playwright assertion");
+        AppendSmartTodo(
+            sb,
+            "convert constraint to Playwright assertion",
+            "ASSERTION_CONSTRAINT",
+            "The NUnit/Fluent assertion constraint was preserved as a comment because no equivalent Playwright assertion was inferred.",
+            "Add a parameterized assertion mapping if this pattern is common.");
     }
 
     void RenderAssertAreEqual(StringBuilder sb, AssertAreEqualAction action)
@@ -998,14 +1090,24 @@ public class PlaywrightDotNetRenderer : IRenderer
         AppendCommentBlock(sb, _indent + _indent, $"[{action.MethodName}] {action.FullSourceText} // line {action.SourceLine}");
         if (!IsLowPriorityMethod(action.MethodName, action.FullSourceText))
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: manual review needed");
+            AppendSmartTodo(
+                sb,
+                "manual review needed",
+                "MANUAL_REVIEW",
+                "Method invocation was recognized only at a generic level and may have side effects.",
+                "Add Method/ParameterizedMethod mapping when source truth confirms deterministic target behavior.");
         }
     }
 
     void RenderUnsupported(StringBuilder sb, UnsupportedAction action)
     {
         var reason = EscapeComment(action.Reason);
-        sb.AppendLine($"{_indent}{_indent}// TODO: UNSUPPORTED [{reason}]");
+        AppendSmartTodo(
+            sb,
+            $"UNSUPPORTED [{reason}]",
+            "UNSUPPORTED_ACTION",
+            "The source action is not supported by the current recognizers/adapter mappings.",
+            "Classify it as missing mapping, unsupported business semantics, or a generic migrator gap.");
         AppendCommentBlock(sb, _indent + _indent, action.SourceText, "  ");
     }
 
@@ -1019,7 +1121,12 @@ public class PlaywrightDotNetRenderer : IRenderer
             }
             else
             {
-                sb.AppendLine($"{_indent}{_indent}// TODO: raw statement requires manual review:");
+                AppendSmartTodo(
+                sb,
+                "raw statement requires manual review:",
+                "RAW_STATEMENT",
+                "The source statement was not recognized semantically and may contain Selenium-specific or business-specific logic.",
+                "Prefer adapter-config Method/ParameterizedMethod mapping if the pattern is reusable; otherwise keep TODO for manual migration.");
                 AppendCommentBlock(sb, _indent + _indent, action.SourceText, "  ");
             }
 
@@ -1032,7 +1139,12 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
         else
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: raw statement — review: {EscapeComment(action.SourceText)}");
+            AppendSmartTodo(
+                sb,
+                $"raw statement — review: {EscapeComment(action.SourceText)}",
+                "RAW_STATEMENT",
+                "The source statement was emitted as a safe comment because no reliable target mapping exists yet.",
+                "Find source truth and add a mapping only if the translation is deterministic.");
         }
     }
 
@@ -1093,14 +1205,24 @@ public class PlaywrightDotNetRenderer : IRenderer
     {
         if (ContainsUnresolvedSourceObjectAccess(action.InitializationValue) && HasLineBreak(action.InitializationValue))
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: raw local declaration requires manual review:");
+            AppendSmartTodo(
+                sb,
+                "raw local declaration requires manual review:",
+                "RAW_LOCAL_DECLARATION",
+                "The declaration initializer contains unresolved/source-side logic.",
+                "Map the initializer or keep the declaration commented until target semantics are known.");
             AppendCommentBlock(sb, _indent + _indent, $"{action.VariableType} {action.VariableName} = {action.InitializationValue}", "  ");
             return;
         }
 
         if (ContainsUnresolvedSourceObjectAccess(action.InitializationValue))
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: raw local declaration — review: {EscapeComment(action.VariableType)} {EscapeComment(action.VariableName)} = {EscapeComment(action.InitializationValue)}");
+            AppendSmartTodo(
+                sb,
+                $"raw local declaration — review: {EscapeComment(action.VariableType)} {EscapeComment(action.VariableName)} = {EscapeComment(action.InitializationValue)}",
+                "RAW_LOCAL_DECLARATION",
+                "The declaration depends on source-side object access and cannot be safely emitted active.",
+                "Map the source expression through adapter-config or leave it for manual migration.");
             return;
         }
 
@@ -1388,7 +1510,12 @@ public class PlaywrightDotNetRenderer : IRenderer
         {
             var escapedComment = EscapeComment(action.SourceText);
             var escapedLocator = EscapeStringLiteral(action.SourceText);
-            sb.AppendLine($"{_indent}{_indent}// TODO: table row text access — map source expression: {escapedComment}");
+            AppendSmartTodo(
+            sb,
+            $"table row text access — map source expression: {escapedComment}",
+            "TABLE_MAPPING_REQUIRED",
+            "The table/list source expression is not mapped to a Playwright row target.",
+            "Add a Tables mapping with RowTarget based on POM/source truth.");
             sb.AppendLine($"{_indent}{_indent}// var {NextTempVar("rowText")} = await Page.Locator(\"TODO: {escapedLocator}\").TextContentAsync();");
         }
         else
@@ -2055,7 +2182,12 @@ public class PlaywrightDotNetRenderer : IRenderer
                 sb.AppendLine($"{_indent}{_indent}{prefix}Assert.That({nv3}, Is.GreaterThanOrEqualTo({countExpr}));");
                 break;
             default:
-                sb.AppendLine($"{_indent}{_indent}// TODO: table count assertion — {action.Kind}");
+                AppendSmartTodo(
+                    sb,
+                    $"table count assertion — {action.Kind}",
+                    "TABLE_ASSERTION_UNSUPPORTED",
+                    "This table count assertion kind is not translated yet.",
+                    "Add mapping/support for the assertion kind or keep it for manual migration.");
                 sb.AppendLine($"{_indent}{_indent}//   {EscapeComment(action.SourceText)}");
                 break;
         }
@@ -2076,7 +2208,12 @@ public class PlaywrightDotNetRenderer : IRenderer
 
         if (target.Kind == TargetKind.Unresolved)
         {
-            sb.AppendLine($"{_indent}{_indent}// TODO: table row access — map source expression: {EscapeComment(action.SourceText)}");
+            AppendSmartTodo(
+                sb,
+                $"table row access — map source expression: {EscapeComment(action.SourceText)}",
+                "TABLE_MAPPING_REQUIRED",
+                "The table/list access pattern is not mapped to a Playwright row target.",
+                "Add a Tables mapping with RowTarget based on POM/source truth.");
             sb.AppendLine($"{_indent}{_indent}// var {NextTempVar("row")} = Page.Locator(\"TODO: {action.SourceText}\").Nth({action.IndexExpression});");
         }
         else

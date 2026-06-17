@@ -138,6 +138,13 @@ if (mode == "smoke-plan")
     return smokeExitCode;
 }
 
+// Handle migration-board mode — builds an HTML dashboard from migration artifacts.
+if (mode == "migration-board")
+{
+    var boardExitCode = RunMigrationBoard(inputPath, outPath, format);
+    return boardExitCode;
+}
+
 // Handle scaffold mode — generates a minimal, compile-ready Playwright .NET test project
 if (mode == "scaffold")
 {
@@ -272,6 +279,7 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
     GenerateDraftConfig(allUnmapped, outPath, config);
     WriteExplainTodoArtifacts(summaryWithGenerated, outPath, format, allUnmapped, allUnsupported, null);
     WriteSmokePlanArtifacts(outPath, outPath, format);
+    WriteMigrationBoardArtifacts(outPath, outPath, format);
 
     PrintSummary(summaryWithGenerated);
     Console.WriteLine($"Migration written to: {Path.GetFullPath(outPath)} ({generated} files generated)");
@@ -402,6 +410,7 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
     File.WriteAllText(Path.Combine(outPath, "project-verify-report.md"), WriteProjectVerifyMarkdown(report));
     WriteExplainTodoArtifacts(summary with { GeneratedFiles = generatedFiles.Count }, outPath, format, allUnmapped, allUnsupported, report);
     WriteSmokePlanArtifacts(outPath, outPath, format);
+    WriteMigrationBoardArtifacts(outPath, outPath, format);
 
     PrintSummary(summary with { GeneratedFiles = generatedFiles.Count });
     Console.WriteLine();
@@ -1731,6 +1740,14 @@ static TodoExplanationReport BuildExplainTodoReport(
             Evidence: new[] { kv.Key }));
     }
 
+    foreach (var smart in ExtractSmartTodoInsights(summary.PerFileReports))
+    {
+        // Unmapped/unsupported artifacts remain the primary source for high-impact issues.
+        // Smart TODO markers fill gaps for raw statements, placeholders, source-only cascades, etc.
+        if (!insights.Any(i => i.Category == smart.Category && i.Title == smart.Title))
+            insights.Add(smart);
+    }
+
     if (summary.TodoComments > 0 && insights.Count == 0)
     {
         insights.Add(new TodoInsight(
@@ -1771,6 +1788,123 @@ static TodoExplanationReport BuildExplainTodoReport(
         NextBestAction: ordered.FirstOrDefault()?.SuggestedAction ?? "No TODO/actionable issue found. Move to project verify or runtime smoke.");
 }
 
+
+static IEnumerable<TodoInsight> ExtractSmartTodoInsights(IEnumerable<MigrationReport> perFileReports)
+{
+    var buckets = new Dictionary<(string Code, string Message), (int Count, string File, int Line, List<string> Evidence)>();
+
+    foreach (var report in perFileReports)
+    {
+        if (string.IsNullOrWhiteSpace(report.GeneratedOutput))
+            continue;
+
+        var lines = report.GeneratedOutput.Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            var match = System.Text.RegularExpressions.Regex.Match(
+                line,
+                @"//\s*TODO:\s*(?<message>.*?)\s*\[MIGRATOR:(?<code>[A-Z0-9_]+)\]");
+            if (!match.Success)
+                continue;
+
+            var code = match.Groups["code"].Value;
+            var message = match.Groups["message"].Value.Trim();
+            var key = (code, message);
+
+            if (!buckets.TryGetValue(key, out var existing))
+                existing = (0, report.SourceFilePath, i + 1, new List<string>());
+
+            existing.Count++;
+            if (existing.Evidence.Count < 5)
+                existing.Evidence.Add(line.Trim());
+
+            buckets[key] = existing;
+        }
+    }
+
+    foreach (var kv in buckets.OrderByDescending(kv => kv.Value.Count))
+    {
+        var code = kv.Key.Code;
+        var message = kv.Key.Message;
+        var (count, file, line, evidence) = kv.Value;
+
+        yield return new TodoInsight(
+            Category: code,
+            Title: SmartTodoTitle(code, message),
+            Reason: SmartTodoReason(code),
+            EstimatedImpact: count,
+            ExampleFile: file,
+            ExampleLine: line,
+            SuggestedAction: SmartTodoSuggestedAction(code),
+            RequiresSourceTruth: SmartTodoRequiresSourceTruth(code),
+            RequiresDeveloper: SmartTodoMayNeedDeveloper(code),
+            Evidence: evidence.ToArray());
+    }
+}
+
+static string SmartTodoTitle(string code, string message)
+{
+    return code switch
+    {
+        "MISSING_MAPPING" => $"Add source-backed mapping: {TrimForTitle(message, 90)}",
+        "SOURCE_ONLY_IDENTIFIER" => $"Map or keep source-only statement: {TrimForTitle(message, 90)}",
+        "UNRESOLVED_SYMBOL" => $"Fix upstream unresolved symbol: {TrimForTitle(message, 90)}",
+        "UNAVAILABLE_SYMBOLS" => $"Classify unavailable target symbols: {TrimForTitle(message, 90)}",
+        "UNRESOLVED_PLACEHOLDER" => $"Fix adapter-config placeholder: {TrimForTitle(message, 90)}",
+        "TABLE_MAPPING_REQUIRED" => $"Add table/list mapping: {TrimForTitle(message, 90)}",
+        _ => $"Review TODO [{code}]: {TrimForTitle(message, 90)}"
+    };
+}
+
+static string SmartTodoReason(string code)
+{
+    return code switch
+    {
+        "MISSING_MAPPING" => "Generated code contains a source UI target that has no Playwright mapping.",
+        "SOURCE_ONLY_IDENTIFIER" => "The statement references a Selenium/source-only root that must not be active in target code.",
+        "UNRESOLVED_SYMBOL" => "The statement depends on a symbol blocked earlier in the same method/setup chain.",
+        "UNAVAILABLE_SYMBOLS" => "The statement references identifiers not known in the target method/project context.",
+        "RAW_STATEMENT" => "The statement was not recognized semantically and needs mapping or manual migration.",
+        "RAW_LOCAL_DECLARATION" => "The local declaration initializer depends on source-side logic.",
+        "MAPPED_REQUIRES_REVIEW" => "Adapter config deliberately marked the mapping as requiring review.",
+        "UNRESOLVED_PLACEHOLDER" => "A TargetStatements placeholder could not be substituted from the source method pattern.",
+        "ASSERTION_CONSTRAINT" => "The assertion was preserved because no direct Playwright assertion mapping was inferred.",
+        "TABLE_MAPPING_REQUIRED" => "A table/list access pattern needs a Tables mapping with RowTarget.",
+        "UNSUPPORTED_ACTION" => "The recognizer/adapter could not safely translate this source action.",
+        _ => "Generated TODO contains a migrator classification code."
+    };
+}
+
+static string SmartTodoSuggestedAction(string code)
+{
+    return code switch
+    {
+        "MISSING_MAPPING" => "Find POM/source truth and add UiTarget/Method/ParameterizedMethod/Table/Pagination mapping.",
+        "SOURCE_ONLY_IDENTIFIER" => "Do not mark the source-only root as target-known. Map the whole expression or leave TODO.",
+        "UNRESOLVED_SYMBOL" => "Find the first TODO that blocked the symbol; fix that root cause first.",
+        "UNAVAILABLE_SYMBOLS" => "Add TargetKnownTypes/TargetKnownIdentifiers only for real target symbols; otherwise map/comment the expression.",
+        "RAW_STATEMENT" => "If repeated, add Method/ParameterizedMethod mapping; otherwise keep manual TODO.",
+        "RAW_LOCAL_DECLARATION" => "Map the initializer through adapter-config or keep the declaration commented.",
+        "MAPPED_REQUIRES_REVIEW" => "Review target semantics and remove RequiresReview only when proven safe.",
+        "UNRESOLVED_PLACEHOLDER" => "Fix SourceMethodPattern placeholders or TargetStatements names in adapter-config.",
+        "ASSERTION_CONSTRAINT" => "Add reusable assertion mapping if this pattern appears often.",
+        "TABLE_MAPPING_REQUIRED" => "Add a Tables mapping with source-backed RowTarget.",
+        "UNSUPPORTED_ACTION" => "Classify as missing mapping, unsupported business semantics, or generic migrator gap.",
+        _ => "Inspect source truth and decide whether this is config work or developer escalation."
+    };
+}
+
+static bool SmartTodoRequiresSourceTruth(string code)
+{
+    return code is "MISSING_MAPPING" or "RAW_STATEMENT" or "RAW_LOCAL_DECLARATION" or "TABLE_MAPPING_REQUIRED" or "UNSUPPORTED_ACTION";
+}
+
+static bool SmartTodoMayNeedDeveloper(string code)
+{
+    return code is "UNRESOLVED_SYMBOL" or "UNAVAILABLE_SYMBOLS" or "UNRESOLVED_PLACEHOLDER";
+}
+
 static TodoExplanationReport BuildExplainTodoReportFromArtifacts(string artifactDir)
 {
     var reportPath = FindFirstExisting(artifactDir, "report.json");
@@ -1794,6 +1928,9 @@ static TodoExplanationReport BuildExplainTodoReportFromArtifacts(string artifact
     if (unsupported.Count == 0 && reportPath != null)
         unsupported = ReadNestedCountItems(reportPath, "TopUnsupportedActions", "MethodOrSourceText", "Count", "ExampleFile", "ExampleLine");
 
+    var generatedReports = ReadGeneratedFileReports(artifactDir);
+    var generatedTodoCount = generatedReports.Sum(r => r.TodoComments);
+
     var fakeSummary = new MigrationSummaryReport(
         FilesProcessed: summary.FilesProcessed,
         TestsFound: summary.TestsFound,
@@ -1803,13 +1940,13 @@ static TodoExplanationReport BuildExplainTodoReportFromArtifacts(string artifact
         UnsupportedActions: summary.UnsupportedActions,
         MappedTargets: summary.MappedTargets,
         UnmappedTargets: summary.UnmappedTargets,
-        TodoComments: summary.TodoComments,
+        TodoComments: Math.Max(summary.TodoComments, generatedTodoCount),
         FilesWithWarnings: 0,
-        GeneratedFiles: 0,
-        ProcessedFiles: Array.Empty<string>(),
+        GeneratedFiles: generatedReports.Count,
+        ProcessedFiles: generatedReports.Select(r => r.SourceFilePath).ToArray(),
         TopUnmappedTargets: Array.Empty<UnmappedTargetInfo>(),
         TopUnsupportedActions: Array.Empty<UnsupportedMethodInfo>(),
-        PerFileReports: Array.Empty<MigrationReport>());
+        PerFileReports: generatedReports);
 
     var built = BuildExplainTodoReport(fakeSummary, unmapped, unsupported, projectVerify);
     return built with
@@ -1818,6 +1955,46 @@ static TodoExplanationReport BuildExplainTodoReportFromArtifacts(string artifact
         SyntaxErrors = Math.Max(built.SyntaxErrors, summary.SyntaxErrors),
         ProjectVerifyStatus = projectVerify?.Status ?? summary.VerifyStatus
     };
+}
+
+
+static IReadOnlyList<MigrationReport> ReadGeneratedFileReports(string artifactDir)
+{
+    if (!Directory.Exists(artifactDir))
+        return Array.Empty<MigrationReport>();
+
+    var files = Directory.EnumerateFiles(artifactDir, "*.cs", SearchOption.AllDirectories)
+        .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                 && !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+        .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    var reports = new List<MigrationReport>();
+    foreach (var file in files)
+    {
+        var text = File.ReadAllText(file);
+        if (!text.Contains("// Generated by Migrator", StringComparison.Ordinal) &&
+            !text.Contains("MIGRATOR:", StringComparison.Ordinal))
+        {
+            continue;
+        }
+
+        var todoCount = text.Split('\n').Count(l => l.TrimStart().StartsWith("// TODO:", StringComparison.Ordinal));
+        reports.Add(new MigrationReport(
+            SourceFilePath: file,
+            TotalTests: 0,
+            SuccessfullyConvertedTests: 0,
+            UnsupportedActions: Array.Empty<UnsupportedAction>(),
+            GeneratedOutput: text,
+            SemanticActions: 0,
+            SyntaxFallbackActions: 0,
+            UnsupportedCount: 0,
+            MappedTargets: 0,
+            UnmappedTargets: 0,
+            TodoComments: todoCount));
+    }
+
+    return reports;
 }
 
 static string? FindFirstExisting(string dir, string fileName)
@@ -2608,6 +2785,319 @@ static string WriteAgentRuntimeNextTaskMarkdown(SmokePlanReport report)
     sb.AppendLine("- После этапа дай отчёт на русском и спроси: `Продолжить?`");
     return sb.ToString();
 }
+
+
+// --- Migration board mode ---
+
+static int RunMigrationBoard(string inputPath, string outPath, string format)
+{
+    if (!Directory.Exists(inputPath))
+    {
+        Console.Error.WriteLine($"Migration-board mode expects a directory with migration artifacts: {inputPath}");
+        return 1;
+    }
+
+    Directory.CreateDirectory(outPath);
+    var report = BuildMigrationBoardReportFromArtifacts(inputPath);
+    WriteMigrationBoardReport(report, outPath, format);
+
+    Console.WriteLine("=== Migration Board ===");
+    Console.WriteLine($"Source: {inputPath}");
+    Console.WriteLine($"Files: {report.Summary.FilesProcessed}, Tests: {report.Summary.TestsFound}, TODO: {report.Summary.TodoComments}");
+    Console.WriteLine($"Project verify: {report.ProjectVerifyStatus ?? "not-run"}");
+    Console.WriteLine($"Smoke candidates: {report.SmokeCandidates}, Runtime-ready: {report.RuntimeReadyCandidates}");
+    Console.WriteLine($"Migration board written to: {Path.GetFullPath(outPath)}");
+    return 0;
+}
+
+static void WriteMigrationBoardArtifacts(string artifactDir, string outPath, string format)
+{
+    try
+    {
+        var report = BuildMigrationBoardReportFromArtifacts(artifactDir);
+        if (report.Summary.FilesProcessed == 0 && report.GeneratedFiles == 0 && report.TopInsights.Length == 0 && report.TopSmokeCandidates.Length == 0)
+            return;
+        WriteMigrationBoardReport(report, outPath, format);
+    }
+    catch
+    {
+        // Advisory only: board generation must not break migrate/verify-project.
+    }
+}
+
+static MigrationBoardReport BuildMigrationBoardReportFromArtifacts(string artifactDir)
+{
+    var summary = new ArtifactSummary();
+    var reportPath = FindFirstExisting(artifactDir, "report.json");
+    var verifyPath = FindFirstExisting(artifactDir, "verify-report.json");
+    var projectVerifyPath = FindFirstExisting(artifactDir, "project-verify-report.json");
+
+    if (reportPath != null)
+        ReadSummaryReport(reportPath, summary);
+    if (verifyPath != null)
+        ReadVerifyReport(verifyPath, summary);
+
+    var projectVerify = projectVerifyPath != null ? ReadProjectVerifyReport(projectVerifyPath) : null;
+    if (projectVerify != null)
+    {
+        summary.VerifyStatus = projectVerify.Status;
+        summary.SyntaxErrors = Math.Max(summary.SyntaxErrors, projectVerify.ClassifiedDiagnostics.Count(d => d.Severity.Equals("error", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    var explain = BuildExplainTodoReportFromArtifacts(artifactDir);
+    summary.FilesProcessed = Math.Max(summary.FilesProcessed, explain.FilesProcessed);
+    summary.TestsFound = Math.Max(summary.TestsFound, explain.TestsFound);
+    summary.ActionsFound = Math.Max(summary.ActionsFound, explain.ActionsFound);
+    summary.SemanticActions = Math.Max(summary.SemanticActions, explain.SemanticActions);
+    summary.SyntaxFallbackActions = Math.Max(summary.SyntaxFallbackActions, explain.SyntaxFallbackActions);
+    summary.MappedTargets = Math.Max(summary.MappedTargets, explain.MappedTargets);
+    summary.UnmappedTargets = Math.Max(summary.UnmappedTargets, explain.UnmappedTargets);
+    summary.UnsupportedActions = Math.Max(summary.UnsupportedActions, explain.UnsupportedActions);
+    summary.TodoComments = Math.Max(summary.TodoComments, explain.TodoComments);
+    summary.SyntaxErrors = Math.Max(summary.SyntaxErrors, explain.SyntaxErrors);
+    summary.VerifyStatus ??= explain.ProjectVerifyStatus;
+
+    var smoke = BuildSmokePlanReportFromArtifacts(artifactDir);
+    var fileCards = BuildMigrationBoardFileCards(smoke, projectVerify).ToArray();
+    var topInsights = explain.Insights
+        .OrderByDescending(x => x.EstimatedImpact)
+        .ThenBy(x => x.Category, StringComparer.OrdinalIgnoreCase)
+        .Take(25)
+        .ToArray();
+    var topSmoke = smoke.Candidates.Take(20).ToArray();
+    var artifacts = FindBoardArtifacts(artifactDir).ToArray();
+
+    return new MigrationBoardReport(
+        GeneratedAtUtc: DateTimeOffset.UtcNow,
+        Source: Path.GetFullPath(artifactDir),
+        Summary: summary,
+        ProjectVerifyStatus: projectVerify?.Status ?? summary.VerifyStatus,
+        ProjectDiagnostics: projectVerify?.Diagnostics.Length ?? 0,
+        GeneratedFiles: smoke.GeneratedFiles,
+        RuntimeReadyCandidates: smoke.RuntimeReadyCandidates,
+        SmokeCandidates: smoke.SmokeCandidates,
+        FileCards: fileCards,
+        TopInsights: topInsights,
+        TopSmokeCandidates: topSmoke,
+        RecommendedNextActions: BuildMigrationBoardNextActions(summary, explain, smoke, projectVerify).ToArray(),
+        Artifacts: artifacts);
+}
+
+static IEnumerable<MigrationBoardFileCard> BuildMigrationBoardFileCards(SmokePlanReport smoke, ProjectVerifyReport? projectVerify)
+{
+    var diagnosticsByFile = BuildDiagnosticsByFile(projectVerify);
+    foreach (var group in smoke.Candidates.GroupBy(c => c.File, StringComparer.OrdinalIgnoreCase))
+    {
+        var tests = group.ToArray();
+        var best = tests.OrderByDescending(x => x.Score).FirstOrDefault();
+        diagnosticsByFile.TryGetValue(Path.GetFileName(group.Key), out var diagnostics);
+        diagnostics ??= Array.Empty<ProjectVerifyDiagnostic>();
+        var errors = diagnostics.Count(d => d.Severity.Equals("error", StringComparison.OrdinalIgnoreCase));
+        var warnings = diagnostics.Length - errors;
+        var todo = tests.Sum(t => t.TodoLines);
+        var activeRatio = tests.Length == 0 ? 0 : Math.Round(tests.Average(t => t.ActiveRatio), 3);
+        yield return new MigrationBoardFileCard(
+            File: group.Key,
+            Tests: tests.Length,
+            TodoLines: todo,
+            CompileErrors: errors,
+            CompileWarnings: warnings,
+            ActiveRatio: activeRatio,
+            BestScore: best?.Score ?? 0,
+            BestReadinessLevel: best?.ReadinessLevel ?? "unknown",
+            BestTestName: best?.TestName ?? "");
+    }
+}
+
+static IEnumerable<string> FindBoardArtifacts(string artifactDir)
+{
+    var names = new[]
+    {
+        "report.json", "verify-report.json", "project-verify-report.json", "explain-todo.md", "explain-todo.json",
+        "agent-next-task.md", "smoke-plan.md", "smoke-plan.json", "runtime-checklist.md", "agent-runtime-next-task.md",
+        "unmapped-targets.json", "unsupported-actions.json", "pom-index.generated.json", "doctor-report.md", "guard-report.md", "config-validate-report.md"
+    };
+
+    foreach (var name in names)
+    {
+        var found = FindFirstExisting(artifactDir, name);
+        if (found != null)
+            yield return Path.GetFullPath(found);
+    }
+}
+
+static IEnumerable<string> BuildMigrationBoardNextActions(ArtifactSummary summary, TodoExplanationReport explain, SmokePlanReport smoke, ProjectVerifyReport? projectVerify)
+{
+    if (projectVerify == null)
+        yield return "Запусти `--mode verify-project`, чтобы получить настоящую проектную компиляцию.";
+    else if (!projectVerify.Status.Equals("passed", StringComparison.OrdinalIgnoreCase))
+        yield return "Сначала открой `project-verify-report.md` и разрули compile errors: runtime пока рано.";
+
+    if (explain.Insights.Length > 0)
+        yield return $"Следующий лучший config-шаг: {explain.NextBestAction}";
+
+    var best = smoke.Candidates.FirstOrDefault();
+    if (best != null)
+        yield return $"Лучший runtime-кандидат: `{Path.GetFileName(best.File)}::{best.TestName}` ({best.ReadinessLevel}, score {best.Score:0.0}).";
+
+    if (summary.TodoComments > 0 && explain.Insights.Length == 0)
+        yield return "TODO есть, но explain-todo не нашёл root cause. Проверь smart TODO markers в generated `.cs`.";
+
+    if (summary.TodoComments == 0 && string.Equals(projectVerify?.Status, "passed", StringComparison.OrdinalIgnoreCase))
+        yield return "TODO нет и project verify зелёный: выбирай smoke-кандидат и запускай один тест изолированно.";
+}
+
+static void WriteMigrationBoardReport(MigrationBoardReport report, string outPath, string format)
+{
+    Directory.CreateDirectory(outPath);
+    if (format == "json" || format == "both")
+    {
+        File.WriteAllText(Path.Combine(outPath, "migration-board.json"),
+            System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    if (format == "text" || format == "both")
+    {
+        File.WriteAllText(Path.Combine(outPath, "migration-board.html"), WriteMigrationBoardHtml(report));
+        File.WriteAllText(Path.Combine(outPath, "migration-board.md"), WriteMigrationBoardMarkdown(report));
+    }
+}
+
+static string WriteMigrationBoardMarkdown(MigrationBoardReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Migration Board");
+    sb.AppendLine();
+    sb.AppendLine($"- **Generated**: {report.GeneratedAtUtc:yyyy-MM-dd HH:mm:ss zzz}");
+    sb.AppendLine($"- **Source**: `{PathRedaction.Redact(report.Source)}`");
+    sb.AppendLine($"- **Project verify**: `{report.ProjectVerifyStatus ?? "not-run"}`");
+    sb.AppendLine($"- **TODO**: `{report.Summary.TodoComments}`");
+    sb.AppendLine($"- **Syntax/compile errors**: `{report.Summary.SyntaxErrors}`");
+    sb.AppendLine($"- **Runtime-ready**: `{report.RuntimeReadyCandidates}`");
+    sb.AppendLine($"- **Smoke candidates**: `{report.SmokeCandidates}`");
+    sb.AppendLine();
+    sb.AppendLine("## Recommended next actions");
+    foreach (var action in report.RecommendedNextActions)
+        sb.AppendLine($"- {action}");
+    if (report.RecommendedNextActions.Length == 0)
+        sb.AppendLine("- Нет рекомендаций: проверь входные артефакты.");
+    sb.AppendLine();
+    sb.AppendLine("## Top TODO / migration insights");
+    sb.AppendLine("| # | Category | Impact | Title | Suggested action |");
+    sb.AppendLine("|---|---|---:|---|---|");
+    for (var i = 0; i < Math.Min(20, report.TopInsights.Length); i++)
+    {
+        var x = report.TopInsights[i];
+        sb.AppendLine($"| {i + 1} | `{EscapeMd(x.Category)}` | {x.EstimatedImpact} | {EscapeMd(x.Title)} | {EscapeMd(x.SuggestedAction)} |");
+    }
+    sb.AppendLine();
+    sb.AppendLine("## Runtime candidates");
+    sb.AppendLine("| # | Level | Score | Test | TODO | Active | File |");
+    sb.AppendLine("|---|---|---:|---|---:|---:|---|");
+    for (var i = 0; i < Math.Min(20, report.TopSmokeCandidates.Length); i++)
+    {
+        var c = report.TopSmokeCandidates[i];
+        sb.AppendLine($"| {i + 1} | {EscapeMd(c.ReadinessLevel)} | {c.Score:0.0} | `{EscapeMd(c.TestName)}` | {c.TodoLines} | {c.ActiveRatio:P0} | `{EscapeMd(PathRedaction.Redact(c.File))}` |");
+    }
+    return sb.ToString();
+}
+
+static string WriteMigrationBoardHtml(MigrationBoardReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("<!doctype html>");
+    sb.AppendLine("<html lang=\"ru\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+    sb.AppendLine("<title>Migration Board</title>");
+    sb.AppendLine("<style>");
+    sb.AppendLine("body{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#f6f7fb;color:#172033}header{background:#172033;color:white;padding:24px 32px}.wrap{padding:24px 32px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.card{background:white;border-radius:12px;padding:16px;box-shadow:0 1px 4px #0001}.metric{font-size:28px;font-weight:700}.label{color:#667085;font-size:13px}.ok{color:#17803d}.warn{color:#b66a00}.bad{color:#b42318}.pill{display:inline-block;border-radius:999px;padding:4px 10px;font-size:12px;background:#eef2ff}.pill.ok{background:#dcfae6;color:#067647}.pill.warn{background:#fef0c7;color:#93370d}.pill.bad{background:#fee4e2;color:#b42318}table{border-collapse:collapse;width:100%;background:white;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px #0001}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #eaecf0;vertical-align:top}th{background:#f2f4f7;font-size:12px;text-transform:uppercase;color:#667085}code{background:#f2f4f7;padding:2px 4px;border-radius:4px}.section{margin:28px 0 14px}.small{font-size:12px;color:#667085}.bar{height:8px;background:#eaecf0;border-radius:999px;overflow:hidden}.bar>span{display:block;height:8px;background:#3478f6}.action{border-left:4px solid #3478f6}.empty{color:#667085;font-style:italic}</style>");
+    sb.AppendLine("</head><body>");
+    sb.AppendLine("<header>");
+    sb.AppendLine("<h1>Migration Board</h1>");
+    sb.AppendLine($"<div class=\"small\">Generated: {Html(report.GeneratedAtUtc.ToString("yyyy-MM-dd HH:mm:ss zzz"))} · Source: <code>{Html(PathRedaction.Redact(report.Source))}</code></div>");
+    sb.AppendLine("</header><main class=\"wrap\">");
+
+    sb.AppendLine("<section class=\"grid\">");
+    MetricCard(sb, "Files", report.Summary.FilesProcessed.ToString(), "processed", "");
+    MetricCard(sb, "Tests", report.Summary.TestsFound.ToString(), "found", "");
+    MetricCard(sb, "TODO", report.Summary.TodoComments.ToString(), "remaining comments", report.Summary.TodoComments == 0 ? "ok" : "warn");
+    MetricCard(sb, "Unmapped", report.Summary.UnmappedTargets.ToString(), "targets", report.Summary.UnmappedTargets == 0 ? "ok" : "warn");
+    MetricCard(sb, "Unsupported", report.Summary.UnsupportedActions.ToString(), "actions", report.Summary.UnsupportedActions == 0 ? "ok" : "warn");
+    MetricCard(sb, "Compile errors", report.Summary.SyntaxErrors.ToString(), "syntax/project verify", report.Summary.SyntaxErrors == 0 ? "ok" : "bad");
+    MetricCard(sb, "Project verify", report.ProjectVerifyStatus ?? "not-run", "status", StatusCss(report.ProjectVerifyStatus));
+    MetricCard(sb, "Smoke", $"{report.RuntimeReadyCandidates}/{report.SmokeCandidates}", "ready / candidates", report.RuntimeReadyCandidates > 0 ? "ok" : report.SmokeCandidates > 0 ? "warn" : "");
+    sb.AppendLine("</section>");
+
+    sb.AppendLine("<h2 class=\"section\">Recommended next actions</h2>");
+    if (report.RecommendedNextActions.Length == 0)
+        sb.AppendLine("<div class=\"card empty\">No recommendations found. Check input artifacts.</div>");
+    else
+    {
+        sb.AppendLine("<div class=\"grid\">");
+        foreach (var action in report.RecommendedNextActions.Take(6))
+            sb.AppendLine($"<div class=\"card action\">{Html(action)}</div>");
+        sb.AppendLine("</div>");
+    }
+
+    sb.AppendLine("<h2 class=\"section\">Top TODO / migration insights</h2>");
+    sb.AppendLine("<table><thead><tr><th>#</th><th>Category</th><th>Impact</th><th>Title</th><th>Suggested action</th><th>Where</th></tr></thead><tbody>");
+    if (report.TopInsights.Length == 0)
+        sb.AppendLine("<tr><td colspan=\"6\" class=\"empty\">No insights found.</td></tr>");
+    for (var i = 0; i < Math.Min(25, report.TopInsights.Length); i++)
+    {
+        var x = report.TopInsights[i];
+        var where = string.IsNullOrWhiteSpace(x.ExampleFile) ? "" : $"{PathRedaction.Redact(x.ExampleFile)}:{x.ExampleLine}";
+        sb.AppendLine($"<tr><td>{i + 1}</td><td><span class=\"pill warn\">{Html(x.Category)}</span></td><td>{x.EstimatedImpact}</td><td>{Html(x.Title)}</td><td>{Html(x.SuggestedAction)}</td><td><code>{Html(where)}</code></td></tr>");
+    }
+    sb.AppendLine("</tbody></table>");
+
+    sb.AppendLine("<h2 class=\"section\">Runtime candidates</h2>");
+    sb.AppendLine("<table><thead><tr><th>#</th><th>Level</th><th>Score</th><th>Test</th><th>Active</th><th>TODO</th><th>Compile</th><th>File</th></tr></thead><tbody>");
+    if (report.TopSmokeCandidates.Length == 0)
+        sb.AppendLine("<tr><td colspan=\"8\" class=\"empty\">No generated tests found.</td></tr>");
+    for (var i = 0; i < Math.Min(25, report.TopSmokeCandidates.Length); i++)
+    {
+        var c = report.TopSmokeCandidates[i];
+        var levelCss = c.ReadinessLevel.StartsWith("Level 5", StringComparison.OrdinalIgnoreCase) ? "ok" : c.ReadinessLevel.StartsWith("Level 4", StringComparison.OrdinalIgnoreCase) ? "warn" : "";
+        sb.AppendLine($"<tr><td>{i + 1}</td><td><span class=\"pill {levelCss}\">{Html(c.ReadinessLevel)}</span></td><td>{c.Score:0.0}</td><td><code>{Html(c.TestName)}</code></td><td><div class=\"bar\" title=\"{c.ActiveRatio:P0}\"><span style=\"width:{Math.Round(c.ActiveRatio * 100)}%\"></span></div><span class=\"small\">{c.ActiveRatio:P0}</span></td><td>{c.TodoLines}</td><td>{c.CompileErrors}</td><td><code>{Html(PathRedaction.Redact(c.File))}:{c.StartLine}</code></td></tr>");
+    }
+    sb.AppendLine("</tbody></table>");
+
+    sb.AppendLine("<h2 class=\"section\">Files</h2>");
+    sb.AppendLine("<table><thead><tr><th>File</th><th>Tests</th><th>Active avg</th><th>TODO</th><th>Compile errors</th><th>Best candidate</th></tr></thead><tbody>");
+    if (report.FileCards.Length == 0)
+        sb.AppendLine("<tr><td colspan=\"6\" class=\"empty\">No file cards found.</td></tr>");
+    foreach (var f in report.FileCards.OrderByDescending(x => x.BestScore).ThenBy(x => x.TodoLines).Take(50))
+    {
+        sb.AppendLine($"<tr><td><code>{Html(PathRedaction.Redact(f.File))}</code></td><td>{f.Tests}</td><td>{f.ActiveRatio:P0}</td><td>{f.TodoLines}</td><td>{f.CompileErrors}</td><td>{Html(f.BestTestName)} <span class=\"small\">{Html(f.BestReadinessLevel)}</span></td></tr>");
+    }
+    sb.AppendLine("</tbody></table>");
+
+    sb.AppendLine("<h2 class=\"section\">Linked artifacts</h2>");
+    sb.AppendLine("<div class=\"card\"><ul>");
+    foreach (var artifact in report.Artifacts)
+        sb.AppendLine($"<li><code>{Html(PathRedaction.Redact(artifact))}</code></li>");
+    if (report.Artifacts.Length == 0)
+        sb.AppendLine("<li class=\"empty\">No related artifacts found.</li>");
+    sb.AppendLine("</ul></div>");
+
+    sb.AppendLine("</main></body></html>");
+    return sb.ToString();
+}
+
+static void MetricCard(StringBuilder sb, string label, string value, string hint, string css)
+{
+    sb.AppendLine($"<div class=\"card\"><div class=\"label\">{Html(label)}</div><div class=\"metric {Html(css)}\">{Html(value)}</div><div class=\"small\">{Html(hint)}</div></div>");
+}
+
+static string StatusCss(string? status)
+{
+    if (string.Equals(status, "passed", StringComparison.OrdinalIgnoreCase)) return "ok";
+    if (string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase)) return "bad";
+    if (string.IsNullOrWhiteSpace(status) || status.Equals("not-run", StringComparison.OrdinalIgnoreCase)) return "warn";
+    return "";
+}
+
+static string Html(string? value) => System.Net.WebUtility.HtmlEncode(value ?? "");
 
 static void PrintSummary(MigrationSummaryReport summary)
 {
@@ -5028,9 +5518,9 @@ static CliOptions? ParseArgs(string[] args)
         }
     }
 
-    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "doctor" && mode != "explain-todo" && mode != "smoke-plan" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "orchestrate" && mode != "scaffold" && mode != "bootstrap-project")
+    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "doctor" && mode != "explain-todo" && mode != "smoke-plan" && mode != "migration-board" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "orchestrate" && mode != "scaffold" && mode != "bootstrap-project")
     {
-        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|verify-project|doctor|explain-todo|smoke-plan|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project");
+        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|verify-project|doctor|explain-todo|smoke-plan|migration-board|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project");
         return null;
     }
 
@@ -5068,6 +5558,7 @@ static CliOptions? ParseArgs(string[] args)
             "doctor" => "doctor",
             "explain-todo" => "explain-todo",
             "smoke-plan" => "smoke-plan",
+            "migration-board" => "migration-board",
             "config-validate" => "config-validate",
             "config-diff" => "config-diff",
             "guard" => "guard",
@@ -5171,6 +5662,10 @@ Modes:
                     report.json, explain-todo.json, and project-verify-report.json when
                     present. Outputs smoke-plan.md/json, runtime-checklist.md, and
                     agent-runtime-next-task.md. Does NOT run tests.
+  migration-board Build an HTML dashboard from existing migration artifacts. Reads
+                    report.json, explain-todo.json, smoke-plan.json, verify-report.json,
+                    project-verify-report.json, generated files, and related artifacts.
+                    Outputs migration-board.html/json. Does NOT modify config/source.
   config-validate Validate adapter-config structure and agent-safety rules. Outputs
                     config-validate-report.md/json. Fails on dangerous config.
   config-diff     Compare two adapter-config files and highlight risky agent changes.
@@ -5205,9 +5700,9 @@ Modes:
 
 Options:
     --mode <mode>                 Operation mode (required)
-                                    analyze|migrate|verify|verify-project|doctor|explain-todo|smoke-plan|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project
+                                    analyze|migrate|verify|verify-project|doctor|explain-todo|smoke-plan|migration-board|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project
     --input <file-or-directory>   Input .cs file or directory (required).
-                                    For propose/explain-todo: directory with report files.
+                                    For propose/explain-todo/migration-board: directory with report files.
                                     For doctor: source tests/project directory to validate before migration.
                                     For discover-target: target Playwright project root.
                                     For index-pom: Selenium project/PageObject directory.
@@ -5245,6 +5740,7 @@ Examples:
   Migrator.Cli --mode doctor --input ./OldTests --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json --out doctor
   Migrator.Cli --mode explain-todo --input migration/verify-project --out explain-todo --format both
   Migrator.Cli --mode smoke-plan --input migration/verify-project --out smoke-plan --format both
+  Migrator.Cli --mode migration-board --input migration/verify-project --out board --format both
   Migrator.Cli --mode config-validate --config ./adapter-config.json --out config-validate
   Migrator.Cli --mode config-diff --before adapter.old.json --after adapter-config.json --out config-diff
   Migrator.Cli --mode guard --before migration/baseline --after migration/current --out guard
@@ -5334,6 +5830,8 @@ record TodoInsight(
     string[] Evidence);
 
 record GeneratedTestMethodStats(string File, string TestName, int StartLine, int ActiveLines, int TodoLines, int ExecutableLines, double ActiveRatio, int AwaitCount, int ExpectOrAssertCount, int LocatorCount);
+record MigrationBoardReport(DateTimeOffset GeneratedAtUtc, string Source, ArtifactSummary Summary, string? ProjectVerifyStatus, int ProjectDiagnostics, int GeneratedFiles, int RuntimeReadyCandidates, int SmokeCandidates, MigrationBoardFileCard[] FileCards, TodoInsight[] TopInsights, SmokeCandidate[] TopSmokeCandidates, string[] RecommendedNextActions, string[] Artifacts);
+record MigrationBoardFileCard(string File, int Tests, int TodoLines, int CompileErrors, int CompileWarnings, double ActiveRatio, double BestScore, string BestReadinessLevel, string BestTestName);
 record SmokePlanReport(DateTimeOffset GeneratedAtUtc, string Source, string? ProjectVerifyStatus, int GeneratedFiles, int TestsFound, int RuntimeReadyCandidates, int SmokeCandidates, SmokeCandidate[] Candidates, string[] RecommendedNextActions);
 record SmokeCandidate(string File, string TestName, int StartLine, int ActiveLines, int TodoLines, double ActiveRatio, int CompileErrors, int CompileWarnings, int AwaitCount, int ExpectOrAssertCount, int LocatorCount, double Score, string ReadinessLevel, string[] Checklist);
 

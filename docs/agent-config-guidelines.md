@@ -241,3 +241,16 @@ dotnet run --project .\Migrator.Cli -- --mode bootstrap-project --input "<tests>
 
 После `migrate`/`verify-project` можно запустить `--mode smoke-plan`, чтобы выбрать самые близкие к runtime запуску тесты. Режим читает generated `.cs`, `project-verify-report.json` и `explain-todo.json`, затем пишет `smoke-plan.md/json`, `runtime-checklist.md` и `agent-runtime-next-task.md`. Агент должен брать Level 4/5 кандидаты по одному, не запускать весь пакет сразу и не править generated `.cs` вручную. Подробности: `docs/runtime-readiness.md`.
 
+
+## JSON Schema and smart TODO workflow
+
+Use `schemas/adapter-config.schema.json` for editor hints while editing profile/config files. The schema intentionally allows extra metadata such as `SourceTruth`, `Confidence`, and `RequiresReview` so agents can leave review breadcrumbs.
+
+When generated code contains a TODO marker like `[MIGRATOR:MISSING_MAPPING]`, use the marker as the primary classification signal:
+
+1. Find source truth.
+2. Add the smallest source-backed mapping.
+3. Run `config-validate`.
+4. Run migration/verify again.
+
+Do not treat schema validity as proof of migration safety. It only proves the config shape is reasonable.
