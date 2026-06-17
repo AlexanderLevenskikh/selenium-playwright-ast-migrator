@@ -43,3 +43,13 @@ Use the common layers first and the project-specific layer last:
 When an agent moves a rule into a base profile, it must explain why the rule is reusable across the project family.
 
 If the rule is based on one project only and there is no evidence it is shared, keep it in the project profile.
+
+## Profile match / reuse score
+
+Для переиспользования профилей между похожими проектами используй режим `profile-match`:
+
+```powershell
+selenium-pw-migrator --mode profile-match --input "<tests>" --config "profiles/infrastructure-base.adapter.json" --config "profiles/projects/<project>.adapter.json" --out "profile-match-<project>" --format both
+```
+
+Он ничего не меняет, а оценивает, насколько текущий проект похож на уже готовый migration profile, какие правила профиля реально встречаются в source-коде и какие выражения остались не покрыты. Основной файл для агента: `agent-profile-reuse-task.md`.

@@ -154,3 +154,13 @@ dotnet run --project .\Migrator.Cli -- --mode doctor --input "<tests>" --config 
 ## Migration Board в agent-first workflow
 
 После `verify-project`, `explain-todo` и `smoke-plan` агент должен ориентироваться по `migration-board.html/md`: это единая панель состояния миграции, root-cause TODO и runtime-кандидатов.
+
+## Profile match / reuse score
+
+Для переиспользования профилей между похожими проектами используй режим `profile-match`:
+
+```powershell
+selenium-pw-migrator --mode profile-match --input "<tests>" --config "profiles/infrastructure-base.adapter.json" --config "profiles/projects/<project>.adapter.json" --out "profile-match-<project>" --format both
+```
+
+Он ничего не меняет, а оценивает, насколько текущий проект похож на уже готовый migration profile, какие правила профиля реально встречаются в source-коде и какие выражения остались не покрыты. Основной файл для агента: `agent-profile-reuse-task.md`.

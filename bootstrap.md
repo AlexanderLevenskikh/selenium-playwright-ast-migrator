@@ -945,3 +945,13 @@ Generated TODO comments now include machine-readable `MIGRATOR:<CODE>` markers. 
 ## Migration board
 
 Для нового проекта после первого `verify-project` запусти или открой автоматически созданный `migration-board.html`. Он покажет, что чинить первым и какие тесты ближе всего к runtime.
+
+## Profile match / reuse score
+
+Для переиспользования профилей между похожими проектами используй режим `profile-match`:
+
+```powershell
+selenium-pw-migrator --mode profile-match --input "<tests>" --config "profiles/infrastructure-base.adapter.json" --config "profiles/projects/<project>.adapter.json" --out "profile-match-<project>" --format both
+```
+
+Он ничего не меняет, а оценивает, насколько текущий проект похож на уже готовый migration profile, какие правила профиля реально встречаются в source-коде и какие выражения остались не покрыты. Основной файл для агента: `agent-profile-reuse-task.md`.

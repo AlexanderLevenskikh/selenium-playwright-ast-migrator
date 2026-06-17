@@ -204,3 +204,13 @@ Use `schemas/adapter-config.schema.json` in config/profile files for editor hint
 ## Migration Board rule
 
 После `migrate` / `verify-project` / `smoke-plan` агент должен смотреть `migration-board.html` или `migration-board.md`, если файл есть. Не заставляй пользователя читать сырые JSON/MD отчёты, если доска уже собрана. Используй блок `Recommended next actions` как следующий план.
+
+## Profile match / reuse score
+
+Для переиспользования профилей между похожими проектами используй режим `profile-match`:
+
+```powershell
+selenium-pw-migrator --mode profile-match --input "<tests>" --config "profiles/infrastructure-base.adapter.json" --config "profiles/projects/<project>.adapter.json" --out "profile-match-<project>" --format both
+```
+
+Он ничего не меняет, а оценивает, насколько текущий проект похож на уже готовый migration profile, какие правила профиля реально встречаются в source-коде и какие выражения остались не покрыты. Основной файл для агента: `agent-profile-reuse-task.md`.

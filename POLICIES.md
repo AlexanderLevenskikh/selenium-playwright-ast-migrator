@@ -2908,3 +2908,13 @@ dotnet run --project .\Migrator.Cli -- --mode doctor --input "<tests>" --config 
 ## Migration Board policy
 
 `migration-board` является read-only режимом. Он может читать migration artifacts и generated code, но не имеет права менять `adapter-config`, source project или generated `.cs`. Агент может использовать доску для принятия решения, но не должен скрывать ошибки, отмеченные в `Top TODO / migration insights`.
+
+## Profile match / reuse score
+
+Для переиспользования профилей между похожими проектами используй режим `profile-match`:
+
+```powershell
+selenium-pw-migrator --mode profile-match --input "<tests>" --config "profiles/infrastructure-base.adapter.json" --config "profiles/projects/<project>.adapter.json" --out "profile-match-<project>" --format both
+```
+
+Он ничего не меняет, а оценивает, насколько текущий проект похож на уже готовый migration profile, какие правила профиля реально встречаются в source-коде и какие выражения остались не покрыты. Основной файл для агента: `agent-profile-reuse-task.md`.
