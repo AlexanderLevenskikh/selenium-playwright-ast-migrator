@@ -1,0 +1,21 @@
+{
+  "SourceProjectName": "DiscountsTests",
+  "UiTargets": [
+    {
+      "SourceExpression": "page.SaveButton",
+      "TargetExpression": "DiscountsSaveButton",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "discountSettingsPage.TitleInput",
+      "TargetExpression": "DiscountTitleInput",
+      "TargetKind": "TestId"
+    }
+  ],
+  "TargetKnownTypes": ["DiscountStatus"],
+  "Verification": {
+    "ProjectReferences": [
+      "TODO/path/to/Discounts.E2ETests.csproj"
+    ]
+  }
+}

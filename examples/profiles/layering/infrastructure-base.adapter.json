@@ -1,0 +1,24 @@
+{
+  "SourceProjectName": "Infrastructure Selenium POM Base",
+  "LocatorSettings": {
+    "DefaultTestIdAttribute": "data-tid",
+    "KnownTestIdAttributes": ["data-tid", "data-test", "data-testid"]
+  },
+  "SourceOnlyIdentifiers": ["page", "pagef", "Driver", "WebDriver"],
+  "TargetKnownTypes": ["Product", "Navigation"],
+  "TargetKnownIdentifiers": ["Navigation"],
+  "UiTargets": [
+    {
+      "SourceExpression": "page.SaveButton",
+      "TargetExpression": "SaveButton",
+      "TargetKind": "TestId"
+    }
+  ],
+  "Methods": [],
+  "ParameterizedMethods": [],
+  "Verification": {
+    "TargetFramework": "net8.0",
+    "AutoDiscoverNearestProject": true,
+    "Configuration": "Debug"
+  }
+}
