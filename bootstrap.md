@@ -955,3 +955,19 @@ selenium-pw-migrator --mode profile-match --input "<tests>" --config "profiles/i
 ```
 
 Он ничего не меняет, а оценивает, насколько текущий проект похож на уже готовый migration profile, какие правила профиля реально встречаются в source-коде и какие выражения остались не покрыты. Основной файл для агента: `agent-profile-reuse-task.md`.
+
+## Milestone 12: runtime failure classifier and schema workflow
+
+New command modes:
+
+```powershell
+selenium-pw-migrator --mode runtime-classify --input "migration/runtime-logs" --out runtime-failure-classification --format both
+selenium-pw-migrator --mode config-schema --out schema --format both
+```
+
+`runtime-classify` reads runtime logs after a smoke run and groups failures into locator, timeout, assertion, navigation, auth/environment, setup, and browser-context categories. Use it before changing mappings after a failed Playwright run.
+
+`config-schema` writes `adapter-config.schema.json` into the migration workspace for editor/agent usage. JSON Schema complements but does not replace `config-validate`.
+
+See `docs/runtime-failure-classifier.md` and `docs/config-schema-workflow.md`.
+

@@ -34,6 +34,7 @@
 
   <ItemGroup>
     <None Include="README_TOOL.md" Pack="true" PackagePath="\" />
+    <None Include="..\schemas\adapter-config.schema.json" Link="schemas\adapter-config.schema.json" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="schemas\" />
   </ItemGroup>
 
   <!-- Dotnet tool packages do not run from the source tree.
