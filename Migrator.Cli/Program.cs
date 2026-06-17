@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Diagnostics;
@@ -21,8 +21,29 @@ string? configPath = opts.Config;
 string format = opts.Format;
 bool failOnUnsupported = opts.FailOnUnsupported;
 bool failOnTodo = opts.FailOnTodo;
+string? beforePath = opts.Before;
+string? afterPath = opts.After;
 
-if (mode != "discover-target" && mode != "scaffold" && !File.Exists(inputPath) && !Directory.Exists(inputPath))
+// Agent-safety modes operate on config/report artifacts and do not process source files.
+if (mode == "config-validate")
+{
+    var validateExitCode = RunConfigValidate(configPath ?? inputPath, outPath, format);
+    return validateExitCode;
+}
+
+if (mode == "config-diff")
+{
+    var diffExitCode = RunConfigDiff(beforePath, afterPath, outPath, format);
+    return diffExitCode;
+}
+
+if (mode == "guard")
+{
+    var guardExitCode = RunGuard(beforePath, afterPath, outPath, format);
+    return guardExitCode;
+}
+
+if (mode != "discover-target" && mode != "scaffold" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && !File.Exists(inputPath) && !Directory.Exists(inputPath))
 {
     Console.Error.WriteLine($"Input not found: {inputPath}");
     return 1;
@@ -79,6 +100,13 @@ if (mode == "index-pom")
 {
     var indexPomExitCode = RunIndexPom(inputPath, outPath, format);
     return indexPomExitCode;
+}
+
+// Handle explain-todo mode — explains migration TODO/root causes from existing artifacts.
+if (mode == "explain-todo")
+{
+    var explainExitCode = RunExplainTodo(inputPath, outPath, format);
+    return explainExitCode;
 }
 
 // Handle scaffold mode — generates a minimal, compile-ready Playwright .NET test project
@@ -138,7 +166,7 @@ switch (mode)
     case "verify-project":
         {
             var verifyConfig = configPath != null ? ConfigValidator.ValidateJson(File.ReadAllText(configPath), configPath) : new ProjectAdapterConfig();
-            var verifyExitCode = RunVerifyProject(summary, outPath, format, resultsList, verifyConfig, configPath, inputPath);
+            var verifyExitCode = RunVerifyProject(summary, outPath, format, resultsList, verifyConfig, configPath, inputPath, allUnmapped, CollectAllUnsupported(resultsList));
             if (verifyExitCode != 0)
                 return verifyExitCode;
         }
@@ -179,6 +207,7 @@ static void RunAnalyze(MigrationSummaryReport summary, string outPath, string fo
     var allUnsupported = CollectAllUnsupported(results);
     WriteReports(summary, outPath, format, allUnmapped, allUnsupported);
     GenerateDraftConfig(allUnmapped, outPath, configPath);
+    WriteExplainTodoArtifacts(summary, outPath, format, allUnmapped, allUnsupported, null);
 
     PrintSummary(summary);
     Console.WriteLine($"Analysis written to: {Path.GetFullPath(outPath)}");
@@ -205,6 +234,7 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
     var allUnsupported = CollectAllUnsupported(results);
     WriteReports(summaryWithGenerated, outPath, format, allUnmapped, allUnsupported);
     GenerateDraftConfig(allUnmapped, outPath, configPath);
+    WriteExplainTodoArtifacts(summaryWithGenerated, outPath, format, allUnmapped, allUnsupported, null);
 
     PrintSummary(summaryWithGenerated);
     Console.WriteLine($"Migration written to: {Path.GetFullPath(outPath)} ({generated} files generated)");
@@ -261,7 +291,7 @@ static int RunVerify(MigrationSummaryReport summary, string outPath, string form
     return VerifyRunner.ApplyQualityGates(report, config?.QualityGates, report.Issues);
 }
 
-static int RunVerifyProject(MigrationSummaryReport summary, string outPath, string format, List<PipelineResult> results, ProjectAdapterConfig config, string? configPath, string inputPath)
+static int RunVerifyProject(MigrationSummaryReport summary, string outPath, string format, List<PipelineResult> results, ProjectAdapterConfig config, string? configPath, string inputPath, IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped, IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnsupported)
 {
     Directory.CreateDirectory(outPath);
 
@@ -317,6 +347,7 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
     File.WriteAllText(Path.Combine(outPath, "project-verify-report.json"),
         System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
     File.WriteAllText(Path.Combine(outPath, "project-verify-report.md"), WriteProjectVerifyMarkdown(report));
+    WriteExplainTodoArtifacts(summary with { GeneratedFiles = generatedFiles.Count }, outPath, format, allUnmapped, allUnsupported, report);
 
     PrintSummary(summary with { GeneratedFiles = generatedFiles.Count });
     Console.WriteLine();
@@ -1109,6 +1140,455 @@ static void GenerateDraftConfig(IReadOnlyDictionary<string, (int Count, string F
     File.WriteAllText(draftPath, draftJson);
     Console.WriteLine($"Draft adapter config written: {draftPath}");
 }
+
+
+static int RunExplainTodo(string inputPath, string outPath, string format)
+{
+    Directory.CreateDirectory(outPath);
+
+    var artifactDir = File.Exists(inputPath)
+        ? Path.GetDirectoryName(Path.GetFullPath(inputPath)) ?? Directory.GetCurrentDirectory()
+        : Path.GetFullPath(inputPath);
+
+    if (!Directory.Exists(artifactDir))
+    {
+        Console.Error.WriteLine($"Explain-todo input directory not found: {artifactDir}");
+        return 1;
+    }
+
+    var report = BuildExplainTodoReportFromArtifacts(artifactDir);
+    WriteExplainTodoReport(report, outPath, format);
+
+    Console.WriteLine("=== Explain TODO ===");
+    Console.WriteLine($"Input artifacts: {artifactDir}");
+    Console.WriteLine($"TODO comments: {report.TodoComments}");
+    Console.WriteLine($"Insights: {report.Insights.Length}");
+    if (report.Insights.Length > 0)
+    {
+        Console.WriteLine("Top next actions:");
+        foreach (var insight in report.Insights.Take(5))
+            Console.WriteLine($"  - [{insight.Category}] {insight.Title} (impact: {insight.EstimatedImpact})");
+    }
+    Console.WriteLine($"Explain TODO artifacts written to: {Path.GetFullPath(outPath)}");
+    return 0;
+}
+
+static void WriteExplainTodoArtifacts(
+    MigrationSummaryReport summary,
+    string outPath,
+    string format,
+    IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped,
+    IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnsupported,
+    ProjectVerifyReport? projectVerifyReport)
+{
+    var report = BuildExplainTodoReport(summary, allUnmapped, allUnsupported, projectVerifyReport);
+    WriteExplainTodoReport(report, outPath, format);
+}
+
+static void WriteExplainTodoReport(TodoExplanationReport report, string outPath, string format)
+{
+    Directory.CreateDirectory(outPath);
+
+    if (format == "json" || format == "both")
+    {
+        File.WriteAllText(Path.Combine(outPath, "explain-todo.json"),
+            System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    if (format == "text" || format == "both")
+    {
+        File.WriteAllText(Path.Combine(outPath, "explain-todo.md"), WriteExplainTodoMarkdown(report));
+        File.WriteAllText(Path.Combine(outPath, "agent-next-task.md"), WriteAgentNextTaskMarkdown(report));
+    }
+}
+
+static TodoExplanationReport BuildExplainTodoReport(
+    MigrationSummaryReport summary,
+    IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped,
+    IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnsupported,
+    ProjectVerifyReport? projectVerifyReport)
+{
+    var insights = new List<TodoInsight>();
+
+    if (projectVerifyReport != null && projectVerifyReport.Status != "passed")
+    {
+        var diagnostics = projectVerifyReport.Diagnostics.Take(10).ToArray();
+        var title = projectVerifyReport.Diagnostics.Length == 0
+            ? "Project verify failed without captured diagnostics"
+            : "Project verify failed: inspect build diagnostics";
+        insights.Add(new TodoInsight(
+            Category: "PROJECT_VERIFY",
+            Title: title,
+            Reason: "Generated code does not compile in the temporary verification project.",
+            EstimatedImpact: projectVerifyReport.Diagnostics.Length,
+            ExampleFile: projectVerifyReport.HarnessProject,
+            ExampleLine: 0,
+            SuggestedAction: "Open project-verify-report.md. Fix missing ProjectReferences/PackageReferences in adapter-config.Verification or classify generated-code errors.",
+            RequiresSourceTruth: false,
+            RequiresDeveloper: projectVerifyReport.Diagnostics.Any(d => d.Contains("CS0103", StringComparison.OrdinalIgnoreCase)
+                                                                     || d.Contains("CS0246", StringComparison.OrdinalIgnoreCase)),
+            Evidence: diagnostics));
+    }
+
+    foreach (var kv in allUnmapped.OrderByDescending(kv => kv.Value.Count).Take(20))
+    {
+        insights.Add(new TodoInsight(
+            Category: "MISSING_MAPPING",
+            Title: $"Add mapping for {kv.Key}",
+            Reason: "Source expression was not mapped to a Playwright locator/action.",
+            EstimatedImpact: kv.Value.Count,
+            ExampleFile: kv.Value.File,
+            ExampleLine: kv.Value.Line,
+            SuggestedAction: "Find POM/source truth for this expression, then add a UiTarget/Method/ParameterizedMethod mapping in adapter-config.json.",
+            RequiresSourceTruth: true,
+            RequiresDeveloper: false,
+            Evidence: new[] { $"Suggested target draft: {SuggestTargetExpression(kv.Key)}" }));
+    }
+
+    foreach (var kv in allUnsupported.OrderByDescending(kv => kv.Value.Count).Take(20))
+    {
+        insights.Add(new TodoInsight(
+            Category: "UNSUPPORTED_ACTION",
+            Title: $"Classify unsupported action: {TrimForTitle(kv.Key, 90)}",
+            Reason: "The source statement was preserved as unsupported/raw logic.",
+            EstimatedImpact: kv.Value.Count,
+            ExampleFile: kv.Value.File,
+            ExampleLine: kv.Value.Line,
+            SuggestedAction: "If this is a repeated helper/wrapper, add a Method/ParameterizedMethod mapping. If semantics are unclear, leave TODO and ask the project owner.",
+            RequiresSourceTruth: true,
+            RequiresDeveloper: LooksLikeGenericMigratorGap(kv.Key),
+            Evidence: new[] { kv.Key }));
+    }
+
+    if (summary.TodoComments > 0 && insights.Count == 0)
+    {
+        insights.Add(new TodoInsight(
+            Category: "TODO_REVIEW",
+            Title: "TODO comments remain, but no unmapped/unsupported root cause was found in summary artifacts",
+            Reason: "TODO may come from raw statements, placeholders, assertions, or generated-code safety checks.",
+            EstimatedImpact: summary.TodoComments,
+            ExampleFile: "",
+            ExampleLine: 0,
+            SuggestedAction: "Run verify or inspect generated TODO labels. If available, run --mode explain-todo against the verify-project output directory.",
+            RequiresSourceTruth: false,
+            RequiresDeveloper: false,
+            Evidence: Array.Empty<string>()));
+    }
+
+    var ordered = insights
+        .OrderByDescending(i => i.EstimatedImpact)
+        .ThenBy(i => i.Category, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    return new TodoExplanationReport(
+        GeneratedAtUtc: DateTimeOffset.UtcNow,
+        Source: "pipeline",
+        FilesProcessed: summary.FilesProcessed,
+        TestsFound: summary.TestsFound,
+        ActionsFound: summary.ActionsFound,
+        SemanticActions: summary.SemanticActions,
+        SyntaxFallbackActions: summary.SyntaxFallbackActions,
+        MappedTargets: summary.MappedTargets,
+        UnmappedTargets: summary.UnmappedTargets,
+        UnsupportedActions: summary.UnsupportedActions,
+        TodoComments: summary.TodoComments,
+        SyntaxErrors: projectVerifyReport?.Diagnostics.Count(d => d.Contains(": error ", StringComparison.OrdinalIgnoreCase) || d.Contains("CS", StringComparison.OrdinalIgnoreCase)) ?? 0,
+        ProjectVerifyStatus: projectVerifyReport?.Status,
+        Insights: ordered,
+        NextBestAction: ordered.FirstOrDefault()?.SuggestedAction ?? "No TODO/actionable issue found. Move to project verify or runtime smoke.");
+}
+
+static TodoExplanationReport BuildExplainTodoReportFromArtifacts(string artifactDir)
+{
+    var reportPath = FindFirstExisting(artifactDir, "report.json");
+    var unmappedPath = FindFirstExisting(artifactDir, "unmapped-targets.json");
+    var unsupportedPath = FindFirstExisting(artifactDir, "unsupported-actions.json");
+    var verifyPath = FindFirstExisting(artifactDir, "verify-report.json");
+    var projectVerifyPath = FindFirstExisting(artifactDir, "project-verify-report.json");
+
+    var summary = new ArtifactSummary();
+    if (reportPath != null)
+        ReadSummaryReport(reportPath, summary);
+    if (verifyPath != null)
+        ReadVerifyReport(verifyPath, summary);
+    ProjectVerifyReport? projectVerify = projectVerifyPath != null ? ReadProjectVerifyReport(projectVerifyPath) : null;
+
+    var unmapped = ReadCountItems(unmappedPath, "SourceExpression", "Usages", "ExampleFile", "ExampleLine");
+    if (unmapped.Count == 0 && reportPath != null)
+        unmapped = ReadNestedCountItems(reportPath, "TopUnmappedTargets", "SourceExpression", "Usages", "ExampleFile", "ExampleLine");
+
+    var unsupported = ReadCountItems(unsupportedPath, "MethodOrSourceText", "Count", "ExampleFile", "ExampleLine");
+    if (unsupported.Count == 0 && reportPath != null)
+        unsupported = ReadNestedCountItems(reportPath, "TopUnsupportedActions", "MethodOrSourceText", "Count", "ExampleFile", "ExampleLine");
+
+    var fakeSummary = new MigrationSummaryReport(
+        FilesProcessed: summary.FilesProcessed,
+        TestsFound: summary.TestsFound,
+        ActionsFound: summary.ActionsFound,
+        SemanticActions: summary.SemanticActions,
+        SyntaxFallbackActions: summary.SyntaxFallbackActions,
+        UnsupportedActions: summary.UnsupportedActions,
+        MappedTargets: summary.MappedTargets,
+        UnmappedTargets: summary.UnmappedTargets,
+        TodoComments: summary.TodoComments,
+        FilesWithWarnings: 0,
+        GeneratedFiles: 0,
+        ProcessedFiles: Array.Empty<string>(),
+        TopUnmappedTargets: Array.Empty<UnmappedTargetInfo>(),
+        TopUnsupportedActions: Array.Empty<UnsupportedMethodInfo>(),
+        PerFileReports: Array.Empty<MigrationReport>());
+
+    var built = BuildExplainTodoReport(fakeSummary, unmapped, unsupported, projectVerify);
+    return built with
+    {
+        Source = artifactDir,
+        SyntaxErrors = Math.Max(built.SyntaxErrors, summary.SyntaxErrors),
+        ProjectVerifyStatus = projectVerify?.Status ?? summary.VerifyStatus
+    };
+}
+
+static string? FindFirstExisting(string dir, string fileName)
+{
+    var direct = Path.Combine(dir, fileName);
+    if (File.Exists(direct))
+        return direct;
+
+    return Directory.EnumerateFiles(dir, fileName, SearchOption.AllDirectories)
+        .OrderBy(p => p.Length)
+        .FirstOrDefault();
+}
+
+static void ReadSummaryReport(string path, ArtifactSummary summary)
+{
+    using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+    var root = doc.RootElement;
+    summary.FilesProcessed = ReadInt(root, "FilesProcessed");
+    summary.TestsFound = ReadInt(root, "TestsFound");
+    summary.ActionsFound = ReadInt(root, "ActionsFound");
+    summary.SemanticActions = ReadInt(root, "SemanticActions");
+    summary.SyntaxFallbackActions = ReadInt(root, "SyntaxFallbackActions");
+    summary.UnsupportedActions = ReadInt(root, "UnsupportedActions");
+    summary.MappedTargets = ReadInt(root, "MappedTargets");
+    summary.UnmappedTargets = ReadInt(root, "UnmappedTargets");
+    summary.TodoComments = ReadInt(root, "TodoComments");
+}
+
+static void ReadVerifyReport(string path, ArtifactSummary summary)
+{
+    using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+    var root = doc.RootElement;
+    if (root.TryGetProperty("summary", out var s))
+    {
+        summary.VerifyStatus = ReadString(s, "status");
+        summary.TodoComments = Math.Max(summary.TodoComments, ReadInt(s, "todoComments"));
+        summary.UnmappedTargets = Math.Max(summary.UnmappedTargets, ReadInt(s, "unmappedTargets"));
+        summary.UnsupportedActions = Math.Max(summary.UnsupportedActions, ReadInt(s, "unsupportedActions"));
+        summary.SyntaxErrors = Math.Max(summary.SyntaxErrors, ReadInt(s, "syntaxErrors"));
+    }
+}
+
+static ProjectVerifyReport? ReadProjectVerifyReport(string path)
+{
+    try
+    {
+        return System.Text.Json.JsonSerializer.Deserialize<ProjectVerifyReport>(File.ReadAllText(path));
+    }
+    catch
+    {
+        return null;
+    }
+}
+
+static Dictionary<string, (int Count, string File, int Line)> ReadCountItems(string? path, string nameProp, string countProp, string fileProp, string lineProp)
+{
+    var result = new Dictionary<string, (int Count, string File, int Line)>(StringComparer.OrdinalIgnoreCase);
+    if (path == null || !File.Exists(path))
+        return result;
+
+    using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+    if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Array)
+        return result;
+
+    foreach (var item in doc.RootElement.EnumerateArray())
+        AddArtifactItem(result, item, nameProp, countProp, fileProp, lineProp);
+    return result;
+}
+
+static Dictionary<string, (int Count, string File, int Line)> ReadNestedCountItems(string path, string arrayProp, string nameProp, string countProp, string fileProp, string lineProp)
+{
+    var result = new Dictionary<string, (int Count, string File, int Line)>(StringComparer.OrdinalIgnoreCase);
+    if (!File.Exists(path))
+        return result;
+
+    using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+    if (!doc.RootElement.TryGetProperty(arrayProp, out var array) || array.ValueKind != System.Text.Json.JsonValueKind.Array)
+        return result;
+
+    foreach (var item in array.EnumerateArray())
+        AddArtifactItem(result, item, nameProp, countProp, fileProp, lineProp);
+    return result;
+}
+
+static void AddArtifactItem(Dictionary<string, (int Count, string File, int Line)> result, System.Text.Json.JsonElement item, string nameProp, string countProp, string fileProp, string lineProp)
+{
+    var name = ReadString(item, nameProp);
+    if (string.IsNullOrWhiteSpace(name))
+        return;
+    var count = ReadInt(item, countProp);
+    if (count <= 0)
+        count = 1;
+    var file = ReadString(item, fileProp) ?? "";
+    var line = ReadInt(item, lineProp);
+    result[name] = (count, file, line);
+}
+
+static int ReadInt(System.Text.Json.JsonElement element, string propertyName)
+{
+    if (!element.TryGetProperty(propertyName, out var p))
+        return 0;
+    if (p.ValueKind == System.Text.Json.JsonValueKind.Number && p.TryGetInt32(out var i))
+        return i;
+    if (p.ValueKind == System.Text.Json.JsonValueKind.String && int.TryParse(p.GetString(), out i))
+        return i;
+    return 0;
+}
+
+static string? ReadString(System.Text.Json.JsonElement element, string propertyName)
+{
+    if (!element.TryGetProperty(propertyName, out var p))
+        return null;
+    return p.ValueKind == System.Text.Json.JsonValueKind.String ? p.GetString() : p.ToString();
+}
+
+static string WriteExplainTodoMarkdown(TodoExplanationReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Explain TODO Report");
+    sb.AppendLine();
+    sb.AppendLine($"- **Generated**: {report.GeneratedAtUtc:yyyy-MM-dd HH:mm:ss zzz}");
+    sb.AppendLine($"- **Source**: `{report.Source}`");
+    sb.AppendLine($"- **Files**: `{report.FilesProcessed}`");
+    sb.AppendLine($"- **Tests**: `{report.TestsFound}`");
+    sb.AppendLine($"- **Actions**: `{report.ActionsFound}`");
+    sb.AppendLine($"- **Semantic / SyntaxFallback**: `{report.SemanticActions}` / `{report.SyntaxFallbackActions}`");
+    sb.AppendLine($"- **Mapped / Unmapped**: `{report.MappedTargets}` / `{report.UnmappedTargets}`");
+    sb.AppendLine($"- **Unsupported**: `{report.UnsupportedActions}`");
+    sb.AppendLine($"- **TODO**: `{report.TodoComments}`");
+    if (!string.IsNullOrWhiteSpace(report.ProjectVerifyStatus))
+        sb.AppendLine($"- **Project verify**: `{report.ProjectVerifyStatus}`");
+    if (report.SyntaxErrors > 0)
+        sb.AppendLine($"- **Syntax/build diagnostics**: `{report.SyntaxErrors}`");
+    sb.AppendLine();
+    sb.AppendLine("## Следующий лучший шаг");
+    sb.AppendLine();
+    sb.AppendLine(report.NextBestAction);
+    sb.AppendLine();
+    sb.AppendLine("## Что делать дальше");
+    sb.AppendLine();
+    if (report.Insights.Length == 0)
+    {
+        sb.AppendLine("Проблем для объяснения не найдено. Переходи к verify-project или runtime smoke.");
+    }
+    else
+    {
+        sb.AppendLine("| # | Категория | Что | Эффект | Где | Действие |");
+        sb.AppendLine("|---|---|---|---:|---|---|");
+        for (var i = 0; i < report.Insights.Length; i++)
+        {
+            var x = report.Insights[i];
+            var where = string.IsNullOrWhiteSpace(x.ExampleFile) ? "" : $"`{PathRedaction.Redact(x.ExampleFile)}:{x.ExampleLine}`";
+            sb.AppendLine($"| {i + 1} | `{EscapeMd(x.Category)}` | {EscapeMd(x.Title)} | {x.EstimatedImpact} | {where} | {EscapeMd(x.SuggestedAction)} |");
+        }
+    }
+    sb.AppendLine();
+    sb.AppendLine("## Детали");
+    sb.AppendLine();
+    foreach (var insight in report.Insights.Take(30))
+    {
+        sb.AppendLine($"### {EscapeMd(insight.Title)}");
+        sb.AppendLine();
+        sb.AppendLine($"- **Категория**: `{insight.Category}`");
+        sb.AppendLine($"- **Причина**: {insight.Reason}");
+        sb.AppendLine($"- **Оценка эффекта**: {insight.EstimatedImpact}");
+        if (!string.IsNullOrWhiteSpace(insight.ExampleFile))
+            sb.AppendLine($"- **Пример**: `{PathRedaction.Redact(insight.ExampleFile)}:{insight.ExampleLine}`");
+        sb.AppendLine($"- **Нужен source truth**: {(insight.RequiresSourceTruth ? "да" : "нет")}");
+        sb.AppendLine($"- **Нужен разработчик**: {(insight.RequiresDeveloper ? "возможно" : "нет")}");
+        sb.AppendLine($"- **Действие**: {insight.SuggestedAction}");
+        if (insight.Evidence.Length > 0)
+        {
+            sb.AppendLine("- **Факты**:");
+            foreach (var e in insight.Evidence.Take(5))
+                sb.AppendLine($"  - `{EscapeMd(e)}`");
+        }
+        sb.AppendLine();
+    }
+    return sb.ToString();
+}
+
+static string WriteAgentNextTaskMarkdown(TodoExplanationReport report)
+{
+    var first = report.Insights.FirstOrDefault();
+    var sb = new StringBuilder();
+    sb.AppendLine("# Agent Next Task");
+    sb.AppendLine();
+    sb.AppendLine("Ты продолжаешь миграцию Selenium C# → Playwright .NET через AST Migrator.");
+    sb.AppendLine();
+    sb.AppendLine("## Текущий статус");
+    sb.AppendLine();
+    sb.AppendLine($"- TODO: `{report.TodoComments}`");
+    sb.AppendLine($"- Unmapped targets: `{report.UnmappedTargets}`");
+    sb.AppendLine($"- Unsupported actions: `{report.UnsupportedActions}`");
+    sb.AppendLine($"- Project verify: `{report.ProjectVerifyStatus ?? "not-run"}`");
+    sb.AppendLine();
+    sb.AppendLine("## Следующий рекомендуемый шаг");
+    sb.AppendLine();
+    if (first == null)
+    {
+        sb.AppendLine("Явных TODO/root-cause проблем не найдено. Запусти verify-project или выбери runtime smoke candidates.");
+    }
+    else
+    {
+        sb.AppendLine($"Категория: `{first.Category}`");
+        sb.AppendLine();
+        sb.AppendLine($"Задача: **{first.Title}**");
+        sb.AppendLine();
+        sb.AppendLine($"Почему: {first.Reason}");
+        sb.AppendLine();
+        sb.AppendLine($"Что сделать: {first.SuggestedAction}");
+        if (!string.IsNullOrWhiteSpace(first.ExampleFile))
+            sb.AppendLine($"\nПример: `{PathRedaction.Redact(first.ExampleFile)}:{first.ExampleLine}`");
+    }
+    sb.AppendLine();
+    sb.AppendLine("## Ограничения");
+    sb.AppendLine();
+    sb.AppendLine("- Не меняй исходный проект.");
+    sb.AppendLine("- Не редактируй generated `.cs` вручную.");
+    sb.AppendLine("- По умолчанию меняй только `adapter-config.json`.");
+    sb.AppendLine("- Если нужен C# fix мигратора — остановись и сформируй escalation report.");
+    sb.AppendLine("- Если нужен selector/POM — найди source truth; не угадывай молча.");
+    sb.AppendLine();
+    sb.AppendLine("## Формат ответа");
+    sb.AppendLine();
+    sb.AppendLine("Отвечай на русском. После этапа покажи метрики до/после и спроси: `Продолжить?`");
+    return sb.ToString();
+}
+
+static string TrimForTitle(string value, int max)
+{
+    var oneLine = value.Replace("\r", " ").Replace("\n", " ").Trim();
+    return oneLine.Length <= max ? oneLine : oneLine.Substring(0, max - 1) + "…";
+}
+
+static bool LooksLikeGenericMigratorGap(string value)
+{
+    return value.Contains("TODO", StringComparison.OrdinalIgnoreCase)
+        || value.Contains("Page.", StringComparison.Ordinal)
+        || value.Contains("Locator", StringComparison.OrdinalIgnoreCase)
+        || value.Contains("ClickAndOpen", StringComparison.OrdinalIgnoreCase);
+}
+
+static string EscapeMd(string value) => value.Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ");
 
 static void PrintSummary(MigrationSummaryReport summary)
 {
@@ -2363,6 +2843,462 @@ static string ToOrchestrationReportMarkdown(OrchestrationReport report)
     return sb.ToString();
 }
 
+
+static int RunConfigValidate(string? configPath, string outPath, string format)
+{
+    if (string.IsNullOrWhiteSpace(configPath))
+    {
+        Console.Error.WriteLine("config-validate requires --config <adapter-config.json> or --input <adapter-config.json>.");
+        return 2;
+    }
+
+    if (!File.Exists(configPath))
+    {
+        Console.Error.WriteLine($"Config not found: {configPath}");
+        return 2;
+    }
+
+    Directory.CreateDirectory(outPath);
+
+    var issues = new List<ConfigSafetyIssue>();
+    ProjectAdapterConfig? config = null;
+    try
+    {
+        config = ConfigValidator.ValidateJson(File.ReadAllText(configPath), configPath);
+    }
+    catch (ConfigValidationError ex)
+    {
+        foreach (var err in ex.Errors)
+            issues.Add(new ConfigSafetyIssue("error", "STRUCTURAL_CONFIG_ERROR", err, configPath, "Fix adapter-config.json before running migration."));
+    }
+    catch (Exception ex)
+    {
+        issues.Add(new ConfigSafetyIssue("error", "CONFIG_READ_ERROR", ex.Message, configPath, "Check that the config file is valid JSON and accessible."));
+    }
+
+    if (config != null)
+        issues.AddRange(AnalyzeConfigSafety(config));
+
+    var report = new ConfigSafetyReport(
+        GeneratedAtUtc: DateTimeOffset.UtcNow,
+        ConfigPath: Path.GetFullPath(configPath),
+        Status: issues.Any(i => i.Severity.Equals("error", StringComparison.OrdinalIgnoreCase)) ? "failed" : "passed",
+        Issues: issues.OrderBy(i => SeverityRank(i.Severity)).ThenBy(i => i.Code, StringComparer.OrdinalIgnoreCase).ThenBy(i => i.Location, StringComparer.OrdinalIgnoreCase).ToArray(),
+        Metrics: config != null ? BuildConfigMetrics(config) : Array.Empty<ConfigMetric>());
+
+    WriteConfigSafetyReport(report, outPath, format);
+
+    Console.WriteLine("=== Config Validate ===");
+    Console.WriteLine($"Status: {report.Status.ToUpperInvariant()}");
+    Console.WriteLine($"Issues: {report.Issues.Length} ({report.Issues.Count(i => i.Severity == "error")} error, {report.Issues.Count(i => i.Severity == "warning")} warning)");
+    foreach (var issue in report.Issues.Take(30))
+        Console.WriteLine($"[{issue.Severity.ToUpperInvariant()}] {issue.Code}: {issue.Message}" + (string.IsNullOrWhiteSpace(issue.Location) ? "" : $" ({issue.Location})"));
+    if (report.Issues.Length > 30)
+        Console.WriteLine($"... and {report.Issues.Length - 30} more");
+    Console.WriteLine($"Reports written to: {Path.GetFullPath(outPath)}");
+
+    return report.Status == "passed" ? 0 : 2;
+}
+
+static int RunConfigDiff(string? beforePath, string? afterPath, string outPath, string format)
+{
+    if (string.IsNullOrWhiteSpace(beforePath) || string.IsNullOrWhiteSpace(afterPath))
+    {
+        Console.Error.WriteLine("config-diff requires --before <old-adapter-config.json> --after <new-adapter-config.json>.");
+        return 2;
+    }
+
+    if (!File.Exists(beforePath) || !File.Exists(afterPath))
+    {
+        Console.Error.WriteLine($"Config diff input not found. before={beforePath}, after={afterPath}");
+        return 2;
+    }
+
+    Directory.CreateDirectory(outPath);
+    var before = ConfigValidator.ValidateJson(File.ReadAllText(beforePath), beforePath);
+    var after = ConfigValidator.ValidateJson(File.ReadAllText(afterPath), afterPath);
+
+    var changes = BuildConfigChanges(before, after).ToArray();
+    var risks = BuildConfigDiffRisks(before, after).ToArray();
+    var report = new ConfigDiffReport(
+        GeneratedAtUtc: DateTimeOffset.UtcNow,
+        BeforePath: Path.GetFullPath(beforePath),
+        AfterPath: Path.GetFullPath(afterPath),
+        Changes: changes,
+        Risks: risks,
+        Summary: new[]
+        {
+            $"UiTargets: {before.UiTargets.Length} → {after.UiTargets.Length}",
+            $"Methods: {before.Methods.Length} → {after.Methods.Length}",
+            $"ParameterizedMethods: {before.ParameterizedMethods.Length} → {after.ParameterizedMethods.Length}",
+            $"SourceOnlyIdentifiers: {before.SourceOnlyIdentifiers.Length} → {after.SourceOnlyIdentifiers.Length}",
+            $"TargetKnownTypes: {before.TargetKnownTypes.Length} → {after.TargetKnownTypes.Length}",
+            $"TargetKnownIdentifiers: {before.TargetKnownIdentifiers.Length} → {after.TargetKnownIdentifiers.Length}"
+        });
+
+    WriteConfigDiffReport(report, outPath, format);
+
+    Console.WriteLine("=== Config Diff ===");
+    Console.WriteLine($"Changes: {report.Changes.Length}");
+    Console.WriteLine($"Risks: {report.Risks.Length}");
+    foreach (var risk in report.Risks.Take(20))
+        Console.WriteLine($"[RISK] {risk.Code}: {risk.Message}" + (string.IsNullOrWhiteSpace(risk.Location) ? "" : $" ({risk.Location})"));
+    Console.WriteLine($"Reports written to: {Path.GetFullPath(outPath)}");
+    return 0;
+}
+
+static int RunGuard(string? beforePath, string? afterPath, string outPath, string format)
+{
+    if (string.IsNullOrWhiteSpace(beforePath) || string.IsNullOrWhiteSpace(afterPath))
+    {
+        Console.Error.WriteLine("guard requires --before <old-artifacts-dir> --after <new-artifacts-dir>.");
+        return 2;
+    }
+
+    var beforeDir = ResolveArtifactDirectoryForGuard(beforePath);
+    var afterDir = ResolveArtifactDirectoryForGuard(afterPath);
+    if (!Directory.Exists(beforeDir) || !Directory.Exists(afterDir))
+    {
+        Console.Error.WriteLine($"Guard artifacts not found. before={beforeDir}, after={afterDir}");
+        return 2;
+    }
+
+    Directory.CreateDirectory(outPath);
+    var before = BuildExplainTodoReportFromArtifacts(beforeDir);
+    var after = BuildExplainTodoReportFromArtifacts(afterDir);
+    var checks = BuildGuardChecks(before, after).ToArray();
+    var passed = checks.All(c => c.Status.Equals("passed", StringComparison.OrdinalIgnoreCase) || c.Status.Equals("warning", StringComparison.OrdinalIgnoreCase));
+    var report = new GuardReport(
+        GeneratedAtUtc: DateTimeOffset.UtcNow,
+        BeforePath: Path.GetFullPath(beforeDir),
+        AfterPath: Path.GetFullPath(afterDir),
+        Status: passed ? "passed" : "failed",
+        Checks: checks,
+        Summary: new[]
+        {
+            $"TODO: {before.TodoComments} → {after.TodoComments}",
+            $"UnmappedTargets: {before.UnmappedTargets} → {after.UnmappedTargets}",
+            $"UnsupportedActions: {before.UnsupportedActions} → {after.UnsupportedActions}",
+            $"SyntaxErrors: {before.SyntaxErrors} → {after.SyntaxErrors}",
+            $"ProjectVerify: {before.ProjectVerifyStatus ?? "unknown"} → {after.ProjectVerifyStatus ?? "unknown"}"
+        });
+
+    WriteGuardReport(report, outPath, format);
+
+    Console.WriteLine("=== Migration Guard ===");
+    Console.WriteLine($"Status: {report.Status.ToUpperInvariant()}");
+    foreach (var check in report.Checks)
+        Console.WriteLine($"[{check.Status.ToUpperInvariant()}] {check.Name}: {check.Message}");
+    Console.WriteLine($"Reports written to: {Path.GetFullPath(outPath)}");
+    return report.Status == "passed" ? 0 : 2;
+}
+
+static ConfigMetric[] BuildConfigMetrics(ProjectAdapterConfig config)
+{
+    return new[]
+    {
+        new ConfigMetric("UiTargets", config.UiTargets.Length),
+        new ConfigMetric("Methods", config.Methods.Length),
+        new ConfigMetric("ParameterizedMethods", config.ParameterizedMethods.Length),
+        new ConfigMetric("PageObjects", config.PageObjects.Length),
+        new ConfigMetric("Tables", config.Tables.Length),
+        new ConfigMetric("Pagination", config.Pagination.Length),
+        new ConfigMetric("Scopes", config.Scopes.Length),
+        new ConfigMetric("SourceOnlyIdentifiers", config.SourceOnlyIdentifiers.Length),
+        new ConfigMetric("TargetKnownTypes", config.TargetKnownTypes.Length),
+        new ConfigMetric("TargetKnownIdentifiers", config.TargetKnownIdentifiers.Length)
+    };
+}
+
+static IEnumerable<ConfigSafetyIssue> AnalyzeConfigSafety(ProjectAdapterConfig config)
+{
+    var issues = new List<ConfigSafetyIssue>();
+    var forbiddenTargetKnown = new HashSet<string>(new[] { "page", "pagef", "driver", "webdriver" }, StringComparer.OrdinalIgnoreCase);
+    var sourceOnly = FlattenSourceOnlyIdentifiers(config).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    var targetKnown = FlattenTargetKnownIdentifiers(config).Concat(FlattenTargetKnownTypes(config)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    foreach (var symbol in targetKnown.Where(sourceOnly.Contains).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+    {
+        issues.Add(new ConfigSafetyIssue("error", "TARGET_KNOWN_CONFLICTS_WITH_SOURCE_ONLY",
+            $"'{symbol}' is both source-only and target-known.", "adapter-config.json",
+            "Choose one meaning. Source-only symbols must not be rendered as active target code."));
+    }
+
+    foreach (var symbol in targetKnown.Where(forbiddenTargetKnown.Contains).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+    {
+        issues.Add(new ConfigSafetyIssue("error", "FORBIDDEN_TARGET_KNOWN_SYMBOL",
+            $"'{symbol}' looks like a Selenium/source-only root and must not be target-known.", "TargetKnownTypes/TargetKnownIdentifiers",
+            "Keep page/pagef/Driver/WebDriver source-only, or map the whole expression through adapter-config."));
+    }
+
+    AddDuplicateIssues(config.UiTargets.Select(x => x.SourceExpression), "UiTargets.SourceExpression", "DUPLICATE_UI_TARGET", issues);
+    AddDuplicateIssues(config.Methods.Select(x => x.SourceMethod), "Methods.SourceMethod", "DUPLICATE_METHOD_MAPPING", issues);
+    AddDuplicateIssues(config.ParameterizedMethods.Select(x => x.SourceMethodPattern), "ParameterizedMethods.SourceMethodPattern", "DUPLICATE_PARAMETERIZED_METHOD_MAPPING", issues);
+    AddDuplicateIssues(config.SourceOnlyIdentifiers, "SourceOnlyIdentifiers", "DUPLICATE_SOURCE_ONLY_IDENTIFIER", issues);
+    AddDuplicateIssues(config.TargetKnownTypes, "TargetKnownTypes", "DUPLICATE_TARGET_KNOWN_TYPE", issues);
+    AddDuplicateIssues(config.TargetKnownIdentifiers, "TargetKnownIdentifiers", "DUPLICATE_TARGET_KNOWN_IDENTIFIER", issues);
+
+    foreach (var target in config.UiTargets.Where(t => string.Equals(t.TargetKind, "RawExpression", StringComparison.OrdinalIgnoreCase)))
+    {
+        issues.Add(new ConfigSafetyIssue("warning", "RAW_EXPRESSION_MAPPING_REQUIRES_REVIEW",
+            $"UiTarget '{target.SourceExpression}' uses RawExpression target kind.", "UiTargets",
+            "Prefer TestId/Locator/Text. Keep RawExpression only with source truth and manual review."));
+    }
+
+    foreach (var method in config.Methods.Where(m => m.TargetStatements != null && m.TargetStatements.Any(ContainsRiskyGeneratedCode)))
+    {
+        issues.Add(new ConfigSafetyIssue("warning", "RISKY_TARGET_STATEMENT",
+            $"Method mapping '{method.SourceMethod}' contains TODO/dynamic/object fallback-like target code.", "Methods",
+            "Generated target statements should be real Playwright/test code, not hidden TODO or dummy declarations."));
+    }
+
+    foreach (var method in config.ParameterizedMethods.Where(m => m.TargetStatements != null && m.TargetStatements.Any(ContainsRiskyGeneratedCode)))
+    {
+        issues.Add(new ConfigSafetyIssue("warning", "RISKY_PARAMETERIZED_TARGET_STATEMENT",
+            $"Parameterized mapping '{method.SourceMethodPattern}' contains TODO/dynamic/object fallback-like target code.", "ParameterizedMethods",
+            "Avoid hiding migration gaps in config. Leave TODO in generated code or escalate."));
+    }
+
+    if (config.Verification == null)
+    {
+        issues.Add(new ConfigSafetyIssue("warning", "MISSING_PROJECT_VERIFICATION",
+            "Verification section is missing, so verify-project may not compile generated code in the real project context.", "Verification",
+            "Add Verification.ProjectReferences/PackageReferences or enable nearest project auto-discovery."));
+    }
+
+    return issues;
+}
+
+static bool ContainsRiskyGeneratedCode(string statement)
+{
+    var s = statement.Trim();
+    return s.Contains("TODO", StringComparison.OrdinalIgnoreCase)
+        || s.Contains("dynamic ", StringComparison.OrdinalIgnoreCase)
+        || s.StartsWith("object ", StringComparison.OrdinalIgnoreCase)
+        || s.Contains("= null!", StringComparison.OrdinalIgnoreCase);
+}
+
+static IEnumerable<string> FlattenSourceOnlyIdentifiers(ProjectAdapterConfig config)
+{
+    foreach (var item in config.SourceOnlyIdentifiers) yield return item;
+}
+
+static IEnumerable<string> FlattenTargetKnownTypes(ProjectAdapterConfig config)
+{
+    foreach (var item in config.TargetKnownTypes) yield return item;
+    foreach (var scope in config.Scopes)
+        foreach (var item in scope.TargetKnownTypes)
+            yield return item;
+}
+
+static IEnumerable<string> FlattenTargetKnownIdentifiers(ProjectAdapterConfig config)
+{
+    foreach (var item in config.TargetKnownIdentifiers) yield return item;
+    foreach (var scope in config.Scopes)
+        foreach (var item in scope.TargetKnownIdentifiers)
+            yield return item;
+}
+
+static void AddDuplicateIssues(IEnumerable<string?> values, string location, string code, List<ConfigSafetyIssue> issues)
+{
+    foreach (var group in values.Where(v => !string.IsNullOrWhiteSpace(v)).GroupBy(v => v!, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
+    {
+        issues.Add(new ConfigSafetyIssue("warning", code,
+            $"Duplicate value '{group.Key}' appears {group.Count()} times.", location,
+            "Remove duplicate entries or split project-specific overrides into Scopes/config layers."));
+    }
+}
+
+static IEnumerable<ConfigDiffChange> BuildConfigChanges(ProjectAdapterConfig before, ProjectAdapterConfig after)
+{
+    foreach (var c in DiffStringSet("UiTargets", before.UiTargets.Select(x => x.SourceExpression), after.UiTargets.Select(x => x.SourceExpression))) yield return c;
+    foreach (var c in DiffStringSet("Methods", before.Methods.Select(x => x.SourceMethod), after.Methods.Select(x => x.SourceMethod))) yield return c;
+    foreach (var c in DiffStringSet("ParameterizedMethods", before.ParameterizedMethods.Select(x => x.SourceMethodPattern), after.ParameterizedMethods.Select(x => x.SourceMethodPattern))) yield return c;
+    foreach (var c in DiffStringSet("SourceOnlyIdentifiers", before.SourceOnlyIdentifiers, after.SourceOnlyIdentifiers)) yield return c;
+    foreach (var c in DiffStringSet("TargetKnownTypes", before.TargetKnownTypes, after.TargetKnownTypes)) yield return c;
+    foreach (var c in DiffStringSet("TargetKnownIdentifiers", before.TargetKnownIdentifiers, after.TargetKnownIdentifiers)) yield return c;
+    foreach (var c in DiffStringSet("Tables", before.Tables.Select(x => x.SourceExpression), after.Tables.Select(x => x.SourceExpression))) yield return c;
+    foreach (var c in DiffStringSet("Pagination", before.Pagination.Select(x => x.SourceExpression), after.Pagination.Select(x => x.SourceExpression))) yield return c;
+    foreach (var c in DiffStringSet("Scopes", before.Scopes.Select(x => x.Name), after.Scopes.Select(x => x.Name))) yield return c;
+}
+
+static IEnumerable<ConfigDiffChange> DiffStringSet(string section, IEnumerable<string?> beforeValues, IEnumerable<string?> afterValues)
+{
+    var before = beforeValues.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v!.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    var after = afterValues.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v!.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    foreach (var value in after.Except(before, StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+        yield return new ConfigDiffChange(section, "added", value);
+    foreach (var value in before.Except(after, StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+        yield return new ConfigDiffChange(section, "removed", value);
+}
+
+static IEnumerable<ConfigSafetyIssue> BuildConfigDiffRisks(ProjectAdapterConfig before, ProjectAdapterConfig after)
+{
+    var risks = new List<ConfigSafetyIssue>();
+    var forbiddenTargetKnown = new HashSet<string>(new[] { "page", "pagef", "driver", "webdriver" }, StringComparer.OrdinalIgnoreCase);
+    var removedSourceOnly = before.SourceOnlyIdentifiers.Except(after.SourceOnlyIdentifiers, StringComparer.OrdinalIgnoreCase).ToArray();
+    foreach (var symbol in removedSourceOnly)
+    {
+        risks.Add(new ConfigSafetyIssue("warning", "SOURCE_ONLY_REMOVED",
+            $"'{symbol}' was removed from SourceOnlyIdentifiers.", "SourceOnlyIdentifiers",
+            "Verify that this symbol is now mapped or intentionally safe in target code."));
+    }
+
+    var addedTargetKnown = after.TargetKnownTypes.Concat(after.TargetKnownIdentifiers)
+        .Except(before.TargetKnownTypes.Concat(before.TargetKnownIdentifiers), StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+    foreach (var symbol in addedTargetKnown.Where(forbiddenTargetKnown.Contains))
+    {
+        risks.Add(new ConfigSafetyIssue("error", "FORBIDDEN_TARGET_KNOWN_ADDED",
+            $"'{symbol}' was added as target-known.", "TargetKnownTypes/TargetKnownIdentifiers",
+            "Do not mark Selenium roots as target-known."));
+    }
+
+    if (IsQualityGateLoosened(before.QualityGates?.MaxTodoComments, after.QualityGates?.MaxTodoComments))
+        risks.Add(new ConfigSafetyIssue("warning", "QUALITY_GATE_LOOSENED", "MaxTodoComments was loosened or removed.", "QualityGates.MaxTodoComments", "Confirm this was intentional."));
+    if (IsQualityGateLoosened(before.QualityGates?.MaxUnsupportedActions, after.QualityGates?.MaxUnsupportedActions))
+        risks.Add(new ConfigSafetyIssue("warning", "QUALITY_GATE_LOOSENED", "MaxUnsupportedActions was loosened or removed.", "QualityGates.MaxUnsupportedActions", "Confirm this was intentional."));
+    if (IsQualityGateLoosened(before.QualityGates?.MaxUnmappedTargets, after.QualityGates?.MaxUnmappedTargets))
+        risks.Add(new ConfigSafetyIssue("warning", "QUALITY_GATE_LOOSENED", "MaxUnmappedTargets was loosened or removed.", "QualityGates.MaxUnmappedTargets", "Confirm this was intentional."));
+
+    return risks;
+}
+
+static bool IsQualityGateLoosened(int? before, int? after)
+{
+    if (before.HasValue && !after.HasValue)
+        return true;
+    if (before.HasValue && after.HasValue && after.Value > before.Value)
+        return true;
+    return false;
+}
+
+static IEnumerable<GuardCheck> BuildGuardChecks(TodoExplanationReport before, TodoExplanationReport after)
+{
+    yield return CompareNonIncreasing("TODO comments", before.TodoComments, after.TodoComments, "TODO should not grow after agent changes.");
+    yield return CompareNonIncreasing("Unmapped targets", before.UnmappedTargets, after.UnmappedTargets, "Unmapped targets should not grow after config edits.");
+    yield return CompareNonIncreasing("Unsupported actions", before.UnsupportedActions, after.UnsupportedActions, "Unsupported actions should not grow after config edits.");
+    yield return CompareNonIncreasing("Syntax errors", before.SyntaxErrors, after.SyntaxErrors, "Generated/project syntax errors must not regress.");
+
+    if (string.Equals(before.ProjectVerifyStatus, "passed", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(after.ProjectVerifyStatus, "passed", StringComparison.OrdinalIgnoreCase))
+    {
+        yield return new GuardCheck("Project verify", "failed", $"Project verify regressed: {before.ProjectVerifyStatus} → {after.ProjectVerifyStatus}.", null, null);
+    }
+    else
+    {
+        yield return new GuardCheck("Project verify", "passed", $"Project verify status: {before.ProjectVerifyStatus ?? "unknown"} → {after.ProjectVerifyStatus ?? "unknown"}.", null, null);
+    }
+}
+
+static GuardCheck CompareNonIncreasing(string name, int before, int after, string guidance)
+{
+    if (after > before)
+        return new GuardCheck(name, "failed", $"{name} grew: {before} → {after}. {guidance}", before, after);
+    if (after < before)
+        return new GuardCheck(name, "passed", $"{name} improved: {before} → {after}.", before, after);
+    return new GuardCheck(name, "passed", $"{name} unchanged: {before} → {after}.", before, after);
+}
+
+static string ResolveArtifactDirectoryForGuard(string path)
+{
+    if (Directory.Exists(path))
+        return path;
+    if (File.Exists(path))
+        return Path.GetDirectoryName(Path.GetFullPath(path)) ?? Directory.GetCurrentDirectory();
+    return path;
+}
+
+static int SeverityRank(string severity) => severity.Equals("error", StringComparison.OrdinalIgnoreCase) ? 0 : 1;
+
+static void WriteConfigSafetyReport(ConfigSafetyReport report, string outPath, string format)
+{
+    if (format is "json" or "both")
+        File.WriteAllText(Path.Combine(outPath, "config-validate-report.json"), System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    if (format is "text" or "both")
+        File.WriteAllText(Path.Combine(outPath, "config-validate-report.md"), WriteConfigSafetyMarkdown(report));
+}
+
+static string WriteConfigSafetyMarkdown(ConfigSafetyReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Config Validate Report");
+    sb.AppendLine();
+    sb.AppendLine($"Status: **{report.Status}**");
+    sb.AppendLine($"Config: `{report.ConfigPath}`");
+    sb.AppendLine();
+    sb.AppendLine("## Metrics");
+    foreach (var m in report.Metrics)
+        sb.AppendLine($"- {m.Name}: {m.Value}");
+    sb.AppendLine();
+    sb.AppendLine("## Issues");
+    if (report.Issues.Length == 0)
+        sb.AppendLine("No safety issues found.");
+    foreach (var issue in report.Issues)
+    {
+        sb.AppendLine($"- **{issue.Severity.ToUpperInvariant()} {issue.Code}**: {issue.Message}");
+        if (!string.IsNullOrWhiteSpace(issue.Location)) sb.AppendLine($"  - Location: `{issue.Location}`");
+        if (!string.IsNullOrWhiteSpace(issue.SuggestedAction)) sb.AppendLine($"  - Suggested action: {issue.SuggestedAction}");
+    }
+    return sb.ToString();
+}
+
+static void WriteConfigDiffReport(ConfigDiffReport report, string outPath, string format)
+{
+    if (format is "json" or "both")
+        File.WriteAllText(Path.Combine(outPath, "config-diff-report.json"), System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    if (format is "text" or "both")
+        File.WriteAllText(Path.Combine(outPath, "config-diff-report.md"), WriteConfigDiffMarkdown(report));
+}
+
+static string WriteConfigDiffMarkdown(ConfigDiffReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Config Diff Report");
+    sb.AppendLine();
+    sb.AppendLine($"Before: `{report.BeforePath}`");
+    sb.AppendLine($"After: `{report.AfterPath}`");
+    sb.AppendLine();
+    sb.AppendLine("## Summary");
+    foreach (var s in report.Summary) sb.AppendLine($"- {s}");
+    sb.AppendLine();
+    sb.AppendLine("## Risks");
+    if (report.Risks.Length == 0) sb.AppendLine("No high-risk changes detected.");
+    foreach (var risk in report.Risks)
+        sb.AppendLine($"- **{risk.Severity.ToUpperInvariant()} {risk.Code}**: {risk.Message} ({risk.Location})");
+    sb.AppendLine();
+    sb.AppendLine("## Changes");
+    foreach (var change in report.Changes)
+        sb.AppendLine($"- {change.Section}: **{change.ChangeType}** `{change.Key}`");
+    return sb.ToString();
+}
+
+static void WriteGuardReport(GuardReport report, string outPath, string format)
+{
+    if (format is "json" or "both")
+        File.WriteAllText(Path.Combine(outPath, "guard-report.json"), System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    if (format is "text" or "both")
+        File.WriteAllText(Path.Combine(outPath, "guard-report.md"), WriteGuardMarkdown(report));
+}
+
+static string WriteGuardMarkdown(GuardReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Migration Guard Report");
+    sb.AppendLine();
+    sb.AppendLine($"Status: **{report.Status}**");
+    sb.AppendLine($"Before: `{report.BeforePath}`");
+    sb.AppendLine($"After: `{report.AfterPath}`");
+    sb.AppendLine();
+    sb.AppendLine("## Summary");
+    foreach (var s in report.Summary) sb.AppendLine($"- {s}");
+    sb.AppendLine();
+    sb.AppendLine("## Checks");
+    foreach (var check in report.Checks)
+        sb.AppendLine($"- **{check.Status.ToUpperInvariant()} {check.Name}**: {check.Message}");
+    return sb.ToString();
+}
+
 static CliOptions? ParseArgs(string[] args)
 {
     string mode = "migrate";
@@ -2370,8 +3306,11 @@ static CliOptions? ParseArgs(string[] args)
     string? outDir = null;
     string? config = null;
     string format = "both";
+    string workspace = "migration";
     bool failOnUnsupported = false;
     bool failOnTodo = false;
+    string? before = null;
+    string? after = null;
 
     for (int i = 0; i < args.Length; i++)
     {
@@ -2413,6 +3352,33 @@ static CliOptions? ParseArgs(string[] args)
                     return null;
                 }
                 break;
+            case "--before":
+                if (i + 1 < args.Length)
+                    before = args[++i];
+                else
+                {
+                    Console.Error.WriteLine("--before requires a value");
+                    return null;
+                }
+                break;
+            case "--after":
+                if (i + 1 < args.Length)
+                    after = args[++i];
+                else
+                {
+                    Console.Error.WriteLine("--after requires a value");
+                    return null;
+                }
+                break;
+            case "--workspace":
+                if (i + 1 < args.Length)
+                    workspace = args[++i];
+                else
+                {
+                    Console.Error.WriteLine("--workspace requires a value");
+                    return null;
+                }
+                break;
             case "--format":
                 if (i + 1 < args.Length)
                     format = args[++i];
@@ -2449,16 +3415,32 @@ static CliOptions? ParseArgs(string[] args)
         }
     }
 
-    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "orchestrate" && mode != "scaffold")
+    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "explain-todo" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "orchestrate" && mode != "scaffold")
     {
-        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|verify-project|propose|discover-target|index-pom|orchestrate|scaffold");
+        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|verify-project|explain-todo|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold");
         return null;
     }
 
-    if (mode != "scaffold" && string.IsNullOrEmpty(input))
+    if (mode == "config-validate" && string.IsNullOrEmpty(input) && !string.IsNullOrEmpty(config))
+        input = config;
+
+    if ((mode == "config-diff" || mode == "guard") && (string.IsNullOrEmpty(before) || string.IsNullOrEmpty(after)))
     {
-        Console.Error.WriteLine("--input is required");
+        Console.Error.WriteLine($"--before and --after are required for {mode}");
         PrintHelp();
+        return null;
+    }
+
+    if (mode != "scaffold" && mode != "config-diff" && mode != "guard" && string.IsNullOrEmpty(input))
+    {
+        Console.Error.WriteLine(mode == "config-validate" ? "--config or --input is required" : "--input is required");
+        PrintHelp();
+        return null;
+    }
+
+    if (string.IsNullOrEmpty(workspace))
+    {
+        Console.Error.WriteLine("--workspace must not be empty");
         return null;
     }
 
@@ -2466,18 +3448,24 @@ static CliOptions? ParseArgs(string[] args)
     {
         outDir = mode switch
         {
-            "analyze" => "./migration-analysis",
-            "migrate" => "./generated-tests",
-            "verify" => "./migration-verify",
-            "verify-project" => "./migration-verify-project",
-            "propose" => "./mapping-proposals",
-            "discover-target" => "./target-discovery",
-            "index-pom" => "./pom-index",
-            "orchestrate" => "./orchestration",
-            "scaffold" => "./generated-scaffold",
-            _ => "./migration-output"
+            "analyze" => "analysis",
+            "migrate" => "generated-tests",
+            "verify" => "verify",
+            "verify-project" => "verify-project",
+            "explain-todo" => "explain-todo",
+            "config-validate" => "config-validate",
+            "config-diff" => "config-diff",
+            "guard" => "guard",
+            "propose" => "mapping-proposals",
+            "discover-target" => "target-discovery",
+            "index-pom" => "pom-index",
+            "orchestrate" => "orchestration",
+            "scaffold" => "generated-scaffold",
+            _ => "output"
         };
     }
+
+    outDir = ResolveOutputDirectory(outDir, workspace);
 
     if (format != "text" && format != "json" && format != "both")
     {
@@ -2485,7 +3473,54 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
-    return new CliOptions(mode, input ?? "", outDir, config, format, failOnUnsupported, failOnTodo);
+    return new CliOptions(mode, input ?? "", outDir, config, format, failOnUnsupported, failOnTodo, workspace, before, after);
+}
+
+static string ResolveOutputDirectory(string outDir, string workspace)
+{
+    if (Path.IsPathRooted(outDir) || LooksLikeWindowsRootedPath(outDir))
+        return outDir;
+
+    var normalizedOut = NormalizeRelativeCliPath(outDir);
+    var normalizedWorkspace = NormalizeRelativeCliPath(workspace);
+
+    if (normalizedOut == ".")
+        return workspace;
+
+    if (normalizedWorkspace == ".")
+        return outDir;
+
+    if (normalizedOut.Equals(normalizedWorkspace, StringComparison.OrdinalIgnoreCase)
+        || normalizedOut.StartsWith(normalizedWorkspace + "/", StringComparison.OrdinalIgnoreCase))
+        return outDir;
+
+    if (normalizedOut.StartsWith("../", StringComparison.Ordinal)
+        || normalizedOut.Contains("/../", StringComparison.Ordinal))
+    {
+        var safeName = normalizedOut
+            .Replace("../", "up-", StringComparison.Ordinal)
+            .Replace("/../", "/up-", StringComparison.Ordinal)
+            .Replace("..", "up", StringComparison.Ordinal);
+        return Path.Combine(workspace, safeName);
+    }
+
+    return Path.Combine(workspace, outDir);
+}
+
+static string NormalizeRelativeCliPath(string path)
+{
+    var normalized = path.Replace('\\', '/').Trim();
+    while (normalized.StartsWith("./", StringComparison.Ordinal))
+        normalized = normalized[2..];
+    return string.IsNullOrWhiteSpace(normalized) ? "." : normalized.TrimEnd('/');
+}
+
+static bool LooksLikeWindowsRootedPath(string path)
+{
+    return path.Length >= 3
+        && char.IsLetter(path[0])
+        && path[1] == ':'
+        && (path[2] == '\\' || path[2] == '/');
 }
 
 static void PrintHelp()
@@ -2505,6 +3540,16 @@ Modes:
                     creates a temporary verification .csproj, adds project/package
                     references from adapter-config Verification, and runs dotnet build.
                     Does NOT modify source project files.
+  explain-todo    Explain remaining TODO/root causes from existing migration artifacts.
+                    Reads report.json, unmapped-targets.json, unsupported-actions.json,
+                    verify-report.json, project-verify-report.json when present. Outputs
+                    explain-todo.md/json and agent-next-task.md. Does NOT modify config.
+  config-validate Validate adapter-config structure and agent-safety rules. Outputs
+                    config-validate-report.md/json. Fails on dangerous config.
+  config-diff     Compare two adapter-config files and highlight risky agent changes.
+                    Requires --before and --after. Outputs config-diff-report.md/json.
+  guard           Compare two migration artifact directories and fail on regressions
+                    such as increased TODO/syntax errors. Requires --before and --after.
   propose         Analyze migration artifacts (reports, generated output) and
                     generate mapping proposals. Reads report.json, unmapped-targets.json,
                     unsupported-actions.json, verify-report.json. Outputs
@@ -2528,9 +3573,9 @@ Modes:
 
 Options:
     --mode <mode>                 Operation mode (required)
-                                    analyze|migrate|verify|verify-project|propose|discover-target|index-pom|orchestrate|scaffold
+                                    analyze|migrate|verify|verify-project|explain-todo|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold
     --input <file-or-directory>   Input .cs file or directory (required).
-                                    For propose: directory with report files.
+                                    For propose/explain-todo: directory with report files.
                                     For discover-target: target Playwright project root.
                                     For index-pom: Selenium project/PageObject directory.
                                     For orchestrate: source Selenium tests directory.
@@ -2538,8 +3583,14 @@ Options:
                                       project refs come from adapter-config Verification
                                       or nearest .csproj auto-discovery.
                                     For scaffold: not required.
-   --out <output-directory>      Output directory (optional, auto-defaults)
+   --out <output-directory>      Output directory inside --workspace by default.
+                                  Relative paths like orchestration-7 become migration/orchestration-7.
+                                  Use an absolute path to write outside workspace.
+   --workspace <directory>        Migration artifacts root (default: migration).
+                                  All relative --out paths are kept under this root.
    --config <adapter-config.json>  Adapter config for target mapping (optional)
+   --before <path>                Previous config/artifact path for config-diff/guard
+   --after <path>                 New config/artifact path for config-diff/guard
    --format <text|json|both>     Report format (default: both)
    --fail-on-unsupported         Exit code 2 if unsupported actions exist
    --fail-on-todo                Exit code 3 if TODO comments exist
@@ -2553,23 +3604,84 @@ Exit codes:
   4  Generated syntax errors detected
 
 Examples:
-  Migrator.Cli --mode analyze --input ./OldTests --out ./analysis --format both
-  Migrator.Cli --mode migrate --input ./OldTests --out ./Generated --config ./adapter-config.json
-  Migrator.Cli --mode verify-project --input ./OldTests --out ./project-verify --config ./adapter-config.json
-  Migrator.Cli --mode propose --input ./Generated --config ./adapter-config.json --format both
-   Migrator.Cli --mode discover-target --input ./team-playwright-tests --out ./target-discovery
-   Migrator.Cli --mode index-pom --input ./OldTests --out ./pom-index --format both
-   Migrator.Cli --mode orchestrate --input ./OldTests --config ./adapter-config.json --out ./orchestration --format both
-   Migrator.Cli --mode scaffold --out ./new-playwright-tests
+  Migrator.Cli --mode analyze --input ./OldTests --out analysis --format both
+  Migrator.Cli --mode migrate --input ./OldTests --out generated --config ./adapter-config.json
+  Migrator.Cli --mode verify-project --input ./OldTests --out verify-project --config ./adapter-config.json
+  Migrator.Cli --mode explain-todo --input migration/verify-project --out explain-todo --format both
+  Migrator.Cli --mode config-validate --config ./adapter-config.json --out config-validate
+  Migrator.Cli --mode config-diff --before adapter.old.json --after adapter-config.json --out config-diff
+  Migrator.Cli --mode guard --before migration/baseline --after migration/current --out guard
+  Migrator.Cli --mode propose --input migration/generated --config ./adapter-config.json --format both
+   Migrator.Cli --mode discover-target --input ./team-playwright-tests --out target-discovery
+   Migrator.Cli --mode index-pom --input ./OldTests --out pom-index --format both
+   Migrator.Cli --mode orchestrate --input ./OldTests --config ./adapter-config.json --out orchestration --format both
+   Migrator.Cli --mode scaffold --out generated-scaffold
+
+Output workspace examples:
+  --out orchestration-7            writes to migration/orchestration-7
+  --out migration/custom-run       writes to migration/custom-run
+  --out C:\temp\migration-run     writes to absolute path C:\temp\migration-run
 ");
 }
 
 
+class ArtifactSummary
+{
+    public int FilesProcessed { get; set; }
+    public int TestsFound { get; set; }
+    public int ActionsFound { get; set; }
+    public int SemanticActions { get; set; }
+    public int SyntaxFallbackActions { get; set; }
+    public int UnsupportedActions { get; set; }
+    public int MappedTargets { get; set; }
+    public int UnmappedTargets { get; set; }
+    public int TodoComments { get; set; }
+    public int SyntaxErrors { get; set; }
+    public string? VerifyStatus { get; set; }
+}
+
 record DotnetBuildResult(int ExitCode, string Command, string StdOut, string StdErr);
 record ProjectVerifyReport(DateTimeOffset GeneratedAtUtc, string Status, int ExitCode, string[] GeneratedFiles, string HarnessProject, string[] ProjectReferences, string[] AssemblyReferences, PackageReferenceConfig[] PackageReferences, string Command, string StdOut, string StdErr, string[] Diagnostics);
+
+record TodoExplanationReport(
+    DateTimeOffset GeneratedAtUtc,
+    string Source,
+    int FilesProcessed,
+    int TestsFound,
+    int ActionsFound,
+    int SemanticActions,
+    int SyntaxFallbackActions,
+    int MappedTargets,
+    int UnmappedTargets,
+    int UnsupportedActions,
+    int TodoComments,
+    int SyntaxErrors,
+    string? ProjectVerifyStatus,
+    TodoInsight[] Insights,
+    string NextBestAction);
+
+record TodoInsight(
+    string Category,
+    string Title,
+    string Reason,
+    int EstimatedImpact,
+    string ExampleFile,
+    int ExampleLine,
+    string SuggestedAction,
+    bool RequiresSourceTruth,
+    bool RequiresDeveloper,
+    string[] Evidence);
 
 record PomIndexReport(DateTimeOffset GeneratedAtUtc, string InputPath, int FilesScanned, PomFact[] Facts, PomUsageCandidate[] InferredCandidates, string[] Warnings);
 record PomFact(string SourceExpression, string OwnerType, string MemberName, string MemberKind, string Selector, string SelectorKind, string TargetKindSuggestion, string TargetExpressionSuggestion, string SourceFile, int SourceLine, string Confidence, bool RequiresReview, string Notes);
 record PomUsageCandidate(string SourceExpression, string SuggestedTargetExpression, string SuggestedTargetKind, int Usages, string ExampleFile, int ExampleLine, string Confidence, bool RequiresSourceTruth, string Notes);
 
-record CliOptions(string Mode, string Input, string Out, string? Config, string Format, bool FailOnUnsupported, bool FailOnTodo);
+record ConfigSafetyReport(DateTimeOffset GeneratedAtUtc, string ConfigPath, string Status, ConfigSafetyIssue[] Issues, ConfigMetric[] Metrics);
+record ConfigSafetyIssue(string Severity, string Code, string Message, string? Location, string SuggestedAction);
+record ConfigMetric(string Name, int Value);
+record ConfigDiffReport(DateTimeOffset GeneratedAtUtc, string BeforePath, string AfterPath, ConfigDiffChange[] Changes, ConfigSafetyIssue[] Risks, string[] Summary);
+record ConfigDiffChange(string Section, string ChangeType, string Key);
+record GuardReport(DateTimeOffset GeneratedAtUtc, string BeforePath, string AfterPath, string Status, GuardCheck[] Checks, string[] Summary);
+record GuardCheck(string Name, string Status, string Message, int? Before, int? After);
+
+record CliOptions(string Mode, string Input, string Out, string? Config, string Format, bool FailOnUnsupported, bool FailOnTodo, string Workspace, string? Before, string? After);

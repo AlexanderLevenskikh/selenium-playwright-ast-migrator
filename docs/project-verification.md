@@ -71,3 +71,22 @@ migrate_discounts_project_verify/
 4. Если build падает из-за missing reference, добавлять reference в `Verification.ProjectReferences` или `Verification.PackageReferences`.
 5. Если build падает из-за unmapped/source-only code, возвращаться к `adapter-config` mappings или оставлять TODO.
 6. Если требуется новый generic механизм мигратора — остановиться и написать escalation report.
+
+
+## Workspace
+
+Относительный `--out` автоматически создаётся внутри `migration/`.
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode verify-project --input "C:\path\to\Tests" --config "adapter-config.json" --out "verify-project-1" --format both
+```
+
+Результат будет в:
+
+```text
+migration/verify-project-1/
+  generated/
+  project-verify/
+  project-verify-report.json
+  project-verify-report.md
+```

@@ -2788,3 +2788,47 @@ dotnet run --project .\Migrator.Cli -- --mode index-pom --input "<Selenium proje
 
 Агенту запрещено руками копировать generated files в продуктовый проект или править source project ради зелёной проверки. Если не хватает ссылок на инфраструктуру, добавляй их в `Verification.ProjectReferences` / `Verification.PackageReferences`.
 
+
+
+## Explain TODO / Agent Next Task
+
+После `migrate` или `verify-project` запускай режим объяснения TODO:
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode explain-todo --input "<migration-output>" --out "todo-explanation" --format both
+```
+
+Он создаёт:
+
+- `explain-todo.md/json` — почему остались TODO и какие действия дадут максимальный эффект;
+- `agent-next-task.md` — готовую следующую задачу для агента.
+
+Агент должен читать `agent-next-task.md`, но по умолчанию менять только `adapter-config.json`. Если отчёт говорит, что нужна правка C# мигратора, агент должен остановиться и сформировать escalation report.
+
+## Safety policy for agent-edited config
+
+Agent-edited `adapter-config.json` must pass:
+
+```powershell
+--mode config-validate
+```
+
+Migration iterations must pass:
+
+```powershell
+--mode guard --before <previous-run> --after <new-run>
+```
+
+Agent changes should be reviewable via:
+
+```powershell
+--mode config-diff --before <old-config> --after <new-config>
+```
+
+Forbidden regressions:
+
+- TODO count grows without explanation;
+- syntax errors grow;
+- `page`, `pagef`, `Driver`, `WebDriver` become target-known;
+- source-only identifiers are removed without source truth;
+- quality gates are loosened silently.

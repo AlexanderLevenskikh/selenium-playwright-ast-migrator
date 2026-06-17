@@ -183,3 +183,38 @@ dotnet run --project .\Migrator.Cli -- --mode index-pom --input "<Selenium proje
 
 Агенту запрещено руками копировать generated files в продуктовый проект или править source project ради зелёной проверки. Если не хватает ссылок на инфраструктуру, добавляй их в `Verification.ProjectReferences` / `Verification.PackageReferences`.
 
+
+
+## Explain TODO / Agent Next Task
+
+После `migrate` или `verify-project` запускай режим объяснения TODO:
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode explain-todo --input "<migration-output>" --out "todo-explanation" --format both
+```
+
+Он создаёт:
+
+- `explain-todo.md/json` — почему остались TODO и какие действия дадут максимальный эффект;
+- `agent-next-task.md` — готовую следующую задачу для агента.
+
+Агент должен читать `agent-next-task.md`, но по умолчанию менять только `adapter-config.json`. Если отчёт говорит, что нужна правка C# мигратора, агент должен остановиться и сформировать escalation report.
+
+
+## Рабочая папка агента
+
+Все результаты прогонов (`orchestrate`, `migrate`, `verify-project`, `index-pom`, `explain-todo`, `propose`) держи внутри `migration/`.
+
+CLI сам помещает относительный `--out` в `migration/`, поэтому можно писать:
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode verify-project --input "<tests>" --config "adapter-config.json" --out "verify-project-3" --format both
+```
+
+Фактический путь будет:
+
+```text
+migration/verify-project-3
+```
+
+Не создавай output-папки рядом с кодом мигратора. Подробнее: `docs/migration-workspace.md`.

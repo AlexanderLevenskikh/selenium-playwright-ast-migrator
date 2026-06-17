@@ -45,3 +45,48 @@ dotnet run --project .\Migrator.Cli -- --mode index-pom --input "<Selenium proje
 
 Агенту запрещено руками копировать generated files в продуктовый проект или править source project ради зелёной проверки. Если не хватает ссылок на инфраструктуру, добавляй их в `Verification.ProjectReferences` / `Verification.PackageReferences`.
 
+
+
+## Explain TODO / Agent Next Task
+
+После `migrate` или `verify-project` запускай режим объяснения TODO:
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode explain-todo --input "<migration-output>" --out "todo-explanation" --format both
+```
+
+Он создаёт:
+
+- `explain-todo.md/json` — почему остались TODO и какие действия дадут максимальный эффект;
+- `agent-next-task.md` — готовую следующую задачу для агента.
+
+Агент должен читать `agent-next-task.md`, но по умолчанию менять только `adapter-config.json`. Если отчёт говорит, что нужна правка C# мигратора, агент должен остановиться и сформировать escalation report.
+
+
+## Migration workspace
+
+Все рабочие артефакты создавай только внутри `migration/`. CLI по умолчанию сам помещает относительный `--out` в workspace: `--out orchestration-7` станет `migration/orchestration-7`.
+
+Читать подробности: `docs/migration-workspace.md`.
+
+Запрещено создавать рядом с кодом мигратора папки вида `orchestration-7`, `verify-project-4`, `pom-index`, `todo-explanation` вне `migration/`.
+
+## Safety commands for agent workflow
+
+Перед продолжением после правок конфига:
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode config-validate --config adapter-config.json --out config-validate
+```
+
+Для ревью изменений:
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode config-diff --before adapter-config.before.json --after adapter-config.json --out config-diff
+```
+
+Для проверки, что новый прогон не стал хуже:
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode guard --before migration/previous --after migration/current --out guard
+```
