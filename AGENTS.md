@@ -71,7 +71,7 @@ dotnet run --project .\Migrator.Cli -- --mode index-pom --input "<Selenium proje
 
 ## Project-aware verify
 
-Для настоящей компиляции generated Playwright-кода используй режим `verify-project`, а не только standalone `verify`. Он создаёт временный `.csproj` в `--out/project-verify`, подключает generated-файлы и project/package references из `adapter-config.json` (`Verification`). Исходный проект не меняется. Подробнее: `docs/project-verification.md`.
+Для настоящей компиляции generated Playwright-кода используй режим `verify-project`, а не только standalone `verify`. Он создаёт временный `.csproj` в `--out/project-verify`, подключает generated-файлы, project/package references из `adapter-config.json` (`Verification`), умеет искать ближайший `.csproj`, рекурсивные `ProjectReference`, `Directory.Build.props/targets`, `Directory.Packages.props`, и классифицирует build diagnostics по причинам. Исходный проект не меняется. Подробнее: `docs/project-verification.md`.
 
 Агенту запрещено руками копировать generated files в продуктовый проект или править source project ради зелёной проверки. Если не хватает ссылок на инфраструктуру, добавляй их в `Verification.ProjectReferences` / `Verification.PackageReferences`.
 
@@ -115,3 +115,22 @@ dotnet run --project .\Migrator.Cli -- --mode explain-todo --input "<migration-o
 Если `config-validate` или `guard` падает — не продолжать. Нужно исправить или откатить последние изменения и объяснить причину.
 
 Подробнее: `docs/agent-safety.md`.
+
+---
+
+## Milestone 3: переиспользование между проектами
+
+Мигратор поддерживает несколько `--config` слоёв. Передавай базовый профиль первым, проектный профиль последним:
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode migrate --input "<tests>" --config "profiles/infrastructure-base.adapter.json" --config "profiles/projects/project.adapter.json" --out "project-migrate" --format both
+```
+
+Правило: общие правила направления живут в base profile, локальные селекторы и исключения — в project profile. Подробнее: `docs/config-layering.md`, `docs/migration-profiles.md`, `docs/bootstrap-project.md`.
+
+Новый режим для старта проекта:
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode bootstrap-project --input "<tests>" --out "project-bootstrap" --format both
+```
+

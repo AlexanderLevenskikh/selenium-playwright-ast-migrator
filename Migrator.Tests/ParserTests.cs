@@ -2288,4 +2288,117 @@ public class ParserTests
         Assert.Contains("Navigation", adapted.TargetKnownIdentifiers);
     }
 
+    [Fact]
+    public void ConfigMerger_ProjectLayerOverridesBaseMappings()
+    {
+        var baseConfig = new ProjectAdapterConfig(
+            "Base",
+            new[] { new UiTargetMapping("page.Save", "BaseSave", "TestId") },
+            Array.Empty<PageObjectMapping>(),
+            new[] { new MethodMapping("Open()", "BaseOpen", null, null, false) },
+            SourceOnlyIdentifiers: new[] { "page" },
+            TargetKnownTypes: new[] { "Product" });
+        var projectConfig = new ProjectAdapterConfig(
+            "Project",
+            new[]
+            {
+                new UiTargetMapping("page.Save", "ProjectSave", "TestId"),
+                new UiTargetMapping("page.Cancel", "ProjectCancel", "TestId")
+            },
+            Array.Empty<PageObjectMapping>(),
+            new[] { new MethodMapping("Open()", "ProjectOpen", null, null, false) },
+            TargetKnownTypes: new[] { "Navigation" });
+
+        var merged = ProjectAdapterConfigMerger.Merge(new[] { baseConfig, projectConfig });
+
+        Assert.Equal("Project", merged.SourceProjectName);
+        Assert.Equal("ProjectSave", Assert.Single(merged.UiTargets.Where(x => x.SourceExpression == "page.Save")).TargetExpression);
+        Assert.Contains(merged.UiTargets, x => x.SourceExpression == "page.Cancel");
+        Assert.Equal("ProjectOpen", Assert.Single(merged.Methods.Where(x => x.SourceMethod == "Open()")).TargetMethod);
+        Assert.Contains("page", merged.SourceOnlyIdentifiers);
+        Assert.Contains("Product", merged.TargetKnownTypes);
+        Assert.Contains("Navigation", merged.TargetKnownTypes);
+    }
+
+    [Fact]
+    public void ConfigMerger_VerificationLayersMergeProjectAwareFields()
+    {
+        var baseConfig = new ProjectAdapterConfig
+        {
+            SourceProjectName = "Base",
+            Verification = new VerificationConfig
+            {
+                BaseDirectory = "repo",
+                Solution = "Base.sln",
+                ProjectReferences = new[] { "Base.Tests.csproj" },
+                AutoDiscoverProjectReferences = true,
+                AutoDiscoverBuildFiles = true
+            }
+        };
+        var projectConfig = new ProjectAdapterConfig
+        {
+            SourceProjectName = "Project",
+            Verification = new VerificationConfig
+            {
+                Solution = "Project.sln",
+                BuildWorkingDirectory = "repo/src",
+                ProjectReferences = new[] { "Project.Tests.csproj" },
+                AutoDiscoverPackageReferences = true
+            }
+        };
+
+        var merged = ProjectAdapterConfigMerger.Merge(new[] { baseConfig, projectConfig });
+
+        Assert.NotNull(merged.Verification);
+        Assert.Equal("Project.sln", merged.Verification!.Solution);
+        Assert.Equal("repo/src", merged.Verification.BuildWorkingDirectory);
+        Assert.Contains("Base.Tests.csproj", merged.Verification.ProjectReferences);
+        Assert.Contains("Project.Tests.csproj", merged.Verification.ProjectReferences);
+        Assert.True(merged.Verification.AutoDiscoverProjectReferences);
+        Assert.True(merged.Verification.AutoDiscoverBuildFiles);
+        Assert.True(merged.Verification.AutoDiscoverPackageReferences);
+    }
+
+    [Fact]
+    public void ConfigMerger_ScopeLayersMergeByName()
+    {
+        var baseConfig = new ProjectAdapterConfig(
+            "Base",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            Scopes: new[]
+            {
+                new ProfileScope(
+                    "Discounts",
+                    new[] { "**/DiscountsTests/**" },
+                    uiTargets: new[] { new UiTargetMapping("page.Save", "BaseSave", "TestId") },
+                    targetKnownTypes: new[] { "Product" })
+            });
+        var projectConfig = new ProjectAdapterConfig(
+            "Project",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            Scopes: new[]
+            {
+                new ProfileScope(
+                    "Discounts",
+                    new[] { "**/SpecialDiscounts/**" },
+                    uiTargets: new[] { new UiTargetMapping("page.Save", "ProjectSave", "TestId") },
+                    targetKnownIdentifiers: new[] { "Navigation" })
+            });
+
+        var merged = ProjectAdapterConfigMerger.Merge(new[] { baseConfig, projectConfig });
+        var scope = Assert.Single(merged.Scopes);
+
+        Assert.Equal("Discounts", scope.Name);
+        Assert.Contains("**/DiscountsTests/**", scope.SourcePathPatterns);
+        Assert.Contains("**/SpecialDiscounts/**", scope.SourcePathPatterns);
+        Assert.Equal("ProjectSave", Assert.Single(scope.UiTargets).TargetExpression);
+        Assert.Contains("Product", scope.TargetKnownTypes);
+        Assert.Contains("Navigation", scope.TargetKnownIdentifiers);
+    }
+
+
 }

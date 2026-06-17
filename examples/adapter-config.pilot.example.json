@@ -77,8 +77,9 @@
     }
   ],
   "Verification": {
-    "TargetFramework": "net8.0",
     "BaseDirectory": "TODO: path to source repo root",
+    "BuildWorkingDirectory": "TODO: path to source repo root",
+    "Solution": "TODO: optional/path/to/source.sln",
     "ProjectReferences": [
       "TODO: relative/path/to/source-tests.csproj"
     ],
@@ -93,6 +94,9 @@
       }
     ],
     "AutoDiscoverNearestProject": true,
+    "AutoDiscoverProjectReferences": true,
+    "AutoDiscoverBuildFiles": true,
+    "AutoDiscoverPackageReferences": false,
     "NoRestore": false,
     "Configuration": "Debug"
   }

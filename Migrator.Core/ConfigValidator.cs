@@ -288,6 +288,12 @@ public static class ConfigValidator
             errors.Add($"Verification.TargetFramework looks invalid: '{verification.TargetFramework}'. Example: net8.0.");
         }
 
+        if (!string.IsNullOrWhiteSpace(verification.Solution) &&
+            !verification.Solution.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add("Verification.Solution should point to a .sln file.");
+        }
+
         for (var i = 0; i < verification.ProjectReferences.Length; i++)
         {
             if (string.IsNullOrWhiteSpace(verification.ProjectReferences[i]))

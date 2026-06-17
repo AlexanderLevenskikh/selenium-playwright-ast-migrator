@@ -136,6 +136,18 @@ public sealed class VerificationConfig
     public string? BaseDirectory { get; init; }
 
     /// <summary>
+    /// Optional solution file. Used only for reports and discovery context; verify-project still builds
+    /// a temporary harness project and never modifies the solution.
+    /// </summary>
+    public string? Solution { get; init; }
+
+    /// <summary>
+    /// Optional working directory for dotnet build/restore. When absent, verify-project uses BaseDirectory.
+    /// Set this to the source repo root so NuGet.config and corporate package sources are discovered.
+    /// </summary>
+    public string? BuildWorkingDirectory { get; init; }
+
+    /// <summary>
     /// Project references to add to the temporary verification project.
     /// Use this for test infrastructure projects such as ArBilling.Infrastructure or the source test csproj.
     /// </summary>
@@ -158,10 +170,28 @@ public sealed class VerificationConfig
     public bool? DisableDefaultPackageReferences { get; init; }
 
     /// <summary>
-    /// If true, verify-project tries to find the nearest .csproj upward from --input and add it as a ProjectReference
-    /// when no ProjectReferences are configured. Default: true.
+    /// If true, verify-project tries to find the nearest .csproj upward from --input and add it as a ProjectReference.
+    /// Default: true.
     /// </summary>
     public bool? AutoDiscoverNearestProject { get; init; }
+
+    /// <summary>
+    /// If true, recursively follows ProjectReference entries from discovered/configured projects and adds them to
+    /// the temporary verification project. Default: true.
+    /// </summary>
+    public bool? AutoDiscoverProjectReferences { get; init; }
+
+    /// <summary>
+    /// If true, imports nearest Directory.Build.props, Directory.Build.targets, and Directory.Packages.props files
+    /// into the temporary verification project when they are found near BaseDirectory/project references. Default: true.
+    /// </summary>
+    public bool? AutoDiscoverBuildFiles { get; init; }
+
+    /// <summary>
+    /// If true, reads PackageReference entries from discovered/configured projects and mirrors them into the temporary
+    /// verification project. Usually ProjectReference is enough, so the default is false.
+    /// </summary>
+    public bool? AutoDiscoverPackageReferences { get; init; }
 
     /// <summary>
     /// If true, dotnet build runs with --no-restore. Default: false.

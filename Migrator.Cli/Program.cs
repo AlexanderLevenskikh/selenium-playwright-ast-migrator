@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Diagnostics;
 using System.Text;
+using System.Xml.Linq;
 using Migrator.Core;
 using Migrator.Core.Models;
 using Migrator.PlaywrightDotNet;
@@ -18,6 +19,9 @@ string mode = opts.Mode;
 string inputPath = opts.Input;
 string outPath = opts.Out;
 string? configPath = opts.Config;
+string[] configPaths = opts.Configs;
+string? primaryConfigPath = configPaths.Length > 0 ? configPaths[^1] : null;
+ProjectAdapterConfig? loadedConfig = null;
 string format = opts.Format;
 bool failOnUnsupported = opts.FailOnUnsupported;
 bool failOnTodo = opts.FailOnTodo;
@@ -27,7 +31,10 @@ string? afterPath = opts.After;
 // Agent-safety modes operate on config/report artifacts and do not process source files.
 if (mode == "config-validate")
 {
-    var validateExitCode = RunConfigValidate(configPath ?? inputPath, outPath, format);
+    var validateInputs = configPaths.Length > 0
+        ? configPaths
+        : (!string.IsNullOrWhiteSpace(inputPath) ? new[] { inputPath } : Array.Empty<string>());
+    var validateExitCode = RunConfigValidate(validateInputs, outPath, format);
     return validateExitCode;
 }
 
@@ -43,7 +50,7 @@ if (mode == "guard")
     return guardExitCode;
 }
 
-if (mode != "discover-target" && mode != "scaffold" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && !File.Exists(inputPath) && !Directory.Exists(inputPath))
+if (mode != "discover-target" && mode != "scaffold" && mode != "bootstrap-project" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && !File.Exists(inputPath) && !Directory.Exists(inputPath))
 {
     Console.Error.WriteLine($"Input not found: {inputPath}");
     return 1;
@@ -60,16 +67,21 @@ var renderer = new PlaywrightDotNetRenderer();
 
 IProjectAdapter? adapter = null;
 
-if (!string.IsNullOrEmpty(configPath))
+if (configPaths.Length > 0)
 {
-    if (!File.Exists(configPath))
+    foreach (var path in configPaths)
     {
-        Console.Error.WriteLine($"Config not found: {configPath}");
-        return 1;
+        if (!File.Exists(path))
+        {
+            Console.Error.WriteLine($"Config not found: {path}");
+            return 1;
+        }
     }
+
     try
     {
-        adapter = new DefaultProjectAdapter(configPath);
+        loadedConfig = ProjectAdapterConfigMerger.LoadAndMerge(configPaths);
+        adapter = new DefaultProjectAdapter(loadedConfig);
     }
     catch (ConfigValidationError cvex)
     {
@@ -78,20 +90,23 @@ if (!string.IsNullOrEmpty(configPath))
             Console.Error.WriteLine(err);
         return 2;
     }
-    Console.WriteLine($"Loaded adapter config: {configPath}");
+
+    Console.WriteLine(configPaths.Length == 1
+        ? $"Loaded adapter config: {configPaths[0]}"
+        : $"Loaded adapter config layers: {string.Join(" -> ", configPaths)}");
 }
 
 // Handle propose mode separately — input is a directory with report artifacts, not source files
 if (mode == "propose")
 {
-    var proposeExitCode = RunPropose(inputPath, outPath, configPath, format);
+    var proposeExitCode = RunPropose(inputPath, outPath, loadedConfig, format);
     return proposeExitCode;
 }
 
 // Handle discover-target mode — scans a target Playwright .NET project
 if (mode == "discover-target")
 {
-    var discoverExitCode = RunDiscoverTarget(inputPath, outPath, configPath, format);
+    var discoverExitCode = RunDiscoverTarget(inputPath, outPath, primaryConfigPath, format);
     return discoverExitCode;
 }
 
@@ -123,10 +138,17 @@ if (mode == "scaffold")
     return 0;
 }
 
+// Handle bootstrap-project mode — creates reusable profile/project config skeletons.
+if (mode == "bootstrap-project")
+{
+    var bootstrapExitCode = RunBootstrapProject(inputPath, outPath, format);
+    return bootstrapExitCode;
+}
+
 // Handle orchestrate mode — runs analyze → migrate → verify → propose pipeline
 if (mode == "orchestrate")
 {
-    var orchestrateExitCode = RunOrchestrate(inputPath, outPath, configPath, format, parser, renderer, adapter);
+    var orchestrateExitCode = RunOrchestrate(inputPath, outPath, primaryConfigPath, format, parser, renderer, adapter, loadedConfig);
     return orchestrateExitCode;
 }
 
@@ -149,14 +171,14 @@ var summary = BuildSummary(resultsList, out var allUnmapped);
 switch (mode)
 {
     case "analyze":
-        RunAnalyze(summary, outPath, format, configPath, resultsList, allUnmapped);
+        RunAnalyze(summary, outPath, format, loadedConfig, resultsList, allUnmapped);
         break;
     case "migrate":
-        RunMigrate(summary, outPath, format, configPath, resultsList, allUnmapped);
+        RunMigrate(summary, outPath, format, loadedConfig, resultsList, allUnmapped);
         break;
     case "verify":
         {
-            var verifyConfig = configPath != null ? ConfigValidator.ValidateJson(File.ReadAllText(configPath), configPath) : null;
+            var verifyConfig = loadedConfig;
             var verifyAdapter = adapter as DefaultProjectAdapter;
             var verifyExitCode = RunVerify(summary, outPath, format, resultsList, verifyConfig, verifyAdapter);
             if (verifyExitCode != 0)
@@ -165,8 +187,8 @@ switch (mode)
         break;
     case "verify-project":
         {
-            var verifyConfig = configPath != null ? ConfigValidator.ValidateJson(File.ReadAllText(configPath), configPath) : new ProjectAdapterConfig();
-            var verifyExitCode = RunVerifyProject(summary, outPath, format, resultsList, verifyConfig, configPath, inputPath, allUnmapped, CollectAllUnsupported(resultsList));
+            var verifyConfig = loadedConfig ?? new ProjectAdapterConfig();
+            var verifyExitCode = RunVerifyProject(summary, outPath, format, resultsList, verifyConfig, primaryConfigPath, inputPath, allUnmapped, CollectAllUnsupported(resultsList));
             if (verifyExitCode != 0)
                 return verifyExitCode;
         }
@@ -200,20 +222,20 @@ static int ApplyQualityGate(MigrationSummaryReport summary, bool failOnUnsupport
 
 // --- Mode implementations ---
 
-static void RunAnalyze(MigrationSummaryReport summary, string outPath, string format, string? configPath, List<PipelineResult> results, IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped)
+static void RunAnalyze(MigrationSummaryReport summary, string outPath, string format, ProjectAdapterConfig? config, List<PipelineResult> results, IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped)
 {
     Directory.CreateDirectory(outPath);
 
     var allUnsupported = CollectAllUnsupported(results);
     WriteReports(summary, outPath, format, allUnmapped, allUnsupported);
-    GenerateDraftConfig(allUnmapped, outPath, configPath);
+    GenerateDraftConfig(allUnmapped, outPath, config);
     WriteExplainTodoArtifacts(summary, outPath, format, allUnmapped, allUnsupported, null);
 
     PrintSummary(summary);
     Console.WriteLine($"Analysis written to: {Path.GetFullPath(outPath)}");
 }
 
-static void RunMigrate(MigrationSummaryReport summary, string outPath, string format, string? configPath, List<PipelineResult> results, IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped)
+static void RunMigrate(MigrationSummaryReport summary, string outPath, string format, ProjectAdapterConfig? config, List<PipelineResult> results, IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped)
 {
     Directory.CreateDirectory(outPath);
 
@@ -233,7 +255,7 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
 
     var allUnsupported = CollectAllUnsupported(results);
     WriteReports(summaryWithGenerated, outPath, format, allUnmapped, allUnsupported);
-    GenerateDraftConfig(allUnmapped, outPath, configPath);
+    GenerateDraftConfig(allUnmapped, outPath, config);
     WriteExplainTodoArtifacts(summaryWithGenerated, outPath, format, allUnmapped, allUnsupported, null);
 
     PrintSummary(summaryWithGenerated);
@@ -317,9 +339,14 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
 
     var verification = config.Verification ?? new VerificationConfig();
     var baseDir = ResolveVerificationBaseDirectory(verification, configPath, inputPath);
-    var projectReferences = ResolveProjectReferences(verification, baseDir, inputPath).ToList();
+    var solutionPath = ResolveSolutionPath(verification, baseDir, inputPath);
+    var projectDiscovery = ResolveProjectReferences(verification, baseDir, inputPath).ToList();
+    var projectReferences = projectDiscovery.Select(x => x.Path).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     var assemblyReferences = ResolvePathList(verification.AssemblyReferences, baseDir).ToList();
-    var packageReferences = BuildPackageReferences(verification).ToList();
+    var discoveredBuildFiles = DiscoverBuildFiles(verification, baseDir, projectReferences).ToList();
+    var targetFramework = ResolveVerificationTargetFramework(verification, projectReferences);
+    var packageReferences = BuildPackageReferences(verification, projectReferences).ToList();
+    var buildWorkingDirectory = ResolveBuildWorkingDirectory(verification, baseDir, solutionPath);
 
     var csprojPath = Path.Combine(harnessDir, "Generated.Playwright.Verify.csproj");
     File.WriteAllText(csprojPath, BuildVerificationCsproj(
@@ -327,22 +354,33 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
         generatedDir,
         projectReferences,
         assemblyReferences,
-        packageReferences));
+        packageReferences,
+        targetFramework,
+        discoveredBuildFiles));
 
-    var buildResult = RunDotnetBuild(csprojPath, verification);
+    var buildResult = RunDotnetBuild(csprojPath, verification, buildWorkingDirectory);
+    var rawDiagnostics = ExtractBuildDiagnostics(buildResult.StdOut + "\n" + buildResult.StdErr);
+    var classifiedDiagnostics = rawDiagnostics.Select(ClassifyBuildDiagnostic).ToArray();
     var report = new ProjectVerifyReport(
         GeneratedAtUtc: DateTimeOffset.UtcNow,
         Status: buildResult.ExitCode == 0 ? "passed" : "failed",
         ExitCode: buildResult.ExitCode,
         GeneratedFiles: generatedFiles.Select(Path.GetFullPath).ToArray(),
         HarnessProject: Path.GetFullPath(csprojPath),
+        BaseDirectory: Path.GetFullPath(baseDir),
+        Solution: solutionPath != null ? Path.GetFullPath(solutionPath) : null,
+        BuildWorkingDirectory: Path.GetFullPath(buildWorkingDirectory),
         ProjectReferences: projectReferences.Select(Path.GetFullPath).ToArray(),
+        ProjectReferenceDiscovery: projectDiscovery.ToArray(),
         AssemblyReferences: assemblyReferences.Select(Path.GetFullPath).ToArray(),
         PackageReferences: packageReferences.ToArray(),
+        BuildFilesImported: discoveredBuildFiles.Select(Path.GetFullPath).ToArray(),
+        TargetFramework: targetFramework,
         Command: buildResult.Command,
         StdOut: buildResult.StdOut,
         StdErr: buildResult.StdErr,
-        Diagnostics: ExtractBuildDiagnostics(buildResult.StdOut + "\n" + buildResult.StdErr));
+        Diagnostics: rawDiagnostics,
+        ClassifiedDiagnostics: classifiedDiagnostics);
 
     File.WriteAllText(Path.Combine(outPath, "project-verify-report.json"),
         System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
@@ -355,8 +393,12 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
     Console.WriteLine($"Status: {report.Status.ToUpperInvariant()}");
     Console.WriteLine($"Generated files: {report.GeneratedFiles.Length}");
     Console.WriteLine($"Harness project: {report.HarnessProject}");
+    Console.WriteLine($"Base directory: {report.BaseDirectory}");
+    Console.WriteLine($"Build working directory: {report.BuildWorkingDirectory}");
+    Console.WriteLine($"Target framework: {report.TargetFramework}");
     Console.WriteLine($"Project references: {report.ProjectReferences.Length}");
     Console.WriteLine($"Package references: {report.PackageReferences.Length}");
+    Console.WriteLine($"Imported build files: {report.BuildFilesImported.Length}");
     Console.WriteLine($"Diagnostics: {report.Diagnostics.Length}");
     if (report.Diagnostics.Length > 0)
     {
@@ -373,7 +415,7 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
 static string ResolveVerificationBaseDirectory(VerificationConfig verification, string? configPath, string inputPath)
 {
     if (!string.IsNullOrWhiteSpace(verification.BaseDirectory))
-        return Path.GetFullPath(verification.BaseDirectory);
+        return Path.GetFullPath(ExpandPath(verification.BaseDirectory));
 
     if (!string.IsNullOrWhiteSpace(configPath))
         return Path.GetDirectoryName(Path.GetFullPath(configPath)) ?? Directory.GetCurrentDirectory();
@@ -384,23 +426,85 @@ static string ResolveVerificationBaseDirectory(VerificationConfig verification, 
     return Path.GetDirectoryName(Path.GetFullPath(inputPath)) ?? Directory.GetCurrentDirectory();
 }
 
-static IEnumerable<string> ResolveProjectReferences(VerificationConfig verification, string baseDir, string inputPath)
+static string? ResolveSolutionPath(VerificationConfig verification, string baseDir, string inputPath)
 {
-    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    if (!string.IsNullOrWhiteSpace(verification.Solution))
+        return ResolvePath(verification.Solution, baseDir);
 
-    foreach (var path in ResolvePathList(verification.ProjectReferences, baseDir))
+    var nearestSolution = FindNearestFile(inputPath, "*.sln");
+    if (nearestSolution != null)
+        return nearestSolution;
+
+    var baseSolution = Directory.Exists(baseDir)
+        ? new DirectoryInfo(baseDir).GetFiles("*.sln", SearchOption.TopDirectoryOnly).OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault()
+        : null;
+
+    return baseSolution?.FullName;
+}
+
+static string ResolveBuildWorkingDirectory(VerificationConfig verification, string baseDir, string? solutionPath)
+{
+    if (!string.IsNullOrWhiteSpace(verification.BuildWorkingDirectory))
+        return ResolvePath(verification.BuildWorkingDirectory, baseDir);
+
+    if (!string.IsNullOrWhiteSpace(verification.BaseDirectory))
+        return Path.GetFullPath(baseDir);
+
+    if (solutionPath != null)
+        return Path.GetDirectoryName(solutionPath) ?? baseDir;
+
+    return Path.GetFullPath(baseDir);
+}
+
+static IEnumerable<ProjectReferenceDiscovery> ResolveProjectReferences(VerificationConfig verification, string baseDir, string inputPath)
+{
+    var discovered = new Dictionary<string, ProjectReferenceDiscovery>(StringComparer.OrdinalIgnoreCase);
+
+    void AddProject(string path, string source, string reason)
     {
-        if (seen.Add(path))
-            yield return path;
+        var full = Path.GetFullPath(path);
+        if (!File.Exists(full))
+        {
+            if (!discovered.ContainsKey(full))
+                discovered[full] = new ProjectReferenceDiscovery(full, source, "missing", reason + " (file not found)");
+            return;
+        }
+
+        if (!discovered.ContainsKey(full) || discovered[full].Source == "missing")
+            discovered[full] = new ProjectReferenceDiscovery(full, source, "included", reason);
     }
 
-    var autoDiscover = verification.AutoDiscoverNearestProject ?? true;
-    if (!autoDiscover || seen.Count > 0)
-        yield break;
+    foreach (var path in ResolvePathList(verification.ProjectReferences, baseDir))
+        AddProject(path, "config", "explicit Verification.ProjectReferences entry");
 
-    var nearest = FindNearestCsproj(inputPath);
-    if (nearest != null && seen.Add(nearest))
-        yield return nearest;
+    var autoNearest = verification.AutoDiscoverNearestProject ?? true;
+    if (autoNearest)
+    {
+        var nearest = FindNearestCsproj(inputPath);
+        if (nearest != null)
+            AddProject(nearest, "auto-nearest", "nearest .csproj discovered upward from --input");
+    }
+
+    var includeTransitive = verification.AutoDiscoverProjectReferences ?? true;
+    if (includeTransitive)
+    {
+        var queue = new Queue<string>(discovered.Values.Where(x => x.Status == "included").Select(x => x.Path));
+        while (queue.Count > 0)
+        {
+            var project = queue.Dequeue();
+            foreach (var reference in ReadProjectReferences(project))
+            {
+                var before = discovered.Count;
+                AddProject(reference, "transitive", $"ProjectReference from {Path.GetFileName(project)}");
+                if (discovered.Count > before && File.Exists(reference))
+                    queue.Enqueue(reference);
+            }
+        }
+    }
+
+    return discovered.Values
+        .OrderBy(x => x.Source == "config" ? 0 : x.Source == "auto-nearest" ? 1 : 2)
+        .ThenBy(x => x.Path, StringComparer.OrdinalIgnoreCase);
 }
 
 static IEnumerable<string> ResolvePathList(IEnumerable<string> paths, string baseDir)
@@ -409,14 +513,19 @@ static IEnumerable<string> ResolvePathList(IEnumerable<string> paths, string bas
     {
         if (string.IsNullOrWhiteSpace(path))
             continue;
-
-        var normalized = Environment.ExpandEnvironmentVariables(path.Trim());
-        var fullPath = Path.IsPathRooted(normalized)
-            ? Path.GetFullPath(normalized)
-            : Path.GetFullPath(Path.Combine(baseDir, normalized));
-        yield return fullPath;
+        yield return ResolvePath(path, baseDir);
     }
 }
+
+static string ResolvePath(string path, string baseDir)
+{
+    var normalized = ExpandPath(path.Trim());
+    return Path.IsPathRooted(normalized)
+        ? Path.GetFullPath(normalized)
+        : Path.GetFullPath(Path.Combine(baseDir, normalized));
+}
+
+static string ExpandPath(string path) => Environment.ExpandEnvironmentVariables(path);
 
 static string? FindNearestCsproj(string inputPath)
 {
@@ -437,7 +546,6 @@ static string? FindNearestCsproj(string inputPath)
 
         if (projects.Length > 1)
         {
-            // Prefer a project whose name matches the input directory when there are several siblings.
             var inputName = new DirectoryInfo(start ?? dir.FullName).Name;
             var preferred = projects.FirstOrDefault(p => Path.GetFileNameWithoutExtension(p.Name).Equals(inputName, StringComparison.OrdinalIgnoreCase));
             return (preferred ?? projects[0]).FullName;
@@ -449,7 +557,127 @@ static string? FindNearestCsproj(string inputPath)
     return null;
 }
 
-static IEnumerable<PackageReferenceConfig> BuildPackageReferences(VerificationConfig verification)
+static string FindRepoRootForVerification(string path)
+{
+    var start = File.Exists(path)
+        ? Path.GetDirectoryName(Path.GetFullPath(path))
+        : Path.GetFullPath(path);
+
+    var dir = new DirectoryInfo(start ?? Directory.GetCurrentDirectory());
+    DirectoryInfo? best = null;
+    while (dir != null)
+    {
+        if (dir.GetFiles("*.sln", SearchOption.TopDirectoryOnly).Length > 0
+            || File.Exists(Path.Combine(dir.FullName, "NuGet.config"))
+            || File.Exists(Path.Combine(dir.FullName, "Directory.Build.props")))
+        {
+            best = dir;
+        }
+        dir = dir.Parent;
+    }
+
+    return best?.FullName ?? (start ?? Directory.GetCurrentDirectory());
+}
+
+static string? FindNearestFile(string inputPath, string pattern)
+{
+    var start = File.Exists(inputPath)
+        ? Path.GetDirectoryName(Path.GetFullPath(inputPath))
+        : Path.GetFullPath(inputPath);
+
+    var dir = new DirectoryInfo(start ?? Directory.GetCurrentDirectory());
+    while (dir != null)
+    {
+        var match = dir.GetFiles(pattern, SearchOption.TopDirectoryOnly)
+            .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        if (match != null)
+            return match.FullName;
+        dir = dir.Parent;
+    }
+
+    return null;
+}
+
+static IEnumerable<string> ReadProjectReferences(string csprojPath)
+{
+    var projectDir = Path.GetDirectoryName(csprojPath) ?? Directory.GetCurrentDirectory();
+    XDocument doc;
+    try
+    {
+        doc = XDocument.Load(csprojPath);
+    }
+    catch
+    {
+        yield break;
+    }
+
+    foreach (var include in doc.Descendants().Where(x => x.Name.LocalName == "ProjectReference")
+        .Select(x => (string?)x.Attribute("Include"))
+        .Where(x => !string.IsNullOrWhiteSpace(x)))
+    {
+        var full = Path.GetFullPath(Path.Combine(projectDir, ExpandPath(include!)));
+        yield return full;
+    }
+}
+
+static string ResolveVerificationTargetFramework(VerificationConfig verification, IReadOnlyList<string> projectReferences)
+{
+    if (!string.IsNullOrWhiteSpace(verification.TargetFramework))
+        return verification.TargetFramework.Trim();
+
+    foreach (var project in projectReferences.Where(File.Exists))
+    {
+        var tfm = ReadTargetFramework(project);
+        if (!string.IsNullOrWhiteSpace(tfm))
+            return tfm!;
+    }
+
+    return "net8.0";
+}
+
+static string? ReadTargetFramework(string csprojPath)
+{
+    try
+    {
+        var doc = XDocument.Load(csprojPath);
+        var targetFramework = doc.Descendants().FirstOrDefault(x => x.Name.LocalName == "TargetFramework")?.Value.Trim();
+        if (!string.IsNullOrWhiteSpace(targetFramework))
+            return targetFramework;
+
+        var targetFrameworks = doc.Descendants().FirstOrDefault(x => x.Name.LocalName == "TargetFrameworks")?.Value.Trim();
+        if (!string.IsNullOrWhiteSpace(targetFrameworks))
+            return targetFrameworks.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+    }
+    catch
+    {
+        return null;
+    }
+
+    return null;
+}
+
+static IEnumerable<string> DiscoverBuildFiles(VerificationConfig verification, string baseDir, IReadOnlyList<string> projectReferences)
+{
+    if (verification.AutoDiscoverBuildFiles == false)
+        yield break;
+
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var anchors = new List<string> { baseDir };
+    anchors.AddRange(projectReferences.Where(File.Exists).Select(p => Path.GetDirectoryName(p) ?? baseDir));
+
+    foreach (var anchor in anchors)
+    {
+        foreach (var fileName in new[] { "Directory.Build.props", "Directory.Packages.props", "Directory.Build.targets" })
+        {
+            var found = FindNearestFile(anchor, fileName);
+            if (found != null && seen.Add(found))
+                yield return found;
+        }
+    }
+}
+
+static IEnumerable<PackageReferenceConfig> BuildPackageReferences(VerificationConfig verification, IReadOnlyList<string> projectReferences)
 {
     var result = new List<PackageReferenceConfig>();
     if (verification.DisableDefaultPackageReferences != true)
@@ -457,6 +685,9 @@ static IEnumerable<PackageReferenceConfig> BuildPackageReferences(VerificationCo
         result.Add(new PackageReferenceConfig { Include = "Microsoft.Playwright.NUnit", Version = "1.52.0" });
         result.Add(new PackageReferenceConfig { Include = "NUnit", Version = "3.14.0" });
     }
+
+    if (verification.AutoDiscoverPackageReferences == true)
+        result.AddRange(ReadPackageReferences(projectReferences));
 
     var byInclude = new Dictionary<string, PackageReferenceConfig>(StringComparer.OrdinalIgnoreCase);
     foreach (var package in result.Concat(verification.PackageReferences))
@@ -473,19 +704,74 @@ static IEnumerable<PackageReferenceConfig> BuildPackageReferences(VerificationCo
     return byInclude.Values.OrderBy(p => p.Include, StringComparer.OrdinalIgnoreCase);
 }
 
+static IEnumerable<PackageReferenceConfig> ReadPackageReferences(IEnumerable<string> projectReferences)
+{
+    foreach (var project in projectReferences.Where(File.Exists))
+    {
+        XDocument doc;
+        try
+        {
+            doc = XDocument.Load(project);
+        }
+        catch
+        {
+            continue;
+        }
+
+        foreach (var pr in doc.Descendants().Where(x => x.Name.LocalName == "PackageReference"))
+        {
+            var include = ((string?)pr.Attribute("Include"))?.Trim();
+            var version = ((string?)pr.Attribute("Version"))?.Trim()
+                ?? pr.Elements().FirstOrDefault(x => x.Name.LocalName == "Version")?.Value.Trim();
+            if (!string.IsNullOrWhiteSpace(include) && !string.IsNullOrWhiteSpace(version))
+                yield return new PackageReferenceConfig { Include = include!, Version = version! };
+        }
+    }
+}
+
+static HashSet<string> ReadCentralPackageNames(IEnumerable<string> buildFiles)
+{
+    var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var file in buildFiles.Where(x => Path.GetFileName(x).Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase) && File.Exists(x)))
+    {
+        try
+        {
+            var doc = XDocument.Load(file);
+            foreach (var packageVersion in doc.Descendants().Where(x => x.Name.LocalName == "PackageVersion"))
+            {
+                var include = ((string?)packageVersion.Attribute("Include"))?.Trim();
+                if (!string.IsNullOrWhiteSpace(include))
+                    result.Add(include!);
+            }
+        }
+        catch
+        {
+            // Best effort only. If parsing fails, keep explicit PackageReference versions.
+        }
+    }
+    return result;
+}
+
 static string BuildVerificationCsproj(
     VerificationConfig verification,
     string generatedDir,
     IReadOnlyList<string> projectReferences,
     IReadOnlyList<string> assemblyReferences,
-    IReadOnlyList<PackageReferenceConfig> packageReferences)
+    IReadOnlyList<PackageReferenceConfig> packageReferences,
+    string targetFramework,
+    IReadOnlyList<string> buildFiles)
 {
-    var targetFramework = string.IsNullOrWhiteSpace(verification.TargetFramework) ? "net8.0" : verification.TargetFramework!.Trim();
-    var configuration = string.IsNullOrWhiteSpace(verification.Configuration) ? "Debug" : verification.Configuration!.Trim();
     var generatedGlob = Path.Combine(generatedDir, "**", "*.cs");
+    var props = buildFiles.Where(x => x.EndsWith(".props", StringComparison.OrdinalIgnoreCase)).ToArray();
+    var targets = buildFiles.Where(x => x.EndsWith(".targets", StringComparison.OrdinalIgnoreCase)).ToArray();
+    var centralPackageNames = ReadCentralPackageNames(buildFiles);
 
     var sb = new StringBuilder();
     sb.AppendLine("<Project Sdk=\"Microsoft.NET.Sdk\">");
+    foreach (var propsPath in props)
+        sb.AppendLine($"  <Import Project=\"{EscapeXml(propsPath)}\" Condition=\"Exists('{EscapeXml(propsPath)}')\" />");
+    if (props.Length > 0)
+        sb.AppendLine();
     sb.AppendLine("  <PropertyGroup>");
     sb.AppendLine($"    <TargetFramework>{EscapeXml(targetFramework)}</TargetFramework>");
     sb.AppendLine("    <IsPackable>false</IsPackable>");
@@ -504,7 +790,12 @@ static string BuildVerificationCsproj(
         sb.AppendLine();
         sb.AppendLine("  <ItemGroup>");
         foreach (var p in packageReferences)
-            sb.AppendLine($"    <PackageReference Include=\"{EscapeXml(p.Include)}\" Version=\"{EscapeXml(p.Version)}\" />");
+        {
+            if (centralPackageNames.Contains(p.Include))
+                sb.AppendLine($"    <PackageReference Include=\"{EscapeXml(p.Include)}\" />");
+            else
+                sb.AppendLine($"    <PackageReference Include=\"{EscapeXml(p.Include)}\" Version=\"{EscapeXml(p.Version)}\" />");
+        }
         sb.AppendLine("  </ItemGroup>");
     }
 
@@ -531,11 +822,18 @@ static string BuildVerificationCsproj(
         sb.AppendLine("  </ItemGroup>");
     }
 
+    if (targets.Length > 0)
+    {
+        sb.AppendLine();
+        foreach (var targetsPath in targets)
+            sb.AppendLine($"  <Import Project=\"{EscapeXml(targetsPath)}\" Condition=\"Exists('{EscapeXml(targetsPath)}')\" />");
+    }
+
     sb.AppendLine("</Project>");
     return sb.ToString();
 }
 
-static DotnetBuildResult RunDotnetBuild(string csprojPath, VerificationConfig verification)
+static DotnetBuildResult RunDotnetBuild(string csprojPath, VerificationConfig verification, string workingDirectory)
 {
     var args = new List<string>
     {
@@ -557,6 +855,7 @@ static DotnetBuildResult RunDotnetBuild(string csprojPath, VerificationConfig ve
     var psi = new ProcessStartInfo
     {
         FileName = "dotnet",
+        WorkingDirectory = Directory.Exists(workingDirectory) ? workingDirectory : Directory.GetCurrentDirectory(),
         RedirectStandardOutput = true,
         RedirectStandardError = true,
         UseShellExecute = false,
@@ -595,6 +894,89 @@ static string[] ExtractBuildDiagnostics(string text)
         .ToArray();
 }
 
+static ProjectVerifyDiagnostic ClassifyBuildDiagnostic(string diagnostic)
+{
+    var codeMatch = System.Text.RegularExpressions.Regex.Match(diagnostic, @"\b(?<code>CS\d{4}|NU\d{4}|MSB\d{4})\b");
+    var code = codeMatch.Success ? codeMatch.Groups["code"].Value : "UNKNOWN";
+    var severity = diagnostic.Contains(": warning ", StringComparison.OrdinalIgnoreCase) ? "warning" : "error";
+
+    var locationMatch = System.Text.RegularExpressions.Regex.Match(diagnostic, @"^(?<file>.*?)(\((?<line>\d+),(?<column>\d+)\))?:\s*(error|warning)");
+    var file = locationMatch.Success ? locationMatch.Groups["file"].Value.Trim() : null;
+    var line = locationMatch.Success && int.TryParse(locationMatch.Groups["line"].Value, out var parsedLine) ? parsedLine : (int?)null;
+
+    var category = "unknown";
+    var likelyCause = "Требуется ручная классификация diagnostics.";
+    var suggestedAction = "Посмотри raw diagnostic и ближайший generated-файл.";
+
+    if (code == "CS0103")
+    {
+        category = "unknown-identifier";
+        likelyCause = "Generated-код ссылается на идентификатор, которого нет в verification project: source-only leak, missing target known identifier или потерянная target-local переменная.";
+        suggestedAction = "Проверь, не должен ли символ быть SourceOnlyIdentifiers, TargetKnownIdentifiers/TargetKnownTypes или результатом active TargetStatements.";
+    }
+    else if (code == "CS0246")
+    {
+        category = "missing-type-or-namespace";
+        likelyCause = "Не найден тип/namespace: чаще всего не хватает ProjectReference/PackageReference или using указывает на сборку, которая не подключена в Verification.";
+        suggestedAction = "Добавь нужный .csproj в Verification.ProjectReferences или пакет в Verification.PackageReferences.";
+    }
+    else if (code == "CS0234")
+    {
+        category = "missing-namespace-member";
+        likelyCause = "Namespace найден частично, но вложенный namespace/type отсутствует: обычно missing project/package reference или неверный using.";
+        suggestedAction = "Проверь ProjectReferences и реальные namespace в исходном проекте.";
+    }
+    else if (code == "CS1061")
+    {
+        category = "missing-member";
+        likelyCause = "Тип найден, но метода/свойства нет: возможно mapping сгенерировал неверный Playwright/helper API.";
+        suggestedAction = "Проверь adapter-config mapping и target helper API.";
+    }
+    else if (code == "CS1501" || code == "CS1503" || code == "CS7036")
+    {
+        category = "signature-mismatch";
+        likelyCause = "Метод найден, но аргументы не совпали: mapping сохранил Selenium-семантику или неверно перенёс параметры.";
+        suggestedAction = "Проверь ParameterizedMethodMapping/MappedMethodInvocationAction и placeholders.";
+    }
+    else if (code == "CS1998")
+    {
+        category = "async-without-await";
+        likelyCause = "Сгенерированный async-тест не содержит await. Обычно не блокер, но может быть сигналом пустой/закомментированной миграции.";
+        suggestedAction = "Проверь, не стал ли тест почти полностью TODO.";
+    }
+    else if (code.StartsWith("NU", StringComparison.OrdinalIgnoreCase))
+    {
+        category = "nuget-restore";
+        likelyCause = "Проблема restore/package source/version. Часто связана с внутренним NuGet feed или отсутствующим NuGet.config.";
+        suggestedAction = "Укажи Verification.BuildWorkingDirectory на корень repo с NuGet.config или добавь нужный package source локально.";
+    }
+    else if (code.StartsWith("MSB", StringComparison.OrdinalIgnoreCase))
+    {
+        category = "msbuild-project";
+        likelyCause = "MSBuild не смог собрать temporary harness или один из referenced проектов.";
+        suggestedAction = "Проверь imported Directory.Build.props/targets, TargetFramework и ProjectReferences.";
+    }
+
+    return new ProjectVerifyDiagnostic(
+        Raw: diagnostic,
+        Code: code,
+        Severity: severity,
+        Category: category,
+        File: string.IsNullOrWhiteSpace(file) ? null : file,
+        Line: line,
+        LikelyCause: likelyCause,
+        SuggestedAction: suggestedAction);
+}
+
+static Dictionary<string, int> CountDiagnosticCategories(IEnumerable<ProjectVerifyDiagnostic> diagnostics)
+{
+    return diagnostics
+        .GroupBy(x => x.Category, StringComparer.OrdinalIgnoreCase)
+        .OrderByDescending(g => g.Count())
+        .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+}
+
 static string WriteProjectVerifyMarkdown(ProjectVerifyReport report)
 {
     var sb = new StringBuilder();
@@ -604,21 +986,94 @@ static string WriteProjectVerifyMarkdown(ProjectVerifyReport report)
     sb.AppendLine($"- **Status**: `{report.Status}`");
     sb.AppendLine($"- **Exit code**: `{report.ExitCode}`");
     sb.AppendLine($"- **Harness project**: `{report.HarnessProject}`");
+    sb.AppendLine($"- **Base directory**: `{report.BaseDirectory}`");
+    if (!string.IsNullOrWhiteSpace(report.Solution))
+        sb.AppendLine($"- **Solution**: `{report.Solution}`");
+    sb.AppendLine($"- **Build working directory**: `{report.BuildWorkingDirectory}`");
+    sb.AppendLine($"- **Target framework**: `{report.TargetFramework}`");
     sb.AppendLine($"- **Command**: `{report.Command}`");
     sb.AppendLine();
+
+    sb.AppendLine("## Discovery summary");
+    sb.AppendLine();
+    sb.AppendLine($"- Generated files: `{report.GeneratedFiles.Length}`");
+    sb.AppendLine($"- Project references: `{report.ProjectReferences.Length}`");
+    sb.AppendLine($"- Assembly references: `{report.AssemblyReferences.Length}`");
+    sb.AppendLine($"- Package references: `{report.PackageReferences.Length}`");
+    sb.AppendLine($"- Imported build files: `{report.BuildFilesImported.Length}`");
+    sb.AppendLine();
+
+    sb.AppendLine("## Project reference discovery");
+    if (report.ProjectReferenceDiscovery.Length == 0)
+    {
+        sb.AppendLine("- none");
+    }
+    else
+    {
+        foreach (var r in report.ProjectReferenceDiscovery)
+            sb.AppendLine($"- `{r.Path}` — **{r.Source}**, `{r.Status}`: {r.Reason}");
+    }
+    sb.AppendLine();
+
+    sb.AppendLine("## Imported build files");
+    foreach (var r in report.BuildFilesImported)
+        sb.AppendLine($"- `{r}`");
+    if (report.BuildFilesImported.Length == 0)
+        sb.AppendLine("- none");
+    sb.AppendLine();
+
     sb.AppendLine("## Project references");
     foreach (var r in report.ProjectReferences)
         sb.AppendLine($"- `{r}`");
     if (report.ProjectReferences.Length == 0)
         sb.AppendLine("- none");
     sb.AppendLine();
+
     sb.AppendLine("## Package references");
     foreach (var p in report.PackageReferences)
         sb.AppendLine($"- `{p.Include}` `{p.Version}`");
     if (report.PackageReferences.Length == 0)
         sb.AppendLine("- none");
     sb.AppendLine();
-    sb.AppendLine("## Diagnostics");
+
+    sb.AppendLine("## Diagnostic categories");
+    var categories = CountDiagnosticCategories(report.ClassifiedDiagnostics);
+    if (categories.Count == 0)
+    {
+        sb.AppendLine("No diagnostics captured.");
+    }
+    else
+    {
+        foreach (var kv in categories)
+            sb.AppendLine($"- **{kv.Key}**: {kv.Value}");
+    }
+    sb.AppendLine();
+
+    sb.AppendLine("## Classified diagnostics");
+    if (report.ClassifiedDiagnostics.Length == 0)
+    {
+        sb.AppendLine("No build diagnostics captured.");
+    }
+    else
+    {
+        foreach (var d in report.ClassifiedDiagnostics)
+        {
+            sb.AppendLine($"### `{d.Code}` — {d.Category}");
+            sb.AppendLine();
+            sb.AppendLine($"- **Severity**: `{d.Severity}`");
+            if (!string.IsNullOrWhiteSpace(d.File))
+                sb.AppendLine($"- **File**: `{d.File}`" + (d.Line.HasValue ? $":{d.Line.Value}" : ""));
+            sb.AppendLine($"- **Likely cause**: {d.LikelyCause}");
+            sb.AppendLine($"- **Suggested action**: {d.SuggestedAction}");
+            sb.AppendLine();
+            sb.AppendLine("```text");
+            sb.AppendLine(d.Raw);
+            sb.AppendLine("```");
+            sb.AppendLine();
+        }
+    }
+
+    sb.AppendLine("## Raw diagnostics");
     if (report.Diagnostics.Length == 0)
     {
         sb.AppendLine("No build diagnostics captured.");
@@ -1080,17 +1535,17 @@ static string SuggestTargetExpression(string sourceExpression)
     return $"TODO_{camel}";
 }
 
-static void GenerateDraftConfig(IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped, string outPath, string? existingConfigPath)
+static void GenerateDraftConfig(IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped, string outPath, ProjectAdapterConfig? existingConfig)
 {
     var existingMappings = new HashSet<string>(StringComparer.Ordinal);
 
-    if (!string.IsNullOrEmpty(existingConfigPath) && File.Exists(existingConfigPath))
+    if (existingConfig != null)
     {
-        var json = File.ReadAllText(existingConfigPath);
-        var config = System.Text.Json.JsonSerializer.Deserialize<ProjectAdapterConfig>(json);
-        if (config != null)
+        foreach (var tm in existingConfig.UiTargets)
+            existingMappings.Add(tm.SourceExpression);
+        foreach (var scope in existingConfig.Scopes)
         {
-            foreach (var tm in config.UiTargets)
+            foreach (var tm in scope.UiTargets)
                 existingMappings.Add(tm.SourceExpression);
         }
     }
@@ -1292,7 +1747,9 @@ static TodoExplanationReport BuildExplainTodoReport(
         UnmappedTargets: summary.UnmappedTargets,
         UnsupportedActions: summary.UnsupportedActions,
         TodoComments: summary.TodoComments,
-        SyntaxErrors: projectVerifyReport?.Diagnostics.Count(d => d.Contains(": error ", StringComparison.OrdinalIgnoreCase) || d.Contains("CS", StringComparison.OrdinalIgnoreCase)) ?? 0,
+        SyntaxErrors: projectVerifyReport?.ClassifiedDiagnostics.Count(d => d.Severity.Equals("error", StringComparison.OrdinalIgnoreCase))
+            ?? projectVerifyReport?.Diagnostics.Count(d => d.Contains(": error ", StringComparison.OrdinalIgnoreCase) || d.Contains("CS", StringComparison.OrdinalIgnoreCase))
+            ?? 0,
         ProjectVerifyStatus: projectVerifyReport?.Status,
         Insights: ordered,
         NextBestAction: ordered.FirstOrDefault()?.SuggestedAction ?? "No TODO/actionable issue found. Move to project verify or runtime smoke.");
@@ -1391,12 +1848,99 @@ static ProjectVerifyReport? ReadProjectVerifyReport(string path)
 {
     try
     {
-        return System.Text.Json.JsonSerializer.Deserialize<ProjectVerifyReport>(File.ReadAllText(path));
+        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+        var root = doc.RootElement;
+        var diagnostics = ReadStringArray(root, "Diagnostics");
+        var classified = root.TryGetProperty("ClassifiedDiagnostics", out var cd) && cd.ValueKind == System.Text.Json.JsonValueKind.Array
+            ? cd.EnumerateArray().Select(ReadProjectVerifyDiagnostic).ToArray()
+            : diagnostics.Select(ClassifyBuildDiagnostic).ToArray();
+
+        return new ProjectVerifyReport(
+            GeneratedAtUtc: ReadDateTimeOffset(root, "GeneratedAtUtc") ?? DateTimeOffset.UtcNow,
+            Status: ReadString(root, "Status") ?? "unknown",
+            ExitCode: ReadInt(root, "ExitCode"),
+            GeneratedFiles: ReadStringArray(root, "GeneratedFiles"),
+            HarnessProject: ReadString(root, "HarnessProject") ?? "",
+            BaseDirectory: ReadString(root, "BaseDirectory") ?? "",
+            Solution: ReadString(root, "Solution"),
+            BuildWorkingDirectory: ReadString(root, "BuildWorkingDirectory") ?? "",
+            ProjectReferences: ReadStringArray(root, "ProjectReferences"),
+            ProjectReferenceDiscovery: ReadProjectReferenceDiscoveryArray(root),
+            AssemblyReferences: ReadStringArray(root, "AssemblyReferences"),
+            PackageReferences: ReadPackageReferenceArray(root),
+            BuildFilesImported: ReadStringArray(root, "BuildFilesImported"),
+            TargetFramework: ReadString(root, "TargetFramework") ?? "",
+            Command: ReadString(root, "Command") ?? "",
+            StdOut: ReadString(root, "StdOut") ?? "",
+            StdErr: ReadString(root, "StdErr") ?? "",
+            Diagnostics: diagnostics,
+            ClassifiedDiagnostics: classified);
     }
     catch
     {
         return null;
     }
+}
+
+static DateTimeOffset? ReadDateTimeOffset(System.Text.Json.JsonElement root, string name)
+{
+    if (root.TryGetProperty(name, out var prop) && prop.ValueKind == System.Text.Json.JsonValueKind.String && DateTimeOffset.TryParse(prop.GetString(), out var value))
+        return value;
+    return null;
+}
+
+static string[] ReadStringArray(System.Text.Json.JsonElement root, string name)
+{
+    if (!root.TryGetProperty(name, out var prop) || prop.ValueKind != System.Text.Json.JsonValueKind.Array)
+        return Array.Empty<string>();
+    return prop.EnumerateArray()
+        .Where(x => x.ValueKind == System.Text.Json.JsonValueKind.String)
+        .Select(x => x.GetString() ?? "")
+        .Where(x => !string.IsNullOrWhiteSpace(x))
+        .ToArray();
+}
+
+static PackageReferenceConfig[] ReadPackageReferenceArray(System.Text.Json.JsonElement root)
+{
+    if (!root.TryGetProperty("PackageReferences", out var prop) || prop.ValueKind != System.Text.Json.JsonValueKind.Array)
+        return Array.Empty<PackageReferenceConfig>();
+
+    return prop.EnumerateArray()
+        .Select(x => new PackageReferenceConfig
+        {
+            Include = ReadString(x, "Include") ?? "",
+            Version = ReadString(x, "Version") ?? ""
+        })
+        .Where(x => !string.IsNullOrWhiteSpace(x.Include))
+        .ToArray();
+}
+
+static ProjectReferenceDiscovery[] ReadProjectReferenceDiscoveryArray(System.Text.Json.JsonElement root)
+{
+    if (!root.TryGetProperty("ProjectReferenceDiscovery", out var prop) || prop.ValueKind != System.Text.Json.JsonValueKind.Array)
+        return Array.Empty<ProjectReferenceDiscovery>();
+
+    return prop.EnumerateArray()
+        .Select(x => new ProjectReferenceDiscovery(
+            Path: ReadString(x, "Path") ?? "",
+            Source: ReadString(x, "Source") ?? "unknown",
+            Status: ReadString(x, "Status") ?? "unknown",
+            Reason: ReadString(x, "Reason") ?? ""))
+        .Where(x => !string.IsNullOrWhiteSpace(x.Path))
+        .ToArray();
+}
+
+static ProjectVerifyDiagnostic ReadProjectVerifyDiagnostic(System.Text.Json.JsonElement x)
+{
+    return new ProjectVerifyDiagnostic(
+        Raw: ReadString(x, "Raw") ?? "",
+        Code: ReadString(x, "Code") ?? "UNKNOWN",
+        Severity: ReadString(x, "Severity") ?? "error",
+        Category: ReadString(x, "Category") ?? "unknown",
+        File: ReadString(x, "File"),
+        Line: x.TryGetProperty("Line", out var lineProp) && lineProp.ValueKind == System.Text.Json.JsonValueKind.Number && lineProp.TryGetInt32(out var line) ? line : null,
+        LikelyCause: ReadString(x, "LikelyCause") ?? "Требуется ручная классификация diagnostics.",
+        SuggestedAction: ReadString(x, "SuggestedAction") ?? "Посмотри raw diagnostic.");
 }
 
 static Dictionary<string, (int Count, string File, int Line)> ReadCountItems(string? path, string nameProp, string countProp, string fileProp, string lineProp)
@@ -1692,7 +2236,7 @@ static void WriteScaffoldReport(ScaffoldResult result, string outPath, string fo
     }
 }
 
-static int RunPropose(string inputPath, string outPath, string? configPath, string format)
+static int RunPropose(string inputPath, string outPath, ProjectAdapterConfig? existingConfig, string format)
 {
     if (!Directory.Exists(inputPath))
     {
@@ -1761,20 +2305,7 @@ static int RunPropose(string inputPath, string outPath, string? configPath, stri
         warnings.Add("verify-report.json not found, verify-based proposals skipped");
     }
 
-    // Load adapter config
-    ProjectAdapterConfig? existingConfig = null;
-    if (!string.IsNullOrEmpty(configPath))
-    {
-        if (File.Exists(configPath))
-        {
-            existingConfig = System.Text.Json.JsonSerializer.Deserialize<ProjectAdapterConfig>(File.ReadAllText(configPath));
-        }
-        else
-        {
-            Console.Error.WriteLine($"Config not found: {configPath}");
-            return 1;
-        }
-    }
+    // Existing config was already loaded/merged by CLI before entering propose mode.
 
     // Load generated files for additional context
     var generatedFiles = new List<string>();
@@ -2303,9 +2834,203 @@ static string WritePomAdapterDraft(PomIndexReport index)
     return System.Text.Json.JsonSerializer.Serialize(draft, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
 }
 
+
+// --- Bootstrap project mode ---
+
+static int RunBootstrapProject(string inputPath, string outPath, string format)
+{
+    Directory.CreateDirectory(outPath);
+    var profilesDir = Path.Combine(outPath, "profiles");
+    var projectsDir = Path.Combine(profilesDir, "projects");
+    Directory.CreateDirectory(profilesDir);
+    Directory.CreateDirectory(projectsDir);
+
+    var inputFullPath = string.IsNullOrWhiteSpace(inputPath)
+        ? Directory.GetCurrentDirectory()
+        : Path.GetFullPath(inputPath);
+    var projectName = Directory.Exists(inputFullPath)
+        ? new DirectoryInfo(inputFullPath).Name
+        : Path.GetFileNameWithoutExtension(inputFullPath);
+    if (string.IsNullOrWhiteSpace(projectName))
+        projectName = "project";
+
+    var safeProjectName = MakeSafeProfileName(projectName);
+    var nearestProject = Directory.Exists(inputFullPath) || File.Exists(inputFullPath)
+        ? FindNearestCsproj(inputFullPath)
+        : null;
+
+    var baseConfig = new ProjectAdapterConfig(
+        SourceProjectName: "Infrastructure Selenium POM Base",
+        UiTargets: Array.Empty<UiTargetMapping>(),
+        PageObjects: Array.Empty<PageObjectMapping>(),
+        Methods: Array.Empty<MethodMapping>(),
+        LocatorSettings: new LocatorSettings("data-tid", new[] { "data-tid", "data-test", "data-testid" }),
+        SourceOnlyIdentifiers: new[] { "page", "pagef", "Driver", "WebDriver" },
+        TargetKnownTypes: Array.Empty<string>(),
+        TargetKnownIdentifiers: Array.Empty<string>(),
+        Verification: new VerificationConfig
+        {
+            AutoDiscoverNearestProject = true,
+            AutoDiscoverProjectReferences = true,
+            AutoDiscoverBuildFiles = true,
+            AutoDiscoverPackageReferences = false,
+            Configuration = "Debug"
+        });
+
+    var projectConfig = new ProjectAdapterConfig(
+        SourceProjectName: projectName,
+        UiTargets: Array.Empty<UiTargetMapping>(),
+        PageObjects: Array.Empty<PageObjectMapping>(),
+        Methods: Array.Empty<MethodMapping>(),
+        TargetKnownTypes: Array.Empty<string>(),
+        TargetKnownIdentifiers: Array.Empty<string>(),
+        Verification: new VerificationConfig
+        {
+            BaseDirectory = nearestProject != null ? FindRepoRootForVerification(nearestProject) : null,
+            BuildWorkingDirectory = nearestProject != null ? FindRepoRootForVerification(nearestProject) : null,
+            ProjectReferences = nearestProject != null ? new[] { nearestProject } : Array.Empty<string>(),
+            AutoDiscoverNearestProject = nearestProject == null,
+            AutoDiscoverProjectReferences = true,
+            AutoDiscoverBuildFiles = true,
+            AutoDiscoverPackageReferences = false,
+            Configuration = "Debug"
+        });
+
+    var baseConfigPath = Path.Combine(profilesDir, "infrastructure-base.adapter.json");
+    var projectConfigPath = Path.Combine(projectsDir, $"{safeProjectName}.adapter.json");
+    var jsonOptions = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+    File.WriteAllText(baseConfigPath, System.Text.Json.JsonSerializer.Serialize(baseConfig, jsonOptions));
+    File.WriteAllText(projectConfigPath, System.Text.Json.JsonSerializer.Serialize(projectConfig, jsonOptions));
+
+    var planPath = Path.Combine(outPath, "migration-profile-plan.md");
+    File.WriteAllText(planPath, BuildBootstrapProjectPlan(projectName, inputFullPath, baseConfigPath, projectConfigPath, nearestProject));
+
+    var nextTaskPath = Path.Combine(outPath, "agent-next-task.md");
+    File.WriteAllText(nextTaskPath, BuildBootstrapAgentNextTask(projectName, inputFullPath, baseConfigPath, projectConfigPath));
+
+    var report = new BootstrapProjectReport(
+        DateTimeOffset.UtcNow,
+        projectName,
+        inputFullPath,
+        baseConfigPath,
+        projectConfigPath,
+        nearestProject,
+        new[]
+        {
+            "Review generated profile layers before use.",
+            "Move reusable rules to infrastructure-base.adapter.json.",
+            "Keep project-specific selectors and exceptions in profiles/projects/*.adapter.json."
+        });
+
+    if (format == "json" || format == "both")
+        File.WriteAllText(Path.Combine(outPath, "bootstrap-project-report.json"), System.Text.Json.JsonSerializer.Serialize(report, jsonOptions));
+    if (format == "text" || format == "both")
+        File.WriteAllText(Path.Combine(outPath, "bootstrap-project-report.md"), BuildBootstrapProjectReport(report));
+
+    Console.WriteLine("=== Bootstrap Project ===");
+    Console.WriteLine($"Input: {inputFullPath}");
+    Console.WriteLine($"Base profile: {baseConfigPath}");
+    Console.WriteLine($"Project profile: {projectConfigPath}");
+    Console.WriteLine($"Plan: {planPath}");
+    Console.WriteLine($"Agent task: {nextTaskPath}");
+    return 0;
+}
+
+static string MakeSafeProfileName(string name)
+{
+    var chars = name.Select(ch => char.IsLetterOrDigit(ch) || ch == '-' || ch == '_' ? char.ToLowerInvariant(ch) : '-').ToArray();
+    var safe = new string(chars).Trim('-');
+    return string.IsNullOrWhiteSpace(safe) ? "project" : safe;
+}
+
+static string BuildBootstrapProjectPlan(string projectName, string inputPath, string baseConfigPath, string projectConfigPath, string? nearestProject)
+{
+    var safeProjectName = MakeSafeProfileName(projectName);
+    var sb = new StringBuilder();
+    sb.AppendLine($"# Migration profile bootstrap: {projectName}");
+    sb.AppendLine();
+    sb.AppendLine($"Input: `{inputPath}`");
+    if (!string.IsNullOrWhiteSpace(nearestProject))
+        sb.AppendLine($"Nearest .csproj: `{nearestProject}`");
+    else
+        sb.AppendLine("Nearest .csproj: not found, verify-project will use AutoDiscoverNearestProject.");
+    sb.AppendLine();
+    sb.AppendLine("## Generated profile layers");
+    sb.AppendLine($"1. Base profile: `{baseConfigPath}`");
+    sb.AppendLine($"2. Project profile: `{projectConfigPath}`");
+    sb.AppendLine();
+    sb.AppendLine("Use them left-to-right:");
+    sb.AppendLine();
+    sb.AppendLine("```powershell");
+    sb.AppendLine($"dotnet run --project .\\Migrator.Cli -- --mode migrate --input \"{inputPath}\" --config \"{baseConfigPath}\" --config \"{projectConfigPath}\" --out \"{safeProjectName}-migrate\" --format both");
+    sb.AppendLine("```");
+    sb.AppendLine();
+    sb.AppendLine("## What goes where");
+    sb.AppendLine("- `infrastructure-base.adapter.json`: reusable wrappers, common source-only rules, target-known symbols, generic UI/table/pagination mappings.");
+    sb.AppendLine("- project adapter: concrete PageObject mappings, local selectors, project-specific navigation, local Verification references.");
+    sb.AppendLine();
+    sb.AppendLine("## Recommended first run");
+    sb.AppendLine("1. Run `index-pom` on the Selenium project/PageObject directory.");
+    sb.AppendLine("2. Move high-confidence reusable mappings to the base profile.");
+    sb.AppendLine("3. Move project-only mappings to the project profile.");
+    sb.AppendLine("4. Run `config-validate` with both `--config` layers.");
+    sb.AppendLine("5. Run `migrate` and `verify-project` with both layers.");
+    return sb.ToString();
+}
+
+static string BuildBootstrapAgentNextTask(string projectName, string inputPath, string baseConfigPath, string projectConfigPath)
+{
+    var safeProjectName = MakeSafeProfileName(projectName);
+    var sb = new StringBuilder();
+    sb.AppendLine($"# Следующая задача агенту: bootstrap profile for {projectName}");
+    sb.AppendLine();
+    sb.AppendLine("Работай только через config layers. C# код мигратора не менять.");
+    sb.AppendLine();
+    sb.AppendLine("## Прочитай");
+    sb.AppendLine("- `docs/config-layering.md`");
+    sb.AppendLine("- `docs/migration-profiles.md`");
+    sb.AppendLine("- `docs/agent-safety.md`");
+    sb.AppendLine();
+    sb.AppendLine("## Используй конфиги слева направо");
+    sb.AppendLine($"1. `{baseConfigPath}`");
+    sb.AppendLine($"2. `{projectConfigPath}`");
+    sb.AppendLine();
+    sb.AppendLine("## Команды");
+    sb.AppendLine("```powershell");
+    sb.AppendLine($"dotnet run --project .\\Migrator.Cli -- --mode config-validate --config \"{baseConfigPath}\" --config \"{projectConfigPath}\" --out config-validate");
+    sb.AppendLine($"dotnet run --project .\\Migrator.Cli -- --mode index-pom --input \"{inputPath}\" --out pom-index --format both");
+    sb.AppendLine($"dotnet run --project .\\Migrator.Cli -- --mode migrate --input \"{inputPath}\" --config \"{baseConfigPath}\" --config \"{projectConfigPath}\" --out {safeProjectName}-migrate --format both");
+    sb.AppendLine($"dotnet run --project .\\Migrator.Cli -- --mode verify-project --input \"{inputPath}\" --config \"{baseConfigPath}\" --config \"{projectConfigPath}\" --out {safeProjectName}-verify-project --format both");
+    sb.AppendLine("```");
+    sb.AppendLine();
+    sb.AppendLine("## Правила");
+    sb.AppendLine("- reusable mappings клади в base profile;");
+    sb.AppendLine("- project-specific mappings клади в project profile;");
+    sb.AppendLine("- не дублируй правило в project profile, если оно уже корректно покрыто base profile;");
+    sb.AppendLine("- после итерации запускай config-validate и guard;");
+    sb.AppendLine("- остановись и спроси `Продолжить?`.");
+    return sb.ToString();
+}
+
+static string BuildBootstrapProjectReport(BootstrapProjectReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine($"# Bootstrap project report: {report.ProjectName}");
+    sb.AppendLine();
+    sb.AppendLine($"Input: `{report.InputPath}`");
+    sb.AppendLine($"Base profile: `{report.BaseProfilePath}`");
+    sb.AppendLine($"Project profile: `{report.ProjectProfilePath}`");
+    sb.AppendLine($"Nearest project: `{report.NearestProjectPath ?? "not found"}`");
+    sb.AppendLine();
+    sb.AppendLine("## Warnings");
+    foreach (var warning in report.Warnings)
+        sb.AppendLine($"- {warning}");
+    return sb.ToString();
+}
+
 // --- Orchestrate mode ---
 
-static int RunOrchestrate(string inputPath, string outPath, string? configPath, string format, ITestFileParser parser, IRenderer renderer, IProjectAdapter? adapter)
+static int RunOrchestrate(string inputPath, string outPath, string? configPath, string format, ITestFileParser parser, IRenderer renderer, IProjectAdapter? adapter, ProjectAdapterConfig? config)
 {
     Console.WriteLine("=== Orchestrator Dry-Run ===");
     Console.WriteLine();
@@ -2346,7 +3071,7 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
                 var summary = BuildSummary(resultsList, out var allUnmapped);
                 var allUnsupported = CollectAllUnsupported(resultsList);
                 WriteReports(summary, analyzeDir, format, allUnmapped, allUnsupported);
-                GenerateDraftConfig(allUnmapped, analyzeDir, configPath);
+                GenerateDraftConfig(allUnmapped, analyzeDir, config);
 
                 // Copy summary to generated/ for later stages
                 WriteReports(summary, generatedDir, format, allUnmapped, allUnsupported);
@@ -2401,7 +3126,7 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
 
                 // Write reports to both generated/ and generated/reports/
                 WriteReports(summaryWithGenerated, generatedDir, format, allUnmapped, allUnsupported);
-                GenerateDraftConfig(allUnmapped, generatedDir, configPath);
+                GenerateDraftConfig(allUnmapped, generatedDir, config);
 
                 stage = stage with
                 {
@@ -2443,7 +3168,6 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
                     ? (Func<string, string?>)(p => da.GetActiveScope(p))
                     : null;
 
-                var config = configPath != null ? System.Text.Json.JsonSerializer.Deserialize<ProjectAdapterConfig>(File.ReadAllText(configPath)) : null;
                 verifyReport = VerifyRunner.Run(resultsList, config, syntaxChecker, scopeChecker);
                 verifyExitCode = VerifyRunner.ApplyQualityGates(verifyReport, config?.QualityGates, verifyReport.Issues);
 
@@ -2524,7 +3248,7 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
                     generatedFiles[Path.GetFileName(csFile)] = File.ReadAllText(csFile);
                 }
 
-                var existingConfig = configPath != null ? System.Text.Json.JsonSerializer.Deserialize<ProjectAdapterConfig>(File.ReadAllText(configPath)) : null;
+                var existingConfig = config;
 
                 var proposalInput = new ProposalGenerator.ProposalInput
                 {
@@ -2844,17 +3568,11 @@ static string ToOrchestrationReportMarkdown(OrchestrationReport report)
 }
 
 
-static int RunConfigValidate(string? configPath, string outPath, string format)
+static int RunConfigValidate(string[] configPaths, string outPath, string format)
 {
-    if (string.IsNullOrWhiteSpace(configPath))
+    if (configPaths.Length == 0)
     {
         Console.Error.WriteLine("config-validate requires --config <adapter-config.json> or --input <adapter-config.json>.");
-        return 2;
-    }
-
-    if (!File.Exists(configPath))
-    {
-        Console.Error.WriteLine($"Config not found: {configPath}");
         return 2;
     }
 
@@ -2862,33 +3580,51 @@ static int RunConfigValidate(string? configPath, string outPath, string format)
 
     var issues = new List<ConfigSafetyIssue>();
     ProjectAdapterConfig? config = null;
-    try
+    foreach (var path in configPaths)
     {
-        config = ConfigValidator.ValidateJson(File.ReadAllText(configPath), configPath);
+        if (!File.Exists(path))
+        {
+            issues.Add(new ConfigSafetyIssue("error", "CONFIG_NOT_FOUND", $"Config not found: {path}", path, "Check the --config path."));
+        }
     }
-    catch (ConfigValidationError ex)
+
+    if (!issues.Any(i => i.Severity.Equals("error", StringComparison.OrdinalIgnoreCase)))
     {
-        foreach (var err in ex.Errors)
-            issues.Add(new ConfigSafetyIssue("error", "STRUCTURAL_CONFIG_ERROR", err, configPath, "Fix adapter-config.json before running migration."));
-    }
-    catch (Exception ex)
-    {
-        issues.Add(new ConfigSafetyIssue("error", "CONFIG_READ_ERROR", ex.Message, configPath, "Check that the config file is valid JSON and accessible."));
+        try
+        {
+            config = ProjectAdapterConfigMerger.LoadAndMerge(configPaths);
+        }
+        catch (ConfigValidationError ex)
+        {
+            foreach (var err in ex.Errors)
+                issues.Add(new ConfigSafetyIssue("error", "STRUCTURAL_CONFIG_ERROR", err, string.Join(" -> ", configPaths), "Fix adapter-config layers before running migration."));
+        }
+        catch (Exception ex)
+        {
+            issues.Add(new ConfigSafetyIssue("error", "CONFIG_READ_ERROR", ex.Message, string.Join(" -> ", configPaths), "Check that all config files are valid JSON and accessible."));
+        }
     }
 
     if (config != null)
         issues.AddRange(AnalyzeConfigSafety(config));
 
+    var configPathLabel = string.Join(" -> ", configPaths.Select(Path.GetFullPath));
     var report = new ConfigSafetyReport(
         GeneratedAtUtc: DateTimeOffset.UtcNow,
-        ConfigPath: Path.GetFullPath(configPath),
+        ConfigPath: configPathLabel,
         Status: issues.Any(i => i.Severity.Equals("error", StringComparison.OrdinalIgnoreCase)) ? "failed" : "passed",
         Issues: issues.OrderBy(i => SeverityRank(i.Severity)).ThenBy(i => i.Code, StringComparer.OrdinalIgnoreCase).ThenBy(i => i.Location, StringComparer.OrdinalIgnoreCase).ToArray(),
         Metrics: config != null ? BuildConfigMetrics(config) : Array.Empty<ConfigMetric>());
 
     WriteConfigSafetyReport(report, outPath, format);
+    if (config != null && configPaths.Length > 1)
+    {
+        File.WriteAllText(Path.Combine(outPath, "adapter-config.merged.json"),
+            System.Text.Json.JsonSerializer.Serialize(config, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    }
 
     Console.WriteLine("=== Config Validate ===");
+    Console.WriteLine(configPaths.Length == 1 ? $"Config: {configPaths[0]}" : $"Config layers: {string.Join(" -> ", configPaths)}");
     Console.WriteLine($"Status: {report.Status.ToUpperInvariant()}");
     Console.WriteLine($"Issues: {report.Issues.Length} ({report.Issues.Count(i => i.Severity == "error")} error, {report.Issues.Count(i => i.Severity == "warning")} warning)");
     foreach (var issue in report.Issues.Take(30))
@@ -2899,6 +3635,8 @@ static int RunConfigValidate(string? configPath, string outPath, string format)
 
     return report.Status == "passed" ? 0 : 2;
 }
+
+
 
 static int RunConfigDiff(string? beforePath, string? afterPath, string outPath, string format)
 {
@@ -2944,7 +3682,7 @@ static int RunConfigDiff(string? beforePath, string? afterPath, string outPath, 
     foreach (var risk in report.Risks.Take(20))
         Console.WriteLine($"[RISK] {risk.Code}: {risk.Message}" + (string.IsNullOrWhiteSpace(risk.Location) ? "" : $" ({risk.Location})"));
     Console.WriteLine($"Reports written to: {Path.GetFullPath(outPath)}");
-    return 0;
+    return risks.Any(r => r.Severity.Equals("error", StringComparison.OrdinalIgnoreCase)) ? 2 : 0;
 }
 
 static int RunGuard(string? beforePath, string? afterPath, string outPath, string format)
@@ -3305,6 +4043,7 @@ static CliOptions? ParseArgs(string[] args)
     string? input = null;
     string? outDir = null;
     string? config = null;
+    var configs = new List<string>();
     string format = "both";
     string workspace = "migration";
     bool failOnUnsupported = false;
@@ -3345,7 +4084,10 @@ static CliOptions? ParseArgs(string[] args)
                 break;
             case "--config":
                 if (i + 1 < args.Length)
+                {
                     config = args[++i];
+                    configs.Add(config);
+                }
                 else
                 {
                     Console.Error.WriteLine("--config requires a value");
@@ -3415,14 +4157,14 @@ static CliOptions? ParseArgs(string[] args)
         }
     }
 
-    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "explain-todo" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "orchestrate" && mode != "scaffold")
+    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "explain-todo" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "orchestrate" && mode != "scaffold" && mode != "bootstrap-project")
     {
-        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|verify-project|explain-todo|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold");
+        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|verify-project|explain-todo|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project");
         return null;
     }
 
-    if (mode == "config-validate" && string.IsNullOrEmpty(input) && !string.IsNullOrEmpty(config))
-        input = config;
+    if (mode == "config-validate" && string.IsNullOrEmpty(input) && configs.Count > 0)
+        input = configs[^1];
 
     if ((mode == "config-diff" || mode == "guard") && (string.IsNullOrEmpty(before) || string.IsNullOrEmpty(after)))
     {
@@ -3431,7 +4173,7 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
-    if (mode != "scaffold" && mode != "config-diff" && mode != "guard" && string.IsNullOrEmpty(input))
+    if (mode != "scaffold" && mode != "bootstrap-project" && mode != "config-diff" && mode != "guard" && string.IsNullOrEmpty(input))
     {
         Console.Error.WriteLine(mode == "config-validate" ? "--config or --input is required" : "--input is required");
         PrintHelp();
@@ -3461,6 +4203,7 @@ static CliOptions? ParseArgs(string[] args)
             "index-pom" => "pom-index",
             "orchestrate" => "orchestration",
             "scaffold" => "generated-scaffold",
+            "bootstrap-project" => "project-bootstrap",
             _ => "output"
         };
     }
@@ -3473,7 +4216,7 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
-    return new CliOptions(mode, input ?? "", outDir, config, format, failOnUnsupported, failOnTodo, workspace, before, after);
+    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after);
 }
 
 static string ResolveOutputDirectory(string outDir, string workspace)
@@ -3538,7 +4281,9 @@ Modes:
                     verify-report.txt.
   verify-project  Project-aware verification. Generates files into --out/generated,
                     creates a temporary verification .csproj, adds project/package
-                    references from adapter-config Verification, and runs dotnet build.
+                    references from adapter-config Verification, auto-discovers nearest
+                    .csproj/transitive ProjectReference/build props when enabled,
+                    runs dotnet build, and classifies build diagnostics.
                     Does NOT modify source project files.
   explain-todo    Explain remaining TODO/root causes from existing migration artifacts.
                     Reads report.json, unmapped-targets.json, unsupported-actions.json,
@@ -3570,25 +4315,32 @@ Modes:
                      with draft adapter config. Creates .csproj, GeneratedTestBase,
                      TestSettings, ExampleSmokeTest, adapter-config.draft.json, README,
                      and .gitignore. Does NOT require --input. Outputs scaffold-report.
+  bootstrap-project
+                  Create reusable migration profile skeletons for a new project:
+                     profiles/infrastructure-base.adapter.json,
+                     profiles/projects/<project>.adapter.json, migration-profile-plan.md,
+                     and agent-next-task.md. Does NOT modify source project files.
 
 Options:
     --mode <mode>                 Operation mode (required)
-                                    analyze|migrate|verify|verify-project|explain-todo|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold
+                                    analyze|migrate|verify|verify-project|explain-todo|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project
     --input <file-or-directory>   Input .cs file or directory (required).
                                     For propose/explain-todo: directory with report files.
                                     For discover-target: target Playwright project root.
                                     For index-pom: Selenium project/PageObject directory.
                                     For orchestrate: source Selenium tests directory.
                                     For verify-project: source Selenium tests directory;
-                                      project refs come from adapter-config Verification
-                                      or nearest .csproj auto-discovery.
-                                    For scaffold: not required.
+                                      project refs come from adapter-config Verification,
+                                      nearest .csproj auto-discovery, and transitive
+                                      ProjectReference discovery when enabled.
+                                    For scaffold/bootstrap-project: not required.
    --out <output-directory>      Output directory inside --workspace by default.
                                   Relative paths like orchestration-7 become migration/orchestration-7.
                                   Use an absolute path to write outside workspace.
    --workspace <directory>        Migration artifacts root (default: migration).
                                   All relative --out paths are kept under this root.
-   --config <adapter-config.json>  Adapter config for target mapping (optional)
+   --config <adapter-config.json>  Adapter config layer. Can be repeated.
+                                  Layers are merged left-to-right; later/project configs override base profiles.
    --before <path>                Previous config/artifact path for config-diff/guard
    --after <path>                 New config/artifact path for config-diff/guard
    --format <text|json|both>     Report format (default: both)
@@ -3605,8 +4357,8 @@ Exit codes:
 
 Examples:
   Migrator.Cli --mode analyze --input ./OldTests --out analysis --format both
-  Migrator.Cli --mode migrate --input ./OldTests --out generated --config ./adapter-config.json
-  Migrator.Cli --mode verify-project --input ./OldTests --out verify-project --config ./adapter-config.json
+  Migrator.Cli --mode migrate --input ./OldTests --out generated --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json
+  Migrator.Cli --mode verify-project --input ./OldTests --out verify-project --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json
   Migrator.Cli --mode explain-todo --input migration/verify-project --out explain-todo --format both
   Migrator.Cli --mode config-validate --config ./adapter-config.json --out config-validate
   Migrator.Cli --mode config-diff --before adapter.old.json --after adapter-config.json --out config-diff
@@ -3616,6 +4368,7 @@ Examples:
    Migrator.Cli --mode index-pom --input ./OldTests --out pom-index --format both
    Migrator.Cli --mode orchestrate --input ./OldTests --config ./adapter-config.json --out orchestration --format both
    Migrator.Cli --mode scaffold --out generated-scaffold
+   Migrator.Cli --mode bootstrap-project --input ./OldTests --out bootstrap-oldtests
 
 Output workspace examples:
   --out orchestration-7            writes to migration/orchestration-7
@@ -3641,7 +4394,30 @@ class ArtifactSummary
 }
 
 record DotnetBuildResult(int ExitCode, string Command, string StdOut, string StdErr);
-record ProjectVerifyReport(DateTimeOffset GeneratedAtUtc, string Status, int ExitCode, string[] GeneratedFiles, string HarnessProject, string[] ProjectReferences, string[] AssemblyReferences, PackageReferenceConfig[] PackageReferences, string Command, string StdOut, string StdErr, string[] Diagnostics);
+record BootstrapProjectReport(DateTimeOffset GeneratedAtUtc, string ProjectName, string InputPath, string BaseProfilePath, string ProjectProfilePath, string? NearestProjectPath, string[] Warnings);
+record ProjectVerifyReport(
+    DateTimeOffset GeneratedAtUtc,
+    string Status,
+    int ExitCode,
+    string[] GeneratedFiles,
+    string HarnessProject,
+    string BaseDirectory,
+    string? Solution,
+    string BuildWorkingDirectory,
+    string[] ProjectReferences,
+    ProjectReferenceDiscovery[] ProjectReferenceDiscovery,
+    string[] AssemblyReferences,
+    PackageReferenceConfig[] PackageReferences,
+    string[] BuildFilesImported,
+    string TargetFramework,
+    string Command,
+    string StdOut,
+    string StdErr,
+    string[] Diagnostics,
+    ProjectVerifyDiagnostic[] ClassifiedDiagnostics);
+
+record ProjectReferenceDiscovery(string Path, string Source, string Status, string Reason);
+record ProjectVerifyDiagnostic(string Raw, string Code, string Severity, string Category, string? File, int? Line, string LikelyCause, string SuggestedAction);
 
 record TodoExplanationReport(
     DateTimeOffset GeneratedAtUtc,
@@ -3684,4 +4460,4 @@ record ConfigDiffChange(string Section, string ChangeType, string Key);
 record GuardReport(DateTimeOffset GeneratedAtUtc, string BeforePath, string AfterPath, string Status, GuardCheck[] Checks, string[] Summary);
 record GuardCheck(string Name, string Status, string Message, int? Before, int? After);
 
-record CliOptions(string Mode, string Input, string Out, string? Config, string Format, bool FailOnUnsupported, bool FailOnTodo, string Workspace, string? Before, string? After);
+record CliOptions(string Mode, string Input, string Out, string? Config, string[] Configs, string Format, bool FailOnUnsupported, bool FailOnTodo, string Workspace, string? Before, string? After);

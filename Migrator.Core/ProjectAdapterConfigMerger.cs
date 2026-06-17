@@ -160,11 +160,16 @@ public static class ProjectAdapterConfigMerger
         {
             TargetFramework = LastNonEmpty(layers.Select(x => x.TargetFramework)),
             BaseDirectory = LastNonEmpty(layers.Select(x => x.BaseDirectory)),
+            Solution = LastNonEmpty(layers.Select(x => x.Solution)),
+            BuildWorkingDirectory = LastNonEmpty(layers.Select(x => x.BuildWorkingDirectory)),
             ProjectReferences = MergeStrings(layers.SelectMany(x => x.ProjectReferences)),
             AssemblyReferences = MergeStrings(layers.SelectMany(x => x.AssemblyReferences)),
             PackageReferences = MergeBy(layers.SelectMany(x => x.PackageReferences), x => x.Include),
             DisableDefaultPackageReferences = LastBool(layers.Select(x => x.DisableDefaultPackageReferences)),
             AutoDiscoverNearestProject = LastBool(layers.Select(x => x.AutoDiscoverNearestProject)),
+            AutoDiscoverProjectReferences = LastBool(layers.Select(x => x.AutoDiscoverProjectReferences)),
+            AutoDiscoverBuildFiles = LastBool(layers.Select(x => x.AutoDiscoverBuildFiles)),
+            AutoDiscoverPackageReferences = LastBool(layers.Select(x => x.AutoDiscoverPackageReferences)),
             NoRestore = LastBool(layers.Select(x => x.NoRestore)),
             Configuration = LastNonEmpty(layers.Select(x => x.Configuration)),
             RuntimeIdentifier = LastNonEmpty(layers.Select(x => x.RuntimeIdentifier))
