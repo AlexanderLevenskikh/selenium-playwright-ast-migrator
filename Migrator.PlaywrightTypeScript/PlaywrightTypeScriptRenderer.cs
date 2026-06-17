@@ -53,6 +53,9 @@ public sealed class PlaywrightTypeScriptRenderer : IRenderer
             case PressAction press:
                 RenderLocatorAction(sb, pad, press.Target, $".press('{EscapeString(press.KeyName)}')", press.SourceLine, "press target");
                 break;
+            case WaitForAction wait:
+                RenderWait(sb, pad, wait);
+                break;
             case NavigationAction navigation:
                 sb.AppendLine($"{pad}await page.goto({ConvertExpression(navigation.UrlExpression)});");
                 if (!string.IsNullOrWhiteSpace(navigation.PageVariableName))
@@ -160,6 +163,52 @@ public sealed class PlaywrightTypeScriptRenderer : IRenderer
         }
 
         sb.AppendLine($"{pad}await {RenderTarget(target)}{actionSuffix};");
+    }
+
+    void RenderWait(StringBuilder sb, string pad, WaitForAction wait)
+    {
+        if (wait.Kind == WaitForKind.ActionabilityElided)
+        {
+            sb.AppendLine($"{pad}// source wait elided: {EscapeComment(wait.FullSourceText)}");
+            sb.AppendLine($"{pad}//   Reason: Playwright actions and web-first assertions auto-wait for actionability.");
+            return;
+        }
+
+        if (!IsResolved(wait.Target))
+        {
+            RenderTodo(
+                sb,
+                pad,
+                wait.Kind == WaitForKind.ReviewRequired ? "WAIT_REQUIRES_STATE_ASSERTION" : "WAIT_MAPPING_REQUIRED",
+                wait.FullSourceText,
+                "Product-state waits need a concrete Playwright locator/assertion; Playwright auto-wait only covers actionability.",
+                "Map loader/table/modal/toast target or add a TS-specific Method/ParameterizedMethod mapping.");
+            return;
+        }
+
+        var locator = RenderTarget(wait.Target);
+        switch (wait.Kind)
+        {
+            case WaitForKind.ProductStateHidden:
+                sb.AppendLine($"{pad}await expect({locator}).toBeHidden();");
+                break;
+            case WaitForKind.ProductStateVisible:
+                sb.AppendLine($"{pad}await expect({locator}).toBeVisible();");
+                break;
+            case WaitForKind.ReviewRequired:
+                RenderTodo(
+                    sb,
+                    pad,
+                    "WAIT_REQUIRES_STATE_ASSERTION",
+                    wait.FullSourceText,
+                    "Custom wait is ambiguous and should not be migrated as a fixed timeout.",
+                    "Replace with loader/table/modal/toast/url/download assertion or a TS-specific mapping.");
+                sb.AppendLine($"{pad}// await {locator}.waitFor();");
+                break;
+            default:
+                sb.AppendLine($"{pad}await {locator}.waitFor();");
+                break;
+        }
     }
 
     void RenderMissingTarget(StringBuilder sb, string pad, string sourceExpression) =>

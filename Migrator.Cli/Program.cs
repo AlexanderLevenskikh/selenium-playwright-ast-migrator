@@ -1467,7 +1467,7 @@ static TargetExpression? GetTarget(TestAction action)
         PressAction p => p.Target,
         TextAssertionAction ta => ta.Target,
         VisibilityAssertionAction va => va.Target,
-        WaitForAction wa => wa.Target,
+        WaitForAction wa => wa.Kind == WaitForKind.ActionabilityElided ? null : wa.Target,
         _ => null
     };
 }
@@ -1920,6 +1920,8 @@ static string SmartTodoTitle(string code, string message)
         "UNAVAILABLE_SYMBOLS" => $"Classify unavailable target symbols: {TrimForTitle(message, 90)}",
         "UNRESOLVED_PLACEHOLDER" => $"Fix adapter-config placeholder: {TrimForTitle(message, 90)}",
         "TABLE_MAPPING_REQUIRED" => $"Add table/list mapping: {TrimForTitle(message, 90)}",
+        "WAIT_MAPPING_REQUIRED" => $"Map product-state wait target: {TrimForTitle(message, 90)}",
+        "WAIT_REQUIRES_STATE_ASSERTION" => $"Replace custom wait with state assertion: {TrimForTitle(message, 90)}",
         _ => $"Review TODO [{code}]: {TrimForTitle(message, 90)}"
     };
 }
@@ -1938,6 +1940,8 @@ static string SmartTodoReason(string code)
         "UNRESOLVED_PLACEHOLDER" => "A TargetStatements placeholder could not be substituted from the source method pattern.",
         "ASSERTION_CONSTRAINT" => "The assertion was preserved because no direct Playwright assertion mapping was inferred.",
         "TABLE_MAPPING_REQUIRED" => "A table/list access pattern needs a Tables mapping with RowTarget.",
+        "WAIT_MAPPING_REQUIRED" => "A product-state wait such as loader/table/modal synchronization needs a mapped Playwright target.",
+        "WAIT_REQUIRES_STATE_ASSERTION" => "A custom wait is ambiguous and should be replaced with a concrete state assertion, not a fixed timeout.",
         "UNSUPPORTED_ACTION" => "The recognizer/adapter could not safely translate this source action.",
         _ => "Generated TODO contains a migrator classification code."
     };
@@ -1957,6 +1961,8 @@ static string SmartTodoSuggestedAction(string code)
         "UNRESOLVED_PLACEHOLDER" => "Fix SourceMethodPattern placeholders or TargetStatements names in adapter-config.",
         "ASSERTION_CONSTRAINT" => "Add reusable assertion mapping if this pattern appears often.",
         "TABLE_MAPPING_REQUIRED" => "Add a Tables mapping with source-backed RowTarget.",
+        "WAIT_MAPPING_REQUIRED" => "Map the loader/table/modal/toast target or add a Method/ParameterizedMethod wait mapping.",
+        "WAIT_REQUIRES_STATE_ASSERTION" => "Replace with loader/table/modal/toast/url/download assertion after checking source truth.",
         "UNSUPPORTED_ACTION" => "Classify as missing mapping, unsupported business semantics, or generic migrator gap.",
         _ => "Inspect source truth and decide whether this is config work or developer escalation."
     };
@@ -1964,12 +1970,12 @@ static string SmartTodoSuggestedAction(string code)
 
 static bool SmartTodoRequiresSourceTruth(string code)
 {
-    return code is "MISSING_MAPPING" or "RAW_STATEMENT" or "RAW_LOCAL_DECLARATION" or "TABLE_MAPPING_REQUIRED" or "UNSUPPORTED_ACTION";
+    return code is "MISSING_MAPPING" or "RAW_STATEMENT" or "RAW_LOCAL_DECLARATION" or "TABLE_MAPPING_REQUIRED" or "WAIT_MAPPING_REQUIRED" or "WAIT_REQUIRES_STATE_ASSERTION" or "UNSUPPORTED_ACTION";
 }
 
 static bool SmartTodoMayNeedDeveloper(string code)
 {
-    return code is "UNRESOLVED_SYMBOL" or "UNAVAILABLE_SYMBOLS" or "UNRESOLVED_PLACEHOLDER";
+    return code is "UNRESOLVED_SYMBOL" or "UNAVAILABLE_SYMBOLS" or "UNRESOLVED_PLACEHOLDER" or "WAIT_REQUIRES_STATE_ASSERTION";
 }
 
 static TodoExplanationReport BuildExplainTodoReportFromArtifacts(string artifactDir)

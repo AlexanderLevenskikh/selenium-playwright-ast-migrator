@@ -515,7 +515,10 @@ public class DefaultProjectAdapter : IProjectAdapter
             WaitForAction wa => new[] { new WaitForAction(
                 wa.SourceLine,
                 ResolveTargetWithLocalVars(wa.Target.SourceExpression, resolved, localVariableMappings),
-                wa.Confidence) },
+                wa.Confidence,
+                wa.SourceMethod,
+                wa.FullSourceText,
+                wa.Kind) },
             TableRowTextAccessAction trt => new[] { new TableRowTextAccessAction(
                 trt.SourceLine,
                 ResolveTargetWithLocalVars(trt.Target.SourceExpression, resolved, localVariableMappings),
@@ -676,7 +679,10 @@ public class DefaultProjectAdapter : IProjectAdapter
             WaitForAction wa => new[] { new WaitForAction(
                 wa.SourceLine,
                 ResolveTarget(wa.Target.SourceExpression, resolved),
-                wa.Confidence) },
+                wa.Confidence,
+                wa.SourceMethod,
+                wa.FullSourceText,
+                wa.Kind) },
             MethodInvocationAction mi => TryResolveMethodMapping(mi, resolved),
             RawStatementAction raw => TryResolveRawStatement(raw, resolved),
             LocalDeclarationAction lds => TryResolveLocalDeclaration(lds, resolved),

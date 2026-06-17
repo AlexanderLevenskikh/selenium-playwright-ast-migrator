@@ -9,7 +9,13 @@ public class WaitPresenceRecognizer : IInvocationRecognizer
         if ((ctx.MethodName == "WaitPresence" || ctx.MethodName == "WaitPresenceAsync")
             && !string.IsNullOrEmpty(ctx.ReceiverText))
         {
-            return new WaitForAction(ctx.SourceLine, ctx.ReceiverText, RecognitionConfidence.SyntaxFallback);
+            return new WaitForAction(
+                ctx.SourceLine,
+                ctx.ReceiverText,
+                RecognitionConfidence.SyntaxFallback,
+                ctx.MethodName,
+                ctx.FullText,
+                WaitForKind.ActionabilityElided);
         }
 
         return null;

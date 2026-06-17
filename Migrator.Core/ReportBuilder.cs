@@ -46,7 +46,7 @@ public static class ReportBuilder
         if (action is PressAction p) return p.Target;
         if (action is TextAssertionAction ta) return ta.Target;
         if (action is VisibilityAssertionAction va) return va.Target;
-        if (action is WaitForAction wa) return wa.Target;
+        if (action is WaitForAction wa) return wa.Kind == WaitForKind.ActionabilityElided ? null : wa.Target;
         return null;
     }
 }

@@ -20,8 +20,8 @@ public class ButtonTestsPlaywright : PageTest
 		// TODO: references unavailable symbol(s) 'Navigation' — verify in target
 		// TODO: depends on unresolved symbol 'pagef'
 		//   page = pagef
-		// TODO: depends on unresolved symbol 'page'
-		//   page.Loader.ValidateLoading()
+		// TODO: map product-state wait target: page.Loader
+		// await Expect((locator)).ToBeHiddenAsync(); // line 17
 	}
 
 	[Category("QuickRunning")]

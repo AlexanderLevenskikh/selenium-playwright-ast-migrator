@@ -163,7 +163,7 @@ public static class VerifyRunner
                 a is PressAction p && p.Target.Kind == TargetKind.Unresolved ||
                 a is TextAssertionAction ta && ta.Target.Kind == TargetKind.Unresolved ||
                 a is VisibilityAssertionAction va && va.Target.Kind == TargetKind.Unresolved ||
-                a is WaitForAction wa && wa.Target.Kind == TargetKind.Unresolved ||
+                a is WaitForAction wa && wa.Kind != WaitForKind.ActionabilityElided && wa.Target.Kind == TargetKind.Unresolved ||
                 a is MappedMethodInvocationAction mmi && mmi.TargetStatements.Any(s => s.Contains("RawExpression")));
             totalRawExpressions += rawExprCount;
 

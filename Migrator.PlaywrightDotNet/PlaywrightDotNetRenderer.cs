@@ -388,6 +388,13 @@ public class PlaywrightDotNetRenderer : IRenderer
         var sourceText = GetActionSourceText(action);
         var declaredVariables = ExtractVariableNames(sourceText).ToArray();
 
+        // WaitPolicy must run before source-root safety. A mapped wait such as
+        // page.Loader.ValidateLoading() still has a Selenium/POM root (page),
+        // but the meaningful target is page.Loader and can be rendered safely.
+        // Actionability waits are intentionally elided because Playwright actions/assertions auto-wait.
+        if (action is WaitForAction wait && TryRenderWaitPolicyBeforeSafety(sb, wait, sourceText))
+            return;
+
         // Source-level blocked check: extract root symbol from original source expression.
         // If the root symbol is blocked (from unresolved setup/source-only), the action
         // must be commented regardless of whether the target has a valid Playwright mapping.
@@ -800,17 +807,75 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
     }
 
-    void RenderWaitFor(StringBuilder sb, WaitForAction action)
+    bool TryRenderWaitPolicyBeforeSafety(StringBuilder sb, WaitForAction action, string sourceText)
+    {
+        RenderWaitFor(sb, action, sourceText);
+        return true;
+    }
+
+    void RenderWaitFor(StringBuilder sb, WaitForAction action) =>
+        RenderWaitFor(sb, action, action.FullSourceText);
+
+    void RenderWaitFor(StringBuilder sb, WaitForAction action, string sourceText)
     {
         var target = action.Target;
-        if (target.Kind != TargetKind.Unresolved)
+
+        if (action.Kind == WaitForKind.ActionabilityElided)
         {
-            sb.AppendLine($"{_indent}{_indent}await {RenderTargetExpression(target)}.WaitForAsync(); // line {action.SourceLine}");
+            sb.AppendLine($"{_indent}{_indent}// source wait elided: {EscapeComment(sourceText)} // line {action.SourceLine}");
+            sb.AppendLine($"{_indent}{_indent}//   Reason: Playwright actions and web-first assertions auto-wait for actionability.");
+            return;
         }
-        else
+
+        if (target.Kind == TargetKind.Unresolved)
         {
-            RenderUnresolvedTargetComment(sb, target, "await (locator).WaitForAsync()", action.SourceLine);
+            RenderWaitMappingRequired(sb, action, sourceText);
+            return;
         }
+
+        var locator = RenderTargetExpression(target);
+        switch (action.Kind)
+        {
+            case WaitForKind.ProductStateHidden:
+                sb.AppendLine($"{_indent}{_indent}await {ExpectCall()}({locator}).ToBeHiddenAsync(); // line {action.SourceLine}");
+                break;
+            case WaitForKind.ProductStateVisible:
+                sb.AppendLine($"{_indent}{_indent}await {ExpectCall()}({locator}).ToBeVisibleAsync(); // line {action.SourceLine}");
+                break;
+            case WaitForKind.ReviewRequired:
+                AppendSmartTodo(
+                    sb,
+                    $"custom wait requires state assertion: {EscapeComment(action.SourceMethod)}",
+                    "WAIT_REQUIRES_STATE_ASSERTION",
+                    "The source wait is custom/ambiguous. Do not migrate it as a fixed timeout without identifying the product state it waits for.",
+                    "Replace with loader/table/modal/toast/url/download assertion or add a project Method/ParameterizedMethod mapping.",
+                    sourceText);
+                sb.AppendLine($"{_indent}{_indent}// await {locator}.WaitForAsync(); // line {action.SourceLine}");
+                break;
+            default:
+                sb.AppendLine($"{_indent}{_indent}await {locator}.WaitForAsync(); // line {action.SourceLine}");
+                break;
+        }
+    }
+
+    void RenderWaitMappingRequired(StringBuilder sb, WaitForAction action, string sourceText)
+    {
+        string suggested = action.Kind switch
+        {
+            WaitForKind.ProductStateHidden => $"await {ExpectCall()}((locator)).ToBeHiddenAsync()",
+            WaitForKind.ProductStateVisible => $"await {ExpectCall()}((locator)).ToBeVisibleAsync()",
+            WaitForKind.ReviewRequired => "await (locator/state assertion)",
+            _ => "await (locator).WaitForAsync()"
+        };
+
+        AppendSmartTodo(
+            sb,
+            $"map product-state wait target: {EscapeComment(action.Target.SourceExpression)}",
+            action.Kind == WaitForKind.ReviewRequired ? "WAIT_REQUIRES_STATE_ASSERTION" : "WAIT_MAPPING_REQUIRED",
+            "This is a Selenium wait. Playwright auto-wait covers actionability, but product-state waits such as loader/table/modal synchronization still need a concrete target assertion.",
+            "Map the waited control through UiTargets/Tables or add a Method/ParameterizedMethod mapping. Do not mark source-only roots as target-known.",
+            sourceText);
+        sb.AppendLine($"{_indent}{_indent}// {suggested}; // line {action.SourceLine}");
     }
 
     void RenderUrlAssertion(StringBuilder sb, UrlAssertionAction action)
@@ -1725,7 +1790,7 @@ public class PlaywrightDotNetRenderer : IRenderer
             AssertAreEqualAction a => $"Assert.AreEqual({a.ExpectedExpression}, {a.ActualExpression})",
             TextAssertionAction a => $"{a.Target.SourceExpression}.Text.Should({a.ExpectedValue})",
             VisibilityAssertionAction a => $"{a.Target.SourceExpression}.Visible.Should()",
-            WaitForAction a => $"{a.Target.SourceExpression}.WaitFor()",
+            WaitForAction a => a.FullSourceText,
             UrlAssertionAction a => $"UrlAssertion({a.ExpectedValue})",
             MethodInvocationAction a => a.FullSourceText,
             MappedMethodInvocationAction a => a.FullSourceText,

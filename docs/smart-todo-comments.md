@@ -32,6 +32,8 @@ New comments append a stable machine-readable code and short guidance:
 | `UNRESOLVED_PLACEHOLDER` | TargetStatements placeholder could not be substituted. | Fix `SourceMethodPattern`/placeholder names. |
 | `ASSERTION_CONSTRAINT` | Assertion constraint was preserved because no target assertion mapping exists. | Add assertion mapping if pattern is common. |
 | `TABLE_MAPPING_REQUIRED` | Table/list pattern lacks row target mapping. | Add `Tables` mapping with `RowTarget`. |
+| `WAIT_MAPPING_REQUIRED` | Product-state wait such as loader/table/modal synchronization lacks a mapped target. | Map the waited control through `UiTargets`/`Tables` or add a Method/ParameterizedMethod mapping. |
+| `WAIT_REQUIRES_STATE_ASSERTION` | Custom wait is ambiguous and should not become a fixed timeout. | Replace with a concrete loader/table/modal/toast/url/download assertion. |
 | `UNSUPPORTED_ACTION` | Recognizer/adapter cannot translate the action. | Classify as missing mapping, unsupported semantics, or generic migrator gap. |
 
 ## Agent rule
