@@ -124,6 +124,13 @@ if (mode == "explain-todo")
     return explainExitCode;
 }
 
+// Handle smoke-plan mode — ranks generated tests by runtime readiness and writes checklists.
+if (mode == "smoke-plan")
+{
+    var smokeExitCode = RunSmokePlan(inputPath, outPath, format);
+    return smokeExitCode;
+}
+
 // Handle scaffold mode — generates a minimal, compile-ready Playwright .NET test project
 if (mode == "scaffold")
 {
@@ -257,6 +264,7 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
     WriteReports(summaryWithGenerated, outPath, format, allUnmapped, allUnsupported);
     GenerateDraftConfig(allUnmapped, outPath, config);
     WriteExplainTodoArtifacts(summaryWithGenerated, outPath, format, allUnmapped, allUnsupported, null);
+    WriteSmokePlanArtifacts(outPath, outPath, format);
 
     PrintSummary(summaryWithGenerated);
     Console.WriteLine($"Migration written to: {Path.GetFullPath(outPath)} ({generated} files generated)");
@@ -386,6 +394,7 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
         System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
     File.WriteAllText(Path.Combine(outPath, "project-verify-report.md"), WriteProjectVerifyMarkdown(report));
     WriteExplainTodoArtifacts(summary with { GeneratedFiles = generatedFiles.Count }, outPath, format, allUnmapped, allUnsupported, report);
+    WriteSmokePlanArtifacts(outPath, outPath, format);
 
     PrintSummary(summary with { GeneratedFiles = generatedFiles.Count });
     Console.WriteLine();
@@ -2133,6 +2142,465 @@ static bool LooksLikeGenericMigratorGap(string value)
 }
 
 static string EscapeMd(string value) => value.Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ");
+
+
+// --- Runtime readiness / smoke-plan mode ---
+
+static int RunSmokePlan(string inputPath, string outPath, string format)
+{
+    if (!Directory.Exists(inputPath))
+    {
+        Console.Error.WriteLine($"Smoke-plan mode expects a directory with migration artifacts: {inputPath}");
+        return 1;
+    }
+
+    Directory.CreateDirectory(outPath);
+    var report = BuildSmokePlanReportFromArtifacts(inputPath);
+    WriteSmokePlanReport(report, outPath, format);
+
+    Console.WriteLine("=== Smoke Plan Summary ===");
+    Console.WriteLine($"Source: {inputPath}");
+    Console.WriteLine($"Generated files: {report.GeneratedFiles}");
+    Console.WriteLine($"Tests found: {report.TestsFound}");
+    Console.WriteLine($"Runtime-ready: {report.RuntimeReadyCandidates}");
+    Console.WriteLine($"Smoke candidates: {report.SmokeCandidates}");
+    Console.WriteLine($"Project verify: {report.ProjectVerifyStatus ?? "not-run"}");
+    Console.WriteLine($"Smoke-plan artifacts written to: {Path.GetFullPath(outPath)}");
+    return 0;
+}
+
+static void WriteSmokePlanArtifacts(string artifactDir, string outPath, string format)
+{
+    try
+    {
+        var report = BuildSmokePlanReportFromArtifacts(artifactDir);
+        if (report.TestsFound == 0)
+            return;
+        WriteSmokePlanReport(report, outPath, format);
+    }
+    catch
+    {
+        // Advisory only: smoke-plan must not break migrate/verify-project.
+    }
+}
+
+static SmokePlanReport BuildSmokePlanReportFromArtifacts(string artifactDir)
+{
+    var projectVerifyPath = FindFirstExisting(artifactDir, "project-verify-report.json");
+    var projectVerify = projectVerifyPath != null ? ReadProjectVerifyReport(projectVerifyPath) : null;
+    var explainPath = FindFirstExisting(artifactDir, "explain-todo.json");
+    var explain = explainPath != null ? ReadTodoExplanationReport(explainPath) : null;
+    var generatedFiles = FindGeneratedCsFiles(artifactDir).ToArray();
+
+    var diagnosticsByFile = BuildDiagnosticsByFile(projectVerify);
+    var candidates = new List<SmokeCandidate>();
+
+    foreach (var file in generatedFiles)
+    {
+        foreach (var method in ExtractGeneratedTestMethods(file))
+        {
+            diagnosticsByFile.TryGetValue(Path.GetFileName(file), out var fileDiagnostics);
+            fileDiagnostics ??= Array.Empty<ProjectVerifyDiagnostic>();
+            var errorCount = fileDiagnostics.Count(d => d.Severity.Equals("error", StringComparison.OrdinalIgnoreCase));
+            var warningCount = fileDiagnostics.Length - errorCount;
+            candidates.Add(BuildSmokeCandidate(method, projectVerify?.Status, errorCount, warningCount, fileDiagnostics));
+        }
+    }
+
+    var ordered = candidates
+        .OrderByDescending(x => x.Score)
+        .ThenBy(x => x.TodoLines)
+        .ThenByDescending(x => x.ActiveRatio)
+        .ThenBy(x => x.File, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(x => x.TestName, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    var ready = ordered.Count(x => x.ReadinessLevel.StartsWith("Level 5", StringComparison.OrdinalIgnoreCase));
+    var smoke = ordered.Count(x => x.ReadinessLevel.StartsWith("Level 4", StringComparison.OrdinalIgnoreCase));
+
+    return new SmokePlanReport(
+        GeneratedAtUtc: DateTimeOffset.UtcNow,
+        Source: Path.GetFullPath(artifactDir),
+        ProjectVerifyStatus: projectVerify?.Status,
+        GeneratedFiles: generatedFiles.Length,
+        TestsFound: ordered.Length,
+        RuntimeReadyCandidates: ready,
+        SmokeCandidates: smoke,
+        Candidates: ordered,
+        RecommendedNextActions: BuildSmokeRecommendedActions(ordered, projectVerify, explain).ToArray());
+}
+
+static TodoExplanationReport? ReadTodoExplanationReport(string path)
+{
+    try
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+        var root = doc.RootElement;
+        return new TodoExplanationReport(
+            GeneratedAtUtc: ReadDateTimeOffset(root, "GeneratedAtUtc") ?? DateTimeOffset.UtcNow,
+            Source: ReadString(root, "Source") ?? path,
+            FilesProcessed: ReadInt(root, "FilesProcessed"),
+            TestsFound: ReadInt(root, "TestsFound"),
+            ActionsFound: ReadInt(root, "ActionsFound"),
+            SemanticActions: ReadInt(root, "SemanticActions"),
+            SyntaxFallbackActions: ReadInt(root, "SyntaxFallbackActions"),
+            MappedTargets: ReadInt(root, "MappedTargets"),
+            UnmappedTargets: ReadInt(root, "UnmappedTargets"),
+            UnsupportedActions: ReadInt(root, "UnsupportedActions"),
+            TodoComments: ReadInt(root, "TodoComments"),
+            SyntaxErrors: ReadInt(root, "SyntaxErrors"),
+            ProjectVerifyStatus: ReadString(root, "ProjectVerifyStatus"),
+            Insights: Array.Empty<TodoInsight>(),
+            NextBestAction: ReadString(root, "NextBestAction") ?? "Run smoke-plan or explain-todo.");
+    }
+    catch
+    {
+        return null;
+    }
+}
+
+static IEnumerable<string> FindGeneratedCsFiles(string artifactDir)
+{
+    var generatedDir = Path.Combine(artifactDir, "generated");
+    var searchRoot = Directory.Exists(generatedDir) ? generatedDir : artifactDir;
+    return Directory.EnumerateFiles(searchRoot, "*.cs", SearchOption.AllDirectories)
+        .Where(path => !path.Replace('\\', '/').Contains("/project-verify/", StringComparison.OrdinalIgnoreCase))
+        .Where(path => !path.Replace('\\', '/').Contains("/obj/", StringComparison.OrdinalIgnoreCase))
+        .Where(path => !path.Replace('\\', '/').Contains("/bin/", StringComparison.OrdinalIgnoreCase))
+        .Where(path => Path.GetFileName(path).EndsWith("Playwright.cs", StringComparison.OrdinalIgnoreCase)
+                    || File.ReadLines(path).Take(80).Any(line => line.Contains("Microsoft.Playwright", StringComparison.Ordinal) || line.Contains("PageTest", StringComparison.Ordinal)))
+        .OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
+}
+
+static Dictionary<string, ProjectVerifyDiagnostic[]> BuildDiagnosticsByFile(ProjectVerifyReport? projectVerify)
+{
+    var result = new Dictionary<string, List<ProjectVerifyDiagnostic>>(StringComparer.OrdinalIgnoreCase);
+    if (projectVerify == null)
+        return new Dictionary<string, ProjectVerifyDiagnostic[]>(StringComparer.OrdinalIgnoreCase);
+
+    foreach (var d in projectVerify.ClassifiedDiagnostics)
+    {
+        if (string.IsNullOrWhiteSpace(d.File))
+            continue;
+        var key = Path.GetFileName(d.File);
+        if (!result.TryGetValue(key, out var list))
+        {
+            list = new List<ProjectVerifyDiagnostic>();
+            result[key] = list;
+        }
+        list.Add(d);
+    }
+
+    return result.ToDictionary(kv => kv.Key, kv => kv.Value.ToArray(), StringComparer.OrdinalIgnoreCase);
+}
+
+static IEnumerable<GeneratedTestMethodStats> ExtractGeneratedTestMethods(string filePath)
+{
+    var lines = File.ReadAllLines(filePath);
+    var pendingTestAttribute = false;
+    for (var i = 0; i < lines.Length; i++)
+    {
+        var trimmed = lines[i].Trim();
+        if (trimmed.StartsWith("[Test", StringComparison.Ordinal) || trimmed.StartsWith("[Theory", StringComparison.Ordinal) || trimmed.StartsWith("[Fact", StringComparison.Ordinal))
+        {
+            pendingTestAttribute = true;
+            continue;
+        }
+
+        if (!pendingTestAttribute)
+            continue;
+
+        var match = System.Text.RegularExpressions.Regex.Match(lines[i], @"\b(?:async\s+)?(?:Task|void)\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(");
+        if (!match.Success)
+            continue;
+
+        var methodName = match.Groups["name"].Value;
+        var methodLines = CaptureMethodLines(lines, i, out var endIndex);
+        yield return AnalyzeGeneratedTestMethod(filePath, methodName, i + 1, methodLines);
+        i = Math.Max(i, endIndex);
+        pendingTestAttribute = false;
+    }
+}
+
+static string[] CaptureMethodLines(string[] lines, int signatureIndex, out int endIndex)
+{
+    var result = new List<string>();
+    var depth = 0;
+    var opened = false;
+    endIndex = signatureIndex;
+
+    for (var i = signatureIndex; i < lines.Length; i++)
+    {
+        var line = lines[i];
+        result.Add(line);
+        foreach (var ch in line)
+        {
+            if (ch == '{')
+            {
+                depth++;
+                opened = true;
+            }
+            else if (ch == '}')
+            {
+                depth--;
+            }
+        }
+
+        if (opened && depth <= 0)
+        {
+            endIndex = i;
+            break;
+        }
+    }
+
+    return result.ToArray();
+}
+
+static GeneratedTestMethodStats AnalyzeGeneratedTestMethod(string filePath, string testName, int startLine, string[] methodLines)
+{
+    var todoLines = methodLines.Count(line => line.Contains("TODO", StringComparison.OrdinalIgnoreCase));
+    var activeLines = 0;
+    var executableLines = 0;
+    var awaitCount = 0;
+    var expectCount = 0;
+    var locatorCount = 0;
+
+    foreach (var line in methodLines)
+    {
+        var t = line.Trim();
+        if (string.IsNullOrWhiteSpace(t) || t == "{" || t == "}" || t.StartsWith("[", StringComparison.Ordinal))
+            continue;
+        if (t.Contains("TODO", StringComparison.OrdinalIgnoreCase))
+            continue;
+
+        executableLines++;
+        if (!t.StartsWith("//", StringComparison.Ordinal))
+        {
+            activeLines++;
+            if (t.Contains("await ", StringComparison.Ordinal)) awaitCount++;
+            if (t.Contains("Expect(", StringComparison.Ordinal) || t.Contains("Assert.", StringComparison.Ordinal) || t.Contains("Should", StringComparison.Ordinal)) expectCount++;
+            if (t.Contains("Locator(", StringComparison.Ordinal) || t.Contains("GetBy", StringComparison.Ordinal)) locatorCount++;
+        }
+    }
+
+    var denominator = activeLines + todoLines;
+    var activeRatio = denominator == 0 ? 0 : Math.Round((double)activeLines / denominator, 3);
+    return new GeneratedTestMethodStats(Path.GetFullPath(filePath), testName, startLine, activeLines, todoLines, executableLines, activeRatio, awaitCount, expectCount, locatorCount);
+}
+
+static SmokeCandidate BuildSmokeCandidate(GeneratedTestMethodStats method, string? projectVerifyStatus, int compileErrors, int compileWarnings, ProjectVerifyDiagnostic[] diagnostics)
+{
+    var projectPassed = string.Equals(projectVerifyStatus, "passed", StringComparison.OrdinalIgnoreCase);
+    var projectNotRun = string.IsNullOrWhiteSpace(projectVerifyStatus);
+    var score = method.ActiveRatio * 100 - method.TodoLines * 7 - compileErrors * 25 - compileWarnings * 2;
+    if (method.AwaitCount > 0) score += 5;
+    if (method.ExpectOrAssertCount > 0) score += 5;
+    if (method.LocatorCount > 0) score += 3;
+    score = Math.Round(Math.Max(0, Math.Min(100, score)), 1);
+
+    string level;
+    if (compileErrors > 0)
+        level = "Level 2 — compile cleanup";
+    else if (projectNotRun)
+        level = method.TodoLines <= 3 && method.ActiveRatio >= 0.7 ? "Level 3 — run verify-project first" : "Level 2 — needs project verify";
+    else if (!projectPassed)
+        level = method.TodoLines <= 3 && method.ActiveRatio >= 0.75 ? "Level 3 — close, but project verify failed" : "Level 2 — compile/project cleanup";
+    else if (method.TodoLines == 0 && method.ActiveRatio >= 0.8)
+        level = "Level 5 — runtime-ready candidate";
+    else if (method.TodoLines <= 3 && method.ActiveRatio >= 0.7)
+        level = "Level 4 — smoke candidate";
+    else if (method.TodoLines <= 8 && method.ActiveRatio >= 0.5)
+        level = "Level 3 — close to smoke";
+    else
+        level = "Level 2 — migration cleanup";
+
+    return new SmokeCandidate(
+        File: method.File,
+        TestName: method.TestName,
+        StartLine: method.StartLine,
+        ActiveLines: method.ActiveLines,
+        TodoLines: method.TodoLines,
+        ActiveRatio: method.ActiveRatio,
+        CompileErrors: compileErrors,
+        CompileWarnings: compileWarnings,
+        AwaitCount: method.AwaitCount,
+        ExpectOrAssertCount: method.ExpectOrAssertCount,
+        LocatorCount: method.LocatorCount,
+        Score: score,
+        ReadinessLevel: level,
+        Checklist: BuildRuntimeChecklist(method, projectVerifyStatus, compileErrors, diagnostics).ToArray());
+}
+
+static IEnumerable<string> BuildRuntimeChecklist(GeneratedTestMethodStats method, string? projectVerifyStatus, int compileErrors, ProjectVerifyDiagnostic[] diagnostics)
+{
+    if (compileErrors > 0)
+    {
+        yield return "Сначала исправить compile errors в verify-project; runtime запуск пока не имеет смысла.";
+        foreach (var d in diagnostics.Where(x => x.Severity.Equals("error", StringComparison.OrdinalIgnoreCase)).Take(3))
+            yield return $"Проверить `{d.Code}`/{d.Category}: {d.SuggestedAction}";
+        yield break;
+    }
+
+    if (string.IsNullOrWhiteSpace(projectVerifyStatus))
+        yield return "Запустить `--mode verify-project`, чтобы подтвердить компиляцию в контексте проекта.";
+    else if (!projectVerifyStatus.Equals("passed", StringComparison.OrdinalIgnoreCase))
+        yield return "Довести `verify-project` до pass или понять, какие ошибки не относятся к этому тесту.";
+
+    yield return method.TodoLines > 0
+        ? $"Разобрать оставшиеся TODO внутри теста: {method.TodoLines}."
+        : "TODO внутри теста нет — можно готовить изолированный runtime запуск.";
+
+    yield return method.LocatorCount > 0
+        ? "Проверить ключевые locators/selectors против UI: data-tid, таблицы, модалки, лайтбоксы."
+        : "Проверить, что тест реально взаимодействует с UI, а не стал пустым/почти полностью setup-only.";
+
+    if (method.AwaitCount == 0)
+        yield return "Проверить async-тест: нет `await`, возможно большая часть действий осталась TODO.";
+    if (method.ExpectOrAssertCount == 0)
+        yield return "Проверить наличие meaningful assertions: тест может выполнять действия без проверок.";
+
+    yield return "Запускать первым один тест/fixture, не весь пакет: `dotnet test --filter FullyQualifiedName~<TestName>` или локальный аналог команды проекта.";
+    yield return "После runtime failure классифицировать причину: locator, wait, test data/setup, navigation, assertion mismatch.";
+}
+
+static IEnumerable<string> BuildSmokeRecommendedActions(SmokeCandidate[] candidates, ProjectVerifyReport? projectVerify, TodoExplanationReport? explain)
+{
+    if (projectVerify == null)
+        yield return "Сначала запусти `--mode verify-project`: runtime readiness без проектной компиляции ненадёжна.";
+    else if (!projectVerify.Status.Equals("passed", StringComparison.OrdinalIgnoreCase))
+        yield return "Сначала разберись с `project-verify-report.md`: runtime запускать рано, пока generated-код не компилируется.";
+
+    var best = candidates.FirstOrDefault();
+    if (best != null)
+        yield return $"Первый кандидат на доводку: `{Path.GetFileName(best.File)}::{best.TestName}` ({best.ReadinessLevel}, score {best.Score}).";
+
+    var close = candidates.Count(x => x.ReadinessLevel.StartsWith("Level 4", StringComparison.OrdinalIgnoreCase) || x.ReadinessLevel.StartsWith("Level 5", StringComparison.OrdinalIgnoreCase));
+    if (close > 0)
+        yield return $"Сфокусируйся на Level 4/5 тестах: {close} кандидатов ближе всего к runtime.";
+    if (explain != null && explain.TodoComments > 0)
+        yield return $"Для снижения TODO смотри `explain-todo.md`: следующий шаг — {explain.NextBestAction}";
+    if (candidates.Length == 0)
+        yield return "Generated тесты не найдены. Проверь, что smoke-plan запущен на папку с `generated/` или `*Playwright.cs`.";
+}
+
+static void WriteSmokePlanReport(SmokePlanReport report, string outPath, string format)
+{
+    Directory.CreateDirectory(outPath);
+    if (format == "json" || format == "both")
+    {
+        File.WriteAllText(Path.Combine(outPath, "smoke-plan.json"), System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    }
+    if (format == "text" || format == "both")
+    {
+        File.WriteAllText(Path.Combine(outPath, "smoke-plan.md"), WriteSmokePlanMarkdown(report));
+        File.WriteAllText(Path.Combine(outPath, "runtime-checklist.md"), WriteRuntimeChecklistMarkdown(report));
+        File.WriteAllText(Path.Combine(outPath, "agent-runtime-next-task.md"), WriteAgentRuntimeNextTaskMarkdown(report));
+    }
+}
+
+static string WriteSmokePlanMarkdown(SmokePlanReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Smoke Plan / Runtime Readiness");
+    sb.AppendLine();
+    sb.AppendLine($"- **Generated**: {report.GeneratedAtUtc:yyyy-MM-dd HH:mm:ss zzz}");
+    sb.AppendLine($"- **Source**: `{report.Source}`");
+    sb.AppendLine($"- **Project verify**: `{report.ProjectVerifyStatus ?? "not-run"}`");
+    sb.AppendLine($"- **Generated files**: `{report.GeneratedFiles}`");
+    sb.AppendLine($"- **Tests found**: `{report.TestsFound}`");
+    sb.AppendLine($"- **Runtime-ready candidates**: `{report.RuntimeReadyCandidates}`");
+    sb.AppendLine($"- **Smoke candidates**: `{report.SmokeCandidates}`");
+    sb.AppendLine();
+
+    sb.AppendLine("## Рекомендуемые действия");
+    foreach (var action in report.RecommendedNextActions)
+        sb.AppendLine($"- {action}");
+    if (report.RecommendedNextActions.Length == 0)
+        sb.AppendLine("- Нет рекомендаций: проверь входные артефакты.");
+    sb.AppendLine();
+
+    sb.AppendLine("## Лучшие кандидаты");
+    sb.AppendLine("| # | Level | Score | Test | Active | TODO | Compile errors | File | Первый пункт checklist |");
+    sb.AppendLine("|---|---|---:|---|---:|---:|---:|---|---|");
+    for (var i = 0; i < Math.Min(30, report.Candidates.Length); i++)
+    {
+        var c = report.Candidates[i];
+        var checklist = c.Checklist.Length == 0 ? "" : EscapeMd(c.Checklist[0]);
+        sb.AppendLine($"| {i + 1} | {EscapeMd(c.ReadinessLevel)} | {c.Score:0.0} | `{EscapeMd(c.TestName)}` | {c.ActiveRatio:P0} | {c.TodoLines} | {c.CompileErrors} | `{EscapeMd(PathRedaction.Redact(c.File))}:{c.StartLine}` | {checklist} |");
+    }
+    sb.AppendLine();
+    sb.AppendLine("## Как читать уровни");
+    sb.AppendLine("- **Level 5** — лучший кандидат на изолированный runtime запуск.");
+    sb.AppendLine("- **Level 4** — почти готов, обычно нужно добить несколько TODO/проверок.");
+    sb.AppendLine("- **Level 3** — близко, но сначала нужен verify-project или небольшая чистка.");
+    sb.AppendLine("- **Level 2** — сначала маппинги/compile cleanup, runtime пока рано.");
+    return sb.ToString();
+}
+
+static string WriteRuntimeChecklistMarkdown(SmokePlanReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Runtime Checklist");
+    sb.AppendLine();
+    sb.AppendLine("Используй этот список для ручной/агентской доводки первых runtime smoke-тестов.");
+    sb.AppendLine();
+    foreach (var c in report.Candidates.Take(15))
+    {
+        sb.AppendLine($"## `{c.TestName}`");
+        sb.AppendLine();
+        sb.AppendLine($"- **File**: `{PathRedaction.Redact(c.File)}:{c.StartLine}`");
+        sb.AppendLine($"- **Level**: {c.ReadinessLevel}");
+        sb.AppendLine($"- **Score**: {c.Score:0.0}");
+        sb.AppendLine($"- **Active ratio**: {c.ActiveRatio:P0}");
+        sb.AppendLine($"- **TODO**: {c.TodoLines}");
+        sb.AppendLine($"- **Compile errors**: {c.CompileErrors}");
+        sb.AppendLine();
+        sb.AppendLine("### Checklist");
+        foreach (var item in c.Checklist)
+            sb.AppendLine($"- [ ] {item}");
+        sb.AppendLine();
+    }
+    if (report.Candidates.Length == 0)
+        sb.AppendLine("Generated tests were not found. Run smoke-plan against a migrate/verify-project output directory.");
+    return sb.ToString();
+}
+
+static string WriteAgentRuntimeNextTaskMarkdown(SmokePlanReport report)
+{
+    var best = report.Candidates.FirstOrDefault();
+    var sb = new StringBuilder();
+    sb.AppendLine("# Agent Runtime Next Task");
+    sb.AppendLine();
+    sb.AppendLine("Ты продолжаешь миграцию Selenium C# → Playwright .NET. Сейчас этап runtime readiness: нужно выбрать самые близкие к запуску тесты и довести их до smoke.");
+    sb.AppendLine();
+    sb.AppendLine("## Статус");
+    sb.AppendLine($"- Project verify: `{report.ProjectVerifyStatus ?? "not-run"}`");
+    sb.AppendLine($"- Tests found: `{report.TestsFound}`");
+    sb.AppendLine($"- Runtime-ready candidates: `{report.RuntimeReadyCandidates}`");
+    sb.AppendLine($"- Smoke candidates: `{report.SmokeCandidates}`");
+    sb.AppendLine();
+    sb.AppendLine("## Следующий шаг");
+    if (best == null)
+    {
+        sb.AppendLine("Generated тесты не найдены. Сначала запусти migrate или verify-project, затем повтори smoke-plan.");
+    }
+    else
+    {
+        sb.AppendLine($"Возьми первый кандидат: `{Path.GetFileName(best.File)}::{best.TestName}`.");
+        sb.AppendLine($"Level: **{best.ReadinessLevel}**, score: **{best.Score:0.0}**, TODO: **{best.TodoLines}**.");
+        sb.AppendLine("Работай только с этим тестом/fixture, не запускай весь пакет сразу.");
+        sb.AppendLine("Checklist:");
+        foreach (var item in best.Checklist)
+            sb.AppendLine($"- {item}");
+    }
+    sb.AppendLine();
+    sb.AppendLine("## Ограничения");
+    sb.AppendLine("- Не редактируй generated `.cs` вручную как финальное решение.");
+    sb.AppendLine("- Если нужен mapping — добавляй его в adapter-config/profile.");
+    sb.AppendLine("- Если runtime failure связан с мигратором — сформируй escalation report.");
+    sb.AppendLine("- После этапа дай отчёт на русском и спроси: `Продолжить?`");
+    return sb.ToString();
+}
 
 static void PrintSummary(MigrationSummaryReport summary)
 {
@@ -4157,9 +4625,9 @@ static CliOptions? ParseArgs(string[] args)
         }
     }
 
-    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "explain-todo" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "orchestrate" && mode != "scaffold" && mode != "bootstrap-project")
+    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "explain-todo" && mode != "smoke-plan" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "orchestrate" && mode != "scaffold" && mode != "bootstrap-project")
     {
-        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|verify-project|explain-todo|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project");
+        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|verify-project|explain-todo|smoke-plan|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project");
         return null;
     }
 
@@ -4195,6 +4663,7 @@ static CliOptions? ParseArgs(string[] args)
             "verify" => "verify",
             "verify-project" => "verify-project",
             "explain-todo" => "explain-todo",
+            "smoke-plan" => "smoke-plan",
             "config-validate" => "config-validate",
             "config-diff" => "config-diff",
             "guard" => "guard",
@@ -4289,6 +4758,10 @@ Modes:
                     Reads report.json, unmapped-targets.json, unsupported-actions.json,
                     verify-report.json, project-verify-report.json when present. Outputs
                     explain-todo.md/json and agent-next-task.md. Does NOT modify config.
+  smoke-plan      Rank generated tests by runtime readiness. Reads generated .cs files,
+                    report.json, explain-todo.json, and project-verify-report.json when
+                    present. Outputs smoke-plan.md/json, runtime-checklist.md, and
+                    agent-runtime-next-task.md. Does NOT run tests.
   config-validate Validate adapter-config structure and agent-safety rules. Outputs
                     config-validate-report.md/json. Fails on dangerous config.
   config-diff     Compare two adapter-config files and highlight risky agent changes.
@@ -4323,7 +4796,7 @@ Modes:
 
 Options:
     --mode <mode>                 Operation mode (required)
-                                    analyze|migrate|verify|verify-project|explain-todo|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project
+                                    analyze|migrate|verify|verify-project|explain-todo|smoke-plan|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project
     --input <file-or-directory>   Input .cs file or directory (required).
                                     For propose/explain-todo: directory with report files.
                                     For discover-target: target Playwright project root.
@@ -4360,6 +4833,7 @@ Examples:
   Migrator.Cli --mode migrate --input ./OldTests --out generated --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json
   Migrator.Cli --mode verify-project --input ./OldTests --out verify-project --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json
   Migrator.Cli --mode explain-todo --input migration/verify-project --out explain-todo --format both
+  Migrator.Cli --mode smoke-plan --input migration/verify-project --out smoke-plan --format both
   Migrator.Cli --mode config-validate --config ./adapter-config.json --out config-validate
   Migrator.Cli --mode config-diff --before adapter.old.json --after adapter-config.json --out config-diff
   Migrator.Cli --mode guard --before migration/baseline --after migration/current --out guard
@@ -4447,6 +4921,10 @@ record TodoInsight(
     bool RequiresSourceTruth,
     bool RequiresDeveloper,
     string[] Evidence);
+
+record GeneratedTestMethodStats(string File, string TestName, int StartLine, int ActiveLines, int TodoLines, int ExecutableLines, double ActiveRatio, int AwaitCount, int ExpectOrAssertCount, int LocatorCount);
+record SmokePlanReport(DateTimeOffset GeneratedAtUtc, string Source, string? ProjectVerifyStatus, int GeneratedFiles, int TestsFound, int RuntimeReadyCandidates, int SmokeCandidates, SmokeCandidate[] Candidates, string[] RecommendedNextActions);
+record SmokeCandidate(string File, string TestName, int StartLine, int ActiveLines, int TodoLines, double ActiveRatio, int CompileErrors, int CompileWarnings, int AwaitCount, int ExpectOrAssertCount, int LocatorCount, double Score, string ReadinessLevel, string[] Checklist);
 
 record PomIndexReport(DateTimeOffset GeneratedAtUtc, string InputPath, int FilesScanned, PomFact[] Facts, PomUsageCandidate[] InferredCandidates, string[] Warnings);
 record PomFact(string SourceExpression, string OwnerType, string MemberName, string MemberKind, string Selector, string SelectorKind, string TargetKindSuggestion, string TargetExpressionSuggestion, string SourceFile, int SourceLine, string Confidence, bool RequiresReview, string Notes);
