@@ -903,3 +903,35 @@ dotnet tool restore
 dotnet tool run selenium-pw-migrator -- --mode bootstrap-project --input "<tests>" --out "project-bootstrap"
 ```
 
+
+# Milestone 7. Agent-first workflow
+
+Agent-first workflow теперь является основным режимом для нетривиальной миграции.
+
+Перед началом дополнительно прочитай:
+
+- `docs/agent-first-workflow.md`
+- `docs/agent-roles.md`
+- `docs/agent-command-set.md`
+- `docs/agent-first-checklist.md`
+- `docs/escalation-reports.md`
+
+Используй playbook-и:
+
+- `docs/agent-playbooks/run-agent-migration-iteration.md`
+- `docs/agent-playbooks/reuse-existing-profile.md`
+- `docs/agent-playbooks/runtime-smoke-one-test.md`
+- `docs/agent-playbooks/escalate-to-developer.md`
+
+Для старта/возобновления можно использовать prompt-шаблоны из `examples/agent-first/`.
+
+## Doctor / preflight
+
+Перед первой миграцией нового проекта или пакета тестов запускай preflight-проверку:
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode doctor --input "<tests>" --config "<profile.adapter.json>" --out "doctor" --format both
+```
+
+Режим ничего не меняет: он проверяет input, config layers, ближайший `.csproj`/`.sln`, `NuGet.config`, `Verification`, POM/source-truth кандидаты и доступность `dotnet`. Артефакты: `doctor-report.md/json` и `agent-doctor-next-task.md`. Подробности: `docs/doctor-mode.md`.
+

@@ -17,6 +17,10 @@ Each playbook describes a specific task: what input you need, step-by-step actio
 | [Runtime Proof](runtime-proof.md) | Safely attempt runtime verification |
 | [Classify Failures](classify-failures.md) | Categorize test failures |
 | [Safety Rules](safety-rules.md) | Hard rules — read before starting any task |
+| [Run Agent Migration Iteration](run-agent-migration-iteration.md) | One safe config/profile iteration |
+| [Escalate to Developer](escalate-to-developer.md) | Create a developer escalation package |
+| [Reuse Existing Profile](reuse-existing-profile.md) | Apply a base migration profile to a similar project |
+| [Runtime Smoke One Test](runtime-smoke-one-test.md) | Runtime-proof one selected smoke candidate |
 
 ## General principles
 
@@ -37,3 +41,14 @@ Each playbook describes a specific task: what input you need, step-by-step actio
 6. Re-run and verify
 7. Report results
 ```
+
+## Agent-first workflow
+
+Перед сложной миграцией агент должен читать:
+
+- `docs/agent-first-workflow.md`
+- `docs/agent-command-set.md`
+- `docs/agent-first-checklist.md`
+- `docs/escalation-reports.md`
+
+Эти документы задают роли, безопасные команды, условия остановки и формат эскалации.

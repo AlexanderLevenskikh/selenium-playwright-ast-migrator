@@ -1,0 +1,153 @@
+# Agent-first workflow
+
+Этот документ описывает основной способ работы с мигратором после Milestone 7.
+Мигратор остаётся CLI-инструментом, но основным интерфейсом для сложной миграции становится агент: он читает отчёты, POM/source truth, предлагает изменения в profile/config и останавливается только в безопасных точках.
+
+## Роли
+
+| Роль | За что отвечает | Чего не делает |
+|---|---|---|
+| Пользователь / тестировщик | Выбирает пакет тестов, подтверждает смысл тестов, ревьюит понятные TODO | Не обязан понимать renderer, recognizer, AST, symbol tracking |
+| Агент | Ведёт миграционную итерацию, читает POM, меняет config/profile, запускает проверки, пишет отчёт | Не правит C# мигратора без явного разрешения, не правит generated/source project |
+| Разработчик мигратора | Чинит generic blockers, renderer/core/schema, принимает reusable profile changes | Не должен вручную править generated код ради зелёной сборки |
+
+## Главная модель работы
+
+```text
+1. bootstrap-project / выбрать профиль
+2. index-pom
+3. baseline migrate или verify-project
+4. explain-todo + agent-next-task
+5. config-only iteration
+6. config-validate + migrate/verify-project + guard + config-diff
+7. smoke-plan
+8. runtime proof по одному тесту
+9. если config не помогает — escalation report разработчику
+```
+
+## Что агент может делать автономно
+
+Агент может без отдельного подтверждения:
+
+- читать исходный Selenium test project;
+- читать POM, base classes, helpers, extension methods;
+- запускать `migrate`, `verify`, `verify-project`, `index-pom`, `explain-todo`, `smoke-plan`;
+- менять `adapter-config.json` или project profile;
+- добавлять high-confidence mappings по найденному source truth;
+- запускать `config-validate`, `config-diff`, `guard`;
+- создавать отчёты внутри `migration/`.
+
+## Когда агент обязан остановиться
+
+Агент обязан остановиться и написать escalation report, если:
+
+- нужно менять C# код мигратора;
+- нужно менять исходный проект;
+- нужна ручная правка generated `.cs`;
+- source truth не найден, а mapping будет догадкой;
+- `guard` показывает регрессию;
+- `verify-project` падает из-за generic blocker мигратора;
+- runtime failure требует продуктового знания, которого нет в источниках.
+
+## Безопасные границы
+
+Агент по умолчанию может менять только:
+
+```text
+adapter-config.json
+profiles/**/*.adapter.json
+migration/**/*.md
+migration/**/*.json
+```
+
+Агенту запрещено менять:
+
+```text
+Migrator.*/*.cs          без явного разрешения
+исходный Selenium project
+generated/*.cs вручную
+production code
+секреты/NuGet tokens/NuGet.config с настоящими credentials
+```
+
+## Обязательный цикл после изменения config/profile
+
+После каждого изменения config/profile агент должен выполнить:
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode config-validate --config "<configs>" --out config-validate
+
+dotnet run --project .\Migrator.Cli -- --mode migrate --input "<tests>" --config "<configs>" --out "current-run" --format both
+
+# Если есть project context:
+dotnet run --project .\Migrator.Cli -- --mode verify-project --input "<tests>" --config "<configs>" --out "current-verify-project" --format both
+
+dotnet run --project .\Migrator.Cli -- --mode guard --before "migration/previous-run" --after "migration/current-run" --out guard
+
+dotnet run --project .\Migrator.Cli -- --mode config-diff --before "adapter-config.before.json" --after "adapter-config.json" --out config-diff
+```
+
+Если используется установленный tool, замени `dotnet run --project .\Migrator.Cli --` на:
+
+```powershell
+selenium-pw-migrator
+```
+
+или:
+
+```powershell
+dotnet tool run selenium-pw-migrator --
+```
+
+## Формат сообщения пользователю после итерации
+
+```text
+## Этап завершён
+
+### Цель этапа
+
+### Что прочитал
+
+### Что изменил
+
+### Проверки
+
+### Метрики до/после
+
+### Что стало лучше
+
+### Что осталось TODO
+
+### Риски
+
+### Нужна ли эскалация
+
+### Следующий шаг
+
+Продолжить?
+```
+
+## Принцип
+
+Агент должен не просто выполнять команды, а переводить технические сигналы в понятные решения:
+
+```text
+Плохо:
+CS0103 Product not found.
+
+Хорошо:
+Generated-код использует Product.Travel, но verify-project не видит этот тип.
+Я проверю, это missing ProjectReference или safe target type, который надо добавить в TargetKnownTypes.
+Если тип есть в проекте — добавлю его в config. Если нет — оставлю TODO или создам escalation report.
+```
+
+## Doctor / preflight
+
+Перед первой миграцией нового проекта или пакета тестов запускай preflight-проверку:
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode doctor --input "<tests>" --config "<profile.adapter.json>" --out "doctor" --format both
+```
+
+Режим ничего не меняет: он проверяет input, config layers, ближайший `.csproj`/`.sln`, `NuGet.config`, `Verification`, POM/source-truth кандидаты и доступность `dotnet`. Артефакты: `doctor-report.md/json` и `agent-doctor-next-task.md`. Подробности: `docs/doctor-mode.md`.
+

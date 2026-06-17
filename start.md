@@ -130,3 +130,34 @@ selenium-pw-migrator --mode migrate --input "<tests>" --config "<config>" --out 
 
 Упаковка и установка описаны в `docs/packaging-and-distribution.md` и `docs/tool-installation.md`.
 
+
+## Milestone 7: agent-first workflow
+
+Перед сложной миграцией дополнительно прочитай:
+
+```text
+docs/agent-first-workflow.md
+docs/agent-roles.md
+docs/agent-command-set.md
+docs/agent-first-checklist.md
+docs/escalation-reports.md
+```
+
+Если продолжаешь остановленную миграцию, используй prompt из:
+
+```text
+examples/agent-first/resume-agent-prompt.md
+```
+
+Если нужен разработчик, не продолжай config-only итерации. Создай `migration/escalation-report.md` по шаблону из `docs/escalation-reports.md`.
+
+## Doctor / preflight
+
+Перед первой миграцией нового проекта или пакета тестов запускай preflight-проверку:
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode doctor --input "<tests>" --config "<profile.adapter.json>" --out "doctor" --format both
+```
+
+Режим ничего не меняет: он проверяет input, config layers, ближайший `.csproj`/`.sln`, `NuGet.config`, `Verification`, POM/source-truth кандидаты и доступность `dotnet`. Артефакты: `doctor-report.md/json` и `agent-doctor-next-task.md`. Подробности: `docs/doctor-mode.md`.
+

@@ -96,6 +96,13 @@ if (configPaths.Length > 0)
         : $"Loaded adapter config layers: {string.Join(" -> ", configPaths)}");
 }
 
+// Handle doctor mode — validates environment/input/config/project context before migration.
+if (mode == "doctor")
+{
+    var doctorExitCode = RunDoctor(inputPath, outPath, format, configPaths, loadedConfig);
+    return doctorExitCode;
+}
+
 // Handle propose mode separately — input is a directory with report artifacts, not source files
 if (mode == "propose")
 {
@@ -4036,6 +4043,402 @@ static string ToOrchestrationReportMarkdown(OrchestrationReport report)
 }
 
 
+
+static int RunDoctor(string inputPath, string outPath, string format, string[] configPaths, ProjectAdapterConfig? config)
+{
+    Directory.CreateDirectory(outPath);
+
+    var checks = new List<DoctorCheck>();
+    var fullInputPath = Path.GetFullPath(inputPath);
+    var inputExists = File.Exists(inputPath) || Directory.Exists(inputPath);
+    var inputKind = File.Exists(inputPath) ? "file" : Directory.Exists(inputPath) ? "directory" : "missing";
+
+    AddDoctorCheck(checks, inputExists ? "passed" : "failed", "INPUT_EXISTS",
+        inputExists ? $"Input {inputKind} exists." : $"Input not found: {inputPath}",
+        fullInputPath,
+        inputExists ? "Continue with migration preflight." : "Fix --input path before running migrate/verify-project.");
+
+    var csFiles = inputExists ? SafeEnumerateFiles(inputPath, "*.cs", SearchOption.AllDirectories).ToArray() : Array.Empty<string>();
+    AddDoctorCheck(checks, csFiles.Length > 0 ? "passed" : "warning", "CS_FILES_FOUND",
+        csFiles.Length > 0 ? $"Found {csFiles.Length} C# file(s) under input." : "No C# files found under input.",
+        fullInputPath,
+        csFiles.Length > 0 ? "OK." : "Check that --input points to Selenium C# tests, not an empty/report directory.");
+
+    var apiLikeFiles = csFiles.Count(p => p.Contains("ApiTests", StringComparison.OrdinalIgnoreCase)
+                                     || p.Contains("WebApiTests", StringComparison.OrdinalIgnoreCase)
+                                     || Path.GetFileName(p).Contains("Api", StringComparison.OrdinalIgnoreCase));
+    if (csFiles.Length > 0 && apiLikeFiles > 0 && apiLikeFiles * 3 >= csFiles.Length)
+    {
+        AddDoctorCheck(checks, "warning", "INPUT_LOOKS_API_HEAVY",
+            $"{apiLikeFiles}/{csFiles.Length} files look API-oriented. UI Selenium→Playwright migration may be using too broad input.",
+            fullInputPath,
+            "Prefer a UI/E2E test package folder. Do not include WebApiTests in a UI Playwright migration unless intentionally supported.");
+    }
+
+    var topLevelDirs = Directory.Exists(inputPath)
+        ? SafeEnumerateDirectories(inputPath, "*", SearchOption.TopDirectoryOnly).Select(Path.GetFileName).Where(x => !string.IsNullOrWhiteSpace(x)).ToArray()!
+        : Array.Empty<string>();
+    if (topLevelDirs.Length > 12)
+    {
+        AddDoctorCheck(checks, "warning", "INPUT_SCOPE_WIDE",
+            $"Input has {topLevelDirs.Length} top-level directories. This may be a repo/root rather than a test package.",
+            fullInputPath,
+            "Prefer the narrowest test package directory for migrate/verify-project, then reuse profiles for other projects.");
+    }
+
+    if (configPaths.Length == 0)
+    {
+        AddDoctorCheck(checks, "warning", "CONFIG_NOT_PROVIDED",
+            "No adapter-config layer was provided.",
+            null,
+            "Use --config for project/profile migration. Doctor can still inspect input/project context.");
+    }
+    else
+    {
+        foreach (var cfg in configPaths)
+        {
+            AddDoctorCheck(checks, File.Exists(cfg) ? "passed" : "failed", "CONFIG_LAYER_EXISTS",
+                File.Exists(cfg) ? $"Config layer exists: {cfg}" : $"Config layer not found: {cfg}",
+                cfg,
+                File.Exists(cfg) ? "OK." : "Fix --config path or remove the missing layer.");
+        }
+
+        if (config != null)
+        {
+            var safetyIssues = AnalyzeConfigSafety(config).ToArray();
+            var errors = safetyIssues.Count(i => i.Severity.Equals("error", StringComparison.OrdinalIgnoreCase));
+            var warnings = safetyIssues.Count(i => i.Severity.Equals("warning", StringComparison.OrdinalIgnoreCase));
+            AddDoctorCheck(checks, errors > 0 ? "failed" : warnings > 0 ? "warning" : "passed", "CONFIG_SAFETY",
+                errors > 0 || warnings > 0
+                    ? $"Config safety found {errors} error(s), {warnings} warning(s)."
+                    : "Config safety checks passed.",
+                string.Join(" -> ", configPaths),
+                errors > 0 || warnings > 0
+                    ? "Run --mode config-validate for the full safety report before migration."
+                    : "OK.");
+        }
+    }
+
+    var nearestProject = inputExists ? FindNearestCsproj(inputPath) : null;
+    AddDoctorCheck(checks, nearestProject != null ? "passed" : "warning", "NEAREST_CSPROJ",
+        nearestProject != null ? $"Nearest .csproj found: {nearestProject}" : "No .csproj found upward from input.",
+        nearestProject,
+        nearestProject != null ? "verify-project can use this project as context when auto-discovery is enabled." : "Set Verification.ProjectReferences explicitly in adapter-config.");
+
+    var nearestSolution = inputExists ? FindNearestFile(inputPath, "*.sln") : null;
+    AddDoctorCheck(checks, nearestSolution != null ? "passed" : "warning", "NEAREST_SOLUTION",
+        nearestSolution != null ? $"Nearest .sln found: {nearestSolution}" : "No .sln found upward from input.",
+        nearestSolution,
+        nearestSolution != null ? "Good for project-aware diagnostics." : "Not required, but useful for repo/context discovery.");
+
+    var repoRoot = inputExists ? FindRepoRootForVerification(inputPath) : Directory.GetCurrentDirectory();
+    var nugetConfig = FindNearestFileFromDirectory(repoRoot, "NuGet.config");
+    AddDoctorCheck(checks, nugetConfig != null ? "passed" : "warning", "NUGET_CONFIG",
+        nugetConfig != null ? $"NuGet.config found: {nugetConfig}" : "No NuGet.config found near inferred repo root.",
+        repoRoot,
+        nugetConfig != null ? "BuildWorkingDirectory should point at repo root so internal feeds are visible." : "If project uses internal packages, set Verification.BuildWorkingDirectory to repo root with NuGet.config.");
+
+    var buildFiles = new[] { "Directory.Build.props", "Directory.Build.targets", "Directory.Packages.props" }
+        .Select(name => FindNearestFileFromDirectory(repoRoot, name))
+        .Where(x => x != null)
+        .Cast<string>()
+        .ToArray();
+    AddDoctorCheck(checks, buildFiles.Length > 0 ? "passed" : "info", "BUILD_FILES",
+        buildFiles.Length > 0 ? $"Found {buildFiles.Length} repo build file(s)." : "No Directory.Build.* / Directory.Packages.props found near repo root.",
+        repoRoot,
+        buildFiles.Length > 0 ? "verify-project should import these when AutoDiscoverBuildFiles is enabled." : "OK if project does not use repo-level build props.");
+
+    if (config?.Verification == null)
+    {
+        AddDoctorCheck(checks, "warning", "VERIFICATION_CONFIG_MISSING",
+            "adapter-config has no Verification section.",
+            configPaths.Length > 0 ? string.Join(" -> ", configPaths) : null,
+            "Add Verification.BaseDirectory/ProjectReferences/BuildWorkingDirectory for reliable verify-project.");
+    }
+    else
+    {
+        var verification = config.Verification;
+        var baseDir = ResolveVerificationBaseDirectory(verification, configPaths.LastOrDefault(), inputPath);
+        var solution = ResolveSolutionPath(verification, baseDir, inputPath);
+        var refs = ResolveProjectReferences(verification, baseDir, inputPath).ToArray();
+        var includedRefs = refs.Where(r => r.Status.Equals("included", StringComparison.OrdinalIgnoreCase)).ToArray();
+        var missingRefs = refs.Where(r => r.Status.Equals("missing", StringComparison.OrdinalIgnoreCase)).ToArray();
+        var buildWorkingDirectory = ResolveBuildWorkingDirectory(verification, baseDir, solution);
+
+        AddDoctorCheck(checks, Directory.Exists(baseDir) ? "passed" : "failed", "VERIFICATION_BASE_DIRECTORY",
+            Directory.Exists(baseDir) ? $"Verification base directory exists: {baseDir}" : $"Verification base directory does not exist: {baseDir}",
+            baseDir,
+            Directory.Exists(baseDir) ? "OK." : "Fix Verification.BaseDirectory or use a path relative to adapter-config.");
+
+        AddDoctorCheck(checks, Directory.Exists(buildWorkingDirectory) ? "passed" : "failed", "BUILD_WORKING_DIRECTORY",
+            Directory.Exists(buildWorkingDirectory) ? $"Build working directory exists: {buildWorkingDirectory}" : $"Build working directory does not exist: {buildWorkingDirectory}",
+            buildWorkingDirectory,
+            Directory.Exists(buildWorkingDirectory) ? "OK. dotnet build will run here." : "Set Verification.BuildWorkingDirectory to a real repo root, preferably where NuGet.config lives.");
+
+        AddDoctorCheck(checks, includedRefs.Length > 0 ? "passed" : "warning", "PROJECT_REFERENCES",
+            includedRefs.Length > 0 ? $"verify-project can use {includedRefs.Length} project reference(s)." : "No project references resolved for verify-project.",
+            null,
+            includedRefs.Length > 0 ? "OK." : "Add Verification.ProjectReferences or enable AutoDiscoverNearestProject.");
+
+        foreach (var missing in missingRefs.Take(10))
+        {
+            AddDoctorCheck(checks, "failed", "PROJECT_REFERENCE_MISSING",
+                $"ProjectReference does not exist: {missing.Path}",
+                missing.Path,
+                "Fix the path in Verification.ProjectReferences or BaseDirectory.");
+        }
+    }
+
+    var pomFiles = inputExists ? FindPomLikeFiles(inputPath).Take(50).ToArray() : Array.Empty<string>();
+    AddDoctorCheck(checks, pomFiles.Length > 0 ? "passed" : "warning", "POM_SOURCE_TRUTH",
+        pomFiles.Length > 0 ? $"Found {pomFiles.Length} POM/source-truth candidate file(s)." : "No obvious PageObject/POM files found under input.",
+        fullInputPath,
+        pomFiles.Length > 0 ? "Run --mode index-pom before heavy adapter-config work." : "If POMs live elsewhere, run index-pom on the wider project/root or provide source truth manually.");
+
+    var dotnet = RunSimpleProcess("dotnet", new[] { "--version" }, Directory.GetCurrentDirectory());
+    AddDoctorCheck(checks, dotnet.ExitCode == 0 ? "passed" : "failed", "DOTNET_AVAILABLE",
+        dotnet.ExitCode == 0 ? $"dotnet available: {dotnet.StdOut.Trim()}" : "dotnet CLI is not available or failed to run.",
+        null,
+        dotnet.ExitCode == 0 ? "OK." : "Install .NET SDK or run from a developer environment before verify-project/packaging.");
+
+    var status = checks.Any(c => c.Status.Equals("failed", StringComparison.OrdinalIgnoreCase))
+        ? "failed"
+        : checks.Any(c => c.Status.Equals("warning", StringComparison.OrdinalIgnoreCase)) ? "warning" : "passed";
+
+    var report = new DoctorReport(
+        GeneratedAtUtc: DateTimeOffset.UtcNow,
+        Status: status,
+        InputPath: fullInputPath,
+        InputKind: inputKind,
+        ConfigLayers: configPaths.Select(Path.GetFullPath).ToArray(),
+        WorkspaceOutPath: Path.GetFullPath(outPath),
+        Checks: checks.ToArray(),
+        RecommendedNextActions: BuildDoctorRecommendedActions(checks).ToArray());
+
+    WriteDoctorReport(report, outPath, format);
+
+    Console.WriteLine("=== Doctor ===");
+    Console.WriteLine($"Status: {report.Status.ToUpperInvariant()}");
+    Console.WriteLine($"Input: {report.InputPath}");
+    Console.WriteLine($"Config layers: {report.ConfigLayers.Length}");
+    Console.WriteLine($"Checks: {report.Checks.Length} ({report.Checks.Count(c => c.Status == "failed")} failed, {report.Checks.Count(c => c.Status == "warning")} warning)");
+    foreach (var check in report.Checks.Where(c => c.Status != "passed" && c.Status != "info").Take(30))
+        Console.WriteLine($"[{check.Status.ToUpperInvariant()}] {check.Code}: {check.Message}");
+    Console.WriteLine($"Reports written to: {Path.GetFullPath(outPath)}");
+
+    return report.Status == "failed" ? 2 : 0;
+}
+
+static void AddDoctorCheck(List<DoctorCheck> checks, string status, string code, string message, string? location, string suggestedAction)
+{
+    checks.Add(new DoctorCheck(status, code, message, location, suggestedAction));
+}
+
+static IEnumerable<string> BuildDoctorRecommendedActions(IEnumerable<DoctorCheck> checks)
+{
+    var important = checks
+        .Where(c => c.Status.Equals("failed", StringComparison.OrdinalIgnoreCase) || c.Status.Equals("warning", StringComparison.OrdinalIgnoreCase))
+        .OrderBy(c => c.Status.Equals("failed", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+        .ThenBy(c => c.Code, StringComparer.OrdinalIgnoreCase)
+        .Take(8)
+        .Select(c => $"{c.Code}: {c.SuggestedAction}");
+
+    foreach (var action in important)
+        yield return action;
+
+    if (!important.Any())
+    {
+        yield return "Preflight looks good. Run migrate/verify-project, then explain-todo/smoke-plan.";
+    }
+}
+
+static string[] SafeEnumerateFiles(string path, string pattern, SearchOption searchOption)
+{
+    try
+    {
+        if (File.Exists(path))
+        {
+            var name = Path.GetFileName(path);
+            var regex = "^" + System.Text.RegularExpressions.Regex.Escape(pattern).Replace("\\*", ".*") + "$";
+            if (pattern == "*" || System.Text.RegularExpressions.Regex.IsMatch(name, regex, System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                return new[] { Path.GetFullPath(path) };
+            return Array.Empty<string>();
+        }
+
+        if (!Directory.Exists(path))
+            return Array.Empty<string>();
+
+        return Directory.EnumerateFiles(path, pattern, searchOption)
+            .Where(p => !p.Replace('\\', '/').Contains("/bin/", StringComparison.OrdinalIgnoreCase)
+                     && !p.Replace('\\', '/').Contains("/obj/", StringComparison.OrdinalIgnoreCase)
+                     && !p.Replace('\\', '/').Contains("/.git/", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+    }
+    catch
+    {
+        return Array.Empty<string>();
+    }
+}
+
+static string[] SafeEnumerateDirectories(string path, string pattern, SearchOption searchOption)
+{
+    try
+    {
+        if (!Directory.Exists(path))
+            return Array.Empty<string>();
+        return Directory.EnumerateDirectories(path, pattern, searchOption)
+            .Where(p => !p.Replace('\\', '/').Contains("/bin/", StringComparison.OrdinalIgnoreCase)
+                     && !p.Replace('\\', '/').Contains("/obj/", StringComparison.OrdinalIgnoreCase)
+                     && !p.Replace('\\', '/').Contains("/.git/", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+    }
+    catch
+    {
+        return Array.Empty<string>();
+    }
+}
+
+static IEnumerable<string> FindPomLikeFiles(string inputPath)
+{
+    var files = SafeEnumerateFiles(inputPath, "*.cs", SearchOption.AllDirectories);
+    return files.Where(path =>
+    {
+        var name = Path.GetFileNameWithoutExtension(path);
+        var normalized = path.Replace('\\', '/');
+        return name.Contains("Page", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Pom", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Lightbox", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Modal", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("/Pages/", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("/PageObjects/", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("/POM/", StringComparison.OrdinalIgnoreCase);
+    });
+}
+
+static string? FindNearestFileFromDirectory(string startDirectory, string pattern)
+{
+    var dir = new DirectoryInfo(Directory.Exists(startDirectory) ? startDirectory : Directory.GetCurrentDirectory());
+    while (dir != null)
+    {
+        var match = dir.GetFiles(pattern, SearchOption.TopDirectoryOnly)
+            .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        if (match != null)
+            return match.FullName;
+        dir = dir.Parent;
+    }
+    return null;
+}
+
+static SimpleProcessResult RunSimpleProcess(string fileName, string[] args, string workingDirectory)
+{
+    try
+    {
+        var psi = new ProcessStartInfo(fileName)
+        {
+            WorkingDirectory = Directory.Exists(workingDirectory) ? workingDirectory : Directory.GetCurrentDirectory(),
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        foreach (var arg in args)
+            psi.ArgumentList.Add(arg);
+
+        using var process = Process.Start(psi);
+        if (process == null)
+            return new SimpleProcessResult(127, string.Empty, "Process.Start returned null");
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        return new SimpleProcessResult(process.ExitCode, stdout, stderr);
+    }
+    catch (Exception ex)
+    {
+        return new SimpleProcessResult(127, string.Empty, ex.Message);
+    }
+}
+
+static void WriteDoctorReport(DoctorReport report, string outPath, string format)
+{
+    if (format is "json" or "both")
+    {
+        File.WriteAllText(Path.Combine(outPath, "doctor-report.json"),
+            System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    if (format is "text" or "both")
+    {
+        File.WriteAllText(Path.Combine(outPath, "doctor-report.md"), WriteDoctorMarkdown(report));
+        File.WriteAllText(Path.Combine(outPath, "agent-doctor-next-task.md"), WriteAgentDoctorNextTask(report));
+    }
+}
+
+static string WriteDoctorMarkdown(DoctorReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Doctor Report");
+    sb.AppendLine();
+    sb.AppendLine($"- **Generated**: {report.GeneratedAtUtc:yyyy-MM-dd HH:mm:ss zzz}");
+    sb.AppendLine($"- **Status**: `{report.Status}`");
+    sb.AppendLine($"- **Input**: `{report.InputPath}` (`{report.InputKind}`)");
+    sb.AppendLine($"- **Workspace out**: `{report.WorkspaceOutPath}`");
+    sb.AppendLine($"- **Config layers**: `{report.ConfigLayers.Length}`");
+    foreach (var layer in report.ConfigLayers)
+        sb.AppendLine($"  - `{layer}`");
+    sb.AppendLine();
+
+    sb.AppendLine("## Recommended next actions");
+    foreach (var action in report.RecommendedNextActions)
+        sb.AppendLine($"- {action}");
+    sb.AppendLine();
+
+    sb.AppendLine("## Checks");
+    foreach (var check in report.Checks.OrderBy(c => DoctorStatusRank(c.Status)).ThenBy(c => c.Code, StringComparer.OrdinalIgnoreCase))
+    {
+        sb.AppendLine($"### `{check.Code}` — {check.Status}");
+        sb.AppendLine();
+        sb.AppendLine(check.Message);
+        if (!string.IsNullOrWhiteSpace(check.Location))
+            sb.AppendLine($"\nLocation: `{check.Location}`");
+        sb.AppendLine($"\nSuggested action: {check.SuggestedAction}");
+        sb.AppendLine();
+    }
+    return sb.ToString();
+}
+
+static string WriteAgentDoctorNextTask(DoctorReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Agent Doctor Next Task");
+    sb.AppendLine();
+    sb.AppendLine("Прочитай `doctor-report.md` и не начинай миграцию, пока failed checks не исправлены или явно не эскалированы.");
+    sb.AppendLine();
+    sb.AppendLine($"- Status: `{report.Status}`");
+    sb.AppendLine($"- Input: `{report.InputPath}`");
+    sb.AppendLine($"- Config layers: `{report.ConfigLayers.Length}`");
+    sb.AppendLine();
+    sb.AppendLine("## Следующие действия");
+    foreach (var action in report.RecommendedNextActions)
+        sb.AppendLine($"- {action}");
+    sb.AppendLine();
+    sb.AppendLine("## Ограничения");
+    sb.AppendLine("- Не меняй C# мигратора без явного разрешения.");
+    sb.AppendLine("- Не меняй исходный проект.");
+    sb.AppendLine("- Не правь generated `.cs` вручную.");
+    sb.AppendLine("- Если проблема в окружении/project references/NuGet — сначала поправь `adapter-config.Verification` или попроси разработчика.");
+    sb.AppendLine("- После исправления preflight проблем снова запусти `--mode doctor`.");
+    return sb.ToString();
+}
+
+static int DoctorStatusRank(string status) => status.ToLowerInvariant() switch
+{
+    "failed" => 0,
+    "warning" => 1,
+    "passed" => 2,
+    "info" => 3,
+    _ => 4
+};
+
 static int RunConfigValidate(string[] configPaths, string outPath, string format)
 {
     if (configPaths.Length == 0)
@@ -4625,9 +5028,9 @@ static CliOptions? ParseArgs(string[] args)
         }
     }
 
-    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "explain-todo" && mode != "smoke-plan" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "orchestrate" && mode != "scaffold" && mode != "bootstrap-project")
+    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "doctor" && mode != "explain-todo" && mode != "smoke-plan" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "orchestrate" && mode != "scaffold" && mode != "bootstrap-project")
     {
-        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|verify-project|explain-todo|smoke-plan|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project");
+        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|verify-project|doctor|explain-todo|smoke-plan|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project");
         return null;
     }
 
@@ -4662,6 +5065,7 @@ static CliOptions? ParseArgs(string[] args)
             "migrate" => "generated-tests",
             "verify" => "verify",
             "verify-project" => "verify-project",
+            "doctor" => "doctor",
             "explain-todo" => "explain-todo",
             "smoke-plan" => "smoke-plan",
             "config-validate" => "config-validate",
@@ -4754,6 +5158,11 @@ Modes:
                     .csproj/transitive ProjectReference/build props when enabled,
                     runs dotnet build, and classifies build diagnostics.
                     Does NOT modify source project files.
+  doctor          Preflight diagnostics for agent/user workflows. Checks input scope,
+                    adapter-config layers, config safety, nearest .csproj/.sln,
+                    verification references, NuGet/build files, POM/source-truth
+                    availability, dotnet availability, and workspace hygiene.
+                    Does NOT modify config or source project files.
   explain-todo    Explain remaining TODO/root causes from existing migration artifacts.
                     Reads report.json, unmapped-targets.json, unsupported-actions.json,
                     verify-report.json, project-verify-report.json when present. Outputs
@@ -4796,9 +5205,10 @@ Modes:
 
 Options:
     --mode <mode>                 Operation mode (required)
-                                    analyze|migrate|verify|verify-project|explain-todo|smoke-plan|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project
+                                    analyze|migrate|verify|verify-project|doctor|explain-todo|smoke-plan|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project
     --input <file-or-directory>   Input .cs file or directory (required).
                                     For propose/explain-todo: directory with report files.
+                                    For doctor: source tests/project directory to validate before migration.
                                     For discover-target: target Playwright project root.
                                     For index-pom: Selenium project/PageObject directory.
                                     For orchestrate: source Selenium tests directory.
@@ -4832,6 +5242,7 @@ Examples:
   Migrator.Cli --mode analyze --input ./OldTests --out analysis --format both
   Migrator.Cli --mode migrate --input ./OldTests --out generated --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json
   Migrator.Cli --mode verify-project --input ./OldTests --out verify-project --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json
+  Migrator.Cli --mode doctor --input ./OldTests --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json --out doctor
   Migrator.Cli --mode explain-todo --input migration/verify-project --out explain-todo --format both
   Migrator.Cli --mode smoke-plan --input migration/verify-project --out smoke-plan --format both
   Migrator.Cli --mode config-validate --config ./adapter-config.json --out config-validate
@@ -4937,5 +5348,9 @@ record ConfigDiffReport(DateTimeOffset GeneratedAtUtc, string BeforePath, string
 record ConfigDiffChange(string Section, string ChangeType, string Key);
 record GuardReport(DateTimeOffset GeneratedAtUtc, string BeforePath, string AfterPath, string Status, GuardCheck[] Checks, string[] Summary);
 record GuardCheck(string Name, string Status, string Message, int? Before, int? After);
+
+record DoctorReport(DateTimeOffset GeneratedAtUtc, string Status, string InputPath, string InputKind, string[] ConfigLayers, string WorkspaceOutPath, DoctorCheck[] Checks, string[] RecommendedNextActions);
+record DoctorCheck(string Status, string Code, string Message, string? Location, string SuggestedAction);
+record SimpleProcessResult(int ExitCode, string StdOut, string StdErr);
 
 record CliOptions(string Mode, string Input, string Out, string? Config, string[] Configs, string Format, bool FailOnUnsupported, bool FailOnTodo, string Workspace, string? Before, string? After);

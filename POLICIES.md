@@ -2864,3 +2864,36 @@ dotnet run --project .\Migrator.Cli -- --mode bootstrap-project --input "<tests>
 - Для пилотных команд предпочтителен local tool manifest (`.config/dotnet-tools.json`), чтобы версия мигратора была закреплена в проекте.
 - Если пакет опубликован неудачно, не пытайся перетирать стабильную версию: выпускай новую preview-версию.
 
+
+# Milestone 7. Agent-first workflow
+
+Agent-first workflow является предпочтительным способом работы с мигратором на реальных проектах.
+
+Агент обязан:
+
+1. Читать `docs/agent-first-workflow.md` и `docs/agent-command-set.md` перед работой.
+2. Вести `migration/agent-state.md` и `migration/pre-stop-checklist.md`.
+3. Использовать только безопасный command set.
+4. После config/profile правок запускать `config-validate`, `migrate`/`verify-project`, `guard`, `config-diff`.
+5. Останавливать config-only итерации при generic blocker и создавать `migration/escalation-report.md`.
+6. Писать пользователю на русском и не вставлять сырые ответы подагентов.
+
+Агенту запрещено:
+
+- менять C# мигратора без явного разрешения;
+- менять source project;
+- вручную править generated `.cs`;
+- добавлять mappings без source truth;
+- продолжать config churn после выявления generic blocker;
+- публиковать NuGet/tool без разрешения пользователя.
+
+## Doctor / preflight
+
+Перед первой миграцией нового проекта или пакета тестов запускай preflight-проверку:
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode doctor --input "<tests>" --config "<profile.adapter.json>" --out "doctor" --format both
+```
+
+Режим ничего не меняет: он проверяет input, config layers, ближайший `.csproj`/`.sln`, `NuGet.config`, `Verification`, POM/source-truth кандидаты и доступность `dotnet`. Артефакты: `doctor-report.md/json` и `agent-doctor-next-task.md`. Подробности: `docs/doctor-mode.md`.
+

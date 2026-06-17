@@ -273,3 +273,38 @@ dotnet tool run selenium-pw-migrator -- --mode verify-project --input "Tests/Dis
 
 Подробнее: `docs/packaging-and-distribution.md` и `docs/tool-installation.md`.
 
+
+## Milestone 7: Agent-first workflow
+
+Мигратор теперь описан как agent-first toolkit: CLI остаётся движком, а агент становится основным интерфейсом для сложной миграции.
+
+Главные документы:
+
+- `docs/agent-first-workflow.md` — общий процесс работы агента;
+- `docs/agent-roles.md` — роли тестировщика, агента и разработчика;
+- `docs/agent-command-set.md` — безопасные команды агента;
+- `docs/agent-first-checklist.md` — чеклист перед стартом/остановкой;
+- `docs/escalation-reports.md` — шаблон эскалации разработчику;
+- `examples/agent-first/*.md` — готовые prompt-шаблоны для старта/возобновления/эскалации.
+
+Основной принцип:
+
+```text
+CLI генерирует и проверяет,
+agent ведёт итерацию,
+пользователь принимает решения,
+разработчик чинит generic blockers.
+```
+
+Агент по умолчанию работает через `adapter-config.json` / profiles и отчёты внутри `migration/`. C# мигратора, source project и generated `.cs` он не трогает без явного разрешения.
+
+## Doctor / preflight
+
+Перед первой миграцией нового проекта или пакета тестов запускай preflight-проверку:
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode doctor --input "<tests>" --config "<profile.adapter.json>" --out "doctor" --format both
+```
+
+Режим ничего не меняет: он проверяет input, config layers, ближайший `.csproj`/`.sln`, `NuGet.config`, `Verification`, POM/source-truth кандидаты и доступность `dotnet`. Артефакты: `doctor-report.md/json` и `agent-doctor-next-task.md`. Подробности: `docs/doctor-mode.md`.
+

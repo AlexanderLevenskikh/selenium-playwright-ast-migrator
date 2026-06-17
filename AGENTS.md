@@ -151,3 +151,39 @@ dotnet run --project .\Migrator.Cli -- --mode bootstrap-project --input "<tests>
 - для команд рекомендуй local tool manifest, а не global install;
 - публикуй preview-версии, пока CLI/config активно меняются.
 
+
+## Milestone 7: Agent-first workflow
+
+Для сложной миграции считай agent-first workflow основным пользовательским сценарием.
+
+Перед началом агент обязан прочитать:
+
+- `docs/agent-first-workflow.md`
+- `docs/agent-roles.md`
+- `docs/agent-command-set.md`
+- `docs/agent-first-checklist.md`
+- `docs/escalation-reports.md`
+- `docs/agent-playbooks/run-agent-migration-iteration.md`
+- `docs/agent-playbooks/escalate-to-developer.md`
+- `docs/agent-playbooks/reuse-existing-profile.md`
+- `docs/agent-playbooks/runtime-smoke-one-test.md`
+
+Правило ролей:
+
+- project-specific знания — в config/profile;
+- временные выводы и состояние — в `migration/`;
+- generic механика — в C# мигратора только после явного разрешения;
+- все user-facing отчёты — на русском.
+
+Если агент упирается в generic blocker, он не должен продолжать config churn. Нужно создать `migration/escalation-report.md` по `docs/escalation-reports.md`.
+
+## Doctor / preflight
+
+Перед первой миграцией нового проекта или пакета тестов запускай preflight-проверку:
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode doctor --input "<tests>" --config "<profile.adapter.json>" --out "doctor" --format both
+```
+
+Режим ничего не меняет: он проверяет input, config layers, ближайший `.csproj`/`.sln`, `NuGet.config`, `Verification`, POM/source-truth кандидаты и доступность `dotnet`. Артефакты: `doctor-report.md/json` и `agent-doctor-next-task.md`. Подробности: `docs/doctor-mode.md`.
+
