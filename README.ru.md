@@ -153,3 +153,22 @@ dotnet publish Migrator.Cli -c Release -o ./publish
 Локальные переменные, объявленные active `TargetStatements`, renderer регистрирует автоматически в рамках текущего метода. Их не нужно и нельзя вести глобальным списком в config.
 
 Подробнее: `docs/agent-config-guidelines.md`.
+
+## POM-index first
+
+Перед массовым заполнением `adapter-config.json` по PageObject'ам используй режим `index-pom`:
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode index-pom --input "<Selenium project or PageObject directory>" --out "pom-index" --format both
+```
+
+Читать подробности: `docs/pom-indexing.md`.
+
+Правило: найденные POM-факты являются source truth, а `inferred-pom-candidates.json` — только черновик. Inferred candidates нельзя автоматически переносить в `adapter-config.json`: сначала найти POM/helper/source truth или спросить разработчика.
+
+## Project-aware verify
+
+Для настоящей компиляции generated Playwright-кода используй режим `verify-project`, а не только standalone `verify`. Он создаёт временный `.csproj` в `--out/project-verify`, подключает generated-файлы и project/package references из `adapter-config.json` (`Verification`). Исходный проект не меняется. Подробнее: `docs/project-verification.md`.
+
+Агенту запрещено руками копировать generated files в продуктовый проект или править source project ради зелёной проверки. Если не хватает ссылок на инфраструктуру, добавляй их в `Verification.ProjectReferences` / `Verification.PackageReferences`.
+

@@ -128,3 +128,16 @@ Renderer must not contain project-specific symbol knowledge. Project/domain symb
 The renderer also maintains method-scoped target locals. When an active target statement declares a local variable, the renderer registers it for downstream safety checks inside the same method. This is generic symbol-table mechanics; it is not adapter/project knowledge.
 
 Config owns the knowledge. Renderer owns only scope tracking and safe rendering mechanics.
+
+## POM-index first
+
+Перед массовым заполнением `adapter-config.json` по PageObject'ам используй режим `index-pom`:
+
+```powershell
+dotnet run --project .\Migrator.Cli -- --mode index-pom --input "<Selenium project or PageObject directory>" --out "pom-index" --format both
+```
+
+Читать подробности: `docs/pom-indexing.md`.
+
+Правило: найденные POM-факты являются source truth, а `inferred-pom-candidates.json` — только черновик. Inferred candidates нельзя автоматически переносить в `adapter-config.json`: сначала найти POM/helper/source truth или спросить разработчика.
+

@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Diagnostics;
+using System.Text;
 using Migrator.Core;
 using Migrator.Core.Models;
 using Migrator.PlaywrightDotNet;
@@ -72,6 +74,13 @@ if (mode == "discover-target")
     return discoverExitCode;
 }
 
+// Handle index-pom mode — scans Selenium PageObjects/source truth and produces reviewable POM facts.
+if (mode == "index-pom")
+{
+    var indexPomExitCode = RunIndexPom(inputPath, outPath, format);
+    return indexPomExitCode;
+}
+
 // Handle scaffold mode — generates a minimal, compile-ready Playwright .NET test project
 if (mode == "scaffold")
 {
@@ -122,6 +131,14 @@ switch (mode)
             var verifyConfig = configPath != null ? ConfigValidator.ValidateJson(File.ReadAllText(configPath), configPath) : null;
             var verifyAdapter = adapter as DefaultProjectAdapter;
             var verifyExitCode = RunVerify(summary, outPath, format, resultsList, verifyConfig, verifyAdapter);
+            if (verifyExitCode != 0)
+                return verifyExitCode;
+        }
+        break;
+    case "verify-project":
+        {
+            var verifyConfig = configPath != null ? ConfigValidator.ValidateJson(File.ReadAllText(configPath), configPath) : new ProjectAdapterConfig();
+            var verifyExitCode = RunVerifyProject(summary, outPath, format, resultsList, verifyConfig, configPath, inputPath);
             if (verifyExitCode != 0)
                 return verifyExitCode;
         }
@@ -243,6 +260,364 @@ static int RunVerify(MigrationSummaryReport summary, string outPath, string form
     // Apply quality gates for exit code
     return VerifyRunner.ApplyQualityGates(report, config?.QualityGates, report.Issues);
 }
+
+static int RunVerifyProject(MigrationSummaryReport summary, string outPath, string format, List<PipelineResult> results, ProjectAdapterConfig config, string? configPath, string inputPath)
+{
+    Directory.CreateDirectory(outPath);
+
+    Console.WriteLine("=== Verify Project Mode ===");
+    Console.WriteLine("Creates a temporary verification project and runs dotnet build. Source project files are not modified.");
+    Console.WriteLine();
+
+    var generatedDir = Path.Combine(outPath, "generated");
+    var harnessDir = Path.Combine(outPath, "project-verify");
+    Directory.CreateDirectory(generatedDir);
+    Directory.CreateDirectory(harnessDir);
+
+    var writtenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var generatedFiles = new List<string>();
+    foreach (var result in results)
+    {
+        var baseName = $"{result.SourceModel.ClassName}Playwright.cs";
+        var outName = ResolveFileName(generatedDir, baseName, writtenNames);
+        var fullOut = Path.Combine(generatedDir, outName);
+        File.WriteAllText(fullOut, result.GeneratedOutput);
+        generatedFiles.Add(fullOut);
+    }
+
+    var verification = config.Verification ?? new VerificationConfig();
+    var baseDir = ResolveVerificationBaseDirectory(verification, configPath, inputPath);
+    var projectReferences = ResolveProjectReferences(verification, baseDir, inputPath).ToList();
+    var assemblyReferences = ResolvePathList(verification.AssemblyReferences, baseDir).ToList();
+    var packageReferences = BuildPackageReferences(verification).ToList();
+
+    var csprojPath = Path.Combine(harnessDir, "Generated.Playwright.Verify.csproj");
+    File.WriteAllText(csprojPath, BuildVerificationCsproj(
+        verification,
+        generatedDir,
+        projectReferences,
+        assemblyReferences,
+        packageReferences));
+
+    var buildResult = RunDotnetBuild(csprojPath, verification);
+    var report = new ProjectVerifyReport(
+        GeneratedAtUtc: DateTimeOffset.UtcNow,
+        Status: buildResult.ExitCode == 0 ? "passed" : "failed",
+        ExitCode: buildResult.ExitCode,
+        GeneratedFiles: generatedFiles.Select(Path.GetFullPath).ToArray(),
+        HarnessProject: Path.GetFullPath(csprojPath),
+        ProjectReferences: projectReferences.Select(Path.GetFullPath).ToArray(),
+        AssemblyReferences: assemblyReferences.Select(Path.GetFullPath).ToArray(),
+        PackageReferences: packageReferences.ToArray(),
+        Command: buildResult.Command,
+        StdOut: buildResult.StdOut,
+        StdErr: buildResult.StdErr,
+        Diagnostics: ExtractBuildDiagnostics(buildResult.StdOut + "\n" + buildResult.StdErr));
+
+    File.WriteAllText(Path.Combine(outPath, "project-verify-report.json"),
+        System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    File.WriteAllText(Path.Combine(outPath, "project-verify-report.md"), WriteProjectVerifyMarkdown(report));
+
+    PrintSummary(summary with { GeneratedFiles = generatedFiles.Count });
+    Console.WriteLine();
+    Console.WriteLine("=== Project Verify Summary ===");
+    Console.WriteLine($"Status: {report.Status.ToUpperInvariant()}");
+    Console.WriteLine($"Generated files: {report.GeneratedFiles.Length}");
+    Console.WriteLine($"Harness project: {report.HarnessProject}");
+    Console.WriteLine($"Project references: {report.ProjectReferences.Length}");
+    Console.WriteLine($"Package references: {report.PackageReferences.Length}");
+    Console.WriteLine($"Diagnostics: {report.Diagnostics.Length}");
+    if (report.Diagnostics.Length > 0)
+    {
+        foreach (var diagnostic in report.Diagnostics.Take(30))
+            Console.WriteLine($"  {diagnostic}");
+        if (report.Diagnostics.Length > 30)
+            Console.WriteLine($"  ... and {report.Diagnostics.Length - 30} more");
+    }
+    Console.WriteLine($"Project verify reports written to: {Path.GetFullPath(outPath)}");
+
+    return report.ExitCode == 0 ? 0 : 2;
+}
+
+static string ResolveVerificationBaseDirectory(VerificationConfig verification, string? configPath, string inputPath)
+{
+    if (!string.IsNullOrWhiteSpace(verification.BaseDirectory))
+        return Path.GetFullPath(verification.BaseDirectory);
+
+    if (!string.IsNullOrWhiteSpace(configPath))
+        return Path.GetDirectoryName(Path.GetFullPath(configPath)) ?? Directory.GetCurrentDirectory();
+
+    if (Directory.Exists(inputPath))
+        return Path.GetFullPath(inputPath);
+
+    return Path.GetDirectoryName(Path.GetFullPath(inputPath)) ?? Directory.GetCurrentDirectory();
+}
+
+static IEnumerable<string> ResolveProjectReferences(VerificationConfig verification, string baseDir, string inputPath)
+{
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    foreach (var path in ResolvePathList(verification.ProjectReferences, baseDir))
+    {
+        if (seen.Add(path))
+            yield return path;
+    }
+
+    var autoDiscover = verification.AutoDiscoverNearestProject ?? true;
+    if (!autoDiscover || seen.Count > 0)
+        yield break;
+
+    var nearest = FindNearestCsproj(inputPath);
+    if (nearest != null && seen.Add(nearest))
+        yield return nearest;
+}
+
+static IEnumerable<string> ResolvePathList(IEnumerable<string> paths, string baseDir)
+{
+    foreach (var path in paths)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            continue;
+
+        var normalized = Environment.ExpandEnvironmentVariables(path.Trim());
+        var fullPath = Path.IsPathRooted(normalized)
+            ? Path.GetFullPath(normalized)
+            : Path.GetFullPath(Path.Combine(baseDir, normalized));
+        yield return fullPath;
+    }
+}
+
+static string? FindNearestCsproj(string inputPath)
+{
+    var start = File.Exists(inputPath)
+        ? Path.GetDirectoryName(Path.GetFullPath(inputPath))
+        : Path.GetFullPath(inputPath);
+
+    var dir = new DirectoryInfo(start ?? Directory.GetCurrentDirectory());
+    while (dir != null)
+    {
+        var projects = dir.GetFiles("*.csproj", SearchOption.TopDirectoryOnly)
+            .Where(p => !p.FullName.Replace('\\', '/').Contains("/bin/", StringComparison.OrdinalIgnoreCase)
+                     && !p.FullName.Replace('\\', '/').Contains("/obj/", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (projects.Length == 1)
+            return projects[0].FullName;
+
+        if (projects.Length > 1)
+        {
+            // Prefer a project whose name matches the input directory when there are several siblings.
+            var inputName = new DirectoryInfo(start ?? dir.FullName).Name;
+            var preferred = projects.FirstOrDefault(p => Path.GetFileNameWithoutExtension(p.Name).Equals(inputName, StringComparison.OrdinalIgnoreCase));
+            return (preferred ?? projects[0]).FullName;
+        }
+
+        dir = dir.Parent;
+    }
+
+    return null;
+}
+
+static IEnumerable<PackageReferenceConfig> BuildPackageReferences(VerificationConfig verification)
+{
+    var result = new List<PackageReferenceConfig>();
+    if (verification.DisableDefaultPackageReferences != true)
+    {
+        result.Add(new PackageReferenceConfig { Include = "Microsoft.Playwright.NUnit", Version = "1.52.0" });
+        result.Add(new PackageReferenceConfig { Include = "NUnit", Version = "3.14.0" });
+    }
+
+    var byInclude = new Dictionary<string, PackageReferenceConfig>(StringComparer.OrdinalIgnoreCase);
+    foreach (var package in result.Concat(verification.PackageReferences))
+    {
+        if (string.IsNullOrWhiteSpace(package.Include) || string.IsNullOrWhiteSpace(package.Version))
+            continue;
+        byInclude[package.Include.Trim()] = new PackageReferenceConfig
+        {
+            Include = package.Include.Trim(),
+            Version = package.Version.Trim()
+        };
+    }
+
+    return byInclude.Values.OrderBy(p => p.Include, StringComparer.OrdinalIgnoreCase);
+}
+
+static string BuildVerificationCsproj(
+    VerificationConfig verification,
+    string generatedDir,
+    IReadOnlyList<string> projectReferences,
+    IReadOnlyList<string> assemblyReferences,
+    IReadOnlyList<PackageReferenceConfig> packageReferences)
+{
+    var targetFramework = string.IsNullOrWhiteSpace(verification.TargetFramework) ? "net8.0" : verification.TargetFramework!.Trim();
+    var configuration = string.IsNullOrWhiteSpace(verification.Configuration) ? "Debug" : verification.Configuration!.Trim();
+    var generatedGlob = Path.Combine(generatedDir, "**", "*.cs");
+
+    var sb = new StringBuilder();
+    sb.AppendLine("<Project Sdk=\"Microsoft.NET.Sdk\">");
+    sb.AppendLine("  <PropertyGroup>");
+    sb.AppendLine($"    <TargetFramework>{EscapeXml(targetFramework)}</TargetFramework>");
+    sb.AppendLine("    <IsPackable>false</IsPackable>");
+    sb.AppendLine("    <Nullable>enable</Nullable>");
+    sb.AppendLine("    <ImplicitUsings>enable</ImplicitUsings>");
+    sb.AppendLine("    <LangVersion>latest</LangVersion>");
+    sb.AppendLine("    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>");
+    sb.AppendLine("  </PropertyGroup>");
+    sb.AppendLine();
+    sb.AppendLine("  <ItemGroup>");
+    sb.AppendLine($"    <Compile Include=\"{EscapeXml(generatedGlob)}\" />");
+    sb.AppendLine("  </ItemGroup>");
+
+    if (packageReferences.Count > 0)
+    {
+        sb.AppendLine();
+        sb.AppendLine("  <ItemGroup>");
+        foreach (var p in packageReferences)
+            sb.AppendLine($"    <PackageReference Include=\"{EscapeXml(p.Include)}\" Version=\"{EscapeXml(p.Version)}\" />");
+        sb.AppendLine("  </ItemGroup>");
+    }
+
+    if (projectReferences.Count > 0)
+    {
+        sb.AppendLine();
+        sb.AppendLine("  <ItemGroup>");
+        foreach (var r in projectReferences)
+            sb.AppendLine($"    <ProjectReference Include=\"{EscapeXml(r)}\" />");
+        sb.AppendLine("  </ItemGroup>");
+    }
+
+    if (assemblyReferences.Count > 0)
+    {
+        sb.AppendLine();
+        sb.AppendLine("  <ItemGroup>");
+        foreach (var r in assemblyReferences)
+        {
+            var name = Path.GetFileNameWithoutExtension(r);
+            sb.AppendLine($"    <Reference Include=\"{EscapeXml(name)}\">");
+            sb.AppendLine($"      <HintPath>{EscapeXml(r)}</HintPath>");
+            sb.AppendLine("    </Reference>");
+        }
+        sb.AppendLine("  </ItemGroup>");
+    }
+
+    sb.AppendLine("</Project>");
+    return sb.ToString();
+}
+
+static DotnetBuildResult RunDotnetBuild(string csprojPath, VerificationConfig verification)
+{
+    var args = new List<string>
+    {
+        "build",
+        csprojPath,
+        "-v:minimal",
+        $"-c:{(string.IsNullOrWhiteSpace(verification.Configuration) ? "Debug" : verification.Configuration!.Trim())}"
+    };
+
+    if (verification.NoRestore == true)
+        args.Add("--no-restore");
+
+    if (!string.IsNullOrWhiteSpace(verification.RuntimeIdentifier))
+    {
+        args.Add("-r");
+        args.Add(verification.RuntimeIdentifier!.Trim());
+    }
+
+    var psi = new ProcessStartInfo
+    {
+        FileName = "dotnet",
+        RedirectStandardOutput = true,
+        RedirectStandardError = true,
+        UseShellExecute = false,
+        CreateNoWindow = true
+    };
+    foreach (var arg in args)
+        psi.ArgumentList.Add(arg);
+
+    try
+    {
+        using var process = Process.Start(psi);
+        if (process == null)
+            return new DotnetBuildResult(127, "dotnet " + string.Join(" ", args.Select(QuoteArg)), "", "Failed to start dotnet process.");
+
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        return new DotnetBuildResult(process.ExitCode, "dotnet " + string.Join(" ", args.Select(QuoteArg)), stdout, stderr);
+    }
+    catch (Exception ex)
+    {
+        return new DotnetBuildResult(127, "dotnet " + string.Join(" ", args.Select(QuoteArg)), "", ex.Message);
+    }
+}
+
+static string[] ExtractBuildDiagnostics(string text)
+{
+    return text.Replace("\r\n", "\n")
+        .Split('\n')
+        .Where(line => line.Contains(": error ", StringComparison.OrdinalIgnoreCase)
+                    || line.Contains(": warning ", StringComparison.OrdinalIgnoreCase)
+                    || System.Text.RegularExpressions.Regex.IsMatch(line, @"\bCS\d{4}\b"))
+        .Select(line => line.Trim())
+        .Where(line => line.Length > 0)
+        .Distinct(StringComparer.Ordinal)
+        .ToArray();
+}
+
+static string WriteProjectVerifyMarkdown(ProjectVerifyReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Project Verify Report");
+    sb.AppendLine();
+    sb.AppendLine($"- **Generated**: {report.GeneratedAtUtc:yyyy-MM-dd HH:mm:ss zzz}");
+    sb.AppendLine($"- **Status**: `{report.Status}`");
+    sb.AppendLine($"- **Exit code**: `{report.ExitCode}`");
+    sb.AppendLine($"- **Harness project**: `{report.HarnessProject}`");
+    sb.AppendLine($"- **Command**: `{report.Command}`");
+    sb.AppendLine();
+    sb.AppendLine("## Project references");
+    foreach (var r in report.ProjectReferences)
+        sb.AppendLine($"- `{r}`");
+    if (report.ProjectReferences.Length == 0)
+        sb.AppendLine("- none");
+    sb.AppendLine();
+    sb.AppendLine("## Package references");
+    foreach (var p in report.PackageReferences)
+        sb.AppendLine($"- `{p.Include}` `{p.Version}`");
+    if (report.PackageReferences.Length == 0)
+        sb.AppendLine("- none");
+    sb.AppendLine();
+    sb.AppendLine("## Diagnostics");
+    if (report.Diagnostics.Length == 0)
+    {
+        sb.AppendLine("No build diagnostics captured.");
+    }
+    else
+    {
+        foreach (var d in report.Diagnostics)
+            sb.AppendLine($"- {d}");
+    }
+    sb.AppendLine();
+    sb.AppendLine("## StdOut");
+    sb.AppendLine("```text");
+    sb.AppendLine(report.StdOut.TrimEnd());
+    sb.AppendLine("```");
+    if (!string.IsNullOrWhiteSpace(report.StdErr))
+    {
+        sb.AppendLine();
+        sb.AppendLine("## StdErr");
+        sb.AppendLine("```text");
+        sb.AppendLine(report.StdErr.TrimEnd());
+        sb.AppendLine("```");
+    }
+    return sb.ToString();
+}
+
+static string EscapeXml(string value) => System.Security.SecurityElement.Escape(value) ?? value;
+
+static string QuoteArg(string arg) => arg.Contains(' ') || arg.Contains('"')
+    ? "\"" + arg.Replace("\"", "\\\"") + "\""
+    : arg;
 
 static SyntaxCheckerDelegate CreateGeneratedCodeChecker()
 {
@@ -1068,6 +1443,386 @@ static int RunDiscoverTarget(string inputPath, string outPath, string? configPat
     return 0;
 }
 
+
+// --- POM index mode ---
+
+static int RunIndexPom(string inputPath, string outPath, string format)
+{
+    if (!Directory.Exists(inputPath) && !File.Exists(inputPath))
+    {
+        Console.Error.WriteLine($"POM index input not found: {inputPath}");
+        return 2;
+    }
+
+    var inputBaseDir = Directory.Exists(inputPath)
+        ? inputPath
+        : Path.GetDirectoryName(Path.GetFullPath(inputPath)) ?? Directory.GetCurrentDirectory();
+
+    var files = File.Exists(inputPath)
+        ? new[] { inputPath }
+        : Directory.GetFiles(inputPath, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !IsGeneratedOrBuildArtifact(f))
+            .ToArray();
+
+    Directory.CreateDirectory(outPath);
+
+    var facts = new List<PomFact>();
+    var usages = new Dictionary<string, PomUsageCandidate>(StringComparer.OrdinalIgnoreCase);
+
+    foreach (var file in files)
+    {
+        var text = File.ReadAllText(file);
+        var relativeFile = Path.GetRelativePath(inputBaseDir, file);
+        var className = FindFirstMatch(text, @"\bclass\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)") ?? Path.GetFileNameWithoutExtension(file);
+
+        facts.AddRange(ExtractPomFacts(text, relativeFile, className));
+        foreach (var usage in ExtractPomUsages(text, relativeFile))
+        {
+            if (!usages.TryGetValue(usage.SourceExpression, out var existing))
+                usages[usage.SourceExpression] = usage;
+            else
+                usages[usage.SourceExpression] = existing with { Usages = existing.Usages + usage.Usages };
+        }
+    }
+
+    var factExpressions = new HashSet<string>(facts.Select(f => f.SourceExpression), StringComparer.OrdinalIgnoreCase);
+    var inferred = usages.Values
+        .Where(u => !factExpressions.Contains(u.SourceExpression))
+        .OrderByDescending(u => u.Usages)
+        .ThenBy(u => u.SourceExpression, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    var index = new PomIndexReport(
+        GeneratedAtUtc: DateTimeOffset.UtcNow,
+        InputPath: Path.GetFullPath(inputPath),
+        FilesScanned: files.Length,
+        Facts: facts.OrderBy(f => f.SourceExpression, StringComparer.OrdinalIgnoreCase).ToArray(),
+        InferredCandidates: inferred,
+        Warnings: BuildPomIndexWarnings(facts, inferred));
+
+    var jsonOptions = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+
+    if (format == "json" || format == "both")
+    {
+        File.WriteAllText(Path.Combine(outPath, "pom-index.generated.json"), System.Text.Json.JsonSerializer.Serialize(index, jsonOptions));
+        File.WriteAllText(Path.Combine(outPath, "inferred-pom-candidates.json"), System.Text.Json.JsonSerializer.Serialize(inferred, jsonOptions));
+    }
+
+    if (format == "text" || format == "both")
+    {
+        File.WriteAllText(Path.Combine(outPath, "pom-index.generated.md"), WritePomIndexMarkdown(index));
+    }
+
+    File.WriteAllText(Path.Combine(outPath, "adapter-config.pom-draft.json"), WritePomAdapterDraft(index));
+
+    Console.WriteLine("=== POM Index ===");
+    Console.WriteLine($"Files scanned: {files.Length}");
+    Console.WriteLine($"POM facts: {facts.Count}");
+    Console.WriteLine($"Inferred candidates requiring review: {inferred.Length}");
+    Console.WriteLine($"Written to: {Path.GetFullPath(outPath)}");
+    Console.WriteLine("Important: adapter-config.pom-draft.json is review-only. Do not auto-merge inferred candidates without source truth.");
+
+    return 0;
+}
+
+static bool IsGeneratedOrBuildArtifact(string path)
+{
+    var normalized = path.Replace('\\', '/');
+    return normalized.Contains("/bin/", StringComparison.OrdinalIgnoreCase)
+        || normalized.Contains("/obj/", StringComparison.OrdinalIgnoreCase)
+        || normalized.Contains("/generated/", StringComparison.OrdinalIgnoreCase)
+        || normalized.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase)
+        || normalized.EndsWith(".Designer.cs", StringComparison.OrdinalIgnoreCase);
+}
+
+static IEnumerable<PomFact> ExtractPomFacts(string text, string file, string className)
+{
+    var facts = new List<PomFact>();
+    var lines = text.Replace("\r\n", "\n").Split('\n');
+
+    // Properties/methods returning a wrapper initialized with By.CssSelector/By.XPath/By.Id/etc.
+    var propertyRegex = new System.Text.RegularExpressions.Regex(
+        """
+        (?<type>[A-Za-z_][A-Za-z0-9_<>]*)\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?:=>|\{\s*get\s*\{\s*return)\s*new\s+[A-Za-z_][A-Za-z0-9_<>]*\s*\([^;\n]*?By\.(?<by>CssSelector|XPath|Id|Name|ClassName|TagName)\s*\(\s*@?(?<quote>["'])(?<selector>.*?)(?<!\\)\k<quote>
+        """,
+        System.Text.RegularExpressions.RegexOptions.IgnorePatternWhitespace | System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    foreach (System.Text.RegularExpressions.Match m in propertyRegex.Matches(text))
+    {
+        var name = m.Groups["name"].Value;
+        var selector = m.Groups["selector"].Value;
+        var by = m.Groups["by"].Value;
+        facts.Add(new PomFact(
+            SourceExpression: $"{className}.{name}",
+            OwnerType: className,
+            MemberName: name,
+            MemberKind: "PropertyOrMethod",
+            Selector: selector,
+            SelectorKind: by,
+            TargetKindSuggestion: SuggestTargetKind(selector, by),
+            TargetExpressionSuggestion: SuggestTargetExpressionFromSelector(selector, name),
+            SourceFile: file,
+            SourceLine: GetLineNumber(text, m.Index),
+            Confidence: "high",
+            RequiresReview: false,
+            Notes: "Found explicit Selenium By selector in POM."));
+    }
+
+    // Common data-tid/data-test constants or expression-bodied properties returning string selectors.
+    var tidRegex = new System.Text.RegularExpressions.Regex(
+        """
+        (?<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?:=>|=)\s*@?(?<quote>["'])(?<selector>\[[^\]\n]*(?:data-tid|data-test|data-testid|data-test-id)[^\]\n]*\])\k<quote>
+        """,
+        System.Text.RegularExpressions.RegexOptions.IgnorePatternWhitespace | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    foreach (System.Text.RegularExpressions.Match m in tidRegex.Matches(text))
+    {
+        var name = m.Groups["name"].Value;
+        var selector = m.Groups["selector"].Value;
+        if (facts.Any(f => f.OwnerType == className && f.MemberName == name && f.Selector == selector))
+            continue;
+        facts.Add(new PomFact(
+            SourceExpression: $"{className}.{name}",
+            OwnerType: className,
+            MemberName: name,
+            MemberKind: "SelectorConstantOrProperty",
+            Selector: selector,
+            SelectorKind: "CssSelector",
+            TargetKindSuggestion: SuggestTargetKind(selector, "CssSelector"),
+            TargetExpressionSuggestion: SuggestTargetExpressionFromSelector(selector, name),
+            SourceFile: file,
+            SourceLine: GetLineNumber(text, m.Index),
+            Confidence: "medium",
+            RequiresReview: true,
+            Notes: "Found selector-like string. Review whether it is a POM target or helper constant."));
+    }
+
+    return facts;
+}
+
+static IEnumerable<PomUsageCandidate> ExtractPomUsages(string text, string file)
+{
+    var candidates = new Dictionary<string, PomUsageCandidate>(StringComparer.OrdinalIgnoreCase);
+    var usageRegex = new System.Text.RegularExpressions.Regex(
+        @"\b(?<root>page|pagef|lightbox|modal|dialog|popup|[a-z][A-Za-z0-9_]*Page)\.(?<member>[A-Z][A-Za-z0-9_]*)\b",
+        System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    foreach (System.Text.RegularExpressions.Match m in usageRegex.Matches(StripCommentsAndStringsForPomUsage(text)))
+    {
+        var source = $"{m.Groups["root"].Value}.{m.Groups["member"].Value}";
+        if (!candidates.TryGetValue(source, out var existing))
+        {
+            candidates[source] = new PomUsageCandidate(
+                SourceExpression: source,
+                SuggestedTargetExpression: m.Groups["member"].Value,
+                SuggestedTargetKind: "TestId",
+                Usages: 1,
+                ExampleFile: file,
+                ExampleLine: GetLineNumber(text, m.Index),
+                Confidence: "low",
+                RequiresSourceTruth: true,
+                Notes: "No explicit POM selector fact found in scanned files. This is an inferred candidate, not source truth.");
+        }
+        else
+        {
+            candidates[source] = existing with { Usages = existing.Usages + 1 };
+        }
+    }
+
+    return candidates.Values;
+}
+
+static string StripCommentsAndStringsForPomUsage(string text)
+{
+    var sb = new System.Text.StringBuilder(text);
+    bool inString = false;
+    char quote = '\0';
+    bool inLineComment = false;
+    bool inBlockComment = false;
+
+    for (int i = 0; i < sb.Length; i++)
+    {
+        var c = sb[i];
+        var next = i + 1 < sb.Length ? sb[i + 1] : '\0';
+
+        if (inLineComment)
+        {
+            if (c == '\n') inLineComment = false;
+            else sb[i] = ' ';
+            continue;
+        }
+
+        if (inBlockComment)
+        {
+            if (c == '*' && next == '/')
+            {
+                sb[i] = ' ';
+                sb[i + 1] = ' ';
+                i++;
+                inBlockComment = false;
+            }
+            else if (c != '\n') sb[i] = ' ';
+            continue;
+        }
+
+        if (inString)
+        {
+            if (c == quote && (i == 0 || text[i - 1] != '\\'))
+                inString = false;
+            if (c != '\n') sb[i] = ' ';
+            continue;
+        }
+
+        if (c == '/' && next == '/')
+        {
+            sb[i] = ' ';
+            sb[i + 1] = ' ';
+            i++;
+            inLineComment = true;
+            continue;
+        }
+
+        if (c == '/' && next == '*')
+        {
+            sb[i] = ' ';
+            sb[i + 1] = ' ';
+            i++;
+            inBlockComment = true;
+            continue;
+        }
+
+        if (c == '\"' || c == '\'')
+        {
+            quote = c;
+            sb[i] = ' ';
+            inString = true;
+        }
+    }
+    return sb.ToString();
+}
+
+static string? FindFirstMatch(string text, string pattern)
+{
+    var m = System.Text.RegularExpressions.Regex.Match(text, pattern);
+    return m.Success ? m.Groups["name"].Value : null;
+}
+
+static int GetLineNumber(string text, int index)
+{
+    var line = 1;
+    for (int i = 0; i < Math.Min(index, text.Length); i++)
+        if (text[i] == '\n') line++;
+    return line;
+}
+
+static string SuggestTargetKind(string selector, string selectorKind)
+{
+    if (selectorKind == "XPath") return "Css";
+    if (selector.Contains("data-tid", StringComparison.OrdinalIgnoreCase)
+        || selector.Contains("data-test", StringComparison.OrdinalIgnoreCase)
+        || selector.Contains("data-testid", StringComparison.OrdinalIgnoreCase)
+        || selector.Contains("data-test-id", StringComparison.OrdinalIgnoreCase))
+        return "TestId";
+    return selectorKind == "Id" ? "TestId" : "Css";
+}
+
+static string SuggestTargetExpressionFromSelector(string selector, string fallback)
+{
+    var m = System.Text.RegularExpressions.Regex.Match(selector, """data-(?:tid|test|testid|test-id)['"\]\s]*[=]['"\s]*(?<value>[^'"\]]+)""", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    if (m.Success) return m.Groups["value"].Value;
+
+    m = System.Text.RegularExpressions.Regex.Match(selector, @"#(?<id>[A-Za-z_][A-Za-z0-9_-]*)");
+    if (m.Success) return m.Groups["id"].Value;
+
+    return fallback;
+}
+
+static string[] BuildPomIndexWarnings(IReadOnlyList<PomFact> facts, IReadOnlyList<PomUsageCandidate> inferred)
+{
+    var warnings = new List<string>();
+    if (facts.Count == 0)
+        warnings.Add("No explicit Selenium By selector facts were found. Check input path: it may point only to tests without PageObjects.");
+    if (inferred.Count > 0)
+        warnings.Add($"{inferred.Count} inferred POM candidates were found without source-truth selectors. They require human/developer review before becoming adapter mappings.");
+    return warnings.ToArray();
+}
+
+static string WritePomIndexMarkdown(PomIndexReport index)
+{
+    var sb = new System.Text.StringBuilder();
+    sb.AppendLine("# POM index generated report");
+    sb.AppendLine();
+    sb.AppendLine($"Input: `{index.InputPath}`");
+    sb.AppendLine($"Files scanned: {index.FilesScanned}");
+    sb.AppendLine($"Facts found: {index.Facts.Length}");
+    sb.AppendLine($"Inferred candidates requiring review: {index.InferredCandidates.Length}");
+    sb.AppendLine();
+
+    if (index.Warnings.Length > 0)
+    {
+        sb.AppendLine("## Warnings");
+        foreach (var w in index.Warnings)
+            sb.AppendLine($"- {w}");
+        sb.AppendLine();
+    }
+
+    sb.AppendLine("## Source-truth POM facts");
+    sb.AppendLine("| Source | Selector | Kind | File:Line | Confidence |");
+    sb.AppendLine("|---|---|---|---|---|");
+    foreach (var f in index.Facts.Take(200))
+        sb.AppendLine($"| `{f.SourceExpression}` | `{f.Selector}` | {f.TargetKindSuggestion} | `{f.SourceFile}:{f.SourceLine}` | {f.Confidence} |");
+    if (index.Facts.Length > 200)
+        sb.AppendLine($"| ... | ... | ... | ... | {index.Facts.Length - 200} more |");
+    sb.AppendLine();
+
+    sb.AppendLine("## Inferred candidates, not source truth");
+    sb.AppendLine("| Source | Suggested target | Usages | Example | Required action |");
+    sb.AppendLine("|---|---|---:|---|---|");
+    foreach (var c in index.InferredCandidates.Take(200))
+        sb.AppendLine($"| `{c.SourceExpression}` | `{c.SuggestedTargetExpression}` | {c.Usages} | `{c.ExampleFile}:{c.ExampleLine}` | Find POM/source truth or ask developer |");
+    if (index.InferredCandidates.Length > 200)
+        sb.AppendLine($"| ... | ... | ... | ... | {index.InferredCandidates.Length - 200} more |");
+
+    return sb.ToString();
+}
+
+static string WritePomAdapterDraft(PomIndexReport index)
+{
+    var highConfidence = index.Facts
+        .Where(f => !f.RequiresReview && !string.IsNullOrWhiteSpace(f.TargetExpressionSuggestion))
+        .Select(f => new
+        {
+            f.SourceExpression,
+            TargetExpression = f.TargetExpressionSuggestion,
+            TargetKind = f.TargetKindSuggestion,
+            SourceTruth = $"{f.SourceFile}:{f.SourceLine}"
+        })
+        .ToArray();
+
+    var reviewOnly = index.InferredCandidates
+        .Take(200)
+        .Select(c => new
+        {
+            c.SourceExpression,
+            TargetExpression = c.SuggestedTargetExpression,
+            TargetKind = c.SuggestedTargetKind,
+            c.Usages,
+            c.ExampleFile,
+            c.ExampleLine,
+            c.RequiresSourceTruth,
+            c.Notes
+        })
+        .ToArray();
+
+    var draft = new
+    {
+        Comment = "Review-only POM draft. Merge high-confidence UiTargets manually. InferredCandidates are NOT source truth and must not be auto-applied.",
+        UiTargets = highConfidence,
+        InferredCandidates = reviewOnly
+    };
+    return System.Text.Json.JsonSerializer.Serialize(draft, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+}
+
 // --- Orchestrate mode ---
 
 static int RunOrchestrate(string inputPath, string outPath, string? configPath, string format, ITestFileParser parser, IRenderer renderer, IProjectAdapter? adapter)
@@ -1627,7 +2382,7 @@ static CliOptions? ParseArgs(string[] args)
                     mode = args[++i];
                 else
                 {
-                    Console.Error.WriteLine("--mode requires a value: analyze|migrate|verify|propose");
+                    Console.Error.WriteLine("--mode requires a value: analyze|migrate|verify|verify-project|propose");
                     return null;
                 }
                 break;
@@ -1694,9 +2449,9 @@ static CliOptions? ParseArgs(string[] args)
         }
     }
 
-    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "propose" && mode != "discover-target" && mode != "orchestrate" && mode != "scaffold")
+    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "orchestrate" && mode != "scaffold")
     {
-        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|propose|discover-target|orchestrate|scaffold");
+        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|verify-project|propose|discover-target|index-pom|orchestrate|scaffold");
         return null;
     }
 
@@ -1714,8 +2469,10 @@ static CliOptions? ParseArgs(string[] args)
             "analyze" => "./migration-analysis",
             "migrate" => "./generated-tests",
             "verify" => "./migration-verify",
+            "verify-project" => "./migration-verify-project",
             "propose" => "./mapping-proposals",
             "discover-target" => "./target-discovery",
+            "index-pom" => "./pom-index",
             "orchestrate" => "./orchestration",
             "scaffold" => "./generated-scaffold",
             _ => "./migration-output"
@@ -1744,6 +2501,10 @@ Modes:
                     TODO/placeholder detection, config validation, scope matching,
                     and quality gate evaluation. Outputs verify-report.json and
                     verify-report.txt.
+  verify-project  Project-aware verification. Generates files into --out/generated,
+                    creates a temporary verification .csproj, adds project/package
+                    references from adapter-config Verification, and runs dotnet build.
+                    Does NOT modify source project files.
   propose         Analyze migration artifacts (reports, generated output) and
                     generate mapping proposals. Reads report.json, unmapped-targets.json,
                     unsupported-actions.json, verify-report.json. Outputs
@@ -1752,6 +2513,10 @@ Modes:
                     facts. Outputs target-inventory.json, target-style-notes.md,
                     adapter-config.draft.json, and discovery-warnings.txt.
                     Does NOT modify config. Collects facts only.
+  index-pom      Scan Selenium PageObjects/source files and collect source-truth facts.
+                    Outputs pom-index.generated.json/md, inferred-pom-candidates.json,
+                    and adapter-config.pom-draft.json. Does NOT modify config.
+                    Missing POMs are emitted as inferred candidates requiring review.
   orchestrate     Dry-run orchestration mode. Runs analyze → migrate → verify → propose
                      in sequence, writes stage artifacts into subdirectories, and produces
                      orchestration-report.md and orchestration-report.json. Does NOT modify
@@ -1763,11 +2528,15 @@ Modes:
 
 Options:
     --mode <mode>                 Operation mode (required)
-                                    analyze|migrate|verify|propose|discover-target|orchestrate|scaffold
+                                    analyze|migrate|verify|verify-project|propose|discover-target|index-pom|orchestrate|scaffold
     --input <file-or-directory>   Input .cs file or directory (required).
                                     For propose: directory with report files.
                                     For discover-target: target Playwright project root.
+                                    For index-pom: Selenium project/PageObject directory.
                                     For orchestrate: source Selenium tests directory.
+                                    For verify-project: source Selenium tests directory;
+                                      project refs come from adapter-config Verification
+                                      or nearest .csproj auto-discovery.
                                     For scaffold: not required.
    --out <output-directory>      Output directory (optional, auto-defaults)
    --config <adapter-config.json>  Adapter config for target mapping (optional)
@@ -1786,11 +2555,21 @@ Exit codes:
 Examples:
   Migrator.Cli --mode analyze --input ./OldTests --out ./analysis --format both
   Migrator.Cli --mode migrate --input ./OldTests --out ./Generated --config ./adapter-config.json
+  Migrator.Cli --mode verify-project --input ./OldTests --out ./project-verify --config ./adapter-config.json
   Migrator.Cli --mode propose --input ./Generated --config ./adapter-config.json --format both
    Migrator.Cli --mode discover-target --input ./team-playwright-tests --out ./target-discovery
+   Migrator.Cli --mode index-pom --input ./OldTests --out ./pom-index --format both
    Migrator.Cli --mode orchestrate --input ./OldTests --config ./adapter-config.json --out ./orchestration --format both
    Migrator.Cli --mode scaffold --out ./new-playwright-tests
 ");
 }
+
+
+record DotnetBuildResult(int ExitCode, string Command, string StdOut, string StdErr);
+record ProjectVerifyReport(DateTimeOffset GeneratedAtUtc, string Status, int ExitCode, string[] GeneratedFiles, string HarnessProject, string[] ProjectReferences, string[] AssemblyReferences, PackageReferenceConfig[] PackageReferences, string Command, string StdOut, string StdErr, string[] Diagnostics);
+
+record PomIndexReport(DateTimeOffset GeneratedAtUtc, string InputPath, int FilesScanned, PomFact[] Facts, PomUsageCandidate[] InferredCandidates, string[] Warnings);
+record PomFact(string SourceExpression, string OwnerType, string MemberName, string MemberKind, string Selector, string SelectorKind, string TargetKindSuggestion, string TargetExpressionSuggestion, string SourceFile, int SourceLine, string Confidence, bool RequiresReview, string Notes);
+record PomUsageCandidate(string SourceExpression, string SuggestedTargetExpression, string SuggestedTargetKind, int Usages, string ExampleFile, int ExampleLine, string Confidence, bool RequiresSourceTruth, string Notes);
 
 record CliOptions(string Mode, string Input, string Out, string? Config, string Format, bool FailOnUnsupported, bool FailOnTodo);

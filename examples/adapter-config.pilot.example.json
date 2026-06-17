@@ -75,5 +75,25 @@
       ],
       "RequiresReview": false
     }
-  ]
+  ],
+  "Verification": {
+    "TargetFramework": "net8.0",
+    "BaseDirectory": "TODO: path to source repo root",
+    "ProjectReferences": [
+      "TODO: relative/path/to/source-tests.csproj"
+    ],
+    "PackageReferences": [
+      {
+        "Include": "Microsoft.Playwright.NUnit",
+        "Version": "1.52.0"
+      },
+      {
+        "Include": "NUnit",
+        "Version": "3.14.0"
+      }
+    ],
+    "AutoDiscoverNearestProject": true,
+    "NoRestore": false,
+    "Configuration": "Debug"
+  }
 }

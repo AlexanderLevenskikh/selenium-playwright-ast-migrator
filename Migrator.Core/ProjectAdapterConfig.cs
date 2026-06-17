@@ -63,6 +63,15 @@ public sealed class ProjectAdapterConfig
     [JsonPropertyName("Scopes")]
     public ProfileScope[] Scopes { get; init; } = Array.Empty<ProfileScope>();
 
+
+    /// <summary>
+    /// Optional project-aware verification settings. Used by CLI mode verify-project to
+    /// compile generated Playwright files in a temporary .csproj with real project/package references.
+    /// This does not modify the source project.
+    /// </summary>
+    [JsonPropertyName("Verification")]
+    public VerificationConfig? Verification { get; init; }
+
     /// <summary>
     /// Optional quality gate settings for verify mode. Controls thresholds and fail conditions.
     /// When absent, soft defaults are used (warnings reported, but verify does not fail unexpectedly).
@@ -88,7 +97,7 @@ public sealed class ProjectAdapterConfig
     {
     }
 
-    public ProjectAdapterConfig(string SourceProjectName, UiTargetMapping[] UiTargets, PageObjectMapping[] PageObjects, MethodMapping[] Methods, LocatorSettings? LocatorSettings = null, TestHostConfig? TestHost = null, ParameterizedMethodMapping[]? ParameterizedMethods = null, ProfileScope[]? Scopes = null, QualityGatesConfig? QualityGates = null, TableConfig[]? Tables = null, PaginationConfig[]? Pagination = null, string[]? SourceOnlyIdentifiers = null, string[]? TargetKnownTypes = null, string[]? TargetKnownIdentifiers = null)
+    public ProjectAdapterConfig(string SourceProjectName, UiTargetMapping[] UiTargets, PageObjectMapping[] PageObjects, MethodMapping[] Methods, LocatorSettings? LocatorSettings = null, TestHostConfig? TestHost = null, ParameterizedMethodMapping[]? ParameterizedMethods = null, ProfileScope[]? Scopes = null, QualityGatesConfig? QualityGates = null, TableConfig[]? Tables = null, PaginationConfig[]? Pagination = null, string[]? SourceOnlyIdentifiers = null, string[]? TargetKnownTypes = null, string[]? TargetKnownIdentifiers = null, VerificationConfig? Verification = null)
     {
         this.SourceProjectName = SourceProjectName;
         this.UiTargets = UiTargets;
@@ -104,7 +113,80 @@ public sealed class ProjectAdapterConfig
         this.SourceOnlyIdentifiers = SourceOnlyIdentifiers ?? Array.Empty<string>();
         this.TargetKnownTypes = TargetKnownTypes ?? Array.Empty<string>();
         this.TargetKnownIdentifiers = TargetKnownIdentifiers ?? Array.Empty<string>();
+        this.Verification = Verification;
     }
+}
+
+/// <summary>
+/// Project-aware verification settings for CLI mode verify-project.
+/// The migrator creates a temporary .csproj under the output directory, includes generated files,
+/// adds the configured references, and runs dotnet build. The source project is never modified.
+/// </summary>
+public sealed class VerificationConfig
+{
+    /// <summary>
+    /// Target framework for the temporary verification project. Default: net8.0.
+    /// </summary>
+    public string? TargetFramework { get; init; }
+
+    /// <summary>
+    /// Optional base directory for resolving relative project/reference paths.
+    /// When absent, paths are resolved relative to the adapter config file directory, then current working directory.
+    /// </summary>
+    public string? BaseDirectory { get; init; }
+
+    /// <summary>
+    /// Project references to add to the temporary verification project.
+    /// Use this for test infrastructure projects such as ArBilling.Infrastructure or the source test csproj.
+    /// </summary>
+    public string[] ProjectReferences { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Package references needed by generated tests. Microsoft.Playwright.NUnit and NUnit are added by default
+    /// unless DisableDefaultPackageReferences is true.
+    /// </summary>
+    public PackageReferenceConfig[] PackageReferences { get; init; } = Array.Empty<PackageReferenceConfig>();
+
+    /// <summary>
+    /// Raw assembly references. Use only when ProjectReference/PackageReference is not possible.
+    /// </summary>
+    public string[] AssemblyReferences { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// If true, do not add default Playwright/NUnit packages to the temporary project.
+    /// </summary>
+    public bool? DisableDefaultPackageReferences { get; init; }
+
+    /// <summary>
+    /// If true, verify-project tries to find the nearest .csproj upward from --input and add it as a ProjectReference
+    /// when no ProjectReferences are configured. Default: true.
+    /// </summary>
+    public bool? AutoDiscoverNearestProject { get; init; }
+
+    /// <summary>
+    /// If true, dotnet build runs with --no-restore. Default: false.
+    /// </summary>
+    public bool? NoRestore { get; init; }
+
+    /// <summary>
+    /// Build configuration for dotnet build. Default: Debug.
+    /// </summary>
+    public string? Configuration { get; init; }
+
+    /// <summary>
+    /// Optional runtime identifier passed to dotnet build. Usually null.
+    /// </summary>
+    public string? RuntimeIdentifier { get; init; }
+
+    public VerificationConfig() { }
+}
+
+public sealed class PackageReferenceConfig
+{
+    public string Include { get; init; } = null!;
+    public string Version { get; init; } = null!;
+
+    public PackageReferenceConfig() { }
 }
 
 /// <summary>

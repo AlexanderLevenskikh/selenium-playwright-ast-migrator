@@ -32,6 +32,7 @@ public static class ConfigValidator
         ValidateParameterizedMethods(config.ParameterizedMethods, "ParameterizedMethods", errors);
         ValidateScopes(config.Scopes, errors);
         ValidateQualityGates(config.QualityGates, errors);
+        ValidateVerification(config.Verification, errors);
         ValidateTables(config.Tables, "Tables", errors);
         ValidatePagination(config.Pagination, "Pagination", errors);
         ValidateIdentifierList(config.SourceOnlyIdentifiers, "SourceOnlyIdentifiers", errors);
@@ -274,6 +275,41 @@ public static class ConfigValidator
 
         if (gates.MaxRawExpressions.HasValue && gates.MaxRawExpressions.Value < 0)
             errors.Add("QualityGates.MaxRawExpressions cannot be negative.");
+    }
+
+
+    private static void ValidateVerification(VerificationConfig? verification, List<string> errors)
+    {
+        if (verification == null) return;
+
+        if (!string.IsNullOrWhiteSpace(verification.TargetFramework) &&
+            !System.Text.RegularExpressions.Regex.IsMatch(verification.TargetFramework.Trim(), @"^net[0-9]+(\.[0-9]+)?([A-Za-z0-9.-]+)?$"))
+        {
+            errors.Add($"Verification.TargetFramework looks invalid: '{verification.TargetFramework}'. Example: net8.0.");
+        }
+
+        for (var i = 0; i < verification.ProjectReferences.Length; i++)
+        {
+            if (string.IsNullOrWhiteSpace(verification.ProjectReferences[i]))
+                errors.Add($"Verification.ProjectReferences[{i}] is empty.");
+            else if (!verification.ProjectReferences[i].EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
+                errors.Add($"Verification.ProjectReferences[{i}] should point to a .csproj file.");
+        }
+
+        for (var i = 0; i < verification.PackageReferences.Length; i++)
+        {
+            var package = verification.PackageReferences[i];
+            if (string.IsNullOrWhiteSpace(package.Include))
+                errors.Add($"Verification.PackageReferences[{i}].Include is missing.");
+            if (string.IsNullOrWhiteSpace(package.Version))
+                errors.Add($"Verification.PackageReferences[{i}].Version is missing.");
+        }
+
+        for (var i = 0; i < verification.AssemblyReferences.Length; i++)
+        {
+            if (string.IsNullOrWhiteSpace(verification.AssemblyReferences[i]))
+                errors.Add($"Verification.AssemblyReferences[{i}] is empty.");
+        }
     }
 
     private static void ValidateIdentifierList(string[] identifiers, string section, List<string> errors)
