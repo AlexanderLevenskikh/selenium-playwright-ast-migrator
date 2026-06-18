@@ -57,6 +57,92 @@ public class ParserTests
     }
 
     [Fact]
+    public void Parse_GenericInvocationLocalDeclaration_ProducesMethodInvocationAction()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-generic-nav-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file, @"
+namespace Sample.E2ETests
+{
+    public class BillDiscountTests
+    {
+        [Test]
+        public void OpenDiscounts()
+        {
+            var productChoosingPage = Browser.GoToPage<DiscountsProductChoosingPage>(DiscountsProductChoosingPage.Uri);
+        }
+    }
+}
+");
+
+        try
+        {
+            var model = _parser.Parse(file);
+            var test = model.Tests.Single();
+            var action = Assert.Single(test.BodyActions);
+            var method = Assert.IsType<MethodInvocationAction>(action);
+
+            Assert.Equal("Browser", method.ReceiverExpression);
+            Assert.Equal("GoToPage", method.MethodName);
+            Assert.Equal("Browser.GoToPage<DiscountsProductChoosingPage>(DiscountsProductChoosingPage.Uri)", method.FullSourceText);
+            Assert.Equal(new[] { "DiscountsProductChoosingPage.Uri" }, method.ArgumentTexts);
+            Assert.Equal(RecognitionConfidence.SyntaxFallback, method.Confidence);
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void ParameterizedMethods_MapGenericInvocationLocalDeclaration()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-generic-nav-map-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file, @"
+namespace Sample.E2ETests
+{
+    public class BillDiscountTests
+    {
+        [Test]
+        public void OpenDiscounts()
+        {
+            var productChoosingPage = Browser.GoToPage<DiscountsProductChoosingPage>(DiscountsProductChoosingPage.Uri);
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var config = new ProjectAdapterConfig(
+                "Test",
+                Array.Empty<UiTargetMapping>(),
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>(),
+                ParameterizedMethods: new[]
+                {
+                    new ParameterizedMethodMapping(
+                        "Browser.GoToPage<{T}>({url})",
+                        new[] { "await Navigation.GoToPageAsync<{T}>({url});" },
+                        requiresReview: false)
+                });
+
+            var adapter = new DefaultProjectAdapter(config);
+            var adapted = adapter.Adapt(sourceModel);
+            var mapped = Assert.IsType<MappedMethodInvocationAction>(adapted.Tests.Single().BodyActions.Single());
+
+            Assert.Equal("Browser.GoToPage<DiscountsProductChoosingPage>(DiscountsProductChoosingPage.Uri)", mapped.FullSourceText);
+            Assert.Equal("await Navigation.GoToPageAsync<DiscountsProductChoosingPage>(DiscountsProductChoosingPage.Uri);", mapped.TargetStatements.Single());
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    [Fact]
     public void Parse_ButtonTests_SetUp_OnFileLevel()
     {
         var model = _parser.Parse(Path.Combine(_testFilesDir, "ButtonTests.cs"));
@@ -66,7 +152,7 @@ public class ParserTests
             Assert.True(
                 a is ClickAction or MethodInvocationAction or SendKeysAction or
                 AssertThatAction or AssertAreEqualAction or UnsupportedAction or PageObjectFieldAction or
-                RawStatementAction,
+                WaitForAction or RawStatementAction,
                 $"Unknown action type: {a.GetType().Name}"));
     }
 
@@ -107,7 +193,9 @@ public class ParserTests
         var checkFilterSc = model.Tests.First(t => t.Name == "CheckFilterScToRegistry");
 
         Assert.Contains(checkFilterSc.BodyActions, a => a is MethodInvocationAction mi && mi.MethodName.Contains("InputAndSelect"));
-        Assert.Contains(checkFilterSc.BodyActions, a => a is MethodInvocationAction mi && mi.MethodName.Contains("ValidateLoading"));
+        Assert.Contains(checkFilterSc.BodyActions, a =>
+            a is MethodInvocationAction mi && mi.MethodName.Contains("ValidateLoading") ||
+            a is WaitForAction wait && wait.SourceMethod.Contains("ValidateLoading"));
         Assert.Contains(checkFilterSc.BodyActions, a => a is TextAssertionAction ta && ta.Kind == TextAssertionKind.TextContains);
     }
 
@@ -617,7 +705,9 @@ public class ParserTests
         var model = _parser.Parse(Path.Combine(_testFilesDir, "Widget.cs"));
         var test = model.Tests.First(t => t.Name == "CheckSearchToWidget");
 
-        var waitAction = test.BodyActions.OfType<WaitForAction>().FirstOrDefault();
+        var waitAction = test.BodyActions
+            .OfType<WaitForAction>()
+            .FirstOrDefault(a => a.SourceMethod == "WaitPresence");
         Assert.NotNull(waitAction);
         Assert.Equal("page.FuterUser", waitAction!.Target.SourceExpression);
     }

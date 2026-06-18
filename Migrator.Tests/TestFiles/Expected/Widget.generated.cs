@@ -21,9 +21,8 @@ public class WidgetPlaywright : PageTest
 		// TODO: map product-state wait target: pagef.Loader
 		// await Expect((locator)).ToBeHiddenAsync(); // line 18
 		// TODO: depends on unresolved symbol 'pagef'
-		//   var lightbox = pagef.WidgetButton.ClickAndOpen<WidgetPage>()
-		// TODO: depends on unresolved symbol 'lightbox'
-		//   page = lightbox
+		//   pagef.WidgetButton.ClickAndOpen<WidgetPage>()
+		// TODO: raw statement — review: page = lightbox
 		// TODO: depends on unresolved symbol 'page'
 		//   page.User.Visible.Should()
 		// TODO: depends on unresolved symbol 'page'

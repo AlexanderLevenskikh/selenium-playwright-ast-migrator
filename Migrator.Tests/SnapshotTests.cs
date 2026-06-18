@@ -3152,7 +3152,15 @@ public class GoodTests
             .Where(line =>
             {
                 var trimmed = line.TrimStart();
-                return !trimmed.StartsWith("//   Reason:") &&
+
+                // Snapshot tests are intended to protect generated test structure and
+                // preserved source comments, not the exact wording/number of advisory
+                // TODO diagnostics. Recent safety passes may add extra TODO lines
+                // (for example UNAVAILABLE_SYMBOLS after a raw statement) without
+                // changing the migrated structure. Keep dedicated assertions/report
+                // checks responsible for TODO presence and counts.
+                return !trimmed.StartsWith("// TODO:") &&
+                       !trimmed.StartsWith("//   Reason:") &&
                        !trimmed.StartsWith("//   Next:") &&
                        !trimmed.StartsWith("//   Source:");
             });

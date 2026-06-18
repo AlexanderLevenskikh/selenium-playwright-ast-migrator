@@ -258,6 +258,14 @@ public class RoslynTestFileParser : ITestFileParser
             if (TryExtractLocatorDeclaration(lds, line) is { } locatorDecl)
                 return locatorDecl;
 
+            // Generic invocation assignments such as
+            // var page = Browser.GoToPage<MyPage>(MyPage.Uri);
+            // must stay structured so ParameterizedMethods can handle them.
+            // If they fall through to RawStatementAction, source-only checks in the renderer
+            // block them before config mappings get a chance to apply.
+            if (TryExtractGenericInvocationDeclaration(lds, line) is { } genericInvocationDecl)
+                return genericInvocationDecl;
+
             if (TryExtractLocalDeclaration(lds, line) is { } localDecl)
                 return localDecl;
 
@@ -396,7 +404,9 @@ public class RoslynTestFileParser : ITestFileParser
         var expr = invocation.Expression;
         return expr switch
         {
+            GenericNameSyntax gns => gns.Identifier.Text,
             IdentifierNameSyntax ids => ids.Identifier.Text,
+            MemberAccessExpressionSyntax { Name: GenericNameSyntax gns } => gns.Identifier.Text,
             MemberAccessExpressionSyntax mas => mas.Name.ToString(),
             _ => expr.ToString()
         };
@@ -434,6 +444,66 @@ public class RoslynTestFileParser : ITestFileParser
         {
             AwaitExpressionSyntax aw => IsMeaningfulExpr(aw.Expression),
             InvocationExpressionSyntax => true,
+            _ => false
+        };
+    }
+
+    static readonly HashSet<string> GenericInvocationDeclarationMethods = new(StringComparer.Ordinal)
+    {
+        "GoToPage",
+        "GoToPageWithUserAccessRight",
+        "OpenPage",
+        "WaitForPage",
+        "Click",
+        "ClickAndFollow",
+        "ClickAndOpen",
+    };
+
+    static TestAction? TryExtractGenericInvocationDeclaration(LocalDeclarationStatementSyntax lds, int line)
+    {
+        var declaration = lds.Declaration;
+        if (declaration.Variables.Count == 0) return null;
+
+        var variable = declaration.Variables[0];
+        var initializer = variable.Initializer?.Value;
+        var invocation = initializer switch
+        {
+            InvocationExpressionSyntax direct => direct,
+            AwaitExpressionSyntax { Expression: InvocationExpressionSyntax awaited } => awaited,
+            _ => null
+        };
+
+        if (invocation == null) return null;
+
+        if (!IsGenericInvocation(invocation))
+            return null;
+
+        var methodName = GetMethodName(invocation);
+        if (!GenericInvocationDeclarationMethods.Contains(methodName))
+            return null;
+
+        var receiverText = GetReceiverText(invocation);
+        var fullText = invocation.ToString().Trim().TrimEnd(';');
+        var argumentTexts = invocation.ArgumentList.Arguments
+            .Select(a => a.Expression.ToString())
+            .ToArray();
+
+        return new MethodInvocationAction(
+            line,
+            receiverText,
+            methodName,
+            fullText,
+            argumentTexts,
+            RecognitionConfidence.SyntaxFallback);
+    }
+
+    static bool IsGenericInvocation(InvocationExpressionSyntax invocation)
+    {
+        return invocation.Expression switch
+        {
+            GenericNameSyntax => true,
+            MemberAccessExpressionSyntax { Name: GenericNameSyntax } => true,
+            MemberBindingExpressionSyntax { Name: GenericNameSyntax } => true,
             _ => false
         };
     }

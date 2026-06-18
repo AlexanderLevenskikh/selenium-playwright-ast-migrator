@@ -101,3 +101,9 @@ Good: `page.AddReasons.ClickAndOpen<CatalogStopReasonsModalPage>()` needs a gene
 Good: `page.Table.Items.ElementAt(i).Text` needs table/list chain support.
 Bad: `page` has 1540 TODO, config cannot help.
 ```
+
+## Implemented generic blocker examples
+
+Some formerly escalated patterns may become parser/recognizer features. See:
+
+- `docs/migrator-tickets/browser-gotopage-generic-invocation.md` — `Browser.GoToPage<T>(...)` local declarations parsed as `MethodInvocationAction` so `ParameterizedMethods` can resolve them.
