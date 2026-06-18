@@ -2146,7 +2146,8 @@ public class PlaywrightDotNetRenderer : IRenderer
     /// </summary>
     static HashSet<string> ExtractRootIdentifiers(string text)
     {
-        var stripped = StripStringLiterals(text);
+        var stripped = StripPropertyPatternDesignators(StripStringLiterals(text));
+        var lambdaParameters = ExtractLambdaParameterNames(stripped);
         var roots = new HashSet<string>();
         var i = 0;
         while (i < stripped.Length)
@@ -2167,7 +2168,7 @@ public class PlaywrightDotNetRenderer : IRenderer
                     i++;
                 var id = stripped.Substring(start, i - start);
 
-                if (!precededByDot)
+                if (!precededByDot && id != "_" && !lambdaParameters.Contains(id))
                     roots.Add(id);
             }
             else
@@ -2177,6 +2178,149 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
         return roots;
     }
+
+    static string StripPropertyPatternDesignators(string text)
+    {
+        // Property patterns and named arguments contain identifiers before ':' that are
+        // not runtime symbols in the generated method scope. Examples:
+        //   x is { IsLoaded: true }
+        //   x is { Name.Exists: true }
+        // Keep the value side intact so captured variables such as { Count: expectedCount }
+        // are still checked by FindUnavailableSymbols.
+        return Regex.Replace(
+            text,
+            @"(^|[,{])(\s*)([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)(\s*:)",
+            m => m.Groups[1].Value
+                 + m.Groups[2].Value
+                 + new string(' ', m.Groups[3].Value.Length)
+                 + m.Groups[4].Value);
+    }
+
+    static HashSet<string> ExtractLambdaParameterNames(string text)
+    {
+        var result = new HashSet<string>(StringComparer.Ordinal);
+        var searchIndex = 0;
+
+        while (true)
+        {
+            var arrowIndex = text.IndexOf("=>", searchIndex, StringComparison.Ordinal);
+            if (arrowIndex < 0)
+                break;
+
+            var parameterText = TryExtractLambdaParameterText(text, arrowIndex);
+            if (!string.IsNullOrWhiteSpace(parameterText))
+            {
+                foreach (var parameterName in ParseLambdaParameterNames(parameterText))
+                    result.Add(parameterName);
+            }
+
+            searchIndex = arrowIndex + 2;
+        }
+
+        return result;
+    }
+
+    static string? TryExtractLambdaParameterText(string text, int arrowIndex)
+    {
+        var end = arrowIndex - 1;
+        while (end >= 0 && char.IsWhiteSpace(text[end]))
+            end--;
+
+        if (end < 0)
+            return null;
+
+        if (text[end] == ')')
+        {
+            var start = FindMatchingOpenParen(text, end);
+            if (start >= 0)
+                return text.Substring(start + 1, end - start - 1);
+
+            return null;
+        }
+
+        var identifierStart = end;
+        while (identifierStart >= 0 && IsIdentifierPart(text[identifierStart]))
+            identifierStart--;
+
+        return text.Substring(identifierStart + 1, end - identifierStart);
+    }
+
+    static int FindMatchingOpenParen(string text, int closeParenIndex)
+    {
+        var depth = 1;
+        for (var i = closeParenIndex - 1; i >= 0; i--)
+        {
+            if (text[i] == ')')
+            {
+                depth++;
+            }
+            else if (text[i] == '(')
+            {
+                depth--;
+                if (depth == 0)
+                    return i;
+            }
+        }
+
+        return -1;
+    }
+
+    static IEnumerable<string> ParseLambdaParameterNames(string parameterText)
+    {
+        foreach (var part in SplitTopLevelComma(parameterText))
+        {
+            var identifiers = Regex.Matches(part, @"@?[A-Za-z_]\w*")
+                .Select(m => m.Value.TrimStart('@'))
+                .Where(name => name.Length > 0 && name != "_")
+                .Where(name => !IsFrameworkKeyword(name))
+                .Where(name => name is not "var" and not "ref" and not "out" and not "in" and not "params")
+                .ToArray();
+
+            if (identifiers.Length > 0)
+                yield return identifiers[^1];
+        }
+    }
+
+    static IEnumerable<string> SplitTopLevelComma(string text)
+    {
+        var start = 0;
+        var parenDepth = 0;
+        var bracketDepth = 0;
+        var braceDepth = 0;
+
+        for (var i = 0; i < text.Length; i++)
+        {
+            switch (text[i])
+            {
+                case '(':
+                    parenDepth++;
+                    break;
+                case ')':
+                    parenDepth--;
+                    break;
+                case '[':
+                    bracketDepth++;
+                    break;
+                case ']':
+                    bracketDepth--;
+                    break;
+                case '{':
+                    braceDepth++;
+                    break;
+                case '}':
+                    braceDepth--;
+                    break;
+                case ',' when parenDepth == 0 && bracketDepth == 0 && braceDepth == 0:
+                    yield return text.Substring(start, i - start);
+                    start = i + 1;
+                    break;
+            }
+        }
+
+        yield return text.Substring(start);
+    }
+
+    static bool IsIdentifierPart(char c) => char.IsLetterOrDigit(c) || c == '_' || c == '@';
 
     void RenderResolvedRawStatement(StringBuilder sb, RawStatementAction action)
     {
