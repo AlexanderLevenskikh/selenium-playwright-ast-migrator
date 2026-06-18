@@ -143,6 +143,54 @@ namespace Sample.E2ETests
     }
 
     [Fact]
+    public void ParameterizedMethods_MapGenericInvocationLocalDeclaration_WithNestedCommaArgument()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-generic-nav-complex-map-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file, @"
+namespace Sample.E2ETests
+{
+    public class BillDiscountTests
+    {
+        [Test]
+        public void OpenDiscounts()
+        {
+            var productChoosingPage = Browser.GoToPage<DiscountsProductChoosingPage>(Uri(productId, tariff.TariffId));
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var config = new ProjectAdapterConfig(
+                "Test",
+                Array.Empty<UiTargetMapping>(),
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>(),
+                ParameterizedMethods: new[]
+                {
+                    new ParameterizedMethodMapping(
+                        "Browser.GoToPage<{T}>({url})",
+                        new[] { "await Navigation.GoToPageAsync<{T}>({url});" },
+                        requiresReview: false)
+                });
+
+            var adapter = new DefaultProjectAdapter(config);
+            var adapted = adapter.Adapt(sourceModel);
+            var mapped = Assert.IsType<MappedMethodInvocationAction>(adapted.Tests.Single().BodyActions.Single());
+
+            Assert.Equal("Browser.GoToPage<DiscountsProductChoosingPage>(Uri(productId, tariff.TariffId))", mapped.FullSourceText);
+            Assert.Equal("await Navigation.GoToPageAsync<DiscountsProductChoosingPage>(Uri(productId, tariff.TariffId));", mapped.TargetStatements.Single());
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    [Fact]
     public void Parse_ButtonTests_SetUp_OnFileLevel()
     {
         var model = _parser.Parse(Path.Combine(_testFilesDir, "ButtonTests.cs"));

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using Migrator.Core;
 using Migrator.Core.Models;
 using System.Text.Json;
@@ -785,7 +786,8 @@ public class DefaultProjectAdapter : IProjectAdapter
     Dictionary<string, PlaceholderValue>? TryMatchPattern(string pattern, string sourceText, IReadOnlyList<string> argumentTexts)
     {
         var placeholderRegex = new Regex(@"\{(\w+)\}");
-        var placeholders = placeholderRegex.Matches(pattern).Cast<System.Text.RegularExpressions.Match>()
+        var placeholderMatches = placeholderRegex.Matches(pattern).Cast<System.Text.RegularExpressions.Match>().ToList();
+        var placeholders = placeholderMatches
             .Select(m => m.Groups[1].Value)
             .ToList();
 
@@ -796,11 +798,32 @@ public class DefaultProjectAdapter : IProjectAdapter
             return null;
         }
 
-        var regexPattern = Regex.Escape(pattern);
-        foreach (var ph in placeholders)
+        var regexPatternBuilder = new StringBuilder();
+        var lastIndex = 0;
+        for (var i = 0; i < placeholderMatches.Count; i++)
         {
-            regexPattern = regexPattern.Replace("\\" + "{" + Regex.Escape(ph) + "}", "(?<" + ph + ">[^,)]+)");
+            var match = placeholderMatches[i];
+            var placeholderName = match.Groups[1].Value;
+
+            regexPatternBuilder.Append(Regex.Escape(pattern.Substring(lastIndex, match.Index - lastIndex)));
+
+            // Parameterized method arguments can contain commas and nested invocations, e.g.
+            // Browser.GoToPage<Page>(Uri(productId, tariff.TariffId)).
+            // Older matching used [^,)]+ which stopped at the first comma/closing paren and
+            // prevented config-only mappings from matching. Use non-greedy captures for
+            // intermediate placeholders and let the final placeholder consume the remaining
+            // text up to the escaped pattern suffix.
+            regexPatternBuilder.Append("(?<");
+            regexPatternBuilder.Append(placeholderName);
+            regexPatternBuilder.Append(">");
+            regexPatternBuilder.Append(i == placeholderMatches.Count - 1 ? ".*" : ".*?");
+            regexPatternBuilder.Append(")");
+
+            lastIndex = match.Index + match.Length;
         }
+
+        regexPatternBuilder.Append(Regex.Escape(pattern.Substring(lastIndex)));
+        var regexPattern = regexPatternBuilder.ToString();
 
         try
         {

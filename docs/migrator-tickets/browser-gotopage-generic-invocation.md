@@ -48,3 +48,22 @@ Added parser/adapter tests:
 - `Parse_GenericInvocationLocalDeclaration_ProducesMethodInvocationAction`
 - `ParameterizedMethods_MapGenericInvocationLocalDeclaration`
 
+
+## Follow-up: placeholder matching with nested comma arguments
+
+Parameterized mappings also need to match complex invocation arguments, for example:
+
+```csharp
+var productChoosingPage = Browser.GoToPage<DiscountsProductChoosingPage>(Uri(productId, tariff.TariffId));
+```
+
+The old `TryMatchPattern` placeholder regex used `[^,)]+`, so `{url}` stopped at the first comma or closing parenthesis and did not match arguments like `Uri(productId, tariff.TariffId)`.
+
+`DefaultProjectAdapter.TryMatchPattern` now builds the regex from the pattern token-by-token:
+
+- intermediate placeholders use non-greedy `.*?`;
+- the final placeholder uses greedy `.*`, so it can capture everything up to the escaped pattern suffix, including commas and nested parentheses.
+
+Additional regression test:
+
+- `ParameterizedMethods_MapGenericInvocationLocalDeclaration_WithNestedCommaArgument`
