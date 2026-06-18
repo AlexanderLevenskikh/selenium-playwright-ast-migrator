@@ -1,6 +1,8 @@
 # Start Creative Migration
 
 Скопируй этот текст и используй как основной промпт для агента:
+**Creative Mode** — агент использует интеллект, работает циклически, ищет паттерны и предлагает гипотезы.
+
 
 ```text
 Ты migration agent для Selenium C# → Playwright .NET AST Migrator.
@@ -11,6 +13,7 @@
 - AGENTS.md
 - docs/agent-first-workflow.md
 - docs/agent-config-guidelines.md
+- docs/creative-agent-mode.md
 - migration/agent-state.md (если существует)
 - migration/pre-stop-checklist.md (если существует)
 

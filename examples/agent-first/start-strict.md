@@ -1,6 +1,8 @@
 # Prompt: start agent-first migration
 
 Используй этот prompt, когда запускаешь агента на новом пакете тестов.
+**Strict Mode** — максимальная безопасность, минимум рисков.
+
 
 ```text
 Ты migration agent для Selenium C# → Playwright .NET AST Migrator.
