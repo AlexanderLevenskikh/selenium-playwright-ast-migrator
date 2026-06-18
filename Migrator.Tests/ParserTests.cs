@@ -57,6 +57,100 @@ public class ParserTests
     }
 
     [Fact]
+    public void Parse_FluentAssertionsShouldTerminal_UsesRootReceiver()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-fluent-assertion-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file, @"
+namespace Sample.E2ETests
+{
+    public class FluentAssertionTests
+    {
+        [Test]
+        public void AssertValue()
+        {
+            element.Should().Be(expected);
+        }
+    }
+}
+");
+
+        try
+        {
+            var model = _parser.Parse(file);
+            var test = model.Tests.Single();
+            var action = Assert.Single(test.BodyActions);
+            var method = Assert.IsType<MethodInvocationAction>(action);
+
+            Assert.Equal("element", method.ReceiverExpression);
+            Assert.Equal("Be", method.MethodName);
+            Assert.Equal("element.Should().Be(expected)", method.FullSourceText);
+            Assert.Equal(new[] { "expected" }, method.ArgumentTexts);
+            Assert.Equal(RecognitionConfidence.SyntaxFallback, method.Confidence);
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void ParameterizedMethods_FluentAssertionsTargetPlaceholder_UsesRootReceiver()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-fluent-assertion-map-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file, @"
+namespace Sample.E2ETests
+{
+    public class FluentAssertionTests
+    {
+        [Test]
+        public void AssertValue()
+        {
+            element.Should().Be(""ok"");
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var config = new ProjectAdapterConfig(
+                "Test",
+                new[]
+                {
+                    new UiTargetMapping("element", "Page.Locator(\"#element\")", "RawExpression")
+                },
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>(),
+                ParameterizedMethods: new[]
+                {
+                    new ParameterizedMethodMapping(
+                        "{source}.Should().Be({expected})",
+                        new[] { "await Expect({TARGET}).ToHaveTextAsync({expected});" },
+                        requiresReview: false)
+                });
+
+            var adapter = new DefaultProjectAdapter(config);
+            var adapted = adapter.Adapt(sourceModel);
+            var mapped = Assert.IsType<MappedMethodInvocationAction>(adapted.Tests.Single().BodyActions.Single());
+            var output = new PlaywrightDotNetRenderer().Render(adapted);
+
+            Assert.NotNull(mapped.TargetExpr);
+            Assert.Equal("element", mapped.TargetExpr!.SourceExpression);
+            Assert.Contains("await Expect(Page.Locator(\"#element\")).ToHaveTextAsync(\"ok\");", output);
+            Assert.DoesNotContain("element.Should()", output);
+            Assert.True(CompileChecker.CompilesWithoutErrors(output),
+                CompileChecker.FormatErrors(output));
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    [Fact]
     public void Parse_GenericInvocationLocalDeclaration_ProducesMethodInvocationAction()
     {
         var file = Path.Combine(Path.GetTempPath(), $"migrator-generic-nav-{Guid.NewGuid():N}.cs");

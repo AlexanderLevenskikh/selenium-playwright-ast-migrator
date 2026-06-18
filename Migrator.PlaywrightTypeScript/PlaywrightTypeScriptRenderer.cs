@@ -245,12 +245,12 @@ public sealed class PlaywrightTypeScriptRenderer : IRenderer
             {
                 result = mapped.Kind switch
                 {
-                TargetKind.Text => $"page.getByText({Quote(expr)})",
-                TargetKind.CssSelector => $"page.locator({Quote(expr)})",
-                TargetKind.TestIdBeginning => $"page.locator({Quote($"[data-testid^='{expr}']")})",
-                TargetKind.ClassNameBeginning => $"page.locator({Quote($"[class^='{expr}']")})",
-                TargetKind.RawExpression => ConvertLocatorExpression(expr),
-                TargetKind.PlaywrightLocator => ConvertLocatorExpression(expr),
+                    TargetKind.Text => $"page.getByText({Quote(expr)})",
+                    TargetKind.CssSelector => $"page.locator({Quote(expr)})",
+                    TargetKind.TestIdBeginning => $"page.locator({Quote($"[data-testid^='{expr}']")})",
+                    TargetKind.ClassNameBeginning => $"page.locator({Quote($"[class^='{expr}']")})",
+                    TargetKind.RawExpression => ConvertLocatorExpression(expr),
+                    TargetKind.PlaywrightLocator => ConvertLocatorExpression(expr),
                     _ => $"page.getByTestId({Quote(expr)})"
                 };
             }

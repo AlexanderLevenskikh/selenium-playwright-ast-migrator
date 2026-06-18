@@ -949,6 +949,7 @@ public class PlaywrightDotNetRenderer : IRenderer
 
         for (var i = 0; i < processed.Length; i++)
         {
+            var originalStatement = action.TargetStatements[i];
             var stmt = processed[i];
             var (substituted, hasUnresolved) = SubstituteTargetPlaceholder(stmt, action);
 
@@ -964,7 +965,7 @@ public class PlaywrightDotNetRenderer : IRenderer
             else
             {
                 sb.AppendLine($"{_indent}{_indent}{substituted} // line {action.SourceLine}");
-                RegisterTargetLocalsFromActiveStatement(substituted);
+                RegisterTargetLocalsFromMappedActiveStatement(substituted, originalStatement, action);
             }
         }
         if (action.RequiresReview)
@@ -976,6 +977,24 @@ public class PlaywrightDotNetRenderer : IRenderer
                 "Adapter config explicitly marked this mapping as requiring review.",
                 "Verify target semantics; remove RequiresReview only when the mapping is proven safe.");
         }
+    }
+
+
+    void RegisterTargetLocalsFromMappedActiveStatement(string statement, string originalStatement, MappedMethodInvocationAction action)
+    {
+        var declaredVariables = ExtractDeclaredVariableNames(statement).ToArray();
+        foreach (var variable in declaredVariables)
+            RegisterTargetLocal(variable);
+
+        if (string.IsNullOrWhiteSpace(action.ResultVariable) || declaredVariables.Length == 0)
+            return;
+
+        var originalUsesResultPlaceholder = originalStatement.Contains("{result}", StringComparison.Ordinal);
+        var declaredResultVariable = declaredVariables.FirstOrDefault(v => v == action.ResultVariable);
+        if (!originalUsesResultPlaceholder && declaredResultVariable == null)
+            return;
+
+        RegisterSourceVar(action.ResultVariable!, declaredResultVariable ?? declaredVariables[0]);
     }
 
 

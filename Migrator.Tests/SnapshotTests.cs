@@ -3525,6 +3525,28 @@ public class MethodMappingPlaceholderTests
     }
 
     [Fact]
+    public void MethodMapping_ResultVariable_IsRegisteredForDownstreamActions()
+    {
+        var mappedAction = new MappedMethodInvocationAction(
+            1,
+            "Browser.GoToPage<MyPage>(MyPage.Uri)",
+            new[] { "var {result} = \"ok\";" },
+            sourceMethod: "Browser.GoToPage<{T}>({url})",
+            resultVariable: "productChoosingPage");
+
+        var downstreamAction = new RawStatementAction(2, "productChoosingPage.ToString()");
+        var model = CreateModel(new TestAction[] { mappedAction, downstreamAction });
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("productChoosingPage", output);
+        Assert.Contains("\"ok\"", output);
+        Assert.Contains("productChoosingPage.ToString();", output);
+        Assert.DoesNotContain("UNAVAILABLE_SYMBOLS", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
     public void MethodMapping_ResultPlaceholder_Unresolved_DoesNotBreakSyntax()
     {
         var mappedAction = new MappedMethodInvocationAction(
@@ -3920,10 +3942,10 @@ public class CompileSafetyTests
         var model = CreateModel(
             new LocalDeclarationAction(1, "name", "var", "DataGenerator.GenRussianString(10)"),
             new SendKeysAction(2, TargetExpression.Mapped("page.Name", "Page.Locator(\"#name\")", TargetKind.RawExpression), "name"))
-            with
-            {
-                SourceOnlyIdentifiers = new[] { "DataGenerator" }
-            };
+        with
+        {
+            SourceOnlyIdentifiers = new[] { "DataGenerator" }
+        };
 
         var output = new PlaywrightDotNetRenderer().Render(model);
 
@@ -3940,10 +3962,10 @@ public class CompileSafetyTests
         var model = CreateModel(
             new LocalDeclarationAction(1, "name", "var", "DataGenerator.GenRussianString(10)"),
             new SendKeysAction(2, TargetExpression.Mapped("page.Email", "Page.Locator(\"#email\")", TargetKind.RawExpression), "name"))
-            with
-            {
-                SourceOnlyIdentifiers = new[] { "DataGenerator" }
-            };
+        with
+        {
+            SourceOnlyIdentifiers = new[] { "DataGenerator" }
+        };
 
         var output = new PlaywrightDotNetRenderer().Render(model);
 
@@ -3961,10 +3983,10 @@ public class CompileSafetyTests
                 1,
                 TargetExpression.Mapped("page.Email", "Page.Locator(\"#email\")", TargetKind.RawExpression),
                 "DataGenerator.GenRussianString(10)"))
-            with
-            {
-                SourceOnlyIdentifiers = new[] { "DataGenerator" }
-            };
+        with
+        {
+            SourceOnlyIdentifiers = new[] { "DataGenerator" }
+        };
 
         var output = new PlaywrightDotNetRenderer().Render(model);
 

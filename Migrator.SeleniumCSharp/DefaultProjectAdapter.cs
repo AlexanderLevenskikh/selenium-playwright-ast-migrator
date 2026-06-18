@@ -759,6 +759,8 @@ public class DefaultProjectAdapter : IProjectAdapter
             var placeholders = TryMatchPattern(mapping.SourceMethodPattern, fullText, mi.ArgumentTexts);
             if (placeholders != null)
             {
+                NormalizeFluentAssertionsPlaceholders(placeholders);
+
                 if (!string.IsNullOrWhiteSpace(mi.ResultVariable))
                 {
                     // Special placeholder for assignment-pattern mappings, e.g.
@@ -779,7 +781,8 @@ public class DefaultProjectAdapter : IProjectAdapter
                     resolvedStatements = Array.Empty<string>();
                 }
 
-                var resolvedTarget = TryResolveReceiverTarget(mi.ReceiverExpression, resolved);
+                var receiverForTarget = StripTerminalShouldInvocation(mi.ReceiverExpression);
+                var resolvedTarget = TryResolveReceiverTarget(receiverForTarget, resolved);
                 return new MappedMethodInvocationAction(
                     mi.SourceLine,
                     mi.FullSourceText,
@@ -792,6 +795,31 @@ public class DefaultProjectAdapter : IProjectAdapter
         }
 
         return null;
+    }
+
+    static void NormalizeFluentAssertionsPlaceholders(Dictionary<string, PlaceholderValue> placeholders)
+    {
+        foreach (var key in placeholders.Keys.ToArray())
+        {
+            var value = placeholders[key];
+            var normalizedRawText = StripTerminalShouldInvocation(value.RawText);
+            if (normalizedRawText == value.RawText)
+                continue;
+
+            placeholders[key] = new PlaceholderValue(
+                normalizedRawText,
+                value.IsStringLiteral ? value.Content : normalizedRawText,
+                value.IsStringLiteral);
+        }
+    }
+
+    static string StripTerminalShouldInvocation(string expression)
+    {
+        var trimmed = expression.Trim();
+        var match = Regex.Match(
+            trimmed,
+            @"^(?<receiver>.+?)\s*\.\s*Should\s*\(\s*\)\s*$");
+        return match.Success ? match.Groups["receiver"].Value.Trim() : expression;
     }
 
     Dictionary<string, PlaceholderValue>? TryMatchPattern(string pattern, string sourceText, IReadOnlyList<string> argumentTexts)
@@ -1132,43 +1160,43 @@ targetExpr: null,
 
         // Try to recognize table row text access: page.Table.Items.ElementAt(N).Text.Get()
         var tableTextMatch = TableTextAccessRegex.Match(initExpr);
-            if (tableTextMatch.Success)
+        if (tableTextMatch.Success)
+        {
+            var index = tableTextMatch.Groups[1].Value.Trim();
+            var tableSource = ExtractTableItemsSource(initExpr);
+            if (tableSource != null)
             {
-                var index = tableTextMatch.Groups[1].Value.Trim();
-                var tableSource = ExtractTableItemsSource(initExpr);
-                if (tableSource != null)
+                var targetExpr = resolved.ResolveTableAwareTarget(initExpr);
+                return new[]
                 {
-                    var targetExpr = resolved.ResolveTableAwareTarget(initExpr);
-                    return new[]
-                    {
-                        new TableRowTextAccessAction(
-                            lds.SourceLine,
-                            targetExpr,
-                            index,
-                            $"{lds.VariableType} {lds.VariableName} = {initExpr}")
-                    };
-                }
+                    new TableRowTextAccessAction(
+                        lds.SourceLine,
+                        targetExpr,
+                        index,
+                        $"{lds.VariableType} {lds.VariableName} = {initExpr}")
+                };
             }
+        }
 
-            // Try to recognize table row access: page.Table.Items.ElementAt(N)
-            var elementAtMatch = ElementAtRegex.Match(initExpr);
-            if (elementAtMatch.Success && !initExpr.Contains(".Text.Get()"))
+        // Try to recognize table row access: page.Table.Items.ElementAt(N)
+        var elementAtMatch = ElementAtRegex.Match(initExpr);
+        if (elementAtMatch.Success && !initExpr.Contains(".Text.Get()"))
+        {
+            var index = elementAtMatch.Groups[1].Value.Trim();
+            var tableSource = ExtractTableItemsSource(initExpr);
+            if (tableSource != null)
             {
-                var index = elementAtMatch.Groups[1].Value.Trim();
-                var tableSource = ExtractTableItemsSource(initExpr);
-                if (tableSource != null)
+                var targetExpr = resolved.ResolveTableAwareTarget(initExpr);
+                return new[]
                 {
-                    var targetExpr = resolved.ResolveTableAwareTarget(initExpr);
-                    return new[]
-                    {
-                        new TableRowTextAccessAction(
-                            lds.SourceLine,
-                            targetExpr,
-                            index,
-                            $"{lds.VariableType} {lds.VariableName} = {initExpr}")
-                    };
-                }
+                    new TableRowTextAccessAction(
+                        lds.SourceLine,
+                        targetExpr,
+                        index,
+                        $"{lds.VariableType} {lds.VariableName} = {initExpr}")
+                };
             }
+        }
 
         // Try to recognize simple .Text.Get() on a known UI target: page.Count.Text.Get()
         if (initExpr.EndsWith(".Text.Get()"))
