@@ -990,8 +990,10 @@ public class PlaywrightDotNetRenderer : IRenderer
             return;
 
         var originalUsesResultPlaceholder = originalStatement.Contains("{result}", StringComparison.Ordinal);
+        var originalDeclaredVariables = ExtractDeclaredVariableNames(originalStatement);
+        var originalDeclaresResultVariable = originalDeclaredVariables.Any(v => v == action.ResultVariable);
         var declaredResultVariable = declaredVariables.FirstOrDefault(v => v == action.ResultVariable);
-        if (!originalUsesResultPlaceholder && declaredResultVariable == null)
+        if (!originalUsesResultPlaceholder && !originalDeclaresResultVariable && declaredResultVariable == null)
             return;
 
         RegisterSourceVar(action.ResultVariable!, declaredResultVariable ?? declaredVariables[0]);

@@ -713,7 +713,19 @@ public class DefaultProjectAdapter : IProjectAdapter
             };
         }
 
-        // 2. Exact match by method name
+        // 2. Parameterized pattern match for assignment-producing invocations.
+        //
+        // Generic local declarations such as
+        //   var page = button.Click<Page>();
+        // are parsed as MethodInvocationAction with MethodName = "Click" and
+        // ResultVariable = "page". A broad method-name mapping like Methods["Click"]
+        // must not steal those actions before ParameterizedMethods["{source}.Click<{T}>()"]
+        // can emit the follow-up page variable declaration.
+        var paramResult = TryMatchParameterized(mi, resolved);
+        if (paramResult != null && !string.IsNullOrWhiteSpace(mi.ResultVariable))
+            return new[] { paramResult };
+
+        // 3. Exact match by method name
         if (!string.IsNullOrEmpty(mi.MethodName) && resolved._methodStatementsMap.TryGetValue(mi.MethodName, out var methodMapping))
         {
             return new[]
@@ -729,12 +741,11 @@ public class DefaultProjectAdapter : IProjectAdapter
             };
         }
 
-        // 3. Parameterized pattern match
-        var paramResult = TryMatchParameterized(mi, resolved);
+        // 4. Parameterized pattern match for regular invocations
         if (paramResult != null)
             return new[] { paramResult };
 
-        // 4. No match — return original action (will render as TODO)
+        // 5. No match — return original action (will render as TODO)
         return new[] { mi };
     }
 

@@ -287,6 +287,127 @@ namespace Sample.E2ETests
         }
     }
 
+
+    [Fact]
+    public void Parse_GenericClickInvocationLocalDeclaration_ProducesMethodInvocationAction()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-generic-click-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file, @"
+namespace Sample.E2ETests
+{
+    public class BillDiscountTests
+    {
+        [Test]
+        public void OpenDiscounts()
+        {
+            var discountSettingsPage = discountOnProductPage.OnBillDiscounts.CreateNew.Click<BillDiscountPage>();
+        }
+    }
+}
+");
+
+        try
+        {
+            var model = _parser.Parse(file);
+            var test = model.Tests.Single();
+            var action = Assert.Single(test.BodyActions);
+            var method = Assert.IsType<MethodInvocationAction>(action);
+
+            Assert.Equal("discountOnProductPage.OnBillDiscounts.CreateNew", method.ReceiverExpression);
+            Assert.Equal("Click", method.MethodName);
+            Assert.Equal("discountOnProductPage.OnBillDiscounts.CreateNew.Click<BillDiscountPage>()", method.FullSourceText);
+            Assert.Empty(method.ArgumentTexts);
+            Assert.Equal("discountSettingsPage", method.ResultVariable);
+            Assert.Equal(RecognitionConfidence.SyntaxFallback, method.Confidence);
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void ParameterizedMethods_GenericClickLocalDeclaration_WinsOverMethodNameMapping_AndRegistersResult()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-generic-click-map-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file, @"
+namespace Sample.E2ETests
+{
+    public class BillDiscountTests
+    {
+        [Test]
+        public void OpenDiscounts()
+        {
+            var discountSettingsPage = discountOnProductPage.OnBillDiscounts.CreateNew.Click<BillDiscountPage>();
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var sourceTest = sourceModel.Tests.Single();
+            var sourceWithDownstream = sourceModel with
+            {
+                Tests = new[]
+                {
+                    sourceTest with
+                    {
+                        BodyActions = sourceTest.BodyActions.Concat(new TestAction[]
+                        {
+                            new RawStatementAction(99, "discountSettingsPage.ToString()")
+                        })
+                    }
+                }
+            };
+
+            var config = new ProjectAdapterConfig(
+                "Test",
+                Array.Empty<UiTargetMapping>(),
+                Array.Empty<PageObjectMapping>(),
+                new[]
+                {
+                    new MethodMapping(
+                        "Click",
+                        null,
+                        "Fallback click mapping that must not steal generic Click<T>() declarations",
+                        new[] { "await Page.GetByTestId(\"fallback-click\").ClickAsync();" },
+                        requiresReview: false)
+                },
+                ParameterizedMethods: new[]
+                {
+                    new ParameterizedMethodMapping(
+                        "{source}.Click<{T}>()",
+                        new[]
+                        {
+                            "await Page.GetByTestId(\"create-new\").ClickAsync();",
+                            "var {result} = await Navigation.GoToAsync<{T}>(x => x);"
+                        },
+                        requiresReview: false)
+                });
+
+            var adapter = new DefaultProjectAdapter(config);
+            var adapted = adapter.Adapt(sourceWithDownstream);
+            var actions = adapted.Tests.Single().BodyActions.ToArray();
+            var mapped = Assert.IsType<MappedMethodInvocationAction>(actions[0]);
+            var output = new PlaywrightDotNetRenderer().Render(adapted);
+
+            Assert.Equal("discountSettingsPage", mapped.ResultVariable);
+            Assert.Contains("create-new", mapped.TargetStatements[0]);
+            Assert.Contains("var discountSettingsPage = await Navigation.GoToAsync<BillDiscountPage>(x => x);", mapped.TargetStatements[1]);
+            Assert.DoesNotContain("fallback-click", string.Join("\n", mapped.TargetStatements));
+            Assert.Contains("discountSettingsPage.ToString();", output);
+            Assert.DoesNotContain("UNAVAILABLE_SYMBOLS", output);
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
     [Fact]
     public void Parse_ButtonTests_SetUp_OnFileLevel()
     {
