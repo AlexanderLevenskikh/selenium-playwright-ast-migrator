@@ -932,6 +932,14 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     void RenderMappedMethodInvocation(StringBuilder sb, MappedMethodInvocationAction action)
     {
+        // TargetStatements may contain newline-separated statements in a single array
+        // element, e.g. "await click();\nvar {result} = await Navigation.GoToAsync<T>();".
+        // Split before {result} substitution and deduplication so each C# statement is
+        // processed independently for rendering, variable extraction, and symbol registration.
+        var originalStatements = action.TargetStatements
+            .SelectMany(SplitMappedTargetStatements)
+            .ToArray();
+
         // Substitute {result} before local-variable deduplication.
         //
         // Why: assignment-pattern mappings commonly emit declarations such as
@@ -942,14 +950,14 @@ public class PlaywrightDotNetRenderer : IRenderer
         // work with the real generated variable name and still rename it safely when
         // needed. Other placeholders, such as {TARGET}, are intentionally resolved
         // later because they depend on rendered target expressions.
-        var resultPreprocessed = action.TargetStatements
+        var resultPreprocessed = originalStatements
             .Select(stmt => SubstituteResultPlaceholderBeforeDedup(stmt, action))
             .ToArray();
         var processed = DeduplicateInvocationVariables(resultPreprocessed);
 
         for (var i = 0; i < processed.Length; i++)
         {
-            var originalStatement = action.TargetStatements[i];
+            var originalStatement = originalStatements[i];
             var stmt = processed[i];
             var (substituted, hasUnresolved) = SubstituteTargetPlaceholder(stmt, action);
 
@@ -997,6 +1005,16 @@ public class PlaywrightDotNetRenderer : IRenderer
             return;
 
         RegisterSourceVar(action.ResultVariable!, declaredResultVariable ?? declaredVariables[0]);
+    }
+
+
+    static IEnumerable<string> SplitMappedTargetStatements(string statement)
+    {
+        return statement
+            .Replace("\r\n", "\n")
+            .Replace('\r', '\n')
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(s => s.Length > 0);
     }
 
 
