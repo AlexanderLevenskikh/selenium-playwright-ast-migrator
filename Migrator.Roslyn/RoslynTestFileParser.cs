@@ -494,6 +494,7 @@ public class RoslynTestFileParser : ITestFileParser
             methodName,
             fullText,
             argumentTexts,
+            variable.Identifier.Text,
             RecognitionConfidence.SyntaxFallback);
     }
 

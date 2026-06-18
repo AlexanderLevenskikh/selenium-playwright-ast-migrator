@@ -130,8 +130,22 @@ public sealed class PlaywrightTypeScriptRenderer : IRenderer
         if (mapped.RequiresReview)
             RenderTodo(sb, pad, "MAPPED_REQUIRES_REVIEW", mapped.FullSourceText, "Mapping is marked RequiresReview.", "Review source truth and add a safe TS-specific mapping if appropriate.");
 
-        foreach (var statement in mapped.TargetStatements)
+        foreach (var originalStatement in mapped.TargetStatements)
         {
+            var statement = originalStatement;
+            if (statement.Contains("{result}"))
+            {
+                if (!string.IsNullOrWhiteSpace(mapped.ResultVariable))
+                {
+                    statement = statement.Replace("{result}", mapped.ResultVariable);
+                }
+                else
+                {
+                    RenderTodo(sb, pad, "UNRESOLVED_PLACEHOLDER", statement, "Mapped TargetStatement uses {result}, but the source action has no assigned result variable.", "Use {result} only for assignment-pattern mappings such as var page = Browser.GoToPage<T>(...). ");
+                    continue;
+                }
+            }
+
             if (LooksLikeTypeScript(statement))
             {
                 var code = EnsureSemicolon(statement.Trim());

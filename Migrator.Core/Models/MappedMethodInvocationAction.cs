@@ -20,7 +20,13 @@ public sealed class MappedMethodInvocationAction : TestAction
     /// </summary>
     public string? SourceMethod { get; }
 
-    public MappedMethodInvocationAction(int sourceLine, string fullSourceText, IReadOnlyList<string> targetStatements, bool requiresReview = false, TargetExpression? targetExpr = null, string? sourceMethod = null)
+    /// <summary>
+    /// Name of the local variable assigned from the source invocation, when available.
+    /// Used to substitute {result} in TargetStatements.
+    /// </summary>
+    public string? ResultVariable { get; }
+
+    public MappedMethodInvocationAction(int sourceLine, string fullSourceText, IReadOnlyList<string> targetStatements, bool requiresReview = false, TargetExpression? targetExpr = null, string? sourceMethod = null, string? resultVariable = null)
         : base(sourceLine, RecognitionConfidence.Semantic)
     {
         FullSourceText = fullSourceText;
@@ -28,5 +34,6 @@ public sealed class MappedMethodInvocationAction : TestAction
         RequiresReview = requiresReview;
         TargetExpr = targetExpr;
         SourceMethod = sourceMethod;
+        ResultVariable = resultVariable;
     }
 }

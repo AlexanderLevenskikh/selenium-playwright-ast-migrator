@@ -85,6 +85,7 @@ namespace Sample.E2ETests
             Assert.Equal("GoToPage", method.MethodName);
             Assert.Equal("Browser.GoToPage<DiscountsProductChoosingPage>(DiscountsProductChoosingPage.Uri)", method.FullSourceText);
             Assert.Equal(new[] { "DiscountsProductChoosingPage.Uri" }, method.ArgumentTexts);
+            Assert.Equal("productChoosingPage", method.ResultVariable);
             Assert.Equal(RecognitionConfidence.SyntaxFallback, method.Confidence);
         }
         finally
@@ -124,7 +125,7 @@ namespace Sample.E2ETests
                 {
                     new ParameterizedMethodMapping(
                         "Browser.GoToPage<{T}>({url})",
-                        new[] { "await Navigation.GoToPageAsync<{T}>({url});" },
+                        new[] { "var {result} = await Navigation.GoToPageAsync<{T}>({url});" },
                         requiresReview: false)
                 });
 
@@ -133,7 +134,8 @@ namespace Sample.E2ETests
             var mapped = Assert.IsType<MappedMethodInvocationAction>(adapted.Tests.Single().BodyActions.Single());
 
             Assert.Equal("Browser.GoToPage<DiscountsProductChoosingPage>(DiscountsProductChoosingPage.Uri)", mapped.FullSourceText);
-            Assert.Equal("await Navigation.GoToPageAsync<DiscountsProductChoosingPage>(DiscountsProductChoosingPage.Uri);", mapped.TargetStatements.Single());
+            Assert.Equal("productChoosingPage", mapped.ResultVariable);
+            Assert.Equal("var productChoosingPage = await Navigation.GoToPageAsync<DiscountsProductChoosingPage>(DiscountsProductChoosingPage.Uri);", mapped.TargetStatements.Single());
         }
         finally
         {
@@ -172,7 +174,7 @@ namespace Sample.E2ETests
                 {
                     new ParameterizedMethodMapping(
                         "Browser.GoToPage<{T}>({url})",
-                        new[] { "await Navigation.GoToPageAsync<{T}>({url});" },
+                        new[] { "var {result} = await Navigation.GoToPageAsync<{T}>({url});" },
                         requiresReview: false)
                 });
 
@@ -181,7 +183,8 @@ namespace Sample.E2ETests
             var mapped = Assert.IsType<MappedMethodInvocationAction>(adapted.Tests.Single().BodyActions.Single());
 
             Assert.Equal("Browser.GoToPage<DiscountsProductChoosingPage>(Uri(productId, tariff.TariffId))", mapped.FullSourceText);
-            Assert.Equal("await Navigation.GoToPageAsync<DiscountsProductChoosingPage>(Uri(productId, tariff.TariffId));", mapped.TargetStatements.Single());
+            Assert.Equal("productChoosingPage", mapped.ResultVariable);
+            Assert.Equal("var productChoosingPage = await Navigation.GoToPageAsync<DiscountsProductChoosingPage>(Uri(productId, tariff.TariffId));", mapped.TargetStatements.Single());
         }
         finally
         {

@@ -708,7 +708,8 @@ public class DefaultProjectAdapter : IProjectAdapter
                     mapping.Statements,
                     mapping.RequiresReview,
                     resolvedTarget,
-                    fullText)
+                    fullText,
+                    mi.ResultVariable)
             };
         }
 
@@ -723,7 +724,8 @@ public class DefaultProjectAdapter : IProjectAdapter
                     methodMapping.Statements,
                     methodMapping.RequiresReview,
                     resolvedTarget,
-                    mi.MethodName)
+                    mi.MethodName,
+                    mi.ResultVariable)
             };
         }
 
@@ -757,6 +759,14 @@ public class DefaultProjectAdapter : IProjectAdapter
             var placeholders = TryMatchPattern(mapping.SourceMethodPattern, fullText, mi.ArgumentTexts);
             if (placeholders != null)
             {
+                if (!string.IsNullOrWhiteSpace(mi.ResultVariable))
+                {
+                    // Special placeholder for assignment-pattern mappings, e.g.
+                    // var page = Browser.GoToPage<Page>(Page.Uri);
+                    // TargetStatements can use {result} to keep the generated local name.
+                    placeholders["result"] = new PlaceholderValue(mi.ResultVariable!, mi.ResultVariable!, IsStringLiteral: false);
+                }
+
                 string[] resolvedStatements;
                 if (mapping.TargetStatements != null && mapping.TargetStatements.Length > 0)
                 {
@@ -776,7 +786,8 @@ public class DefaultProjectAdapter : IProjectAdapter
                     resolvedStatements,
                     mapping.RequiresReview,
                     resolvedTarget,
-                    mapping.SourceMethodPattern);
+                    mapping.SourceMethodPattern,
+                    mi.ResultVariable);
             }
         }
 

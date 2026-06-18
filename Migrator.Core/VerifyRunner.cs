@@ -340,7 +340,7 @@ public static class VerifyRunner
             var stmtPlaceholders = ExtractPlaceholders(stmt);
             foreach (var ph in stmtPlaceholders)
             {
-                if (!patternPlaceholders.Contains(ph))
+                if (!patternPlaceholders.Contains(ph) && !IsSpecialParameterizedPlaceholder(ph))
                 {
                     issues.Add(new VerifyIssue(
                         "Config", IssueSeverity.Warning,
@@ -349,6 +349,13 @@ public static class VerifyRunner
                 }
             }
         }
+    }
+
+    static bool IsSpecialParameterizedPlaceholder(string placeholder)
+    {
+        // {result} is supplied by the parser for assignment-pattern method invocations:
+        // var page = Browser.GoToPage<Page>(...);
+        return string.Equals(placeholder, "result", StringComparison.Ordinal);
     }
 
     // --- Scope matching ---
@@ -699,6 +706,7 @@ public static class VerifyRunner
     static HashSet<string> CollectParameterizedPlaceholderNames(ProjectAdapterConfig? config)
     {
         var knownPlaceholders = new HashSet<string>();
+        knownPlaceholders.Add("result");
         if (config == null)
             return knownPlaceholders;
 

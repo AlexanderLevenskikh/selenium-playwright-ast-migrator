@@ -67,3 +67,36 @@ The old `TryMatchPattern` placeholder regex used `[^,)]+`, so `{url}` stopped at
 Additional regression test:
 
 - `ParameterizedMethods_MapGenericInvocationLocalDeclaration_WithNestedCommaArgument`
+
+## Follow-up: `{result}` placeholder for assignment variable
+
+Parameterized mappings for local declarations also need access to the variable on the left side:
+
+```csharp
+var productChoosingPage = Browser.GoToPage<DiscountsProductChoosingPage>(DiscountsProductChoosingPage.Uri);
+```
+
+Without a special placeholder, target statements like this stayed unresolved:
+
+```json
+{
+  "SourceMethodPattern": "Browser.GoToPage<{T}>({url})",
+  "TargetStatements": [
+    "var {result} = await Navigation.GoToPageAsync<{T}>({url});"
+  ]
+}
+```
+
+Implemented behavior:
+
+- `MethodInvocationAction` carries `ResultVariable` for generic local declaration initializers.
+- `MappedMethodInvocationAction` preserves `ResultVariable` for renderer diagnostics/fallback substitution.
+- `DefaultProjectAdapter` injects a special `{result}` placeholder before substituting `TargetStatements`.
+- `VerifyRunner` treats `{result}` as a known special placeholder for `ParameterizedMethods`.
+- .NET and TypeScript renderers can substitute `{result}` as a final safety net if it reaches rendering.
+
+Additional regression coverage:
+
+- `Parse_GenericInvocationLocalDeclaration_ProducesMethodInvocationAction` asserts `ResultVariable`.
+- `ParameterizedMethods_MapGenericInvocationLocalDeclaration` verifies `{result}` substitution.
+- `ParameterizedMethods_MapGenericInvocationLocalDeclaration_WithNestedCommaArgument` verifies `{result}` together with comma/nested-argument matching.

@@ -3504,6 +3504,45 @@ public class MethodMappingPlaceholderTests
     }
 
     [Fact]
+    public void MethodMapping_ResultPlaceholder_IsSubstituted()
+    {
+        var mappedAction = new MappedMethodInvocationAction(
+            1,
+            "Browser.GoToPage<MyPage>(MyPage.Uri)",
+            new[] { "var {result} = \"ok\";" },
+            sourceMethod: "Browser.GoToPage<{T}>({url})",
+            resultVariable: "productChoosingPage");
+
+        var model = CreateModel(new TestAction[] { mappedAction });
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("productChoosingPage", output);
+        Assert.Contains("\"ok\"", output);
+        Assert.DoesNotContain("{result}", output);
+        Assert.DoesNotContain("{result}", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void MethodMapping_ResultPlaceholder_Unresolved_DoesNotBreakSyntax()
+    {
+        var mappedAction = new MappedMethodInvocationAction(
+            5,
+            "Browser.GoToPage<MyPage>(MyPage.Uri)",
+            new[] { "var {result} = \"ok\";" },
+            sourceMethod: "Browser.GoToPage<{T}>({url})");
+
+        var model = CreateModel(new TestAction[] { mappedAction });
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.DoesNotContain("var  =", output);
+        Assert.Contains("TODO: unresolved MethodMapping placeholder", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
     public void MethodMapping_TargetPlaceholder_Unresolved_DoesNotBreakSyntax()
     {
         var mappedAction = new MappedMethodInvocationAction(

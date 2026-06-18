@@ -395,6 +395,16 @@ public class PlaywrightDotNetRenderer : IRenderer
         if (action is WaitForAction wait && TryRenderWaitPolicyBeforeSafety(sb, wait, sourceText))
             return;
 
+        // Method mappings are explicit adapter/profile decisions. Their source text often
+        // starts with a Selenium-only root such as Browser/page/pagef, but the TargetStatements
+        // are already target-side code. Do not block them by source-root safety; unresolved
+        // placeholders are handled safely inside RenderMappedMethodInvocation.
+        if (action is MappedMethodInvocationAction mappedMethod)
+        {
+            RenderMappedMethodInvocation(sb, mappedMethod);
+            return;
+        }
+
         // Source-level blocked check: extract root symbol from original source expression.
         // If the root symbol is blocked (from unresolved setup/source-only), the action
         // must be commented regardless of whether the target has a valid Playwright mapping.
@@ -922,7 +932,21 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     void RenderMappedMethodInvocation(StringBuilder sb, MappedMethodInvocationAction action)
     {
-        var processed = DeduplicateInvocationVariables(action.TargetStatements);
+        // Substitute {result} before local-variable deduplication.
+        //
+        // Why: assignment-pattern mappings commonly emit declarations such as
+        //   var {result} = await Navigation.GoToPageAsync<T>(...);
+        // If deduplication runs first, it sees the literal placeholder as a variable
+        // name and can lose the relationship between the declaration and later
+        // statements. Replacing {result} up front lets the normal local alias logic
+        // work with the real generated variable name and still rename it safely when
+        // needed. Other placeholders, such as {TARGET}, are intentionally resolved
+        // later because they depend on rendered target expressions.
+        var resultPreprocessed = action.TargetStatements
+            .Select(stmt => SubstituteResultPlaceholderBeforeDedup(stmt, action))
+            .ToArray();
+        var processed = DeduplicateInvocationVariables(resultPreprocessed);
+
         for (var i = 0; i < processed.Length; i++)
         {
             var stmt = processed[i];
@@ -954,6 +978,18 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
     }
 
+
+    static string SubstituteResultPlaceholderBeforeDedup(string statement, MappedMethodInvocationAction action)
+    {
+        if (!statement.Contains("{result}", StringComparison.Ordinal))
+            return statement;
+
+        if (string.IsNullOrWhiteSpace(action.ResultVariable))
+            return statement;
+
+        return statement.Replace("{result}", action.ResultVariable!, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// Substitutes {TARGET} in a target statement with the resolved target expression.
     /// Also detects unknown placeholders (e.g. {UNKNOWN}) that cannot be resolved.
@@ -963,6 +999,20 @@ public class PlaywrightDotNetRenderer : IRenderer
     {
         var substituted = statement;
         var hasUnresolved = false;
+
+        // Resolve {result} from assignment-pattern mappings, e.g.
+        // var page = Browser.GoToPage<Page>(...);
+        if (substituted.Contains("{result}"))
+        {
+            if (!string.IsNullOrWhiteSpace(action.ResultVariable))
+            {
+                substituted = substituted.Replace("{result}", action.ResultVariable);
+            }
+            else
+            {
+                hasUnresolved = true;
+            }
+        }
 
         // Resolve {TARGET} if target expression is available
         if (substituted.Contains("{TARGET}"))
