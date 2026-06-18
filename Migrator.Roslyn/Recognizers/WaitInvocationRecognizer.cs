@@ -1,10 +1,18 @@
 using Migrator.Core;
 using Migrator.Core.Models;
+using Migrator.Roslyn;
 
 namespace Migrator.Roslyn.Recognizers;
 
 public class WaitInvocationRecognizer : IInvocationRecognizer
 {
+    readonly IReadOnlyDictionary<string, string> _configuredWaitPolicies;
+
+    public WaitInvocationRecognizer(RecognizerOptions? options = null)
+    {
+        _configuredWaitPolicies = (options ?? RecognizerOptions.Default).WaitPolicies;
+    }
+
     static readonly HashSet<string> ActionabilityWaitMethods = new(StringComparer.Ordinal)
     {
         "WaitPresence", "WaitPresenceAsync",
@@ -12,7 +20,24 @@ public class WaitInvocationRecognizer : IInvocationRecognizer
         "WaitEnabled", "WaitEnabledAsync",
         "WaitClickable", "WaitClickableAsync",
         "WaitDisplayed", "WaitDisplayedAsync",
-        "WaitExists", "WaitExistsAsync"
+        "WaitExists", "WaitExistsAsync",
+        "WaitExistAndVisible", "WaitExistAndVisibleAsync"
+    };
+
+    static readonly Dictionary<string, WaitForKind> BuiltInWaitPolicies = new(StringComparer.Ordinal)
+    {
+        ["WaitOpened"] = WaitForKind.ProductStateVisible,
+        ["WaitOpenedAsync"] = WaitForKind.ProductStateVisible,
+        ["WaitNotExists"] = WaitForKind.ProductStateHidden,
+        ["WaitNotExistsAsync"] = WaitForKind.ProductStateHidden,
+        ["WaitDisabled"] = WaitForKind.ReviewRequired,
+        ["WaitDisabledAsync"] = WaitForKind.ReviewRequired,
+        ["WaitValue"] = WaitForKind.ReviewRequired,
+        ["WaitValueAsync"] = WaitForKind.ReviewRequired,
+        ["WaitValueContains"] = WaitForKind.ReviewRequired,
+        ["WaitValueContainsAsync"] = WaitForKind.ReviewRequired,
+        ["WaitContainsText"] = WaitForKind.ReviewRequired,
+        ["WaitContainsTextAsync"] = WaitForKind.ReviewRequired
     };
 
     static readonly HashSet<string> ProductStateWaitMethods = new(StringComparer.Ordinal)
@@ -29,6 +54,23 @@ public class WaitInvocationRecognizer : IInvocationRecognizer
         if (string.IsNullOrWhiteSpace(ctx.ReceiverText))
             return null;
 
+        if (_configuredWaitPolicies.TryGetValue(ctx.MethodName, out var configuredKind))
+        {
+            if (configuredKind == "AdapterMapping")
+                return null;
+
+            if (TryParseWaitForKind(configuredKind, out var kind))
+            {
+                return new WaitForAction(
+                    ctx.SourceLine,
+                    ctx.ReceiverText,
+                    RecognitionConfidence.SyntaxFallback,
+                    ctx.MethodName,
+                    ctx.FullText,
+                    kind);
+            }
+        }
+
         if (ActionabilityWaitMethods.Contains(ctx.MethodName))
         {
             return new WaitForAction(
@@ -38,6 +80,17 @@ public class WaitInvocationRecognizer : IInvocationRecognizer
                 ctx.MethodName,
                 ctx.FullText,
                 WaitForKind.ActionabilityElided);
+        }
+
+        if (BuiltInWaitPolicies.TryGetValue(ctx.MethodName, out var builtInKind))
+        {
+            return new WaitForAction(
+                ctx.SourceLine,
+                ctx.ReceiverText,
+                RecognitionConfidence.SyntaxFallback,
+                ctx.MethodName,
+                ctx.FullText,
+                builtInKind);
         }
 
         if (IsProductStateWait(ctx.MethodName, ctx.ReceiverText))
@@ -63,6 +116,11 @@ public class WaitInvocationRecognizer : IInvocationRecognizer
         }
 
         return null;
+    }
+
+    static bool TryParseWaitForKind(string configuredKind, out WaitForKind kind)
+    {
+        return Enum.TryParse(configuredKind, ignoreCase: false, out kind);
     }
 
     static bool IsProductStateWait(string methodName, string receiverText)

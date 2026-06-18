@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Migrator.Core.Models;
+using Migrator.Roslyn;
 
 namespace Migrator.Roslyn.Recognizers;
 
@@ -12,10 +13,12 @@ namespace Migrator.Roslyn.Recognizers;
 /// </summary>
 public class NavigationRecognizer : IInvocationRecognizer
 {
-    static readonly HashSet<string> NavigationMethods = new()
+    readonly IReadOnlySet<string> _navigationMethods;
+
+    public NavigationRecognizer(RecognizerOptions? options = null)
     {
-        "GoToAsync", "GoTo", "NavigateTo", "Navigate", "OpenPage"
-    };
+        _navigationMethods = (options ?? RecognizerOptions.Default).NavigationMethods;
+    }
 
     static readonly Regex OpenPagePattern = new(
         @"^\s*var\s+(\w+)\s*=\s*Navigation\s*\.\s*OpenPage\s*<\w+>\s*\(([^)]+)\)\s*$",
@@ -42,7 +45,7 @@ public class NavigationRecognizer : IInvocationRecognizer
             }
         }
 
-        if (NavigationMethods.Contains(ctx.MethodName))
+        if (_navigationMethods.Contains(ctx.MethodName))
             return new MethodInvocationAction(ctx.SourceLine, ctx.ReceiverText, ctx.MethodName, ctx.FullText, RecognitionConfidence.SyntaxFallback);
 
         return null;

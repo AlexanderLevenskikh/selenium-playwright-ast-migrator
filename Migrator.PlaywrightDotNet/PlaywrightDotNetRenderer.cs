@@ -21,11 +21,22 @@ public class PlaywrightDotNetRenderer : IRenderer
     readonly HashSet<string> _targetLocals = new(StringComparer.Ordinal);
     HashSet<string> _targetKnownTypes = new(StringComparer.Ordinal);
     HashSet<string> _targetKnownIdentifiers = new(StringComparer.Ordinal);
+    readonly HashSet<string> _suppressedMethods;
+    readonly string[] _suppressedMethodPatterns;
     bool _useAssertionsExpect = false;
 
     public PlaywrightDotNetRenderer(string indent = "\t")
+        : this(null, indent)
+    {
+    }
+
+    public PlaywrightDotNetRenderer(ProjectAdapterConfig? config, string indent = "\t")
     {
         _indent = indent;
+        _suppressedMethods = new HashSet<string>(
+            config?.SuppressedMethods ?? Array.Empty<string>(),
+            StringComparer.Ordinal);
+        _suppressedMethodPatterns = config?.SuppressedMethodPatterns ?? Array.Empty<string>();
     }
 
     public string Render(TestFileModel model)
@@ -1319,7 +1330,7 @@ public class PlaywrightDotNetRenderer : IRenderer
     /// Currently conservative — no methods are suppressed globally.
     /// Use adapter config MethodMapping instead of adding entries here.
     /// </summary>
-    static bool IsLowPriorityMethod(string methodName, string? fullSourceText)
+    bool IsLowPriorityMethod(string methodName, string? fullSourceText)
     {
         // Reject patterns that always have side effects — never suppress.
         if (methodName.StartsWith("ClickAndOpen", StringComparison.Ordinal))
@@ -1329,10 +1340,38 @@ public class PlaywrightDotNetRenderer : IRenderer
         if (fullSourceText is not null && fullSourceText.Contains("Navigation.", StringComparison.Ordinal))
             return false;
 
-        // No methods currently suppressed globally.
+        if (IsSuppressedMethod(methodName, fullSourceText))
+            return true;
+
+        if (fullSourceText != null && _suppressedMethodPatterns.Any(p => WildcardMatches(fullSourceText, p)))
+            return true;
+
         // Methods like ValidateLoading, ExecuteScript, Window, SettingPeriod may have side effects
-        // and should be handled via adapter config MethodMapping per-project.
+        // and should be handled via adapter config MethodMapping per-project unless explicitly suppressed.
         return false;
+    }
+
+    bool IsSuppressedMethod(string methodName, string? fullSourceText)
+    {
+        if (_suppressedMethods.Contains(methodName))
+            return true;
+
+        if (string.IsNullOrWhiteSpace(fullSourceText))
+            return false;
+
+        var trimmed = fullSourceText.Trim();
+        return _suppressedMethods.Any(method =>
+            trimmed.StartsWith(method.Trim() + "(", StringComparison.Ordinal) ||
+            trimmed.Contains("." + method.Trim() + "(", StringComparison.Ordinal));
+    }
+
+    static bool WildcardMatches(string text, string pattern)
+    {
+        if (string.IsNullOrWhiteSpace(pattern))
+            return false;
+
+        var regex = "^" + Regex.Escape(pattern.Trim()).Replace("\\*", ".*") + "$";
+        return Regex.IsMatch(text.Trim(), regex, RegexOptions.CultureInvariant);
     }
 
     /// <summary>

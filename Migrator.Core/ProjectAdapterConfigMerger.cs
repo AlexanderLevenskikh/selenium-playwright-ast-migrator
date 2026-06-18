@@ -52,7 +52,12 @@ public static class ProjectAdapterConfigMerger
             SourceOnlyIdentifiers: MergeStrings(layers.SelectMany(c => c.SourceOnlyIdentifiers)),
             TargetKnownTypes: MergeStrings(layers.SelectMany(c => c.TargetKnownTypes)),
             TargetKnownIdentifiers: MergeStrings(layers.SelectMany(c => c.TargetKnownIdentifiers)),
-            Verification: MergeVerification(layers.Select(c => c.Verification)));
+            Verification: MergeVerification(layers.Select(c => c.Verification)),
+            WaitPolicies: MergeBy(layers.SelectMany(c => c.WaitPolicies), x => x.SourceMethod),
+            RecognizerAliases: MergeRecognizerAliases(layers.Select(c => c.RecognizerAliases)),
+            GenericResultMethods: MergeStrings(layers.SelectMany(c => c.GenericResultMethods)),
+            SuppressedMethods: MergeStrings(layers.SelectMany(c => c.SuppressedMethods)),
+            SuppressedMethodPatterns: MergeStrings(layers.SelectMany(c => c.SuppressedMethodPatterns)));
     }
 
     static T[] MergeBy<T>(IEnumerable<T> items, Func<T, string?> keySelector)
@@ -131,6 +136,22 @@ public static class ProjectAdapterConfigMerger
         return new LocatorSettings(
             LastNonEmpty(layers.Select(x => x.DefaultTestIdAttribute)),
             MergeStrings(layers.SelectMany(x => x.KnownTestIdAttributes ?? Array.Empty<string>())));
+    }
+
+
+    static RecognizerAliasesConfig? MergeRecognizerAliases(IEnumerable<RecognizerAliasesConfig?> aliases)
+    {
+        var layers = aliases.Where(x => x != null).Cast<RecognizerAliasesConfig>().ToArray();
+        if (layers.Length == 0)
+            return null;
+
+        return new RecognizerAliasesConfig
+        {
+            InputMethods = MergeStrings(layers.SelectMany(x => x.InputMethods)),
+            SelectMethods = MergeStrings(layers.SelectMany(x => x.SelectMethods)),
+            NavigationMethods = MergeStrings(layers.SelectMany(x => x.NavigationMethods)),
+            FluentAssertionMethods = MergeStrings(layers.SelectMany(x => x.FluentAssertionMethods))
+        };
     }
 
     static TestHostConfig? MergeTestHost(IEnumerable<TestHostConfig?> hosts)

@@ -51,6 +51,30 @@
       "items": { "$ref": "#/$defs/parameterizedMethodMapping" },
       "description": "Pattern-based method mappings with {placeholder} support."
     },
+    "WaitPolicies": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/waitPolicy" },
+      "description": "Project-specific classification for Wait* wrappers before generic wait recognition."
+    },
+    "RecognizerAliases": { "$ref": "#/$defs/recognizerAliases" },
+    "GenericResultMethods": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true,
+      "description": "Generic methods whose result variable must be preserved for adapter mappings, e.g. Click<T>()."
+    },
+    "SuppressedMethods": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true,
+      "description": "Diagnostic/no-op source methods that should not emit MANUAL_REVIEW TODOs."
+    },
+    "SuppressedMethodPatterns": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true,
+      "description": "Wildcard patterns against full source invocation text for low-priority diagnostic calls."
+    },
     "LocatorSettings": { "$ref": "#/$defs/locatorSettings" },
     "TestHost": { "$ref": "#/$defs/testHost" },
     "Verification": { "$ref": "#/$defs/verification" },
@@ -127,6 +151,29 @@
         "Description": { "type": "string" },
         "SourceTruth": { "type": "string" },
         "Confidence": { "type": "string", "enum": ["high", "medium", "low"] }
+      }
+    },
+    "waitPolicy": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["SourceMethod", "Kind"],
+      "properties": {
+        "SourceMethod": { "type": "string" },
+        "Kind": {
+          "type": "string",
+          "enum": ["ActionabilityElided", "ProductStateLoaded", "ProductStateVisible", "ProductStateHidden", "ReviewRequired", "AdapterMapping"]
+        },
+        "Reason": { "type": "string" }
+      }
+    },
+    "recognizerAliases": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "InputMethods": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "SelectMethods": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "NavigationMethods": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "FluentAssertionMethods": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
       }
     },
     "locatorSettings": {

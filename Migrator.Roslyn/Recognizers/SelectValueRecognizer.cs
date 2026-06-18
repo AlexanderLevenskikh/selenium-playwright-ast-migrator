@@ -1,4 +1,5 @@
 using Migrator.Core.Models;
+using Migrator.Roslyn;
 
 namespace Migrator.Roslyn.Recognizers;
 
@@ -10,15 +11,16 @@ namespace Migrator.Roslyn.Recognizers;
 /// </summary>
 public class SelectValueRecognizer : IInvocationRecognizer
 {
-    static readonly HashSet<string> SelectMethods = new()
+    readonly IReadOnlySet<string> _selectMethods;
+
+    public SelectValueRecognizer(RecognizerOptions? options = null)
     {
-        "SelectValue", "SelectValueByText", "SelectButton",
-        "DeselectValue", "SelectOption", "SelectByText", "SelectByValue"
-    };
+        _selectMethods = (options ?? RecognizerOptions.Default).SelectMethods;
+    }
 
     public TestAction? TryRecognize(InvocationContext ctx)
     {
-        if (SelectMethods.Contains(ctx.MethodName) && !string.IsNullOrEmpty(ctx.ReceiverText))
+        if (_selectMethods.Contains(ctx.MethodName) && !string.IsNullOrEmpty(ctx.ReceiverText))
             return new MethodInvocationAction(ctx.SourceLine, ctx.ReceiverText, ctx.MethodName, ctx.FullText, RecognitionConfidence.SyntaxFallback);
 
         return null;

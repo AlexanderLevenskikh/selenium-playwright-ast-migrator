@@ -1,18 +1,21 @@
 using Migrator.Core;
 using Migrator.Core.Models;
+using Migrator.Roslyn;
 
 namespace Migrator.Roslyn.Recognizers;
 
 public class SendKeysInvocationRecognizer : IInvocationRecognizer
 {
-    static readonly HashSet<string> SimpleInputMethods = new()
+    readonly IReadOnlySet<string> _simpleInputMethods;
+
+    public SendKeysInvocationRecognizer(RecognizerOptions? options = null)
     {
-        "SendKeys", "InputText", "InputValue"
-    };
+        _simpleInputMethods = (options ?? RecognizerOptions.Default).InputMethods;
+    }
 
     public TestAction? TryRecognize(InvocationContext ctx)
     {
-        if (SimpleInputMethods.Contains(ctx.MethodName) && !string.IsNullOrEmpty(ctx.ReceiverText))
+        if (_simpleInputMethods.Contains(ctx.MethodName) && !string.IsNullOrEmpty(ctx.ReceiverText))
         {
             var argText = ctx.ArgumentTexts.FirstOrDefault() ?? string.Empty;
             if (argText.StartsWith("Keys.", System.StringComparison.Ordinal))

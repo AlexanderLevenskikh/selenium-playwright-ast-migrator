@@ -65,11 +65,6 @@ if (mode == "discover-target" && !Directory.Exists(inputPath))
     return 2;
 }
 
-var parser = new RoslynTestFileParser();
-IRenderer renderer = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
-    ? new PlaywrightTypeScriptRenderer()
-    : new PlaywrightDotNetRenderer();
-
 IProjectAdapter? adapter = null;
 
 if (configPaths.Length > 0)
@@ -100,6 +95,11 @@ if (configPaths.Length > 0)
         ? $"Loaded adapter config: {configPaths[0]}"
         : $"Loaded adapter config layers: {string.Join(" -> ", configPaths)}");
 }
+
+var parser = new RoslynTestFileParser(loadedConfig);
+IRenderer renderer = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
+    ? new PlaywrightTypeScriptRenderer()
+    : new PlaywrightDotNetRenderer(loadedConfig);
 
 if (string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase) && mode == "orchestrate")
 {
@@ -5686,7 +5686,12 @@ static ConfigMetric[] BuildConfigMetrics(ProjectAdapterConfig config)
         new ConfigMetric("Scopes", config.Scopes.Length),
         new ConfigMetric("SourceOnlyIdentifiers", config.SourceOnlyIdentifiers.Length),
         new ConfigMetric("TargetKnownTypes", config.TargetKnownTypes.Length),
-        new ConfigMetric("TargetKnownIdentifiers", config.TargetKnownIdentifiers.Length)
+        new ConfigMetric("TargetKnownIdentifiers", config.TargetKnownIdentifiers.Length),
+        new ConfigMetric("WaitPolicies", config.WaitPolicies.Length),
+        new ConfigMetric("RecognizerAliases", CountRecognizerAliases(config.RecognizerAliases)),
+        new ConfigMetric("GenericResultMethods", config.GenericResultMethods.Length),
+        new ConfigMetric("SuppressedMethods", config.SuppressedMethods.Length),
+        new ConfigMetric("SuppressedMethodPatterns", config.SuppressedMethodPatterns.Length)
     };
 }
 
@@ -5717,6 +5722,24 @@ static IEnumerable<ConfigSafetyIssue> AnalyzeConfigSafety(ProjectAdapterConfig c
     AddDuplicateIssues(config.SourceOnlyIdentifiers, "SourceOnlyIdentifiers", "DUPLICATE_SOURCE_ONLY_IDENTIFIER", issues);
     AddDuplicateIssues(config.TargetKnownTypes, "TargetKnownTypes", "DUPLICATE_TARGET_KNOWN_TYPE", issues);
     AddDuplicateIssues(config.TargetKnownIdentifiers, "TargetKnownIdentifiers", "DUPLICATE_TARGET_KNOWN_IDENTIFIER", issues);
+    AddDuplicateIssues(config.WaitPolicies.Select(x => x.SourceMethod), "WaitPolicies.SourceMethod", "DUPLICATE_WAIT_POLICY", issues);
+    AddDuplicateIssues(config.GenericResultMethods, "GenericResultMethods", "DUPLICATE_GENERIC_RESULT_METHOD", issues);
+    AddDuplicateIssues(config.SuppressedMethods, "SuppressedMethods", "DUPLICATE_SUPPRESSED_METHOD", issues);
+    AddDuplicateIssues(config.SuppressedMethodPatterns, "SuppressedMethodPatterns", "DUPLICATE_SUPPRESSED_METHOD_PATTERN", issues);
+    if (config.RecognizerAliases != null)
+    {
+        AddDuplicateIssues(config.RecognizerAliases.InputMethods, "RecognizerAliases.InputMethods", "DUPLICATE_RECOGNIZER_ALIAS", issues);
+        AddDuplicateIssues(config.RecognizerAliases.SelectMethods, "RecognizerAliases.SelectMethods", "DUPLICATE_RECOGNIZER_ALIAS", issues);
+        AddDuplicateIssues(config.RecognizerAliases.NavigationMethods, "RecognizerAliases.NavigationMethods", "DUPLICATE_RECOGNIZER_ALIAS", issues);
+        AddDuplicateIssues(config.RecognizerAliases.FluentAssertionMethods, "RecognizerAliases.FluentAssertionMethods", "DUPLICATE_RECOGNIZER_ALIAS", issues);
+    }
+
+    foreach (var method in config.SuppressedMethods.Concat(config.SuppressedMethodPatterns).Where(IsRiskySuppressedMethod))
+    {
+        issues.Add(new ConfigSafetyIssue("warning", "RISKY_SUPPRESSED_METHOD",
+            $"'{method}' looks like an action/assertion/business method but is configured as suppressed.", "SuppressedMethods/SuppressedMethodPatterns",
+            "Suppress only diagnostics/no-op helpers. Map or review business actions, waits, assertions, navigation, create/save/delete methods."));
+    }
 
     foreach (var target in config.UiTargets.Where(t => string.Equals(t.TargetKind, "RawExpression", StringComparison.OrdinalIgnoreCase)))
     {
@@ -5800,6 +5823,36 @@ static IEnumerable<ConfigDiffChange> BuildConfigChanges(ProjectAdapterConfig bef
     foreach (var c in DiffStringSet("Tables", before.Tables.Select(x => x.SourceExpression), after.Tables.Select(x => x.SourceExpression))) yield return c;
     foreach (var c in DiffStringSet("Pagination", before.Pagination.Select(x => x.SourceExpression), after.Pagination.Select(x => x.SourceExpression))) yield return c;
     foreach (var c in DiffStringSet("Scopes", before.Scopes.Select(x => x.Name), after.Scopes.Select(x => x.Name))) yield return c;
+    foreach (var c in DiffStringSet("WaitPolicies", before.WaitPolicies.Select(x => $"{x.SourceMethod}:{x.Kind}"), after.WaitPolicies.Select(x => $"{x.SourceMethod}:{x.Kind}"))) yield return c;
+    foreach (var c in DiffStringSet("GenericResultMethods", before.GenericResultMethods, after.GenericResultMethods)) yield return c;
+    foreach (var c in DiffStringSet("SuppressedMethods", before.SuppressedMethods, after.SuppressedMethods)) yield return c;
+    foreach (var c in DiffStringSet("SuppressedMethodPatterns", before.SuppressedMethodPatterns, after.SuppressedMethodPatterns)) yield return c;
+    foreach (var c in DiffStringSet("RecognizerAliases.InputMethods", before.RecognizerAliases?.InputMethods ?? Array.Empty<string>(), after.RecognizerAliases?.InputMethods ?? Array.Empty<string>())) yield return c;
+    foreach (var c in DiffStringSet("RecognizerAliases.SelectMethods", before.RecognizerAliases?.SelectMethods ?? Array.Empty<string>(), after.RecognizerAliases?.SelectMethods ?? Array.Empty<string>())) yield return c;
+    foreach (var c in DiffStringSet("RecognizerAliases.NavigationMethods", before.RecognizerAliases?.NavigationMethods ?? Array.Empty<string>(), after.RecognizerAliases?.NavigationMethods ?? Array.Empty<string>())) yield return c;
+    foreach (var c in DiffStringSet("RecognizerAliases.FluentAssertionMethods", before.RecognizerAliases?.FluentAssertionMethods ?? Array.Empty<string>(), after.RecognizerAliases?.FluentAssertionMethods ?? Array.Empty<string>())) yield return c;
+}
+
+static int CountRecognizerAliases(RecognizerAliasesConfig? aliases)
+{
+    if (aliases == null)
+        return 0;
+
+    return aliases.InputMethods.Length
+        + aliases.SelectMethods.Length
+        + aliases.NavigationMethods.Length
+        + aliases.FluentAssertionMethods.Length;
+}
+
+static bool IsRiskySuppressedMethod(string? method)
+{
+    if (string.IsNullOrWhiteSpace(method))
+        return false;
+
+    var text = method.Trim().TrimStart('*', '.');
+    var simpleName = text.Split('(', '.', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? text;
+    var riskyPrefixes = new[] { "Click", "Open", "Navigate", "GoTo", "Wait", "Assert", "Verify", "Validate", "Exist", "Create", "Save", "Delete", "Remove", "Submit", "Send", "Set" };
+    return riskyPrefixes.Any(prefix => simpleName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 }
 
 static IEnumerable<ConfigDiffChange> DiffStringSet(string section, IEnumerable<string?> beforeValues, IEnumerable<string?> afterValues)
@@ -5840,6 +5893,29 @@ static IEnumerable<ConfigSafetyIssue> BuildConfigDiffRisks(ProjectAdapterConfig 
         risks.Add(new ConfigSafetyIssue("warning", "QUALITY_GATE_LOOSENED", "MaxUnsupportedActions was loosened or removed.", "QualityGates.MaxUnsupportedActions", "Confirm this was intentional."));
     if (IsQualityGateLoosened(before.QualityGates?.MaxUnmappedTargets, after.QualityGates?.MaxUnmappedTargets))
         risks.Add(new ConfigSafetyIssue("warning", "QUALITY_GATE_LOOSENED", "MaxUnmappedTargets was loosened or removed.", "QualityGates.MaxUnmappedTargets", "Confirm this was intentional."));
+
+    var addedSuppressions = after.SuppressedMethods.Concat(after.SuppressedMethodPatterns)
+        .Except(before.SuppressedMethods.Concat(before.SuppressedMethodPatterns), StringComparer.OrdinalIgnoreCase)
+        .Where(IsRiskySuppressedMethod)
+        .ToArray();
+    foreach (var method in addedSuppressions)
+    {
+        risks.Add(new ConfigSafetyIssue("warning", "RISKY_SUPPRESSION_ADDED",
+            $"'{method}' was added as a suppressed method/pattern.", "SuppressedMethods/SuppressedMethodPatterns",
+            "Confirm this is diagnostic/no-op. Business actions/assertions/waits should be mapped or reviewed, not suppressed."));
+    }
+
+    var addedElidedWaits = after.WaitPolicies
+        .Where(x => string.Equals(x.Kind, "ActionabilityElided", StringComparison.Ordinal))
+        .Select(x => x.SourceMethod)
+        .Except(before.WaitPolicies.Where(x => string.Equals(x.Kind, "ActionabilityElided", StringComparison.Ordinal)).Select(x => x.SourceMethod), StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+    foreach (var method in addedElidedWaits)
+    {
+        risks.Add(new ConfigSafetyIssue("warning", "ACTIONABILITY_WAIT_ELIDED",
+            $"'{method}' was configured as ActionabilityElided.", "WaitPolicies",
+            "Confirm this wait is not a product-state assertion. Disabled/hidden/value/text waits usually need assertions, not elision."));
+    }
 
     return risks;
 }
