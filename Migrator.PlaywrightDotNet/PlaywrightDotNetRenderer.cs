@@ -514,7 +514,9 @@ public class PlaywrightDotNetRenderer : IRenderer
         // (local aliases, framework built-ins, known types, etc.), render as active code
         // instead of TODO. This covers usages like `await Expect(loader).ToBeHiddenAsync()`
         // where `loader` is a known local alias.
-        if (action is RawStatementAction rawResolved && AllSymbolsResolved(rawResolved.SourceText, declaredVariables))
+        if (action is RawStatementAction rawResolved
+            && !HasLineBreak(rawResolved.SourceText)
+            && AllSymbolsResolved(rawResolved.SourceText, declaredVariables))
         {
             RenderResolvedRawStatement(sb, rawResolved);
             return;
