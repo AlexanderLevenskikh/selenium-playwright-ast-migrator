@@ -85,6 +85,20 @@ public sealed class ProjectAdapterConfig
     public WaitPolicyMapping[] WaitPolicies { get; init; } = Array.Empty<WaitPolicyMapping>();
 
     /// <summary>
+    /// Methods that should be rendered as source comments without manual-review TODOs.
+    /// Use only for diagnostic/no-op helpers; risky methods are reported by config safety checks.
+    /// </summary>
+    [JsonPropertyName("SuppressedMethods")]
+    public string[] SuppressedMethods { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Glob-like source statement patterns that should be rendered as source comments before safety checks.
+    /// Example: "*page.GoToDiscountsPage(*)".
+    /// </summary>
+    [JsonPropertyName("SuppressedMethodPatterns")]
+    public string[] SuppressedMethodPatterns { get; init; } = Array.Empty<string>();
+
+    /// <summary>
     /// Optional project-aware verification settings. Used by CLI mode verify-project to
     /// compile generated Playwright files in a temporary .csproj with real project/package references.
     /// This does not modify the source project.
@@ -117,7 +131,7 @@ public sealed class ProjectAdapterConfig
     {
     }
 
-    public ProjectAdapterConfig(string SourceProjectName, UiTargetMapping[] UiTargets, PageObjectMapping[] PageObjects, MethodMapping[] Methods, LocatorSettings? LocatorSettings = null, TestHostConfig? TestHost = null, ParameterizedMethodMapping[]? ParameterizedMethods = null, ProfileScope[]? Scopes = null, QualityGatesConfig? QualityGates = null, TableConfig[]? Tables = null, PaginationConfig[]? Pagination = null, string[]? SourceOnlyIdentifiers = null, string[]? TargetKnownTypes = null, string[]? TargetKnownIdentifiers = null, VerificationConfig? Verification = null, RecognizerAliasOptions? RecognizerAliases = null, string[]? GenericResultMethods = null, WaitPolicyMapping[]? WaitPolicies = null)
+    public ProjectAdapterConfig(string SourceProjectName, UiTargetMapping[] UiTargets, PageObjectMapping[] PageObjects, MethodMapping[] Methods, LocatorSettings? LocatorSettings = null, TestHostConfig? TestHost = null, ParameterizedMethodMapping[]? ParameterizedMethods = null, ProfileScope[]? Scopes = null, QualityGatesConfig? QualityGates = null, TableConfig[]? Tables = null, PaginationConfig[]? Pagination = null, string[]? SourceOnlyIdentifiers = null, string[]? TargetKnownTypes = null, string[]? TargetKnownIdentifiers = null, VerificationConfig? Verification = null, RecognizerAliasOptions? RecognizerAliases = null, string[]? GenericResultMethods = null, WaitPolicyMapping[]? WaitPolicies = null, string[]? SuppressedMethods = null, string[]? SuppressedMethodPatterns = null)
     {
         this.SourceProjectName = SourceProjectName;
         this.UiTargets = UiTargets;
@@ -137,6 +151,8 @@ public sealed class ProjectAdapterConfig
         this.RecognizerAliases = RecognizerAliases ?? new RecognizerAliasOptions();
         this.GenericResultMethods = GenericResultMethods ?? Array.Empty<string>();
         this.WaitPolicies = WaitPolicies ?? Array.Empty<WaitPolicyMapping>();
+        this.SuppressedMethods = SuppressedMethods ?? Array.Empty<string>();
+        this.SuppressedMethodPatterns = SuppressedMethodPatterns ?? Array.Empty<string>();
     }
 }
 

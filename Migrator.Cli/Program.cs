@@ -65,11 +65,6 @@ if (mode == "discover-target" && !Directory.Exists(inputPath))
     return 2;
 }
 
-var parser = new RoslynTestFileParser();
-IRenderer renderer = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
-    ? new PlaywrightTypeScriptRenderer()
-    : new PlaywrightDotNetRenderer();
-
 IProjectAdapter? adapter = null;
 
 if (configPaths.Length > 0)
@@ -100,6 +95,11 @@ if (configPaths.Length > 0)
         ? $"Loaded adapter config: {configPaths[0]}"
         : $"Loaded adapter config layers: {string.Join(" -> ", configPaths)}");
 }
+
+var parser = new RoslynTestFileParser(RecognizerOptions.FromConfig(loadedConfig));
+IRenderer renderer = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
+    ? new PlaywrightTypeScriptRenderer()
+    : new PlaywrightDotNetRenderer();
 
 if (string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase) && mode == "orchestrate")
 {
@@ -5225,7 +5225,9 @@ static ConfigMetric[] BuildConfigMetrics(ProjectAdapterConfig config)
         new ConfigMetric("Scopes", config.Scopes.Length),
         new ConfigMetric("SourceOnlyIdentifiers", config.SourceOnlyIdentifiers.Length),
         new ConfigMetric("TargetKnownTypes", config.TargetKnownTypes.Length),
-        new ConfigMetric("TargetKnownIdentifiers", config.TargetKnownIdentifiers.Length)
+        new ConfigMetric("TargetKnownIdentifiers", config.TargetKnownIdentifiers.Length),
+        new ConfigMetric("SuppressedMethods", config.SuppressedMethods.Length),
+        new ConfigMetric("SuppressedMethodPatterns", config.SuppressedMethodPatterns.Length)
     };
 }
 
@@ -5256,6 +5258,15 @@ static IEnumerable<ConfigSafetyIssue> AnalyzeConfigSafety(ProjectAdapterConfig c
     AddDuplicateIssues(config.SourceOnlyIdentifiers, "SourceOnlyIdentifiers", "DUPLICATE_SOURCE_ONLY_IDENTIFIER", issues);
     AddDuplicateIssues(config.TargetKnownTypes, "TargetKnownTypes", "DUPLICATE_TARGET_KNOWN_TYPE", issues);
     AddDuplicateIssues(config.TargetKnownIdentifiers, "TargetKnownIdentifiers", "DUPLICATE_TARGET_KNOWN_IDENTIFIER", issues);
+    AddDuplicateIssues(config.SuppressedMethods, "SuppressedMethods", "DUPLICATE_SUPPRESSED_METHOD", issues);
+    AddDuplicateIssues(config.SuppressedMethodPatterns, "SuppressedMethodPatterns", "DUPLICATE_SUPPRESSED_METHOD_PATTERN", issues);
+
+    foreach (var suppressed in config.SuppressedMethods.Concat(config.SuppressedMethodPatterns).Where(IsRiskySuppressionPattern))
+    {
+        issues.Add(new ConfigSafetyIssue("warning", "RISKY_SUPPRESSION_REQUIRES_REVIEW",
+            $"Suppression '{suppressed}' looks like it may hide a state-changing or assertion-like source helper.", "SuppressedMethods/SuppressedMethodPatterns",
+            "Suppress only diagnostic/no-op helpers. Map or review business actions, waits, assertions, create/save/delete/open/click helpers."));
+    }
 
     foreach (var target in config.UiTargets.Where(t => string.Equals(t.TargetKind, "RawExpression", StringComparison.OrdinalIgnoreCase)))
     {
@@ -5286,6 +5297,21 @@ static IEnumerable<ConfigSafetyIssue> AnalyzeConfigSafety(ProjectAdapterConfig c
     }
 
     return issues;
+}
+
+static bool IsRiskySuppressionPattern(string value)
+{
+    var text = value.Trim();
+    if (string.IsNullOrWhiteSpace(text))
+        return false;
+
+    var riskyTokens = new[]
+    {
+        "Click", "Open", "GoTo", "Navigate", "Wait", "Assert", "Verify", "Validate",
+        "Exist", "Create", "Save", "Delete", "Remove", "Submit", "Request", "Capture"
+    };
+
+    return riskyTokens.Any(token => text.Contains(token, StringComparison.OrdinalIgnoreCase));
 }
 
 static bool ContainsRiskyGeneratedCode(string statement)
@@ -5338,6 +5364,8 @@ static IEnumerable<ConfigDiffChange> BuildConfigChanges(ProjectAdapterConfig bef
     foreach (var c in DiffStringSet("TargetKnownIdentifiers", before.TargetKnownIdentifiers, after.TargetKnownIdentifiers)) yield return c;
     foreach (var c in DiffStringSet("Tables", before.Tables.Select(x => x.SourceExpression), after.Tables.Select(x => x.SourceExpression))) yield return c;
     foreach (var c in DiffStringSet("Pagination", before.Pagination.Select(x => x.SourceExpression), after.Pagination.Select(x => x.SourceExpression))) yield return c;
+    foreach (var c in DiffStringSet("SuppressedMethods", before.SuppressedMethods, after.SuppressedMethods)) yield return c;
+    foreach (var c in DiffStringSet("SuppressedMethodPatterns", before.SuppressedMethodPatterns, after.SuppressedMethodPatterns)) yield return c;
     foreach (var c in DiffStringSet("Scopes", before.Scopes.Select(x => x.Name), after.Scopes.Select(x => x.Name))) yield return c;
 }
 
@@ -5371,6 +5399,16 @@ static IEnumerable<ConfigSafetyIssue> BuildConfigDiffRisks(ProjectAdapterConfig 
         risks.Add(new ConfigSafetyIssue("error", "FORBIDDEN_TARGET_KNOWN_ADDED",
             $"'{symbol}' was added as target-known.", "TargetKnownTypes/TargetKnownIdentifiers",
             "Do not mark Selenium roots as target-known."));
+    }
+
+    var addedSuppressions = after.SuppressedMethods.Concat(after.SuppressedMethodPatterns)
+        .Except(before.SuppressedMethods.Concat(before.SuppressedMethodPatterns), StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+    foreach (var suppressed in addedSuppressions.Where(IsRiskySuppressionPattern))
+    {
+        risks.Add(new ConfigSafetyIssue("warning", "RISKY_SUPPRESSION_ADDED",
+            $"Suppression '{suppressed}' was added and may hide a business action/wait/assertion.", "SuppressedMethods/SuppressedMethodPatterns",
+            "Approve only if this helper is intentionally comment-only and downstream mappings are verified."));
     }
 
     if (IsQualityGateLoosened(before.QualityGates?.MaxTodoComments, after.QualityGates?.MaxTodoComments))

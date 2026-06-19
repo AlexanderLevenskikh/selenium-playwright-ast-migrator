@@ -21,6 +21,8 @@ public class PlaywrightDotNetRenderer : IRenderer
     readonly HashSet<string> _targetLocals = new(StringComparer.Ordinal);
     HashSet<string> _targetKnownTypes = new(StringComparer.Ordinal);
     HashSet<string> _targetKnownIdentifiers = new(StringComparer.Ordinal);
+    HashSet<string> _suppressedMethods = new(StringComparer.Ordinal);
+    string[] _suppressedMethodPatterns = Array.Empty<string>();
     bool _useAssertionsExpect = false;
 
     public PlaywrightDotNetRenderer(string indent = "\t")
@@ -46,6 +48,13 @@ public class PlaywrightDotNetRenderer : IRenderer
         _targetKnownIdentifiers = new HashSet<string>(
             model.TargetKnownIdentifiers ?? Array.Empty<string>(),
             StringComparer.Ordinal);
+        _suppressedMethods = new HashSet<string>(
+            model.SuppressedMethods ?? Array.Empty<string>(),
+            StringComparer.Ordinal);
+        _suppressedMethodPatterns = (model.SuppressedMethodPatterns ?? Array.Empty<string>())
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p.Trim())
+            .ToArray();
         var targetNamespace = testHost?.Namespace ?? model.Namespace;
         var className = testHost?.ClassName ?? (model.ClassName + "Playwright");
         var baseClass = testHost?.BaseClass ?? "PageTest";
@@ -388,6 +397,15 @@ public class PlaywrightDotNetRenderer : IRenderer
         var sourceText = GetActionSourceText(action);
         var declaredVariables = ExtractVariableNames(sourceText).ToArray();
 
+        // Config-level suppressions must run before source-root safety checks.
+        // This is intentionally comment-only: suppressed source helpers are not
+        // emitted as active target code and their declared variables are not registered.
+        if (IsSuppressedAction(action, sourceText))
+        {
+            RenderSuppressedAction(sb, action, sourceText);
+            return;
+        }
+
         // WaitPolicy must run before source-root safety. A mapped wait such as
         // page.Loader.ValidateLoading() still has a Selenium/POM root (page),
         // but the meaningful target is page.Loader and can be rendered safely.
@@ -578,6 +596,91 @@ public class PlaywrightDotNetRenderer : IRenderer
             _ => sourceText
         };
     }
+
+    bool IsSuppressedAction(TestAction action, string sourceText)
+    {
+        if (MatchesSuppressedMethod(action, sourceText))
+            return true;
+
+        return _suppressedMethodPatterns.Any(pattern => GlobMatches(pattern, sourceText));
+    }
+
+    bool MatchesSuppressedMethod(TestAction action, string sourceText)
+    {
+        if (_suppressedMethods.Count == 0)
+            return false;
+
+        var methodName = action switch
+        {
+            MethodInvocationAction method => method.MethodName,
+            MappedMethodInvocationAction mapped => mapped.SourceMethod,
+            WaitForAction wait => wait.SourceMethod,
+            _ => ExtractLastInvocationMethodName(sourceText)
+        };
+
+        if (!string.IsNullOrWhiteSpace(methodName) && _suppressedMethods.Contains(methodName.Trim()))
+            return true;
+
+        var normalized = NormalizeWhitespace(sourceText);
+        foreach (var suppressed in _suppressedMethods)
+        {
+            var value = suppressed.Trim();
+            if (string.IsNullOrWhiteSpace(value))
+                continue;
+
+            if (value.Contains('.', StringComparison.Ordinal))
+            {
+                if (normalized.Contains(value + "(", StringComparison.Ordinal)
+                    || normalized.Contains(value + "<", StringComparison.Ordinal))
+                    return true;
+            }
+            else if (string.Equals(methodName, value, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void RenderSuppressedAction(StringBuilder sb, TestAction action, string sourceText)
+    {
+        sb.AppendLine($"{_indent}{_indent}// source suppressed by adapter-config // line {GetActionLine(action)}");
+        AppendCommentBlock(sb, _indent + _indent, sourceText, "  ");
+    }
+
+    static string NormalizeWhitespace(string text)
+    {
+        return Regex.Replace(text ?? string.Empty, @"\s+", " ").Trim();
+    }
+
+    static bool GlobMatches(string pattern, string text)
+    {
+        var normalizedPattern = NormalizeWhitespace(pattern);
+        var normalizedText = NormalizeWhitespace(text);
+        if (normalizedPattern.Length == 0)
+            return false;
+
+        var regex = "^" + Regex.Escape(normalizedPattern)
+            .Replace("\\*", ".*")
+            .Replace("\\?", ".") + "$";
+        return Regex.IsMatch(normalizedText, regex, RegexOptions.CultureInvariant);
+    }
+
+    static string? ExtractLastInvocationMethodName(string? sourceText)
+    {
+        if (string.IsNullOrWhiteSpace(sourceText))
+            return null;
+
+        string? result = null;
+        foreach (Match match in Regex.Matches(sourceText, @"(?:^|\.)\s*(?<name>[A-Za-z_]\w*)\s*(?:<[^>()]*>)?\s*\("))
+            result = match.Groups["name"].Value;
+
+        return result;
+    }
+
+    static int GetActionLine(TestAction action) => action.SourceLine;
+
 
     void RenderBlockedActionAsComment(StringBuilder sb, TestAction action, string reason, string sourceText)
     {

@@ -47,8 +47,10 @@ public sealed class RecognizerOptions
         var waitPolicies = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var policy in config?.WaitPolicies ?? Array.Empty<WaitPolicyMapping>())
         {
-            if (!string.IsNullOrWhiteSpace(policy.SourceMethod) && !string.IsNullOrWhiteSpace(policy.Kind))
-                waitPolicies[policy.SourceMethod.Trim()] = policy.Kind.Trim();
+            var methodName = policy.SourceMethod ?? policy.MethodName;
+            var kind = policy.Kind ?? policy.WaitKind ?? policy.Behavior;
+            if (!string.IsNullOrWhiteSpace(methodName) && !string.IsNullOrWhiteSpace(kind))
+                waitPolicies[methodName.Trim()] = kind.Trim();
         }
 
         return new RecognizerOptions(

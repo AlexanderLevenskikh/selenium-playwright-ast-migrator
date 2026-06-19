@@ -101,7 +101,9 @@ public class DefaultProjectAdapter : IProjectAdapter
             TestHost = testHost,
             SourceOnlyIdentifiers = resolved._sourceOnlyIdentifiers,
             TargetKnownTypes = resolved._targetKnownTypes,
-            TargetKnownIdentifiers = resolved._targetKnownIdentifiers
+            TargetKnownIdentifiers = resolved._targetKnownIdentifiers,
+            SuppressedMethods = resolved._globalConfig.SuppressedMethods,
+            SuppressedMethodPatterns = resolved._globalConfig.SuppressedMethodPatterns
         };
     }
 

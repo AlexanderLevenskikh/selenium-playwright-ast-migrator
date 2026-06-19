@@ -38,6 +38,8 @@ public static class ConfigValidator
         ValidateIdentifierList(config.SourceOnlyIdentifiers, "SourceOnlyIdentifiers", errors);
         ValidateIdentifierList(config.TargetKnownTypes, "TargetKnownTypes", errors);
         ValidateIdentifierList(config.TargetKnownIdentifiers, "TargetKnownIdentifiers", errors);
+        ValidateStringList(config.SuppressedMethods, "SuppressedMethods", errors);
+        ValidateStringList(config.SuppressedMethodPatterns, "SuppressedMethodPatterns", errors);
 
         if (errors.Count > 0)
             throw new ConfigValidationError(errors);
@@ -315,6 +317,19 @@ public static class ConfigValidator
         {
             if (string.IsNullOrWhiteSpace(verification.AssemblyReferences[i]))
                 errors.Add($"Verification.AssemblyReferences[{i}] is empty.");
+        }
+    }
+
+    private static void ValidateStringList(IEnumerable<string>? values, string section, List<string> errors)
+    {
+        if (values == null) return;
+
+        int index = 0;
+        foreach (var value in values)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                errors.Add($"{section}[{index}] must be a non-empty string.");
+            index++;
         }
     }
 
