@@ -19,6 +19,19 @@ Migrating E2E suites usually fails for boring reasons: thousands of repeated loc
 
 The goal is not magic conversion. The goal is to replace weeks of manual rewriting with a controlled migration loop: **source truth → profile config → generated code → verification → next pattern**.
 
+## Real migration result
+
+On one real complex Selenium C# project:
+
+- Initial TODO count: ~730
+- Tracked final-stage TODO, run-44
+- After validated core fixes + config refinements: 0
+- Syntax errors: 0
+- Build diagnostics: 0 before verify-project timeout
+
+The goal was not one-click magic, but an iterative migration workflow:
+analyze → mine patterns → update config → verify → patch only real migrator limitations.
+
 ## Supported targets
 
 | Source | Target | Status | Notes |
