@@ -837,17 +837,24 @@ public class DefaultProjectAdapter : IProjectAdapter
 
     Dictionary<string, PlaceholderValue>? TryMatchPattern(string pattern, string sourceText, IReadOnlyList<string> argumentTexts)
     {
+        var patternText = TrimTrailingStatementTerminator(pattern);
+        var sourceTextToMatch = TrimTrailingStatementTerminator(sourceText);
         var placeholderRegex = new Regex(@"\{(\w+)\}");
-        var placeholderMatches = placeholderRegex.Matches(pattern).Cast<System.Text.RegularExpressions.Match>().ToList();
+        var placeholderMatches = placeholderRegex.Matches(patternText).Cast<System.Text.RegularExpressions.Match>().ToList();
         var placeholders = placeholderMatches
             .Select(m => m.Groups[1].Value)
             .ToList();
 
         if (placeholders.Count == 0)
         {
-            if (sourceText == pattern)
-                return new Dictionary<string, PlaceholderValue>();
-            return null;
+            var literalPatternBuilder = new StringBuilder();
+            AppendWhitespaceTolerantLiteral(literalPatternBuilder, patternText);
+            return Regex.IsMatch(
+                sourceTextToMatch,
+                "^" + literalPatternBuilder + "$",
+                RegexOptions.CultureInvariant | RegexOptions.Singleline)
+                ? new Dictionary<string, PlaceholderValue>()
+                : null;
         }
 
         var regexPatternBuilder = new StringBuilder();
@@ -857,14 +864,14 @@ public class DefaultProjectAdapter : IProjectAdapter
             var match = placeholderMatches[i];
             var placeholderName = match.Groups[1].Value;
 
-            regexPatternBuilder.Append(Regex.Escape(pattern.Substring(lastIndex, match.Index - lastIndex)));
+            AppendWhitespaceTolerantLiteral(
+                regexPatternBuilder,
+                patternText.Substring(lastIndex, match.Index - lastIndex));
 
-            // Parameterized method arguments can contain commas and nested invocations, e.g.
-            // Browser.GoToPage<Page>(Uri(productId, tariff.TariffId)).
-            // Older matching used [^,)]+ which stopped at the first comma/closing paren and
-            // prevented config-only mappings from matching. Use non-greedy captures for
-            // intermediate placeholders and let the final placeholder consume the remaining
-            // text up to the escaped pattern suffix.
+            // Parameterized method arguments can contain commas, nested invocations and
+            // multiline fluent chains. Use Singleline captures and whitespace-tolerant
+            // literal separators so patterns like {source}.Should().BeEquivalentTo({arg})
+            // still match source formatted as Should()\n    .BeEquivalentTo(...).
             regexPatternBuilder.Append("(?<");
             regexPatternBuilder.Append(placeholderName);
             regexPatternBuilder.Append(">");
@@ -874,12 +881,15 @@ public class DefaultProjectAdapter : IProjectAdapter
             lastIndex = match.Index + match.Length;
         }
 
-        regexPatternBuilder.Append(Regex.Escape(pattern.Substring(lastIndex)));
+        AppendWhitespaceTolerantLiteral(regexPatternBuilder, patternText.Substring(lastIndex));
         var regexPattern = regexPatternBuilder.ToString();
 
         try
         {
-            var match = Regex.Match(sourceText, "^" + regexPattern + "$");
+            var match = Regex.Match(
+                sourceTextToMatch,
+                "^" + regexPattern + "$",
+                RegexOptions.CultureInvariant | RegexOptions.Singleline);
             if (!match.Success)
                 return null;
 
@@ -905,6 +915,41 @@ public class DefaultProjectAdapter : IProjectAdapter
             Console.Error.WriteLine($"Warning: invalid pattern regex for '{pattern}'");
             return null;
         }
+    }
+
+    static string TrimTrailingStatementTerminator(string text)
+    {
+        return (text ?? string.Empty).Trim().TrimEnd(';').Trim();
+    }
+
+    static void AppendWhitespaceTolerantLiteral(StringBuilder builder, string literal)
+    {
+        for (var i = 0; i < literal.Length; i++)
+        {
+            var ch = literal[i];
+            if (char.IsWhiteSpace(ch))
+            {
+                while (i + 1 < literal.Length && char.IsWhiteSpace(literal[i + 1]))
+                    i++;
+                builder.Append(@"\s*");
+                continue;
+            }
+
+            if (IsWhitespaceFlexibleToken(ch))
+            {
+                builder.Append(@"\s*");
+                builder.Append(Regex.Escape(ch.ToString()));
+                builder.Append(@"\s*");
+                continue;
+            }
+
+            builder.Append(Regex.Escape(ch.ToString()));
+        }
+    }
+
+    static bool IsWhitespaceFlexibleToken(char ch)
+    {
+        return ch is '.' or '(' or ')' or '<' or '>' or ',';
     }
 
     bool IsCSharpStringLiteral(string text)

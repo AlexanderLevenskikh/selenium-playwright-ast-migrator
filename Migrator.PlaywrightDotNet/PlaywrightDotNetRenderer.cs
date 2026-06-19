@@ -599,10 +599,45 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     bool IsSuppressedAction(TestAction action, string sourceText)
     {
-        if (MatchesSuppressedMethod(action, sourceText))
-            return true;
+        var candidates = GetSuppressionSourceTextCandidates(action, sourceText);
+        return candidates.Any(candidate => MatchesSuppressedMethod(action, candidate))
+            || candidates.Any(MatchesSuppressedMethodPattern);
+    }
 
-        return _suppressedMethodPatterns.Any(pattern => GlobMatches(pattern, sourceText));
+    IEnumerable<string> GetSuppressionSourceTextCandidates(TestAction action, string sourceText)
+    {
+        if (!string.IsNullOrWhiteSpace(sourceText))
+            yield return sourceText;
+
+        switch (action)
+        {
+            case MethodInvocationAction method when !string.IsNullOrWhiteSpace(method.FullSourceText):
+                yield return method.FullSourceText;
+                break;
+            case MappedMethodInvocationAction mapped when !string.IsNullOrWhiteSpace(mapped.FullSourceText):
+                yield return mapped.FullSourceText;
+                break;
+            case WaitForAction wait when !string.IsNullOrWhiteSpace(wait.FullSourceText):
+                yield return wait.FullSourceText;
+                break;
+            case RawStatementAction raw when !string.IsNullOrWhiteSpace(raw.SourceText):
+                yield return raw.SourceText;
+                break;
+            case UnsupportedAction unsupported when !string.IsNullOrWhiteSpace(unsupported.SourceText):
+                yield return unsupported.SourceText;
+                break;
+        }
+    }
+
+    bool MatchesSuppressedMethodPattern(string sourceText)
+    {
+        if (!_suppressedMethodPatterns.Any() || string.IsNullOrWhiteSpace(sourceText))
+            return false;
+
+        var trimmed = TrimTrailingStatementTerminator(sourceText);
+        return _suppressedMethodPatterns.Any(pattern =>
+            GlobMatches(pattern, sourceText)
+            || (!string.Equals(trimmed, sourceText, StringComparison.Ordinal) && GlobMatches(pattern, trimmed)));
     }
 
     bool MatchesSuppressedMethod(TestAction action, string sourceText)
@@ -654,17 +689,22 @@ public class PlaywrightDotNetRenderer : IRenderer
         return Regex.Replace(text ?? string.Empty, @"\s+", " ").Trim();
     }
 
+    static string TrimTrailingStatementTerminator(string text)
+    {
+        return (text ?? string.Empty).Trim().TrimEnd(';').Trim();
+    }
+
     static bool GlobMatches(string pattern, string text)
     {
-        var normalizedPattern = NormalizeWhitespace(pattern);
-        var normalizedText = NormalizeWhitespace(text);
+        var normalizedPattern = NormalizeWhitespace(TrimTrailingStatementTerminator(pattern));
+        var normalizedText = NormalizeWhitespace(TrimTrailingStatementTerminator(text));
         if (normalizedPattern.Length == 0)
             return false;
 
         var regex = "^" + Regex.Escape(normalizedPattern)
             .Replace("\\*", ".*")
             .Replace("\\?", ".") + "$";
-        return Regex.IsMatch(normalizedText, regex, RegexOptions.CultureInvariant);
+        return Regex.IsMatch(normalizedText, regex, RegexOptions.CultureInvariant | RegexOptions.Singleline);
     }
 
     static string? ExtractLastInvocationMethodName(string? sourceText)
@@ -1346,6 +1386,12 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     void RenderMethodInvocation(StringBuilder sb, MethodInvocationAction action)
     {
+        if (MatchesSuppressedMethodPattern(action.FullSourceText))
+        {
+            RenderSuppressedAction(sb, action, action.FullSourceText);
+            return;
+        }
+
         AppendCommentBlock(sb, _indent + _indent, $"[{action.MethodName}] {action.FullSourceText} // line {action.SourceLine}");
         if (!IsLowPriorityMethod(action.MethodName, action.FullSourceText))
         {
