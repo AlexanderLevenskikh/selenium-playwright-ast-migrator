@@ -391,6 +391,7 @@ internal static class RuntimeFailureClassifierCommand
         sb.AppendLine("После правок запусти один smoke-тест повторно, затем снова `runtime-classify` на новом логе и сравни результат.");
         return sb.ToString();
     }
-        private static string EscapeMd(string value) => value.Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ");
+
+    private static string EscapeMd(string value) => value.Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ");
 
 }

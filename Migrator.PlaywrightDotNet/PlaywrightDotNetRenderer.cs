@@ -56,7 +56,7 @@ public class PlaywrightDotNetRenderer : IRenderer
             .Select(p => p.Trim())
             .ToArray();
         var targetNamespace = testHost?.Namespace ?? model.Namespace;
-        var className = testHost?.ClassName ?? (model.ClassName + "Playwright");
+        var className = testHost?.ClassName ?? GeneratedNaming.ApplyPlaywrightSuffixOnce(model.ClassName);
         var baseClass = testHost?.BaseClass ?? "PageTest";
         _useAssertionsExpect = baseClass != "PageTest";
         var hasTestHostSetup = testHost?.SetUpStatements != null && testHost.SetUpStatements.Length > 0;

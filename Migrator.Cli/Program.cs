@@ -332,7 +332,7 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
     {
         string baseName = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
             ? $"{ToKebabCase(result.SourceModel.ClassName)}.spec.ts"
-            : $"{result.SourceModel.ClassName}Playwright.cs";
+            : GeneratedNaming.GetPlaywrightFileName(result.SourceModel.ClassName);
         string outName = ResolveFileName(outPath, baseName, writtenNames);
         var fullOut = Path.Combine(outPath, outName);
         File.WriteAllText(fullOut, result.GeneratedOutput);
@@ -420,7 +420,7 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
     var generatedFiles = new List<string>();
     foreach (var result in results)
     {
-        var baseName = $"{result.SourceModel.ClassName}Playwright.cs";
+        var baseName = GeneratedNaming.GetPlaywrightFileName(result.SourceModel.ClassName);
         var outName = ResolveFileName(generatedDir, baseName, writtenNames);
         var fullOut = Path.Combine(generatedDir, outName);
         File.WriteAllText(fullOut, result.GeneratedOutput);
@@ -4200,8 +4200,8 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
                 foreach (var result in resultsList)
                 {
                     string baseName = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
-            ? $"{ToKebabCase(result.SourceModel.ClassName)}.spec.ts"
-            : $"{result.SourceModel.ClassName}Playwright.cs";
+                        ? $"{ToKebabCase(result.SourceModel.ClassName)}.spec.ts"
+                        : GeneratedNaming.GetPlaywrightFileName(result.SourceModel.ClassName);
                     string outName = ResolveFileName(generatedDir, baseName, writtenNames);
                     File.WriteAllText(Path.Combine(generatedDir, outName), result.GeneratedOutput);
                     generated++;
