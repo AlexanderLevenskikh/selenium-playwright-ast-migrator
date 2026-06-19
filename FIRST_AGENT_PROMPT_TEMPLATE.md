@@ -20,10 +20,22 @@
 <TARGET_PLAYWRIGHT_PROJECT_PATH>
 ```
 
-**Migrator path:**
+**Migrator CLI bundle path:**
 
 ```text
-<MIGRATOR_PATH>
+<MIGRATOR_TOOL_BUNDLE_PATH>
+```
+
+Обычно это папка вида:
+
+```text
+<TARGET_PLAYWRIGHT_PROJECT_PATH>\tools\migrator
+```
+
+Внутри должен лежать compiled CLI:
+
+```text
+<TARGET_PLAYWRIGHT_PROJECT_PATH>\tools\migrator\migrator.exe
 ```
 
 **Migration output root:**
@@ -39,15 +51,40 @@
 Сначала изучи:
 
 ```text
-<MIGRATOR_PATH>\README.md
-<MIGRATOR_PATH>\docs\config-driven-recognizers.md
-<MIGRATOR_PATH>\schemas\adapter-config.schema.json
+<MIGRATOR_TOOL_BUNDLE_PATH>\README_AGENT_TOOL.md
+<MIGRATOR_TOOL_BUNDLE_PATH>\docs\agent-tool-boundary.md
+<MIGRATOR_TOOL_BUNDLE_PATH>\docs\migration-safety-playbook.md
+<MIGRATOR_TOOL_BUNDLE_PATH>\docs\config-driven-recognizers.md
+<MIGRATOR_TOOL_BUNDLE_PATH>\schemas\adapter-config.schema.json
 <TARGET_PLAYWRIGHT_PROJECT_PATH>\migration\creative-migration-playbook.md
 <TARGET_PLAYWRIGHT_PROJECT_PATH>\migration\profiles\<PROJECT_NAME>.adapter.json
 <TARGET_PLAYWRIGHT_PROJECT_PATH>\migration\migrator-tickets.md
 ```
 
 Если какого-то файла нет — создай его, но не ломай текущую структуру проекта.
+
+
+## Tool boundary
+
+Работай так, будто AST Migrator — внешний black-box CLI tool.
+
+Разрешено:
+
+* запускать `<MIGRATOR_TOOL_BUNDLE_PATH>\migrator.exe`;
+* читать docs/schema из `<MIGRATOR_TOOL_BUNDLE_PATH>`;
+* менять `migration/profiles/*.adapter.json`;
+* обновлять `migration/migration-progress.md`;
+* создавать тикеты в `migration/migrator-tickets.md`;
+* создавать новые `migration/run-*` outputs.
+
+Запрещено:
+
+* искать или править исходный код мигратора;
+* править generated `.cs` files как финальное решение;
+* менять source Selenium project;
+* suppress-ить business logic без анализа.
+
+Если найдено core limitation — создай тикет, не патчь migrator source.
 
 ## Режим работы
 
@@ -113,7 +150,9 @@
 
 Не изменяй generated `.cs` files вручную. Если generated код плохой — исправляй config или заводи тикет на мигратор.
 
-Не изменяй C# код мигратора без явного разрешения. Если нужна правка мигратора, создай тикет в:
+Мигратор доступен только как compiled CLI tool. Исходный код мигратора намеренно недоступен.
+
+Не ищи и не изменяй C# код мигратора. Если нужна правка мигратора, создай тикет в:
 
 ```text
 migration\migrator-tickets.md
@@ -150,10 +189,10 @@ migration\migrator-tickets.md
 
 ## Команды
 
-Используй команды мигратора из README. Примерный цикл:
+Используй compiled CLI из `<MIGRATOR_TOOL_BUNDLE_PATH>`. Не используй `dotnet run --project` и не ищи `Migrator.sln`. Примерный цикл:
 
 ```powershell
-dotnet run --project <MIGRATOR_PATH>\Migrator.Cli -- `
+<MIGRATOR_TOOL_BUNDLE_PATH>\migrator.exe `
   --mode migrate `
   --input "<SOURCE_SELENIUM_PROJECT_PATH>" `
   --out "<TARGET_PLAYWRIGHT_PROJECT_PATH>\migration\run-001" `
@@ -163,7 +202,7 @@ dotnet run --project <MIGRATOR_PATH>\Migrator.Cli -- `
 Затем проверь результат:
 
 ```powershell
-dotnet run --project <MIGRATOR_PATH>\Migrator.Cli -- `
+<MIGRATOR_TOOL_BUNDLE_PATH>\migrator.exe `
   --mode verify `
   --input "<SOURCE_SELENIUM_PROJECT_PATH>" `
   --out "<TARGET_PLAYWRIGHT_PROJECT_PATH>\migration\run-001" `

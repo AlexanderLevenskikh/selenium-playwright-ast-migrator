@@ -11,6 +11,14 @@ public sealed record TestFileModel
     public string Namespace { get; init; } = null!;
     public string ClassName { get; init; } = null!;
     public string? BaseClassName { get; init; }
+
+    /// <summary>
+    /// Optional suffix appended to the final generated class name when CLI file-name
+    /// collision resolution emits files such as FooPlaywright_2.cs.
+    /// Set by CLI/orchestration before rendering; source class name stays unchanged.
+    /// </summary>
+    public string? ClassNameSuffix { get; init; }
+
     public IEnumerable<TestAction> SetUpActions { get; init; } = Array.Empty<TestAction>();
     public IEnumerable<TestModel> Tests { get; init; } = Array.Empty<TestModel>();
 

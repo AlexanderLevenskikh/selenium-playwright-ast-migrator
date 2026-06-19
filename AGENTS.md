@@ -269,3 +269,24 @@ See [`docs/README.md`](docs/README.md) for the current documentation map.
 ## Agent modes
 
 Use Strict Mode for safe config-only iterations and Creative Mode for pattern mining/TS drafts. See [`docs/agent-modes.md`](docs/agent-modes.md).
+
+
+## Agent tool boundary
+
+Для project-migration с AI-agent предпочтительный режим — compiled CLI bundle без исходников мигратора.
+
+Агент должен работать с мигратором как с black-box tool:
+
+```powershell
+.\tools\migrator\migrator.exe --mode migrate ...
+```
+
+Агенту нельзя давать в workspace `Migrator.sln`, `Migrator.Core/`, `Migrator.Roslyn/`, `Migrator.PlaywrightDotNet/`, `Migrator.SeleniumCSharp/`, `Migrator.Cli/`, `Migrator.Tests/`.
+
+Если агент нашёл limitation core migrator, он создаёт тикет в `migration/migrator-tickets.md`, а не меняет C# код.
+
+Подробности:
+
+- `docs/agent-tool-boundary.md`
+- `docs/migration-safety-playbook.md`
+- `scripts/package-agent-cli-bundle.ps1`

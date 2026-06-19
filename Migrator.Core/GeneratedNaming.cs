@@ -17,6 +17,16 @@ public static class GeneratedNaming
             : name + PlaywrightSuffix;
     }
 
+    public static string ApplyClassNameSuffix(string className, string? classNameSuffix)
+    {
+        if (string.IsNullOrWhiteSpace(classNameSuffix))
+            return className;
+
+        return className.EndsWith(classNameSuffix, StringComparison.Ordinal)
+            ? className
+            : className + classNameSuffix;
+    }
+
     public static string GetPlaywrightFileName(string sourceClassName)
     {
         return ApplyPlaywrightSuffixOnce(sourceClassName) + ".cs";

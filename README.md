@@ -153,6 +153,8 @@ dotnet run --project Migrator.Cli -- \
 
 - [`docs/architecture.md`](docs/architecture.md) — architecture and module responsibilities.
 - [`docs/agent-modes.md`](docs/agent-modes.md) — Strict vs Creative mode and prompt inputs.
+- [`docs/agent-tool-boundary.md`](docs/agent-tool-boundary.md) — using the migrator as a compiled CLI bundle for agents.
+- [`docs/migration-safety-playbook.md`](docs/migration-safety-playbook.md) — safety rules for WebDriver, URLs, broad suppressions, waits and assertions.
 - [`docs/typescript-target.md`](docs/typescript-target.md) — experimental TypeScript target.
 - [`docs/wait-policy.md`](docs/wait-policy.md) — Selenium wait classification.
 - [`docs/explain-todo.md`](docs/explain-todo.md) — smart TODO markers and next actions.
@@ -179,6 +181,22 @@ The test suite covers parser behavior, adapter mappings, snapshots, compile-smok
 ```
 
 See [`docs/packaging-and-distribution.md`](docs/packaging-and-distribution.md) and [`docs/tool-installation.md`](docs/tool-installation.md).
+
+## Agent CLI bundle
+
+For AI-agent migrations, prefer giving the agent a compiled CLI bundle instead of the migrator source repository:
+
+```powershell
+.\scripts\package-agent-cli-bundle.ps1 -Runtime win-x64 -Output artifacts/agent-cli-bundle
+```
+
+Then copy `artifacts/agent-cli-bundle/tool` to the target project, for example:
+
+```text
+<target-playwright-project>/tools/migrator
+```
+
+The bundle contains `migrator.exe`, schema and agent-facing docs, but no C# source code. See [`docs/agent-tool-boundary.md`](docs/agent-tool-boundary.md).
 
 ## Philosophy
 

@@ -333,9 +333,10 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
         string baseName = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
             ? $"{ToKebabCase(result.SourceModel.ClassName)}.spec.ts"
             : GeneratedNaming.GetPlaywrightFileName(result.SourceModel.ClassName);
-        string outName = ResolveFileName(outPath, baseName, writtenNames);
+        var (outName, classNameSuffix) = ResolveGeneratedFileName(baseName, writtenNames);
         var fullOut = Path.Combine(outPath, outName);
-        File.WriteAllText(fullOut, result.GeneratedOutput);
+        var generatedOutput = RenderOutputForResolvedFileName(result, target, classNameSuffix);
+        File.WriteAllText(fullOut, generatedOutput);
         generated++;
     }
 
@@ -352,12 +353,12 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
     Console.WriteLine($"Migration written to: {Path.GetFullPath(outPath)} ({generated} files generated)");
 }
 
-static string ResolveFileName(string dir, string baseName, ISet<string> usedNames)
+static (string FileName, string ClassNameSuffix) ResolveGeneratedFileName(string baseName, ISet<string> usedNames)
 {
     if (!usedNames.Contains(baseName))
     {
         usedNames.Add(baseName);
-        return baseName;
+        return (baseName, string.Empty);
     }
 
     var ext = Path.GetExtension(baseName);
@@ -365,14 +366,24 @@ static string ResolveFileName(string dir, string baseName, ISet<string> usedName
     int n = 2;
     while (true)
     {
-        string candidate = $"{stem}_{n}{ext}";
+        var collisionSuffix = $"_{n}";
+        string candidate = $"{stem}{collisionSuffix}{ext}";
         if (!usedNames.Contains(candidate))
         {
             usedNames.Add(candidate);
-            return candidate;
+            return (candidate, collisionSuffix);
         }
         n++;
     }
+}
+
+static string RenderOutputForResolvedFileName(PipelineResult result, string target, string classNameSuffix)
+{
+    if (string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(classNameSuffix))
+        return result.GeneratedOutput;
+
+    var targetModel = result.TargetModel with { ClassNameSuffix = classNameSuffix };
+    return new PlaywrightDotNetRenderer().Render(targetModel);
 }
 
 static int RunVerify(MigrationSummaryReport summary, string outPath, string format, List<PipelineResult> results, ProjectAdapterConfig? config, DefaultProjectAdapter? adapter)
@@ -421,9 +432,10 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
     foreach (var result in results)
     {
         var baseName = GeneratedNaming.GetPlaywrightFileName(result.SourceModel.ClassName);
-        var outName = ResolveFileName(generatedDir, baseName, writtenNames);
+        var (outName, classNameSuffix) = ResolveGeneratedFileName(baseName, writtenNames);
         var fullOut = Path.Combine(generatedDir, outName);
-        File.WriteAllText(fullOut, result.GeneratedOutput);
+        var generatedOutput = RenderOutputForResolvedFileName(result, "dotnet", classNameSuffix);
+        File.WriteAllText(fullOut, generatedOutput);
         generatedFiles.Add(fullOut);
     }
 
@@ -4202,8 +4214,9 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
                     string baseName = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
                         ? $"{ToKebabCase(result.SourceModel.ClassName)}.spec.ts"
                         : GeneratedNaming.GetPlaywrightFileName(result.SourceModel.ClassName);
-                    string outName = ResolveFileName(generatedDir, baseName, writtenNames);
-                    File.WriteAllText(Path.Combine(generatedDir, outName), result.GeneratedOutput);
+                    var (outName, classNameSuffix) = ResolveGeneratedFileName(baseName, writtenNames);
+                    var generatedOutput = RenderOutputForResolvedFileName(result, target, classNameSuffix);
+                    File.WriteAllText(Path.Combine(generatedDir, outName), generatedOutput);
                     generated++;
                 }
 
