@@ -1,7 +1,6 @@
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using Migrator.Core;
 using Migrator.Core.Models;
 using Migrator.PlaywrightDotNet;
 using Migrator.Roslyn;
@@ -69,106 +68,6 @@ public class WaitPolicyTests
         Assert.DoesNotContain("SOURCE_ONLY_IDENTIFIER", output);
     }
 
-
-
-    [Fact]
-    public void Parser_ConfiguredWaitPolicyCanSkipRecognizerForAdapterMapping()
-    {
-        var config = new ProjectAdapterConfig
-        {
-            WaitPolicies = new[]
-            {
-                new WaitPolicyMapping("WaitContainsText", "AdapterMapping")
-            }
-        };
-        var parser = new RoslynTestFileParser(config);
-        var model = parser.Parse(WriteTempSource("page.Title.WaitContainsText(\"ready\");"));
-
-        var action = Assert.Single(model.Tests.Single().BodyActions);
-        var method = Assert.IsType<MethodInvocationAction>(action);
-        Assert.Equal("WaitContainsText", method.MethodName);
-        Assert.Equal("page.Title", method.ReceiverExpression);
-    }
-
-    [Fact]
-    public void Parser_ConfiguredWaitPolicyOverridesBuiltInWaitClassification()
-    {
-        var config = new ProjectAdapterConfig
-        {
-            WaitPolicies = new[]
-            {
-                new WaitPolicyMapping("WaitContainsText", "ProductStateHidden")
-            }
-        };
-        var parser = new RoslynTestFileParser(config);
-        var model = parser.Parse(WriteTempSource("page.Toast.WaitContainsText(\"done\");"));
-
-        var wait = Assert.IsType<WaitForAction>(Assert.Single(model.Tests.Single().BodyActions));
-        Assert.Equal("WaitContainsText", wait.SourceMethod);
-        Assert.Equal(WaitForKind.ProductStateHidden, wait.Kind);
-    }
-
-    [Fact]
-    public void Parser_RecognizerAliasesCanAddInputMethodsFromConfig()
-    {
-        var config = new ProjectAdapterConfig
-        {
-            RecognizerAliases = new RecognizerAliasesConfig
-            {
-                InputMethods = new[] { "SetValue" }
-            }
-        };
-        var parser = new RoslynTestFileParser(config);
-        var model = parser.Parse(WriteTempSource("page.Name.SetValue(\"Alex\");"));
-
-        var sendKeys = Assert.IsType<SendKeysAction>(Assert.Single(model.Tests.Single().BodyActions));
-        Assert.Equal("page.Name", sendKeys.Target.SourceExpression);
-        Assert.Equal("\"Alex\"", sendKeys.TextExpression);
-    }
-
-    [Fact]
-    public void Parser_GenericResultMethodsAreInferredFromParameterizedResultMappings()
-    {
-        var config = new ProjectAdapterConfig
-        {
-            ParameterizedMethods = new[]
-            {
-                new ParameterizedMethodMapping
-                {
-                    SourceMethodPattern = "{source}.TapAndOpen<{T}>()",
-                    TargetStatements = new[] { "var {result} = await Navigation.GoToAsync<{T}>(x => x);" }
-                }
-            }
-        };
-        var parser = new RoslynTestFileParser(config);
-        var model = parser.Parse(WriteTempSource("var nextPage = page.Button.TapAndOpen<MyPage>();"));
-
-        var method = Assert.IsType<MethodInvocationAction>(Assert.Single(model.Tests.Single().BodyActions));
-        Assert.Equal("TapAndOpen", method.MethodName);
-        Assert.Equal("nextPage", method.ResultVariable);
-    }
-
-    [Fact]
-    public void Renderer_SuppressedMethodsDoNotEmitManualReviewTodo()
-    {
-        var config = new ProjectAdapterConfig
-        {
-            SuppressedMethods = new[] { "WriteLine" }
-        };
-        var model = CreateModel(new MethodInvocationAction(
-            12,
-            "Console",
-            "WriteLine",
-            "Console.WriteLine(\"debug\")",
-            Array.Empty<string>(),
-            RecognitionConfidence.SyntaxFallback));
-
-        var output = new PlaywrightDotNetRenderer(config).Render(model);
-
-        Assert.Contains("[WriteLine] Console.WriteLine", output);
-        Assert.DoesNotContain("MANUAL_REVIEW", output);
-    }
-
     static TestFileModel CreateModel(TestAction action) => new(
         FilePath: "WaitPolicy.cs",
         Namespace: "Tests",
@@ -184,24 +83,4 @@ public class WaitPolicyTests
                 Parameters: Array.Empty<MethodParameterModel>(),
                 BodyActions: new[] { action })
         });
-
-
-    static string WriteTempSource(string bodyStatement)
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"migrator-config-recognizer-{Guid.NewGuid():N}.cs");
-        File.WriteAllText(path, $$"""
-using NUnit.Framework;
-
-public class ConfigDrivenRecognizerFixture
-{
-    [Test]
-    public void Check()
-    {
-        {{bodyStatement}}
-    }
-}
-""");
-        return path;
-    }
-
 }

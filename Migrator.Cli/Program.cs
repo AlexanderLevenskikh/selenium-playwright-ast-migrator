@@ -65,6 +65,11 @@ if (mode == "discover-target" && !Directory.Exists(inputPath))
     return 2;
 }
 
+var parser = new RoslynTestFileParser();
+IRenderer renderer = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
+    ? new PlaywrightTypeScriptRenderer()
+    : new PlaywrightDotNetRenderer();
+
 IProjectAdapter? adapter = null;
 
 if (configPaths.Length > 0)
@@ -95,11 +100,6 @@ if (configPaths.Length > 0)
         ? $"Loaded adapter config: {configPaths[0]}"
         : $"Loaded adapter config layers: {string.Join(" -> ", configPaths)}");
 }
-
-var parser = new RoslynTestFileParser(loadedConfig);
-IRenderer renderer = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
-    ? new PlaywrightTypeScriptRenderer()
-    : new PlaywrightDotNetRenderer(loadedConfig);
 
 if (string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase) && mode == "orchestrate")
 {
@@ -164,14 +164,14 @@ if (mode == "smoke-plan")
 // Handle runtime-classify mode — classifies Playwright runtime failures/logs after a smoke run.
 if (mode == "runtime-classify")
 {
-    var runtimeExitCode = RunRuntimeClassify(inputPath, outPath, format);
+    var runtimeExitCode = RuntimeFailureClassifierCommand.RunRuntimeClassify(inputPath, outPath, format);
     return runtimeExitCode;
 }
 
 // Handle config-schema mode — writes/copies adapter-config JSON Schema for editors and agents.
 if (mode == "config-schema")
 {
-    var schemaExitCode = RunConfigSchema(outPath, format);
+    var schemaExitCode = ConfigSchemaCommand.RunConfigSchema(outPath, format);
     return schemaExitCode;
 }
 
@@ -185,7 +185,7 @@ if (mode == "migration-board")
 // Handle profile-match mode — estimates whether existing config/profile layers can be reused for a source project.
 if (mode == "profile-match")
 {
-    var profileMatchExitCode = RunProfileMatch(inputPath, outPath, format, configPaths);
+    var profileMatchExitCode = ProfileMatchCommand.RunProfileMatch(inputPath, outPath, format, configPaths);
     return profileMatchExitCode;
 }
 
@@ -3275,518 +3275,45 @@ static void WriteScaffoldReport(ScaffoldResult result, string outPath, string fo
 }
 
 
-static int RunProfileMatch(string inputPath, string outPath, string format, string[] configPaths)
-{
-    Directory.CreateDirectory(outPath);
 
-    if (configPaths.Length == 0)
-    {
-        Console.Error.WriteLine("profile-match requires at least one --config profile layer");
-        return 2;
-    }
 
-    var files = CollectProfileInputFiles(inputPath);
-    if (files.Length == 0)
-    {
-        var empty = new ProfileMatchReport(
-            DateTimeOffset.UtcNow,
-            inputPath,
-            configPaths,
-            0,
-            "No C# source files found. Check --input before trying to reuse a profile.",
-            Array.Empty<ProfileLayerMatch>(),
-            Array.Empty<ProjectProfileSignal>(),
-            new[] { "No .cs files were found under input path." },
-            new[] { "Run doctor mode and verify that --input points to Selenium UI tests, not an empty folder." });
-        WriteProfileMatchReport(empty, outPath, format);
-        return 1;
-    }
 
-    var layers = new List<(string Path, ProjectAdapterConfig Config)>();
-    foreach (var path in configPaths)
-    {
-        if (!File.Exists(path))
-        {
-            Console.Error.WriteLine($"Config not found: {path}");
-            return 2;
-        }
 
-        try
-        {
-            layers.Add((path, ConfigValidator.ValidateJson(File.ReadAllText(path), path)));
-        }
-        catch (ConfigValidationError cvex)
-        {
-            Console.Error.WriteLine($"Config error in {path}:");
-            foreach (var err in cvex.Errors)
-                Console.Error.WriteLine(err);
-            return 2;
-        }
-    }
 
-    var layerMatches = layers
-        .Select(layer => BuildProfileLayerMatch(layer.Path, layer.Config, files))
-        .ToArray();
 
-    var mergedConfig = ProjectAdapterConfigMerger.Merge(layers.Select(x => x.Config));
-    var signals = DetectProjectProfileSignals(files, mergedConfig)
-        .OrderByDescending(x => x.Occurrences)
-        .ThenBy(x => x.Expression, StringComparer.Ordinal)
-        .Take(75)
-        .ToArray();
 
-    var totalRules = layerMatches.Sum(x => x.TotalRules);
-    var matchedRules = layerMatches.Sum(x => x.MatchedRules);
-    var overallScore = totalRules == 0 ? 0 : Math.Round(100.0 * matchedRules / totalRules, 1);
 
-    var gaps = signals
-        .Where(x => string.IsNullOrWhiteSpace(x.CoveredBy))
-        .Take(20)
-        .Select(x => $"{x.Expression} ({x.Occurrences} usages, example {ShortPath(x.ExampleFile)}:{x.ExampleLine})")
-        .ToArray();
 
-    var recommendation = BuildProfileMatchRecommendation(overallScore, layerMatches, gaps);
-    var nextActions = BuildProfileMatchNextActions(overallScore, layerMatches, gaps);
 
-    var report = new ProfileMatchReport(
-        DateTimeOffset.UtcNow,
-        inputPath,
-        configPaths,
-        overallScore,
-        recommendation,
-        layerMatches,
-        signals,
-        gaps,
-        nextActions);
 
-    WriteProfileMatchReport(report, outPath, format);
-    return overallScore >= 35 || matchedRules > 0 ? 0 : 1;
-}
 
-static ProfileInputFile[] CollectProfileInputFiles(string inputPath)
-{
-    if (File.Exists(inputPath) && inputPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
-    {
-        return new[] { new ProfileInputFile(inputPath, SafeReadAllText(inputPath)) };
-    }
 
-    if (!Directory.Exists(inputPath))
-        return Array.Empty<ProfileInputFile>();
 
-    return Directory.EnumerateFiles(inputPath, "*.cs", SearchOption.AllDirectories)
-        .Where(p => !IsUnderIgnoredProfileMatchDirectory(p))
-        .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-        .Select(p => new ProfileInputFile(p, SafeReadAllText(p)))
-        .ToArray();
-}
 
-static bool IsUnderIgnoredProfileMatchDirectory(string path)
-{
-    var normalized = path.Replace('\\', '/');
-    return normalized.Contains("/bin/", StringComparison.OrdinalIgnoreCase)
-        || normalized.Contains("/obj/", StringComparison.OrdinalIgnoreCase)
-        || normalized.Contains("/migration/", StringComparison.OrdinalIgnoreCase)
-        || normalized.Contains("/.migration/", StringComparison.OrdinalIgnoreCase)
-        || normalized.Contains("/generated/", StringComparison.OrdinalIgnoreCase);
-}
 
-static string SafeReadAllText(string path)
-{
-    try { return File.ReadAllText(path); }
-    catch { return string.Empty; }
-}
 
-static ProfileLayerMatch BuildProfileLayerMatch(string configPath, ProjectAdapterConfig config, ProfileInputFile[] files)
-{
-    var rules = ExtractProfileRules(config).ToArray();
-    var matched = new List<ProfileRuleMatch>();
-    var unused = new List<ProfileRuleMatch>();
 
-    foreach (var rule in rules)
-    {
-        var match = FindProfileRuleUsage(rule, files);
-        if (match.Hits > 0)
-            matched.Add(match);
-        else
-            unused.Add(match);
-    }
 
-    var score = rules.Length == 0 ? 0 : Math.Round(100.0 * matched.Count / rules.Length, 1);
-    var verdict = score switch
-    {
-        >= 70 => "high-reuse",
-        >= 40 => "partial-reuse",
-        > 0 => "low-reuse",
-        _ => "no-signal"
-    };
 
-    return new ProfileLayerMatch(
-        configPath,
-        string.IsNullOrWhiteSpace(config.SourceProjectName) ? Path.GetFileNameWithoutExtension(configPath) : config.SourceProjectName,
-        rules.Length,
-        matched.Count,
-        score,
-        verdict,
-        matched.OrderByDescending(x => x.Hits).ThenBy(x => x.Key, StringComparer.Ordinal).Take(30).ToArray(),
-        unused.OrderBy(x => x.Section, StringComparer.Ordinal).ThenBy(x => x.Key, StringComparer.Ordinal).Take(30).ToArray());
-}
 
-static IEnumerable<ProfileRuleInfo> ExtractProfileRules(ProjectAdapterConfig config)
-{
-    foreach (var item in config.UiTargets)
-        if (!string.IsNullOrWhiteSpace(item.SourceExpression))
-            yield return new ProfileRuleInfo("UiTargets", item.SourceExpression, 3);
 
-    foreach (var item in config.Methods)
-        if (!string.IsNullOrWhiteSpace(item.SourceMethod))
-            yield return new ProfileRuleInfo("Methods", item.SourceMethod, 3);
 
-    foreach (var item in config.ParameterizedMethods)
-        if (!string.IsNullOrWhiteSpace(item.SourceMethodPattern))
-            yield return new ProfileRuleInfo("ParameterizedMethods", item.SourceMethodPattern, 4);
 
-    foreach (var item in config.PageObjects)
-        if (!string.IsNullOrWhiteSpace(item.SourceType))
-            yield return new ProfileRuleInfo("PageObjects", item.SourceType, 2);
 
-    foreach (var item in config.Tables)
-        if (!string.IsNullOrWhiteSpace(item.SourceExpression))
-            yield return new ProfileRuleInfo("Tables", item.SourceExpression, 3);
 
-    foreach (var item in config.Pagination)
-        if (!string.IsNullOrWhiteSpace(item.SourceExpression))
-            yield return new ProfileRuleInfo("Pagination", item.SourceExpression, 3);
 
-    foreach (var item in config.SourceOnlyIdentifiers)
-        if (!string.IsNullOrWhiteSpace(item))
-            yield return new ProfileRuleInfo("SourceOnlyIdentifiers", item, 1);
 
-    foreach (var item in config.TargetKnownTypes)
-        if (!string.IsNullOrWhiteSpace(item))
-            yield return new ProfileRuleInfo("TargetKnownTypes", item, 1);
 
-    foreach (var item in config.TargetKnownIdentifiers)
-        if (!string.IsNullOrWhiteSpace(item))
-            yield return new ProfileRuleInfo("TargetKnownIdentifiers", item, 1);
 
-    foreach (var scope in config.Scopes)
-    {
-        var scopeName = string.IsNullOrWhiteSpace(scope.Name) ? "unnamed-scope" : scope.Name;
-        foreach (var item in scope.UiTargets)
-            if (!string.IsNullOrWhiteSpace(item.SourceExpression))
-                yield return new ProfileRuleInfo($"Scopes/{scopeName}/UiTargets", item.SourceExpression, 3);
-        foreach (var item in scope.Methods)
-            if (!string.IsNullOrWhiteSpace(item.SourceMethod))
-                yield return new ProfileRuleInfo($"Scopes/{scopeName}/Methods", item.SourceMethod, 3);
-        foreach (var item in scope.ParameterizedMethods)
-            if (!string.IsNullOrWhiteSpace(item.SourceMethodPattern))
-                yield return new ProfileRuleInfo($"Scopes/{scopeName}/ParameterizedMethods", item.SourceMethodPattern, 4);
-        foreach (var item in scope.Tables)
-            if (!string.IsNullOrWhiteSpace(item.SourceExpression))
-                yield return new ProfileRuleInfo($"Scopes/{scopeName}/Tables", item.SourceExpression, 3);
-        foreach (var item in scope.Pagination)
-            if (!string.IsNullOrWhiteSpace(item.SourceExpression))
-                yield return new ProfileRuleInfo($"Scopes/{scopeName}/Pagination", item.SourceExpression, 3);
-    }
-}
 
-static ProfileRuleMatch FindProfileRuleUsage(ProfileRuleInfo rule, ProfileInputFile[] files)
-{
-    int hits = 0;
-    string exampleFile = "";
-    int exampleLine = 0;
 
-    foreach (var file in files)
-    {
-        var fileHits = CountProfileRuleHits(file.Text, rule.Key, rule.Section, out var line);
-        if (fileHits <= 0)
-            continue;
 
-        hits += fileHits;
-        if (exampleFile.Length == 0)
-        {
-            exampleFile = file.Path;
-            exampleLine = line;
-        }
-    }
 
-    return new ProfileRuleMatch(rule.Section, rule.Key, hits, exampleFile, exampleLine);
-}
 
-static int CountProfileRuleHits(string text, string key, string section, out int firstLine)
-{
-    firstLine = 0;
-    if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(key))
-        return 0;
 
-    if (section.Contains("Identifier", StringComparison.OrdinalIgnoreCase)
-        || section.Contains("KnownTypes", StringComparison.OrdinalIgnoreCase)
-        || section.Contains("SourceOnly", StringComparison.OrdinalIgnoreCase))
-    {
-        var regex = new System.Text.RegularExpressions.Regex($@"\b{System.Text.RegularExpressions.Regex.Escape(key)}\b");
-        var matches = regex.Matches(text);
-        if (matches.Count > 0)
-            firstLine = GetLineNumber(text, matches[0].Index);
-        return matches.Count;
-    }
 
-    if (key.Contains('{', StringComparison.Ordinal) && key.Contains('}', StringComparison.Ordinal))
-    {
-        var regex = new System.Text.RegularExpressions.Regex(ProfilePatternToRegex(key), System.Text.RegularExpressions.RegexOptions.Singleline);
-        var matches = regex.Matches(text);
-        if (matches.Count > 0)
-            firstLine = GetLineNumber(text, matches[0].Index);
-        return matches.Count;
-    }
 
-    int count = 0;
-    int index = 0;
-    while ((index = text.IndexOf(key, index, StringComparison.Ordinal)) >= 0)
-    {
-        if (count == 0)
-            firstLine = GetLineNumber(text, index);
-        count++;
-        index += Math.Max(1, key.Length);
-    }
-    return count;
-}
 
-static string ProfilePatternToRegex(string pattern)
-{
-    var parts = System.Text.RegularExpressions.Regex.Split(pattern, @"\{[A-Za-z_][A-Za-z0-9_]*\}");
-    return string.Join(".+?", parts.Select(System.Text.RegularExpressions.Regex.Escape));
-}
-
-static int GetLineNumber(string text, int index)
-{
-    if (index <= 0)
-        return 1;
-    var line = 1;
-    for (var i = 0; i < index && i < text.Length; i++)
-    {
-        if (text[i] == '\n')
-            line++;
-    }
-    return line;
-}
-
-static string ShortPath(string? path)
-{
-    if (string.IsNullOrWhiteSpace(path))
-        return "";
-    var normalized = path.Replace('\\', '/');
-    var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
-    if (parts.Length <= 3)
-        return normalized;
-    return string.Join('/', parts.Skip(Math.Max(0, parts.Length - 3)));
-}
-
-static ProjectProfileSignal[] DetectProjectProfileSignals(ProfileInputFile[] files, ProjectAdapterConfig config)
-{
-    var signals = new Dictionary<string, ProjectProfileSignalBuilder>(StringComparer.Ordinal);
-    var regex = new System.Text.RegularExpressions.Regex(@"\b(?<root>[a-z][A-Za-z0-9_]*)\.(?<member>[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)", System.Text.RegularExpressions.RegexOptions.Compiled);
-
-    foreach (var file in files)
-    {
-        var stripped = StripCommentsAndStringsForPomUsage(file.Text);
-        foreach (System.Text.RegularExpressions.Match match in regex.Matches(stripped))
-        {
-            var expression = match.Value;
-            if (expression.StartsWith("System.", StringComparison.Ordinal) || expression.StartsWith("Console.", StringComparison.Ordinal))
-                continue;
-            if (!LooksLikeProjectPomOrHelperExpression(expression))
-                continue;
-
-            if (!signals.TryGetValue(expression, out var builder))
-            {
-                builder = new ProjectProfileSignalBuilder(expression, file.Path, GetLineNumber(file.Text, match.Index));
-                signals[expression] = builder;
-            }
-            builder.Occurrences++;
-        }
-    }
-
-    return signals.Values
-        .Select(x => x.ToSignal(FindConfigCoverage(x.Expression, config)))
-        .OrderByDescending(x => x.Occurrences)
-        .ThenBy(x => x.Expression, StringComparer.Ordinal)
-        .ToArray();
-}
-
-static bool LooksLikeProjectPomOrHelperExpression(string expression)
-{
-    var root = expression.Split('.')[0];
-    if (root is "this" or "base" or "Task" or "DateTime" or "TimeSpan" or "String" or "Math" or "Guid")
-        return false;
-    if (expression.Contains("Should", StringComparison.Ordinal) || expression.Contains("Assert", StringComparison.Ordinal))
-        return false;
-    return expression.Contains("page", StringComparison.OrdinalIgnoreCase)
-        || expression.Contains("Page", StringComparison.Ordinal)
-        || expression.Contains("Button", StringComparison.Ordinal)
-        || expression.Contains("Table", StringComparison.Ordinal)
-        || expression.Contains("Filter", StringComparison.Ordinal)
-        || expression.Contains("Modal", StringComparison.Ordinal)
-        || expression.Contains("Lightbox", StringComparison.Ordinal)
-        || expression.Contains("Pagination", StringComparison.Ordinal)
-        || expression.Count(c => c == '.') >= 1;
-}
-
-static string FindConfigCoverage(string expression, ProjectAdapterConfig config)
-{
-    if (config.UiTargets.Any(x => string.Equals(x.SourceExpression, expression, StringComparison.Ordinal)))
-        return "UiTargets";
-    if (config.Tables.Any(x => string.Equals(x.SourceExpression, expression, StringComparison.Ordinal)))
-        return "Tables";
-    if (config.Pagination.Any(x => string.Equals(x.SourceExpression, expression, StringComparison.Ordinal)))
-        return "Pagination";
-    if (config.Methods.Any(x => string.Equals(x.SourceMethod, expression, StringComparison.Ordinal) || x.SourceMethod.StartsWith(expression + "(", StringComparison.Ordinal)))
-        return "Methods";
-    if (config.ParameterizedMethods.Any(x => PatternCouldCoverExpression(x.SourceMethodPattern, expression)))
-        return "ParameterizedMethods";
-    if (config.Scopes.Any(s => s.UiTargets.Any(x => string.Equals(x.SourceExpression, expression, StringComparison.Ordinal))))
-        return "Scoped UiTargets";
-    return "";
-}
-
-static bool PatternCouldCoverExpression(string? pattern, string expression)
-{
-    if (string.IsNullOrWhiteSpace(pattern))
-        return false;
-    var prefix = pattern.Split('(')[0];
-    return string.Equals(prefix, expression, StringComparison.Ordinal) || pattern.Contains(expression, StringComparison.Ordinal);
-}
-
-static string BuildProfileMatchRecommendation(double score, ProfileLayerMatch[] layers, string[] gaps)
-{
-    if (layers.Length == 0)
-        return "No profile layers were provided. Run bootstrap-project or pass --config profiles/infrastructure-base.adapter.json.";
-    if (score >= 70 && gaps.Length <= 10)
-        return "High reuse potential. Use the profile and add only small project-specific overrides.";
-    if (score >= 40)
-        return "Partial reuse potential. Use the base profile, then run an agent config-only pass for the uncovered targets.";
-    if (score > 0)
-        return "Low reuse signal. Use the profile as a reference, but start with doctor/bootstrap-project and expect a larger project override.";
-    return "No meaningful reuse signal. The project may use different POM/helpers, or the profile is not appropriate for this input.";
-}
-
-static string[] BuildProfileMatchNextActions(double score, ProfileLayerMatch[] layers, string[] gaps)
-{
-    var actions = new List<string>();
-    if (score >= 40)
-    {
-        actions.Add("Run doctor with the same config layers to verify project context before migration.");
-        actions.Add("Run migrate/verify-project using the base profile plus a project override config.");
-    }
-    else
-    {
-        actions.Add("Run bootstrap-project to create a dedicated project profile skeleton.");
-        actions.Add("Run index-pom to collect source truth before adding mappings.");
-    }
-
-    if (gaps.Length > 0)
-        actions.Add("Start the next config-only agent iteration from the top uncovered expressions listed in profile-match.md.");
-    if (layers.Any(x => x.Verdict == "high-reuse"))
-        actions.Add("Keep common rules in the base profile; add only project-specific mappings to profiles/projects/<project>.adapter.json.");
-    return actions.ToArray();
-}
-
-static void WriteProfileMatchReport(ProfileMatchReport report, string outPath, string format)
-{
-    Directory.CreateDirectory(outPath);
-    var jsonOptions = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
-    if (format is "json" or "both")
-        File.WriteAllText(Path.Combine(outPath, "profile-match.json"), System.Text.Json.JsonSerializer.Serialize(report, jsonOptions));
-    if (format is "text" or "both")
-    {
-        File.WriteAllText(Path.Combine(outPath, "profile-match.md"), WriteProfileMatchMarkdown(report));
-        File.WriteAllText(Path.Combine(outPath, "agent-profile-reuse-task.md"), WriteAgentProfileReuseTask(report));
-    }
-}
-
-static string WriteProfileMatchMarkdown(ProfileMatchReport report)
-{
-    var sb = new StringBuilder();
-    sb.AppendLine("# Profile Match Report");
-    sb.AppendLine();
-    sb.AppendLine($"Input: `{report.InputPath}`");
-    sb.AppendLine($"Overall reuse score: **{report.OverallScore:0.0}%**");
-    sb.AppendLine($"Recommendation: **{report.Recommendation}**");
-    sb.AppendLine();
-    sb.AppendLine("## Profile layers");
-    if (report.Layers.Length == 0)
-        sb.AppendLine("No profile layers were analyzed.");
-    foreach (var layer in report.Layers)
-    {
-        sb.AppendLine($"### {layer.SourceProjectName}");
-        sb.AppendLine($"- Path: `{layer.ConfigPath}`");
-        sb.AppendLine($"- Verdict: **{layer.Verdict}**");
-        sb.AppendLine($"- Matched rules: **{layer.MatchedRules}/{layer.TotalRules}** ({layer.Score:0.0}%)");
-        if (layer.TopMatchedRules.Length > 0)
-        {
-            sb.AppendLine("- Top matched rules:");
-            foreach (var r in layer.TopMatchedRules.Take(10))
-                sb.AppendLine($"  - `{r.Section}` `{r.Key}` — {r.Hits} hits ({ShortPath(r.ExampleFile)}:{r.ExampleLine})");
-        }
-        if (layer.UnusedRules.Length > 0)
-        {
-            sb.AppendLine("- Unused sample rules:");
-            foreach (var r in layer.UnusedRules.Take(10))
-                sb.AppendLine($"  - `{r.Section}` `{r.Key}`");
-        }
-        sb.AppendLine();
-    }
-
-    sb.AppendLine("## Uncovered project-specific signals");
-    var uncovered = report.ProjectSignals.Where(x => string.IsNullOrWhiteSpace(x.CoveredBy)).Take(25).ToArray();
-    if (uncovered.Length == 0)
-        sb.AppendLine("No high-frequency uncovered project signals were found.");
-    foreach (var signal in uncovered)
-        sb.AppendLine($"- `{signal.Expression}` — {signal.Occurrences} usages ({ShortPath(signal.ExampleFile)}:{signal.ExampleLine})");
-
-    sb.AppendLine();
-    sb.AppendLine("## Covered signals");
-    foreach (var signal in report.ProjectSignals.Where(x => !string.IsNullOrWhiteSpace(x.CoveredBy)).Take(25))
-        sb.AppendLine($"- `{signal.Expression}` — {signal.Occurrences} usages, covered by **{signal.CoveredBy}**");
-
-    sb.AppendLine();
-    sb.AppendLine("## Recommended next actions");
-    foreach (var action in report.RecommendedNextActions)
-        sb.AppendLine($"- {action}");
-
-    return sb.ToString();
-}
-
-static string WriteAgentProfileReuseTask(ProfileMatchReport report)
-{
-    var sb = new StringBuilder();
-    sb.AppendLine("# Agent task: reuse migration profile");
-    sb.AppendLine();
-    sb.AppendLine("Пиши отчёт на русском. Не меняй C# мигратора и не правь generated `.cs` вручную.");
-    sb.AppendLine();
-    sb.AppendLine($"Input: `{report.InputPath}`");
-    sb.AppendLine($"Reuse score: **{report.OverallScore:0.0}%**");
-    sb.AppendLine($"Recommendation: {report.Recommendation}");
-    sb.AppendLine();
-    sb.AppendLine("## Config layers to use");
-    foreach (var config in report.ConfigLayers)
-        sb.AppendLine($"- `{config}`");
-    sb.AppendLine();
-    sb.AppendLine("## Next actions");
-    foreach (var action in report.RecommendedNextActions)
-        sb.AppendLine($"- {action}");
-    sb.AppendLine();
-    sb.AppendLine("## Top uncovered expressions");
-    foreach (var gap in report.Gaps.Take(15))
-        sb.AppendLine($"- {gap}");
-    sb.AppendLine();
-    sb.AppendLine("## Rules");
-    sb.AppendLine("- Работай через project override config, если base profile уже применим.");
-    sb.AppendLine("- Не копируй common mappings в project config без причины.");
-    sb.AppendLine("- Для uncovered expressions найди POM/source truth перед добавлением mapping.");
-    sb.AppendLine("- После изменений запусти config-validate, migrate/verify-project, guard и config-diff.");
-    sb.AppendLine("- Если profile-match score низкий, начни с bootstrap-project и index-pom.");
-    return sb.ToString();
-}
 
 static int RunPropose(string inputPath, string outPath, ProjectAdapterConfig? existingConfig, string format)
 {
@@ -4193,6 +3720,18 @@ static IEnumerable<PomUsageCandidate> ExtractPomUsages(string text, string file)
     }
 
     return candidates.Values;
+}
+
+static int GetLineNumber(string text, int index)
+{
+    var line = 1;
+    for (var i = 0; i < index && i < text.Length; i++)
+    {
+        if (text[i] == '\n')
+            line++;
+    }
+
+    return line;
 }
 
 static string StripCommentsAndStringsForPomUsage(string text)
@@ -5686,12 +5225,7 @@ static ConfigMetric[] BuildConfigMetrics(ProjectAdapterConfig config)
         new ConfigMetric("Scopes", config.Scopes.Length),
         new ConfigMetric("SourceOnlyIdentifiers", config.SourceOnlyIdentifiers.Length),
         new ConfigMetric("TargetKnownTypes", config.TargetKnownTypes.Length),
-        new ConfigMetric("TargetKnownIdentifiers", config.TargetKnownIdentifiers.Length),
-        new ConfigMetric("WaitPolicies", config.WaitPolicies.Length),
-        new ConfigMetric("RecognizerAliases", CountRecognizerAliases(config.RecognizerAliases)),
-        new ConfigMetric("GenericResultMethods", config.GenericResultMethods.Length),
-        new ConfigMetric("SuppressedMethods", config.SuppressedMethods.Length),
-        new ConfigMetric("SuppressedMethodPatterns", config.SuppressedMethodPatterns.Length)
+        new ConfigMetric("TargetKnownIdentifiers", config.TargetKnownIdentifiers.Length)
     };
 }
 
@@ -5722,24 +5256,6 @@ static IEnumerable<ConfigSafetyIssue> AnalyzeConfigSafety(ProjectAdapterConfig c
     AddDuplicateIssues(config.SourceOnlyIdentifiers, "SourceOnlyIdentifiers", "DUPLICATE_SOURCE_ONLY_IDENTIFIER", issues);
     AddDuplicateIssues(config.TargetKnownTypes, "TargetKnownTypes", "DUPLICATE_TARGET_KNOWN_TYPE", issues);
     AddDuplicateIssues(config.TargetKnownIdentifiers, "TargetKnownIdentifiers", "DUPLICATE_TARGET_KNOWN_IDENTIFIER", issues);
-    AddDuplicateIssues(config.WaitPolicies.Select(x => x.SourceMethod), "WaitPolicies.SourceMethod", "DUPLICATE_WAIT_POLICY", issues);
-    AddDuplicateIssues(config.GenericResultMethods, "GenericResultMethods", "DUPLICATE_GENERIC_RESULT_METHOD", issues);
-    AddDuplicateIssues(config.SuppressedMethods, "SuppressedMethods", "DUPLICATE_SUPPRESSED_METHOD", issues);
-    AddDuplicateIssues(config.SuppressedMethodPatterns, "SuppressedMethodPatterns", "DUPLICATE_SUPPRESSED_METHOD_PATTERN", issues);
-    if (config.RecognizerAliases != null)
-    {
-        AddDuplicateIssues(config.RecognizerAliases.InputMethods, "RecognizerAliases.InputMethods", "DUPLICATE_RECOGNIZER_ALIAS", issues);
-        AddDuplicateIssues(config.RecognizerAliases.SelectMethods, "RecognizerAliases.SelectMethods", "DUPLICATE_RECOGNIZER_ALIAS", issues);
-        AddDuplicateIssues(config.RecognizerAliases.NavigationMethods, "RecognizerAliases.NavigationMethods", "DUPLICATE_RECOGNIZER_ALIAS", issues);
-        AddDuplicateIssues(config.RecognizerAliases.FluentAssertionMethods, "RecognizerAliases.FluentAssertionMethods", "DUPLICATE_RECOGNIZER_ALIAS", issues);
-    }
-
-    foreach (var method in config.SuppressedMethods.Concat(config.SuppressedMethodPatterns).Where(IsRiskySuppressedMethod))
-    {
-        issues.Add(new ConfigSafetyIssue("warning", "RISKY_SUPPRESSED_METHOD",
-            $"'{method}' looks like an action/assertion/business method but is configured as suppressed.", "SuppressedMethods/SuppressedMethodPatterns",
-            "Suppress only diagnostics/no-op helpers. Map or review business actions, waits, assertions, navigation, create/save/delete methods."));
-    }
 
     foreach (var target in config.UiTargets.Where(t => string.Equals(t.TargetKind, "RawExpression", StringComparison.OrdinalIgnoreCase)))
     {
@@ -5823,36 +5339,6 @@ static IEnumerable<ConfigDiffChange> BuildConfigChanges(ProjectAdapterConfig bef
     foreach (var c in DiffStringSet("Tables", before.Tables.Select(x => x.SourceExpression), after.Tables.Select(x => x.SourceExpression))) yield return c;
     foreach (var c in DiffStringSet("Pagination", before.Pagination.Select(x => x.SourceExpression), after.Pagination.Select(x => x.SourceExpression))) yield return c;
     foreach (var c in DiffStringSet("Scopes", before.Scopes.Select(x => x.Name), after.Scopes.Select(x => x.Name))) yield return c;
-    foreach (var c in DiffStringSet("WaitPolicies", before.WaitPolicies.Select(x => $"{x.SourceMethod}:{x.Kind}"), after.WaitPolicies.Select(x => $"{x.SourceMethod}:{x.Kind}"))) yield return c;
-    foreach (var c in DiffStringSet("GenericResultMethods", before.GenericResultMethods, after.GenericResultMethods)) yield return c;
-    foreach (var c in DiffStringSet("SuppressedMethods", before.SuppressedMethods, after.SuppressedMethods)) yield return c;
-    foreach (var c in DiffStringSet("SuppressedMethodPatterns", before.SuppressedMethodPatterns, after.SuppressedMethodPatterns)) yield return c;
-    foreach (var c in DiffStringSet("RecognizerAliases.InputMethods", before.RecognizerAliases?.InputMethods ?? Array.Empty<string>(), after.RecognizerAliases?.InputMethods ?? Array.Empty<string>())) yield return c;
-    foreach (var c in DiffStringSet("RecognizerAliases.SelectMethods", before.RecognizerAliases?.SelectMethods ?? Array.Empty<string>(), after.RecognizerAliases?.SelectMethods ?? Array.Empty<string>())) yield return c;
-    foreach (var c in DiffStringSet("RecognizerAliases.NavigationMethods", before.RecognizerAliases?.NavigationMethods ?? Array.Empty<string>(), after.RecognizerAliases?.NavigationMethods ?? Array.Empty<string>())) yield return c;
-    foreach (var c in DiffStringSet("RecognizerAliases.FluentAssertionMethods", before.RecognizerAliases?.FluentAssertionMethods ?? Array.Empty<string>(), after.RecognizerAliases?.FluentAssertionMethods ?? Array.Empty<string>())) yield return c;
-}
-
-static int CountRecognizerAliases(RecognizerAliasesConfig? aliases)
-{
-    if (aliases == null)
-        return 0;
-
-    return aliases.InputMethods.Length
-        + aliases.SelectMethods.Length
-        + aliases.NavigationMethods.Length
-        + aliases.FluentAssertionMethods.Length;
-}
-
-static bool IsRiskySuppressedMethod(string? method)
-{
-    if (string.IsNullOrWhiteSpace(method))
-        return false;
-
-    var text = method.Trim().TrimStart('*', '.');
-    var simpleName = text.Split('(', '.', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? text;
-    var riskyPrefixes = new[] { "Click", "Open", "Navigate", "GoTo", "Wait", "Assert", "Verify", "Validate", "Exist", "Create", "Save", "Delete", "Remove", "Submit", "Send", "Set" };
-    return riskyPrefixes.Any(prefix => simpleName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 }
 
 static IEnumerable<ConfigDiffChange> DiffStringSet(string section, IEnumerable<string?> beforeValues, IEnumerable<string?> afterValues)
@@ -5893,29 +5379,6 @@ static IEnumerable<ConfigSafetyIssue> BuildConfigDiffRisks(ProjectAdapterConfig 
         risks.Add(new ConfigSafetyIssue("warning", "QUALITY_GATE_LOOSENED", "MaxUnsupportedActions was loosened or removed.", "QualityGates.MaxUnsupportedActions", "Confirm this was intentional."));
     if (IsQualityGateLoosened(before.QualityGates?.MaxUnmappedTargets, after.QualityGates?.MaxUnmappedTargets))
         risks.Add(new ConfigSafetyIssue("warning", "QUALITY_GATE_LOOSENED", "MaxUnmappedTargets was loosened or removed.", "QualityGates.MaxUnmappedTargets", "Confirm this was intentional."));
-
-    var addedSuppressions = after.SuppressedMethods.Concat(after.SuppressedMethodPatterns)
-        .Except(before.SuppressedMethods.Concat(before.SuppressedMethodPatterns), StringComparer.OrdinalIgnoreCase)
-        .Where(IsRiskySuppressedMethod)
-        .ToArray();
-    foreach (var method in addedSuppressions)
-    {
-        risks.Add(new ConfigSafetyIssue("warning", "RISKY_SUPPRESSION_ADDED",
-            $"'{method}' was added as a suppressed method/pattern.", "SuppressedMethods/SuppressedMethodPatterns",
-            "Confirm this is diagnostic/no-op. Business actions/assertions/waits should be mapped or reviewed, not suppressed."));
-    }
-
-    var addedElidedWaits = after.WaitPolicies
-        .Where(x => string.Equals(x.Kind, "ActionabilityElided", StringComparison.Ordinal))
-        .Select(x => x.SourceMethod)
-        .Except(before.WaitPolicies.Where(x => string.Equals(x.Kind, "ActionabilityElided", StringComparison.Ordinal)).Select(x => x.SourceMethod), StringComparer.OrdinalIgnoreCase)
-        .ToArray();
-    foreach (var method in addedElidedWaits)
-    {
-        risks.Add(new ConfigSafetyIssue("warning", "ACTIONABILITY_WAIT_ELIDED",
-            $"'{method}' was configured as ActionabilityElided.", "WaitPolicies",
-            "Confirm this wait is not a product-state assertion. Disabled/hidden/value/text waits usually need assertions, not elision."));
-    }
 
     return risks;
 }
@@ -6634,499 +6097,17 @@ static bool LooksLikeWindowsRootedPath(string path)
 }
 
 
-// --- Runtime failure classifier mode ---
-
-static int RunRuntimeClassify(string inputPath, string outPath, string format)
-{
-    if (!File.Exists(inputPath) && !Directory.Exists(inputPath))
-    {
-        Console.Error.WriteLine($"runtime-classify expects a runtime log file or directory: {inputPath}");
-        return 1;
-    }
-
-    Directory.CreateDirectory(outPath);
-    var report = BuildRuntimeFailureReport(inputPath);
-    WriteRuntimeFailureReport(report, outPath, format);
-
-    Console.WriteLine("=== Runtime Failure Classification ===");
-    Console.WriteLine($"Source: {inputPath}");
-    Console.WriteLine($"Files scanned: {report.FilesScanned}");
-    Console.WriteLine($"Failure groups: {report.Groups.Length}");
-    Console.WriteLine($"Top category: {(report.Groups.Length > 0 ? report.Groups[0].Category : "none")}");
-    Console.WriteLine($"Artifacts written to: {Path.GetFullPath(outPath)}");
-    return 0;
-}
-
-static RuntimeFailureReport BuildRuntimeFailureReport(string inputPath)
-{
-    var files = CollectRuntimeLogFiles(inputPath).ToArray();
-    var observations = new List<RuntimeFailureObservation>();
-
-    foreach (var file in files)
-    {
-        var text = SafeReadRuntimeLogText(file);
-        if (string.IsNullOrWhiteSpace(text))
-            continue;
-
-        foreach (var obs in ClassifyRuntimeLogText(file, text))
-            observations.Add(obs);
-    }
-
-    var groups = observations
-        .GroupBy(x => x.Category, StringComparer.OrdinalIgnoreCase)
-        .Select(g => new RuntimeFailureGroup(
-            Category: g.Key,
-            Count: g.Count(),
-            Severity: RuntimeFailureSeverity(g.Key),
-            LikelyCause: RuntimeFailureLikelyCause(g.Key),
-            SuggestedAction: RuntimeFailureSuggestedAction(g.Key),
-            Examples: g.Take(5).ToArray()))
-        .OrderByDescending(g => RuntimeFailureSeverityWeight(g.Severity))
-        .ThenByDescending(g => g.Count)
-        .ThenBy(g => g.Category, StringComparer.OrdinalIgnoreCase)
-        .ToArray();
-
-    var actions = BuildRuntimeFailureRecommendedActions(groups).ToArray();
-    return new RuntimeFailureReport(
-        GeneratedAtUtc: DateTimeOffset.UtcNow,
-        Source: Path.GetFullPath(inputPath),
-        FilesScanned: files.Length,
-        Observations: observations.Count,
-        Groups: groups,
-        RecommendedNextActions: actions);
-}
-
-static IEnumerable<string> CollectRuntimeLogFiles(string inputPath)
-{
-    if (File.Exists(inputPath))
-    {
-        yield return inputPath;
-        yield break;
-    }
-
-    var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        ".log", ".txt", ".md", ".json", ".trx", ".xml"
-    };
-
-    foreach (var file in Directory.EnumerateFiles(inputPath, "*.*", SearchOption.AllDirectories))
-    {
-        var name = Path.GetFileName(file);
-        if (name.Equals("runtime-failure-report.json", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("runtime-failure-report.md", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("agent-runtime-failure-next-task.md", StringComparison.OrdinalIgnoreCase))
-            continue;
-
-        if (allowed.Contains(Path.GetExtension(file)))
-            yield return file;
-    }
-}
-
-static string SafeReadRuntimeLogText(string file)
-{
-    try
-    {
-        var text = File.ReadAllText(file);
-        return text.Length > 5_000_000 ? text.Substring(0, 5_000_000) : text;
-    }
-    catch
-    {
-        return "";
-    }
-}
-
-static IEnumerable<RuntimeFailureObservation> ClassifyRuntimeLogText(string file, string text)
-{
-    var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
-    var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-    for (var i = 0; i < lines.Length; i++)
-    {
-        var line = lines[i];
-        if (string.IsNullOrWhiteSpace(line))
-            continue;
-
-        var category = ClassifyRuntimeLine(line);
-        if (category == null)
-            continue;
-
-        var key = $"{category}|{Path.GetFileName(file)}|{i}|{line.Trim()}";
-        if (!emitted.Add(key))
-            continue;
-
-        yield return new RuntimeFailureObservation(
-            Category: category,
-            File: file,
-            Line: i + 1,
-            TestName: GuessRuntimeTestName(lines, i),
-            Message: line.Trim(),
-            Snippet: BuildRuntimeSnippet(lines, i));
-    }
-
-    // Some common Playwright reports put useful context across multiple lines.
-    var all = text.ToLowerInvariant();
-    if (!emitted.Any() && (all.Contains("failed") || all.Contains("error") || all.Contains("timeout")))
-    {
-        yield return new RuntimeFailureObservation(
-            Category: "unclassified-runtime-failure",
-            File: file,
-            Line: 1,
-            TestName: null,
-            Message: "Runtime log contains failure/error/timeout text, but no known classifier matched.",
-            Snippet: FirstNonEmptySnippet(lines));
-    }
-}
-
-static string? ClassifyRuntimeLine(string line)
-{
-    var s = line.ToLowerInvariant();
-
-    if (s.Contains("strict mode violation"))
-        return "locator-strict-mode";
-
-    if (s.Contains("locator") && (s.Contains("resolved to") || s.Contains("did not match") || s.Contains("not found") || s.Contains("waiting for locator")))
-        return "locator-not-found";
-
-    if (s.Contains("expect(") && (s.Contains("tohave") || s.Contains("tobe") || s.Contains("failed")))
-        return "assertion-mismatch";
-
-    if (s.Contains("expected") && (s.Contains("received") || s.Contains("actual") || s.Contains("but was")))
-        return "assertion-mismatch";
-
-    if (s.Contains("assert.") || s.Contains("xunit.sdk.equalexception") || s.Contains("nunit.framework.assertionexception"))
-        return "assertion-mismatch";
-
-    if (s.Contains("timeout") || s.Contains("timed out") || s.Contains("exceeded") || s.Contains("waiting for"))
-    {
-        if (s.Contains("navigation") || s.Contains("goto") || s.Contains("waitforurl") || s.Contains("url"))
-            return "navigation-timeout";
-        return "timeout-wait";
-    }
-
-    if (s.Contains("page.goto") || s.Contains("gotoasync") || s.Contains("net::err") || s.Contains("navigation failed") || s.Contains("waitforurl"))
-        return "navigation-failed";
-
-    if (s.Contains("401") || s.Contains("403") || s.Contains("unauthorized") || s.Contains("forbidden") || s.Contains("login") || s.Contains("auth"))
-        return "auth-or-permissions";
-
-    if (s.Contains("500") || s.Contains("502") || s.Contains("503") || s.Contains("504") || s.Contains("internal server error") || s.Contains("bad gateway") || s.Contains("service unavailable"))
-        return "server-environment";
-
-    if (s.Contains("econnrefused") || s.Contains("enotfound") || s.Contains("connection refused") || s.Contains("socket hang up") || s.Contains("dns") || s.Contains("name or service not known"))
-        return "network-environment";
-
-    if (s.Contains("test data") || s.Contains("fixture") || s.Contains("setup") || s.Contains("seed") || s.Contains("not seeded"))
-        return "test-data-or-setup";
-
-    if (s.Contains("target closed") || s.Contains("browser has been closed") || s.Contains("context closed") || s.Contains("page closed"))
-        return "browser-context-closed";
-
-    if ((s.Contains("error") || s.Contains("exception") || s.Contains("failed")) && (s.Contains("playwright") || s.Contains("nunit") || s.Contains("xunit")))
-        return "unclassified-runtime-failure";
-
-    return null;
-}
-
-static string? GuessRuntimeTestName(string[] lines, int index)
-{
-    for (var i = index; i >= Math.Max(0, index - 12); i--)
-    {
-        var line = lines[i].Trim();
-        if (line.Contains(" › ", StringComparison.Ordinal) || line.StartsWith("Failed ", StringComparison.OrdinalIgnoreCase) || line.StartsWith("Passed ", StringComparison.OrdinalIgnoreCase))
-            return line;
-        if (line.Contains("Test Name:", StringComparison.OrdinalIgnoreCase))
-            return line;
-        if (line.EndsWith("()", StringComparison.Ordinal) && line.Any(char.IsLetter))
-            return line;
-    }
-    return null;
-}
-
-static string BuildRuntimeSnippet(string[] lines, int index)
-{
-    var start = Math.Max(0, index - 2);
-    var end = Math.Min(lines.Length - 1, index + 3);
-    return string.Join("\n", lines.Skip(start).Take(end - start + 1).Select(x => x.TrimEnd()));
-}
-
-static string FirstNonEmptySnippet(string[] lines)
-{
-    return string.Join("\n", lines.Where(x => !string.IsNullOrWhiteSpace(x)).Take(8));
-}
-
-static string RuntimeFailureSeverity(string category) => category switch
-{
-    "auth-or-permissions" => "error",
-    "server-environment" => "error",
-    "network-environment" => "error",
-    "browser-context-closed" => "error",
-    "locator-strict-mode" => "warning",
-    "locator-not-found" => "warning",
-    "assertion-mismatch" => "warning",
-    "timeout-wait" => "warning",
-    "navigation-timeout" => "warning",
-    "navigation-failed" => "warning",
-    "test-data-or-setup" => "warning",
-    _ => "info"
-};
-
-static int RuntimeFailureSeverityWeight(string severity) => severity switch
-{
-    "error" => 3,
-    "warning" => 2,
-    _ => 1
-};
-
-static string RuntimeFailureLikelyCause(string category) => category switch
-{
-    "locator-not-found" => "Generated locator did not find an element. Common causes: wrong adapter mapping, changed data-tid, missing wait, or the test navigated to the wrong page.",
-    "locator-strict-mode" => "Playwright locator matched more than one element. Mapping is too broad or the old Selenium wrapper allowed ambiguous selection.",
-    "timeout-wait" => "The UI did not reach the expected state in time. Common causes: missing explicit wait, slow test data setup, wrong locator, or real product issue.",
-    "navigation-timeout" => "Navigation or URL wait did not complete. Check route mapping, base URL, auth state, and redirects.",
-    "navigation-failed" => "Page navigation failed. Check base URL, environment availability, routing, and network errors.",
-    "assertion-mismatch" => "The migrated assertion executed but observed a different value/state. Check test data, selector semantics, and assertion conversion.",
-    "auth-or-permissions" => "Runtime failed around authentication or permissions. Check login helper, test user, cookies/storage state, and environment access.",
-    "server-environment" => "The application or dependent service returned a server error. This is often environment/setup rather than migration code.",
-    "network-environment" => "Network/DNS/connection problem. Check environment URL, proxy/VPN, local services, and CI network.",
-    "test-data-or-setup" => "Failure mentions fixture/setup/test data. Check API seeding, cleanup, and preserved setup helpers.",
-    "browser-context-closed" => "Browser/page/context closed before the action. Check premature teardown, unawaited tasks, popup handling, and crashes.",
-    _ => "Runtime failure did not match a known classifier. Inspect the snippet and add a classifier if this repeats."
-};
-
-static string RuntimeFailureSuggestedAction(string category) => category switch
-{
-    "locator-not-found" => "Open trace/screenshot, verify the PageObject source truth, then fix adapter-config mapping or add a wait only if the locator is correct.",
-    "locator-strict-mode" => "Narrow the mapping: add row/context locator, nth/filter, or a more specific data-tid based on POM/source truth.",
-    "timeout-wait" => "Check whether the action reached the expected page/state. Prefer fixing navigation/setup/locator before increasing timeout.",
-    "navigation-timeout" => "Verify base URL and route mapping; check whether auth redirect or environment slowness changed the expected URL.",
-    "navigation-failed" => "Check environment availability and generated Goto/route code before changing test assertions.",
-    "assertion-mismatch" => "Compare old Selenium assertion with generated Playwright assertion and verify test data. Do not blindly update expected values.",
-    "auth-or-permissions" => "Validate login/storage state/test user. Escalate if environment credentials are missing.",
-    "server-environment" => "Re-run or check service health. Do not edit migration config until environment issue is ruled out.",
-    "network-environment" => "Check network/proxy/VPN/CI connectivity and base URL. Re-run after environment is stable.",
-    "test-data-or-setup" => "Find source setup helper/API call; preserve or map it explicitly before rerunning the test.",
-    "browser-context-closed" => "Inspect trace for crash/teardown timing. Check awaits and popup/context lifecycle.",
-    _ => "Add this log to escalation report with source test, generated test, trace/screenshot, and runtime command."
-};
-
-static IEnumerable<string> BuildRuntimeFailureRecommendedActions(RuntimeFailureGroup[] groups)
-{
-    if (groups.Length == 0)
-    {
-        yield return "Runtime logs contain no classified failures. If the run failed, attach the raw log and extend runtime-classify patterns.";
-        yield break;
-    }
-
-    var top = groups[0];
-    yield return $"Start with `{top.Category}` ({top.Count} observations): {top.SuggestedAction}";
-
-    if (groups.Any(g => g.Category.Contains("environment", StringComparison.OrdinalIgnoreCase) || g.Category == "auth-or-permissions"))
-        yield return "Resolve environment/auth/network failures before changing adapter-config; otherwise migration changes may chase a false signal.";
-
-    if (groups.Any(g => g.Category.StartsWith("locator", StringComparison.OrdinalIgnoreCase)))
-        yield return "For locator failures, inspect trace/screenshot and POM source truth, then update adapter-config/profile mappings.";
-
-    if (groups.Any(g => g.Category == "assertion-mismatch"))
-        yield return "For assertion mismatches, compare old Selenium assertion semantics with generated Playwright assertion before changing expected values.";
-}
-
-static void WriteRuntimeFailureReport(RuntimeFailureReport report, string outPath, string format)
-{
-    Directory.CreateDirectory(outPath);
-    var jsonOptions = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
-    if (format == "json" || format == "both")
-        File.WriteAllText(Path.Combine(outPath, "runtime-failure-report.json"), System.Text.Json.JsonSerializer.Serialize(report, jsonOptions));
-    if (format == "text" || format == "both")
-    {
-        File.WriteAllText(Path.Combine(outPath, "runtime-failure-report.md"), WriteRuntimeFailureMarkdown(report));
-        File.WriteAllText(Path.Combine(outPath, "agent-runtime-failure-next-task.md"), WriteAgentRuntimeFailureNextTask(report));
-    }
-}
-
-static string WriteRuntimeFailureMarkdown(RuntimeFailureReport report)
-{
-    var sb = new StringBuilder();
-    sb.AppendLine("# Runtime Failure Classification");
-    sb.AppendLine();
-    sb.AppendLine($"- **Generated**: {report.GeneratedAtUtc:yyyy-MM-dd HH:mm:ss zzz}");
-    sb.AppendLine($"- **Source**: `{report.Source}`");
-    sb.AppendLine($"- **Files scanned**: `{report.FilesScanned}`");
-    sb.AppendLine($"- **Observations**: `{report.Observations}`");
-    sb.AppendLine($"- **Groups**: `{report.Groups.Length}`");
-    sb.AppendLine();
-
-    sb.AppendLine("## Recommended next actions");
-    foreach (var action in report.RecommendedNextActions)
-        sb.AppendLine($"- {action}");
-    sb.AppendLine();
-
-    sb.AppendLine("## Failure groups");
-    if (report.Groups.Length == 0)
-    {
-        sb.AppendLine("No runtime failures were classified.");
-        return sb.ToString();
-    }
-
-    foreach (var group in report.Groups)
-    {
-        sb.AppendLine($"### {group.Category} ({group.Count})");
-        sb.AppendLine();
-        sb.AppendLine($"- **Severity**: `{group.Severity}`");
-        sb.AppendLine($"- **Likely cause**: {group.LikelyCause}");
-        sb.AppendLine($"- **Suggested action**: {group.SuggestedAction}");
-        sb.AppendLine();
-        sb.AppendLine("Examples:");
-        foreach (var example in group.Examples)
-        {
-            sb.AppendLine($"- `{Path.GetFileName(example.File)}:{example.Line}` {EscapeMd(example.Message)}");
-            if (!string.IsNullOrWhiteSpace(example.TestName))
-                sb.AppendLine($"  - Test/context: `{EscapeMd(example.TestName!)}`");
-            sb.AppendLine("  ```text");
-            sb.AppendLine(example.Snippet);
-            sb.AppendLine("  ```");
-        }
-        sb.AppendLine();
-    }
-
-    return sb.ToString();
-}
-
-static string WriteAgentRuntimeFailureNextTask(RuntimeFailureReport report)
-{
-    var sb = new StringBuilder();
-    sb.AppendLine("# Agent Runtime Failure Next Task");
-    sb.AppendLine();
-    sb.AppendLine("Продолжи runtime-доводку Playwright миграции по классификации runtime failures.");
-    sb.AppendLine();
-    sb.AppendLine("## Ограничения");
-    sb.AppendLine("- Не меняй C# мигратора без отдельного разрешения.");
-    sb.AppendLine("- Не меняй исходный Selenium/product проект.");
-    sb.AppendLine("- Не правь generated .cs вручную как финальное решение.");
-    sb.AppendLine("- Для locator/mapping проблем меняй adapter-config/profile по source truth.");
-    sb.AppendLine("- Для environment/auth/network проблем сначала проверь окружение, а не config.");
-    sb.AppendLine();
-    sb.AppendLine("## Следующие действия");
-    foreach (var action in report.RecommendedNextActions)
-        sb.AppendLine($"- {action}");
-    sb.AppendLine();
-    sb.AppendLine("## Топ категорий");
-    foreach (var group in report.Groups.Take(5))
-        sb.AppendLine($"- `{group.Category}`: {group.Count}. {group.SuggestedAction}");
-    sb.AppendLine();
-    sb.AppendLine("После правок запусти один smoke-тест повторно, затем снова `runtime-classify` на новом логе и сравни результат.");
-    return sb.ToString();
-}
-
 // --- Config schema mode ---
 
-static int RunConfigSchema(string outPath, string format)
-{
-    Directory.CreateDirectory(outPath);
-    var schemaText = LoadAdapterConfigSchemaText();
-    var schemaPath = Path.Combine(outPath, "adapter-config.schema.json");
-    File.WriteAllText(schemaPath, schemaText);
 
-    if (format == "text" || format == "both")
-        File.WriteAllText(Path.Combine(outPath, "adapter-config.schema.usage.md"), WriteConfigSchemaUsageMarkdown(schemaPath));
-    if (format == "json" || format == "both")
-    {
-        var report = new ConfigSchemaReport(DateTimeOffset.UtcNow, Path.GetFullPath(schemaPath), "adapter-config.schema.json", new[]
-        {
-            "Add a $schema property to adapter-config/profile files for editor hints.",
-            "Run config-validate after schema edits; JSON Schema complements but does not replace safety validation."
-        });
-        File.WriteAllText(Path.Combine(outPath, "config-schema-report.json"), System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
-    }
 
-    Console.WriteLine($"Adapter-config JSON Schema written to: {Path.GetFullPath(schemaPath)}");
-    return 0;
-}
 
-static string LoadAdapterConfigSchemaText()
-{
-    foreach (var candidate in AdapterConfigSchemaCandidatePaths())
-    {
-        if (File.Exists(candidate))
-            return File.ReadAllText(candidate);
-    }
 
-    return MinimalAdapterConfigSchemaText();
-}
 
-static IEnumerable<string> AdapterConfigSchemaCandidatePaths()
-{
-    yield return Path.Combine(Environment.CurrentDirectory, "schemas", "adapter-config.schema.json");
-    yield return Path.Combine(AppContext.BaseDirectory, "schemas", "adapter-config.schema.json");
 
-    var dir = new DirectoryInfo(Environment.CurrentDirectory);
-    while (dir != null)
-    {
-        yield return Path.Combine(dir.FullName, "schemas", "adapter-config.schema.json");
-        dir = dir.Parent;
-    }
-}
 
-static string WriteConfigSchemaUsageMarkdown(string schemaPath)
-{
-    return $$"""
-# Adapter Config JSON Schema
 
-Schema written to:
 
-```text
-{{Path.GetFullPath(schemaPath)}}
-```
-
-Use it in config/profile files:
-
-```json
-{
-  "$schema": "./schemas/adapter-config.schema.json"
-}
-```
-
-For profile layers, use a relative path from the profile file to the schema file.
-
-Important:
-
-- JSON Schema helps editors and agents with field names, autocomplete, and obvious type errors.
-- It does **not** replace `config-validate`.
-- After agent config changes, always run:
-
-```powershell
-selenium-pw-migrator --mode config-validate --config adapter-config.json --out config-validate
-```
-""";
-}
-
-static string MinimalAdapterConfigSchemaText()
-{
-    return """
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.local/selenium-playwright-ast-migrator/adapter-config.schema.json",
-  "title": "Selenium Playwright AST Migrator adapter-config",
-  "type": "object",
-  "additionalProperties": true,
-  "properties": {
-    "$schema": { "type": "string" },
-    "SourceProjectName": { "type": "string" },
-    "SourceOnlyIdentifiers": { "type": "array", "items": { "type": "string" } },
-    "TargetKnownTypes": { "type": "array", "items": { "type": "string" } },
-    "TargetKnownIdentifiers": { "type": "array", "items": { "type": "string" } },
-    "UiTargets": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
-    "Methods": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
-    "ParameterizedMethods": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
-    "PageObjects": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
-    "Tables": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
-    "Pagination": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
-    "Scopes": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
-    "Verification": { "type": "object", "additionalProperties": true },
-    "QualityGates": { "type": "object", "additionalProperties": true }
-  }
-}
-""";
-}
 
 static void PrintHelp()
 {
@@ -7282,131 +6263,3 @@ Output workspace examples:
   --out C:\temp\migration-run     writes to absolute path C:\temp\migration-run
 ");
 }
-
-
-record ProfileInputFile(string Path, string Text);
-record ProfileRuleInfo(string Section, string Key, int Weight);
-record ProfileMatchReport(DateTimeOffset GeneratedAtUtc, string InputPath, string[] ConfigLayers, double OverallScore, string Recommendation, ProfileLayerMatch[] Layers, ProjectProfileSignal[] ProjectSignals, string[] Gaps, string[] RecommendedNextActions);
-record ProfileLayerMatch(string ConfigPath, string SourceProjectName, int TotalRules, int MatchedRules, double Score, string Verdict, ProfileRuleMatch[] TopMatchedRules, ProfileRuleMatch[] UnusedRules);
-record ProfileRuleMatch(string Section, string Key, int Hits, string ExampleFile, int ExampleLine);
-record ProjectProfileSignal(string Expression, int Occurrences, string ExampleFile, int ExampleLine, string CoveredBy);
-class ProjectProfileSignalBuilder
-{
-    public string Expression { get; }
-    public string ExampleFile { get; }
-    public int ExampleLine { get; }
-    public int Occurrences { get; set; }
-
-    public ProjectProfileSignalBuilder(string expression, string exampleFile, int exampleLine)
-    {
-        Expression = expression;
-        ExampleFile = exampleFile;
-        ExampleLine = exampleLine;
-    }
-
-    public ProjectProfileSignal ToSignal(string coveredBy) => new(Expression, Occurrences, ExampleFile, ExampleLine, coveredBy);
-}
-
-class ArtifactSummary
-{
-    public int FilesProcessed { get; set; }
-    public int TestsFound { get; set; }
-    public int ActionsFound { get; set; }
-    public int SemanticActions { get; set; }
-    public int SyntaxFallbackActions { get; set; }
-    public int UnsupportedActions { get; set; }
-    public int MappedTargets { get; set; }
-    public int UnmappedTargets { get; set; }
-    public int TodoComments { get; set; }
-    public int SyntaxErrors { get; set; }
-    public string? VerifyStatus { get; set; }
-}
-
-record DotnetBuildResult(int ExitCode, string Command, string StdOut, string StdErr);
-record BootstrapProjectReport(DateTimeOffset GeneratedAtUtc, string ProjectName, string InputPath, string BaseProfilePath, string ProjectProfilePath, string? NearestProjectPath, string[] Warnings);
-record ProjectVerifyReport(
-    DateTimeOffset GeneratedAtUtc,
-    string Status,
-    int ExitCode,
-    string[] GeneratedFiles,
-    string HarnessProject,
-    string BaseDirectory,
-    string? Solution,
-    string BuildWorkingDirectory,
-    string[] ProjectReferences,
-    ProjectReferenceDiscovery[] ProjectReferenceDiscovery,
-    string[] AssemblyReferences,
-    PackageReferenceConfig[] PackageReferences,
-    string[] BuildFilesImported,
-    string TargetFramework,
-    string Command,
-    string StdOut,
-    string StdErr,
-    string[] Diagnostics,
-    ProjectVerifyDiagnostic[] ClassifiedDiagnostics);
-
-record ProjectReferenceDiscovery(string Path, string Source, string Status, string Reason);
-record ProjectVerifyDiagnostic(string Raw, string Code, string Severity, string Category, string? File, int? Line, string LikelyCause, string SuggestedAction);
-
-record TodoExplanationReport(
-    DateTimeOffset GeneratedAtUtc,
-    string Source,
-    int FilesProcessed,
-    int TestsFound,
-    int ActionsFound,
-    int SemanticActions,
-    int SyntaxFallbackActions,
-    int MappedTargets,
-    int UnmappedTargets,
-    int UnsupportedActions,
-    int TodoComments,
-    int SyntaxErrors,
-    string? ProjectVerifyStatus,
-    TodoInsight[] Insights,
-    string NextBestAction);
-
-record TodoInsight(
-    string Category,
-    string Title,
-    string Reason,
-    int EstimatedImpact,
-    string ExampleFile,
-    int ExampleLine,
-    string SuggestedAction,
-    bool RequiresSourceTruth,
-    bool RequiresDeveloper,
-    string[] Evidence);
-
-record GeneratedTestMethodStats(string File, string TestName, int StartLine, int ActiveLines, int TodoLines, int ExecutableLines, double ActiveRatio, int AwaitCount, int ExpectOrAssertCount, int LocatorCount);
-record MigrationBoardReport(DateTimeOffset GeneratedAtUtc, string Source, ArtifactSummary Summary, string? ProjectVerifyStatus, int ProjectDiagnostics, int GeneratedFiles, int RuntimeReadyCandidates, int SmokeCandidates, MigrationBoardFileCard[] FileCards, TodoInsight[] TopInsights, SmokeCandidate[] TopSmokeCandidates, string[] RecommendedNextActions, string[] Artifacts);
-record MigrationBoardFileCard(string File, int Tests, int TodoLines, int CompileErrors, int CompileWarnings, double ActiveRatio, double BestScore, string BestReadinessLevel, string BestTestName);
-record SmokePlanReport(DateTimeOffset GeneratedAtUtc, string Source, string? ProjectVerifyStatus, int GeneratedFiles, int TestsFound, int RuntimeReadyCandidates, int SmokeCandidates, SmokeCandidate[] Candidates, string[] RecommendedNextActions);
-record SmokeCandidate(string File, string TestName, int StartLine, int ActiveLines, int TodoLines, double ActiveRatio, int CompileErrors, int CompileWarnings, int AwaitCount, int ExpectOrAssertCount, int LocatorCount, double Score, string ReadinessLevel, string[] Checklist);
-
-record PomIndexReport(DateTimeOffset GeneratedAtUtc, string InputPath, int FilesScanned, PomFact[] Facts, PomUsageCandidate[] InferredCandidates, string[] Warnings);
-record PomFact(string SourceExpression, string OwnerType, string MemberName, string MemberKind, string Selector, string SelectorKind, string TargetKindSuggestion, string TargetExpressionSuggestion, string SourceFile, int SourceLine, string Confidence, bool RequiresReview, string Notes);
-record PomUsageCandidate(string SourceExpression, string SuggestedTargetExpression, string SuggestedTargetKind, int Usages, string ExampleFile, int ExampleLine, string Confidence, bool RequiresSourceTruth, string Notes);
-
-
-
-record TypeScriptVerifyReport(DateTimeOffset GeneratedAtUtc, string Status, string InputPath, string TsProjectPath, string[] GeneratedFiles, string VerifyDirectory, string TsConfigPath, string Command, int ExitCode, string StdOut, string StdErr, string[] Diagnostics, TypeScriptVerifyDiagnostic[] ClassifiedDiagnostics);
-record TypeScriptVerifyDiagnostic(string Raw, string Code, string Severity, string Category, string LikelyCause, string SuggestedAction);
-
-record RuntimeFailureReport(DateTimeOffset GeneratedAtUtc, string Source, int FilesScanned, int Observations, RuntimeFailureGroup[] Groups, string[] RecommendedNextActions);
-record RuntimeFailureGroup(string Category, int Count, string Severity, string LikelyCause, string SuggestedAction, RuntimeFailureObservation[] Examples);
-record RuntimeFailureObservation(string Category, string File, int Line, string? TestName, string Message, string Snippet);
-record ConfigSchemaReport(DateTimeOffset GeneratedAtUtc, string SchemaPath, string SchemaName, string[] SuggestedUsage);
-
-record ConfigSafetyReport(DateTimeOffset GeneratedAtUtc, string ConfigPath, string Status, ConfigSafetyIssue[] Issues, ConfigMetric[] Metrics);
-record ConfigSafetyIssue(string Severity, string Code, string Message, string? Location, string SuggestedAction);
-record ConfigMetric(string Name, int Value);
-record ConfigDiffReport(DateTimeOffset GeneratedAtUtc, string BeforePath, string AfterPath, ConfigDiffChange[] Changes, ConfigSafetyIssue[] Risks, string[] Summary);
-record ConfigDiffChange(string Section, string ChangeType, string Key);
-record GuardReport(DateTimeOffset GeneratedAtUtc, string BeforePath, string AfterPath, string Status, GuardCheck[] Checks, string[] Summary);
-record GuardCheck(string Name, string Status, string Message, int? Before, int? After);
-
-record DoctorReport(DateTimeOffset GeneratedAtUtc, string Status, string InputPath, string InputKind, string[] ConfigLayers, string WorkspaceOutPath, DoctorCheck[] Checks, string[] RecommendedNextActions);
-record DoctorCheck(string Status, string Code, string Message, string? Location, string SuggestedAction);
-record SimpleProcessResult(int ExitCode, string StdOut, string StdErr);
-
-record CliOptions(string Mode, string Input, string Out, string? Config, string[] Configs, string Format, bool FailOnUnsupported, bool FailOnTodo, string Workspace, string? Before, string? After, string Target, string? TsProject);

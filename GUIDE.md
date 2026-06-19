@@ -1,4 +1,4 @@
-# Руководство по мигратору Selenium C# → Playwright .NET
+# Руководство по мигратору Selenium C# → Playwright
 
 Это руководство написано так, чтобы с ним можно было **быстро попробовать инструмент**, не зарываясь сразу в архитектуру, профили и внутренние режимы.
 
@@ -8,7 +8,7 @@
 
 ## Коротко: что делает инструмент
 
-Мигратор помогает переносить автотесты с **Selenium C#** на **Playwright .NET**.
+Мигратор помогает переносить автотесты с **Selenium C#** на **Playwright .NET**. Экспериментально поддерживается и цель **Playwright TypeScript**, но только при наличии существующего TS Playwright-проекта (`--ts-project`).
 
 Он не обещает волшебную кнопку «переписать всё идеально». Его задача другая: снять с человека большую часть однотипной работы.
 
@@ -36,6 +36,24 @@
 ```
 
 Первый прогон почти никогда не будет идеальным. Это нормально. Инструмент рассчитан на несколько коротких итераций.
+
+---
+
+## Режимы агента
+
+Для AI-assisted миграции используйте один из двух режимов:
+
+- **Strict Mode** — безопасные config-only итерации, финальное ревью, подготовка MR.
+- **Creative Mode** — поиск повторяющихся паттернов, TS draft-миграция, гипотезы и тикеты на доработку мигратора.
+
+В обоих режимах запрещено выдумывать локаторы. Имя PageObject-свойства не является selector-ом: агент должен проваливаться в POM/helper/control factory и доказывать `data-test-id` / `data-tid` / `data-test` по source truth.
+
+Стартовые промпты:
+
+- `examples/agent-first/start-strict.md`
+- `examples/agent-first/start-creative.md`
+
+Подробнее: `docs/agent-modes.md`.
 
 ---
 
@@ -67,6 +85,21 @@
 4. открыть отчёт и посмотреть статус
 5. улучшать config небольшими итерациями
 ```
+
+### Сценарий D. Нужна миграция в существующий Playwright TypeScript проект
+
+Используйте этот путь, если в команде уже есть `front`/TS-проект с Playwright, fixtures, `playwright.config.ts` и `tsconfig.json`.
+
+```text
+1. Указать путь к Selenium-тестам
+2. Указать путь к существующему TS Playwright проекту через --ts-project
+3. Запустить migrate --target ts
+4. Запустить verify-ts-project
+5. Проверить compile/list-ready статус
+6. Только после этого выбирать runtime smoke
+```
+
+Важно: TS-режим не должен генерировать тесты «в вакууме». Он обязан опираться на существующую инфраструктуру проекта и source truth для локаторов.
 
 ### Сценарий C. Настройки уже готовы
 
@@ -1333,3 +1366,8 @@ For Selenium/POM roots such as `page`, `pagef`, `lightbox`, `modal`, `dialog`, a
 
 Selenium explicit waits must be classified before generic source-only TODO handling. Actionability waits such as `WaitPresence`, `WaitVisible`, `WaitEnabled` are usually elided because Playwright auto-waits before actions/assertions. Product-state waits such as `ValidateLoading`, `WaitForLoaded`, table/grid/list refresh waits, modal/toast waits must be kept or converted to Playwright web-first assertions. Ambiguous waits become `[MIGRATOR:WAIT_REQUIRES_STATE_ASSERTION]`. See `docs/wait-policy.md`.
 
+
+
+## Documentation index
+
+See [`docs/README.md`](docs/README.md) for the current documentation map.

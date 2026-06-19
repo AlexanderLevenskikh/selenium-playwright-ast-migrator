@@ -141,3 +141,15 @@ dotnet run --project .\Migrator.Cli -- --mode index-pom --input "<Selenium proje
 
 Правило: найденные POM-факты являются source truth, а `inferred-pom-candidates.json` — только черновик. Inferred candidates нельзя автоматически переносить в `adapter-config.json`: сначала найти POM/helper/source truth или спросить разработчика.
 
+
+## CLI decomposition
+
+`Migrator.Cli/Program.cs` is kept as the command router and legacy command host. Newer self-contained commands should live under `Migrator.Cli/Commands/`:
+
+- `ConfigSchemaCommand` — exports adapter-config JSON Schema and usage notes.
+- `ProfileMatchCommand` — scores whether profile layers can be reused for a new source project.
+- `RuntimeFailureClassifierCommand` — classifies Playwright runtime/smoke logs.
+
+Shared CLI report DTOs live under `Migrator.Cli/Models/CliReportModels.cs`.
+
+When adding a new CLI mode, prefer a small command class instead of adding another large block to `Program.cs`.

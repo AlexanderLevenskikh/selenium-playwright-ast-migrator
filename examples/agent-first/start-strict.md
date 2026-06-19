@@ -1,43 +1,46 @@
-# Prompt: start agent-first migration
+# Start prompt — Strict Mode
 
-Используй этот prompt, когда запускаешь агента на новом пакете тестов.
-**Strict Mode** — максимальная безопасность, минимум рисков.
-
+Use this prompt when you want safe, conservative migration progress.
 
 ```text
-Ты migration agent для Selenium C# → Playwright .NET AST Migrator.
+Работай в Strict Mode.
 
-Работай по agent-first workflow.
+Project paths:
+- Selenium source tests: <SELENIUM_TESTS_PATH>
+- Adapter config: <ADAPTER_CONFIG_PATH>
+- Optional profile layers: <PROFILE_PATHS>
+- Playwright .NET project for verify-project: <PLAYWRIGHT_DOTNET_PROJECT_PATH or empty>
+- Playwright TypeScript project for verify-ts-project: <PLAYWRIGHT_TS_PROJECT_PATH or empty>
+- Migration workspace: <MIGRATION_WORKSPACE_PATH>
 
-Перед началом прочитай:
-- start.md
-- bootstrap.md
-- POLICIES.md
-- AGENTS.md
-- docs/agent-first-workflow.md
-- docs/agent-command-set.md
-- docs/agent-first-checklist.md
-- docs/agent-config-guidelines.md
-- docs/project-verification.md
-- docs/runtime-readiness.md
-- docs/agent-playbooks/source-only-pattern-backlog.md
+Rules:
+- Do not edit C# migrator code.
+- Do not edit generated .cs/.ts files as the final solution.
+- Do not edit the source Selenium project.
+- Change only adapter-config/profile files and migration reports.
+- Never invent selectors. Use POM/helper/source truth.
+- Group TODO by full source expression and pattern, not by root `page`/`pagef`.
+- If a recognizer/renderer/parser fix is required, create or update `migration/migrator-tickets.md`.
 
-Ограничения:
-- Пиши пользователю только на русском.
-- Все output-папки создавай только внутри migration/.
-- Не меняй C# код мигратора без явного разрешения.
-- Не меняй исходный проект.
-- Не правь generated .cs вручную.
-- Основная зона правок: adapter-config.json или profiles/**/*.adapter.json.
+Start by reading:
+- migration/agent-state.md
+- migration/pre-stop-checklist.md
+- latest orchestration-report.md
+- latest explain-todo.md
+- latest agent-next-task.md
+- unmapped-targets.json
+- unsupported-actions.json
+- verify-project-report.md, if present
+- migration-board.md/html, if present
 
-Задача:
-1. Создай/обнови migration/agent-state.md и migration/pre-stop-checklist.md.
-2. Определи input tests path и config/profile stack.
-3. Запусти baseline migrate или verify-project.
-4. Запусти explain-todo.
-5. Прочитай agent-next-task.md.
-6. Сделай одну безопасную config/profile итерацию.
-7. Запусти config-validate, migrate/verify-project, guard, config-diff.
-8. Если TODO доминируют `SOURCE_ONLY_IDENTIFIER(page/pagef)`, сначала построи source-pattern backlog, а не root-level escalation.
-9. Остановись с русским отчётом и вопросом “Продолжить?”.
+Then do one small safe config/profile change and run:
+1. config-validate
+2. migrate or orchestrate
+3. verify-project / verify-ts-project if applicable
+4. config-diff
+5. guard
+6. explain-todo
+7. migration-board
+
+Report before/after metrics and stop if there is a generic blocker.
 ```

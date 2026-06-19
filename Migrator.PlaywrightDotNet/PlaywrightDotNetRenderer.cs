@@ -21,22 +21,11 @@ public class PlaywrightDotNetRenderer : IRenderer
     readonly HashSet<string> _targetLocals = new(StringComparer.Ordinal);
     HashSet<string> _targetKnownTypes = new(StringComparer.Ordinal);
     HashSet<string> _targetKnownIdentifiers = new(StringComparer.Ordinal);
-    readonly HashSet<string> _suppressedMethods;
-    readonly string[] _suppressedMethodPatterns;
     bool _useAssertionsExpect = false;
 
     public PlaywrightDotNetRenderer(string indent = "\t")
-        : this(null, indent)
-    {
-    }
-
-    public PlaywrightDotNetRenderer(ProjectAdapterConfig? config, string indent = "\t")
     {
         _indent = indent;
-        _suppressedMethods = new HashSet<string>(
-            config?.SuppressedMethods ?? Array.Empty<string>(),
-            StringComparer.Ordinal);
-        _suppressedMethodPatterns = config?.SuppressedMethodPatterns ?? Array.Empty<string>();
     }
 
     public string Render(TestFileModel model)
@@ -1330,7 +1319,7 @@ public class PlaywrightDotNetRenderer : IRenderer
     /// Currently conservative — no methods are suppressed globally.
     /// Use adapter config MethodMapping instead of adding entries here.
     /// </summary>
-    bool IsLowPriorityMethod(string methodName, string? fullSourceText)
+    static bool IsLowPriorityMethod(string methodName, string? fullSourceText)
     {
         // Reject patterns that always have side effects — never suppress.
         if (methodName.StartsWith("ClickAndOpen", StringComparison.Ordinal))
@@ -1340,38 +1329,10 @@ public class PlaywrightDotNetRenderer : IRenderer
         if (fullSourceText is not null && fullSourceText.Contains("Navigation.", StringComparison.Ordinal))
             return false;
 
-        if (IsSuppressedMethod(methodName, fullSourceText))
-            return true;
-
-        if (fullSourceText != null && _suppressedMethodPatterns.Any(p => WildcardMatches(fullSourceText, p)))
-            return true;
-
+        // No methods currently suppressed globally.
         // Methods like ValidateLoading, ExecuteScript, Window, SettingPeriod may have side effects
-        // and should be handled via adapter config MethodMapping per-project unless explicitly suppressed.
+        // and should be handled via adapter config MethodMapping per-project.
         return false;
-    }
-
-    bool IsSuppressedMethod(string methodName, string? fullSourceText)
-    {
-        if (_suppressedMethods.Contains(methodName))
-            return true;
-
-        if (string.IsNullOrWhiteSpace(fullSourceText))
-            return false;
-
-        var trimmed = fullSourceText.Trim();
-        return _suppressedMethods.Any(method =>
-            trimmed.StartsWith(method.Trim() + "(", StringComparison.Ordinal) ||
-            trimmed.Contains("." + method.Trim() + "(", StringComparison.Ordinal));
-    }
-
-    static bool WildcardMatches(string text, string pattern)
-    {
-        if (string.IsNullOrWhiteSpace(pattern))
-            return false;
-
-        var regex = "^" + Regex.Escape(pattern.Trim()).Replace("\\*", ".*") + "$";
-        return Regex.IsMatch(text.Trim(), regex, RegexOptions.CultureInvariant);
     }
 
     /// <summary>
@@ -2185,8 +2146,7 @@ public class PlaywrightDotNetRenderer : IRenderer
     /// </summary>
     static HashSet<string> ExtractRootIdentifiers(string text)
     {
-        var stripped = StripPropertyPatternDesignators(StripStringLiterals(text));
-        var lambdaParameters = ExtractLambdaParameterNames(stripped);
+        var stripped = StripStringLiterals(text);
         var roots = new HashSet<string>();
         var i = 0;
         while (i < stripped.Length)
@@ -2207,7 +2167,7 @@ public class PlaywrightDotNetRenderer : IRenderer
                     i++;
                 var id = stripped.Substring(start, i - start);
 
-                if (!precededByDot && id != "_" && !lambdaParameters.Contains(id))
+                if (!precededByDot)
                     roots.Add(id);
             }
             else
@@ -2217,149 +2177,6 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
         return roots;
     }
-
-    static string StripPropertyPatternDesignators(string text)
-    {
-        // Property patterns and named arguments contain identifiers before ':' that are
-        // not runtime symbols in the generated method scope. Examples:
-        //   x is { IsLoaded: true }
-        //   x is { Name.Exists: true }
-        // Keep the value side intact so captured variables such as { Count: expectedCount }
-        // are still checked by FindUnavailableSymbols.
-        return Regex.Replace(
-            text,
-            @"(^|[,{])(\s*)([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)(\s*:)",
-            m => m.Groups[1].Value
-                 + m.Groups[2].Value
-                 + new string(' ', m.Groups[3].Value.Length)
-                 + m.Groups[4].Value);
-    }
-
-    static HashSet<string> ExtractLambdaParameterNames(string text)
-    {
-        var result = new HashSet<string>(StringComparer.Ordinal);
-        var searchIndex = 0;
-
-        while (true)
-        {
-            var arrowIndex = text.IndexOf("=>", searchIndex, StringComparison.Ordinal);
-            if (arrowIndex < 0)
-                break;
-
-            var parameterText = TryExtractLambdaParameterText(text, arrowIndex);
-            if (!string.IsNullOrWhiteSpace(parameterText))
-            {
-                foreach (var parameterName in ParseLambdaParameterNames(parameterText))
-                    result.Add(parameterName);
-            }
-
-            searchIndex = arrowIndex + 2;
-        }
-
-        return result;
-    }
-
-    static string? TryExtractLambdaParameterText(string text, int arrowIndex)
-    {
-        var end = arrowIndex - 1;
-        while (end >= 0 && char.IsWhiteSpace(text[end]))
-            end--;
-
-        if (end < 0)
-            return null;
-
-        if (text[end] == ')')
-        {
-            var start = FindMatchingOpenParen(text, end);
-            if (start >= 0)
-                return text.Substring(start + 1, end - start - 1);
-
-            return null;
-        }
-
-        var identifierStart = end;
-        while (identifierStart >= 0 && IsIdentifierPart(text[identifierStart]))
-            identifierStart--;
-
-        return text.Substring(identifierStart + 1, end - identifierStart);
-    }
-
-    static int FindMatchingOpenParen(string text, int closeParenIndex)
-    {
-        var depth = 1;
-        for (var i = closeParenIndex - 1; i >= 0; i--)
-        {
-            if (text[i] == ')')
-            {
-                depth++;
-            }
-            else if (text[i] == '(')
-            {
-                depth--;
-                if (depth == 0)
-                    return i;
-            }
-        }
-
-        return -1;
-    }
-
-    static IEnumerable<string> ParseLambdaParameterNames(string parameterText)
-    {
-        foreach (var part in SplitTopLevelComma(parameterText))
-        {
-            var identifiers = Regex.Matches(part, @"@?[A-Za-z_]\w*")
-                .Select(m => m.Value.TrimStart('@'))
-                .Where(name => name.Length > 0 && name != "_")
-                .Where(name => !IsFrameworkKeyword(name))
-                .Where(name => name is not "var" and not "ref" and not "out" and not "in" and not "params")
-                .ToArray();
-
-            if (identifiers.Length > 0)
-                yield return identifiers[^1];
-        }
-    }
-
-    static IEnumerable<string> SplitTopLevelComma(string text)
-    {
-        var start = 0;
-        var parenDepth = 0;
-        var bracketDepth = 0;
-        var braceDepth = 0;
-
-        for (var i = 0; i < text.Length; i++)
-        {
-            switch (text[i])
-            {
-                case '(':
-                    parenDepth++;
-                    break;
-                case ')':
-                    parenDepth--;
-                    break;
-                case '[':
-                    bracketDepth++;
-                    break;
-                case ']':
-                    bracketDepth--;
-                    break;
-                case '{':
-                    braceDepth++;
-                    break;
-                case '}':
-                    braceDepth--;
-                    break;
-                case ',' when parenDepth == 0 && bracketDepth == 0 && braceDepth == 0:
-                    yield return text.Substring(start, i - start);
-                    start = i + 1;
-                    break;
-            }
-        }
-
-        yield return text.Substring(start);
-    }
-
-    static bool IsIdentifierPart(char c) => char.IsLetterOrDigit(c) || c == '_' || c == '@';
 
     void RenderResolvedRawStatement(StringBuilder sb, RawStatementAction action)
     {

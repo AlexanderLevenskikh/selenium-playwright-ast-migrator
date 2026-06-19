@@ -2490,42 +2490,6 @@ namespace Sample.E2ETests
             CompileChecker.FormatErrors(output));
     }
 
-    [Fact]
-    public void AllSymbolsResolved_LambdaPropertyPattern_DoesNotFlagLambdaLocalsOrPatternFields()
-    {
-        var renderer = new PlaywrightDotNetRenderer();
-
-        var stmt = new RawStatementAction(1,
-            "Assert.That(((Func<DateTime, bool>)(x => x is { Day: 1, TimeOfDay.Hours: 0 })).Invoke(DateTime.Now))");
-        var model = CreateModel(stmt);
-        var output = renderer.Render(model);
-
-        AssertActiveLineContains(output, "Func<DateTime, bool>");
-        Assert.DoesNotContain("UNAVAILABLE_SYMBOLS", output);
-        Assert.DoesNotContain("'x'", output);
-        Assert.DoesNotContain("'Day'", output);
-        Assert.DoesNotContain("'TimeOfDay'", output);
-        Assert.True(CompileChecker.CompilesWithoutErrors(output),
-            CompileChecker.FormatErrors(output));
-    }
-
-    [Fact]
-    public void UnavailableSymbols_LambdaCapturedVariable_IsStillFlagged()
-    {
-        var renderer = new PlaywrightDotNetRenderer();
-
-        var stmt = new RawStatementAction(1,
-            "Assert.That(((Func<DateTime, bool>)(x => x.Day == expectedDay)).Invoke(DateTime.Now))");
-        var model = CreateModel(stmt);
-        var output = renderer.Render(model);
-
-        Assert.Contains("'expectedDay'", output);
-        Assert.DoesNotContain("'x'", output);
-        Assert.DoesNotContain("'Day'", output);
-        Assert.True(CompileChecker.CompilesWithoutErrors(output),
-            CompileChecker.FormatErrors(output));
-    }
-
     // --- MT-2 (continued): String-literal stripping in FindUnavailableSymbols ---
 
     [Fact]

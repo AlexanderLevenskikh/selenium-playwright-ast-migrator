@@ -1,132 +1,180 @@
-# Migrator — Selenium C# to Playwright .NET
+# Selenium → Playwright AST Migrator
 
-A migration toolkit that turns Selenium WebDriver (C# / NUnit) UI tests into Playwright .NET code through a controlled workflow: **analyze → configure → migrate → verify → propose → iterate**.
+**Move large Selenium C# / NUnit suites to Playwright without turning the migration into a hand-written rewrite project.**
 
-This tool does not promise fully automatic migration. It replaces line-by-line rewrites with generated scaffolding that you review, fix, and improve iteratively.
+This repository contains a .NET 8 CLI migration toolkit that parses Selenium C# tests with Roslyn, builds an intermediate representation, applies project-specific profile mappings, and generates Playwright tests. The main target is **Playwright .NET**; an experimental **Playwright TypeScript** target is available when you already have a real TS Playwright project to plug into.
 
-## What it does
+The tool is intentionally conservative: it generates useful code, reports every uncertain decision, and keeps selectors evidence-based. It is designed for developers and AI agents working together: the migrator does the repetitive AST work, agents mine patterns and improve config, and humans review source-truth decisions.
 
-- Parses Selenium C# test files using Roslyn AST
-- Recognizes UI actions: clicks, input, waits, assertions, page navigation
-- Adapts source expressions to Playwright locators using a JSON profile config
-- Generates Playwright .NET C# code with TODO comments for items needing manual review
-- Validates generated code quality with compile-smoke and verify checks
-- Proposes profile improvements ranked by impact score
-- Scans target Playwright projects to discover infrastructure facts
-- Orchestrates the full pipeline as a non-destructive dry-run
+## Why teams use it
 
-## Who is it for
+Migrating E2E suites usually fails for boring reasons: thousands of repeated locators, custom PageObjects, fragile waits, and hidden business synchronization. This tool turns that chaos into a measurable workflow:
 
-- Teams migrating Selenium C# / NUnit tests to Playwright .NET
-- Developers who want generated scaffolding instead of writing every test from scratch
-- AI agents that safely improve migration profiles without inventing selectors
+- **Analyze** Selenium tests and identify repeated migration patterns.
+- **Map** PageObject expressions to Playwright locators through reviewable JSON profiles.
+- **Generate** compile-ready Playwright scaffolding with smart TODO comments for unsafe areas.
+- **Verify** generated .NET or TypeScript code inside real projects.
+- **Prioritize** next fixes with dashboards, smoke plans, runtime failure classification, and guard reports.
+- **Iterate safely** with strict/creative agent modes and config-only safety loops.
 
-## Architecture at a glance
+The goal is not magic conversion. The goal is to replace weeks of manual rewriting with a controlled migration loop: **source truth → profile config → generated code → verification → next pattern**.
 
+## Supported targets
+
+| Source | Target | Status | Notes |
+|---|---|---|---|
+| Selenium C# / NUnit | Playwright .NET | Primary | Full CLI workflow: analyze, migrate, verify, orchestrate, reports. |
+| Selenium C# / NUnit | Playwright TypeScript | Experimental | Requires `--ts-project` pointing to an existing Playwright TS project. No standalone TS generation in vacuum. |
+
+## Core workflow
+
+```mermaid
+flowchart LR
+    A[Selenium C# tests] --> B[Roslyn parser]
+    B --> C[IR actions]
+    C --> D[Project adapter / JSON profiles]
+    D --> E[Playwright renderer]
+    E --> F[Generated tests]
+    F --> G[Verify / reports / board]
+    G --> D
 ```
-input file (.cs)
-    │
-    ▼  [parse]      Roslyn parser: AST → intermediate representation (IR)
-    ▼  [recognize]  Recognizers: click, input, assertion, wait, unsupported
-    ▼  [adapt]      Adapter: source → Playwright locator (via JSON config)
-    ▼  [render]     Renderer: IR → generated C# code (Playwright .NET)
-    ▼  [report]     ReportBuilder: conversion statistics
-    │
-output file (.cs) + report
-```
 
-## Modes
-
-| Mode | Description |
-|---|---|
-| `analyze` | Parse and analyze tests, produce reports and draft config |
-| `migrate` | Generate Playwright C# files |
-| `verify` | Validate generated code quality with quality gates |
-| `propose` | Generate ranked mapping improvement proposals |
-| `discover-target` | Scan target Playwright project for infrastructure facts |
-| `scaffold` | Generate a minimal Playwright .NET project for teams without existing infrastructure |
-| `orchestrate` | Run full pipeline: analyze → migrate → verify → propose (dry-run) |
-
-## Quick command example
+## Quick start
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode orchestrate --input ./SeleniumTests --config ./adapter-config.json --out ./orchestration --format both
-```
-
-## Recommended workflow
-
-```
-1. Start with 1-5 test files (pilot)
-2. Run analyze, review what the tool understands
-3. Add source-truth mappings to adapter config
-4. Generate code, verify quality
-5. Compile smoke test, then runtime proof
-6. Use propose to find next mappings
-7. Iterate until quality gates pass
-```
-
-## Documentation
-
-- [**Quick Start**](docs/user-guide/quick-start.md) — try the tool in 10-15 minutes
-- [**Migration Workflow**](docs/user-guide/migration-workflow.md) — full process from pilot to production
-- [**Profile Cookbook**](docs/user-guide/project-profile-cookbook.md) — configure UiTargets, Methods, Scopes, etc.
-- [**Common Recipes**](docs/user-guide/common-recipes.md) — practical solutions for frequent migration patterns
-- [**Reports & Quality Gates**](docs/user-guide/reports-and-quality-gates.md) — reading reports and configuring gates
-- [**No-Infra Scaffold**](docs/user-guide/no-infra-scaffold.md) — generating a Playwright project from scratch
-- [**Limitations**](docs/user-guide/limitations.md) — honest boundaries of what the tool can and cannot do
-- [**Agent Playbooks**](docs/agent-playbooks/README.md) — procedural guides for AI agents
-
-## Existing reference docs
-
-- [Architecture](docs/architecture.md) — project structure and responsibilities
-- [Locator Matching](docs/profile/locator-matching.md) — TargetKind and Match strategy details
-- [Method Mappings](docs/profile/method-mappings.md) — exact and template method mappings
-- [Parameterized Methods](docs/profile/parameterized-method-mappings.md) — pattern-based mappings with placeholder substitution
-- [Profile Scoping](docs/profile/profile-scoping.md) — per-file config overrides via Scopes
-- [Runtime Host](docs/profile/runtime-host.md) — TestHost config for class wrapper generation
-- [Target Discovery](docs/profile/target-discovery.md) — discover-target mode reference
-- [Mapping Proposals](docs/profile/mapping-proposals.md) — propose mode reference
-- [Orchestrator Dry-Run](docs/profile/orchestrator-dry-run.md) — orchestrate mode reference
-
-## Limitations
-
-- Not 100% automatic — project-specific semantics require profile configuration
-- Runtime pass requires environment, auth, and test data
-- Discovery output requires human review before using as config
-- Complex table/pagination flows may need manual migration
-- Some generated tests need body-level edits
-- Playwright TypeScript target is not supported
-
-## Important
-
-**Never invent selectors.** All locators must come from source-truth (PageObject code, HTML, or discovery). The tool uses `<SOURCE_TRUTH_REQUIRED>` placeholders when a mapping needs a verified selector.
-
-## Installation
-
-```bash
-git clone <repo-url>
-cd Migrator
 dotnet restore
+
+dotnet run --project Migrator.Cli -- \
+  --mode orchestrate \
+  --input ./SeleniumTests \
+  --config ./adapter-config.json \
+  --out orchestration-1 \
+  --format both
 ```
 
-## Tests
+Outputs are written under `migration/` by default, for example:
+
+```text
+migration/orchestration-1/
+  generated/
+  report.md / report.json
+  explain-todo.md / explain-todo.json
+  migration-board.html
+  smoke-plan.md
+  agent-next-task.md
+```
+
+## Agent modes
+
+The project includes two recommended operating modes for AI-assisted migration.
+
+| Mode | Use when | Allowed behavior |
+|---|---|---|
+| **Strict Mode** | Finalizing, reviewing, preparing MR, avoiding risk | Config-only changes, small verified steps, no creative rewriting. |
+| **Creative Mode** | Mining patterns, exploring TS migration, finding blockers | Hypothesize, run safe experiments, create tickets, but never invent selectors. |
+
+Both modes require source truth for selectors. A PageObject property name is not a selector. Agents must inspect POM properties/helpers such as `CreateControlByTid(...)` and `WithDataTestId(...)` before generating locators.
+
+See:
+
+- [`examples/agent-first/start-strict.md`](examples/agent-first/start-strict.md)
+- [`examples/agent-first/start-creative.md`](examples/agent-first/start-creative.md)
+- [`docs/agent-modes.md`](docs/agent-modes.md)
+
+## TypeScript target
+
+Use TS generation only with an existing Playwright TS project:
 
 ```bash
-dotnet test
+dotnet run --project Migrator.Cli -- \
+  --mode migrate \
+  --target ts \
+  --ts-project ./frontend \
+  --input ./SeleniumTests \
+  --config ./profiles/base.adapter.json \
+  --config ./profiles/project-ts.adapter.json \
+  --out ts-migration-1
 ```
 
-Runs 205 tests: snapshot checks, parser tests, compile-smoke checks, orchestrator integration tests, and more.
-
-## Publish
+Then verify generated `.spec.ts` files in the real project context:
 
 ```bash
-dotnet publish Migrator.Cli -c Release -o ./publish
+dotnet run --project Migrator.Cli -- \
+  --mode verify-ts-project \
+  --input migration/ts-migration-1 \
+  --ts-project ./frontend \
+  --out ts-verify-1
 ```
 
-Produces a self-contained executable.
+## Important safety rules
 
-## Why this approach?
+- Never invent selectors.
+- Never promote Selenium PageObject variables (`page`, `pagef`, `modal`, `lightbox`, `WebDriver`) to target-known identifiers unless they really exist in target code.
+- Do not edit generated `.cs` as the final solution; fix source truth/profile mappings instead.
+- Treat `SOURCE_ONLY_IDENTIFIER(page)` as a symptom. Group TODO by full source expression and pattern, not by root variable.
+- Elide Selenium actionability waits, but preserve product-state waits such as loader/table/modal synchronization.
 
-The tool does not replace migration expertise. It turns migration from rewriting every test by hand into a controlled workflow: generate, verify, classify, improve profile, repeat.
+## Main CLI modes
 
-Even partial migration saves significant time because developers review and fix generated tests instead of writing every test from scratch.
+| Mode | Purpose |
+|---|---|
+| `doctor` | Preflight checks: input, config, project files, tooling, source truth hints. |
+| `analyze` | Parse Selenium files and produce migration reports without generating final code. |
+| `migrate` | Generate Playwright .NET or TS tests. |
+| `verify` | Lightweight generated-code verification. |
+| `verify-project` | Compile generated Playwright .NET tests against a real project/harness. |
+| `verify-ts-project` | Type-check generated Playwright TS tests inside an existing TS project. |
+| `orchestrate` | Run analyze → migrate → verify → reports for Playwright .NET. |
+| `index-pom` | Mine Selenium PageObjects and helper selectors. |
+| `profile-match` | Estimate whether existing profiles can be reused for a new project. |
+| `config-validate` | Validate profile safety and common mistakes. |
+| `config-diff` | Review config changes. |
+| `guard` | Compare before/after migration metrics and catch regressions. |
+| `explain-todo` | Turn TODO markers into prioritized root-cause insights. |
+| `smoke-plan` | Rank generated tests by runtime readiness. |
+| `runtime-classify` | Classify Playwright runtime failures after smoke runs. |
+| `migration-board` | Generate an HTML dashboard from migration artifacts. |
+| `config-schema` | Export JSON Schema for adapter config. |
+
+## Documentation map
+
+- [`docs/architecture.md`](docs/architecture.md) — architecture and module responsibilities.
+- [`docs/agent-modes.md`](docs/agent-modes.md) — Strict vs Creative mode and prompt inputs.
+- [`docs/typescript-target.md`](docs/typescript-target.md) — experimental TypeScript target.
+- [`docs/wait-policy.md`](docs/wait-policy.md) — Selenium wait classification.
+- [`docs/explain-todo.md`](docs/explain-todo.md) — smart TODO markers and next actions.
+- [`docs/migration-board.md`](docs/migration-board.md) — HTML migration dashboard.
+- [`docs/project-verification.md`](docs/project-verification.md) — compile verification against real projects.
+- [`docs/runtime-readiness.md`](docs/runtime-readiness.md) — smoke candidate scoring.
+- [`docs/runtime-failure-classifier.md`](docs/runtime-failure-classifier.md) — runtime failure categories.
+- [`docs/json-schema.md`](docs/json-schema.md) — adapter JSON Schema.
+- [`docs/agent-playbooks/README.md`](docs/agent-playbooks/README.md) — practical agent playbooks.
+
+## Development
+
+```bash
+dotnet restore
+dotnet test --no-restore
+```
+
+The test suite covers parser behavior, adapter mappings, snapshots, compile-smoke checks, orchestration, TS target basics, safety guards, and regression cases for common migration blockers.
+
+## Packaging as a dotnet tool
+
+```bash
+./scripts/pack-tool.sh
+```
+
+See [`docs/packaging-and-distribution.md`](docs/packaging-and-distribution.md) and [`docs/tool-installation.md`](docs/tool-installation.md).
+
+## Philosophy
+
+The best migration is not the one that hides uncertainty. It is the one that makes uncertainty reviewable.
+
+This tool optimizes for:
+
+- transparent source-truth decisions;
+- small reversible config changes;
+- measurable progress;
+- compile/runtime feedback;
+- AI-agent productivity without unsafe hallucinated selectors.

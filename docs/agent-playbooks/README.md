@@ -4,6 +4,13 @@ Procedural guides for AI agents working with the Migrator.
 
 Each playbook describes a specific task: what input you need, step-by-step actions, what NOT to do, and acceptance criteria.
 
+
+## Choose an agent mode first
+
+- Use [Strict Mode](../agent-modes.md#strict-mode) for safe config-only iterations, final review, and MR preparation.
+- Use [Creative Mode](../agent-modes.md#creative-mode) for pattern mining, TypeScript drafts, and blocker discovery.
+- Start prompts live in `examples/agent-first/start-strict.md` and `examples/agent-first/start-creative.md`.
+
 ## Available playbooks
 
 | Playbook | Task |

@@ -37,42 +37,6 @@ public sealed class ProjectAdapterConfig
     public string[] SourceOnlyIdentifiers { get; init; } = Array.Empty<string>();
 
     /// <summary>
-    /// Project/profile-specific wait classification. This lets adapter configs decide
-    /// whether custom Wait* wrappers are actionability waits, product-state waits,
-    /// review-required waits, or should be left for adapter Method/ParameterizedMethods.
-    /// </summary>
-    [JsonPropertyName("WaitPolicies")]
-    public WaitPolicyMapping[] WaitPolicies { get; init; } = Array.Empty<WaitPolicyMapping>();
-
-    /// <summary>
-    /// Project/profile-specific recognizer aliases. Use this for source wrapper method
-    /// names that are semantically equivalent to built-in recognizer methods.
-    /// </summary>
-    [JsonPropertyName("RecognizerAliases")]
-    public RecognizerAliasesConfig? RecognizerAliases { get; init; }
-
-    /// <summary>
-    /// Generic methods whose result variable must be preserved for adapter mapping.
-    /// Example: Click<T>(), GoToPage<T>(), WaitForPage<T>().
-    /// </summary>
-    [JsonPropertyName("GenericResultMethods")]
-    public string[] GenericResultMethods { get; init; } = Array.Empty<string>();
-
-    /// <summary>
-    /// Source methods that may be safely preserved as comments without MANUAL_REVIEW TODOs.
-    /// Intended for diagnostics/no-op helpers such as Console.WriteLine/TestContext.WriteLine.
-    /// </summary>
-    [JsonPropertyName("SuppressedMethods")]
-    public string[] SuppressedMethods { get; init; } = Array.Empty<string>();
-
-    /// <summary>
-    /// Wildcard patterns for suppressing low-value source method calls. Supports '*'.
-    /// Keep this conservative; business methods should usually be mapped or reviewed.
-    /// </summary>
-    [JsonPropertyName("SuppressedMethodPatterns")]
-    public string[] SuppressedMethodPatterns { get; init; } = Array.Empty<string>();
-
-    /// <summary>
     /// Parameterized method mappings with placeholder support.
     /// Pattern uses {placeholderName} syntax. Priority: exact SourceMethod wins over SourceMethodPattern.
     /// </summary>
@@ -99,6 +63,26 @@ public sealed class ProjectAdapterConfig
     [JsonPropertyName("Scopes")]
     public ProfileScope[] Scopes { get; init; } = Array.Empty<ProfileScope>();
 
+
+
+    /// <summary>
+    /// Optional recognizer aliases for project-specific Selenium helper names.
+    /// These settings are consumed by Roslyn recognizers when present and ignored by older flows.
+    /// </summary>
+    [JsonPropertyName("RecognizerAliases")]
+    public RecognizerAliasOptions RecognizerAliases { get; init; } = new();
+
+    /// <summary>
+    /// Optional generic methods that should preserve assignment result variables, e.g. Browser.GoToPage&lt;T&gt;(...).
+    /// </summary>
+    [JsonPropertyName("GenericResultMethods")]
+    public string[] GenericResultMethods { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Optional wait-policy overrides for project-specific Selenium wait helper names.
+    /// </summary>
+    [JsonPropertyName("WaitPolicies")]
+    public WaitPolicyMapping[] WaitPolicies { get; init; } = Array.Empty<WaitPolicyMapping>();
 
     /// <summary>
     /// Optional project-aware verification settings. Used by CLI mode verify-project to
@@ -133,7 +117,7 @@ public sealed class ProjectAdapterConfig
     {
     }
 
-    public ProjectAdapterConfig(string SourceProjectName, UiTargetMapping[] UiTargets, PageObjectMapping[] PageObjects, MethodMapping[] Methods, LocatorSettings? LocatorSettings = null, TestHostConfig? TestHost = null, ParameterizedMethodMapping[]? ParameterizedMethods = null, ProfileScope[]? Scopes = null, QualityGatesConfig? QualityGates = null, TableConfig[]? Tables = null, PaginationConfig[]? Pagination = null, string[]? SourceOnlyIdentifiers = null, string[]? TargetKnownTypes = null, string[]? TargetKnownIdentifiers = null, VerificationConfig? Verification = null, WaitPolicyMapping[]? WaitPolicies = null, RecognizerAliasesConfig? RecognizerAliases = null, string[]? GenericResultMethods = null, string[]? SuppressedMethods = null, string[]? SuppressedMethodPatterns = null)
+    public ProjectAdapterConfig(string SourceProjectName, UiTargetMapping[] UiTargets, PageObjectMapping[] PageObjects, MethodMapping[] Methods, LocatorSettings? LocatorSettings = null, TestHostConfig? TestHost = null, ParameterizedMethodMapping[]? ParameterizedMethods = null, ProfileScope[]? Scopes = null, QualityGatesConfig? QualityGates = null, TableConfig[]? Tables = null, PaginationConfig[]? Pagination = null, string[]? SourceOnlyIdentifiers = null, string[]? TargetKnownTypes = null, string[]? TargetKnownIdentifiers = null, VerificationConfig? Verification = null, RecognizerAliasOptions? RecognizerAliases = null, string[]? GenericResultMethods = null, WaitPolicyMapping[]? WaitPolicies = null)
     {
         this.SourceProjectName = SourceProjectName;
         this.UiTargets = UiTargets;
@@ -150,12 +134,50 @@ public sealed class ProjectAdapterConfig
         this.TargetKnownTypes = TargetKnownTypes ?? Array.Empty<string>();
         this.TargetKnownIdentifiers = TargetKnownIdentifiers ?? Array.Empty<string>();
         this.Verification = Verification;
-        this.WaitPolicies = WaitPolicies ?? Array.Empty<WaitPolicyMapping>();
-        this.RecognizerAliases = RecognizerAliases;
+        this.RecognizerAliases = RecognizerAliases ?? new RecognizerAliasOptions();
         this.GenericResultMethods = GenericResultMethods ?? Array.Empty<string>();
-        this.SuppressedMethods = SuppressedMethods ?? Array.Empty<string>();
-        this.SuppressedMethodPatterns = SuppressedMethodPatterns ?? Array.Empty<string>();
+        this.WaitPolicies = WaitPolicies ?? Array.Empty<WaitPolicyMapping>();
     }
+}
+
+public sealed class RecognizerAliasOptions
+{
+    [JsonPropertyName("InputMethods")]
+    public string[] InputMethods { get; init; } = Array.Empty<string>();
+
+    [JsonPropertyName("SelectMethods")]
+    public string[] SelectMethods { get; init; } = Array.Empty<string>();
+
+    [JsonPropertyName("NavigationMethods")]
+    public string[] NavigationMethods { get; init; } = Array.Empty<string>();
+
+    [JsonPropertyName("FluentAssertionMethods")]
+    public string[] FluentAssertionMethods { get; init; } = Array.Empty<string>();
+
+    public RecognizerAliasOptions() { }
+}
+
+public sealed class WaitPolicyMapping
+{
+    [JsonPropertyName("MethodName")]
+    public string? MethodName { get; init; }
+
+    [JsonPropertyName("SourceMethod")]
+    public string? SourceMethod { get; init; }
+
+    [JsonPropertyName("Kind")]
+    public string? Kind { get; init; }
+
+    [JsonPropertyName("WaitKind")]
+    public string? WaitKind { get; init; }
+
+    [JsonPropertyName("ReceiverContains")]
+    public string? ReceiverContains { get; init; }
+
+    [JsonPropertyName("Behavior")]
+    public string? Behavior { get; init; }
+
+    public WaitPolicyMapping() { }
 }
 
 /// <summary>
@@ -425,41 +447,6 @@ public sealed class MethodMapping
         TargetStatements = targetStatements;
         RequiresReview = requiresReview;
     }
-}
-
-/// <summary>
-/// Project-specific wait classification. Supported Kind values:
-/// ActionabilityElided, ProductStateLoaded, ProductStateVisible, ProductStateHidden,
-/// ReviewRequired, AdapterMapping. AdapterMapping makes the wait recognizer skip the
-/// call so Method/ParameterizedMethods can handle it later.
-/// </summary>
-public sealed class WaitPolicyMapping
-{
-    public string SourceMethod { get; init; } = null!;
-    public string Kind { get; init; } = "ReviewRequired";
-    public string? Reason { get; init; }
-
-    public WaitPolicyMapping() { }
-    public WaitPolicyMapping(string sourceMethod, string kind, string? reason = null)
-    {
-        SourceMethod = sourceMethod;
-        Kind = kind;
-        Reason = reason;
-    }
-}
-
-/// <summary>
-/// Project-specific aliases for parser recognizers. These aliases only affect
-/// source-code classification; target semantics should still live in mappings.
-/// </summary>
-public sealed class RecognizerAliasesConfig
-{
-    public string[] InputMethods { get; init; } = Array.Empty<string>();
-    public string[] SelectMethods { get; init; } = Array.Empty<string>();
-    public string[] NavigationMethods { get; init; } = Array.Empty<string>();
-    public string[] FluentAssertionMethods { get; init; } = Array.Empty<string>();
-
-    public RecognizerAliasesConfig() { }
 }
 
 /// <summary>

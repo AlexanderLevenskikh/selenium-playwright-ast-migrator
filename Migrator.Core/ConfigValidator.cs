@@ -38,11 +38,6 @@ public static class ConfigValidator
         ValidateIdentifierList(config.SourceOnlyIdentifiers, "SourceOnlyIdentifiers", errors);
         ValidateIdentifierList(config.TargetKnownTypes, "TargetKnownTypes", errors);
         ValidateIdentifierList(config.TargetKnownIdentifiers, "TargetKnownIdentifiers", errors);
-        ValidateWaitPolicies(config.WaitPolicies, "WaitPolicies", errors);
-        ValidateRecognizerAliases(config.RecognizerAliases, "RecognizerAliases", errors);
-        ValidateIdentifierList(config.GenericResultMethods, "GenericResultMethods", errors);
-        ValidateStringList(config.SuppressedMethods, "SuppressedMethods", errors);
-        ValidateStringList(config.SuppressedMethodPatterns, "SuppressedMethodPatterns", errors);
 
         if (errors.Count > 0)
             throw new ConfigValidationError(errors);
@@ -234,48 +229,6 @@ public static class ConfigValidator
         }
     }
 
-    private static readonly HashSet<string> SupportedWaitPolicyKinds = new(StringComparer.Ordinal)
-    {
-        "ActionabilityElided",
-        "ProductStateLoaded",
-        "ProductStateVisible",
-        "ProductStateHidden",
-        "ReviewRequired",
-        "AdapterMapping"
-    };
-
-    private static void ValidateWaitPolicies(WaitPolicyMapping[] policies, string section, List<string> errors)
-    {
-        for (int i = 0; i < policies.Length; i++)
-        {
-            var policy = policies[i];
-            var prefix = $"{section}[{i}]";
-            if (string.IsNullOrWhiteSpace(policy.SourceMethod))
-                errors.Add($"{prefix} has missing SourceMethod.");
-            else if (!IsValidMethodName(policy.SourceMethod))
-                errors.Add($"{prefix}.SourceMethod = \"{policy.SourceMethod}\" is not a simple method name.");
-
-            if (string.IsNullOrWhiteSpace(policy.Kind))
-                errors.Add($"{prefix} has missing Kind.");
-            else if (!SupportedWaitPolicyKinds.Contains(policy.Kind))
-                errors.Add($"{prefix}.Kind = \"{policy.Kind}\" is not supported. Supported values: {string.Join(", ", SupportedWaitPolicyKinds)}.");
-        }
-    }
-
-    private static void ValidateRecognizerAliases(RecognizerAliasesConfig? aliases, string section, List<string> errors)
-    {
-        if (aliases == null)
-            return;
-
-        ValidateIdentifierList(aliases.InputMethods, $"{section}.InputMethods", errors);
-        ValidateIdentifierList(aliases.SelectMethods, $"{section}.SelectMethods", errors);
-        ValidateIdentifierList(aliases.NavigationMethods, $"{section}.NavigationMethods", errors);
-        ValidateIdentifierList(aliases.FluentAssertionMethods, $"{section}.FluentAssertionMethods", errors);
-    }
-
-    private static bool IsValidMethodName(string name) =>
-        System.Text.RegularExpressions.Regex.IsMatch(name, @"^@?[A-Za-z_]\w*$");
-
     private static void ValidateScopes(ProfileScope[] scopes, List<string> errors)
     {
         for (int i = 0; i < scopes.Length; i++)
@@ -378,15 +331,6 @@ public static class ConfigValidator
             var value = identifiers[i].Trim();
             if (!System.Text.RegularExpressions.Regex.IsMatch(value, @"^@?[A-Za-z_]\w*$"))
                 errors.Add($"{section}[{i}] must be a C# identifier, got '{value}'.");
-        }
-    }
-
-    private static void ValidateStringList(string[] values, string section, List<string> errors)
-    {
-        for (var i = 0; i < values.Length; i++)
-        {
-            if (string.IsNullOrWhiteSpace(values[i]))
-                errors.Add($"{section}[{i}] is empty.");
         }
     }
 

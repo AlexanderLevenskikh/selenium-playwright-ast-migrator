@@ -407,3 +407,8 @@ selenium-pw-migrator --mode verify-ts-project `
 
 Selenium explicit waits must be classified before generic source-only TODO handling. Actionability waits such as `WaitPresence`, `WaitVisible`, `WaitEnabled` are usually elided because Playwright auto-waits before actions/assertions. Product-state waits such as `ValidateLoading`, `WaitForLoaded`, table/grid/list refresh waits, modal/toast waits must be kept or converted to Playwright web-first assertions. Ambiguous waits become `[MIGRATOR:WAIT_REQUIRES_STATE_ASSERTION]`. See `docs/wait-policy.md`.
 
+
+
+## Documentation index
+
+See [`docs/README.md`](docs/README.md) for the current documentation map.

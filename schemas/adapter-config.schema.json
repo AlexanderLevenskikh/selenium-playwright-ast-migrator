@@ -16,283 +16,604 @@
     },
     "SourceOnlyIdentifiers": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "uniqueItems": true,
       "description": "Source/Selenium-only roots that must not be rendered as active target code, e.g. page, pagef, Driver, WebDriver."
     },
     "TargetKnownTypes": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "uniqueItems": true,
       "description": "Target-side type names available in generated code, e.g. Product, Navigation. Do not put source-only roots here."
     },
     "TargetKnownIdentifiers": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "uniqueItems": true,
       "description": "Target-side identifiers available in generated code. Use sparingly."
     },
     "UiTargets": {
       "type": "array",
-      "items": { "$ref": "#/$defs/uiTarget" },
+      "items": {
+        "$ref": "#/$defs/uiTarget"
+      },
       "description": "Maps source POM expressions to Playwright locators."
     },
     "PageObjects": {
       "type": "array",
-      "items": { "$ref": "#/$defs/pageObject" }
+      "items": {
+        "$ref": "#/$defs/pageObject"
+      }
     },
     "Methods": {
       "type": "array",
-      "items": { "$ref": "#/$defs/methodMapping" },
+      "items": {
+        "$ref": "#/$defs/methodMapping"
+      },
       "description": "Exact method mappings. ParameterizedMethods are usually preferred for reusable patterns."
     },
     "ParameterizedMethods": {
       "type": "array",
-      "items": { "$ref": "#/$defs/parameterizedMethodMapping" },
+      "items": {
+        "$ref": "#/$defs/parameterizedMethodMapping"
+      },
       "description": "Pattern-based method mappings with {placeholder} support."
     },
-    "WaitPolicies": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/waitPolicy" },
-      "description": "Project-specific classification for Wait* wrappers before generic wait recognition."
+    "LocatorSettings": {
+      "$ref": "#/$defs/locatorSettings"
     },
-    "RecognizerAliases": { "$ref": "#/$defs/recognizerAliases" },
-    "GenericResultMethods": {
-      "type": "array",
-      "items": { "type": "string" },
-      "uniqueItems": true,
-      "description": "Generic methods whose result variable must be preserved for adapter mappings, e.g. Click<T>()."
+    "TestHost": {
+      "$ref": "#/$defs/testHost"
     },
-    "SuppressedMethods": {
-      "type": "array",
-      "items": { "type": "string" },
-      "uniqueItems": true,
-      "description": "Diagnostic/no-op source methods that should not emit MANUAL_REVIEW TODOs."
+    "Verification": {
+      "$ref": "#/$defs/verification"
     },
-    "SuppressedMethodPatterns": {
-      "type": "array",
-      "items": { "type": "string" },
-      "uniqueItems": true,
-      "description": "Wildcard patterns against full source invocation text for low-priority diagnostic calls."
+    "QualityGates": {
+      "$ref": "#/$defs/qualityGates"
     },
-    "LocatorSettings": { "$ref": "#/$defs/locatorSettings" },
-    "TestHost": { "$ref": "#/$defs/testHost" },
-    "Verification": { "$ref": "#/$defs/verification" },
-    "QualityGates": { "$ref": "#/$defs/qualityGates" },
     "Tables": {
       "type": "array",
-      "items": { "$ref": "#/$defs/table" }
+      "items": {
+        "$ref": "#/$defs/table"
+      }
     },
     "Pagination": {
       "type": "array",
-      "items": { "$ref": "#/$defs/pagination" }
+      "items": {
+        "$ref": "#/$defs/pagination"
+      }
     },
     "Scopes": {
       "type": "array",
-      "items": { "$ref": "#/$defs/scope" },
+      "items": {
+        "$ref": "#/$defs/scope"
+      },
       "description": "Per-file/per-suite profile overrides."
+    },
+    "RecognizerAliases": {
+      "$ref": "#/$defs/recognizerAliasOptions",
+      "default": {}
+    },
+    "GenericResultMethods": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "WaitPolicies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/waitPolicyMapping"
+      },
+      "default": []
     }
   },
   "$defs": {
     "targetKind": {
       "type": "string",
-      "enum": ["TestId", "Locator", "Text", "PageObjectProperty", "RawExpression", "CssSelector", "TestIdBeginning", "ClassNameBeginning"],
+      "enum": [
+        "TestId",
+        "Locator",
+        "Text",
+        "PageObjectProperty",
+        "RawExpression",
+        "CssSelector",
+        "TestIdBeginning",
+        "ClassNameBeginning"
+      ],
       "description": "Target locator strategy. Prefer TestId; RawExpression is a last resort."
     },
     "uiTarget": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["SourceExpression", "TargetExpression", "TargetKind"],
+      "required": [
+        "SourceExpression",
+        "TargetExpression",
+        "TargetKind"
+      ],
       "properties": {
-        "SourceExpression": { "type": "string" },
-        "TargetExpression": { "type": "string" },
-        "TargetKind": { "$ref": "#/$defs/targetKind" },
-        "TestIdAttribute": { "type": "string" },
-        "Match": { "type": "string", "enum": ["First", "Nth"] },
-        "Index": { "type": "integer", "minimum": 0 },
-        "SourceTruth": { "type": "string", "description": "Optional agent note: file/line or POM source that proves the mapping." },
-        "Confidence": { "type": "string", "enum": ["high", "medium", "low"] },
-        "RequiresReview": { "type": "boolean" }
+        "SourceExpression": {
+          "type": "string"
+        },
+        "TargetExpression": {
+          "type": "string"
+        },
+        "TargetKind": {
+          "$ref": "#/$defs/targetKind"
+        },
+        "TestIdAttribute": {
+          "type": "string"
+        },
+        "Match": {
+          "type": "string",
+          "enum": [
+            "First",
+            "Nth"
+          ]
+        },
+        "Index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "SourceTruth": {
+          "type": "string",
+          "description": "Optional agent note: file/line or POM source that proves the mapping."
+        },
+        "Confidence": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "RequiresReview": {
+          "type": "boolean"
+        }
       }
     },
     "pageObject": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["SourceType", "TargetType", "VariableName", "ConstructorStrategy"],
+      "required": [
+        "SourceType",
+        "TargetType",
+        "VariableName",
+        "ConstructorStrategy"
+      ],
       "properties": {
-        "SourceType": { "type": "string" },
-        "TargetType": { "type": "string" },
-        "VariableName": { "type": "string" },
-        "ConstructorStrategy": { "type": "string" }
+        "SourceType": {
+          "type": "string"
+        },
+        "TargetType": {
+          "type": "string"
+        },
+        "VariableName": {
+          "type": "string"
+        },
+        "ConstructorStrategy": {
+          "type": "string"
+        }
       }
     },
     "methodMapping": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["SourceMethod"],
+      "required": [
+        "SourceMethod"
+      ],
       "properties": {
-        "SourceMethod": { "type": "string" },
-        "TargetMethod": { "type": "string" },
-        "Description": { "type": "string" },
-        "TargetStatements": { "type": "array", "items": { "type": "string" } },
-        "RequiresReview": { "type": "boolean" },
-        "SourceTruth": { "type": "string" },
-        "Confidence": { "type": "string", "enum": ["high", "medium", "low"] }
+        "SourceMethod": {
+          "type": "string"
+        },
+        "TargetMethod": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "TargetStatements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "RequiresReview": {
+          "type": "boolean"
+        },
+        "SourceTruth": {
+          "type": "string"
+        },
+        "Confidence": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        }
       }
     },
     "parameterizedMethodMapping": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["SourceMethodPattern"],
+      "required": [
+        "SourceMethodPattern"
+      ],
       "properties": {
-        "SourceMethodPattern": { "type": "string", "description": "Use {placeholderName} tokens in method arguments/receiver." },
-        "TargetStatements": { "type": "array", "items": { "type": "string" } },
-        "RequiresReview": { "type": "boolean" },
-        "Description": { "type": "string" },
-        "SourceTruth": { "type": "string" },
-        "Confidence": { "type": "string", "enum": ["high", "medium", "low"] }
-      }
-    },
-    "waitPolicy": {
-      "type": "object",
-      "additionalProperties": true,
-      "required": ["SourceMethod", "Kind"],
-      "properties": {
-        "SourceMethod": { "type": "string" },
-        "Kind": {
+        "SourceMethodPattern": {
           "type": "string",
-          "enum": ["ActionabilityElided", "ProductStateLoaded", "ProductStateVisible", "ProductStateHidden", "ReviewRequired", "AdapterMapping"]
+          "description": "Use {placeholderName} tokens in method arguments/receiver."
         },
-        "Reason": { "type": "string" }
-      }
-    },
-    "recognizerAliases": {
-      "type": "object",
-      "additionalProperties": true,
-      "properties": {
-        "InputMethods": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
-        "SelectMethods": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
-        "NavigationMethods": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
-        "FluentAssertionMethods": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+        "TargetStatements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "RequiresReview": {
+          "type": "boolean"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "SourceTruth": {
+          "type": "string"
+        },
+        "Confidence": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        }
       }
     },
     "locatorSettings": {
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "DefaultTestIdAttribute": { "type": "string" },
-        "KnownTestIdAttributes": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+        "DefaultTestIdAttribute": {
+          "type": "string"
+        },
+        "KnownTestIdAttributes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
       }
     },
     "testHost": {
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "Namespace": { "type": "string" },
-        "BaseClass": { "type": "string" },
-        "ClassAttributes": { "type": "array", "items": { "type": "string" } },
-        "Usings": { "type": "array", "items": { "type": "string" } },
-        "SetUpStatements": { "type": "array", "items": { "type": "string" } },
-        "ClassName": { "type": "string" }
+        "Namespace": {
+          "type": "string"
+        },
+        "BaseClass": {
+          "type": "string"
+        },
+        "ClassAttributes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Usings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "SetUpStatements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ClassName": {
+          "type": "string"
+        }
       }
     },
     "verification": {
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "TargetFramework": { "type": "string" },
-        "BaseDirectory": { "type": "string" },
-        "Solution": { "type": "string" },
-        "BuildWorkingDirectory": { "type": "string" },
-        "ProjectReferences": { "type": "array", "items": { "type": "string" } },
-        "PackageReferences": { "type": "array", "items": { "$ref": "#/$defs/packageReference" } },
-        "AssemblyReferences": { "type": "array", "items": { "type": "string" } },
-        "DisableDefaultPackageReferences": { "type": "boolean" },
-        "AutoDiscoverNearestProject": { "type": "boolean" },
-        "AutoDiscoverProjectReferences": { "type": "boolean" },
-        "AutoDiscoverBuildFiles": { "type": "boolean" },
-        "AutoDiscoverPackageReferences": { "type": "boolean" },
-        "NoRestore": { "type": "boolean" },
-        "Configuration": { "type": "string" },
-        "RuntimeIdentifier": { "type": "string" }
+        "TargetFramework": {
+          "type": "string"
+        },
+        "BaseDirectory": {
+          "type": "string"
+        },
+        "Solution": {
+          "type": "string"
+        },
+        "BuildWorkingDirectory": {
+          "type": "string"
+        },
+        "ProjectReferences": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "PackageReferences": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/packageReference"
+          }
+        },
+        "AssemblyReferences": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "DisableDefaultPackageReferences": {
+          "type": "boolean"
+        },
+        "AutoDiscoverNearestProject": {
+          "type": "boolean"
+        },
+        "AutoDiscoverProjectReferences": {
+          "type": "boolean"
+        },
+        "AutoDiscoverBuildFiles": {
+          "type": "boolean"
+        },
+        "AutoDiscoverPackageReferences": {
+          "type": "boolean"
+        },
+        "NoRestore": {
+          "type": "boolean"
+        },
+        "Configuration": {
+          "type": "string"
+        },
+        "RuntimeIdentifier": {
+          "type": "string"
+        }
       }
     },
     "packageReference": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["Include"],
+      "required": [
+        "Include"
+      ],
       "properties": {
-        "Include": { "type": "string" },
-        "Version": { "type": "string" }
+        "Include": {
+          "type": "string"
+        },
+        "Version": {
+          "type": "string"
+        }
       }
     },
     "qualityGates": {
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "MaxTodoComments": { "type": "integer", "minimum": 0 },
-        "MaxUnsupportedActions": { "type": "integer", "minimum": 0 },
-        "MaxUnmappedTargets": { "type": "integer", "minimum": 0 },
-        "MaxRawExpressions": { "type": "integer", "minimum": 0 },
-        "FailOnPageTodo": { "type": "boolean" },
-        "FailOnSyntaxErrors": { "type": "boolean" },
-        "FailOnProjectVerifyErrors": { "type": "boolean" }
+        "MaxTodoComments": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "MaxUnsupportedActions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "MaxUnmappedTargets": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "MaxRawExpressions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "FailOnPageTodo": {
+          "type": "boolean"
+        },
+        "FailOnSyntaxErrors": {
+          "type": "boolean"
+        },
+        "FailOnProjectVerifyErrors": {
+          "type": "boolean"
+        }
       }
     },
     "targetMappingEntry": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["TargetExpression"],
+      "required": [
+        "TargetExpression"
+      ],
       "properties": {
-        "TargetExpression": { "type": "string" },
-        "TargetKind": { "$ref": "#/$defs/targetKind" },
-        "TestIdAttribute": { "type": "string" }
+        "TargetExpression": {
+          "type": "string"
+        },
+        "TargetKind": {
+          "$ref": "#/$defs/targetKind"
+        },
+        "TestIdAttribute": {
+          "type": "string"
+        }
       }
     },
     "table": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["SourceExpression"],
+      "required": [
+        "SourceExpression"
+      ],
       "properties": {
-        "SourceExpression": { "type": "string" },
-        "RowTarget": { "$ref": "#/$defs/targetMappingEntry" },
-        "Pagination": { "$ref": "#/$defs/paginationEntry" }
+        "SourceExpression": {
+          "type": "string"
+        },
+        "RowTarget": {
+          "$ref": "#/$defs/targetMappingEntry"
+        },
+        "Pagination": {
+          "$ref": "#/$defs/paginationEntry"
+        }
       }
     },
     "paginationEntry": {
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "Forward": { "$ref": "#/$defs/targetMappingEntry" }
+        "Forward": {
+          "$ref": "#/$defs/targetMappingEntry"
+        }
       }
     },
     "pagination": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["SourceExpression", "TargetExpression"],
+      "required": [
+        "SourceExpression",
+        "TargetExpression"
+      ],
       "properties": {
-        "SourceExpression": { "type": "string" },
-        "TargetExpression": { "type": "string" },
-        "TargetKind": { "$ref": "#/$defs/targetKind" },
-        "TestIdAttribute": { "type": "string" }
+        "SourceExpression": {
+          "type": "string"
+        },
+        "TargetExpression": {
+          "type": "string"
+        },
+        "TargetKind": {
+          "$ref": "#/$defs/targetKind"
+        },
+        "TestIdAttribute": {
+          "type": "string"
+        }
       }
     },
     "scope": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["Name"],
+      "required": [
+        "Name"
+      ],
       "properties": {
-        "Name": { "type": "string" },
-        "SourcePathPatterns": { "type": "array", "items": { "type": "string" } },
-        "TestHost": { "$ref": "#/$defs/testHost" },
-        "UiTargets": { "type": "array", "items": { "$ref": "#/$defs/uiTarget" } },
-        "Methods": { "type": "array", "items": { "$ref": "#/$defs/methodMapping" } },
-        "ParameterizedMethods": { "type": "array", "items": { "$ref": "#/$defs/parameterizedMethodMapping" } },
-        "TargetKnownTypes": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
-        "TargetKnownIdentifiers": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
-        "Tables": { "type": "array", "items": { "$ref": "#/$defs/table" } },
-        "Pagination": { "type": "array", "items": { "$ref": "#/$defs/pagination" } }
+        "Name": {
+          "type": "string"
+        },
+        "SourcePathPatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "TestHost": {
+          "$ref": "#/$defs/testHost"
+        },
+        "UiTargets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/uiTarget"
+          }
+        },
+        "Methods": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/methodMapping"
+          }
+        },
+        "ParameterizedMethods": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/parameterizedMethodMapping"
+          }
+        },
+        "TargetKnownTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "TargetKnownIdentifiers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "Tables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/table"
+          }
+        },
+        "Pagination": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pagination"
+          }
+        }
+      }
+    },
+    "recognizerAliasOptions": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "InputMethods": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "SelectMethods": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "NavigationMethods": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "FluentAssertionMethods": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        }
+      }
+    },
+    "waitPolicyMapping": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "MethodName": {
+          "type": "string"
+        },
+        "SourceMethod": {
+          "type": "string"
+        },
+        "Kind": {
+          "type": "string"
+        },
+        "WaitKind": {
+          "type": "string"
+        },
+        "ReceiverContains": {
+          "type": "string"
+        },
+        "Behavior": {
+          "type": "string"
+        }
       }
     }
-  }
+  },
+  "definitions": {}
 }
