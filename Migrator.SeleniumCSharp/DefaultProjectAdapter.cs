@@ -101,7 +101,9 @@ public class DefaultProjectAdapter : IProjectAdapter
             TestHost = testHost,
             SourceOnlyIdentifiers = resolved._sourceOnlyIdentifiers,
             TargetKnownTypes = resolved._targetKnownTypes,
-            TargetKnownIdentifiers = resolved._targetKnownIdentifiers
+            TargetKnownIdentifiers = resolved._targetKnownIdentifiers,
+            SuppressedMethods = resolved._suppressedMethods,
+            SuppressedMethodPatterns = resolved._suppressedMethodPatterns
         };
     }
 
@@ -161,19 +163,30 @@ public class DefaultProjectAdapter : IProjectAdapter
         var testHost = scope.TestHost ?? _globalConfig.TestHost;
         var mergedTargetKnownTypes = MergeStrings(_globalConfig.TargetKnownTypes, scope.TargetKnownTypes);
         var mergedTargetKnownIdentifiers = MergeStrings(_globalConfig.TargetKnownIdentifiers, scope.TargetKnownIdentifiers);
+        var mergedSuppressedMethods = MergeStrings(_globalConfig.SuppressedMethods, scope.SuppressedMethods);
+        var mergedSuppressedMethodPatterns = MergeStrings(_globalConfig.SuppressedMethodPatterns, scope.SuppressedMethodPatterns);
 
         return CreateResolvedConfig(_globalConfig, mergedTargets, mergedMethods,
             mergedParamMethods, testHost, _globalConfig.PageObjects,
-            mergedTargetKnownTypes, mergedTargetKnownIdentifiers);
+            mergedTargetKnownTypes, mergedTargetKnownIdentifiers,
+            mergedSuppressedMethods, mergedSuppressedMethodPatterns);
     }
 
     ResolvedFileConfig CreateResolvedConfig(ProjectAdapterConfig config, UiTargetMapping[] uiTargets,
         MethodMapping[] methods, IList<ParameterizedMethodMapping> paramMethods,
         TestHostConfig? testHost, PageObjectMapping[] pageObjects,
         IReadOnlyList<string>? targetKnownTypes = null,
-        IReadOnlyList<string>? targetKnownIdentifiers = null)
+        IReadOnlyList<string>? targetKnownIdentifiers = null,
+        IReadOnlyList<string>? suppressedMethods = null,
+        IReadOnlyList<string>? suppressedMethodPatterns = null)
     {
-        var resolved = new ResolvedFileConfig(config, testHost, targetKnownTypes, targetKnownIdentifiers);
+        var resolved = new ResolvedFileConfig(
+            config,
+            testHost,
+            targetKnownTypes,
+            targetKnownIdentifiers,
+            suppressedMethods,
+            suppressedMethodPatterns);
 
         foreach (var mapping in uiTargets)
         {
@@ -855,7 +868,9 @@ public class DefaultProjectAdapter : IProjectAdapter
             var match = placeholderMatches[i];
             var placeholderName = match.Groups[1].Value;
 
-            regexPatternBuilder.Append(Regex.Escape(pattern.Substring(lastIndex, match.Index - lastIndex)));
+            AppendWhitespaceTolerantLiteral(
+                regexPatternBuilder,
+                pattern.Substring(lastIndex, match.Index - lastIndex));
 
             // Parameterized method arguments can contain commas and nested invocations, e.g.
             // Browser.GoToPage<Page>(Uri(productId, tariff.TariffId)).
@@ -872,12 +887,12 @@ public class DefaultProjectAdapter : IProjectAdapter
             lastIndex = match.Index + match.Length;
         }
 
-        regexPatternBuilder.Append(Regex.Escape(pattern.Substring(lastIndex)));
+        AppendWhitespaceTolerantLiteral(regexPatternBuilder, pattern.Substring(lastIndex));
         var regexPattern = regexPatternBuilder.ToString();
 
         try
         {
-            var match = Regex.Match(sourceText, "^" + regexPattern + "$");
+            var match = Regex.Match(sourceText, "^" + regexPattern + "$", RegexOptions.Singleline);
             if (!match.Success)
                 return null;
 
@@ -902,6 +917,28 @@ public class DefaultProjectAdapter : IProjectAdapter
         {
             Console.Error.WriteLine($"Warning: invalid pattern regex for '{pattern}'");
             return null;
+        }
+    }
+
+    static void AppendWhitespaceTolerantLiteral(StringBuilder regexPatternBuilder, string literal)
+    {
+        foreach (var ch in literal)
+        {
+            if (char.IsWhiteSpace(ch))
+            {
+                regexPatternBuilder.Append(@"\s*");
+                continue;
+            }
+
+            if (ch is '.' or '(' or ')' or ',')
+            {
+                regexPatternBuilder.Append(@"\s*");
+                regexPatternBuilder.Append(Regex.Escape(ch.ToString()));
+                regexPatternBuilder.Append(@"\s*");
+                continue;
+            }
+
+            regexPatternBuilder.Append(Regex.Escape(ch.ToString()));
         }
     }
 
@@ -1406,18 +1443,26 @@ targetExpr: null,
         internal IReadOnlyList<string> _sourceOnlyIdentifiers = Array.Empty<string>();
         internal IReadOnlyList<string> _targetKnownTypes = Array.Empty<string>();
         internal IReadOnlyList<string> _targetKnownIdentifiers = Array.Empty<string>();
+        internal IReadOnlyList<string> _suppressedMethods = Array.Empty<string>();
+        internal IReadOnlyList<string> _suppressedMethodPatterns = Array.Empty<string>();
         internal readonly TestHostConfig? _testHost;
         internal readonly ProjectAdapterConfig _globalConfig;
 
-        public ResolvedFileConfig(ProjectAdapterConfig globalConfig, TestHostConfig? testHost,
+        public ResolvedFileConfig(
+            ProjectAdapterConfig globalConfig,
+            TestHostConfig? testHost,
             IReadOnlyList<string>? targetKnownTypes = null,
-            IReadOnlyList<string>? targetKnownIdentifiers = null)
+            IReadOnlyList<string>? targetKnownIdentifiers = null,
+            IReadOnlyList<string>? suppressedMethods = null,
+            IReadOnlyList<string>? suppressedMethodPatterns = null)
         {
             _globalConfig = globalConfig;
             _testHost = testHost;
             _sourceOnlyIdentifiers = globalConfig.SourceOnlyIdentifiers ?? Array.Empty<string>();
             _targetKnownTypes = targetKnownTypes ?? globalConfig.TargetKnownTypes ?? Array.Empty<string>();
             _targetKnownIdentifiers = targetKnownIdentifiers ?? globalConfig.TargetKnownIdentifiers ?? Array.Empty<string>();
+            _suppressedMethods = suppressedMethods ?? globalConfig.SuppressedMethods ?? Array.Empty<string>();
+            _suppressedMethodPatterns = suppressedMethodPatterns ?? globalConfig.SuppressedMethodPatterns ?? Array.Empty<string>();
         }
 
         /// <summary>

@@ -22,6 +22,24 @@
       "uniqueItems": true,
       "description": "Source/Selenium-only roots that must not be rendered as active target code, e.g. page, pagef, Driver, WebDriver."
     },
+    "SuppressedMethods": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Exact method names that should be preserved as source comments instead of active target code."
+    },
+    "SuppressedMethodPatterns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Glob-like source method patterns that should be preserved as source comments before source-only safety checks."
+    },
     "TargetKnownTypes": {
       "type": "array",
       "items": {
@@ -549,6 +567,22 @@
             "type": "string"
           },
           "uniqueItems": true
+        },
+        "SuppressedMethods": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "SuppressedMethodPatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "default": []
         },
         "Tables": {
           "type": "array",

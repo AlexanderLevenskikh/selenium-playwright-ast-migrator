@@ -37,6 +37,20 @@ public sealed class ProjectAdapterConfig
     public string[] SourceOnlyIdentifiers { get; init; } = Array.Empty<string>();
 
     /// <summary>
+    /// Exact method names that should be preserved as source comments instead of active target code.
+    /// Use only for source helpers proven to be unnecessary or unsafe in generated Playwright code.
+    /// </summary>
+    [JsonPropertyName("SuppressedMethods")]
+    public string[] SuppressedMethods { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Glob-like source method patterns that should be preserved as source comments before
+    /// source-only safety checks. Useful for legacy POM/setup helpers that intentionally do not migrate.
+    /// </summary>
+    [JsonPropertyName("SuppressedMethodPatterns")]
+    public string[] SuppressedMethodPatterns { get; init; } = Array.Empty<string>();
+
+    /// <summary>
     /// Parameterized method mappings with placeholder support.
     /// Pattern uses {placeholderName} syntax. Priority: exact SourceMethod wins over SourceMethodPattern.
     /// </summary>
@@ -117,7 +131,27 @@ public sealed class ProjectAdapterConfig
     {
     }
 
-    public ProjectAdapterConfig(string SourceProjectName, UiTargetMapping[] UiTargets, PageObjectMapping[] PageObjects, MethodMapping[] Methods, LocatorSettings? LocatorSettings = null, TestHostConfig? TestHost = null, ParameterizedMethodMapping[]? ParameterizedMethods = null, ProfileScope[]? Scopes = null, QualityGatesConfig? QualityGates = null, TableConfig[]? Tables = null, PaginationConfig[]? Pagination = null, string[]? SourceOnlyIdentifiers = null, string[]? TargetKnownTypes = null, string[]? TargetKnownIdentifiers = null, VerificationConfig? Verification = null, RecognizerAliasOptions? RecognizerAliases = null, string[]? GenericResultMethods = null, WaitPolicyMapping[]? WaitPolicies = null)
+    public ProjectAdapterConfig(
+        string SourceProjectName,
+        UiTargetMapping[] UiTargets,
+        PageObjectMapping[] PageObjects,
+        MethodMapping[] Methods,
+        LocatorSettings? LocatorSettings = null,
+        TestHostConfig? TestHost = null,
+        ParameterizedMethodMapping[]? ParameterizedMethods = null,
+        ProfileScope[]? Scopes = null,
+        QualityGatesConfig? QualityGates = null,
+        TableConfig[]? Tables = null,
+        PaginationConfig[]? Pagination = null,
+        string[]? SourceOnlyIdentifiers = null,
+        string[]? TargetKnownTypes = null,
+        string[]? TargetKnownIdentifiers = null,
+        VerificationConfig? Verification = null,
+        RecognizerAliasOptions? RecognizerAliases = null,
+        string[]? GenericResultMethods = null,
+        WaitPolicyMapping[]? WaitPolicies = null,
+        string[]? SuppressedMethods = null,
+        string[]? SuppressedMethodPatterns = null)
     {
         this.SourceProjectName = SourceProjectName;
         this.UiTargets = UiTargets;
@@ -137,6 +171,8 @@ public sealed class ProjectAdapterConfig
         this.RecognizerAliases = RecognizerAliases ?? new RecognizerAliasOptions();
         this.GenericResultMethods = GenericResultMethods ?? Array.Empty<string>();
         this.WaitPolicies = WaitPolicies ?? Array.Empty<WaitPolicyMapping>();
+        this.SuppressedMethods = SuppressedMethods ?? Array.Empty<string>();
+        this.SuppressedMethodPatterns = SuppressedMethodPatterns ?? Array.Empty<string>();
     }
 }
 
@@ -594,11 +630,24 @@ public sealed class ProfileScope
     [JsonPropertyName("TargetKnownIdentifiers")]
     public string[] TargetKnownIdentifiers { get; init; } = Array.Empty<string>();
 
+    /// <summary>
+    /// Scope-specific suppressed method names. Unioned with global SuppressedMethods.
+    /// </summary>
+    [JsonPropertyName("SuppressedMethods")]
+    public string[] SuppressedMethods { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Scope-specific suppressed method patterns. Unioned with global SuppressedMethodPatterns.
+    /// </summary>
+    [JsonPropertyName("SuppressedMethodPatterns")]
+    public string[] SuppressedMethodPatterns { get; init; } = Array.Empty<string>();
+
     public ProfileScope() { }
     public ProfileScope(string name, string[] sourcePathPatterns, TestHostConfig? testHost = null,
         UiTargetMapping[]? uiTargets = null, MethodMapping[]? methods = null,
         ParameterizedMethodMapping[]? parameterizedMethods = null,
-        string[]? targetKnownTypes = null, string[]? targetKnownIdentifiers = null)
+        string[]? targetKnownTypes = null, string[]? targetKnownIdentifiers = null,
+        string[]? suppressedMethods = null, string[]? suppressedMethodPatterns = null)
     {
         Name = name;
         SourcePathPatterns = sourcePathPatterns;
@@ -608,6 +657,8 @@ public sealed class ProfileScope
         ParameterizedMethods = parameterizedMethods ?? Array.Empty<ParameterizedMethodMapping>();
         TargetKnownTypes = targetKnownTypes ?? Array.Empty<string>();
         TargetKnownIdentifiers = targetKnownIdentifiers ?? Array.Empty<string>();
+        SuppressedMethods = suppressedMethods ?? Array.Empty<string>();
+        SuppressedMethodPatterns = suppressedMethodPatterns ?? Array.Empty<string>();
     }
 
     /// <summary>

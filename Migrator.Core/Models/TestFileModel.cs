@@ -40,6 +40,19 @@ public sealed record TestFileModel
     /// </summary>
     public IReadOnlyList<string> TargetKnownIdentifiers { get; init; } = Array.Empty<string>();
 
+    /// <summary>
+    /// Method names that should be rendered as source comments instead of active target code.
+    /// Set by the adapter from config; used by renderer safety checks.
+    /// </summary>
+    public IReadOnlyList<string> SuppressedMethods { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Glob-like source method patterns that should be rendered as source comments before
+    /// source-only/blocking safety checks.
+    /// Set by the adapter from config; used by renderer safety checks.
+    /// </summary>
+    public IReadOnlyList<string> SuppressedMethodPatterns { get; init; } = Array.Empty<string>();
+
     public TestFileModel(
         string FilePath,
         string Namespace,

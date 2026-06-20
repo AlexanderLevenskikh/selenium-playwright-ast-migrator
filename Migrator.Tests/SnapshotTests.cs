@@ -3519,7 +3519,6 @@ public class MethodMappingPlaceholderTests
         Assert.Contains("productChoosingPage", output);
         Assert.Contains("\"ok\"", output);
         Assert.DoesNotContain("{result}", output);
-        Assert.DoesNotContain("{result}", output);
         Assert.True(CompileChecker.CompilesWithoutErrors(output),
             CompileChecker.FormatErrors(output));
     }

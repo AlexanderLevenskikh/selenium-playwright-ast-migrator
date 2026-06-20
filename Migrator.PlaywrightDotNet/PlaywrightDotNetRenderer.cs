@@ -21,6 +21,8 @@ public class PlaywrightDotNetRenderer : IRenderer
     readonly HashSet<string> _targetLocals = new(StringComparer.Ordinal);
     HashSet<string> _targetKnownTypes = new(StringComparer.Ordinal);
     HashSet<string> _targetKnownIdentifiers = new(StringComparer.Ordinal);
+    HashSet<string> _suppressedMethods = new(StringComparer.Ordinal);
+    IReadOnlyList<string> _suppressedMethodPatterns = Array.Empty<string>();
     bool _useAssertionsExpect = false;
 
     public PlaywrightDotNetRenderer(string indent = "\t")
@@ -46,6 +48,10 @@ public class PlaywrightDotNetRenderer : IRenderer
         _targetKnownIdentifiers = new HashSet<string>(
             model.TargetKnownIdentifiers ?? Array.Empty<string>(),
             StringComparer.Ordinal);
+        _suppressedMethods = new HashSet<string>(
+            model.SuppressedMethods ?? Array.Empty<string>(),
+            StringComparer.Ordinal);
+        _suppressedMethodPatterns = model.SuppressedMethodPatterns ?? Array.Empty<string>();
         var targetNamespace = testHost?.Namespace ?? model.Namespace;
         var className = testHost?.ClassName ?? (model.ClassName + "Playwright");
         var baseClass = testHost?.BaseClass ?? "PageTest";
@@ -387,6 +393,12 @@ public class PlaywrightDotNetRenderer : IRenderer
     {
         var sourceText = GetActionSourceText(action);
         var declaredVariables = ExtractVariableNames(sourceText).ToArray();
+
+        if (IsSuppressedAction(action, sourceText))
+        {
+            RenderSuppressedAction(sb, action, sourceText);
+            return;
+        }
 
         // WaitPolicy must run before source-root safety. A mapped wait such as
         // page.Loader.ValidateLoading() still has a Selenium/POM root (page),
@@ -1313,6 +1325,104 @@ public class PlaywrightDotNetRenderer : IRenderer
             : $"{source}; // line {action.SourceLine}";
         sb.AppendLine($"{_indent}{_indent}{line}");
         RegisterTargetLocalsFromActiveStatement(source);
+    }
+
+    bool IsSuppressedAction(TestAction action, string sourceText)
+    {
+        if (IsSuppressedByPattern(sourceText))
+            return true;
+
+        var methodName = action switch
+        {
+            MethodInvocationAction method => method.MethodName,
+            MappedMethodInvocationAction mapped => ExtractMethodName(mapped.FullSourceText),
+            RawStatementAction raw => ExtractMethodName(raw.SourceText),
+            LocalDeclarationAction local => ExtractMethodName(local.InitializationValue),
+            UnsupportedAction unsupported => ExtractMethodName(unsupported.SourceText),
+            WaitForAction wait => ExtractMethodName(wait.FullSourceText),
+            _ => null
+        };
+
+        if (methodName != null && _suppressedMethods.Contains(methodName))
+            return true;
+
+        return _suppressedMethods.Any(method => SourceContainsMethod(sourceText, method));
+    }
+
+    bool IsSuppressedByPattern(string? sourceText)
+    {
+        if (string.IsNullOrWhiteSpace(sourceText) || _suppressedMethodPatterns.Count == 0)
+            return false;
+
+        return _suppressedMethodPatterns.Any(pattern => GlobMatches(sourceText, pattern));
+    }
+
+    void RenderSuppressedAction(StringBuilder sb, TestAction action, string sourceText)
+    {
+        sb.AppendLine($"{_indent}{_indent}// MIGRATOR: source statement suppressed by adapter-config // line {action.SourceLine}");
+        AppendCommentBlock(sb, _indent + _indent, sourceText, "source suppressed: ");
+    }
+
+    static bool SourceContainsMethod(string sourceText, string method)
+    {
+        if (string.IsNullOrWhiteSpace(sourceText) || string.IsNullOrWhiteSpace(method))
+            return false;
+
+        var escaped = Regex.Escape(method.Trim());
+        return Regex.IsMatch(sourceText, $@"(?<![\w@]){escaped}\s*\(")
+            || Regex.IsMatch(sourceText, $@"\.\s*{escaped}\s*\(");
+    }
+
+    static string? ExtractMethodName(string? sourceText)
+    {
+        if (string.IsNullOrWhiteSpace(sourceText))
+            return null;
+
+        var matches = Regex.Matches(sourceText, @"(?:^|\.)\s*(?<method>@?[A-Za-z_]\w*)\s*(?:<[^>]+>)?\s*\(");
+        return matches.Count == 0
+            ? null
+            : matches[matches.Count - 1].Groups["method"].Value.TrimStart('@');
+    }
+
+    static bool GlobMatches(string text, string pattern)
+    {
+        if (string.IsNullOrWhiteSpace(pattern))
+            return false;
+
+        var regex = BuildWhitespaceTolerantGlobRegex(pattern);
+        return Regex.IsMatch(text, regex, RegexOptions.Singleline);
+    }
+
+    static string BuildWhitespaceTolerantGlobRegex(string pattern)
+    {
+        var sb = new StringBuilder("^");
+        foreach (var ch in pattern)
+        {
+            if (ch == '*')
+            {
+                sb.Append(".*");
+                continue;
+            }
+
+            if (char.IsWhiteSpace(ch))
+            {
+                sb.Append(@"\s*");
+                continue;
+            }
+
+            if (ch is '.' or '(' or ')' or ',')
+            {
+                sb.Append(@"\s*");
+                sb.Append(Regex.Escape(ch.ToString()));
+                sb.Append(@"\s*");
+                continue;
+            }
+
+            sb.Append(Regex.Escape(ch.ToString()));
+        }
+
+        sb.Append('$');
+        return sb.ToString();
     }
 
     /// <summary>
