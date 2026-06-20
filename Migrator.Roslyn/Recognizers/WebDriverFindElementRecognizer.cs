@@ -10,24 +10,24 @@ namespace Migrator.Roslyn.Recognizers;
 public class WebDriverFindElementRecognizer : IInvocationRecognizer
 {
     static readonly Regex XPathPattern = new(
-        @"^\s*WebDriver\s*\.\s*FindElement\s*\(\s*By\s*\.\s*XPath\s*\(\s*""([^""]*)""\s*\)\s*\)\s*$",
+        @"^\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*XPath\s*\(\s*""([^""]*)""\s*\)\s*\)\s*$",
         RegexOptions.Compiled);
 
     static readonly Regex CssPattern = new(
-        @"^\s*WebDriver\s*\.\s*FindElement\s*\(\s*By\s*\.\s*CssSelector\s*\(\s*""([^""]*)""\s*\)\s*\)\s*$",
+        @"^\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*CssSelector\s*\(\s*""([^""]*)""\s*\)\s*\)\s*$",
         RegexOptions.Compiled);
 
     static readonly Regex ByXPathDynamic = new(
-        @"^\s*WebDriver\s*\.\s*FindElement\s*\(\s*By\s*\.\s*XPath\s*\(\s*[^""].*\)\s*\)\s*$",
+        @"^\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*XPath\s*\(\s*[^""].*\)\s*\)\s*$",
         RegexOptions.Compiled);
 
     static readonly Regex ByCssDynamic = new(
-        @"^\s*WebDriver\s*\.\s*FindElement\s*\(\s*By\s*\.\s*CssSelector\s*\(\s*[^""].*\)\s*\)\s*$",
+        @"^\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*CssSelector\s*\(\s*[^""].*\)\s*\)\s*$",
         RegexOptions.Compiled);
 
     public TestAction? TryRecognize(InvocationContext ctx)
     {
-        if (ctx.MethodName != "FindElement")
+        if (ctx.MethodName is not ("FindElement" or "FindElements"))
             return null;
 
         if (ctx.ReceiverText != "WebDriver")
@@ -37,13 +37,13 @@ public class WebDriverFindElementRecognizer : IInvocationRecognizer
 
         if (XPathPattern.IsMatch(fullText) || CssPattern.IsMatch(fullText))
             return new UnsupportedAction(ctx.SourceLine, fullText,
-                "Bare WebDriver.FindElement lookup has no Playwright interaction — review manually");
+                "Bare WebDriver.FindElement(s) lookup has no Playwright interaction — review manually");
 
         // Dynamic selector — produce a TODO action
         if (ByXPathDynamic.IsMatch(fullText) || ByCssDynamic.IsMatch(fullText))
         {
             return new UnsupportedAction(ctx.SourceLine, fullText,
-                "WebDriver.FindElement with dynamic selector — add MethodMapping or use static string literal");
+                "WebDriver.FindElement(s) with dynamic selector — add MethodMapping or use static string literal");
         }
 
         return null;

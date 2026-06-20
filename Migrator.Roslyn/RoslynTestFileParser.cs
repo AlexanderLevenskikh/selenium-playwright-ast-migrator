@@ -654,11 +654,11 @@ public class RoslynTestFileParser : ITestFileParser
     }
 
     static readonly Regex WebDriverXPathRegex = new(
-        @"^\s*WebDriver\s*\.\s*FindElement\s*\(\s*By\s*\.\s*XPath\s*\(\s*""([^""]*)""\s*\)\s*\)\s*;?",
+        @"^\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*XPath\s*\(\s*""([^""]*)""\s*\)\s*\)\s*;?",
         RegexOptions.Compiled);
 
     static readonly Regex WebDriverCssRegex = new(
-        @"^\s*WebDriver\s*\.\s*FindElement\s*\(\s*By\s*\.\s*CssSelector\s*\(\s*""([^""]*)""\s*\)\s*\)\s*;?",
+        @"^\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*CssSelector\s*\(\s*""([^""]*)""\s*\)\s*\)\s*;?",
         RegexOptions.Compiled);
 
     static LocatorDeclarationAction? TryExtractLocatorDeclaration(LocalDeclarationStatementSyntax lds, int line)
@@ -670,7 +670,7 @@ public class RoslynTestFileParser : ITestFileParser
         var varName = variable.Identifier.Text;
         var initValue = variable.Initializer?.Value?.ToString() ?? string.Empty;
 
-        // Check for WebDriver.FindElement(By.XPath("..."))
+        // Check for WebDriver.FindElement(s)(By.XPath("..."))
         var xpathMatch = WebDriverXPathRegex.Match(initValue);
         if (xpathMatch.Success)
         {
@@ -679,7 +679,7 @@ public class RoslynTestFileParser : ITestFileParser
             return new LocatorDeclarationAction(line, varName, locatorExpr, initValue);
         }
 
-        // Check for WebDriver.FindElement(By.CssSelector("..."))
+        // Check for WebDriver.FindElement(s)(By.CssSelector("..."))
         var cssMatch = WebDriverCssRegex.Match(initValue);
         if (cssMatch.Success)
         {

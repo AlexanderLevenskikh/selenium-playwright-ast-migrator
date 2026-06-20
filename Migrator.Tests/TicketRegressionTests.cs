@@ -1,3 +1,4 @@
+using System.IO;
 using System.Linq;
 using Migrator.Core;
 using Migrator.Core.Models;
@@ -375,6 +376,72 @@ public class TicketRegressionTests
         Assert.Contains("CONDITIONAL_UNRESOLVED_SYMBOL", output);
         Assert.Contains("if (element2) { ... }", output);
         Assert.DoesNotMatch(@"(?m)^\s*if\s*\(element2\)", output);
+    }
+
+
+    [Fact]
+    public void WebDriverFindElements_StaticXPath_ParsesAsLocatorDeclaration()
+    {
+        var file = Path.GetTempFileName() + ".cs";
+        try
+        {
+            File.WriteAllText(file, @"
+using NUnit.Framework;
+using OpenQA.Selenium;
+
+public class SampleTests
+{
+    [Test]
+    public void GeneratedTest()
+    {
+        var valueSum = WebDriver.FindElements(By.XPath(""//div[@data-tid='SidePageBody__root']//span[@data-tid='CurrencyLabel__root']""));
+    }
+}
+");
+
+            var model = new RoslynTestFileParser().Parse(file);
+            var action = Assert.IsType<LocatorDeclarationAction>(model.Tests.Single().BodyActions.Single());
+
+            Assert.Equal("valueSum", action.VariableName);
+            Assert.Contains("Page.Locator", action.LocatorExpression);
+            Assert.Contains("xpath=//div[@data-tid='SidePageBody__root']//span[@data-tid='CurrencyLabel__root']", action.LocatorExpression);
+        }
+        finally
+        {
+            if (File.Exists(file)) File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void WebDriverFindElements_LocalElementAt_CanResolveDownstreamTextAssertion()
+    {
+        var sourceModel = CreateModel(new TestAction[]
+        {
+            new LocatorDeclarationAction(
+                100,
+                "valueSum",
+                "Page.Locator(\"xpath=//div[@data-tid='SidePageBody__root']//span[@data-tid='CurrencyLabel__root']\")",
+                "WebDriver.FindElements(By.XPath(\"//div[@data-tid='SidePageBody__root']//span[@data-tid='CurrencyLabel__root']\"))"),
+            new TextAssertionAction(
+                101,
+                "valueSum.ElementAt(1)",
+                TextAssertionKind.TextEquals,
+                "\"7 854 000,00 ₽\"",
+                RecognitionConfidence.SyntaxFallback)
+        });
+
+        var model = new DefaultProjectAdapter(new ProjectAdapterConfig(
+            "sample",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>())).Adapt(sourceModel);
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("var valueSum = Page.Locator", output);
+        Assert.Contains("valueSum.Nth(1)", output);
+        Assert.Contains("ToHaveTextAsync(\"7 854 000,00 ₽\")", output);
+        Assert.DoesNotContain("UNRESOLVED_SYMBOL", output);
+        Assert.DoesNotContain("MISSING_MAPPING", output);
     }
 
     [Fact]
