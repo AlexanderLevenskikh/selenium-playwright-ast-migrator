@@ -378,6 +378,38 @@ public class TicketRegressionTests
     }
 
     [Fact]
+    public void UrlAssertion_AllowsTargetKnownTypeExpression()
+    {
+        var model = CreateModel(new TestAction[]
+        {
+            new UrlAssertionAction(84, UrlAssertionKind.UrlEquals, "Urls.BaseUrlCatalogPartners")
+        }) with
+        {
+            TargetKnownTypes = new[] { "Urls" }
+        };
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("await Expect(Page).ToHaveURLAsync(Urls.BaseUrlCatalogPartners)", output);
+        Assert.DoesNotContain("EXTERNAL_URL_VARIABLE", output);
+        Assert.DoesNotContain("// await Expect(Page).ToHaveURLAsync(Urls.BaseUrlCatalogPartners)", output);
+    }
+
+    [Fact]
+    public void UrlAssertion_UnknownExternalExpression_RemainsReviewTodo()
+    {
+        var model = CreateModel(new TestAction[]
+        {
+            new UrlAssertionAction(85, UrlAssertionKind.UrlEquals, "Urls.BaseUrlCatalogPartners")
+        });
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("// await Expect(Page).ToHaveURLAsync(Urls.BaseUrlCatalogPartners)", output);
+        Assert.Contains("EXTERNAL_URL_VARIABLE", output);
+    }
+
+    [Fact]
     public void AssertionLikeSuppression_EmitsFailingGuardInsteadOfEmptyGreenTest()
     {
         var model = CreateModel(new TestAction[]

@@ -1038,12 +1038,12 @@ public class PlaywrightDotNetRenderer : IRenderer
     void RenderUrlAssertion(StringBuilder sb, UrlAssertionAction action)
     {
         var expected = ConvertExpression(action.ExpectedValue);
-        var isLiteral = expected.StartsWith("\"") && expected.EndsWith("\"");
+        var isSafeExpression = IsStringLiteral(expected) || AllSymbolsResolved(expected, Array.Empty<string>());
 
         switch (action.Kind)
         {
             case UrlAssertionKind.UrlEquals:
-                if (isLiteral)
+                if (isSafeExpression)
                 {
                     sb.AppendLine($"{_indent}{_indent}await {ExpectCall()}(Page).ToHaveURLAsync({expected}); // line {action.SourceLine}");
                 }
@@ -1055,11 +1055,11 @@ public class PlaywrightDotNetRenderer : IRenderer
                         "URL assertion uses external variable — verify and uncomment",
                         "EXTERNAL_URL_VARIABLE",
                         "Expected URL depends on a variable that may need target-project setup/context.",
-                        "Ensure the variable is available in target code or map it via adapter-config.");
+                        "Ensure the variable is available in target code or map it via adapter-config TargetKnownTypes/TargetKnownIdentifiers.");
                 }
                 break;
             case UrlAssertionKind.UrlContains:
-                if (isLiteral)
+                if (isSafeExpression)
                 {
                     sb.AppendLine($"{_indent}{_indent}Assert.That(Page.Url, Does.Contain({expected})); // line {action.SourceLine}");
                 }
@@ -1071,10 +1071,16 @@ public class PlaywrightDotNetRenderer : IRenderer
                         "URL assertion uses external variable — verify and uncomment",
                         "EXTERNAL_URL_VARIABLE",
                         "Expected URL depends on a variable that may need target-project setup/context.",
-                        "Ensure the variable is available in target code or map it via adapter-config.");
+                        "Ensure the variable is available in target code or map it via adapter-config TargetKnownTypes/TargetKnownIdentifiers.");
                 }
                 break;
         }
+    }
+
+    static bool IsStringLiteral(string expression)
+    {
+        var trimmed = expression.Trim();
+        return trimmed.StartsWith("\"") && trimmed.EndsWith("\"");
     }
 
     void RenderMappedMethodInvocation(StringBuilder sb, MappedMethodInvocationAction action)
