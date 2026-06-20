@@ -611,6 +611,128 @@ public class SampleTests
         }
     }
 
+    [Fact]
+    public void WaitPolicy_ReceiverContains_AppliesToMatchingCustomWait()
+    {
+        var config = new ProjectAdapterConfig(
+            "sample",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            WaitPolicies: new[]
+            {
+                new WaitPolicyMapping
+                {
+                    MethodName = "Wait",
+                    ReceiverContains = "TaskComplete",
+                    Kind = "ProductStateVisible"
+                }
+            });
+        var recognizer = new WaitInvocationRecognizer(RecognizerOptions.FromConfig(config));
+
+        var action = recognizer.TryRecognize(new InvocationContext(
+            "Wait",
+            "page.Task.TaskComplete",
+            "page.Task.TaskComplete.Wait(10000)",
+            42,
+            SymbolResolved: false,
+            ArgumentTexts: new[] { "10000" }));
+
+        var wait = Assert.IsType<WaitForAction>(action);
+        Assert.Equal(WaitForKind.ProductStateVisible, wait.Kind);
+        Assert.Equal("Wait", wait.SourceMethod);
+    }
+
+    [Fact]
+    public void WaitPolicy_ReceiverContains_DoesNotApplyToOtherReceivers()
+    {
+        var config = new ProjectAdapterConfig(
+            "sample",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            WaitPolicies: new[]
+            {
+                new WaitPolicyMapping
+                {
+                    MethodName = "Wait",
+                    ReceiverContains = "TaskComplete",
+                    Kind = "ProductStateVisible"
+                }
+            });
+        var recognizer = new WaitInvocationRecognizer(RecognizerOptions.FromConfig(config));
+
+        var action = recognizer.TryRecognize(new InvocationContext(
+            "Wait",
+            "page.OtherControl",
+            "page.OtherControl.Wait(10000)",
+            42,
+            SymbolResolved: false,
+            ArgumentTexts: new[] { "10000" }));
+
+        var wait = Assert.IsType<WaitForAction>(action);
+        Assert.Equal(WaitForKind.ReviewRequired, wait.Kind);
+    }
+
+    [Fact]
+    public void WaitPolicy_AdapterMapping_SkipsWaitRecognizerForMethodMappings()
+    {
+        var config = new ProjectAdapterConfig(
+            "sample",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            WaitPolicies: new[]
+            {
+                new WaitPolicyMapping
+                {
+                    MethodName = "WaitContainsText",
+                    Kind = "AdapterMapping"
+                }
+            });
+        var recognizer = new WaitInvocationRecognizer(RecognizerOptions.FromConfig(config));
+
+        var action = recognizer.TryRecognize(new InvocationContext(
+            "WaitContainsText",
+            "page.Status",
+            "page.Status.WaitContainsText(\"Ready\")",
+            42,
+            SymbolResolved: false,
+            ArgumentTexts: new[] { "\"Ready\"" }));
+
+        Assert.Null(action);
+    }
+
+    [Fact]
+    public void WaitPolicy_SourceMethod_NormalizesGenericReceiverSyntax()
+    {
+        var config = new ProjectAdapterConfig(
+            "sample",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            WaitPolicies: new[]
+            {
+                new WaitPolicyMapping
+                {
+                    SourceMethod = "element.WaitDisabled()",
+                    Kind = "Elide"
+                }
+            });
+        var recognizer = new WaitInvocationRecognizer(RecognizerOptions.FromConfig(config));
+
+        var action = recognizer.TryRecognize(new InvocationContext(
+            "WaitDisabled",
+            "discountSettingsPage.Save",
+            "discountSettingsPage.Save.WaitDisabled()",
+            42,
+            SymbolResolved: false,
+            ArgumentTexts: Array.Empty<string>()));
+
+        var wait = Assert.IsType<WaitForAction>(action);
+        Assert.Equal(WaitForKind.ActionabilityElided, wait.Kind);
+    }
+
     static TestFileModel CreateModel(IEnumerable<TestAction> actions) =>
         new(
             FilePath: "Sample.cs",

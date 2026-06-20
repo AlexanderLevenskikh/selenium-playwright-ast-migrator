@@ -5,12 +5,15 @@ namespace Migrator.Roslyn;
 
 public sealed class RecognizerOptions
 {
+    public sealed record WaitPolicyRule(string MethodName, string Kind, string? ReceiverContains);
+
     public IReadOnlySet<string> InputMethods { get; }
     public IReadOnlySet<string> SelectMethods { get; }
     public IReadOnlySet<string> NavigationMethods { get; }
     public IReadOnlySet<string> FluentAssertionMethods { get; }
     public IReadOnlySet<string> GenericResultMethods { get; }
     public IReadOnlyDictionary<string, string> WaitPolicies { get; }
+    public IReadOnlyList<WaitPolicyRule> WaitPolicyRules { get; }
 
     public static RecognizerOptions Default => FromConfig(null);
 
@@ -20,7 +23,8 @@ public sealed class RecognizerOptions
         IReadOnlySet<string> navigationMethods,
         IReadOnlySet<string> fluentAssertionMethods,
         IReadOnlySet<string> genericResultMethods,
-        IReadOnlyDictionary<string, string> waitPolicies)
+        IReadOnlyDictionary<string, string> waitPolicies,
+        IReadOnlyList<WaitPolicyRule> waitPolicyRules)
     {
         InputMethods = inputMethods;
         SelectMethods = selectMethods;
@@ -28,6 +32,7 @@ public sealed class RecognizerOptions
         FluentAssertionMethods = fluentAssertionMethods;
         GenericResultMethods = genericResultMethods;
         WaitPolicies = waitPolicies;
+        WaitPolicyRules = waitPolicyRules;
     }
 
     public static RecognizerOptions FromConfig(ProjectAdapterConfig? config)
@@ -45,17 +50,28 @@ public sealed class RecognizerOptions
             null);
 
         var waitPolicies = new Dictionary<string, string>(StringComparer.Ordinal);
+        var waitPolicyRules = new List<WaitPolicyRule>();
         foreach (var policy in config?.WaitPolicies ?? Array.Empty<WaitPolicyMapping>())
         {
-            var methodName = !string.IsNullOrWhiteSpace(policy.SourceMethod)
+            var configuredMethod = !string.IsNullOrWhiteSpace(policy.SourceMethod)
                 ? policy.SourceMethod
                 : policy.MethodName;
+            var methodName = NormalizeMethodName(configuredMethod);
             var kind = !string.IsNullOrWhiteSpace(policy.Kind)
                 ? policy.Kind
                 : (!string.IsNullOrWhiteSpace(policy.WaitKind) ? policy.WaitKind : policy.Behavior);
 
-            if (!string.IsNullOrWhiteSpace(methodName) && !string.IsNullOrWhiteSpace(kind))
-                waitPolicies[methodName.Trim()] = kind.Trim();
+            if (string.IsNullOrWhiteSpace(methodName) || string.IsNullOrWhiteSpace(kind))
+                continue;
+
+            var trimmedKind = kind.Trim();
+            var receiverContains = string.IsNullOrWhiteSpace(policy.ReceiverContains)
+                ? null
+                : policy.ReceiverContains.Trim();
+
+            waitPolicyRules.Add(new WaitPolicyRule(methodName, trimmedKind, receiverContains));
+            if (receiverContains == null)
+                waitPolicies[methodName] = trimmedKind;
         }
 
         return new RecognizerOptions(
@@ -64,7 +80,25 @@ public sealed class RecognizerOptions
             navigationMethods,
             fluentAssertionMethods,
             genericResultMethods,
-            waitPolicies);
+            waitPolicies,
+            waitPolicyRules);
+    }
+
+    static string? NormalizeMethodName(string? configuredMethod)
+    {
+        var value = configuredMethod?.Trim();
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var parenIndex = value.IndexOf('(', StringComparison.Ordinal);
+        if (parenIndex >= 0)
+            value = value[..parenIndex].Trim();
+
+        var dotIndex = value.LastIndexOf('.');
+        if (dotIndex >= 0 && dotIndex + 1 < value.Length)
+            value = value[(dotIndex + 1)..].Trim();
+
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
     static HashSet<string> Merge(IEnumerable<string> defaults, IEnumerable<string>? configured)

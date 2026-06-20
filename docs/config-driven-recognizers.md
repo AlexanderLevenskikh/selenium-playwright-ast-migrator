@@ -12,12 +12,16 @@ or `WaitValueContains`.
 
 Supported `Kind` values:
 
-- `ActionabilityElided` — render as an elided source wait comment; Playwright actionability/web-first assertions cover it.
-- `ProductStateLoaded` — render as a locator wait when target mapping exists.
-- `ProductStateVisible` — render `Expect(target).ToBeVisibleAsync()` when target mapping exists.
-- `ProductStateHidden` — render `Expect(target).ToBeHiddenAsync()` when target mapping exists.
-- `ReviewRequired` — keep a wait-specific TODO; do not silently migrate.
+- `ActionabilityElided` / `Elide` — render as an elided source wait comment; Playwright actionability/web-first assertions cover it.
+- `ProductStateLoaded` / `Loaded` — render as a locator wait when target mapping exists.
+- `ProductStateVisible` / `Visible` / `AssertVisible` — render `Expect(target).ToBeVisibleAsync()` when target mapping exists.
+- `ProductStateHidden` / `Hidden` / `AssertHidden` — render `Expect(target).ToBeHiddenAsync()` when target mapping exists.
+- `ReviewRequired` / `Review` — keep a wait-specific TODO; do not silently migrate.
 - `AdapterMapping` — skip wait recognition so `Methods`/`ParameterizedMethods` can map the call.
+
+Use `ReceiverContains` when a method name is too broad. For example, `Wait(10000)` should not be globally mapped,
+but `TaskComplete.Wait(10000)` can be mapped by scoping the policy to receivers containing `TaskComplete`.
+`SourceMethod` may be written as either a method name (`WaitDisabled`) or a generic receiver pattern (`element.WaitDisabled()`).
 
 Example:
 
@@ -27,7 +31,8 @@ Example:
     { "SourceMethod": "WaitExistAndVisible", "Kind": "ActionabilityElided" },
     { "SourceMethod": "WaitOpened", "Kind": "ProductStateVisible" },
     { "SourceMethod": "WaitNotExists", "Kind": "ProductStateHidden" },
-    { "SourceMethod": "WaitContainsText", "Kind": "AdapterMapping" }
+    { "SourceMethod": "WaitContainsText", "Kind": "AdapterMapping" },
+    { "MethodName": "Wait", "ReceiverContains": "TaskComplete", "Kind": "Visible" }
   ],
   "ParameterizedMethods": [
     {

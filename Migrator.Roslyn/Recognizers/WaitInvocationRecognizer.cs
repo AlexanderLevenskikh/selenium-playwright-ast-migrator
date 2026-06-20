@@ -42,15 +42,19 @@ public class WaitInvocationRecognizer : IInvocationRecognizer
         if (string.IsNullOrWhiteSpace(ctx.ReceiverText))
             return null;
 
-        if (_options.WaitPolicies.TryGetValue(ctx.MethodName, out var configuredKind))
+        var configuredPolicy = FindConfiguredPolicy(ctx);
+        if (configuredPolicy != null)
         {
+            if (IsAdapterMappingPolicy(configuredPolicy.Kind))
+                return null;
+
             return new WaitForAction(
                 ctx.SourceLine,
                 ctx.ReceiverText,
                 RecognitionConfidence.SyntaxFallback,
                 ctx.MethodName,
                 ctx.FullText,
-                ParseWaitPolicyKind(configuredKind));
+                ParseWaitPolicyKind(configuredPolicy.Kind));
         }
 
         if (ActionabilityWaitMethods.Contains(ctx.MethodName))
@@ -89,12 +93,49 @@ public class WaitInvocationRecognizer : IInvocationRecognizer
         return null;
     }
 
+    RecognizerOptions.WaitPolicyRule? FindConfiguredPolicy(InvocationContext ctx)
+    {
+        foreach (var policy in _options.WaitPolicyRules)
+        {
+            if (!string.Equals(policy.MethodName, ctx.MethodName, StringComparison.Ordinal))
+                continue;
+
+            if (!string.IsNullOrWhiteSpace(policy.ReceiverContains)
+                && !ctx.ReceiverText.Contains(policy.ReceiverContains, StringComparison.Ordinal))
+                continue;
+
+            return policy;
+        }
+
+        return null;
+    }
+
+    static bool IsAdapterMappingPolicy(string? configuredKind) =>
+        string.Equals(configuredKind?.Trim(), "AdapterMapping", StringComparison.OrdinalIgnoreCase);
+
     static WaitForKind ParseWaitPolicyKind(string? configuredKind)
     {
-        if (Enum.TryParse<WaitForKind>(configuredKind, ignoreCase: true, out var kind))
+        var value = configuredKind?.Trim();
+        if (string.IsNullOrWhiteSpace(value))
+            return WaitForKind.ReviewRequired;
+
+        if (Enum.TryParse<WaitForKind>(value, ignoreCase: true, out var kind))
             return kind;
 
-        return WaitForKind.ReviewRequired;
+        return value.ToLowerInvariant() switch
+        {
+            "elide" => WaitForKind.ActionabilityElided,
+            "actionability" => WaitForKind.ActionabilityElided,
+            "actionabilityelide" => WaitForKind.ActionabilityElided,
+            "assertvisible" => WaitForKind.ProductStateVisible,
+            "visible" => WaitForKind.ProductStateVisible,
+            "assertvisibility" => WaitForKind.ProductStateVisible,
+            "asserthidden" => WaitForKind.ProductStateHidden,
+            "hidden" => WaitForKind.ProductStateHidden,
+            "loaded" => WaitForKind.ProductStateLoaded,
+            "review" => WaitForKind.ReviewRequired,
+            _ => WaitForKind.ReviewRequired
+        };
     }
 
     static bool IsProductStateWait(string methodName, string receiverText)
