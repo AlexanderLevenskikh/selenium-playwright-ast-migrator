@@ -315,6 +315,15 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
+        "TargetTestFramework": {
+          "type": "string",
+          "enum": [
+            "nunit",
+            "NUnit",
+            "xunit",
+            "xUnit"
+          ]
+        },
         "Namespace": {
           "type": "string"
         },

@@ -172,6 +172,7 @@ public static class ProjectAdapterConfigMerger
 
         return new TestHostConfig
         {
+            TargetTestFramework = LastNonEmpty(layers.Select(x => x.TargetTestFramework)),
             Namespace = LastNonEmpty(layers.Select(x => x.Namespace)),
             BaseClass = LastNonEmpty(layers.Select(x => x.BaseClass)),
             ClassName = LastNonEmpty(layers.Select(x => x.ClassName)),

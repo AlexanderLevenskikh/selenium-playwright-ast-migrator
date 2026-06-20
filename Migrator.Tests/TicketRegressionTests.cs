@@ -33,9 +33,6 @@ public class TicketRegressionTests
         Assert.Contains("source statement suppressed by adapter-config", output);
         Assert.Contains("page.GoToDiscountsPage(Product.Multiproduct)", output);
         Assert.DoesNotContain("SOURCE_ONLY_IDENTIFIER", output);
-
-        // The source declaration may remain in a suppressed-source comment,
-        // but it must not be emitted as an active C# local declaration.
         Assert.DoesNotMatch(@"(?m)^\s*var\s+discountOnProductPage\s*=", output);
     }
 
@@ -94,6 +91,128 @@ public class TicketRegressionTests
         Assert.Contains("x => x.Count ==0", output);
         Assert.DoesNotContain("'forbidden-informer'", output);
         Assert.DoesNotContain("= =", output);
+    }
+
+
+    [Fact]
+    public void SyntaxFallbackRawInvocation_UsesParameterizedMappingAndUiTarget()
+    {
+        var sourceModel = CreateModel(new TestAction[]
+        {
+            new RawStatementAction(
+                40,
+                "page.PeriodBeginDateSort.Sort(sortOrder)")
+        });
+        var config = new ProjectAdapterConfig(
+            "sample",
+            new[]
+            {
+                new UiTargetMapping(
+                    "page.PeriodBeginDateSort",
+                    "Page.Locator(\"[data-tid=SortBox__root]\").Filter(new LocatorFilterOptions { HasText = \"Начало периода\" })",
+                    "RawExpression")
+            },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "{source}.Sort({sortOrder})",
+                    new[] { "await {TARGET}.Locator(\"[data-tid=SortBox__arrow]\").ClickAsync();" },
+                    requiresReview: false)
+            },
+            SourceOnlyIdentifiers: new[] { "page" });
+
+        var model = new DefaultProjectAdapter(config).Adapt(sourceModel);
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("SortBox__arrow", output);
+        Assert.DoesNotContain("SOURCE_ONLY_IDENTIFIER", output);
+        Assert.DoesNotContain("TODO: uses source-only identifier 'page'", output);
+    }
+
+    [Fact]
+    public void SyntaxFallbackRawClick_UsesUiTarget_WhenSemanticRecognizerMissedIt()
+    {
+        var sourceModel = CreateModel(new TestAction[]
+        {
+            new RawStatementAction(
+                48,
+                "page.Table.Items.ElementAt(9).Click()")
+        });
+        var config = new ProjectAdapterConfig(
+            "sample",
+            new[]
+            {
+                new UiTargetMapping(
+                    "page.Table",
+                    "Page.GetByTestAttribute(\"table\")",
+                    "RawExpression")
+            },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            SourceOnlyIdentifiers: new[] { "page" });
+
+        var model = new DefaultProjectAdapter(config).Adapt(sourceModel);
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("ClickAsync", output);
+        Assert.Contains("Page.GetByTestAttribute(\"table\")", output);
+        Assert.DoesNotContain("SOURCE_ONLY_IDENTIFIER", output);
+    }
+
+    [Fact]
+    public void Renderer_TestHost_TargetTestFrameworkXunit_RendersXunitAttributesAndUsings()
+    {
+        var model = CreateModel(Array.Empty<TestAction>()) with
+        {
+            TestHost = new TestHostConfig
+            {
+                TargetTestFramework = "xunit",
+                Namespace = "Sample.Pw.Tests",
+                BaseClass = "TestBase",
+                ClassAttributes = new[] { "Collection(\"Sequential\")" },
+                Usings = new[] { "Microsoft.Playwright.Extensions.Xunit", "Xunit" }
+            }
+        };
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("using Microsoft.Playwright.Extensions.Xunit;", output);
+        Assert.Contains("using Xunit;", output);
+        Assert.Contains("[Collection(\"Sequential\")]", output);
+        Assert.Contains("[Fact(DisplayName = \"GeneratedTest\")]", output);
+        Assert.DoesNotContain("NUnit.Framework", output);
+        Assert.DoesNotContain("Microsoft.Playwright.NUnit", output);
+        Assert.DoesNotContain("[Test]", output);
+    }
+
+    [Fact]
+    public void Renderer_TestIdKind_DoesNotDoubleWrapGetByTestIdExpression()
+    {
+        var sourceModel = CreateModel(new TestAction[]
+        {
+            new ClickAction(50, "discountLockingBlock.Unlock")
+        });
+        var config = new ProjectAdapterConfig(
+            "sample",
+            new[]
+            {
+                new UiTargetMapping(
+                    "discountLockingBlock.Unlock",
+                    "GetByTestId(\"unlock-product-discounts\")",
+                    "TestId",
+                    testIdAttribute: "data-tid")
+            },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>());
+
+        var model = new DefaultProjectAdapter(config).Adapt(sourceModel);
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("Page.Locator(\"[data-tid='unlock-product-discounts']\")", output);
+        Assert.DoesNotContain("GetByTestId(\\\"unlock-product-discounts\\\")", output);
+        Assert.DoesNotContain("[data-tid='GetByTestId", output);
     }
 
     static TestFileModel CreateModel(IEnumerable<TestAction> actions) =>

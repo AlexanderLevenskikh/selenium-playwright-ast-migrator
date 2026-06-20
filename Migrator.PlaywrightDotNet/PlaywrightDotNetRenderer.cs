@@ -9,6 +9,12 @@ namespace Migrator.PlaywrightDotNet;
 
 public class PlaywrightDotNetRenderer : IRenderer
 {
+    enum TargetTestFramework
+    {
+        NUnit,
+        XUnit
+    }
+
     readonly string _indent;
     int _tempVarCounter = 0;
     readonly HashSet<string> _methodScopeVars = new();
@@ -23,11 +29,31 @@ public class PlaywrightDotNetRenderer : IRenderer
     HashSet<string> _targetKnownIdentifiers = new(StringComparer.Ordinal);
     HashSet<string> _suppressedMethods = new(StringComparer.Ordinal);
     IReadOnlyList<string> _suppressedMethodPatterns = Array.Empty<string>();
+    TargetTestFramework _targetTestFramework = TargetTestFramework.NUnit;
     bool _useAssertionsExpect = false;
 
     public PlaywrightDotNetRenderer(string indent = "\t")
     {
         _indent = indent;
+    }
+
+    static TargetTestFramework ResolveTargetTestFramework(TestHostConfig? testHost)
+    {
+        var configured = testHost?.TargetTestFramework;
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            var normalized = configured.Trim().ToLowerInvariant();
+            if (normalized is "xunit" or "x-unit")
+                return TargetTestFramework.XUnit;
+            if (normalized is "nunit" or "n-unit")
+                return TargetTestFramework.NUnit;
+        }
+
+        if (testHost?.Usings?.Any(u =>
+                u.Contains("Xunit", StringComparison.OrdinalIgnoreCase)) == true)
+            return TargetTestFramework.XUnit;
+
+        return TargetTestFramework.NUnit;
     }
 
     public string Render(TestFileModel model)
@@ -39,6 +65,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         sb.AppendLine();
 
         var testHost = model.TestHost;
+        _targetTestFramework = ResolveTargetTestFramework(testHost);
         _sourceOnlyIdentifiers = new HashSet<string>(
             model.SourceOnlyIdentifiers ?? Array.Empty<string>(),
             StringComparer.Ordinal);
@@ -57,25 +84,46 @@ public class PlaywrightDotNetRenderer : IRenderer
         var baseClass = testHost?.BaseClass ?? "PageTest";
         _useAssertionsExpect = baseClass != "PageTest";
         var hasTestHostSetup = testHost?.SetUpStatements != null && testHost.SetUpStatements.Length > 0;
+        var hasGeneratedSetup = hasTestHostSetup || model.SetUpActions.Any();
 
         // Usings
         if (!string.IsNullOrEmpty(targetNamespace))
         {
-            // Playwright renderer always needs these core usings
-            sb.AppendLine("using Microsoft.Playwright;");
-            sb.AppendLine("using Microsoft.Playwright.NUnit;");
-            sb.AppendLine("using NUnit.Framework;");
-            sb.AppendLine("using System;");
-            sb.AppendLine("using System.Threading.Tasks;");
-            // Additional host-specific usings from config
-            if (testHost?.Usings != null && testHost.Usings.Length > 0)
+            var renderedUsings = new HashSet<string>(StringComparer.Ordinal);
+            void AppendUsing(string usingName)
             {
-                var coreUsings = new HashSet<string> { "Microsoft.Playwright", "Microsoft.Playwright.NUnit", "NUnit.Framework", "System", "System.Threading.Tasks" };
-                foreach (var @using in testHost.Usings)
-                {
-                    if (!coreUsings.Contains(@using))
-                        sb.AppendLine($"using {@using};");
-                }
+                if (renderedUsings.Add(usingName))
+                    sb.AppendLine($"using {usingName};");
+            }
+
+            // Playwright renderer always needs these core usings. Test-framework-specific
+            // usings are selected by TestHost.TargetTestFramework instead of being
+            // hardcoded to NUnit.
+            var configuredUsings = testHost?.Usings ?? Array.Empty<string>();
+            var hasConfiguredPlaywrightXunitUsing = configuredUsings.Any(u =>
+                u.Contains("Playwright", StringComparison.OrdinalIgnoreCase) &&
+                u.Contains("Xunit", StringComparison.OrdinalIgnoreCase));
+
+            AppendUsing("Microsoft.Playwright");
+            if (_targetTestFramework == TargetTestFramework.XUnit)
+            {
+                if (!hasConfiguredPlaywrightXunitUsing)
+                    AppendUsing("Microsoft.Playwright.Extensions.Xunit");
+                AppendUsing("Xunit");
+            }
+            else
+            {
+                AppendUsing("Microsoft.Playwright.NUnit");
+                AppendUsing("NUnit.Framework");
+            }
+            AppendUsing("System");
+            AppendUsing("System.Threading.Tasks");
+
+            // Additional host-specific usings from config
+            if (configuredUsings.Length > 0)
+            {
+                foreach (var @using in configuredUsings)
+                    AppendUsing(@using);
             }
             sb.AppendLine();
             // Backward compatibility: without TestHost, use .Playwright suffix
@@ -101,7 +149,11 @@ public class PlaywrightDotNetRenderer : IRenderer
                 sb.AppendLine($"[{attr}]");
         }
 
-        sb.AppendLine($"public class {className} : {baseClass}");
+        var inheritance = _targetTestFramework == TargetTestFramework.XUnit && hasGeneratedSetup
+            ? $"{baseClass}, IAsyncLifetime"
+            : baseClass;
+
+        sb.AppendLine($"public class {className} : {inheritance}");
         sb.AppendLine("{");
         sb.AppendLine();
 
@@ -124,6 +176,12 @@ public class PlaywrightDotNetRenderer : IRenderer
             sb.AppendLine();
         }
 
+        if (_targetTestFramework == TargetTestFramework.XUnit && hasGeneratedSetup)
+        {
+            RenderXUnitDisposeAsync(sb);
+            sb.AppendLine();
+        }
+
         foreach (var test in model.Tests)
         {
             RenderTest(sb, test);
@@ -137,9 +195,7 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     void RenderHostSetUp(StringBuilder sb, string[] hostStatements, IEnumerable<TestAction> originalActions)
     {
-        sb.AppendLine($"{_indent}[SetUp]");
-        sb.AppendLine($"{_indent}public async Task SetUp()");
-        sb.AppendLine($"{_indent}{{");
+        RenderSetUpMethodHeader(sb);
 
         // Render configured setup statements
         foreach (var stmt in hostStatements)
@@ -247,9 +303,7 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     void RenderSetUp(StringBuilder sb, IEnumerable<TestAction> actions)
     {
-        sb.AppendLine($"{_indent}[SetUp]");
-        sb.AppendLine($"{_indent}public async Task SetUp()");
-        sb.AppendLine($"{_indent}{{");
+        RenderSetUpMethodHeader(sb);
 
         foreach (var action in actions)
             RenderActionWithSafety(sb, action);
@@ -257,10 +311,51 @@ public class PlaywrightDotNetRenderer : IRenderer
         sb.AppendLine($"{_indent}}}");
     }
 
-    void RenderTest(StringBuilder sb, TestModel test)
+    void RenderSetUpMethodHeader(StringBuilder sb)
     {
+        if (_targetTestFramework == TargetTestFramework.XUnit)
+        {
+            sb.AppendLine($"{_indent}public async Task InitializeAsync()");
+            sb.AppendLine($"{_indent}{{");
+            return;
+        }
+
+        sb.AppendLine($"{_indent}[SetUp]");
+        sb.AppendLine($"{_indent}public async Task SetUp()");
+        sb.AppendLine($"{_indent}{{");
+    }
+
+    void RenderXUnitDisposeAsync(StringBuilder sb)
+    {
+        sb.AppendLine($"{_indent}public Task DisposeAsync() => Task.CompletedTask;");
+    }
+
+    void RenderTestAttributes(StringBuilder sb, TestModel test)
+    {
+        if (_targetTestFramework == TargetTestFramework.XUnit)
+        {
+            if (!string.IsNullOrEmpty(test.Category))
+                sb.AppendLine($"{_indent}[Trait(\"Category\", \"{EscapeAttributeArgument(test.Category)}\")]");
+
+            if (test.CaseData.Any())
+            {
+                sb.AppendLine($"{_indent}[Theory(DisplayName = \"{EscapeAttributeArgument(test.Name)}\")]");
+                foreach (var caseData in test.CaseData)
+                {
+                    var args = RenderCaseArguments(caseData);
+                    sb.AppendLine($"{_indent}[InlineData({args})]");
+                }
+            }
+            else
+            {
+                sb.AppendLine($"{_indent}[Fact(DisplayName = \"{EscapeAttributeArgument(test.Name)}\")]");
+            }
+
+            return;
+        }
+
         if (!string.IsNullOrEmpty(test.Category))
-            sb.AppendLine($"{_indent}[Category(\"{test.Category}\")]");
+            sb.AppendLine($"{_indent}[Category(\"{EscapeAttributeArgument(test.Category)}\")]");
 
         foreach (var caseData in test.CaseData)
         {
@@ -271,19 +366,32 @@ public class PlaywrightDotNetRenderer : IRenderer
             }
             else
             {
-                var args = string.Join(", ", caseData.Arguments.Select(a =>
-                {
-                    if (a.All(char.IsDigit) || (a.Contains('.') && a.Replace(".", "").Replace("-", "").All(char.IsDigit)))
-                        return a;
-
-                    return $"\"{a}\"";
-                }));
+                var args = RenderCaseArguments(caseData);
                 sb.AppendLine($"{_indent}[TestCase({args})]");
             }
         }
 
         if (!test.CaseData.Any())
             sb.AppendLine($"{_indent}[Test]");
+    }
+
+    string RenderCaseArguments(TestCaseData caseData)
+    {
+        return string.Join(", ", caseData.Arguments.Select(a =>
+        {
+            if (a.All(char.IsDigit) || (a.Contains('.') && a.Replace(".", "").Replace("-", "").All(char.IsDigit)))
+                return a;
+
+            return $"\"{EscapeAttributeArgument(a)}\"";
+        }));
+    }
+
+    static string EscapeAttributeArgument(string value) =>
+        value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
+    void RenderTest(StringBuilder sb, TestModel test)
+    {
+        RenderTestAttributes(sb, test);
 
         var paramList = RenderParameters(test.Parameters);
         sb.AppendLine($"{_indent}public async Task {test.Name}({paramList})");
@@ -318,6 +426,20 @@ public class PlaywrightDotNetRenderer : IRenderer
     {
         return $"{hint}_{_tempVarCounter++}";
     }
+
+    static bool ActionHasResolvedTarget(TestAction action) => action switch
+    {
+        ClickAction a => a.Target.Kind != TargetKind.Unresolved,
+        SendKeysAction a => a.Target.Kind != TargetKind.Unresolved,
+        PressAction a => a.Target.Kind != TargetKind.Unresolved,
+        TextAssertionAction a => a.Target.Kind != TargetKind.Unresolved,
+        VisibilityAssertionAction a => a.Target.Kind != TargetKind.Unresolved,
+        WaitForAction a => a.Target.Kind != TargetKind.Unresolved,
+        TableCountAssertionAction a => a.Target.Kind != TargetKind.Unresolved,
+        TableRowAccessAction a => a.Target.Kind != TargetKind.Unresolved,
+        TableRowTextAccessAction a => a.Target.Kind != TargetKind.Unresolved,
+        _ => false
+    };
 
     void RenderAction(StringBuilder sb, TestAction action)
     {
@@ -427,7 +549,7 @@ public class PlaywrightDotNetRenderer : IRenderer
                 ? sourceRootSymbol
                 : null;
 
-            if (rootSourceOnly != null)
+            if (rootSourceOnly != null && !ActionHasResolvedTarget(action))
             {
                 foreach (var variable in declaredVariables)
                     BlockSymbol(variable);
@@ -1573,7 +1695,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         if (target is MappedTarget mapped && mapped.TestIdAttribute != null && target.Kind == TargetKind.PlaywrightLocator)
         {
             var attr = EscapeAttribute(mapped.TestIdAttribute);
-            var value = EscapeString(mapped.TargetExpression);
+            var value = EscapeString(ExtractTestIdValue(mapped.TargetExpression));
             var expr = $"Page.Locator(\"[{attr}='{value}']\")";
             return ApplyMatchStrategy(expr, mapped);
         }
@@ -1626,7 +1748,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         // Semantic: TargetExpression is a raw test-id value like "submit"
         if (mapped != null)
         {
-            var expr = $"Page.GetByTestId(\"{mapped.TargetExpression}\")";
+            var expr = $"Page.GetByTestId(\"{ExtractTestIdValue(mapped.TargetExpression)}\")";
             return ApplyMatchStrategy(expr, mapped);
         }
 
@@ -1655,6 +1777,15 @@ public class PlaywrightDotNetRenderer : IRenderer
             "Nth" => locatorExpr,
             _ => locatorExpr
         };
+    }
+
+    static string ExtractTestIdValue(string expression)
+    {
+        var trimmed = expression.Trim();
+        var match = Regex.Match(
+            trimmed,
+            @"^(?:Page\.)?GetByTestId\(\s*""(?<value>[^""]+)""\s*\)$");
+        return match.Success ? match.Groups["value"].Value : expression;
     }
 
     static bool IsLegacyPlaywrightFragment(string expr)

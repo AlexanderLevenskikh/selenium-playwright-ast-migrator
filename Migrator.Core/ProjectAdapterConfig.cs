@@ -493,6 +493,13 @@ public sealed class MethodMapping
 public sealed class TestHostConfig
 {
     /// <summary>
+    /// Target test framework used by the renderer for method/setup attributes.
+    /// Supported values: "nunit" (default) and "xunit".
+    /// </summary>
+    [JsonPropertyName("TargetTestFramework")]
+    public string? TargetTestFramework { get; init; }
+
+    /// <summary>
     /// Target namespace for generated file. Overrides source namespace when set.
     /// Example: "Example.E2ETests.Tests"
     /// </summary>

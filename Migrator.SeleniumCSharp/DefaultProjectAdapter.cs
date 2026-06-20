@@ -1151,6 +1151,236 @@ public class DefaultProjectAdapter : IProjectAdapter
         return Regex.Replace(text, @"([=!<>])\s+(=)", "$1$2");
     }
 
+    IEnumerable<TestAction>? TryResolveInvocationText(
+        int sourceLine,
+        string invocationText,
+        ResolvedFileConfig resolved,
+        string? resultVariable)
+    {
+        var parsed = TryParseMethodInvocation(sourceLine, invocationText, resultVariable);
+        if (parsed == null)
+            return null;
+
+        var mapped = TryResolveMethodMapping(parsed, resolved).ToArray();
+        if (!(mapped.Length == 1 && ReferenceEquals(mapped[0], parsed)))
+            return mapped;
+
+        var receiverTarget = ResolveTarget(parsed.ReceiverExpression, resolved);
+        if (receiverTarget.Kind == TargetKind.Unresolved)
+            return null;
+
+        if (parsed.MethodName is "Click" or "ClickAsync")
+        {
+            return new[]
+            {
+                new ClickAction(sourceLine, receiverTarget, RecognitionConfidence.SyntaxFallback)
+            };
+        }
+
+        if ((parsed.MethodName is "SendKeys" or "SendKeysAsync" or "SetValue" or "SetValueAsync") && parsed.ArgumentTexts.Count > 0)
+        {
+            return new[]
+            {
+                new SendKeysAction(sourceLine, receiverTarget, parsed.ArgumentTexts[0], RecognitionConfidence.SyntaxFallback)
+            };
+        }
+
+        return null;
+    }
+
+    static MethodInvocationAction? TryParseMethodInvocation(int sourceLine, string sourceText, string? resultVariable)
+    {
+        var text = sourceText.Trim().TrimEnd(';').Trim();
+        if (text.Length == 0 || !text.EndsWith(")", StringComparison.Ordinal))
+            return null;
+
+        var closeParen = text.Length - 1;
+        var openParen = FindMatchingOpenParen(text, closeParen);
+        if (openParen < 0)
+            return null;
+
+        var methodEnd = openParen - 1;
+        while (methodEnd >= 0 && char.IsWhiteSpace(text[methodEnd]))
+            methodEnd--;
+
+        if (methodEnd >= 0 && text[methodEnd] == '>')
+        {
+            methodEnd = FindGenericMethodNameEnd(text, methodEnd);
+            if (methodEnd < 0)
+                return null;
+        }
+
+        var methodStart = methodEnd;
+        while (methodStart >= 0 && (char.IsLetterOrDigit(text[methodStart]) || text[methodStart] == '_'))
+            methodStart--;
+        methodStart++;
+
+        if (methodStart > methodEnd)
+            return null;
+
+        var dotIndex = methodStart - 1;
+        while (dotIndex >= 0 && char.IsWhiteSpace(text[dotIndex]))
+            dotIndex--;
+        if (dotIndex < 0 || text[dotIndex] != '.')
+            return null;
+
+        var receiver = text.Substring(0, dotIndex).Trim();
+        if (receiver.Length == 0)
+            return null;
+
+        var methodName = text.Substring(methodStart, methodEnd - methodStart + 1);
+        var argsText = text.Substring(openParen + 1, closeParen - openParen - 1);
+        var args = SplitTopLevelArguments(argsText).ToArray();
+
+        return new MethodInvocationAction(
+            sourceLine,
+            receiver,
+            methodName,
+            text,
+            args,
+            resultVariable,
+            RecognitionConfidence.SyntaxFallback);
+    }
+
+    static int FindMatchingOpenParen(string text, int closeParenIndex)
+    {
+        var depth = 0;
+        for (var i = closeParenIndex; i >= 0; i--)
+        {
+            if (text[i] == ')')
+            {
+                depth++;
+                continue;
+            }
+
+            if (text[i] == '(')
+            {
+                depth--;
+                if (depth == 0)
+                    return i;
+            }
+        }
+
+        return -1;
+    }
+
+    static int FindGenericMethodNameEnd(string text, int genericCloseIndex)
+    {
+        var depth = 0;
+        for (var i = genericCloseIndex; i >= 0; i--)
+        {
+            if (text[i] == '>')
+            {
+                depth++;
+                continue;
+            }
+
+            if (text[i] == '<')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    var methodEnd = i - 1;
+                    while (methodEnd >= 0 && char.IsWhiteSpace(text[methodEnd]))
+                        methodEnd--;
+                    return methodEnd;
+                }
+            }
+        }
+
+        return -1;
+    }
+
+    static IEnumerable<string> SplitTopLevelArguments(string argsText)
+    {
+        if (string.IsNullOrWhiteSpace(argsText))
+            yield break;
+
+        var start = 0;
+        var parenDepth = 0;
+        var bracketDepth = 0;
+        var braceDepth = 0;
+        var angleDepth = 0;
+        var inString = false;
+        var stringQuote = '\0';
+        var verbatimString = false;
+
+        for (var i = 0; i < argsText.Length; i++)
+        {
+            var ch = argsText[i];
+            if (inString)
+            {
+                if (verbatimString && ch == '"' && i + 1 < argsText.Length && argsText[i + 1] == '"')
+                {
+                    i++;
+                    continue;
+                }
+
+                if (!verbatimString && ch == '\\')
+                {
+                    i++;
+                    continue;
+                }
+
+                if (ch == stringQuote)
+                    inString = false;
+                continue;
+            }
+
+            if (ch is '"' or '\'')
+            {
+                inString = true;
+                stringQuote = ch;
+                verbatimString = ch == '"' && i > 0 && argsText[i - 1] == '@';
+                continue;
+            }
+
+            switch (ch)
+            {
+                case '(':
+                    parenDepth++;
+                    break;
+                case ')':
+                    parenDepth--;
+                    break;
+                case '[':
+                    bracketDepth++;
+                    break;
+                case ']':
+                    bracketDepth--;
+                    break;
+                case '{':
+                    braceDepth++;
+                    break;
+                case '}':
+                    braceDepth--;
+                    break;
+                case '<':
+                    angleDepth++;
+                    break;
+                case '>':
+                    angleDepth--;
+                    break;
+                case ',' when parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 && angleDepth == 0:
+                    var arg = argsText.Substring(start, i - start).Trim();
+                    if (arg.Length > 0)
+                        yield return arg;
+                    start = i + 1;
+                    break;
+            }
+        }
+
+        var last = argsText.Substring(start).Trim();
+        if (last.Length > 0)
+            yield return last;
+    }
+
+    static string? ExtractDeclaredVariableName(string statement)
+    {
+        var match = Regex.Match(statement, @"^\s*(?:var|[\w<>.,\s]+)\s+(?<name>\w+)\s*=");
+        return match.Success ? match.Groups["name"].Value : null;
+    }
+
     IEnumerable<TestAction> TryResolveRawStatement(RawStatementAction raw, ResolvedFileConfig resolved)
     {
         var text = raw.SourceText.Trim().TrimEnd(';');
@@ -1158,24 +1388,36 @@ public class DefaultProjectAdapter : IProjectAdapter
         if (text.StartsWith("var ", StringComparison.Ordinal) && text.Contains('='))
         {
             var eqIndex = text.IndexOf('=');
+            var resultVariable = ExtractDeclaredVariableName(text);
             var initExpr = text.Substring(eqIndex + 1).Trim();
-            if (initExpr.Contains('('))
+
+            var mappedInit = TryResolveInvocationText(
+                raw.SourceLine,
+                initExpr,
+                resolved,
+                resultVariable);
+            if (mappedInit != null)
+                return mappedInit;
+
+            if (initExpr.Contains('(') && resolved._methodStatementsMap.TryGetValue(initExpr, out var mapping))
             {
-                if (resolved._methodStatementsMap.TryGetValue(initExpr, out var mapping))
+                return new[]
                 {
-                    return new[]
-                    {
-                        new MappedMethodInvocationAction(
-                            raw.SourceLine,
-                            raw.SourceText,
-                            mapping.Statements,
-                            mapping.RequiresReview,
-targetExpr: null,
-                            sourceMethod: null)
-                    };
-                }
+                    new MappedMethodInvocationAction(
+                        raw.SourceLine,
+                        raw.SourceText,
+                        mapping.Statements,
+                        mapping.RequiresReview,
+                        targetExpr: null,
+                        sourceMethod: null,
+                        resultVariable: resultVariable)
+                };
             }
         }
+
+        var mappedRawInvocation = TryResolveInvocationText(raw.SourceLine, text, resolved, resultVariable: null);
+        if (mappedRawInvocation != null)
+            return mappedRawInvocation;
 
         if (resolved._methodStatementsMap.TryGetValue(text, out var stmtMapping))
         {
@@ -1199,6 +1441,14 @@ targetExpr: null,
         var initExpr = lds.InitializationValue.Trim().TrimEnd(';');
         if (initExpr.Contains('('))
         {
+            var mappedInit = TryResolveInvocationText(
+                lds.SourceLine,
+                initExpr,
+                resolved,
+                lds.VariableName);
+            if (mappedInit != null)
+                return mappedInit;
+
             if (resolved._methodStatementsMap.TryGetValue(initExpr, out var mapping))
             {
                 return new[]
@@ -1209,7 +1459,8 @@ targetExpr: null,
                         mapping.Statements,
                         mapping.RequiresReview,
                         targetExpr: null,
-                        sourceMethod: null)
+                        sourceMethod: null,
+                        resultVariable: lds.VariableName)
                 };
             }
         }
@@ -1335,7 +1586,7 @@ targetExpr: null,
         if (mapped.TestIdAttribute != null && mapped.Kind == TargetKind.PlaywrightLocator)
         {
             var attr = EscapeAttr(mapped.TestIdAttribute);
-            var value = EscapeStr(mapped.TargetExpression);
+            var value = EscapeStr(ExtractTestIdValue(mapped.TargetExpression));
             return ApplyMatchStrategy($"Page.Locator(\"[{attr}='{value}']\")", mapped);
         }
 
@@ -1377,7 +1628,7 @@ targetExpr: null,
                     return ApplyMatchStrategy($"Page.{rendered}", mapped);
 
                 // Semantic: raw test-id value — render as Page.GetByTestId
-                var tv = EscapeStr(mapped.TargetExpression);
+                var tv = EscapeStr(ExtractTestIdValue(mapped.TargetExpression));
                 return ApplyMatchStrategy($"Page.GetByTestId(\"{tv}\")", mapped);
         }
     }
@@ -1385,6 +1636,15 @@ targetExpr: null,
     static string EscapeStr(string value) => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
     static string EscapeAttr(string value) => value.Replace("]", "\\]").Replace("[", "\\[");
     static string EscapeAttrValue(string value) => value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("'", "\\'");
+
+    static string ExtractTestIdValue(string expression)
+    {
+        var trimmed = expression.Trim();
+        var match = Regex.Match(
+            trimmed,
+            @"^(?:Page\.)?GetByTestId\(\s*""(?<value>[^""]+)""\s*\)$");
+        return match.Success ? match.Groups["value"].Value : expression;
+    }
 
     static bool IsLegacyPlaywrightFragment(string expr)
     {
@@ -1474,7 +1734,7 @@ targetExpr: null,
             if (mapped.TestIdAttribute != null && mapped.Kind == TargetKind.PlaywrightLocator)
             {
                 var attr = mapped.TestIdAttribute.Replace("]", "\\]").Replace("[", "\\[");
-                var value = mapped.TargetExpression.Replace("\\", "\\\\").Replace("\"", "\\\"");
+                var value = ExtractTestIdValue(mapped.TargetExpression).Replace("\\", "\\\\").Replace("\"", "\\\"");
                 return $"Page.Locator(\"[{attr}='{value}']\")";
             }
 
@@ -1518,7 +1778,7 @@ targetExpr: null,
             if (IsLegacyPlaywrightFragment(rendered))
                 return $"Page.{rendered}";
 
-            var tv2 = mapped.TargetExpression.Replace("\\", "\\\\").Replace("\"", "\\\"");
+            var tv2 = ExtractTestIdValue(mapped.TargetExpression).Replace("\\", "\\\\").Replace("\"", "\\\"");
             return $"Page.GetByTestId(\"{tv2}\")";
         }
 
