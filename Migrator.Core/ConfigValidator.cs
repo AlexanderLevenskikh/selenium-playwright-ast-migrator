@@ -225,7 +225,14 @@ public static class ConfigValidator
                 errors.Add($"{prefix} has missing SourceMethodPattern.");
 
             if (m.TargetStatements == null || m.TargetStatements.Length == 0)
-                errors.Add($"{prefix} has missing TargetStatements.");
+            {
+                if (string.IsNullOrWhiteSpace(m.TargetExpression))
+                    errors.Add($"{prefix} has missing TargetStatements or TargetExpression.");
+            }
+            else if (!string.IsNullOrWhiteSpace(m.TargetExpression))
+            {
+                errors.Add($"{prefix} has both TargetStatements and TargetExpression; they are mutually exclusive. Use one or the other.");
+            }
         }
     }
 

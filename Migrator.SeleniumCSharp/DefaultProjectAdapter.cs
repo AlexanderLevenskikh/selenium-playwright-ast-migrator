@@ -549,12 +549,8 @@ public class DefaultProjectAdapter : IProjectAdapter
                 ResolveTargetWithLocalVars(press.Target.SourceExpression, resolved, localVariableMappings),
                 press.KeyName,
                 press.Confidence) },
-            TextAssertionAction ta => new[] { new TextAssertionAction(
-                ta.SourceLine,
-                ResolveTargetWithLocalVars(ta.Target.SourceExpression, resolved, localVariableMappings),
-                ta.Kind,
-                ta.ExpectedValue,
-                ta.Confidence) },
+            TextAssertionAction ta => TryResolveTextAssertionWithTarget(ta, resolved,
+                ResolveTargetWithLocalVars(ta.Target.SourceExpression, resolved, localVariableMappings)),
             VisibilityAssertionAction va => new[] { new VisibilityAssertionAction(
                 va.SourceLine,
                 ResolveTargetWithLocalVars(va.Target.SourceExpression, resolved, localVariableMappings),
@@ -694,12 +690,7 @@ public class DefaultProjectAdapter : IProjectAdapter
                 ResolveTarget(press.Target.SourceExpression, resolved),
                 press.KeyName,
                 press.Confidence) },
-            TextAssertionAction ta => new[] { new TextAssertionAction(
-                ta.SourceLine,
-                ResolveTarget(ta.Target.SourceExpression, resolved),
-                ta.Kind,
-                ta.ExpectedValue,
-                ta.Confidence) },
+            TextAssertionAction ta => TryResolveTextAssertionWithMapping(ta, resolved),
             TableRowTextAccessAction trt => new[] { new TableRowTextAccessAction(
                 trt.SourceLine,
                 ResolveTarget(trt.Target.SourceExpression, resolved),
@@ -739,6 +730,75 @@ public class DefaultProjectAdapter : IProjectAdapter
         };
     }
 
+    IEnumerable<TestAction> TryResolveTextAssertionWithMapping(TextAssertionAction ta, ResolvedFileConfig resolved)
+    {
+        var resolvedTargetExpr = ResolveTarget(ta.Target.SourceExpression, resolved);
+        return TryResolveTextAssertionWithTarget(ta, resolved, resolvedTargetExpr);
+    }
+
+    IEnumerable<TestAction> TryResolveTextAssertionWithTarget(TextAssertionAction ta, ResolvedFileConfig resolved, TargetExpression resolvedTargetExpr)
+    {
+        var fullSource = (ta.FullSourceText ?? "").TrimEnd(';');
+        if (string.IsNullOrEmpty(fullSource))
+        {
+            return new[] { new TextAssertionAction(
+                ta.SourceLine,
+                resolvedTargetExpr,
+                ta.Kind,
+                ta.ExpectedValue,
+                ta.Confidence,
+                ta.FullSourceText) };
+        }
+        foreach (var mapping in resolved._parameterizedMethods)
+        {
+            var mi = new MethodInvocationAction(
+                ta.SourceLine,
+                ta.Target.SourceExpression,
+                "Be",
+                ta.FullSourceText,
+                new[] { ta.ExpectedValue },
+                ta.Confidence);
+            var placeholders = TryMatchPattern(mapping.SourceMethodPattern, fullSource, mi.ArgumentTexts);
+            if (placeholders != null)
+            {
+                if (!placeholders.ContainsKey("source"))
+                    placeholders["source"] = new PlaceholderValue(ta.Target.SourceExpression, ta.Target.SourceExpression, IsStringLiteral: false);
+                if (!placeholders.ContainsKey("element"))
+                    placeholders["element"] = new PlaceholderValue(ta.Target.SourceExpression, ta.Target.SourceExpression, IsStringLiteral: false);
+                NormalizeFluentAssertionsPlaceholders(placeholders);
+                var adapterTarget = TryResolveReceiverTarget(ta.Target.SourceExpression, resolved);
+                if (!string.IsNullOrWhiteSpace(mapping.TargetExpression))
+                {
+                    var resolvedExpr = SubstitutePlaceholders(mapping.TargetExpression, placeholders);
+                    return new[] { new MappedExpressionAssertionAction(
+                        ta.SourceLine,
+                        ta.FullSourceText,
+                        resolvedExpr,
+                        mapping.RequiresReview,
+                        adapterTarget,
+                        mapping.SourceMethodPattern) };
+                }
+                var resolvedStatements = mapping.TargetStatements?.Select(stmt => SubstitutePlaceholders(stmt, placeholders)).ToArray()
+                    ?? Array.Empty<string>();
+                return new[] { new MappedMethodInvocationAction(
+                    ta.SourceLine,
+                    ta.FullSourceText,
+                    resolvedStatements,
+                    mapping.RequiresReview,
+                    adapterTarget,
+                    mapping.SourceMethodPattern,
+                    resultVariable: null) };
+            }
+        }
+        return new[] { new TextAssertionAction(
+            ta.SourceLine,
+            resolvedTargetExpr,
+            ta.Kind,
+            ta.ExpectedValue,
+            ta.Confidence,
+            ta.FullSourceText) };
+    }
+
     IEnumerable<TestAction> TryResolveMethodMapping(MethodInvocationAction mi, ResolvedFileConfig resolved)
     {
         var fullText = mi.FullSourceText.TrimEnd(';');
@@ -769,8 +829,17 @@ public class DefaultProjectAdapter : IProjectAdapter
         // must not steal those actions before ParameterizedMethods["{source}.Click<{T}>()"]
         // can emit the follow-up page variable declaration.
         var paramResult = TryMatchParameterized(mi, resolved);
-        if (paramResult != null && !string.IsNullOrWhiteSpace(mi.ResultVariable))
+        if (paramResult is MappedMethodInvocationAction mappedResult)
+        {
+            if (!string.IsNullOrWhiteSpace(mi.ResultVariable))
+                return new[] { mappedResult };
+            // Store for later use if not consumed by result-variable path
+        }
+        else if (paramResult != null)
+        {
+            // Expression mapping or other action type — return immediately
             return new[] { paramResult };
+        }
 
         // 3. Generic receiver MethodMapping, e.g. Methods["element.WaitDisabled()"].
         // Here "element" is a reusable receiver slot, not a literal source object.
@@ -875,7 +944,7 @@ public class DefaultProjectAdapter : IProjectAdapter
         return null;
     }
 
-    MappedMethodInvocationAction? TryMatchParameterized(MethodInvocationAction mi, ResolvedFileConfig resolved)
+    TestAction? TryMatchParameterized(MethodInvocationAction mi, ResolvedFileConfig resolved)
     {
         var fullText = mi.FullSourceText.TrimEnd(';');
 
@@ -893,10 +962,23 @@ public class DefaultProjectAdapter : IProjectAdapter
 
                 if (!string.IsNullOrWhiteSpace(mi.ResultVariable))
                 {
-                    // Special placeholder for assignment-pattern mappings, e.g.
-                    // var page = Browser.GoToPage<Page>(Page.Uri);
-                    // TargetStatements can use {result} to keep the generated local name.
                     placeholders["result"] = new PlaceholderValue(mi.ResultVariable!, mi.ResultVariable!, IsStringLiteral: false);
+                }
+
+                var receiverForTarget = StripTerminalShouldInvocation(mi.ReceiverExpression);
+                var resolvedTarget = TryResolveReceiverTarget(receiverForTarget, resolved);
+
+                // Expression mapping takes priority over statement mapping
+                if (!string.IsNullOrWhiteSpace(mapping.TargetExpression))
+                {
+                    var resolvedExpr = SubstitutePlaceholders(mapping.TargetExpression, placeholders);
+                    return new MappedExpressionAssertionAction(
+                        mi.SourceLine,
+                        mi.FullSourceText,
+                        resolvedExpr,
+                        mapping.RequiresReview,
+                        resolvedTarget,
+                        mapping.SourceMethodPattern);
                 }
 
                 string[] resolvedStatements;
@@ -911,8 +993,6 @@ public class DefaultProjectAdapter : IProjectAdapter
                     resolvedStatements = Array.Empty<string>();
                 }
 
-                var receiverForTarget = StripTerminalShouldInvocation(mi.ReceiverExpression);
-                var resolvedTarget = TryResolveReceiverTarget(receiverForTarget, resolved);
                 return new MappedMethodInvocationAction(
                     mi.SourceLine,
                     mi.FullSourceText,

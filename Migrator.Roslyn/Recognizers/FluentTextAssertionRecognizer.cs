@@ -19,21 +19,21 @@ public class FluentTextAssertionRecognizer : IInvocationRecognizer
             case "Be":
                 var expectedBe = ctx.ArgumentTexts.FirstOrDefault();
                 if (expectedBe != null)
-                    return new TextAssertionAction(ctx.SourceLine, target, TextAssertionKind.TextEquals, expectedBe, RecognitionConfidence.SyntaxFallback);
+                    return new TextAssertionAction(ctx.SourceLine, target, TextAssertionKind.TextEquals, expectedBe, RecognitionConfidence.SyntaxFallback, ctx.FullText);
                 break;
             case "NotBeEmpty":
-                return new TextAssertionAction(ctx.SourceLine, target, TextAssertionKind.TextNotEmpty, null, RecognitionConfidence.SyntaxFallback);
+                return new TextAssertionAction(ctx.SourceLine, target, TextAssertionKind.TextNotEmpty, null, RecognitionConfidence.SyntaxFallback, ctx.FullText);
             case "BeEmpty":
-                return new TextAssertionAction(ctx.SourceLine, target, TextAssertionKind.TextEmpty, null, RecognitionConfidence.SyntaxFallback);
+                return new TextAssertionAction(ctx.SourceLine, target, TextAssertionKind.TextEmpty, null, RecognitionConfidence.SyntaxFallback, ctx.FullText);
             case "Contain":
                 var expectedContain = ctx.ArgumentTexts.FirstOrDefault();
                 if (expectedContain != null)
-                    return new TextAssertionAction(ctx.SourceLine, target, TextAssertionKind.TextContains, expectedContain, RecognitionConfidence.SyntaxFallback);
+                    return new TextAssertionAction(ctx.SourceLine, target, TextAssertionKind.TextContains, expectedContain, RecognitionConfidence.SyntaxFallback, ctx.FullText);
                 break;
             case "NotBe":
                 var expectedNotBe = ctx.ArgumentTexts.FirstOrDefault();
                 if (expectedNotBe != null)
-                    return new TextAssertionAction(ctx.SourceLine, target, TextAssertionKind.TextNotEquals, expectedNotBe, RecognitionConfidence.SyntaxFallback);
+                    return new TextAssertionAction(ctx.SourceLine, target, TextAssertionKind.TextNotEquals, expectedNotBe, RecognitionConfidence.SyntaxFallback, ctx.FullText);
                 break;
         }
 

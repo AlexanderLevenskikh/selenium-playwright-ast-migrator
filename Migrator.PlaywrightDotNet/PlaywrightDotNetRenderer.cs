@@ -30,11 +30,19 @@ public class PlaywrightDotNetRenderer : IRenderer
     HashSet<string> _suppressedMethods = new(StringComparer.Ordinal);
     IReadOnlyList<string> _suppressedMethodPatterns = Array.Empty<string>();
     TargetTestFramework _targetTestFramework = TargetTestFramework.NUnit;
-    bool _useAssertionsExpect = false;
+    bool _useAssertionsExpect;
+    bool _useAssertionsExpectExplicit;
 
     public PlaywrightDotNetRenderer(string indent = "\t")
     {
         _indent = indent;
+    }
+
+    public PlaywrightDotNetRenderer(bool useAssertionsExpect, string indent = "\t")
+    {
+        _indent = indent;
+        _useAssertionsExpect = useAssertionsExpect;
+        _useAssertionsExpectExplicit = true;
     }
 
     static TargetTestFramework ResolveTargetTestFramework(TestHostConfig? testHost)
@@ -82,7 +90,8 @@ public class PlaywrightDotNetRenderer : IRenderer
         var targetNamespace = testHost?.Namespace ?? model.Namespace;
         var className = testHost?.ClassName ?? (model.ClassName + "Playwright");
         var baseClass = testHost?.BaseClass ?? "PageTest";
-        _useAssertionsExpect = baseClass != "PageTest";
+        if (!_useAssertionsExpectExplicit)
+            _useAssertionsExpect = baseClass != "PageTest";
         var hasTestHostSetup = testHost?.SetUpStatements != null && testHost.SetUpStatements.Length > 0;
         var hasGeneratedSetup = hasTestHostSetup || model.SetUpActions.Any();
 
@@ -486,6 +495,9 @@ public class PlaywrightDotNetRenderer : IRenderer
             case MappedMethodInvocationAction mappedInv:
                 RenderMappedMethodInvocation(sb, mappedInv);
                 break;
+            case MappedExpressionAssertionAction mappedExpr:
+                RenderMappedExpressionAssertion(sb, mappedExpr);
+                break;
             case UnsupportedAction unsupported:
                 RenderUnsupported(sb, unsupported);
                 break;
@@ -541,12 +553,19 @@ public class PlaywrightDotNetRenderer : IRenderer
             return;
 
         // Method mappings are explicit adapter/profile decisions. Their source text often
-        // starts with a Selenium-only root such as Browser/page/pagef, but the TargetStatements
+        // starts with a Selenium/POM root such as Browser/page/pagef, but the TargetStatements
         // are already target-side code. Do not block them by source-root safety; unresolved
         // placeholders are handled safely inside RenderMappedMethodInvocation.
         if (action is MappedMethodInvocationAction mappedMethod)
         {
             RenderMappedMethodInvocation(sb, mappedMethod);
+            return;
+        }
+
+        // Expression mappings are also explicit adapter/profile decisions.
+        if (action is MappedExpressionAssertionAction mappedExpr)
+        {
+            RenderMappedExpressionAssertion(sb, mappedExpr);
             return;
         }
 
@@ -1117,7 +1136,7 @@ public class PlaywrightDotNetRenderer : IRenderer
 
             if (_useAssertionsExpect && substituted.Contains("Expect("))
             {
-                substituted = substituted.Replace("Expect(", "Assertions.Expect(");
+                substituted = SubstituteExpectPrefix(substituted);
             }
 
             if (hasUnresolved)
@@ -1135,6 +1154,65 @@ public class PlaywrightDotNetRenderer : IRenderer
             AppendSmartTodo(
                 sb,
                 $"mapped method requires manual review — {EscapeComment(action.FullSourceText)}",
+                "MAPPED_REQUIRES_REVIEW",
+                "Adapter config explicitly marked this mapping as requiring review.",
+                "Verify target semantics; remove RequiresReview only when the mapping is proven safe.");
+        }
+    }
+
+    void RenderMappedExpressionAssertion(StringBuilder sb, MappedExpressionAssertionAction action)
+    {
+        var expr = action.TargetExpressionTemplate;
+
+        // Substitute {TARGET} with resolved target expression
+        var hasUnresolved = false;
+        if (expr.Contains("{TARGET}"))
+        {
+            if (action.TargetExpr != null && action.TargetExpr.Kind != TargetKind.Unresolved)
+            {
+                var targetExpr = RenderTargetExpression(action.TargetExpr);
+                expr = expr.Replace("{TARGET}", targetExpr);
+            }
+            else
+            {
+                hasUnresolved = true;
+            }
+        }
+
+        // Check for remaining unknown placeholders
+        if (!hasUnresolved)
+        {
+            var remaining = FindRemainingPlaceholders(expr);
+            if (remaining.Length > 0)
+            {
+                hasUnresolved = true;
+            }
+        }
+
+        if (_useAssertionsExpect && expr.Contains("Expect("))
+        {
+            expr = SubstituteExpectPrefix(expr);
+        }
+
+        expr = NormalizeGeneratedCSharpStatement(expr);
+
+        if (hasUnresolved)
+        {
+            RenderMappedTargetStatementAsComment(sb, expr, action.SourceMethod, action.SourceLine);
+        }
+        else
+        {
+            var stmt = expr.Trim();
+            if (!stmt.EndsWith(";", StringComparison.Ordinal))
+                stmt += ";";
+            sb.AppendLine($"{_indent}{_indent}{stmt} // line {action.SourceLine}");
+        }
+
+        if (action.RequiresReview)
+        {
+            AppendSmartTodo(
+                sb,
+                $"mapped expression requires manual review — {EscapeComment(action.FullSourceText)}",
                 "MAPPED_REQUIRES_REVIEW",
                 "Adapter config explicitly marked this mapping as requiring review.",
                 "Verify target semantics; remove RequiresReview only when the mapping is proven safe.");
@@ -2184,6 +2262,14 @@ public class PlaywrightDotNetRenderer : IRenderer
     }
 
     string ExpectCall() => _useAssertionsExpect ? "Assertions.Expect" : "Expect";
+
+    string SubstituteExpectPrefix(string expr)
+    {
+        return System.Text.RegularExpressions.Regex.Replace(
+            expr,
+            @"(?<![A-Za-z0-9_\.])Expect\s*\(",
+            "Assertions.Expect(");
+    }
 
     void RenderTableRowTextAccess(StringBuilder sb, TableRowTextAccessAction action)
     {

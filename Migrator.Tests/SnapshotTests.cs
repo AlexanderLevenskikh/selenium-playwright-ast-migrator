@@ -4461,3 +4461,531 @@ public class TestIdBeginningPipelineTests
             CompileChecker.FormatErrors(output));
     }
 }
+
+public class TargetExpressionTests
+{
+    readonly RoslynTestFileParser _parser = new();
+
+    // --- TargetExpression / MappedExpressionAssertionAction tests ---
+
+    [Fact]
+    public void TargetExpression_ChainedShouldBe_ProducesMappedExpressionAssertionAction()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-targetexpr-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file,
+@"namespace Sample.E2ETests
+{
+    public class ChainedAssertionTests
+    {
+        [Test]
+        public void AssertValue()
+        {
+            page.ReportsSubtotalSalesAmount.Sum.Get().Should().Be(2988323.95m);
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var config = new ProjectAdapterConfig(
+                "Test",
+                new[]
+                {
+                    new UiTargetMapping("page.ReportsSubtotalSalesAmount.Sum", "Page.Locator(\"#subtotal\")", "RawExpression")
+                },
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>(),
+                ParameterizedMethods: new[]
+                {
+                    new ParameterizedMethodMapping(
+                        "{source}.Get().Should().Be({expected})",
+                        Array.Empty<string>(),
+                        requiresReview: false,
+                        targetExpression: "await Expect({TARGET}).ToHaveTextAsync({expected})")
+                });
+
+            var adapter = new DefaultProjectAdapter(config);
+            var adapted = adapter.Adapt(sourceModel);
+            var action = adapted.Tests.Single().BodyActions.Single();
+
+            // Must produce MappedExpressionAssertionAction via TargetExpression, not TextAssertionAction
+            Assert.IsType<MappedExpressionAssertionAction>(action);
+
+            var mappedAction = (MappedExpressionAssertionAction)action;
+            // {expected} is substituted by adapter; {TARGET} remains for renderer to substitute
+            Assert.Contains("ToHaveTextAsync", mappedAction.TargetExpressionTemplate);
+            Assert.Contains("{TARGET}", mappedAction.TargetExpressionTemplate);
+            Assert.DoesNotContain("{expected}", mappedAction.TargetExpressionTemplate);
+
+            var output = new PlaywrightDotNetRenderer().Render(adapted);
+
+            Assert.Contains("await Expect(Page.Locator(\"#subtotal\")).ToHaveTextAsync(2988323.95m);", output);
+            Assert.DoesNotContain("page.ReportsSubtotalSalesAmount.Sum.Get().Should()", output);
+            Assert.DoesNotContain("SOURCE_ONLY_IDENTIFIER", output);
+            Assert.DoesNotContain("EMPTY_TEST_AFTER_SUPPRESSION", output);
+            Assert.DoesNotContain("ASSERTION_SUPPRESSION_BLOCKED", output);
+            Assert.DoesNotContain(".Get();", output);
+            Assert.DoesNotContain("MIGRATOR:", output);
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void TargetExpression_UnresolvedTarget_RendersCommentNotActiveCode()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-unresolved-target-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file,
+@"namespace Sample.E2ETests
+{
+    public class UnresolvedTargetTests
+    {
+        [Test]
+        public void AssertUnknown()
+        {
+            page.Unknown.Sum.Get().Should().Be(123);
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var config = new ProjectAdapterConfig(
+                "Test",
+                Array.Empty<UiTargetMapping>(),
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>(),
+                ParameterizedMethods: new[]
+                {
+                    new ParameterizedMethodMapping(
+                        "{source}.Get().Should().Be({expected})",
+                        Array.Empty<string>(),
+                        requiresReview: false,
+                        targetExpression: "await Expect({TARGET}).ToHaveTextAsync({expected})")
+                });
+
+            var adapter = new DefaultProjectAdapter(config);
+            var adapted = adapter.Adapt(sourceModel);
+            var action = adapted.Tests.Single().BodyActions.Single();
+
+            // Should produce MappedExpressionAssertionAction with unresolved target
+            Assert.IsType<MappedExpressionAssertionAction>(action);
+            var mappedAction = (MappedExpressionAssertionAction)action;
+            // TargetExpr is null when adapter cannot resolve the receiver target
+            Assert.Null(mappedAction.TargetExpr);
+
+            // Unresolved target renders as TODO comment, not active assertion code
+            var output = new PlaywrightDotNetRenderer().Render(adapted);
+            Assert.Contains("// TODO:", output);
+            Assert.Contains("UNRESOLVED_PLACEHOLDER", output);
+            // No active (non-comment) line should contain the assertion
+            var activeLines = output.Split('\n').Where(l => !l.TrimStart().StartsWith("//")).ToArray();
+            Assert.DoesNotContain("await Expect(", string.Join("\n", activeLines));
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void TargetExpression_UnknownPlaceholder_RendersCommentNotActiveCode()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-unknown-placeholder-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file,
+@"namespace Sample.E2ETests
+{
+    public class UnknownPlaceholderTests
+    {
+        [Test]
+        public void AssertPlaceholder()
+        {
+            page.Value.Get().Should().Be(42);
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var config = new ProjectAdapterConfig(
+                "Test",
+                new[]
+                {
+                    new UiTargetMapping("page.Value", "Page.Locator(\"#value\")", "RawExpression")
+                },
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>(),
+                ParameterizedMethods: new[]
+                {
+                    new ParameterizedMethodMapping(
+                        "{source}.Get().Should().Be({expected})",
+                        Array.Empty<string>(),
+                        requiresReview: false,
+                        targetExpression: "await Expect({TARGET}).ToHaveTextAsync({missing})")
+                });
+
+            var adapter = new DefaultProjectAdapter(config);
+            var adapted = adapter.Adapt(sourceModel);
+
+            // Unknown placeholder renders as comment/TODO, not active code
+            var output = new PlaywrightDotNetRenderer().Render(adapted);
+
+            Assert.Contains("// TODO:", output);
+            Assert.Contains("UNRESOLVED_PLACEHOLDER", output);
+            // Check no active (non-comment) line contains the assertion
+            var activeLines = output.Split('\n').Where(l => !l.TrimStart().StartsWith("//")).ToArray();
+            Assert.DoesNotContain("await Expect(", string.Join("\n", activeLines));
+            Assert.DoesNotContain("{missing}", string.Join("\n", activeLines));
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void TargetExpression_RequiresReview_AppendsReviewTodo()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-requires-review-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file,
+@"namespace Sample.E2ETests
+{
+    public class RequiresReviewTests
+    {
+        [Test]
+        public void AssertWithReview()
+        {
+            page.Value.Get().Should().Be(42);
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var config = new ProjectAdapterConfig(
+                "Test",
+                new[]
+                {
+                    new UiTargetMapping("page.Value", "Page.Locator(\"#value\")", "RawExpression")
+                },
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>(),
+                ParameterizedMethods: new[]
+                {
+                    new ParameterizedMethodMapping(
+                        "{source}.Get().Should().Be({expected})",
+                        Array.Empty<string>(),
+                        requiresReview: true,
+                        targetExpression: "await Expect({TARGET}).ToHaveTextAsync({expected})")
+                });
+
+            var adapter = new DefaultProjectAdapter(config);
+            var adapted = adapter.Adapt(sourceModel);
+
+            var output = new PlaywrightDotNetRenderer().Render(adapted);
+
+            // Active assertion rendered
+            Assert.Contains("await Expect(Page.Locator(\"#value\")).ToHaveTextAsync(42);", output);
+            // Review TODO appended
+            Assert.Contains("MAPPED_REQUIRES_REVIEW", output);
+            Assert.Contains("mapped expression requires manual review", output);
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void TargetExpression_UseAssertionsExpect_DoesNotDoublePrefix()
+    {
+        var mappedTarget = TargetExpression.Mapped("page.Value", "Page.Locator(\"#value\")", TargetKind.RawExpression);
+
+        // Case A: bare Expect — should get prefixed to Assertions.Expect
+        var actionBare = new MappedExpressionAssertionAction(
+            1, "page.Value.Get().Should().Be(42)",
+            "await Expect({TARGET}).ToHaveTextAsync(42)",
+            requiresReview: false,
+            targetExpr: mappedTarget);
+
+        var renderer = new PlaywrightDotNetRenderer(useAssertionsExpect: true);
+        var outputBare = renderer.Render(new TestFileModel(
+            FilePath: "test.cs", Namespace: "T", ClassName: "C", BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[] { new TestModel("TestBare", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(), new[] { actionBare }) }));
+
+        Assert.Contains("await Assertions.Expect(Page.Locator(\"#value\")).ToHaveTextAsync(42);", outputBare);
+
+        // Case B: already prefixed Assertions.Expect — must NOT become Assertions.Assertions.Expect
+        var actionPrefixed = new MappedExpressionAssertionAction(
+            1, "page.Value.Get().Should().Be(42)",
+            "await Assertions.Expect({TARGET}).ToHaveTextAsync(42)",
+            requiresReview: false,
+            targetExpr: mappedTarget);
+
+        var outputPrefixed = new PlaywrightDotNetRenderer(useAssertionsExpect: true).Render(new TestFileModel(
+            FilePath: "test.cs", Namespace: "T", ClassName: "C", BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[] { new TestModel("TestPrefixed", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(), new[] { actionPrefixed }) }));
+
+        Assert.Contains("await Assertions.Expect(Page.Locator(\"#value\")).ToHaveTextAsync(42);", outputPrefixed);
+        Assert.DoesNotContain("Assertions.Assertions.Expect", outputPrefixed);
+
+        // Case C: MyExpect — must NOT be changed
+        var actionMyExpect = new MappedExpressionAssertionAction(
+            1, "page.Value.Get().Should().Be(42)",
+            "await MyExpect({TARGET}).ToHaveTextAsync(42)",
+            requiresReview: false,
+            targetExpr: mappedTarget);
+
+        var outputMyExpect = new PlaywrightDotNetRenderer(useAssertionsExpect: true).Render(new TestFileModel(
+            FilePath: "test.cs", Namespace: "T", ClassName: "C", BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[] { new TestModel("TestMyExpect", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(), new[] { actionMyExpect }) }));
+
+        Assert.Contains("MyExpect(Page.Locator(\"#value\"))", outputMyExpect);
+        Assert.DoesNotContain("MyAssertions.Expect", outputMyExpect);
+
+        // Case D: Some.Expect — must NOT be changed (dot before Expect)
+        var actionDotExpect = new MappedExpressionAssertionAction(
+            1, "page.Value.Get().Should().Be(42)",
+            "await Some.Expect({TARGET}).ToHaveTextAsync(42)",
+            requiresReview: false,
+            targetExpr: mappedTarget);
+
+        var outputDotExpect = new PlaywrightDotNetRenderer(useAssertionsExpect: true).Render(new TestFileModel(
+            FilePath: "test.cs", Namespace: "T", ClassName: "C", BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[] { new TestModel("TestDotExpect", null, Array.Empty<TestCaseData>(), Array.Empty<MethodParameterModel>(), new[] { actionDotExpect }) }));
+
+        Assert.Contains("Some.Expect(Page.Locator(\"#value\"))", outputDotExpect);
+        Assert.DoesNotContain("Some.Assertions.Expect", outputDotExpect);
+    }
+
+    // --- Standard TextAssertionAction test (scope clarity) ---
+
+    [Fact]
+    public void FluentTextAssertion_GetShouldBe_UsesTextAssertionAction()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-standard-text-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file,
+@"namespace Sample.E2ETests
+{
+    public class StandardTextAssertionTests
+    {
+        [Test]
+        public void AssertValue()
+        {
+            page.Label.Text.Get().Should().Be(""hello"");
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var config = new ProjectAdapterConfig(
+                "Test",
+                new[]
+                {
+                    new UiTargetMapping("page.Label", "Page.Locator(\"#label\")", "RawExpression")
+                },
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>(),
+                ParameterizedMethods: Array.Empty<ParameterizedMethodMapping>());
+
+            var adapter = new DefaultProjectAdapter(config);
+            var adapted = adapter.Adapt(sourceModel);
+            var action = adapted.Tests.Single().BodyActions.Single();
+
+            // Without TargetExpression mapping, standard path produces TextAssertionAction
+            Assert.IsType<TextAssertionAction>(action);
+
+            var output = new PlaywrightDotNetRenderer().Render(adapted);
+            Assert.Contains("hello", output);
+            Assert.DoesNotContain("MappedExpressionAssertionAction", output);
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    // --- Config validation tests ---
+
+    [Fact]
+    public void ConfigValidator_ParameterizedMethod_TargetExpressionOnly_IsValid()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "{source}.Click()",
+                    Array.Empty<string>(),
+                    requiresReview: false,
+                    targetExpression: "await {TARGET}.ClickAsync()")
+            });
+
+        ConfigValidator.Validate(config);
+    }
+
+    [Fact]
+    public void ConfigValidator_ParameterizedMethod_TargetExpressionAndTargetStatements_IsInvalid()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "{source}.Click()",
+                    new[] { "await {TARGET}.ClickAsync();" },
+                    requiresReview: false,
+                    targetExpression: "await {TARGET}.ClickAsync()")
+            });
+
+        var ex = Assert.Throws<ConfigValidationError>(() => ConfigValidator.Validate(config));
+
+        Assert.Contains("TargetStatements", string.Join("\n", ex.Errors));
+        Assert.Contains("TargetExpression", string.Join("\n", ex.Errors));
+        Assert.Contains("mutually exclusive", string.Join("\n", ex.Errors));
+    }
+
+    // --- Regression: TargetStatements still works via ParameterizedMethods ---
+
+    [Fact]
+    public void TargetStatements_CustomMethod_MapsViaParameterizedMethods()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-stmts-regression-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file,
+@"namespace Sample.E2ETests
+{
+    public class StatementMappingTests
+    {
+        [Test]
+        public void RefreshTotals()
+        {
+            page.CustomWidget.RefreshTotals();
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var config = new ProjectAdapterConfig(
+                "Test",
+                new[]
+                {
+                    new UiTargetMapping("page.CustomWidget", "Page.Locator(\"#widget\")", "RawExpression")
+                },
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>(),
+                ParameterizedMethods: new[]
+                {
+                    new ParameterizedMethodMapping(
+                        "{source}.RefreshTotals()",
+                        new[] { "await {TARGET}.ClickAsync();" },
+                        requiresReview: false)
+                });
+
+            var adapter = new DefaultProjectAdapter(config);
+            var adapted = adapter.Adapt(sourceModel);
+            var action = adapted.Tests.Single().BodyActions.Single();
+
+            // Must go through ParameterizedMethods, not built-in recognizer
+            Assert.IsType<MappedMethodInvocationAction>(action);
+
+            var output = new PlaywrightDotNetRenderer().Render(adapted);
+
+            Assert.Contains("await Page.Locator(\"#widget\").ClickAsync();", output);
+            Assert.DoesNotContain("page.CustomWidget.RefreshTotals()", output);
+            Assert.DoesNotContain("MIGRATOR:", output);
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    // --- Regression: ResultVariable still works ---
+
+    [Fact]
+    public void ResultVariable_GoToPage_PreservesLocalVariable()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-resultvar-regression-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file,
+@"namespace Sample.E2ETests
+{
+    public class ResultVariableTests
+    {
+        [Test]
+        public void OpenPage()
+        {
+            var productChoosingPage = Browser.GoToPage<DiscountsProductChoosingPage>(DiscountsProductChoosingPage.Uri);
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var config = new ProjectAdapterConfig(
+                "Test",
+                Array.Empty<UiTargetMapping>(),
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>(),
+                ParameterizedMethods: new[]
+                {
+                    new ParameterizedMethodMapping(
+                        "Browser.GoToPage<{T}>({url})",
+                        new[] { "var {result} = await Navigation.GoToPageAsync<{T}>({url});" },
+                        requiresReview: false)
+                });
+
+            var adapter = new DefaultProjectAdapter(config);
+            var adapted = adapter.Adapt(sourceModel);
+            var action = adapted.Tests.Single().BodyActions.Single();
+
+            // Must be MappedMethodInvocationAction with result variable preserved
+            Assert.IsType<MappedMethodInvocationAction>(action);
+            var mappedAction = (MappedMethodInvocationAction)action;
+            Assert.Equal("productChoosingPage", mappedAction.ResultVariable);
+
+            var output = new PlaywrightDotNetRenderer().Render(adapted);
+
+            Assert.Contains("var productChoosingPage= await Navigation.GoToPageAsync<DiscountsProductChoosingPage>(DiscountsProductChoosingPage.Uri);", output);
+            Assert.DoesNotContain("Browser.GoToPage", output);
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+}

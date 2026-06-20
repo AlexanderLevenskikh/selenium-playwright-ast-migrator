@@ -568,13 +568,27 @@ public sealed class ParameterizedMethodMapping
     /// </summary>
     public string? Description { get; init; }
 
+    /// <summary>
+    /// When set, the matched invocation is treated as an expression mapping instead of a statement mapping.
+    /// The value is a full C# expression template with placeholder support.
+    /// Mutually exclusive with TargetStatements: use one or the other.
+    /// 
+    /// For chained assertions like "page.X.Get().Should().Be(expected)", the config can define:
+    ///   SourceMethodPattern: "page.X.Get().Should().Be({expected})"
+    ///   TargetExpression: "await Assertions.Expect({TARGET}).ToEqualAsync({expected})"
+    /// The renderer emits the expression as a single statement (with semicolon).
+    /// </summary>
+    [JsonPropertyName("TargetExpression")]
+    public string? TargetExpression { get; init; }
+
     public ParameterizedMethodMapping() { }
-    public ParameterizedMethodMapping(string sourceMethodPattern, string[]? targetStatements, bool requiresReview, string? description = null)
+    public ParameterizedMethodMapping(string sourceMethodPattern, string[]? targetStatements, bool requiresReview, string? description = null, string? targetExpression = null)
     {
         SourceMethodPattern = sourceMethodPattern;
         TargetStatements = targetStatements;
         RequiresReview = requiresReview;
         Description = description;
+        TargetExpression = targetExpression;
     }
 }
 
