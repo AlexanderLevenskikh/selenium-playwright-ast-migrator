@@ -85,6 +85,16 @@ Broad suppressions по `page.*.*`, `pagef.*.*`, `lightbox.*.*`, `modal.*.*`, `d
 
 Цель — не переводить старый POM 1:1 любой ценой, а сохранить source truth и не потерять смысл тестов. Подробности: `docs/pom-recovery-policy.md`.
 
+## Suppression safety
+
+Suppression нельзя использовать как способ уменьшить TODO count. Запрещены broad suppressions для assertions и пользовательских действий:
+
+- `*.*.Should(*)`, `*.*.Should()`, `*Assert*`, `*Expect*`, `*Wait().EqualTo(*)`;
+- `*lightbox.*.Click(*)`, `*modal.*.Click(*)`, `*.*.SendKeys(*)`, `*.*.Fill(*)`, `*.*.SetValue(*)`, `*.*.Hover*`;
+- root-only patterns вроде `*page.RowCostTable.Rows*`, если они могут захватить assertions/actions.
+
+Если строка проверяет текст, значение, количество, видимость, URL или бизнес-данные — делай assertion mapping или оставляй failing/manual TODO. Нельзя превращать её в comment-only suppressed source.
+
 ## Project-aware verify
 
 Для настоящей компиляции generated Playwright-кода используй режим `verify-project`, а не только standalone `verify`. Он создаёт временный `.csproj` в `--out/project-verify`, подключает generated-файлы, project/package references из `adapter-config.json` (`Verification`), умеет искать ближайший `.csproj`, рекурсивные `ProjectReference`, `Directory.Build.props/targets`, `Directory.Packages.props`, и классифицирует build diagnostics по причинам. Исходный проект не меняется. Подробнее: `docs/project-verification.md`.

@@ -402,9 +402,17 @@ public class PlaywrightDotNetRenderer : IRenderer
         foreach (var symbol in _setupBlockedSymbols)
             _blockedSymbols.Add(symbol);
 
+        var body = new StringBuilder();
         foreach (var action in test.BodyActions)
-            RenderActionWithSafety(sb, action);
+            RenderActionWithSafety(body, action);
 
+        if (TestBodyBecameEmptyAfterMigration(body.ToString()))
+        {
+            body.AppendLine($"{_indent}{_indent}// TODO: test body became empty after suppression [MIGRATOR:EMPTY_TEST_AFTER_SUPPRESSION]");
+            body.AppendLine($"{_indent}{_indent}throw new NotImplementedException(\"MIGRATOR: test body became empty after suppression; review suppressed statements.\");");
+        }
+
+        sb.Append(body);
         sb.AppendLine($"{_indent}}}");
     }
 
@@ -518,7 +526,10 @@ public class PlaywrightDotNetRenderer : IRenderer
 
         if (IsSuppressedAction(action, sourceText))
         {
-            RenderSuppressedAction(sb, action, sourceText);
+            if (IsAssertionLikeSource(sourceText))
+                RenderUnsafeSuppressedAssertion(sb, action, sourceText);
+            else
+                RenderSuppressedAction(sb, action, sourceText);
             return;
         }
 
@@ -1490,6 +1501,59 @@ public class PlaywrightDotNetRenderer : IRenderer
             RegisterSourceVar(variableName, variableName);
             RegisterTargetLocal(variableName);
         }
+    }
+
+    void RenderUnsafeSuppressedAssertion(StringBuilder sb, TestAction action, string sourceText)
+    {
+        sb.AppendLine($"{_indent}{_indent}// TODO: assertion/check matched SuppressedMethodPatterns and was NOT suppressed // line {action.SourceLine} [MIGRATOR:ASSERTION_SUPPRESSION_BLOCKED]");
+        AppendCommentBlock(sb, _indent + _indent, sourceText, "source assertion: ");
+        sb.AppendLine($"{_indent}{_indent}throw new NotImplementedException(\"MIGRATOR: assertion/check was matched by SuppressedMethodPatterns and must be migrated, not suppressed.\");");
+    }
+
+    static bool IsAssertionLikeSource(string? sourceText)
+    {
+        if (string.IsNullOrWhiteSpace(sourceText))
+            return false;
+
+        var text = NormalizeCSharpOperatorSpacing(sourceText);
+        return Regex.IsMatch(text, @"\bAssert(?:ions)?\s*\.", RegexOptions.IgnoreCase)
+            || Regex.IsMatch(text, @"\bExpect\s*\(", RegexOptions.IgnoreCase)
+            || Regex.IsMatch(text, @"\.\s*Should(?:\s*<[^>]+>)?\s*\(", RegexOptions.IgnoreCase)
+            || Regex.IsMatch(text, @"\.\s*Wait\s*\(\s*\)\s*\.\s*EqualTo\s*\(", RegexOptions.IgnoreCase)
+            || Regex.IsMatch(text, @"\.\s*(?:Be|BeTrue|BeFalse|BeEquivalentTo|Contain|ContainSingle|ContainHtmlText|NotBeEmpty|NotBeNull|EqualTo)\s*\(", RegexOptions.IgnoreCase)
+                && Regex.IsMatch(text, @"\.\s*Should(?:\s*<[^>]+>)?\s*\(", RegexOptions.IgnoreCase);
+    }
+
+    static bool TestBodyBecameEmptyAfterMigration(string renderedBody)
+    {
+        if (string.IsNullOrWhiteSpace(renderedBody))
+            return false;
+
+        // This guard is intentionally limited to real suppression output.
+        // A method can be rendered as comment-only because it is unsupported or blocked by
+        // source-root safety; legacy snapshot tests intentionally preserve that behavior.
+        // The dangerous false-green case we must catch is narrower: adapter-config
+        // suppression removed the active body and left only source comments.
+        var hasSuppressedSource = renderedBody.Contains("source statement suppressed by adapter-config", StringComparison.Ordinal)
+            || renderedBody.Contains("source suppressed:", StringComparison.Ordinal);
+        if (!hasSuppressedSource)
+            return false;
+
+        return !renderedBody
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Trim())
+            .Any(IsActiveGeneratedStatementLine);
+    }
+
+    static bool IsActiveGeneratedStatementLine(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+            return false;
+
+        return !line.StartsWith("//", StringComparison.Ordinal)
+            && !line.StartsWith("/*", StringComparison.Ordinal)
+            && !line.StartsWith("*", StringComparison.Ordinal)
+            && line is not "{" and not "}" and not "};";
     }
 
     static bool TryGetSuppressedBooleanDeclaration(TestAction action, string sourceText, out string variableName)

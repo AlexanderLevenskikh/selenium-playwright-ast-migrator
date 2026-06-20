@@ -5260,6 +5260,38 @@ static IEnumerable<ConfigSafetyIssue> AnalyzeConfigSafety(ProjectAdapterConfig c
     AddDuplicateIssues(config.TargetKnownTypes, "TargetKnownTypes", "DUPLICATE_TARGET_KNOWN_TYPE", issues);
     AddDuplicateIssues(config.TargetKnownIdentifiers, "TargetKnownIdentifiers", "DUPLICATE_TARGET_KNOWN_IDENTIFIER", issues);
 
+    foreach (var (pattern, location) in FlattenSuppressedMethodPatterns(config))
+    {
+        if (LooksLikeAssertionSuppression(pattern))
+        {
+            issues.Add(new ConfigSafetyIssue("error", "DANGEROUS_ASSERTION_SUPPRESSION",
+                $"SuppressedMethodPatterns entry '{pattern}' can suppress assertions/checks.", location,
+                "Do not suppress Should/Assert/Expect/EqualTo checks. Add assertion mappings or leave MANUAL_REVIEW/failing TODO."));
+        }
+        else if (LooksLikeBroadInteractionSuppression(pattern))
+        {
+            issues.Add(new ConfigSafetyIssue("error", "DANGEROUS_INTERACTION_SUPPRESSION",
+                $"SuppressedMethodPatterns entry '{pattern}' is broad enough to hide user interactions or mapped UiTargets.", location,
+                "Replace broad Click/SendKeys/Fill/Hover suppressions with UiTargets, Methods/ParameterizedMethods, or a narrower source-only helper pattern."));
+        }
+    }
+
+    foreach (var (method, location) in FlattenSuppressedMethods(config))
+    {
+        if (LooksLikeAssertionSuppression(method))
+        {
+            issues.Add(new ConfigSafetyIssue("error", "DANGEROUS_ASSERTION_SUPPRESSION",
+                $"SuppressedMethods entry '{method}' can suppress assertions/checks.", location,
+                "Do not suppress Should/Assert/Expect checks. Add assertion mappings or leave MANUAL_REVIEW/failing TODO."));
+        }
+        else if (LooksLikeInteractionSuppressedMethod(method))
+        {
+            issues.Add(new ConfigSafetyIssue("warning", "SUSPICIOUS_INTERACTION_SUPPRESSION",
+                $"SuppressedMethods entry '{method}' may suppress real user interaction.", location,
+                "Prefer UiTargets or method mappings. Suppress only harmless waits/source-only diagnostics."));
+        }
+    }
+
     foreach (var target in config.UiTargets.Where(t => string.Equals(t.TargetKind, "RawExpression", StringComparison.OrdinalIgnoreCase)))
     {
         issues.Add(new ConfigSafetyIssue("warning", "RAW_EXPRESSION_MAPPING_REQUIRES_REVIEW",
@@ -5319,6 +5351,96 @@ static IEnumerable<string> FlattenTargetKnownIdentifiers(ProjectAdapterConfig co
     foreach (var scope in config.Scopes)
         foreach (var item in scope.TargetKnownIdentifiers)
             yield return item;
+}
+
+static IEnumerable<(string Value, string Location)> FlattenSuppressedMethodPatterns(ProjectAdapterConfig config)
+{
+    foreach (var item in config.SuppressedMethodPatterns.Where(v => !string.IsNullOrWhiteSpace(v)))
+        yield return (item, "SuppressedMethodPatterns");
+
+    foreach (var scope in config.Scopes)
+    {
+        var scopeName = string.IsNullOrWhiteSpace(scope.Name) ? "<unnamed>" : scope.Name;
+        foreach (var item in scope.SuppressedMethodPatterns.Where(v => !string.IsNullOrWhiteSpace(v)))
+            yield return (item, $"Scopes[{scopeName}].SuppressedMethodPatterns");
+    }
+}
+
+static IEnumerable<(string Value, string Location)> FlattenSuppressedMethods(ProjectAdapterConfig config)
+{
+    foreach (var item in config.SuppressedMethods.Where(v => !string.IsNullOrWhiteSpace(v)))
+        yield return (item, "SuppressedMethods");
+
+    foreach (var scope in config.Scopes)
+    {
+        var scopeName = string.IsNullOrWhiteSpace(scope.Name) ? "<unnamed>" : scope.Name;
+        foreach (var item in scope.SuppressedMethods.Where(v => !string.IsNullOrWhiteSpace(v)))
+            yield return (item, $"Scopes[{scopeName}].SuppressedMethods");
+    }
+}
+
+static bool LooksLikeAssertionSuppression(string value)
+{
+    if (string.IsNullOrWhiteSpace(value))
+        return false;
+
+    var normalized = value.Replace(" ", string.Empty);
+    return normalized.Contains("Should(", StringComparison.OrdinalIgnoreCase)
+        || normalized.Contains("Should()", StringComparison.OrdinalIgnoreCase)
+        || normalized.Contains("Assert", StringComparison.OrdinalIgnoreCase)
+        || normalized.Contains("Expect", StringComparison.OrdinalIgnoreCase)
+        || normalized.Contains("EqualTo(", StringComparison.OrdinalIgnoreCase)
+        || normalized.Contains("BeEquivalentTo(", StringComparison.OrdinalIgnoreCase)
+        || normalized.Contains("Contain", StringComparison.OrdinalIgnoreCase) && normalized.Contains("Should", StringComparison.OrdinalIgnoreCase);
+}
+
+static bool LooksLikeBroadInteractionSuppression(string pattern)
+{
+    if (string.IsNullOrWhiteSpace(pattern))
+        return false;
+
+    var normalized = pattern.Replace(" ", string.Empty);
+    if (IsKnownHarmlessWaitSuppression(normalized))
+        return false;
+
+    if (!normalized.Contains('*'))
+        return false;
+
+    if (!normalized.Contains('(') && normalized.Count(ch => ch == '*') >= 2)
+        return true;
+
+    return new[]
+    {
+        ".Click(", ".ClickAsync(", ".SendKeys(", ".Fill(", ".FillAsync(",
+        ".SetValue(", ".Press(", ".Hover(", ".HoverMouse(", ".SelectValue(",
+        ".InputAndSelect(", ".InputInputAndAccept("
+    }.Any(token => normalized.Contains(token, StringComparison.OrdinalIgnoreCase))
+        && (normalized.StartsWith("*.", StringComparison.Ordinal)
+            || normalized.Contains(".*.", StringComparison.Ordinal)
+            || normalized.StartsWith("*lightbox", StringComparison.OrdinalIgnoreCase)
+            || normalized.StartsWith("*modal", StringComparison.OrdinalIgnoreCase)
+            || normalized.StartsWith("*page", StringComparison.OrdinalIgnoreCase));
+}
+
+static bool LooksLikeInteractionSuppressedMethod(string method)
+{
+    if (string.IsNullOrWhiteSpace(method))
+        return false;
+
+    return new[]
+    {
+        "Click", "ClickAsync", "SendKeys", "Fill", "FillAsync", "SetValue",
+        "Press", "Hover", "HoverMouse", "SelectValue", "InputAndSelect", "InputInputAndAccept"
+    }.Any(token => method.Equals(token, StringComparison.OrdinalIgnoreCase));
+}
+
+static bool IsKnownHarmlessWaitSuppression(string normalizedPattern)
+{
+    return normalizedPattern.Contains("WaitLoaded(", StringComparison.OrdinalIgnoreCase)
+        || normalizedPattern.Contains("WaitExistAndVisible(", StringComparison.OrdinalIgnoreCase)
+        || normalizedPattern.Contains("WaitDisabled(", StringComparison.OrdinalIgnoreCase)
+        || normalizedPattern.Contains("WaitNotExists(", StringComparison.OrdinalIgnoreCase)
+        || normalizedPattern.Contains("WaitUntil", StringComparison.OrdinalIgnoreCase);
 }
 
 static void AddDuplicateIssues(IEnumerable<string?> values, string location, string code, List<ConfigSafetyIssue> issues)
@@ -5382,6 +5504,23 @@ static IEnumerable<ConfigSafetyIssue> BuildConfigDiffRisks(ProjectAdapterConfig 
         risks.Add(new ConfigSafetyIssue("warning", "QUALITY_GATE_LOOSENED", "MaxUnsupportedActions was loosened or removed.", "QualityGates.MaxUnsupportedActions", "Confirm this was intentional."));
     if (IsQualityGateLoosened(before.QualityGates?.MaxUnmappedTargets, after.QualityGates?.MaxUnmappedTargets))
         risks.Add(new ConfigSafetyIssue("warning", "QUALITY_GATE_LOOSENED", "MaxUnmappedTargets was loosened or removed.", "QualityGates.MaxUnmappedTargets", "Confirm this was intentional."));
+
+    var beforeSuppressedPatterns = FlattenSuppressedMethodPatterns(before).Select(x => x.Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    foreach (var (pattern, location) in FlattenSuppressedMethodPatterns(after).Where(x => !beforeSuppressedPatterns.Contains(x.Value)))
+    {
+        if (LooksLikeAssertionSuppression(pattern))
+        {
+            risks.Add(new ConfigSafetyIssue("error", "DANGEROUS_ASSERTION_SUPPRESSION_ADDED",
+                $"Dangerous assertion suppression was added: '{pattern}'.", location,
+                "Do not add Should/Assert/Expect/EqualTo suppressions. Add assertion mappings or leave failing/manual TODO."));
+        }
+        else if (LooksLikeBroadInteractionSuppression(pattern))
+        {
+            risks.Add(new ConfigSafetyIssue("error", "DANGEROUS_INTERACTION_SUPPRESSION_ADDED",
+                $"Broad interaction suppression was added: '{pattern}'.", location,
+                "Do not hide Click/SendKeys/Fill/Hover behind suppression. Use UiTargets and method mappings."));
+        }
+    }
 
     return risks;
 }

@@ -17,6 +17,10 @@
 
 Особенно строго соблюдай правила для `WebDriver`, URL/external variables, cookies/localStorage, assertions и broad POM suppressions.
 
+Assertion suppression запрещён. Не добавляй в `SuppressedMethodPatterns` broad patterns вроде `*.*.Should(*)`, `*.*.Should()`, `*Assert*`, `*Expect*`, `*Wait().EqualTo(*)`. Они скрывают смысл тестов и создают ложно-зелёную миграцию. Если assertion не мигрируется — добавляй mapping, оставляй manual/failing TODO или заводи тикет.
+
+Interaction suppression тоже опасен: `*lightbox.*.Click(*)`, `*modal.*.SendKeys(*)`, `*.*.Fill(*)`, `*.*.SetValue(*)`, `*.*.Hover*` мешают UiTarget/Method mappings. Сначала пытайся маппить действие.
+
 Перед broad POM suppressions обязательно выполни POM recovery pass: найди исходные POM declarations, извлеки selector evidence, проверь target architecture, добавь config mappings или создай candidates в `migration/pom-candidates/`. Подробности: `docs/pom-recovery-policy.md`.
 
 ## Главный принцип

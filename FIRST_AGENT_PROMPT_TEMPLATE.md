@@ -197,6 +197,8 @@ migration\migrator-tickets.md
 
 `SuppressedMethodPatterns` используй только если строка действительно не нужна в Playwright-версии или является setup/source-only legacy helper.
 
+Никогда не suppress-ь assertion-like и interaction-like паттерны ради уменьшения TODO: `*.*.Should(*)`, `*.*.Should()`, `*Assert*`, `*Expect*`, `*Wait().EqualTo(*)`, `*lightbox.*.Click(*)`, `*modal.*.SendKeys(*)`, `*.*.Fill(*)`, `*.*.SetValue(*)`, `*.*.Hover*`. Для assertions нужен mapping или failing/manual TODO; для interactions — `UiTargets`/`Methods`/`ParameterizedMethods`.
+
 Перед broad suppressions для POM roots (`page.*.*`, `pagef.*.*`, `modal.*.*`, `lightbox.*.*`, `dialog.*.*`, `popup.*.*`) обязательно выполни POM recovery pass. Broad suppression без попытки извлечь selector/source truth считается небезопасным.
 
 ## Команды

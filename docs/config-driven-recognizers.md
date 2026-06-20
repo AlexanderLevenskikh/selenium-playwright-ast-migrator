@@ -85,3 +85,5 @@ Do not suppress business assertions, navigation, create/save/delete methods, or 
 ```
 
 `SuppressedMethodPatterns` are evaluated before source-only safety checks. This is intentional for source helpers that declare temporary Selenium-side page variables but are known to be safe to omit from generated target code. Suppressed actions are rendered as source comments, not active code, and declared variables are not registered as target locals.
+
+Suppression is **not** a TODO reducer. Do not add broad patterns such as `*.*.Should(*)`, `*.*.Should()`, `*lightbox.*.Click(*)`, `*modal.*.SendKeys(*)`, or root-only patterns such as `*page.RowCostTable.Rows*`. These patterns can hide assertions and real user interactions before `UiTargets`, `Methods`, or `ParameterizedMethods` get a chance to migrate them. `config-validate` treats assertion suppressions and broad interaction suppressions as dangerous config. The renderer also refuses to silently suppress assertion-like source lines and emits a failing `ASSERTION_SUPPRESSION_BLOCKED` guard instead.

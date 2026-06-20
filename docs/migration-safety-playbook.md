@@ -297,6 +297,10 @@ Verify*
 4. Если multiline fluent chain не матчится — заведи тикет на matcher.
 5. Suppression допустима только если assertion относится к legacy setup/helper и явно не влияет на проверку сценария.
 
+Жёсткое правило: `*.*.Should(*)`, `*.*.Should()`, `*Assert*`, `*Expect*`, `*Wait().EqualTo(*)` и похожие broad-patterns запрещены. Они превращают смысл теста в комментарий и создают ложно-зелёные тесты. Если такой pattern всё же попадёт в config, renderer должен сгенерировать failing guard `[MIGRATOR:ASSERTION_SUPPRESSION_BLOCKED]`, а не пустой проходящий тест.
+
+Broad suppressions для interaction methods (`Click`, `SendKeys`, `Fill`, `SetValue`, `Hover`, `Press`, `SelectValue`) также запрещены. Они мешают `UiTargets` и method mappings. Вместо них добавляй `UiTargets`, `Methods`, `ParameterizedMethods` или narrowly-scoped wait suppressions.
+
 ## Active TODO vs commented source TODO
 
 Финальный критерий — `0 active TODO`.

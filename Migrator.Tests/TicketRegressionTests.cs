@@ -377,6 +377,77 @@ public class TicketRegressionTests
         Assert.DoesNotMatch(@"(?m)^\s*if\s*\(element2\)", output);
     }
 
+    [Fact]
+    public void AssertionLikeSuppression_EmitsFailingGuardInsteadOfEmptyGreenTest()
+    {
+        var model = CreateModel(new TestAction[]
+        {
+            new RawStatementAction(90, "currencyLabel.Text.Should(value)")
+        }) with
+        {
+            SuppressedMethodPatterns = new[] { "*.*.Should(*)" }
+        };
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("ASSERTION_SUPPRESSION_BLOCKED", output);
+        Assert.Contains("currencyLabel.Text.Should(value)", output);
+        Assert.Contains("throw new NotImplementedException", output);
+        Assert.DoesNotContain("source statement suppressed by adapter-config", output);
+    }
+
+    [Fact]
+    public void BroadSuppressionPattern_CannotSilentlyHideAssertion()
+    {
+        var model = CreateModel(new TestAction[]
+        {
+            new RawStatementAction(91, "page.RowCostTable.Rows.First().StrategyValue.Text.Should().Be(value)")
+        }) with
+        {
+            SuppressedMethodPatterns = new[] { "*page.RowCostTable.Rows*" }
+        };
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("ASSERTION_SUPPRESSION_BLOCKED", output);
+        Assert.Contains("page.RowCostTable.Rows.First().StrategyValue.Text.Should().Be(value)", output);
+        Assert.Contains("throw new NotImplementedException", output);
+    }
+
+    [Fact]
+    public void EmptyTestAfterHarmlessSuppression_EmitsFailingGuard()
+    {
+        var model = CreateModel(new TestAction[]
+        {
+            new RawStatementAction(92, "page.WaitLoaded()")
+        }) with
+        {
+            SuppressedMethodPatterns = new[] { "*page.WaitLoaded(*)" }
+        };
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("EMPTY_TEST_AFTER_SUPPRESSION", output);
+        Assert.Contains("throw new NotImplementedException", output);
+    }
+
+    [Fact]
+    public void SuppressedBooleanDeclaration_IsNotBlockedByEmptyTestGuard()
+    {
+        var model = CreateModel(new TestAction[]
+        {
+            new LocalDeclarationAction(93, "element1", "var", "page.HasWarningAccept.Visible.Get()")
+        }) with
+        {
+            SuppressedMethodPatterns = new[] { "*page.*.Visible.Get(*)" }
+        };
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("bool element1 = default", output);
+        Assert.DoesNotContain("EMPTY_TEST_AFTER_SUPPRESSION", output);
+    }
+
     static TestFileModel CreateModel(IEnumerable<TestAction> actions) =>
         new(
             FilePath: "Sample.cs",
