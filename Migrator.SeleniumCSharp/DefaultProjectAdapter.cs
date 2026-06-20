@@ -1689,6 +1689,14 @@ public class DefaultProjectAdapter : IProjectAdapter
             }
         }
 
+        // Try to recognize boolean visibility local declarations:
+        // var isVisible = page.SomeElement.Visible.Get()
+        // -> var isVisible = await Page.Locator(...).IsVisibleAsync();
+        // This keeps downstream if (isVisible) blocks compilable instead of leaving
+        // source-only variables suppressed/unresolved.
+        if (TryResolveBooleanGetterLocalDeclaration(lds, initExpr, resolved, out var booleanLocal))
+            return new[] { booleanLocal };
+
         // Try to recognize table row text access: page.Table.Items.ElementAt(N).Text.Get()
         var tableTextMatch = TableTextAccessRegex.Match(initExpr);
         if (tableTextMatch.Success)
@@ -1775,6 +1783,49 @@ public class DefaultProjectAdapter : IProjectAdapter
         }
 
         return new[] { lds };
+    }
+
+    bool TryResolveBooleanGetterLocalDeclaration(
+        LocalDeclarationAction lds,
+        string initExpr,
+        ResolvedFileConfig resolved,
+        out LocalDeclarationAction resolvedLocal)
+    {
+        resolvedLocal = null!;
+
+        const string visibleSuffix = ".Visible.Get()";
+        const string existsSuffix = ".Exists.Get()";
+
+        string? targetBase = null;
+        string? targetInitializer = null;
+
+        if (initExpr.EndsWith(visibleSuffix, StringComparison.Ordinal))
+        {
+            targetBase = initExpr.Substring(0, initExpr.Length - visibleSuffix.Length);
+        }
+        else if (initExpr.EndsWith(existsSuffix, StringComparison.Ordinal))
+        {
+            targetBase = initExpr.Substring(0, initExpr.Length - existsSuffix.Length);
+        }
+
+        if (string.IsNullOrWhiteSpace(targetBase))
+            return false;
+
+        var mappedTarget = ResolveTarget(targetBase, resolved);
+        if (mappedTarget is not MappedTarget mt || mappedTarget.Kind == TargetKind.Unresolved)
+            return false;
+
+        var locatorExpr = BuildLocatorExpression(mt);
+        targetInitializer = initExpr.EndsWith(existsSuffix, StringComparison.Ordinal)
+            ? $"await {locatorExpr}.CountAsync() > 0"
+            : $"await {locatorExpr}.IsVisibleAsync()";
+
+        resolvedLocal = new LocalDeclarationAction(
+            lds.SourceLine,
+            lds.VariableName,
+            lds.VariableType,
+            targetInitializer);
+        return true;
     }
 
     static bool ContainsUnresolvedPageObjectAccess(string expr)

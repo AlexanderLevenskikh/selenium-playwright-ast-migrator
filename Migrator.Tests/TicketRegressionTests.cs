@@ -548,6 +548,92 @@ public class SampleTests
     }
 
     [Fact]
+    public void ResolvedRawStatement_AppendsSemicolonBeforeLineComment()
+    {
+        var model = CreateModel(new TestAction[]
+        {
+            new RawStatementAction(99, "await Expect(Page.Locator(\"[data-test=flag]\")).ToBeVisibleAsync()")
+        });
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("await Expect(Page.Locator(\"[data-test=flag]\")).ToBeVisibleAsync(); // line 99", output);
+        Assert.DoesNotContain("ToBeVisibleAsync() // line 99", output);
+    }
+
+    [Fact]
+    public void VisibleGetLocalDeclaration_WithMappedTarget_RendersBooleanAssignmentForCondition()
+    {
+        var sourceModel = CreateModel(new TestAction[]
+        {
+            new LocalDeclarationAction(100, "element1", "var", "page.HasWarningAccept.Visible.Get()"),
+            new ConditionalBlockAction(
+                101,
+                "element1",
+                new TestAction[] { new RawStatementAction(102, "Console.WriteLine(\"ok\")") },
+                Array.Empty<(string Condition, IReadOnlyList<TestAction> Actions)>(),
+                Array.Empty<TestAction>())
+        });
+
+        var config = new ProjectAdapterConfig(
+            "sample",
+            new[]
+            {
+                new UiTargetMapping(
+                    "page.HasWarningAccept",
+                    "[data-test=warning-accept]",
+                    "CssSelector")
+            },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            SourceOnlyIdentifiers: new[] { "page" });
+
+        var model = new DefaultProjectAdapter(config).Adapt(sourceModel);
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("var element1 = await Page.Locator(\"[data-test=warning-accept]\").IsVisibleAsync();", output);
+        Assert.Contains("if (element1)", output);
+        Assert.DoesNotContain("CONDITIONAL_UNRESOLVED_SYMBOL", output);
+        Assert.DoesNotContain("SOURCE_ONLY_IDENTIFIER", output);
+    }
+
+    [Fact]
+    public void ExistsGetLocalDeclaration_WithMappedTarget_RendersBooleanAssignmentForCondition()
+    {
+        var sourceModel = CreateModel(new TestAction[]
+        {
+            new LocalDeclarationAction(110, "exists", "var", "page.EmptyState.Exists.Get()"),
+            new ConditionalBlockAction(
+                111,
+                "exists",
+                new TestAction[] { new RawStatementAction(112, "Console.WriteLine(\"exists\")") },
+                Array.Empty<(string Condition, IReadOnlyList<TestAction> Actions)>(),
+                Array.Empty<TestAction>())
+        });
+
+        var config = new ProjectAdapterConfig(
+            "sample",
+            new[]
+            {
+                new UiTargetMapping(
+                    "page.EmptyState",
+                    "[data-test=empty-state]",
+                    "CssSelector")
+            },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            SourceOnlyIdentifiers: new[] { "page" });
+
+        var model = new DefaultProjectAdapter(config).Adapt(sourceModel);
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("var exists = await Page.Locator(\"[data-test=empty-state]\").CountAsync() > 0;", output);
+        Assert.Contains("if (exists)", output);
+        Assert.DoesNotContain("CONDITIONAL_UNRESOLVED_SYMBOL", output);
+        Assert.DoesNotContain("SOURCE_ONLY_IDENTIFIER", output);
+    }
+
+    [Fact]
     public void FluentTextAssertionRecognizer_HandlesGenericGetShouldBeChain()
     {
         var file = Path.GetTempFileName() + ".cs";
