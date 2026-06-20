@@ -409,6 +409,8 @@ public class PlaywrightDotNetRenderer : IRenderer
         sb.AppendLine($"{_indent}public async Task {test.Name}({paramList})");
         sb.AppendLine($"{_indent}{{");
         ResetMethodScope();
+        foreach (var parameter in test.Parameters)
+            RegisterTargetLocal(parameter.Name);
 
         // Carry over fixture-scoped blocked symbols from setup
         foreach (var symbol in _setupBlockedSymbols)
@@ -1975,7 +1977,7 @@ public class PlaywrightDotNetRenderer : IRenderer
             TargetKind.ClassNameBeginning => RenderClassNameBeginningLocator(mapped: target as MappedTarget),
             TargetKind.Text => RenderTextLocator(mapped: target as MappedTarget),
             TargetKind.PageObjectProperty => rendered,
-            TargetKind.RawExpression => rendered,
+            TargetKind.RawExpression => ApplyMatchStrategy(rendered, target as MappedTarget),
             _ => $"Page.Locator(\"TODO: {target.SourceExpression}\")"
         };
     }
@@ -2974,10 +2976,15 @@ public class PlaywrightDotNetRenderer : IRenderer
             case TableCountKind.CountEquals:
                 sb.AppendLine($"{_indent}{_indent}{prefix}await {expectCall}({locator}).ToHaveCountAsync({countExpr}); // line {action.SourceLine}");
                 break;
-            case TableCountKind.CountGreaterThanZero:
+            case TableCountKind.CountGreaterThan:
                 var nv = NextTempVar("tableCount");
                 sb.AppendLine($"{_indent}{_indent}{prefix}var {nv} = await {locator}.CountAsync(); // line {action.SourceLine}");
-                sb.AppendLine($"{_indent}{_indent}{prefix}Assert.That({nv}, Is.GreaterThan(0));");
+                sb.AppendLine($"{_indent}{_indent}{prefix}Assert.That({nv}, Is.GreaterThan({countExpr}));");
+                break;
+            case TableCountKind.CountGreaterThanZero:
+                var nv0 = NextTempVar("tableCount");
+                sb.AppendLine($"{_indent}{_indent}{prefix}var {nv0} = await {locator}.CountAsync(); // line {action.SourceLine}");
+                sb.AppendLine($"{_indent}{_indent}{prefix}Assert.That({nv0}, Is.GreaterThan(0));");
                 break;
             case TableCountKind.CountLessThanOne:
                 var nv2 = NextTempVar("tableCount");

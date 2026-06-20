@@ -4990,6 +4990,332 @@ public class TargetExpressionTests
     }
 }
 
+
+public class ProjectAssertionHelperTests
+{
+    readonly RoslynTestFileParser _parser = new();
+
+    [Fact]
+    public void ProjectAssertion_TextShouldValue_RendersTextAssertion()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-ts19-text-should-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file,
+@"namespace Sample.E2ETests
+{
+    public class LegacyTextShouldTests
+    {
+        [Test]
+        public void AssertUserName()
+        {
+            page.UserName.Text.Should(""Selenium-администатор"");
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var config = new ProjectAdapterConfig(
+                "Test",
+                new[] { new UiTargetMapping("page.UserName", "Page.Locator(\"#user\")", "RawExpression") },
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>());
+
+            var adapted = new DefaultProjectAdapter(config).Adapt(sourceModel);
+            var action = adapted.Tests.Single().BodyActions.Single();
+
+            Assert.IsType<TextAssertionAction>(action);
+
+            var output = new PlaywrightDotNetRenderer().Render(adapted);
+
+            Assert.Contains("await Expect(Page.Locator(\"#user\")).ToHaveTextAsync(\"Selenium-администатор\");", output);
+            Assert.DoesNotContain("SOURCE_ONLY_IDENTIFIER", output);
+            Assert.DoesNotContain("ASSERTION_SUPPRESSION_BLOCKED", output);
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void ProjectAssertion_VisibleShould_RendersVisibilityAssertion()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-ts19-visible-should-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file,
+@"namespace Sample.E2ETests
+{
+    public class LegacyVisibleShouldTests
+    {
+        [Test]
+        public void AssertExitButton()
+        {
+            lightbox.ExitButton.Visible.Should();
+            page.FuterUser.Text.Should();
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var config = new ProjectAdapterConfig(
+                "Test",
+                new[]
+                {
+                    new UiTargetMapping("lightbox.ExitButton", "Page.Locator(\"#exit\")", "RawExpression"),
+                    new UiTargetMapping("page.FuterUser", "Page.Locator(\"#footer-user\")", "RawExpression")
+                },
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>());
+
+            var adapted = new DefaultProjectAdapter(config).Adapt(sourceModel);
+
+            Assert.All(adapted.Tests.Single().BodyActions, action => Assert.IsType<VisibilityAssertionAction>(action));
+
+            var output = new PlaywrightDotNetRenderer().Render(adapted);
+
+            Assert.Contains("await Expect(Page.Locator(\"#exit\")).ToBeVisibleAsync();", output);
+            Assert.Contains("await Expect(Page.Locator(\"#footer-user\")).ToBeVisibleAsync();", output);
+            Assert.DoesNotContain("SOURCE_ONLY_IDENTIFIER", output);
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void ProjectAssertion_VisibleEqualsVariable_RendersConditionalVisibilityAssertion()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-ts19-visible-equals-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file,
+@"namespace Sample.E2ETests
+{
+    public class LegacyVisibleEqualsTests
+    {
+        [TestCase(true)]
+        public void AssertIcon(bool visible)
+        {
+            page.OnlineSaleIcon.Visible.Equals(visible);
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var config = new ProjectAdapterConfig(
+                "Test",
+                new[] { new UiTargetMapping("page.OnlineSaleIcon", "Page.Locator(\"#online-sale\")", "RawExpression") },
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>());
+
+            var adapted = new DefaultProjectAdapter(config).Adapt(sourceModel);
+            var action = adapted.Tests.Single().BodyActions.Single();
+
+            Assert.IsType<ConditionalBlockAction>(action);
+
+            var output = new PlaywrightDotNetRenderer().Render(adapted);
+
+            Assert.Contains("if (visible)", output);
+            Assert.Contains("await Expect(Page.Locator(\"#online-sale\")).ToBeVisibleAsync();", output);
+            Assert.Contains("await Expect(Page.Locator(\"#online-sale\")).ToBeHiddenAsync();", output);
+            Assert.DoesNotContain("CONDITIONAL_UNRESOLVED_SYMBOL", output);
+            Assert.DoesNotContain("SOURCE_ONLY_IDENTIFIER", output);
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void ProjectAssertion_TextMethodShouldBe_RendersTextAssertion()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-ts19-text-method-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file,
+@"namespace Sample.E2ETests
+{
+    public class LegacyTextMethodTests
+    {
+        [Test]
+        public void AssertGenerateReports()
+        {
+            lightbox.GenerateReports.Text().Should().Be(""Нет"");
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var config = new ProjectAdapterConfig(
+                "Test",
+                new[] { new UiTargetMapping("lightbox.GenerateReports", "Page.Locator(\"#generate-reports\")", "RawExpression") },
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>());
+
+            var adapted = new DefaultProjectAdapter(config).Adapt(sourceModel);
+            var action = adapted.Tests.Single().BodyActions.Single();
+
+            Assert.IsType<TextAssertionAction>(action);
+
+            var output = new PlaywrightDotNetRenderer().Render(adapted);
+
+            Assert.Contains("await Expect(Page.Locator(\"#generate-reports\")).ToHaveTextAsync(\"Нет\");", output);
+            Assert.DoesNotContain("SOURCE_ONLY_IDENTIFIER", output);
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void ProjectAssertion_CountGetGreaterThan_RendersCountAssertion()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-ts19-count-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file,
+@"namespace Sample.E2ETests
+{
+    public class LegacyCountTests
+    {
+        [Test]
+        public void AssertRows()
+        {
+            Assert.That(page.Table.Items.Count.Get() > 3);
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var config = new ProjectAdapterConfig(
+                "Test",
+                new[] { new UiTargetMapping("page.Table.Items", "Page.Locator(\".row\")", "RawExpression") },
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>());
+
+            var adapted = new DefaultProjectAdapter(config).Adapt(sourceModel);
+            var action = adapted.Tests.Single().BodyActions.Single();
+
+            Assert.IsType<TableCountAssertionAction>(action);
+
+            var output = new PlaywrightDotNetRenderer().Render(adapted);
+
+            Assert.Contains("var tableCount_0 = await Page.Locator(\".row\").CountAsync();", output);
+            Assert.Contains("Assert.That(tableCount_0, Is.GreaterThan(3));", output);
+            Assert.DoesNotContain("ASSERTION_CONSTRAINT", output);
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void ProjectAssertion_TextGetEquality_RendersTextAssertion()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-ts19-text-equality-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file,
+@"namespace Sample.E2ETests
+{
+    public class LegacyTextEqualityTests
+    {
+        [Test]
+        public void AssertFirstRow()
+        {
+            Assert.That(page.Table.Items.ElementAt(0).Text.Get() == ""АНО ДПО"");
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var config = new ProjectAdapterConfig(
+                "Test",
+                new[] { new UiTargetMapping("page.Table.Items", "Page.Locator(\".row\")", "RawExpression") },
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>());
+
+            var adapted = new DefaultProjectAdapter(config).Adapt(sourceModel);
+            var action = adapted.Tests.Single().BodyActions.Single();
+
+            Assert.IsType<TextAssertionAction>(action);
+
+            var output = new PlaywrightDotNetRenderer().Render(adapted);
+
+            Assert.Contains("await Expect(Page.Locator(\".row\").Nth(0)).ToHaveTextAsync(\"АНО ДПО\");", output);
+            Assert.DoesNotContain("ASSERTION_CONSTRAINT", output);
+            Assert.DoesNotContain("SOURCE_ONLY_IDENTIFIER", output);
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void ProjectAssertion_HeaderElementsTextShould_DynamicElementAtUsesNthExpression()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-ts19-header-elements-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file,
+@"namespace Sample.E2ETests
+{
+    public class LegacyHeaderElementsTests
+    {
+        [TestCase(1, ""Name"")]
+        public void AssertHeader(int element, string value)
+        {
+            headerElements.ElementAt(element).Text.Should(value);
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var config = new ProjectAdapterConfig(
+                "Test",
+                new[] { new UiTargetMapping("headerElements", "Page.Locator(\".header\")", "RawExpression") },
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>());
+
+            var adapted = new DefaultProjectAdapter(config).Adapt(sourceModel);
+            var action = adapted.Tests.Single().BodyActions.Single();
+
+            Assert.IsType<TextAssertionAction>(action);
+
+            var output = new PlaywrightDotNetRenderer().Render(adapted);
+
+            Assert.Contains("await Expect(Page.Locator(\".header\").Nth(element)).ToHaveTextAsync(value);", output);
+            Assert.DoesNotContain("MISSING_MAPPING", output);
+            Assert.DoesNotContain("SOURCE_ONLY_IDENTIFIER", output);
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+}
+
 public class AssertMultipleTests
 {
     readonly RoslynTestFileParser _parser = new();

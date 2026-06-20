@@ -633,19 +633,23 @@ public class DefaultProjectAdapter : IProjectAdapter
         if (inlineFindElement is MappedTarget)
             return inlineFindElement;
 
-        // Try table-aware resolution for ElementAt patterns
-        var tableResult = resolved.ResolveTableAwareTarget(sourceExpression);
-        if (tableResult is MappedTarget)
-            return tableResult;
-
+        // Try ElementAt forms before prefix fallback resolution.
+        // Otherwise a mapped collection like "headerElements" would make
+        // "headerElements.ElementAt(element)" resolve to the base locator and lose .Nth(element).
         var dynamicElementAt = ResolveDynamicElementAt(sourceExpression, resolved);
         if (dynamicElementAt is MappedTarget)
             return dynamicElementAt;
 
-        // Try general ElementAt resolution: collection.ElementAt(index) where collection has a mapping
+        // Try general ElementAt resolution: collection.ElementAt(index) where collection has a mapping.
+        // This handles simple literal indexes such as headerElements.ElementAt(0).
         var elementAtResult = resolved.ResolveGeneralElementAt(sourceExpression);
         if (elementAtResult is MappedTarget)
             return elementAtResult;
+
+        // Try table-aware resolution for Items.ElementAt(...) patterns.
+        var tableResult = resolved.ResolveTableAwareTarget(sourceExpression);
+        if (tableResult is MappedTarget)
+            return tableResult;
 
         foreach (var entry in resolved._targetMap)
         {

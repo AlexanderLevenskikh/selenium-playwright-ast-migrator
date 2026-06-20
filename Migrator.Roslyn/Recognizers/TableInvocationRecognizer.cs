@@ -33,8 +33,8 @@ public class TableInvocationRecognizer : IInvocationRecognizer
             var tableKind = comparisonMethod switch
             {
                 "Be" => TableCountKind.CountEquals,
-                "BeGreaterThan" => TableCountKind.CountGreaterThanZero,
-                "BeLessThan" => TableCountKind.CountLessThanOne,
+                "BeGreaterThan" => TableCountKind.CountGreaterThan,
+                "BeLessThan" => TableCountKind.CountLessThan,
                 "BeGreaterThanOrEqualTo" => TableCountKind.CountGreaterThanOrEqualTo,
                 _ => TableCountKind.CountEquals
             };

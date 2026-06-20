@@ -76,6 +76,7 @@ public class FluentTextAssertionRecognizer : IInvocationRecognizer
         {
             ".Text().Get()",
             ".Text.Get()",
+            ".Text()",
             ".Text",
             ".Get()"
         };

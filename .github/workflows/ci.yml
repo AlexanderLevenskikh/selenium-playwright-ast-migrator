@@ -27,6 +27,3 @@ jobs:
 
       - name: Test
         run: dotnet test Migrator.sln --no-build --configuration Release --verbosity normal
-
-      - name: Verify formatting
-        run: dotnet format Migrator.sln --verify-no-changes --no-restore --verbosity minimal

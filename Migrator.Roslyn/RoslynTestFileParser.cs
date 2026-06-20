@@ -50,6 +50,7 @@ public class RoslynTestFileParser : ITestFileParser
         new SendKeysInvocationRecognizer(),
         new AssertInvocationRecognizer(),
         new TableInvocationRecognizer(),
+        new ProjectAssertionHelperRecognizer(),
         new FluentTextAssertionRecognizer(),
         new VisibilityAssertionRecognizer(),
         new WaitPresenceRecognizer(),
@@ -303,6 +304,12 @@ public class RoslynTestFileParser : ITestFileParser
             return new RawStatementAction(line, text);
         }
 
+        if (statement is ExpressionStatementSyntax { Expression: BinaryExpressionSyntax binaryExpression })
+        {
+            if (TryExtractBinaryAssertion(binaryExpression, line) is { } binaryAction)
+                return binaryAction;
+        }
+
         var expression = statement is ExpressionStatementSyntax es ? es.Expression : null;
         var invocation = expression switch
         {
@@ -329,6 +336,9 @@ public class RoslynTestFileParser : ITestFileParser
             .ToArray();
 
         var ctx = new InvocationContext(methodName, receiverText, fullText, line, symbolResolved, argumentTexts);
+
+        if (TryExtractAssertThatBinary(invocation, line) is { } assertThatBinary)
+            return assertThatBinary;
 
         // NUnit Assert.Multiple is a wrapper around assertion statements, not an
         // assertion subject. Handle it before generic invocation recognizers so
@@ -360,6 +370,97 @@ public class RoslynTestFileParser : ITestFileParser
         return new UnsupportedAction(line, fullText, symbolResolved
             ? "Semantic match not implemented for this method"
             : "Could not resolve method symbol and no syntax fallback matched");
+    }
+
+    TestAction? TryExtractAssertThatBinary(InvocationExpressionSyntax invocation, int line)
+    {
+        var methodName = GetMethodName(invocation);
+        var receiverText = GetReceiverText(invocation);
+        if (!string.Equals(methodName, "That", StringComparison.Ordinal) || !IsAssertReceiver(receiverText))
+            return null;
+
+        var firstArg = invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression;
+        return firstArg is BinaryExpressionSyntax binaryExpression
+            ? TryExtractBinaryAssertion(binaryExpression, line)
+            : null;
+    }
+
+    TestAction? TryExtractBinaryAssertion(BinaryExpressionSyntax binaryExpression, int line)
+    {
+        var left = binaryExpression.Left.ToString().Trim();
+        var right = binaryExpression.Right.ToString().Trim();
+
+        var textKind = binaryExpression.Kind() switch
+        {
+            SyntaxKind.EqualsExpression => TextAssertionKind.TextEquals,
+            SyntaxKind.NotEqualsExpression => TextAssertionKind.TextNotEquals,
+            _ => (TextAssertionKind?)null
+        };
+
+        if (textKind.HasValue && TryStripAnySuffix(left, out var textTarget,
+                ".Text().Get()",
+                ".Text.Get()",
+                ".Text()",
+                ".Text"))
+        {
+            return new TextAssertionAction(
+                line,
+                textTarget,
+                textKind.Value,
+                right,
+                RecognitionConfidence.SyntaxFallback,
+                binaryExpression.ToString());
+        }
+
+        if (TryStripSuffix(left, ".Count.Get()", out var countTarget))
+        {
+            var kind = binaryExpression.Kind() switch
+            {
+                SyntaxKind.EqualsExpression => TableCountKind.CountEquals,
+                SyntaxKind.GreaterThanExpression => TableCountKind.CountGreaterThan,
+                SyntaxKind.GreaterThanOrEqualExpression => TableCountKind.CountGreaterThanOrEqualTo,
+                SyntaxKind.LessThanExpression => TableCountKind.CountLessThan,
+                _ => (TableCountKind?)null
+            };
+
+            if (kind.HasValue)
+            {
+                return new TableCountAssertionAction(
+                    line,
+                    TargetExpression.Unresolved(countTarget),
+                    kind.Value,
+                    right,
+                    binaryExpression.ToString(),
+                    RecognitionConfidence.SyntaxFallback);
+            }
+        }
+
+        return null;
+    }
+
+    static bool TryStripAnySuffix(string expression, out string target, params string[] suffixes)
+    {
+        foreach (var suffix in suffixes)
+        {
+            if (TryStripSuffix(expression, suffix, out target))
+                return true;
+        }
+
+        target = expression;
+        return false;
+    }
+
+    static bool TryStripSuffix(string expression, string suffix, out string target)
+    {
+        var trimmed = expression.Trim();
+        if (trimmed.EndsWith(suffix, StringComparison.Ordinal))
+        {
+            target = trimmed.Substring(0, trimmed.Length - suffix.Length).Trim();
+            return target.Length > 0;
+        }
+
+        target = expression;
+        return false;
     }
 
     AssertMultipleAction? TryExtractAssertMultiple(InvocationExpressionSyntax invocation, SemanticModel semanticModel, int line)
@@ -404,6 +505,13 @@ public class RoslynTestFileParser : ITestFileParser
                 if (expression is InvocationExpressionSyntax invocation)
                 {
                     if (TryExtractFromInvocation(invocation, semanticModel, line) is { } action)
+                        yield return action;
+                    yield break;
+                }
+
+                if (expression is BinaryExpressionSyntax binaryExpression)
+                {
+                    if (TryExtractBinaryAssertion(binaryExpression, line) is { } action)
                         yield return action;
                     yield break;
                 }

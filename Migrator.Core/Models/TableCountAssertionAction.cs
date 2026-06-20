@@ -39,6 +39,7 @@ public sealed class TableCountAssertionAction : TestAction
 public enum TableCountKind
 {
     CountEquals,
+    CountGreaterThan,
     CountGreaterThanZero,
     CountLessThanOne,
     CountGreaterThanOrEqualTo,
