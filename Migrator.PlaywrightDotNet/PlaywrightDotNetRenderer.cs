@@ -1483,6 +1483,51 @@ public class PlaywrightDotNetRenderer : IRenderer
     {
         sb.AppendLine($"{_indent}{_indent}// MIGRATOR: source statement suppressed by adapter-config // line {action.SourceLine}");
         AppendCommentBlock(sb, _indent + _indent, sourceText, "source suppressed: ");
+
+        if (TryGetSuppressedBooleanDeclaration(action, sourceText, out var variableName))
+        {
+            sb.AppendLine($"{_indent}{_indent}bool {variableName} = default; // MIGRATOR: compile-only suppressed declaration stub [MIGRATOR:SUPPRESSED_DECLARATION_STUB]");
+            RegisterSourceVar(variableName, variableName);
+            RegisterTargetLocal(variableName);
+        }
+    }
+
+    static bool TryGetSuppressedBooleanDeclaration(TestAction action, string sourceText, out string variableName)
+    {
+        variableName = string.Empty;
+        string initializer;
+
+        if (action is LocalDeclarationAction local)
+        {
+            variableName = local.VariableName;
+            initializer = local.InitializationValue;
+        }
+        else
+        {
+            var match = Regex.Match(
+                sourceText.Trim().TrimEnd(';'),
+                @"^\s*(?:var|bool)\s+(?<name>[A-Za-z_]\w*)\s*=\s*(?<init>.+)$",
+                RegexOptions.Singleline);
+            if (!match.Success)
+                return false;
+
+            variableName = match.Groups["name"].Value;
+            initializer = match.Groups["init"].Value;
+        }
+
+        return Regex.IsMatch(variableName, @"^[A-Za-z_]\w*$") && IsBooleanLikeSourceExpression(initializer);
+    }
+
+    static bool IsBooleanLikeSourceExpression(string expression)
+    {
+        var text = expression.Trim();
+        return text.Contains(".Visible.Get", StringComparison.Ordinal)
+            || text.Contains(".Exists.Get", StringComparison.Ordinal)
+            || text.Contains(".Exist.Get", StringComparison.Ordinal)
+            || text.Contains(".IsVisible", StringComparison.Ordinal)
+            || text.Contains(".IsEnabled", StringComparison.Ordinal)
+            || text.Contains(".Displayed", StringComparison.Ordinal)
+            || text.Contains(".Enabled", StringComparison.Ordinal);
     }
 
     static bool SourceContainsMethod(string sourceText, string method)
@@ -1644,6 +1689,21 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     void RenderConditionalBlock(StringBuilder sb, ConditionalBlockAction action)
     {
+        var unresolvedConditions = FindUnresolvedConditionalSymbols(action).ToArray();
+        if (unresolvedConditions.Length > 0)
+        {
+            AppendSmartTodo(
+                sb,
+                $"conditional block depends on unresolved condition symbol(s): {string.Join(", ", unresolvedConditions.Select(s => $"'{s}'"))}",
+                "CONDITIONAL_UNRESOLVED_SYMBOL",
+                "The condition references a source variable that was not generated in the target method.",
+                "Map or stub the declaration first; otherwise keep the whole conditional block for manual migration.");
+            AppendCommentBlock(sb, _indent + _indent, RenderConditionalSourceSummary(action), "  ");
+            foreach (var symbol in unresolvedConditions)
+                BlockSymbol(symbol);
+            return;
+        }
+
         sb.AppendLine($"{_indent}{_indent}if ({action.ConditionExpression})");
         sb.AppendLine($"{_indent}{_indent}{{");
         foreach (var a in action.IfActions)
@@ -1666,6 +1726,29 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
 
         sb.AppendLine($"{_indent}{_indent}}}");
+    }
+
+    IEnumerable<string> FindUnresolvedConditionalSymbols(ConditionalBlockAction action)
+    {
+        foreach (var symbol in FindUnavailableSymbols(action.ConditionExpression, Array.Empty<string>()))
+            yield return symbol;
+
+        foreach (var elseIf in action.ElseIfActions)
+        {
+            foreach (var symbol in FindUnavailableSymbols(elseIf.Condition, Array.Empty<string>()))
+                yield return symbol;
+        }
+    }
+
+    static string RenderConditionalSourceSummary(ConditionalBlockAction action)
+    {
+        var sb = new StringBuilder();
+        sb.Append("if (").Append(action.ConditionExpression).AppendLine(") { ... }");
+        foreach (var elseIf in action.ElseIfActions)
+            sb.Append("else if (").Append(elseIf.Condition).AppendLine(") { ... }");
+        if (action.ElseActions.Any())
+            sb.AppendLine("else { ... }");
+        return sb.ToString().TrimEnd();
     }
 
     string ExtractKeyName(string keyExpression)

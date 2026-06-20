@@ -65,7 +65,6 @@ if (mode == "discover-target" && !Directory.Exists(inputPath))
     return 2;
 }
 
-var parser = new RoslynTestFileParser();
 IRenderer renderer = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
     ? new PlaywrightTypeScriptRenderer()
     : new PlaywrightDotNetRenderer();
@@ -100,6 +99,10 @@ if (configPaths.Length > 0)
         ? $"Loaded adapter config: {configPaths[0]}"
         : $"Loaded adapter config layers: {string.Join(" -> ", configPaths)}");
 }
+
+var parser = loadedConfig != null
+    ? new RoslynTestFileParser(loadedConfig)
+    : new RoslynTestFileParser();
 
 if (string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase) && mode == "orchestrate")
 {

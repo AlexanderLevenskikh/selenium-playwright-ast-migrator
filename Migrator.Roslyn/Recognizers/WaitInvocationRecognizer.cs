@@ -1,10 +1,23 @@
 using Migrator.Core;
 using Migrator.Core.Models;
+using Migrator.Roslyn;
 
 namespace Migrator.Roslyn.Recognizers;
 
 public class WaitInvocationRecognizer : IInvocationRecognizer
 {
+    readonly RecognizerOptions _options;
+
+    public WaitInvocationRecognizer()
+        : this(RecognizerOptions.Default)
+    {
+    }
+
+    public WaitInvocationRecognizer(RecognizerOptions options)
+    {
+        _options = options;
+    }
+
     static readonly HashSet<string> ActionabilityWaitMethods = new(StringComparer.Ordinal)
     {
         "WaitPresence", "WaitPresenceAsync",
@@ -28,6 +41,17 @@ public class WaitInvocationRecognizer : IInvocationRecognizer
     {
         if (string.IsNullOrWhiteSpace(ctx.ReceiverText))
             return null;
+
+        if (_options.WaitPolicies.TryGetValue(ctx.MethodName, out var configuredKind))
+        {
+            return new WaitForAction(
+                ctx.SourceLine,
+                ctx.ReceiverText,
+                RecognitionConfidence.SyntaxFallback,
+                ctx.MethodName,
+                ctx.FullText,
+                ParseWaitPolicyKind(configuredKind));
+        }
 
         if (ActionabilityWaitMethods.Contains(ctx.MethodName))
         {
@@ -63,6 +87,14 @@ public class WaitInvocationRecognizer : IInvocationRecognizer
         }
 
         return null;
+    }
+
+    static WaitForKind ParseWaitPolicyKind(string? configuredKind)
+    {
+        if (Enum.TryParse<WaitForKind>(configuredKind, ignoreCase: true, out var kind))
+            return kind;
+
+        return WaitForKind.ReviewRequired;
     }
 
     static bool IsProductStateWait(string methodName, string receiverText)

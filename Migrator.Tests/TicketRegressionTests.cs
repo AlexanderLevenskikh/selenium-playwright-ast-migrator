@@ -2,6 +2,8 @@ using System.Linq;
 using Migrator.Core;
 using Migrator.Core.Models;
 using Migrator.PlaywrightDotNet;
+using Migrator.Roslyn;
+using Migrator.Roslyn.Recognizers;
 using Migrator.SeleniumCSharp;
 
 namespace Migrator.Tests;
@@ -213,6 +215,166 @@ public class TicketRegressionTests
         Assert.Contains("Page.Locator(\"[data-tid='unlock-product-discounts']\")", output);
         Assert.DoesNotContain("GetByTestId(\\\"unlock-product-discounts\\\")", output);
         Assert.DoesNotContain("[data-tid='GetByTestId", output);
+    }
+
+
+
+    [Fact]
+    public void WaitInvocationRecognizer_UsesConfiguredWaitPolicy()
+    {
+        var config = new ProjectAdapterConfig(
+            "sample",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            WaitPolicies: new[]
+            {
+                new WaitPolicyMapping
+                {
+                    SourceMethod = "WaitDisabled",
+                    Kind = "ActionabilityElided"
+                }
+            });
+        var recognizer = new WaitInvocationRecognizer(RecognizerOptions.FromConfig(config));
+
+        var action = recognizer.TryRecognize(new InvocationContext(
+            "WaitDisabled",
+            "discountSettingsPage.Save",
+            "discountSettingsPage.Save.WaitDisabled()",
+            62,
+            SymbolResolved: false,
+            ArgumentTexts: Array.Empty<string>()));
+
+        var wait = Assert.IsType<WaitForAction>(action);
+        Assert.Equal(WaitForKind.ActionabilityElided, wait.Kind);
+        Assert.Equal("WaitDisabled", wait.SourceMethod);
+    }
+
+    [Fact]
+    public void GenericReceiverMethodMapping_ReplacesElementWithResolvedTarget()
+    {
+        var sourceModel = CreateModel(new TestAction[]
+        {
+            new MethodInvocationAction(
+                60,
+                "discountSettingsPage.Save",
+                "WaitDisabled",
+                "discountSettingsPage.Save.WaitDisabled()",
+                Array.Empty<string>(),
+                RecognitionConfidence.SyntaxFallback)
+        });
+        var config = new ProjectAdapterConfig(
+            "sample",
+            new[]
+            {
+                new UiTargetMapping(
+                    "discountSettingsPage.Save",
+                    @"Page.GetByTestId(""save"")",
+                    "RawExpression")
+            },
+            Array.Empty<PageObjectMapping>(),
+            new[]
+            {
+                new MethodMapping(
+                    "element.WaitDisabled()",
+                    null,
+                    null,
+                    new[] { "await Expect(element).ToBeDisabledAsync();" },
+                    false)
+            });
+
+        var model = new DefaultProjectAdapter(config).Adapt(sourceModel);
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains(@"Page.GetByTestId(""save"")", output);
+        Assert.Contains("ToBeDisabledAsync", output);
+        Assert.DoesNotContain("Expect(element)", output);
+        Assert.DoesNotContain("MANUAL_REVIEW", output);
+    }
+
+    [Fact]
+    public void ParameterizedGenericClick_SubstitutesSourcePlaceholder()
+    {
+        var sourceModel = CreateModel(new TestAction[]
+        {
+            new MethodInvocationAction(
+                61,
+                "tariffCard.TariffListPageLink",
+                "Click",
+                "tariffCard.TariffListPageLink.Click<TariffsOnProductPage>()",
+                Array.Empty<string>(),
+                "tariffListPage",
+                RecognitionConfidence.SyntaxFallback)
+        });
+        var config = new ProjectAdapterConfig(
+            "sample",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "{source}.Click<{T}>()",
+                    new[] { "var {result} = await {source}.ClickAsync(); // target {T}" },
+                    requiresReview: true)
+            });
+
+        var model = new DefaultProjectAdapter(config).Adapt(sourceModel);
+        var mapped = Assert.IsType<MappedMethodInvocationAction>(model.Tests.Single().BodyActions.Single());
+
+        Assert.Contains("tariffCard.TariffListPageLink.ClickAsync", mapped.TargetStatements.Single());
+        Assert.Contains("TariffsOnProductPage", mapped.TargetStatements.Single());
+        Assert.DoesNotContain("{source}", mapped.TargetStatements.Single());
+    }
+
+    [Fact]
+    public void SuppressedBooleanDeclaration_EmitsCompileOnlyStubForLaterCondition()
+    {
+        var model = CreateModel(new TestAction[]
+        {
+            new LocalDeclarationAction(
+                70,
+                "element1",
+                "var",
+                "page.HasWarningAccept.Visible.Get()"),
+            new ConditionalBlockAction(
+                71,
+                "element1",
+                new TestAction[] { new RawStatementAction(72, "Console.WriteLine(\"ok\")") },
+                Array.Empty<(string Condition, IReadOnlyList<TestAction> Actions)>(),
+                Array.Empty<TestAction>())
+        }) with
+        {
+            SuppressedMethodPatterns = new[] { "*page.*.Visible.Get(*)" }
+        };
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("bool element1 = default", output);
+        Assert.Contains("SUPPRESSED_DECLARATION_STUB", output);
+        Assert.Contains("if (element1)", output);
+        Assert.DoesNotContain("CS0103", output);
+        Assert.DoesNotContain("CONDITIONAL_UNRESOLVED_SYMBOL", output);
+    }
+
+    [Fact]
+    public void ConditionalBlock_WithUnknownCondition_IsCommentedInsteadOfEmittingUndefinedSymbol()
+    {
+        var model = CreateModel(new TestAction[]
+        {
+            new ConditionalBlockAction(
+                80,
+                "element2",
+                new TestAction[] { new RawStatementAction(81, "Console.WriteLine(\"bad\")") },
+                Array.Empty<(string Condition, IReadOnlyList<TestAction> Actions)>(),
+                Array.Empty<TestAction>())
+        });
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("CONDITIONAL_UNRESOLVED_SYMBOL", output);
+        Assert.Contains("if (element2) { ... }", output);
+        Assert.DoesNotMatch(@"(?m)^\s*if\s*\(element2\)", output);
     }
 
     static TestFileModel CreateModel(IEnumerable<TestAction> actions) =>

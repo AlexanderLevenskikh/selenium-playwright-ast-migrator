@@ -738,7 +738,15 @@ public class DefaultProjectAdapter : IProjectAdapter
         if (paramResult != null && !string.IsNullOrWhiteSpace(mi.ResultVariable))
             return new[] { paramResult };
 
-        // 3. Exact match by method name
+        // 3. Generic receiver MethodMapping, e.g. Methods["element.WaitDisabled()"].
+        // Here "element" is a reusable receiver slot, not a literal source object.
+        // It lets one mapping cover discountSettingsPage.Save.WaitDisabled(),
+        // page.Submit.WaitDisabled(), etc.
+        var genericReceiverResult = TryResolveGenericReceiverMethodMapping(mi, resolved);
+        if (genericReceiverResult != null)
+            return new[] { genericReceiverResult };
+
+        // 4. Exact match by method name
         if (!string.IsNullOrEmpty(mi.MethodName) && resolved._methodStatementsMap.TryGetValue(mi.MethodName, out var methodMapping))
         {
             return new[]
@@ -754,12 +762,71 @@ public class DefaultProjectAdapter : IProjectAdapter
             };
         }
 
-        // 4. Parameterized pattern match for regular invocations
+        // 5. Parameterized pattern match for regular invocations
         if (paramResult != null)
             return new[] { paramResult };
 
-        // 5. No match — return original action (will render as TODO)
+        // 6. No match — return original action (will render as TODO)
         return new[] { mi };
+    }
+
+
+    MappedMethodInvocationAction? TryResolveGenericReceiverMethodMapping(MethodInvocationAction mi, ResolvedFileConfig resolved)
+    {
+        foreach (var kvp in resolved._methodStatementsMap)
+        {
+            var configuredInvocation = TryParseMethodInvocation(mi.SourceLine, kvp.Key, resultVariable: null);
+            if (configuredInvocation == null)
+                continue;
+
+            var configuredReceiver = configuredInvocation.ReceiverExpression.Trim();
+            if (!IsGenericReceiverName(configuredReceiver))
+                continue;
+
+            if (!string.Equals(configuredInvocation.MethodName, mi.MethodName, StringComparison.Ordinal))
+                continue;
+
+            if (configuredInvocation.ArgumentTexts.Count != mi.ArgumentTexts.Count)
+                continue;
+
+            var receiverForTarget = StripTerminalShouldInvocation(mi.ReceiverExpression);
+            var resolvedTarget = TryResolveReceiverTarget(receiverForTarget, resolved);
+            var statements = kvp.Value.Statements
+                .Select(stmt => RewriteGenericReceiverStatement(stmt, configuredReceiver))
+                .ToArray();
+
+            return new MappedMethodInvocationAction(
+                mi.SourceLine,
+                mi.FullSourceText,
+                statements,
+                kvp.Value.RequiresReview,
+                resolvedTarget,
+                kvp.Key,
+                mi.ResultVariable);
+        }
+
+        return null;
+    }
+
+    static bool IsGenericReceiverName(string receiver)
+    {
+        return string.Equals(receiver, "element", StringComparison.Ordinal)
+            || string.Equals(receiver, "source", StringComparison.Ordinal)
+            || string.Equals(receiver, "target", StringComparison.Ordinal);
+    }
+
+    static string RewriteGenericReceiverStatement(string statement, string genericReceiver)
+    {
+        if (string.IsNullOrWhiteSpace(statement) || string.IsNullOrWhiteSpace(genericReceiver))
+            return statement;
+
+        var result = statement
+            .Replace("{" + genericReceiver + "}", "{TARGET}", StringComparison.Ordinal);
+
+        return Regex.Replace(
+            result,
+            $@"(?<![\w@.]){Regex.Escape(genericReceiver)}(?![\w@])",
+            "{TARGET}");
     }
 
     TargetExpression? TryResolveReceiverTarget(string receiverExpression, ResolvedFileConfig resolved)
@@ -783,6 +850,11 @@ public class DefaultProjectAdapter : IProjectAdapter
             var placeholders = TryMatchPattern(mapping.SourceMethodPattern, fullText, mi.ArgumentTexts);
             if (placeholders != null)
             {
+                if (!placeholders.ContainsKey("source"))
+                    placeholders["source"] = new PlaceholderValue(mi.ReceiverExpression, mi.ReceiverExpression, IsStringLiteral: false);
+                if (!placeholders.ContainsKey("element"))
+                    placeholders["element"] = new PlaceholderValue(mi.ReceiverExpression, mi.ReceiverExpression, IsStringLiteral: false);
+
                 NormalizeFluentAssertionsPlaceholders(placeholders);
 
                 if (!string.IsNullOrWhiteSpace(mi.ResultVariable))

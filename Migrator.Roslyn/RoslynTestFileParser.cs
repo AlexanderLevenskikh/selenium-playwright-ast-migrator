@@ -14,19 +14,36 @@ public class RoslynTestFileParser : ITestFileParser
 {
     readonly List<IInvocationRecognizer> _semanticRecognizers;
     readonly List<IInvocationRecognizer> _syntaxFallbackRecognizers;
+    readonly IReadOnlySet<string> _genericResultMethods;
 
     public RoslynTestFileParser()
-        : this(CreateDefaultRecognizers())
+        : this(RecognizerOptions.Default)
+    {
+    }
+
+    public RoslynTestFileParser(ProjectAdapterConfig? config)
+        : this(RecognizerOptions.FromConfig(config))
+    {
+    }
+
+    public RoslynTestFileParser(RecognizerOptions options)
+        : this(CreateDefaultRecognizers(options), options.GenericResultMethods)
     {
     }
 
     public RoslynTestFileParser(List<IInvocationRecognizer> recognizers)
+        : this(recognizers, RecognizerOptions.Default.GenericResultMethods)
+    {
+    }
+
+    RoslynTestFileParser(List<IInvocationRecognizer> recognizers, IReadOnlySet<string> genericResultMethods)
     {
         _semanticRecognizers = recognizers;
         _syntaxFallbackRecognizers = recognizers;
+        _genericResultMethods = genericResultMethods;
     }
 
-    static List<IInvocationRecognizer> CreateDefaultRecognizers() => new()
+    static List<IInvocationRecognizer> CreateDefaultRecognizers(RecognizerOptions options) => new()
     {
         new WebDriverFindElementRecognizer(),
         new ClickInvocationRecognizer(),
@@ -38,7 +55,7 @@ public class RoslynTestFileParser : ITestFileParser
         new WaitPresenceRecognizer(),
         new UrlAssertionRecognizer(),
         new FluentAssertionsRecognizer(),
-        new WaitInvocationRecognizer(),
+        new WaitInvocationRecognizer(options),
         new AsyncPlaywrightRecognizer(),
         new NavigationRecognizer(),
         new PlaywrightAssertionRecognizer(),
@@ -224,7 +241,7 @@ public class RoslynTestFileParser : ITestFileParser
         return text;
     }
 
-    static IEnumerable<TestAction> ParseMethodBody(MethodDeclarationSyntax method, SemanticModel semanticModel)
+    IEnumerable<TestAction> ParseMethodBody(MethodDeclarationSyntax method, SemanticModel semanticModel)
     {
         if (method.Body == null) yield break;
 
@@ -245,7 +262,7 @@ public class RoslynTestFileParser : ITestFileParser
         }
     }
 
-    static TestAction? TryExtractAction(StatementSyntax statement, SemanticModel semanticModel, int line)
+    TestAction? TryExtractAction(StatementSyntax statement, SemanticModel semanticModel, int line)
     {
         // Local declarations — try to extract meaningful declarations
         if (statement is LocalDeclarationStatementSyntax lds)
@@ -299,7 +316,7 @@ public class RoslynTestFileParser : ITestFileParser
         return TryExtractFromInvocation(invocation, semanticModel, line);
     }
 
-    static TestAction? TryExtractFromInvocation(InvocationExpressionSyntax invocation, SemanticModel semanticModel, int line)
+    TestAction? TryExtractFromInvocation(InvocationExpressionSyntax invocation, SemanticModel semanticModel, int line)
     {
         var methodSymbol = semanticModel.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
         var methodName = GetMethodName(invocation);
@@ -320,8 +337,8 @@ public class RoslynTestFileParser : ITestFileParser
                 return semanticResult;
         }
 
-        // --- Syntax fallback: run recognizer pipeline ---
-        foreach (var recognizer in CreateDefaultRecognizers())
+        // --- Syntax fallback: run configured recognizer pipeline ---
+        foreach (var recognizer in _syntaxFallbackRecognizers)
         {
             if (recognizer is UnknownInvocationRecognizer) continue;
 
@@ -459,7 +476,7 @@ public class RoslynTestFileParser : ITestFileParser
         "ClickAndOpen",
     };
 
-    static TestAction? TryExtractGenericInvocationDeclaration(LocalDeclarationStatementSyntax lds, int line)
+    TestAction? TryExtractGenericInvocationDeclaration(LocalDeclarationStatementSyntax lds, int line)
     {
         var declaration = lds.Declaration;
         if (declaration.Variables.Count == 0) return null;
@@ -479,7 +496,7 @@ public class RoslynTestFileParser : ITestFileParser
             return null;
 
         var methodName = GetMethodName(invocation);
-        if (!GenericInvocationDeclarationMethods.Contains(methodName))
+        if (!_genericResultMethods.Contains(methodName))
             return null;
 
         var receiverText = GetReceiverText(invocation);
@@ -567,7 +584,7 @@ public class RoslynTestFileParser : ITestFileParser
         return null;
     }
 
-    static ConditionalBlockAction? TryExtractConditionalBlock(IfStatementSyntax ifStmt, SemanticModel semanticModel, int line)
+    ConditionalBlockAction? TryExtractConditionalBlock(IfStatementSyntax ifStmt, SemanticModel semanticModel, int line)
     {
         var condition = ifStmt.Condition.ToString().Trim();
         var ifActions = ParseBlockStatements(ifStmt.Statement, semanticModel).ToList();
@@ -609,7 +626,7 @@ public class RoslynTestFileParser : ITestFileParser
             elseActions);
     }
 
-    static IEnumerable<TestAction> ParseBlockStatements(BlockSyntax? block, SemanticModel semanticModel)
+    IEnumerable<TestAction> ParseBlockStatements(BlockSyntax? block, SemanticModel semanticModel)
     {
         if (block == null) yield break;
         foreach (var stmt in block.Statements)
@@ -620,7 +637,7 @@ public class RoslynTestFileParser : ITestFileParser
         }
     }
 
-    static IEnumerable<TestAction> ParseBlockStatements(StatementSyntax stmt, SemanticModel semanticModel)
+    IEnumerable<TestAction> ParseBlockStatements(StatementSyntax stmt, SemanticModel semanticModel)
     {
         if (stmt is BlockSyntax block)
         {
