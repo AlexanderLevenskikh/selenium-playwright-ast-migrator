@@ -547,6 +547,70 @@ public class SampleTests
         Assert.DoesNotContain("EMPTY_TEST_AFTER_SUPPRESSION", output);
     }
 
+    [Fact]
+    public void FluentTextAssertionRecognizer_HandlesGenericGetShouldBeChain()
+    {
+        var file = Path.GetTempFileName() + ".cs";
+        try
+        {
+            File.WriteAllText(file, @"
+using NUnit.Framework;
+
+public class SampleTests
+{
+    [Test]
+    public void GeneratedTest()
+    {
+        page.ReportsSubtotalSalesAmount.Sum.Get().Should().Be(2988323.95m);
+    }
+}
+");
+
+            var model = new RoslynTestFileParser().Parse(file);
+            var action = Assert.IsType<TextAssertionAction>(model.Tests.Single().BodyActions.Single());
+
+            Assert.Equal("page.ReportsSubtotalSalesAmount.Sum", action.Target.SourceExpression);
+            Assert.Equal(TextAssertionKind.TextEquals, action.Kind);
+            Assert.Equal("2988323.95m", action.ExpectedValue);
+        }
+        finally
+        {
+            if (File.Exists(file)) File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void FluentTextAssertionRecognizer_HandlesTextGetReplaceShouldBeChain()
+    {
+        var file = Path.GetTempFileName() + ".cs";
+        try
+        {
+            File.WriteAllText(file, @"
+using NUnit.Framework;
+
+public class SampleTests
+{
+    [Test]
+    public void GeneratedTest()
+    {
+        valueSum.ElementAt(1).Text().Get().Replace(""\u00a0"", "" "").Should().Be(""7 854 000,00 ₽"");
+    }
+}
+");
+
+            var model = new RoslynTestFileParser().Parse(file);
+            var action = Assert.IsType<TextAssertionAction>(model.Tests.Single().BodyActions.Single());
+
+            Assert.Equal("valueSum.ElementAt(1)", action.Target.SourceExpression);
+            Assert.Equal(TextAssertionKind.TextEquals, action.Kind);
+            Assert.Equal("\"7 854 000,00 ₽\"", action.ExpectedValue);
+        }
+        finally
+        {
+            if (File.Exists(file)) File.Delete(file);
+        }
+    }
+
     static TestFileModel CreateModel(IEnumerable<TestAction> actions) =>
         new(
             FilePath: "Sample.cs",

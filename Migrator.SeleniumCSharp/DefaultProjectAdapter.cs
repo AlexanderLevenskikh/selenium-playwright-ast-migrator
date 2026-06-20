@@ -12,19 +12,10 @@ namespace Migrator.SeleniumCSharp;
 
 public class DefaultProjectAdapter : IProjectAdapter
 {
-    static readonly Regex ElementAtRegex =
-        new(@"\.\s*Items\s*\.\s*ElementAt\s*\(\s*([^)]+)\s*\)", RegexOptions.Compiled);
-
-    static readonly Regex TableTextAccessRegex =
-        new(@"\.\s*Items\s*\.\s*ElementAt\s*\(\s*([^)]+)\s*\)\s*\.\s*Text\s*\.\s*Get\s*\(\s*\)", RegexOptions.Compiled);
-
+    static readonly Regex ElementAtRegex = new(@"\.\s*Items\s*\.\s*ElementAt\s*\(\s*([^)]+)\s*\)", RegexOptions.Compiled);
+    static readonly Regex TableTextAccessRegex = new(@"\.\s*Items\s*\.\s*ElementAt\s*\(\s*([^)]+)\s*\)\s*\.\s*Text\s*\.\s*Get\s*\(\s*\)", RegexOptions.Compiled);
     static readonly Regex TableItemsRegex = new(@"\.Elements?\s*\.\s*Items\s*\.", RegexOptions.Compiled);
-
-    static readonly Regex CountGetShouldRegex =
-        new(
-            @"\.Elements?\s*\.\s*Items\s*\.\s*Count\s*\.\s*Get\s*\(\s*\)\s*\.\s*Should\s*\(\s*\)\s*\.\s*(Be|BeGreaterThan|BeLessThan)\s*\(\s*([^)]+)\s*\)",
-            RegexOptions.Compiled);
-
+    static readonly Regex CountGetShouldRegex = new(@"\.Elements?\s*\.\s*Items\s*\.\s*Count\s*\.\s*Get\s*\(\s*\)\s*\.\s*Should\s*\(\s*\)\s*\.\s*(Be|BeGreaterThan|BeLessThan)\s*\(\s*([^)]+)\s*\)", RegexOptions.Compiled);
     readonly ProjectAdapterConfig? _globalConfig;
 
     /// <summary>
@@ -83,8 +74,7 @@ public class DefaultProjectAdapter : IProjectAdapter
 
         if (matching.Length > 1)
         {
-            Console.Error.WriteLine(
-                $"Warning: multiple profile scopes matched source file '{Path.GetFileName(sourceFilePath)}': " +
+            Console.Error.WriteLine($"Warning: multiple profile scopes matched source file '{Path.GetFileName(sourceFilePath)}': " +
                 string.Join(", ", matching.Select(s => s.Name)));
         }
 
@@ -157,8 +147,7 @@ public class DefaultProjectAdapter : IProjectAdapter
 
         if (matchingScopes.Length > 1)
         {
-            Console.Error.WriteLine(
-                $"Warning: multiple profile scopes matched source file '{Path.GetFileName(sourceFilePath)}': " +
+            Console.Error.WriteLine($"Warning: multiple profile scopes matched source file '{Path.GetFileName(sourceFilePath)}': " +
                 string.Join(", ", matchingScopes.Select(s => s.Name)));
         }
 
@@ -173,11 +162,9 @@ public class DefaultProjectAdapter : IProjectAdapter
 
         var testHost = scope.TestHost ?? _globalConfig.TestHost;
         var mergedTargetKnownTypes = MergeStrings(_globalConfig.TargetKnownTypes, scope.TargetKnownTypes);
-        var mergedTargetKnownIdentifiers =
-            MergeStrings(_globalConfig.TargetKnownIdentifiers, scope.TargetKnownIdentifiers);
+        var mergedTargetKnownIdentifiers = MergeStrings(_globalConfig.TargetKnownIdentifiers, scope.TargetKnownIdentifiers);
         var mergedSuppressedMethods = MergeStrings(_globalConfig.SuppressedMethods, scope.SuppressedMethods);
-        var mergedSuppressedMethodPatterns =
-            MergeStrings(_globalConfig.SuppressedMethodPatterns, scope.SuppressedMethodPatterns);
+        var mergedSuppressedMethodPatterns = MergeStrings(_globalConfig.SuppressedMethodPatterns, scope.SuppressedMethodPatterns);
 
         return CreateResolvedConfig(_globalConfig, mergedTargets, mergedMethods,
             mergedParamMethods, testHost, _globalConfig.PageObjects,
@@ -220,14 +207,14 @@ public class DefaultProjectAdapter : IProjectAdapter
             if (kind == TargetKind.PlaywrightLocator && mapping.TargetKind == "TestId")
             {
                 testIdAttribute = mapping.TestIdAttribute
-                                  ?? config.LocatorSettings?.DefaultTestIdAttribute;
+                    ?? config.LocatorSettings?.DefaultTestIdAttribute;
             }
 
             if (kind == TargetKind.TestIdBeginning)
             {
                 testIdAttribute = mapping.TestIdAttribute
-                                  ?? config.LocatorSettings?.DefaultTestIdAttribute
-                                  ?? "data-testid";
+                    ?? config.LocatorSettings?.DefaultTestIdAttribute
+                    ?? "data-testid";
             }
 
             if (kind == TargetKind.ClassNameBeginning)
@@ -290,13 +277,11 @@ public class DefaultProjectAdapter : IProjectAdapter
             if (!string.IsNullOrWhiteSpace(item))
                 result.Add(item.Trim());
         }
-
         foreach (var item in scope ?? Array.Empty<string>())
         {
             if (!string.IsNullOrWhiteSpace(item))
                 result.Add(item.Trim());
         }
-
         return result.ToArray();
     }
 
@@ -385,8 +370,7 @@ public class DefaultProjectAdapter : IProjectAdapter
     {
         var adaptedIfActions = cond.IfActions.SelectMany(a => AdaptAction(a, resolved)).ToList();
         var adaptedElseIfActions = cond.ElseIfActions.Select(e =>
-                (e.Condition, (IReadOnlyList<TestAction>)e.Actions.SelectMany(a => AdaptAction(a, resolved)).ToList()))
-            .ToList();
+            (e.Condition, (IReadOnlyList<TestAction>)e.Actions.SelectMany(a => AdaptAction(a, resolved)).ToList())).ToList();
         var adaptedElseActions = cond.ElseActions.SelectMany(a => AdaptAction(a, resolved)).ToList();
 
         return new[]
@@ -406,14 +390,10 @@ public class DefaultProjectAdapter : IProjectAdapter
         ResolvedFileConfig resolved,
         Dictionary<string, TargetExpression> localVariableMappings)
     {
-        var adaptedIfActions = cond.IfActions
-            .SelectMany(a => AdaptActionWithLocalVars(a, resolved, localVariableMappings)).ToList();
+        var adaptedIfActions = cond.IfActions.SelectMany(a => AdaptActionWithLocalVars(a, resolved, localVariableMappings)).ToList();
         var adaptedElseIfActions = cond.ElseIfActions.Select(e =>
-            (e.Condition,
-                (IReadOnlyList<TestAction>)e.Actions
-                    .SelectMany(a => AdaptActionWithLocalVars(a, resolved, localVariableMappings)).ToList())).ToList();
-        var adaptedElseActions = cond.ElseActions
-            .SelectMany(a => AdaptActionWithLocalVars(a, resolved, localVariableMappings)).ToList();
+            (e.Condition, (IReadOnlyList<TestAction>)e.Actions.SelectMany(a => AdaptActionWithLocalVars(a, resolved, localVariableMappings)).ToList())).ToList();
+        var adaptedElseActions = cond.ElseActions.SelectMany(a => AdaptActionWithLocalVars(a, resolved, localVariableMappings)).ToList();
 
         return new[]
         {
@@ -489,8 +469,7 @@ public class DefaultProjectAdapter : IProjectAdapter
         {
             var selector = xpathMatch.Groups[2].Value;
             var locatorExpr = $"Page.Locator(\"xpath={EscapeForLocator(selector)}\")";
-            localVariableMappings[variableName] =
-                TargetExpression.Mapped(variableName, locatorExpr, TargetKind.RawExpression);
+            localVariableMappings[variableName] = TargetExpression.Mapped(variableName, locatorExpr, TargetKind.RawExpression);
             return;
         }
 
@@ -499,8 +478,7 @@ public class DefaultProjectAdapter : IProjectAdapter
         {
             var selector = cssMatch.Groups[2].Value;
             var locatorExpr = $"Page.Locator(\"{EscapeForLocator(selector)}\")";
-            localVariableMappings[variableName] =
-                TargetExpression.Mapped(variableName, locatorExpr, TargetKind.RawExpression);
+            localVariableMappings[variableName] = TargetExpression.Mapped(variableName, locatorExpr, TargetKind.RawExpression);
         }
     }
 
@@ -539,8 +517,7 @@ public class DefaultProjectAdapter : IProjectAdapter
         if (!int.TryParse(indexText, out var literalIndex))
             return new UnresolvedTarget(sourceExpression);
 
-        if (!localVariableMappings.TryGetValue(receiver, out var receiverTarget) ||
-            receiverTarget is not MappedTarget mappedReceiver)
+        if (!localVariableMappings.TryGetValue(receiver, out var receiverTarget) || receiverTarget is not MappedTarget mappedReceiver)
             return new UnresolvedTarget(sourceExpression);
 
         var locatorExpr = BuildLocatorExpression(mappedReceiver);
@@ -558,84 +535,57 @@ public class DefaultProjectAdapter : IProjectAdapter
     {
         return action switch
         {
-            ClickAction click => new[]
-            {
-                new ClickAction(
-                    click.SourceLine,
-                    ResolveTargetWithLocalVars(click.Target.SourceExpression, resolved, localVariableMappings),
-                    click.Confidence)
-            },
-            SendKeysAction sendKeys => new[]
-            {
-                new SendKeysAction(
-                    sendKeys.SourceLine,
-                    ResolveTargetWithLocalVars(sendKeys.Target.SourceExpression, resolved, localVariableMappings),
-                    sendKeys.TextExpression,
-                    sendKeys.Confidence)
-            },
-            PressAction press => new[]
-            {
-                new PressAction(
-                    press.SourceLine,
-                    ResolveTargetWithLocalVars(press.Target.SourceExpression, resolved, localVariableMappings),
-                    press.KeyName,
-                    press.Confidence)
-            },
-            TextAssertionAction ta => new[]
-            {
-                new TextAssertionAction(
-                    ta.SourceLine,
-                    ResolveTargetWithLocalVars(ta.Target.SourceExpression, resolved, localVariableMappings),
-                    ta.Kind,
-                    ta.ExpectedValue,
-                    ta.Confidence)
-            },
-            VisibilityAssertionAction va => new[]
-            {
-                new VisibilityAssertionAction(
-                    va.SourceLine,
-                    ResolveTargetWithLocalVars(va.Target.SourceExpression, resolved, localVariableMappings),
-                    va.Kind,
-                    va.Confidence)
-            },
-            WaitForAction wa => new[]
-            {
-                new WaitForAction(
-                    wa.SourceLine,
-                    ResolveTargetWithLocalVars(wa.Target.SourceExpression, resolved, localVariableMappings),
-                    wa.Confidence,
-                    wa.SourceMethod,
-                    wa.FullSourceText,
-                    wa.Kind)
-            },
-            TableRowTextAccessAction trt => new[]
-            {
-                new TableRowTextAccessAction(
-                    trt.SourceLine,
-                    ResolveTargetWithLocalVars(trt.Target.SourceExpression, resolved, localVariableMappings),
-                    trt.IndexExpression,
-                    trt.SourceText,
-                    trt.Confidence)
-            },
-            TableRowAccessAction tra => new[]
-            {
-                new TableRowAccessAction(
-                    tra.SourceLine,
-                    ResolveTargetWithLocalVars(tra.Target.SourceExpression, resolved, localVariableMappings),
-                    tra.IndexExpression,
-                    tra.SourceText,
-                    tra.Confidence)
-            },
-            TableCountAssertionAction tca => new[]
-            {
-                new TableCountAssertionAction(
-                    tca.SourceLine,
-                    ResolveTargetWithLocalVars(tca.Target.SourceExpression, resolved, localVariableMappings),
-                    tca.Kind,
-                    tca.ExpectedCount,
-                    tca.SourceText,
-                    tca.Confidence)
-            },
+            ClickAction click => new[] { new ClickAction(
+                click.SourceLine,
+                ResolveTargetWithLocalVars(click.Target.SourceExpression, resolved, localVariableMappings),
+                click.Confidence) },
+            SendKeysAction sendKeys => new[] { new SendKeysAction(
+                sendKeys.SourceLine,
+                ResolveTargetWithLocalVars(sendKeys.Target.SourceExpression, resolved, localVariableMappings),
+                sendKeys.TextExpression,
+                sendKeys.Confidence) },
+            PressAction press => new[] { new PressAction(
+                press.SourceLine,
+                ResolveTargetWithLocalVars(press.Target.SourceExpression, resolved, localVariableMappings),
+                press.KeyName,
+                press.Confidence) },
+            TextAssertionAction ta => new[] { new TextAssertionAction(
+                ta.SourceLine,
+                ResolveTargetWithLocalVars(ta.Target.SourceExpression, resolved, localVariableMappings),
+                ta.Kind,
+                ta.ExpectedValue,
+                ta.Confidence) },
+            VisibilityAssertionAction va => new[] { new VisibilityAssertionAction(
+                va.SourceLine,
+                ResolveTargetWithLocalVars(va.Target.SourceExpression, resolved, localVariableMappings),
+                va.Kind,
+                va.Confidence) },
+            WaitForAction wa => new[] { new WaitForAction(
+                wa.SourceLine,
+                ResolveTargetWithLocalVars(wa.Target.SourceExpression, resolved, localVariableMappings),
+                wa.Confidence,
+                wa.SourceMethod,
+                wa.FullSourceText,
+                wa.Kind) },
+            TableRowTextAccessAction trt => new[] { new TableRowTextAccessAction(
+                trt.SourceLine,
+                ResolveTargetWithLocalVars(trt.Target.SourceExpression, resolved, localVariableMappings),
+                trt.IndexExpression,
+                trt.SourceText,
+                trt.Confidence) },
+            TableRowAccessAction tra => new[] { new TableRowAccessAction(
+                tra.SourceLine,
+                ResolveTargetWithLocalVars(tra.Target.SourceExpression, resolved, localVariableMappings),
+                tra.IndexExpression,
+                tra.SourceText,
+                tra.Confidence) },
+            TableCountAssertionAction tca => new[] { new TableCountAssertionAction(
+                tca.SourceLine,
+                ResolveTargetWithLocalVars(tca.Target.SourceExpression, resolved, localVariableMappings),
+                tca.Kind,
+                tca.ExpectedCount,
+                tca.SourceText,
+                tca.Confidence) },
             MethodInvocationAction mi => TryResolveMethodMapping(mi, resolved),
             RawStatementAction raw => TryResolveRawStatement(raw, resolved),
             LocalDeclarationAction lds => TryResolveLocalDeclaration(lds, resolved),
@@ -730,84 +680,57 @@ public class DefaultProjectAdapter : IProjectAdapter
     {
         return action switch
         {
-            ClickAction click => new[]
-            {
-                new ClickAction(
-                    click.SourceLine,
-                    ResolveTarget(click.Target.SourceExpression, resolved),
-                    click.Confidence)
-            },
-            SendKeysAction sendKeys => new[]
-            {
-                new SendKeysAction(
-                    sendKeys.SourceLine,
-                    ResolveTarget(sendKeys.Target.SourceExpression, resolved),
-                    sendKeys.TextExpression,
-                    sendKeys.Confidence)
-            },
-            PressAction press => new[]
-            {
-                new PressAction(
-                    press.SourceLine,
-                    ResolveTarget(press.Target.SourceExpression, resolved),
-                    press.KeyName,
-                    press.Confidence)
-            },
-            TextAssertionAction ta => new[]
-            {
-                new TextAssertionAction(
-                    ta.SourceLine,
-                    ResolveTarget(ta.Target.SourceExpression, resolved),
-                    ta.Kind,
-                    ta.ExpectedValue,
-                    ta.Confidence)
-            },
-            TableRowTextAccessAction trt => new[]
-            {
-                new TableRowTextAccessAction(
-                    trt.SourceLine,
-                    ResolveTarget(trt.Target.SourceExpression, resolved),
-                    trt.IndexExpression,
-                    trt.SourceText,
-                    trt.Confidence)
-            },
-            TableCountAssertionAction tca => new[]
-            {
-                new TableCountAssertionAction(
-                    tca.SourceLine,
-                    ResolveTarget(tca.Target.SourceExpression, resolved),
-                    tca.Kind,
-                    tca.ExpectedCount,
-                    tca.SourceText,
-                    tca.Confidence)
-            },
-            TableRowAccessAction tra => new[]
-            {
-                new TableRowAccessAction(
-                    tra.SourceLine,
-                    ResolveTarget(tra.Target.SourceExpression, resolved),
-                    tra.IndexExpression,
-                    tra.SourceText,
-                    tra.Confidence)
-            },
-            VisibilityAssertionAction va => new[]
-            {
-                new VisibilityAssertionAction(
-                    va.SourceLine,
-                    ResolveTarget(va.Target.SourceExpression, resolved),
-                    va.Kind,
-                    va.Confidence)
-            },
-            WaitForAction wa => new[]
-            {
-                new WaitForAction(
-                    wa.SourceLine,
-                    ResolveTarget(wa.Target.SourceExpression, resolved),
-                    wa.Confidence,
-                    wa.SourceMethod,
-                    wa.FullSourceText,
-                    wa.Kind)
-            },
+            ClickAction click => new[] { new ClickAction(
+                click.SourceLine,
+                ResolveTarget(click.Target.SourceExpression, resolved),
+                click.Confidence) },
+            SendKeysAction sendKeys => new[] { new SendKeysAction(
+                sendKeys.SourceLine,
+                ResolveTarget(sendKeys.Target.SourceExpression, resolved),
+                sendKeys.TextExpression,
+                sendKeys.Confidence) },
+            PressAction press => new[] { new PressAction(
+                press.SourceLine,
+                ResolveTarget(press.Target.SourceExpression, resolved),
+                press.KeyName,
+                press.Confidence) },
+            TextAssertionAction ta => new[] { new TextAssertionAction(
+                ta.SourceLine,
+                ResolveTarget(ta.Target.SourceExpression, resolved),
+                ta.Kind,
+                ta.ExpectedValue,
+                ta.Confidence) },
+            TableRowTextAccessAction trt => new[] { new TableRowTextAccessAction(
+                trt.SourceLine,
+                ResolveTarget(trt.Target.SourceExpression, resolved),
+                trt.IndexExpression,
+                trt.SourceText,
+                trt.Confidence) },
+            TableCountAssertionAction tca => new[] { new TableCountAssertionAction(
+                tca.SourceLine,
+                ResolveTarget(tca.Target.SourceExpression, resolved),
+                tca.Kind,
+                tca.ExpectedCount,
+                tca.SourceText,
+                tca.Confidence) },
+            TableRowAccessAction tra => new[] { new TableRowAccessAction(
+                tra.SourceLine,
+                ResolveTarget(tra.Target.SourceExpression, resolved),
+                tra.IndexExpression,
+                tra.SourceText,
+                tra.Confidence) },
+            VisibilityAssertionAction va => new[] { new VisibilityAssertionAction(
+                va.SourceLine,
+                ResolveTarget(va.Target.SourceExpression, resolved),
+                va.Kind,
+                va.Confidence) },
+            WaitForAction wa => new[] { new WaitForAction(
+                wa.SourceLine,
+                ResolveTarget(wa.Target.SourceExpression, resolved),
+                wa.Confidence,
+                wa.SourceMethod,
+                wa.FullSourceText,
+                wa.Kind) },
             MethodInvocationAction mi => TryResolveMethodMapping(mi, resolved),
             RawStatementAction raw => TryResolveRawStatement(raw, resolved),
             LocalDeclarationAction lds => TryResolveLocalDeclaration(lds, resolved),
@@ -858,8 +781,7 @@ public class DefaultProjectAdapter : IProjectAdapter
             return new[] { genericReceiverResult };
 
         // 4. Exact match by method name
-        if (!string.IsNullOrEmpty(mi.MethodName) &&
-            resolved._methodStatementsMap.TryGetValue(mi.MethodName, out var methodMapping))
+        if (!string.IsNullOrEmpty(mi.MethodName) && resolved._methodStatementsMap.TryGetValue(mi.MethodName, out var methodMapping))
         {
             return new[]
             {
@@ -883,8 +805,7 @@ public class DefaultProjectAdapter : IProjectAdapter
     }
 
 
-    MappedMethodInvocationAction? TryResolveGenericReceiverMethodMapping(MethodInvocationAction mi,
-        ResolvedFileConfig resolved)
+    MappedMethodInvocationAction? TryResolveGenericReceiverMethodMapping(MethodInvocationAction mi, ResolvedFileConfig resolved)
     {
         foreach (var kvp in resolved._methodStatementsMap)
         {
@@ -924,8 +845,8 @@ public class DefaultProjectAdapter : IProjectAdapter
     static bool IsGenericReceiverName(string receiver)
     {
         return string.Equals(receiver, "element", StringComparison.Ordinal)
-               || string.Equals(receiver, "source", StringComparison.Ordinal)
-               || string.Equals(receiver, "target", StringComparison.Ordinal);
+            || string.Equals(receiver, "source", StringComparison.Ordinal)
+            || string.Equals(receiver, "target", StringComparison.Ordinal);
     }
 
     static string RewriteGenericReceiverStatement(string statement, string genericReceiver)
@@ -964,11 +885,9 @@ public class DefaultProjectAdapter : IProjectAdapter
             if (placeholders != null)
             {
                 if (!placeholders.ContainsKey("source"))
-                    placeholders["source"] = new PlaceholderValue(mi.ReceiverExpression, mi.ReceiverExpression,
-                        IsStringLiteral: false);
+                    placeholders["source"] = new PlaceholderValue(mi.ReceiverExpression, mi.ReceiverExpression, IsStringLiteral: false);
                 if (!placeholders.ContainsKey("element"))
-                    placeholders["element"] = new PlaceholderValue(mi.ReceiverExpression, mi.ReceiverExpression,
-                        IsStringLiteral: false);
+                    placeholders["element"] = new PlaceholderValue(mi.ReceiverExpression, mi.ReceiverExpression, IsStringLiteral: false);
 
                 NormalizeFluentAssertionsPlaceholders(placeholders);
 
@@ -977,8 +896,7 @@ public class DefaultProjectAdapter : IProjectAdapter
                     // Special placeholder for assignment-pattern mappings, e.g.
                     // var page = Browser.GoToPage<Page>(Page.Uri);
                     // TargetStatements can use {result} to keep the generated local name.
-                    placeholders["result"] =
-                        new PlaceholderValue(mi.ResultVariable!, mi.ResultVariable!, IsStringLiteral: false);
+                    placeholders["result"] = new PlaceholderValue(mi.ResultVariable!, mi.ResultVariable!, IsStringLiteral: false);
                 }
 
                 string[] resolvedStatements;
@@ -1034,12 +952,10 @@ public class DefaultProjectAdapter : IProjectAdapter
         return match.Success ? match.Groups["receiver"].Value.Trim() : expression;
     }
 
-    Dictionary<string, PlaceholderValue>? TryMatchPattern(string pattern, string sourceText,
-        IReadOnlyList<string> argumentTexts)
+    Dictionary<string, PlaceholderValue>? TryMatchPattern(string pattern, string sourceText, IReadOnlyList<string> argumentTexts)
     {
         var placeholderRegex = new Regex(@"\{(\w+)\}");
-        var placeholderMatches =
-            placeholderRegex.Matches(pattern).Cast<System.Text.RegularExpressions.Match>().ToList();
+        var placeholderMatches = placeholderRegex.Matches(pattern).Cast<System.Text.RegularExpressions.Match>().ToList();
         var placeholders = placeholderMatches
             .Select(m => m.Groups[1].Value)
             .ToList();
@@ -1091,9 +1007,8 @@ public class DefaultProjectAdapter : IProjectAdapter
             foreach (var ph in placeholders)
             {
                 var groupValue = match.Groups[ph].Value;
-                var rawText = !string.IsNullOrEmpty(groupValue)
-                    ? groupValue
-                    : (argumentTexts.Count > argIndex ? argumentTexts[argIndex] : "");
+                var rawText = !string.IsNullOrEmpty(groupValue) ? groupValue :
+                    (argumentTexts.Count > argIndex ? argumentTexts[argIndex] : "");
                 argIndex++;
 
                 var isStringLiteral = IsCSharpStringLiteral(rawText);
@@ -1165,8 +1080,7 @@ public class DefaultProjectAdapter : IProjectAdapter
             // Check if we're entering a string literal (possibly interpolated)
             if (statement[i] == '"')
             {
-                var hasDollarPrefix = (i > 0 && statement[i - 1] == '$' && result.Length > 0 &&
-                                       result[result.Length - 1] == '$');
+                var hasDollarPrefix = (i > 0 && statement[i - 1] == '$' && result.Length > 0 && result[result.Length - 1] == '$');
                 var (litText, endIdx) = ExtractStringLiteral(statement, i);
                 if (litText.Length > 0)
                 {
@@ -1176,7 +1090,6 @@ public class DefaultProjectAdapter : IProjectAdapter
                     {
                         result.Remove(result.Length - 1, 1); // remove the original $
                     }
-
                     result.Append(substituted);
                     i = endIdx;
                 }
@@ -1186,8 +1099,7 @@ public class DefaultProjectAdapter : IProjectAdapter
                     i++;
                 }
             }
-            else if (statement[i] == '{' &&
-                     TryFindRawPlaceholder(statement, i, placeholders, out var phName, out var phEnd))
+            else if (statement[i] == '{' && TryFindRawPlaceholder(statement, i, placeholders, out var phName, out var phEnd))
             {
                 var ph = placeholders[phName];
                 result.Append(NormalizeCSharpOperatorSpacing(ph.RawText));
@@ -1254,8 +1166,7 @@ public class DefaultProjectAdapter : IProjectAdapter
         return ("", start);
     }
 
-    bool TryFindRawPlaceholder(string text, int start, Dictionary<string, PlaceholderValue> placeholders,
-        out string name, out int end)
+    bool TryFindRawPlaceholder(string text, int start, Dictionary<string, PlaceholderValue> placeholders, out string name, out int end)
     {
         name = "";
         end = start;
@@ -1303,7 +1214,6 @@ public class DefaultProjectAdapter : IProjectAdapter
             {
                 result = result.Replace("{" + ph.Key + "}", ph.Value.Content);
             }
-
             return litText.Substring(0, innerStart) + EscapeForStringLiteral(result) + "\"";
         }
 
@@ -1373,13 +1283,11 @@ public class DefaultProjectAdapter : IProjectAdapter
             };
         }
 
-        if ((parsed.MethodName is "SendKeys" or "SendKeysAsync" or "SetValue" or "SetValueAsync") &&
-            parsed.ArgumentTexts.Count > 0)
+        if ((parsed.MethodName is "SendKeys" or "SendKeysAsync" or "SetValue" or "SetValueAsync") && parsed.ArgumentTexts.Count > 0)
         {
             return new[]
             {
-                new SendKeysAction(sourceLine, receiverTarget, parsed.ArgumentTexts[0],
-                    RecognitionConfidence.SyntaxFallback)
+                new SendKeysAction(sourceLine, receiverTarget, parsed.ArgumentTexts[0], RecognitionConfidence.SyntaxFallback)
             };
         }
 
@@ -1768,7 +1676,6 @@ public class DefaultProjectAdapter : IProjectAdapter
                 var locatorExpr = BuildLocatorExpression(mt);
                 return $"await {locatorExpr}.TextContentAsync()";
             }
-
             return match.Value;
         });
 
@@ -1834,9 +1741,7 @@ public class DefaultProjectAdapter : IProjectAdapter
 
     static string EscapeStr(string value) => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
     static string EscapeAttr(string value) => value.Replace("]", "\\]").Replace("[", "\\[");
-
-    static string EscapeAttrValue(string value) =>
-        value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("'", "\\'");
+    static string EscapeAttrValue(string value) => value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("'", "\\'");
 
     static string ExtractTestIdValue(string expression)
     {
@@ -1868,8 +1773,7 @@ public class DefaultProjectAdapter : IProjectAdapter
         {
             "First" => $"{locatorExpr}.First",
             "Nth" when mapped.NthIndex.HasValue => $"{locatorExpr}.Nth({mapped.NthIndex.Value})",
-            "Nth" when IsSafeIndexExpression(mapped.NthIndexExpression) =>
-                $"{locatorExpr}.Nth({mapped.NthIndexExpression})",
+            "Nth" when IsSafeIndexExpression(mapped.NthIndexExpression) => $"{locatorExpr}.Nth({mapped.NthIndexExpression})",
             "Nth" => locatorExpr,
             _ => locatorExpr
         };
@@ -1922,11 +1826,9 @@ public class DefaultProjectAdapter : IProjectAdapter
             _testHost = testHost;
             _sourceOnlyIdentifiers = globalConfig.SourceOnlyIdentifiers ?? Array.Empty<string>();
             _targetKnownTypes = targetKnownTypes ?? globalConfig.TargetKnownTypes ?? Array.Empty<string>();
-            _targetKnownIdentifiers =
-                targetKnownIdentifiers ?? globalConfig.TargetKnownIdentifiers ?? Array.Empty<string>();
+            _targetKnownIdentifiers = targetKnownIdentifiers ?? globalConfig.TargetKnownIdentifiers ?? Array.Empty<string>();
             _suppressedMethods = suppressedMethods ?? globalConfig.SuppressedMethods ?? Array.Empty<string>();
-            _suppressedMethodPatterns = suppressedMethodPatterns ??
-                                        globalConfig.SuppressedMethodPatterns ?? Array.Empty<string>();
+            _suppressedMethodPatterns = suppressedMethodPatterns ?? globalConfig.SuppressedMethodPatterns ?? Array.Empty<string>();
         }
 
         /// <summary>
@@ -2098,8 +2000,7 @@ public class DefaultProjectAdapter : IProjectAdapter
     }
 
     static readonly ResolvedFileConfig EmptyConfig = new(
-        new ProjectAdapterConfig("", Array.Empty<UiTargetMapping>(), Array.Empty<PageObjectMapping>(),
-            Array.Empty<MethodMapping>()),
+        new ProjectAdapterConfig("", Array.Empty<UiTargetMapping>(), Array.Empty<PageObjectMapping>(), Array.Empty<MethodMapping>()),
         null);
 
     /// <summary>

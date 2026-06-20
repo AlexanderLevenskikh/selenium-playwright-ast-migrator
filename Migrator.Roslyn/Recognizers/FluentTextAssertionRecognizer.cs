@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Migrator.Core.Models;
 
 namespace Migrator.Roslyn.Recognizers;
@@ -50,33 +51,95 @@ public class FluentTextAssertionRecognizer : IInvocationRecognizer
 
     static string? ExtractPageTarget(string receiverText)
     {
-        var shouldIndex = receiverText.LastIndexOf(".Should");
+        var shouldIndex = receiverText.LastIndexOf(".Should", StringComparison.Ordinal);
         if (shouldIndex < 0)
             return null;
 
-        var beforeShould = receiverText.Substring(0, shouldIndex);
+        var beforeShould = receiverText.Substring(0, shouldIndex).Trim();
+        return ExtractValueGetterTarget(beforeShould);
+    }
 
-        if (beforeShould.Contains(".Text.Get()"))
+    static string? ExtractValueGetterTarget(string expression)
+    {
+        var current = expression.Trim();
+
+        // Project helpers often normalize text before asserting, e.g.
+        // valueSum.ElementAt(1).Text().Get().Replace("\u00a0", " ").Should().Be(...).
+        // Strip terminal string transformations and keep the underlying locator target.
+        while (TryStripTerminalInvocation(current, "Replace", out var withoutReplace) ||
+               TryStripTerminalInvocation(current, "Trim", out withoutReplace))
         {
-            var textIndex = beforeShould.LastIndexOf(".Text.Get()");
-            if (textIndex > 0)
-                return beforeShould.Substring(0, textIndex);
+            current = withoutReplace.Trim();
         }
 
-        if (beforeShould.Contains(".Text."))
+        var suffixes = new[]
         {
-            var textIndex = beforeShould.LastIndexOf(".Text.");
-            if (textIndex > 0)
-                return beforeShould.Substring(0, textIndex);
-        }
+            ".Text().Get()",
+            ".Text.Get()",
+            ".Text",
+            ".Get()"
+        };
 
-        if (beforeShould.EndsWith(".Text"))
+        foreach (var suffix in suffixes)
         {
-            var textIndex = beforeShould.LastIndexOf(".Text");
-            if (textIndex > 0)
-                return beforeShould.Substring(0, textIndex);
+            if (current.EndsWith(suffix, StringComparison.Ordinal))
+                return current.Substring(0, current.Length - suffix.Length).Trim();
         }
 
         return null;
+    }
+
+    static bool TryStripTerminalInvocation(string expression, string methodName, out string receiver)
+    {
+        receiver = expression;
+        var pattern = $@"^(?<receiver>.+)\.\s*{Regex.Escape(methodName)}\s*\((?<args>.*)\)\s*$";
+        var match = Regex.Match(expression, pattern, RegexOptions.Singleline);
+        if (!match.Success || !IsBalancedParenthesizedInvocation(match.Groups["args"].Value))
+            return false;
+
+        receiver = match.Groups["receiver"].Value;
+        return true;
+    }
+
+    static bool IsBalancedParenthesizedInvocation(string args)
+    {
+        var depth = 0;
+        var inString = false;
+        var escaped = false;
+
+        foreach (var ch in args)
+        {
+            if (inString)
+            {
+                if (escaped)
+                {
+                    escaped = false;
+                    continue;
+                }
+
+                if (ch == '\\')
+                {
+                    escaped = true;
+                    continue;
+                }
+
+                if (ch == '"')
+                    inString = false;
+
+                continue;
+            }
+
+            if (ch == '"')
+            {
+                inString = true;
+                continue;
+            }
+
+            if (ch == '(') depth++;
+            if (ch == ')') depth--;
+            if (depth < 0) return false;
+        }
+
+        return depth == 0 && !inString;
     }
 }
