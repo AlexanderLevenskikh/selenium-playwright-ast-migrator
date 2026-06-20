@@ -4989,3 +4989,110 @@ public class TargetExpressionTests
         }
     }
 }
+
+public class AssertMultipleTests
+{
+    readonly RoslynTestFileParser _parser = new();
+
+    [Fact]
+    public void AssertMultiple_WrapperElided_RendersInnerActionsIndividually()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-assert-multiple-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file,
+@"namespace Sample.E2ETests
+{
+    public class AssertMultipleTests
+    {
+        [Test]
+        public void MultipleAssertions()
+        {
+            Assert.Multiple(
+                () =>
+                {
+                    page.Label.Text.Get().Should().Be(""hello"");
+                    actual!.Description.Should().Be(code.Description);
+                }
+            );
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var parsedAction = sourceModel.Tests.Single().BodyActions.Single();
+            Assert.IsType<AssertMultipleAction>(parsedAction);
+            Assert.Equal(2, ((AssertMultipleAction)parsedAction).Actions.Count);
+
+            var config = new ProjectAdapterConfig(
+                "Test",
+                new[]
+                {
+                    new UiTargetMapping("page.Label", "Page.Locator(\"#label\")", "RawExpression")
+                },
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>());
+
+            var adapter = new DefaultProjectAdapter(config);
+            var adapted = adapter.Adapt(sourceModel);
+            var adaptedAction = adapted.Tests.Single().BodyActions.Single();
+            Assert.IsType<AssertMultipleAction>(adaptedAction);
+
+            var output = new PlaywrightDotNetRenderer().Render(adapted);
+
+            Assert.Contains("[MIGRATOR:ASSERT_MULTIPLE] Assert.Multiple wrapper elided", output);
+            Assert.Contains("await Expect(Page.Locator(\"#label\")).ToHaveTextAsync(\"hello\");", output);
+            Assert.Contains("actual!.Description.Should().Be(code.Description)", output);
+            Assert.DoesNotContain("await Expect(Assert.Multiple", output);
+            Assert.DoesNotContain("Assert.Multiple(", string.Join("\n", output.Split('\n').Where(l => !l.TrimStart().StartsWith("//"))));
+            Assert.True(CompileChecker.CompilesWithoutErrors(output),
+                CompileChecker.FormatErrors(output));
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void AssertMultiple_EmptyLambda_RendersExplicitManualMigrationThrow()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-assert-multiple-empty-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file,
+@"namespace Sample.E2ETests
+{
+    public class AssertMultipleEmptyTests
+    {
+        [Test]
+        public void EmptyMultiple()
+        {
+            Assert.Multiple(() => { });
+        }
+    }
+}
+");
+
+        try
+        {
+            var sourceModel = _parser.Parse(file);
+            var parsedAction = sourceModel.Tests.Single().BodyActions.Single();
+            Assert.IsType<AssertMultipleAction>(parsedAction);
+
+            var output = new PlaywrightDotNetRenderer().Render(sourceModel);
+
+            Assert.Contains("[MIGRATOR:ASSERT_MULTIPLE] Assert.Multiple wrapper elided", output);
+            Assert.Contains("ASSERT_MULTIPLE_REQUIRES_REVIEW", output);
+            Assert.Contains("throw new NotImplementedException(\"MIGRATOR: Assert.Multiple body requires manual migration.\");", output);
+            Assert.DoesNotContain("await Expect(Assert.Multiple", output);
+            Assert.True(CompileChecker.CompilesWithoutErrors(output),
+                CompileChecker.FormatErrors(output));
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+}

@@ -385,6 +385,19 @@ public class DefaultProjectAdapter : IProjectAdapter
         };
     }
 
+    IEnumerable<TestAction> AdaptAssertMultiple(AssertMultipleAction multiple, ResolvedFileConfig resolved)
+    {
+        var adaptedActions = multiple.Actions.SelectMany(a => AdaptAction(a, resolved)).ToList();
+        return new[]
+        {
+            new AssertMultipleAction(
+                multiple.SourceLine,
+                multiple.FullSourceText,
+                adaptedActions,
+                multiple.Confidence)
+        };
+    }
+
     IEnumerable<TestAction> AdaptConditionalBlockWithLocalVars(
         ConditionalBlockAction cond,
         ResolvedFileConfig resolved,
@@ -404,6 +417,25 @@ public class DefaultProjectAdapter : IProjectAdapter
                 adaptedElseIfActions,
                 adaptedElseActions,
                 cond.Confidence)
+        };
+    }
+
+    IEnumerable<TestAction> AdaptAssertMultipleWithLocalVars(
+        AssertMultipleAction multiple,
+        ResolvedFileConfig resolved,
+        Dictionary<string, TargetExpression> localVariableMappings)
+    {
+        var adaptedActions = multiple.Actions
+            .SelectMany(a => AdaptActionWithLocalVars(a, resolved, localVariableMappings))
+            .ToList();
+
+        return new[]
+        {
+            new AssertMultipleAction(
+                multiple.SourceLine,
+                multiple.FullSourceText,
+                adaptedActions,
+                multiple.Confidence)
         };
     }
 
@@ -586,6 +618,7 @@ public class DefaultProjectAdapter : IProjectAdapter
             RawStatementAction raw => TryResolveRawStatement(raw, resolved),
             LocalDeclarationAction lds => TryResolveLocalDeclaration(lds, resolved),
             ConditionalBlockAction cond => AdaptConditionalBlockWithLocalVars(cond, resolved, localVariableMappings),
+            AssertMultipleAction multiple => AdaptAssertMultipleWithLocalVars(multiple, resolved, localVariableMappings),
             _ => new[] { action }
         };
     }
@@ -726,6 +759,7 @@ public class DefaultProjectAdapter : IProjectAdapter
             RawStatementAction raw => TryResolveRawStatement(raw, resolved),
             LocalDeclarationAction lds => TryResolveLocalDeclaration(lds, resolved),
             ConditionalBlockAction cond => AdaptConditionalBlock(cond, resolved),
+            AssertMultipleAction multiple => AdaptAssertMultiple(multiple, resolved),
             _ => new[] { action }
         };
     }

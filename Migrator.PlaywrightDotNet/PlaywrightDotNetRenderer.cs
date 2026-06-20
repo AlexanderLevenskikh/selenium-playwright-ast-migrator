@@ -289,6 +289,9 @@ public class PlaywrightDotNetRenderer : IRenderer
             case MappedMethodInvocationAction mm:
                 AppendCommentBlock(sb, _indent + _indent, mm.FullSourceText, "  ");
                 break;
+            case AssertMultipleAction multiple:
+                AppendCommentBlock(sb, _indent + _indent, multiple.FullSourceText, "  ");
+                break;
             case ClickAction click:
                 AppendCommentBlock(sb, _indent + _indent, $"click: {click.Target.SourceExpression}", "  ");
                 break;
@@ -498,6 +501,9 @@ public class PlaywrightDotNetRenderer : IRenderer
             case MappedExpressionAssertionAction mappedExpr:
                 RenderMappedExpressionAssertion(sb, mappedExpr);
                 break;
+            case AssertMultipleAction assertMultiple:
+                RenderAssertMultiple(sb, assertMultiple);
+                break;
             case UnsupportedAction unsupported:
                 RenderUnsupported(sb, unsupported);
                 break;
@@ -566,6 +572,14 @@ public class PlaywrightDotNetRenderer : IRenderer
         if (action is MappedExpressionAssertionAction mappedExpr)
         {
             RenderMappedExpressionAssertion(sb, mappedExpr);
+            return;
+        }
+
+        // Assert.Multiple is a source assertion wrapper. It should not be treated as
+        // an assertion subject; render nested actions individually.
+        if (action is AssertMultipleAction assertMultiple)
+        {
+            RenderAssertMultiple(sb, assertMultiple);
             return;
         }
 
@@ -1444,6 +1458,27 @@ public class PlaywrightDotNetRenderer : IRenderer
             stmt = stmt.Replace($"__PH_{i}__", placeholders[i]);
         }
         return stmt;
+    }
+
+    void RenderAssertMultiple(StringBuilder sb, AssertMultipleAction action)
+    {
+        sb.AppendLine($"{_indent}{_indent}// [MIGRATOR:ASSERT_MULTIPLE] Assert.Multiple wrapper elided // line {action.SourceLine}");
+
+        if (action.Actions.Count == 0)
+        {
+            AppendSmartTodo(
+                sb,
+                "Assert.Multiple wrapper has no recognized inner actions",
+                "ASSERT_MULTIPLE_REQUIRES_REVIEW",
+                "The wrapper was recognized, but its lambda body could not be safely decomposed into migratable actions.",
+                "Migrate the inner assertions manually or add recognizer support for the missing assertion patterns.",
+                action.FullSourceText);
+            sb.AppendLine($"{_indent}{_indent}throw new NotImplementedException(\"MIGRATOR: Assert.Multiple body requires manual migration.\");");
+            return;
+        }
+
+        foreach (var innerAction in action.Actions)
+            RenderActionWithSafety(sb, innerAction);
     }
 
     void RenderAssertThat(StringBuilder sb, AssertThatAction action)
@@ -2500,6 +2535,8 @@ public class PlaywrightDotNetRenderer : IRenderer
             UrlAssertionAction a => $"UrlAssertion({a.ExpectedValue})",
             MethodInvocationAction a => a.FullSourceText,
             MappedMethodInvocationAction a => a.FullSourceText,
+            MappedExpressionAssertionAction a => a.FullSourceText,
+            AssertMultipleAction a => a.FullSourceText,
             UnsupportedAction a => a.SourceText,
             RawStatementAction a => a.SourceText,
             LocalDeclarationAction a => $"{a.VariableType} {a.VariableName} = {a.InitializationValue}",

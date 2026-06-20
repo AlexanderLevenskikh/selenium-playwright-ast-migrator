@@ -330,6 +330,13 @@ public class RoslynTestFileParser : ITestFileParser
 
         var ctx = new InvocationContext(methodName, receiverText, fullText, line, symbolResolved, argumentTexts);
 
+        // NUnit Assert.Multiple is a wrapper around assertion statements, not an
+        // assertion subject. Handle it before generic invocation recognizers so
+        // inner .Should() chains are rendered individually instead of trying to
+        // wrap the whole Assert.Multiple(...) call in Expect(...).
+        if (TryExtractAssertMultiple(invocation, semanticModel, line) is { } assertMultiple)
+            return assertMultiple;
+
         // --- Semantic path: try recognizers with symbol info ---
         if (symbolResolved)
         {
@@ -353,6 +360,63 @@ public class RoslynTestFileParser : ITestFileParser
         return new UnsupportedAction(line, fullText, symbolResolved
             ? "Semantic match not implemented for this method"
             : "Could not resolve method symbol and no syntax fallback matched");
+    }
+
+    AssertMultipleAction? TryExtractAssertMultiple(InvocationExpressionSyntax invocation, SemanticModel semanticModel, int line)
+    {
+        var methodName = GetMethodName(invocation);
+        var receiverText = GetReceiverText(invocation);
+        if (!string.Equals(methodName, "Multiple", StringComparison.Ordinal) ||
+            !IsAssertReceiver(receiverText))
+            return null;
+
+        var lambdaExpression = invocation.ArgumentList.Arguments
+            .Select(a => a.Expression)
+            .OfType<LambdaExpressionSyntax>()
+            .FirstOrDefault();
+
+        if (lambdaExpression == null)
+        {
+            return new AssertMultipleAction(
+                line,
+                invocation.ToString().Trim().Trim(';'),
+                Array.Empty<TestAction>());
+        }
+
+        var actions = ExtractLambdaActions(lambdaExpression.Body, semanticModel).ToList();
+        return new AssertMultipleAction(
+            line,
+            invocation.ToString().Trim().Trim(';'),
+            actions);
+    }
+
+    IEnumerable<TestAction> ExtractLambdaActions(CSharpSyntaxNode body, SemanticModel semanticModel)
+    {
+        switch (body)
+        {
+            case BlockSyntax block:
+                foreach (var action in ParseBlockStatements(block, semanticModel))
+                    yield return action;
+                yield break;
+
+            case ExpressionSyntax expression:
+                var line = expression.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+                if (expression is InvocationExpressionSyntax invocation)
+                {
+                    if (TryExtractFromInvocation(invocation, semanticModel, line) is { } action)
+                        yield return action;
+                    yield break;
+                }
+
+                yield return new RawStatementAction(line, expression.ToString().Trim().Trim(';'));
+                yield break;
+        }
+    }
+
+    static bool IsAssertReceiver(string receiverText)
+    {
+        var receiver = receiverText.Trim();
+        return receiver == "Assert" || receiver.EndsWith(".Assert", StringComparison.Ordinal);
     }
 
     static TestAction? TryRecognizeSemantic(IMethodSymbol methodSymbol, string methodName, string receiverText, InvocationExpressionSyntax invocation, int line)
