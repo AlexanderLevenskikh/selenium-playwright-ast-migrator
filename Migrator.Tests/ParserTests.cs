@@ -1870,6 +1870,53 @@ namespace Sample.E2ETests
         Assert.DoesNotContain("TODO", output);
     }
 
+    [Fact]
+    public void Render_MappedMethodInvocation_NormalizesConfigStringAndOperatorSyntax()
+    {
+        var statements = new[]
+        {
+            "var locator = Page.Locator(\"[data-test='loader']\");",
+            "await locator.ClickAsync();",
+            "await Page.GetByTestId('forbidden-informer').DispatchEventAsync('blur');",
+            "Assert.That(1 = = 1, Is.True);",
+            "Assert.That(1 ! = 2, Is.True);",
+        };
+
+        var model = new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "TC",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel(
+                    Name: "T1",
+                    Category: null,
+                    CaseData: Array.Empty<TestCaseData>(),
+                    Parameters: Array.Empty<MethodParameterModel>(),
+                    BodyActions: new TestAction[]
+                    {
+                        new MappedMethodInvocationAction(1, "source.Call()", statements, false),
+                    }),
+            });
+
+        var renderer = new PlaywrightDotNetRenderer();
+        var output = renderer.Render(model);
+
+        Assert.Contains("Page.Locator(\"[data-test='loader']\")", output);
+        Assert.Contains("Page.GetByTestId(\"forbidden-informer\").DispatchEventAsync(\"blur\")", output);
+        Assert.Contains("Assert.That(1 == 1, Is.True);", output);
+        Assert.Contains("Assert.That(1 != 2, Is.True);", output);
+        Assert.DoesNotContain("'forbidden-informer'", output);
+        Assert.DoesNotContain("'blur'", output);
+        Assert.DoesNotContain("= =", output);
+        Assert.DoesNotContain("! =", output);
+
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
     // --- MappedMethodInvocation var deduplication tests ---
 
     [Fact]

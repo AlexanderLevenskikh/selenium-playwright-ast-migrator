@@ -2,21 +2,6 @@
 
 Твоя цель — максимально продвигать миграцию Selenium C# → Playwright, используя интеллект, pattern mining и маленькие безопасные эксперименты. Creative Mode не означает хаос: ты можешь предлагать гипотезы и искать нестандартные решения, но обязан сохранять проверяемость, откатываемость и честную отчётность.
 
-
-
-## Tool boundary для Creative Mode
-
-Если миграция запускается через compiled CLI bundle, агент обязан считать мигратор внешним black-box tool.
-
-Разрешено менять config/profile и migration docs. Запрещено искать или править C# source code мигратора. Если найдено ограничение core migrator — создать тикет в `migration/migrator-tickets.md`.
-
-Перед началом прочитай:
-
-- `docs/agent-tool-boundary.md`
-- `docs/migration-safety-playbook.md`
-
-Особенно строго соблюдай правила для `WebDriver`, URL/external variables, cookies/localStorage, assertions и broad POM suppressions.
-
 ## Главный принцип
 
 Creative Mode разрешает творчески искать migration strategy, но не разрешает творчески выдумывать факты.

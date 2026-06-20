@@ -54,6 +54,7 @@
 <MIGRATOR_TOOL_BUNDLE_PATH>\README_AGENT_TOOL.md
 <MIGRATOR_TOOL_BUNDLE_PATH>\docs\agent-tool-boundary.md
 <MIGRATOR_TOOL_BUNDLE_PATH>\docs\migration-safety-playbook.md
+<MIGRATOR_TOOL_BUNDLE_PATH>\docs\pom-recovery-policy.md
 <MIGRATOR_TOOL_BUNDLE_PATH>\docs\config-driven-recognizers.md
 <MIGRATOR_TOOL_BUNDLE_PATH>\schemas\adapter-config.schema.json
 <TARGET_PLAYWRIGHT_PROJECT_PATH>\migration\creative-migration-playbook.md
@@ -95,6 +96,15 @@
 
 2. Pattern Mining
    Сгруппируй TODO по причинам: missing mappings, manual review, unavailable symbols, source-only identifiers, waits, assertions, navigation, PageObject wrappers.
+
+   Если TODO dominated by `page.*`, `pagef.*`, `modal.*`, `lightbox.*`, `dialog.*`, `popup.*`, не suppress-ь их сразу. Сначала выполни POM recovery pass:
+
+   * найди source POM declarations;
+   * извлеки selector evidence;
+   * проверь target Playwright architecture;
+   * добавь config mappings, если можно;
+   * если config недостаточно — создай candidates в `migration/pom-candidates/`;
+   * обнови `migration/pom-recovery.md`.
 
 3. Hypothesis
    Для каждой крупной группы сформулируй гипотезу: можно ли решить через config или нужна правка core migrator.
@@ -187,6 +197,8 @@ migration\migrator-tickets.md
 
 `SuppressedMethodPatterns` используй только если строка действительно не нужна в Playwright-версии или является setup/source-only legacy helper.
 
+Перед broad suppressions для POM roots (`page.*.*`, `pagef.*.*`, `modal.*.*`, `lightbox.*.*`, `dialog.*.*`, `popup.*.*`) обязательно выполни POM recovery pass. Broad suppression без попытки извлечь selector/source truth считается небезопасным.
+
 ## Команды
 
 Используй compiled CLI из `<MIGRATOR_TOOL_BUNDLE_PATH>`. Не используй `dotnet run --project` и не ищи `Migrator.sln`. Примерный цикл:
@@ -226,8 +238,9 @@ migration\profiles\<PROJECT_NAME>.adapter.json
 4. Сгруппируй TODO по причинам.
 5. Найди top-5 повторяющихся паттернов.
 6. Предложи config-only изменения.
-7. Примени только безопасные изменения.
-8. Повтори цикл, пока TODO существенно снижаются.
-9. Если упёрся в limitation migrator core — не правь C# код, а создай тикет в `migration\migrator-tickets.md`.
+7. Для POM-heavy TODO сначала выполни POM recovery и создай `migration/pom-recovery.md`.
+8. Примени только безопасные изменения.
+9. Повтори цикл, пока TODO существенно снижаются.
+10. Если упёрся в limitation migrator core — не правь C# код, а создай тикет в `migration\migrator-tickets.md`.
 
 Работай агрессивно, но безопасно: цель — быстро снижать TODO, не генерируя ложный активный код.

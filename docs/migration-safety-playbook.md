@@ -172,11 +172,11 @@ Why config is needed:
 URL constants are project-specific, but the migrator needs a generic mechanism to substitute known external variables.
 ```
 
-## PageObject architecture gaps
+## PageObject architecture gaps and POM recovery
 
-Во многих проектах старый Selenium POM слой не переносится 1:1.
+Во многих проектах старый Selenium POM слой не переносится 1:1. Это нормально, но broad suppressions не должны быть первым действием агента.
 
-Примеры:
+Примеры source-only POM expressions:
 
 ```csharp
 page.MenuItems.Error
@@ -187,17 +187,15 @@ dialog.Confirm()
 popup.WaitLoaded()
 ```
 
-Если target Playwright-проект использует другую архитектуру controls/fixtures, такие вызовы могут быть source-only architecture gap.
+Если target Playwright-проект использует другую архитектуру controls/fixtures, такие вызовы могут быть source-only architecture gap. Но перед подавлением нужно выполнить POM recovery pass.
 
-Их можно suppress-ить только если:
+Короткое правило:
 
-- это не assertion;
-- это не бизнес-действие;
-- это не единственный переход в сценарии;
-- целевая архитектура действительно заменяет этот слой другим способом;
-- suppressions документированы в `migration-progress.md`.
+```text
+Do not suppress POM expressions before trying to recover source truth.
+```
 
-Особенно осторожно с broad suppressions:
+Перед broad suppressions вроде:
 
 ```text
 page.*.*
@@ -207,12 +205,32 @@ dialog.*.*
 popup.*.*
 ```
 
-Broad suppressions допустимы для массовой миграции, но требуют ревизии. Они должны означать:
+агент обязан:
+
+1. найти declaration в исходном Selenium POM;
+2. извлечь selector evidence (`CreateControlByTid`, `WithDataTestId`, CSS, XPath, helper methods);
+3. проверить target Playwright architecture;
+4. если можно — добавить `UiTargets` / `Methods` / `ParameterizedMethods`;
+5. если config недостаточно — создать target POM candidate в `migration/pom-candidates/`;
+6. если перенос небезопасен — добавить documented suppression и записать причину в `migration/pom-recovery.md`.
+
+Suppressions допустимы только если:
+
+- это не assertion;
+- это не бизнес-действие;
+- это не единственный переход в сценарии;
+- целевая архитектура действительно заменяет этот слой другим способом;
+- POM recovery attempt задокументирован.
+
+Правильная формулировка broad suppression:
 
 ```text
 Old Selenium POM layer is intentionally not translated 1:1.
 Target Playwright project uses a different control/page architecture.
+Selectors were mined where possible; remaining expressions are manual follow-up.
 ```
+
+Подробные правила: `docs/pom-recovery-policy.md`.
 
 ## Wait policy
 

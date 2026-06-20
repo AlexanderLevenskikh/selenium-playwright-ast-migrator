@@ -53,6 +53,7 @@ Migrator Maintainer
       docs/
         agent-tool-boundary.md
         migration-safety-playbook.md
+        pom-recovery-policy.md
         agent-command-set.md
         agent-safety.md
         config-driven-recognizers.md
@@ -100,6 +101,8 @@ Migrator.Tests/
 migration/profiles/*.adapter.json
 migration/migration-progress.md
 migration/migrator-tickets.md
+migration/pom-recovery.md
+migration/pom-candidates/
 migration/agent-state.md
 migration/pre-stop-checklist.md
 migration/run-*/
@@ -126,6 +129,7 @@ migration/run-*/
 - править generated `.cs` files как финальное решение;
 - изменять source Selenium project;
 - suppress-ить business logic без анализа;
+- добавлять broad POM suppressions без POM recovery;
 - добавлять Selenium/POM roots в `TargetKnownTypes` / `TargetKnownIdentifiers`, если их нет в target code;
 - снижать TODO ценой удаления смысла тестов.
 
@@ -190,4 +194,5 @@ tools/migrator/
 Исходный код мигратора намеренно недоступен.
 Не ищи и не изменяй C# код мигратора.
 Если найдено ограничение core migrator, создай тикет в migration/migrator-tickets.md.
+Перед broad suppressions по page/modal/lightbox/dialog/popup выполни POM recovery и обнови migration/pom-recovery.md.
 ```

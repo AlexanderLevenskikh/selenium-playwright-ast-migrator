@@ -19,40 +19,6 @@ Migrating E2E suites usually fails for boring reasons: thousands of repeated loc
 
 The goal is not magic conversion. The goal is to replace weeks of manual rewriting with a controlled migration loop: **source truth → profile config → generated code → verification → next pattern**.
 
-## Real-world migration case 1
-
-On one real complex Selenium C# project:
-
-- Initial TODO count: ~730
-- Tracked final-stage TODO, run-44
-- After validated core fixes + config refinements: 0
-- Syntax errors: 0
-- Build diagnostics: 0 before verify-project timeout
-
-The goal was not one-click magic, but an iterative migration workflow:
-analyze → mine patterns → update config → verify → patch only real migrator limitations.
-
-## Real-world migration case 2 
-
-The migrator was also validated on a larger Selenium C# E2E suite.
-
-| Metric | Initial run | Final run |
-|---|---:|---:|
-| Active TODO | 2244 | 63 |
-| Generated files compiling | 0/89 | 89/89 |
-| C# compile errors | 89+ | 0 |
-
-The final result reduced active TODO markers by approximately 97% and produced generated Playwright .NET code that compiled successfully across all 89 generated files.
-
-The remaining 63 TODO markers were intentionally left as manual migration points. They mostly belong to areas where automatic migration should not guess behavior:
-
-- URL assertions;
-- individual legacy PageObject properties;
-- custom project-specific helpers;
-- source-only architecture gaps.
-
-This is considered a successful migration stage: the project is compilable, the bulk of repetitive Selenium patterns was migrated or safely classified, and the remaining work is reviewable manual test adaptation rather than parser/renderer failure.
-
 ## Supported targets
 
 | Source | Target | Status | Notes |
@@ -174,8 +140,6 @@ dotnet run --project Migrator.Cli -- \
 
 - [`docs/architecture.md`](docs/architecture.md) — architecture and module responsibilities.
 - [`docs/agent-modes.md`](docs/agent-modes.md) — Strict vs Creative mode and prompt inputs.
-- [`docs/agent-tool-boundary.md`](docs/agent-tool-boundary.md) — using the migrator as a compiled CLI bundle for agents.
-- [`docs/migration-safety-playbook.md`](docs/migration-safety-playbook.md) — safety rules for WebDriver, URLs, broad suppressions, waits and assertions.
 - [`docs/typescript-target.md`](docs/typescript-target.md) — experimental TypeScript target.
 - [`docs/wait-policy.md`](docs/wait-policy.md) — Selenium wait classification.
 - [`docs/explain-todo.md`](docs/explain-todo.md) — smart TODO markers and next actions.
@@ -202,22 +166,6 @@ The test suite covers parser behavior, adapter mappings, snapshots, compile-smok
 ```
 
 See [`docs/packaging-and-distribution.md`](docs/packaging-and-distribution.md) and [`docs/tool-installation.md`](docs/tool-installation.md).
-
-## Agent CLI bundle
-
-For AI-agent migrations, prefer giving the agent a compiled CLI bundle instead of the migrator source repository:
-
-```powershell
-.\scripts\package-agent-cli-bundle.ps1 -Runtime win-x64 -Output artifacts/agent-cli-bundle
-```
-
-Then copy `artifacts/agent-cli-bundle/tool` to the target project, for example:
-
-```text
-<target-playwright-project>/tools/migrator
-```
-
-The bundle contains `migrator.exe`, schema and agent-facing docs, but no C# source code. See [`docs/agent-tool-boundary.md`](docs/agent-tool-boundary.md).
 
 ## Philosophy
 

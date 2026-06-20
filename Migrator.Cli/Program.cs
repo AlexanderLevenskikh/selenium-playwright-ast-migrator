@@ -65,6 +65,11 @@ if (mode == "discover-target" && !Directory.Exists(inputPath))
     return 2;
 }
 
+var parser = new RoslynTestFileParser();
+IRenderer renderer = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
+    ? new PlaywrightTypeScriptRenderer()
+    : new PlaywrightDotNetRenderer();
+
 IProjectAdapter? adapter = null;
 
 if (configPaths.Length > 0)
@@ -95,11 +100,6 @@ if (configPaths.Length > 0)
         ? $"Loaded adapter config: {configPaths[0]}"
         : $"Loaded adapter config layers: {string.Join(" -> ", configPaths)}");
 }
-
-var parser = new RoslynTestFileParser(RecognizerOptions.FromConfig(loadedConfig));
-IRenderer renderer = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
-    ? new PlaywrightTypeScriptRenderer()
-    : new PlaywrightDotNetRenderer();
 
 if (string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase) && mode == "orchestrate")
 {
@@ -332,11 +332,10 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
     {
         string baseName = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
             ? $"{ToKebabCase(result.SourceModel.ClassName)}.spec.ts"
-            : GeneratedNaming.GetPlaywrightFileName(result.SourceModel.ClassName);
-        var (outName, classNameSuffix) = ResolveGeneratedFileName(baseName, writtenNames);
+            : $"{result.SourceModel.ClassName}Playwright.cs";
+        string outName = ResolveFileName(outPath, baseName, writtenNames);
         var fullOut = Path.Combine(outPath, outName);
-        var generatedOutput = RenderOutputForResolvedFileName(result, target, classNameSuffix);
-        File.WriteAllText(fullOut, generatedOutput);
+        File.WriteAllText(fullOut, result.GeneratedOutput);
         generated++;
     }
 
@@ -353,12 +352,12 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
     Console.WriteLine($"Migration written to: {Path.GetFullPath(outPath)} ({generated} files generated)");
 }
 
-static (string FileName, string ClassNameSuffix) ResolveGeneratedFileName(string baseName, ISet<string> usedNames)
+static string ResolveFileName(string dir, string baseName, ISet<string> usedNames)
 {
     if (!usedNames.Contains(baseName))
     {
         usedNames.Add(baseName);
-        return (baseName, string.Empty);
+        return baseName;
     }
 
     var ext = Path.GetExtension(baseName);
@@ -366,24 +365,14 @@ static (string FileName, string ClassNameSuffix) ResolveGeneratedFileName(string
     int n = 2;
     while (true)
     {
-        var collisionSuffix = $"_{n}";
-        string candidate = $"{stem}{collisionSuffix}{ext}";
+        string candidate = $"{stem}_{n}{ext}";
         if (!usedNames.Contains(candidate))
         {
             usedNames.Add(candidate);
-            return (candidate, collisionSuffix);
+            return candidate;
         }
         n++;
     }
-}
-
-static string RenderOutputForResolvedFileName(PipelineResult result, string target, string classNameSuffix)
-{
-    if (string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(classNameSuffix))
-        return result.GeneratedOutput;
-
-    var targetModel = result.TargetModel with { ClassNameSuffix = classNameSuffix };
-    return new PlaywrightDotNetRenderer().Render(targetModel);
 }
 
 static int RunVerify(MigrationSummaryReport summary, string outPath, string format, List<PipelineResult> results, ProjectAdapterConfig? config, DefaultProjectAdapter? adapter)
@@ -431,11 +420,10 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
     var generatedFiles = new List<string>();
     foreach (var result in results)
     {
-        var baseName = GeneratedNaming.GetPlaywrightFileName(result.SourceModel.ClassName);
-        var (outName, classNameSuffix) = ResolveGeneratedFileName(baseName, writtenNames);
+        var baseName = $"{result.SourceModel.ClassName}Playwright.cs";
+        var outName = ResolveFileName(generatedDir, baseName, writtenNames);
         var fullOut = Path.Combine(generatedDir, outName);
-        var generatedOutput = RenderOutputForResolvedFileName(result, "dotnet", classNameSuffix);
-        File.WriteAllText(fullOut, generatedOutput);
+        File.WriteAllText(fullOut, result.GeneratedOutput);
         generatedFiles.Add(fullOut);
     }
 
@@ -4212,11 +4200,10 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
                 foreach (var result in resultsList)
                 {
                     string baseName = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
-                        ? $"{ToKebabCase(result.SourceModel.ClassName)}.spec.ts"
-                        : GeneratedNaming.GetPlaywrightFileName(result.SourceModel.ClassName);
-                    var (outName, classNameSuffix) = ResolveGeneratedFileName(baseName, writtenNames);
-                    var generatedOutput = RenderOutputForResolvedFileName(result, target, classNameSuffix);
-                    File.WriteAllText(Path.Combine(generatedDir, outName), generatedOutput);
+            ? $"{ToKebabCase(result.SourceModel.ClassName)}.spec.ts"
+            : $"{result.SourceModel.ClassName}Playwright.cs";
+                    string outName = ResolveFileName(generatedDir, baseName, writtenNames);
+                    File.WriteAllText(Path.Combine(generatedDir, outName), result.GeneratedOutput);
                     generated++;
                 }
 
@@ -5238,9 +5225,7 @@ static ConfigMetric[] BuildConfigMetrics(ProjectAdapterConfig config)
         new ConfigMetric("Scopes", config.Scopes.Length),
         new ConfigMetric("SourceOnlyIdentifiers", config.SourceOnlyIdentifiers.Length),
         new ConfigMetric("TargetKnownTypes", config.TargetKnownTypes.Length),
-        new ConfigMetric("TargetKnownIdentifiers", config.TargetKnownIdentifiers.Length),
-        new ConfigMetric("SuppressedMethods", config.SuppressedMethods.Length),
-        new ConfigMetric("SuppressedMethodPatterns", config.SuppressedMethodPatterns.Length)
+        new ConfigMetric("TargetKnownIdentifiers", config.TargetKnownIdentifiers.Length)
     };
 }
 
@@ -5271,15 +5256,6 @@ static IEnumerable<ConfigSafetyIssue> AnalyzeConfigSafety(ProjectAdapterConfig c
     AddDuplicateIssues(config.SourceOnlyIdentifiers, "SourceOnlyIdentifiers", "DUPLICATE_SOURCE_ONLY_IDENTIFIER", issues);
     AddDuplicateIssues(config.TargetKnownTypes, "TargetKnownTypes", "DUPLICATE_TARGET_KNOWN_TYPE", issues);
     AddDuplicateIssues(config.TargetKnownIdentifiers, "TargetKnownIdentifiers", "DUPLICATE_TARGET_KNOWN_IDENTIFIER", issues);
-    AddDuplicateIssues(config.SuppressedMethods, "SuppressedMethods", "DUPLICATE_SUPPRESSED_METHOD", issues);
-    AddDuplicateIssues(config.SuppressedMethodPatterns, "SuppressedMethodPatterns", "DUPLICATE_SUPPRESSED_METHOD_PATTERN", issues);
-
-    foreach (var suppressed in config.SuppressedMethods.Concat(config.SuppressedMethodPatterns).Where(IsRiskySuppressionPattern))
-    {
-        issues.Add(new ConfigSafetyIssue("warning", "RISKY_SUPPRESSION_REQUIRES_REVIEW",
-            $"Suppression '{suppressed}' looks like it may hide a state-changing or assertion-like source helper.", "SuppressedMethods/SuppressedMethodPatterns",
-            "Suppress only diagnostic/no-op helpers. Map or review business actions, waits, assertions, create/save/delete/open/click helpers."));
-    }
 
     foreach (var target in config.UiTargets.Where(t => string.Equals(t.TargetKind, "RawExpression", StringComparison.OrdinalIgnoreCase)))
     {
@@ -5310,21 +5286,6 @@ static IEnumerable<ConfigSafetyIssue> AnalyzeConfigSafety(ProjectAdapterConfig c
     }
 
     return issues;
-}
-
-static bool IsRiskySuppressionPattern(string value)
-{
-    var text = value.Trim();
-    if (string.IsNullOrWhiteSpace(text))
-        return false;
-
-    var riskyTokens = new[]
-    {
-        "Click", "Open", "GoTo", "Navigate", "Wait", "Assert", "Verify", "Validate",
-        "Exist", "Create", "Save", "Delete", "Remove", "Submit", "Request", "Capture"
-    };
-
-    return riskyTokens.Any(token => text.Contains(token, StringComparison.OrdinalIgnoreCase));
 }
 
 static bool ContainsRiskyGeneratedCode(string statement)
@@ -5377,8 +5338,6 @@ static IEnumerable<ConfigDiffChange> BuildConfigChanges(ProjectAdapterConfig bef
     foreach (var c in DiffStringSet("TargetKnownIdentifiers", before.TargetKnownIdentifiers, after.TargetKnownIdentifiers)) yield return c;
     foreach (var c in DiffStringSet("Tables", before.Tables.Select(x => x.SourceExpression), after.Tables.Select(x => x.SourceExpression))) yield return c;
     foreach (var c in DiffStringSet("Pagination", before.Pagination.Select(x => x.SourceExpression), after.Pagination.Select(x => x.SourceExpression))) yield return c;
-    foreach (var c in DiffStringSet("SuppressedMethods", before.SuppressedMethods, after.SuppressedMethods)) yield return c;
-    foreach (var c in DiffStringSet("SuppressedMethodPatterns", before.SuppressedMethodPatterns, after.SuppressedMethodPatterns)) yield return c;
     foreach (var c in DiffStringSet("Scopes", before.Scopes.Select(x => x.Name), after.Scopes.Select(x => x.Name))) yield return c;
 }
 
@@ -5412,16 +5371,6 @@ static IEnumerable<ConfigSafetyIssue> BuildConfigDiffRisks(ProjectAdapterConfig 
         risks.Add(new ConfigSafetyIssue("error", "FORBIDDEN_TARGET_KNOWN_ADDED",
             $"'{symbol}' was added as target-known.", "TargetKnownTypes/TargetKnownIdentifiers",
             "Do not mark Selenium roots as target-known."));
-    }
-
-    var addedSuppressions = after.SuppressedMethods.Concat(after.SuppressedMethodPatterns)
-        .Except(before.SuppressedMethods.Concat(before.SuppressedMethodPatterns), StringComparer.OrdinalIgnoreCase)
-        .ToArray();
-    foreach (var suppressed in addedSuppressions.Where(IsRiskySuppressionPattern))
-    {
-        risks.Add(new ConfigSafetyIssue("warning", "RISKY_SUPPRESSION_ADDED",
-            $"Suppression '{suppressed}' was added and may hide a business action/wait/assertion.", "SuppressedMethods/SuppressedMethodPatterns",
-            "Approve only if this helper is intentionally comment-only and downstream mappings are verified."));
     }
 
     if (IsQualityGateLoosened(before.QualityGates?.MaxTodoComments, after.QualityGates?.MaxTodoComments))

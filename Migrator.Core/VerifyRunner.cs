@@ -168,7 +168,7 @@ public static class VerifyRunner
             totalRawExpressions += rawExprCount;
 
             var fileStatus = fileIssues.Any(i => i.Severity == IssueSeverity.Error) ? "failed" : "passed";
-            var generatedName = GeneratedNaming.GetPlaywrightFileName(result.SourceModel.ClassName);
+            var generatedName = $"{result.SourceModel.ClassName}Playwright.cs";
 
             fileResults.Add(new VerifyFileResult(
                 SourceFile: Path.GetFileName(sourcePath),

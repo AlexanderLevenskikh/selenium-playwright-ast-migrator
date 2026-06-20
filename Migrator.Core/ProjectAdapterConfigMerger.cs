@@ -55,9 +55,7 @@ public static class ProjectAdapterConfigMerger
             Verification: MergeVerification(layers.Select(c => c.Verification)),
             RecognizerAliases: MergeRecognizerAliases(layers.Select(c => c.RecognizerAliases)),
             GenericResultMethods: MergeStrings(layers.SelectMany(c => c.GenericResultMethods)),
-            WaitPolicies: MergeBy(layers.SelectMany(c => c.WaitPolicies), WaitPolicyKey),
-            SuppressedMethods: MergeStrings(layers.SelectMany(c => c.SuppressedMethods)),
-            SuppressedMethodPatterns: MergeStrings(layers.SelectMany(c => c.SuppressedMethodPatterns)));
+            WaitPolicies: MergeBy(layers.SelectMany(c => c.WaitPolicies), WaitPolicyKey));
     }
 
     static T[] MergeBy<T>(IEnumerable<T> items, Func<T, string?> keySelector)

@@ -10,9 +10,6 @@
 - [ ] Прочитан `AGENTS.md`
 - [ ] Прочитан `docs/agent-first-workflow.md`
 - [ ] Прочитан `docs/agent-command-set.md`
-- [ ] Прочитан `docs/agent-tool-boundary.md`
-- [ ] Прочитан `docs/migration-safety-playbook.md`
-- [ ] Подтверждено, что агент использует compiled CLI bundle, а не source repo мигратора
 - [ ] Создан/обновлён `migration/agent-state.md`
 - [ ] Создан/обновлён `migration/pre-stop-checklist.md`
 - [ ] Выбран input tests path

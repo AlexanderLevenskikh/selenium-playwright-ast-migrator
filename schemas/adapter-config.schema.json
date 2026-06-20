@@ -113,22 +113,6 @@
         "$ref": "#/$defs/waitPolicyMapping"
       },
       "default": []
-    },
-    "SuppressedMethods": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "default": [],
-      "description": "Method names/qualified method names rendered as source comments without MANUAL_REVIEW TODOs. Use only for diagnostic/no-op helpers."
-    },
-    "SuppressedMethodPatterns": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "default": [],
-      "description": "Glob-like source statement patterns rendered as source comments before source-only safety checks. Example: *page.GoToDiscountsPage(*)."
     }
   },
   "$defs": {
@@ -586,30 +570,22 @@
       "properties": {
         "InputMethods": {
           "type": "array",
-          "items": {
-            "type": "string"
-          },
+          "items": { "type": "string" },
           "default": []
         },
         "SelectMethods": {
           "type": "array",
-          "items": {
-            "type": "string"
-          },
+          "items": { "type": "string" },
           "default": []
         },
         "NavigationMethods": {
           "type": "array",
-          "items": {
-            "type": "string"
-          },
+          "items": { "type": "string" },
           "default": []
         },
         "FluentAssertionMethods": {
           "type": "array",
-          "items": {
-            "type": "string"
-          },
+          "items": { "type": "string" },
           "default": []
         }
       }

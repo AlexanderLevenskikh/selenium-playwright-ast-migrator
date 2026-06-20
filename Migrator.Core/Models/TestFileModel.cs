@@ -11,14 +11,6 @@ public sealed record TestFileModel
     public string Namespace { get; init; } = null!;
     public string ClassName { get; init; } = null!;
     public string? BaseClassName { get; init; }
-
-    /// <summary>
-    /// Optional suffix appended to the final generated class name when CLI file-name
-    /// collision resolution emits files such as FooPlaywright_2.cs.
-    /// Set by CLI/orchestration before rendering; source class name stays unchanged.
-    /// </summary>
-    public string? ClassNameSuffix { get; init; }
-
     public IEnumerable<TestAction> SetUpActions { get; init; } = Array.Empty<TestAction>();
     public IEnumerable<TestModel> Tests { get; init; } = Array.Empty<TestModel>();
 
@@ -43,22 +35,10 @@ public sealed record TestFileModel
     public IReadOnlyList<string> TargetKnownTypes { get; init; } = Array.Empty<string>();
 
     /// <summary>
-    /// Target-side helper/static identifiers that should be treated as available in generated code.
+    /// Target-side identifiers that should be treated as available in generated code.
     /// Set by the adapter from config; used by renderer safety checks.
     /// </summary>
     public IReadOnlyList<string> TargetKnownIdentifiers { get; init; } = Array.Empty<string>();
-
-    /// <summary>
-    /// Source method names that adapter config explicitly suppresses as diagnostic/no-op helpers.
-    /// Used by renderer before safety checks.
-    /// </summary>
-    public IReadOnlyList<string> SuppressedMethods { get; init; } = Array.Empty<string>();
-
-    /// <summary>
-    /// Glob-like source statement patterns that adapter config explicitly suppresses before safety checks.
-    /// Used for project helpers that are intentionally not emitted into target code.
-    /// </summary>
-    public IReadOnlyList<string> SuppressedMethodPatterns { get; init; } = Array.Empty<string>();
 
     public TestFileModel(
         string FilePath,

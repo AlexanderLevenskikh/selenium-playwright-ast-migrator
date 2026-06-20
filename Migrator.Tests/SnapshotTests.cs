@@ -764,54 +764,6 @@ public class SnapshotTests
     }
 
     [Fact]
-    public void Renderer_ClassNameAlreadyHasPlaywrightSuffix_DoesNotDuplicateSuffix()
-    {
-        var targetModel = new TestFileModel(
-            FilePath: "fake.cs",
-            Namespace: "Test",
-            ClassName: "AwardTemplatesPlaywright",
-            BaseClassName: null,
-            SetUpActions: Array.Empty<TestAction>(),
-            Tests: new[]
-            {
-                new TestModel("Check", null, Array.Empty<TestCaseData>(),
-                    Array.Empty<MethodParameterModel>(), Array.Empty<TestAction>()),
-            });
-
-        var renderer = new PlaywrightDotNetRenderer();
-        var output = renderer.Render(targetModel);
-
-        Assert.Contains("public class AwardTemplatesPlaywright : PageTest", output);
-        Assert.DoesNotContain("AwardTemplatesPlaywrightPlaywright", output);
-    }
-
-    [Fact]
-    public void Renderer_CollisionClassNameSuffix_AppendsToGeneratedClassName()
-    {
-        var targetModel = new TestFileModel(
-            FilePath: "fake.cs",
-            Namespace: "Test",
-            ClassName: "AwardTemplatesPlaywright",
-            BaseClassName: null,
-            SetUpActions: Array.Empty<TestAction>(),
-            Tests: new[]
-            {
-                new TestModel("Check", null, Array.Empty<TestCaseData>(),
-                    Array.Empty<MethodParameterModel>(), Array.Empty<TestAction>()),
-            })
-        {
-            ClassNameSuffix = "_2"
-        };
-
-        var renderer = new PlaywrightDotNetRenderer();
-        var output = renderer.Render(targetModel);
-
-        Assert.Contains("public class AwardTemplatesPlaywright_2 : PageTest", output);
-        Assert.DoesNotContain("public class AwardTemplatesPlaywright : PageTest", output);
-        Assert.DoesNotContain("AwardTemplatesPlaywrightPlaywright", output);
-    }
-
-    [Fact]
     public void Renderer_UiTargetMatch_WithTestIdAttribute_First()
     {
         var targetModel = new TestFileModel(

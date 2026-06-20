@@ -21,8 +21,6 @@ public class PlaywrightDotNetRenderer : IRenderer
     readonly HashSet<string> _targetLocals = new(StringComparer.Ordinal);
     HashSet<string> _targetKnownTypes = new(StringComparer.Ordinal);
     HashSet<string> _targetKnownIdentifiers = new(StringComparer.Ordinal);
-    HashSet<string> _suppressedMethods = new(StringComparer.Ordinal);
-    string[] _suppressedMethodPatterns = Array.Empty<string>();
     bool _useAssertionsExpect = false;
 
     public PlaywrightDotNetRenderer(string indent = "\t")
@@ -48,16 +46,8 @@ public class PlaywrightDotNetRenderer : IRenderer
         _targetKnownIdentifiers = new HashSet<string>(
             model.TargetKnownIdentifiers ?? Array.Empty<string>(),
             StringComparer.Ordinal);
-        _suppressedMethods = new HashSet<string>(
-            model.SuppressedMethods ?? Array.Empty<string>(),
-            StringComparer.Ordinal);
-        _suppressedMethodPatterns = (model.SuppressedMethodPatterns ?? Array.Empty<string>())
-            .Where(p => !string.IsNullOrWhiteSpace(p))
-            .Select(p => p.Trim())
-            .ToArray();
         var targetNamespace = testHost?.Namespace ?? model.Namespace;
-        var baseClassName = testHost?.ClassName ?? GeneratedNaming.ApplyPlaywrightSuffixOnce(model.ClassName);
-        var className = GeneratedNaming.ApplyClassNameSuffix(baseClassName, model.ClassNameSuffix);
+        var className = testHost?.ClassName ?? (model.ClassName + "Playwright");
         var baseClass = testHost?.BaseClass ?? "PageTest";
         _useAssertionsExpect = baseClass != "PageTest";
         var hasTestHostSetup = testHost?.SetUpStatements != null && testHost.SetUpStatements.Length > 0;
@@ -398,15 +388,6 @@ public class PlaywrightDotNetRenderer : IRenderer
         var sourceText = GetActionSourceText(action);
         var declaredVariables = ExtractVariableNames(sourceText).ToArray();
 
-        // Config-level suppressions must run before source-root safety checks.
-        // This is intentionally comment-only: suppressed source helpers are not
-        // emitted as active target code and their declared variables are not registered.
-        if (IsSuppressedAction(action, sourceText))
-        {
-            RenderSuppressedAction(sb, action, sourceText);
-            return;
-        }
-
         // WaitPolicy must run before source-root safety. A mapped wait such as
         // page.Loader.ValidateLoading() still has a Selenium/POM root (page),
         // but the meaningful target is page.Loader and can be rendered safely.
@@ -597,131 +578,6 @@ public class PlaywrightDotNetRenderer : IRenderer
             _ => sourceText
         };
     }
-
-    bool IsSuppressedAction(TestAction action, string sourceText)
-    {
-        var candidates = GetSuppressionSourceTextCandidates(action, sourceText);
-        return candidates.Any(candidate => MatchesSuppressedMethod(action, candidate))
-            || candidates.Any(MatchesSuppressedMethodPattern);
-    }
-
-    IEnumerable<string> GetSuppressionSourceTextCandidates(TestAction action, string sourceText)
-    {
-        if (!string.IsNullOrWhiteSpace(sourceText))
-            yield return sourceText;
-
-        switch (action)
-        {
-            case MethodInvocationAction method when !string.IsNullOrWhiteSpace(method.FullSourceText):
-                yield return method.FullSourceText;
-                break;
-            case MappedMethodInvocationAction mapped when !string.IsNullOrWhiteSpace(mapped.FullSourceText):
-                yield return mapped.FullSourceText;
-                break;
-            case WaitForAction wait when !string.IsNullOrWhiteSpace(wait.FullSourceText):
-                yield return wait.FullSourceText;
-                break;
-            case RawStatementAction raw when !string.IsNullOrWhiteSpace(raw.SourceText):
-                yield return raw.SourceText;
-                break;
-            case UnsupportedAction unsupported when !string.IsNullOrWhiteSpace(unsupported.SourceText):
-                yield return unsupported.SourceText;
-                break;
-        }
-    }
-
-    bool MatchesSuppressedMethodPattern(string sourceText)
-    {
-        if (!_suppressedMethodPatterns.Any() || string.IsNullOrWhiteSpace(sourceText))
-            return false;
-
-        var trimmed = TrimTrailingStatementTerminator(sourceText);
-        return _suppressedMethodPatterns.Any(pattern =>
-            GlobMatches(pattern, sourceText)
-            || (!string.Equals(trimmed, sourceText, StringComparison.Ordinal) && GlobMatches(pattern, trimmed)));
-    }
-
-    bool MatchesSuppressedMethod(TestAction action, string sourceText)
-    {
-        if (_suppressedMethods.Count == 0)
-            return false;
-
-        var methodName = action switch
-        {
-            MethodInvocationAction method => method.MethodName,
-            MappedMethodInvocationAction mapped => mapped.SourceMethod,
-            WaitForAction wait => wait.SourceMethod,
-            _ => ExtractLastInvocationMethodName(sourceText)
-        };
-
-        if (!string.IsNullOrWhiteSpace(methodName) && _suppressedMethods.Contains(methodName.Trim()))
-            return true;
-
-        var normalized = NormalizeWhitespace(sourceText);
-        foreach (var suppressed in _suppressedMethods)
-        {
-            var value = suppressed.Trim();
-            if (string.IsNullOrWhiteSpace(value))
-                continue;
-
-            if (value.Contains('.', StringComparison.Ordinal))
-            {
-                if (normalized.Contains(value + "(", StringComparison.Ordinal)
-                    || normalized.Contains(value + "<", StringComparison.Ordinal))
-                    return true;
-            }
-            else if (string.Equals(methodName, value, StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    void RenderSuppressedAction(StringBuilder sb, TestAction action, string sourceText)
-    {
-        sb.AppendLine($"{_indent}{_indent}// source suppressed by adapter-config // line {GetActionLine(action)}");
-        AppendCommentBlock(sb, _indent + _indent, sourceText, "  ");
-    }
-
-    static string NormalizeWhitespace(string text)
-    {
-        return Regex.Replace(text ?? string.Empty, @"\s+", " ").Trim();
-    }
-
-    static string TrimTrailingStatementTerminator(string text)
-    {
-        return (text ?? string.Empty).Trim().TrimEnd(';').Trim();
-    }
-
-    static bool GlobMatches(string pattern, string text)
-    {
-        var normalizedPattern = NormalizeWhitespace(TrimTrailingStatementTerminator(pattern));
-        var normalizedText = NormalizeWhitespace(TrimTrailingStatementTerminator(text));
-        if (normalizedPattern.Length == 0)
-            return false;
-
-        var regex = "^" + Regex.Escape(normalizedPattern)
-            .Replace("\\*", ".*")
-            .Replace("\\?", ".") + "$";
-        return Regex.IsMatch(normalizedText, regex, RegexOptions.CultureInvariant | RegexOptions.Singleline);
-    }
-
-    static string? ExtractLastInvocationMethodName(string? sourceText)
-    {
-        if (string.IsNullOrWhiteSpace(sourceText))
-            return null;
-
-        string? result = null;
-        foreach (Match match in Regex.Matches(sourceText, @"(?:^|\.)\s*(?<name>[A-Za-z_]\w*)\s*(?:<[^>()]*>)?\s*\("))
-            result = match.Groups["name"].Value;
-
-        return result;
-    }
-
-    static int GetActionLine(TestAction action) => action.SourceLine;
-
 
     void RenderBlockedActionAsComment(StringBuilder sb, TestAction action, string reason, string sourceText)
     {
@@ -1106,6 +962,7 @@ public class PlaywrightDotNetRenderer : IRenderer
             var originalStatement = originalStatements[i];
             var stmt = processed[i];
             var (substituted, hasUnresolved) = SubstituteTargetPlaceholder(stmt, action);
+            substituted = NormalizeGeneratedCSharpStatement(substituted);
 
             if (_useAssertionsExpect && substituted.Contains("Expect("))
             {
@@ -1387,12 +1244,6 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     void RenderMethodInvocation(StringBuilder sb, MethodInvocationAction action)
     {
-        if (MatchesSuppressedMethodPattern(action.FullSourceText))
-        {
-            RenderSuppressedAction(sb, action, action.FullSourceText);
-            return;
-        }
-
         AppendCommentBlock(sb, _indent + _indent, $"[{action.MethodName}] {action.FullSourceText} // line {action.SourceLine}");
         if (!IsLowPriorityMethod(action.MethodName, action.FullSourceText))
         {
@@ -1776,11 +1627,145 @@ public class PlaywrightDotNetRenderer : IRenderer
         if (string.IsNullOrEmpty(text))
             return string.Empty;
 
-        return text
+        return NormalizeCSharpOperatorSpacing(text)
             .Replace("\r\n", " ")
             .Replace("\n", " ")
             .Replace("\r", " ")
             .Replace("\t", " ");
+    }
+
+    static string NormalizeGeneratedCSharpStatement(string statement)
+    {
+        return NormalizeCSharpOperatorSpacing(NormalizeJavaScriptStyleSingleQuotedStrings(statement));
+    }
+
+    static string NormalizeCSharpOperatorSpacing(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return string.Empty;
+
+        // Some source/mapping text can arrive with C# comparison operators split
+        // as two tokens, e.g. `= =` instead of `==`. Normalize only comparison
+        // operator pairs; do not touch lambda arrows or assignments.
+        return Regex.Replace(text, @"([=!<>])\s+(=)", "$1$2");
+    }
+
+    static string NormalizeJavaScriptStyleSingleQuotedStrings(string statement)
+    {
+        if (string.IsNullOrEmpty(statement) || !statement.Contains('\''))
+            return statement ?? string.Empty;
+
+        var sb = new StringBuilder(statement.Length);
+        for (var i = 0; i < statement.Length; i++)
+        {
+            var ch = statement[i];
+
+            // Skip normal/verbatim/interpolated C# double-quoted strings. Single
+            // quotes inside CSS selectors such as "[data-test='loader']" must stay
+            // untouched.
+            if (ch == '"')
+            {
+                var verbatim = i > 0 && statement[i - 1] == '@';
+                sb.Append(ch);
+                i++;
+                while (i < statement.Length)
+                {
+                    sb.Append(statement[i]);
+                    if (verbatim)
+                    {
+                        if (statement[i] == '"')
+                        {
+                            if (i + 1 < statement.Length && statement[i + 1] == '"')
+                            {
+                                i++;
+                                sb.Append(statement[i]);
+                            }
+                            else
+                            {
+                                break;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        if (statement[i] == '\\' && i + 1 < statement.Length)
+                        {
+                            i++;
+                            sb.Append(statement[i]);
+                        }
+                        else if (statement[i] == '"')
+                        {
+                            break;
+                        }
+                    }
+                    i++;
+                }
+                continue;
+            }
+
+            if (ch != '\'')
+            {
+                sb.Append(ch);
+                continue;
+            }
+
+            var close = FindClosingSingleQuote(statement, i + 1);
+            if (close < 0)
+            {
+                sb.Append(ch);
+                continue;
+            }
+
+            var content = statement.Substring(i + 1, close - i - 1);
+            if (IsCSharpCharLiteralContent(content))
+            {
+                sb.Append(statement, i, close - i + 1);
+            }
+            else
+            {
+                var escaped = content
+                    .Replace("\\", "\\\\")
+                    .Replace("\"", "\\\"");
+                sb.Append('"').Append(escaped).Append('"');
+            }
+            i = close;
+        }
+
+        return sb.ToString();
+    }
+
+    static int FindClosingSingleQuote(string text, int start)
+    {
+        for (var i = start; i < text.Length; i++)
+        {
+            if (text[i] == '\\' && i + 1 < text.Length)
+            {
+                i++;
+                continue;
+            }
+
+            if (text[i] == '\'')
+                return i;
+        }
+
+        return -1;
+    }
+
+    static bool IsCSharpCharLiteralContent(string content)
+    {
+        if (content.Length == 1)
+            return true;
+
+        if (content.Length == 2 && content[0] == '\\')
+            return true;
+
+        if (content.StartsWith("\\u", StringComparison.Ordinal) && content.Length == 6)
+            return true;
+
+        if (content.StartsWith("\\x", StringComparison.Ordinal) && content.Length is >= 3 and <= 6)
+            return true;
+
+        return false;
     }
 
     static bool IsSafeIndexExpression(string? indexExpression)

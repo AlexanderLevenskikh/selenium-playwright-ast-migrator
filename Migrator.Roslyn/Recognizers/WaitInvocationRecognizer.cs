@@ -1,6 +1,5 @@
 using Migrator.Core;
 using Migrator.Core.Models;
-using Migrator.Roslyn;
 
 namespace Migrator.Roslyn.Recognizers;
 
@@ -25,39 +24,10 @@ public class WaitInvocationRecognizer : IInvocationRecognizer
         "WaitForData", "WaitData", "WaitForResult", "WaitResult"
     };
 
-    readonly IReadOnlyDictionary<string, string> _waitPolicies;
-
-    public WaitInvocationRecognizer()
-        : this(RecognizerOptions.Default)
-    {
-    }
-
-    public WaitInvocationRecognizer(RecognizerOptions options)
-    {
-        _waitPolicies = options.WaitPolicies;
-    }
-
     public TestAction? TryRecognize(InvocationContext ctx)
     {
         if (string.IsNullOrWhiteSpace(ctx.ReceiverText))
             return null;
-
-        if (_waitPolicies.TryGetValue(ctx.MethodName, out var configuredKind))
-        {
-            if (IsAdapterMappingPolicy(configuredKind))
-                return null;
-
-            if (TryParseWaitKind(configuredKind, out var waitKind))
-            {
-                return new WaitForAction(
-                    ctx.SourceLine,
-                    ctx.ReceiverText,
-                    RecognitionConfidence.SyntaxFallback,
-                    ctx.MethodName,
-                    ctx.FullText,
-                    waitKind);
-            }
-        }
 
         if (ActionabilityWaitMethods.Contains(ctx.MethodName))
         {
@@ -93,31 +63,6 @@ public class WaitInvocationRecognizer : IInvocationRecognizer
         }
 
         return null;
-    }
-
-    static bool IsAdapterMappingPolicy(string policy)
-    {
-        return string.Equals(policy, "AdapterMapping", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(policy, "Mapped", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(policy, "ParameterizedMethod", StringComparison.OrdinalIgnoreCase);
-    }
-
-    static bool TryParseWaitKind(string policy, out WaitForKind waitKind)
-    {
-        if (Enum.TryParse(policy, ignoreCase: true, out waitKind))
-            return true;
-
-        waitKind = policy.Trim().ToLowerInvariant() switch
-        {
-            "elide" or "elided" or "actionability" or "actionabilityelided" => WaitForKind.ActionabilityElided,
-            "visible" or "productstatevisible" => WaitForKind.ProductStateVisible,
-            "hidden" or "productstatehidden" => WaitForKind.ProductStateHidden,
-            "loaded" or "productstateloaded" => WaitForKind.ProductStateLoaded,
-            "review" or "reviewrequired" => WaitForKind.ReviewRequired,
-            _ => default
-        };
-
-        return waitKind != default || policy.Equals("ActionabilityElided", StringComparison.OrdinalIgnoreCase);
     }
 
     static bool IsProductStateWait(string methodName, string receiverText)

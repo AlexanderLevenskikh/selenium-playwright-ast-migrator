@@ -1,161 +1,205 @@
 param(
-    [string]$Runtime = "win-x64",
     [string]$Configuration = "Release",
-    [string]$Output = "artifacts\agent-cli-bundle",
-    [switch]$FrameworkDependent
+    [string]$Runtime = "win-x64",
+    [string]$Output = "artifacts/agent-cli-bundle",
+    [string]$ToolName = "migrator",
+    [switch]$RunTests,
+    [switch]$NoSelfContained
 )
 
 $ErrorActionPreference = "Stop"
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$RepoRoot = Split-Path -Parent $ScriptDir
-
-$ProjectPath = Join-Path $RepoRoot "Migrator.Cli\Migrator.Cli.csproj"
-$OutputRoot = if ([System.IO.Path]::IsPathRooted($Output)) {
-    $Output
-} else {
-    Join-Path $RepoRoot $Output
-}
-
-$ToolDir = Join-Path $OutputRoot "tool"
-$DocsDir = Join-Path $ToolDir "docs"
-$SchemasDir = Join-Path $ToolDir "schemas"
-$TemplatesDir = Join-Path $ToolDir "templates"
-$TempPublishDir = Join-Path $RepoRoot "artifacts\.tmp-agent-cli-publish"
+$root = Split-Path -Parent $PSScriptRoot
+$project = Join-Path $root "Migrator.Cli\Migrator.Cli.csproj"
+$outputRoot = if ([System.IO.Path]::IsPathRooted($Output)) { $Output } else { Join-Path $root $Output }
+$publishDir = Join-Path $outputRoot "publish"
+$bundleDir = Join-Path $outputRoot "tool"
+$docsDir = Join-Path $bundleDir "docs"
+$schemasDir = Join-Path $bundleDir "schemas"
+$templatesDir = Join-Path $bundleDir "templates"
 
 Write-Host "Packaging AST Migrator CLI bundle"
-Write-Host "Repo root: $RepoRoot"
-Write-Host "Project:   $ProjectPath"
+Write-Host "Repo root: $root"
+Write-Host "Project:   $project"
 Write-Host "Runtime:   $Runtime"
-Write-Host "Output:    $OutputRoot"
+Write-Host "Output:    $outputRoot"
 Write-Host ""
 
-if (-not (Test-Path $ProjectPath)) {
-    throw "Migrator.Cli project was not found: $ProjectPath"
+if (-not (Test-Path $project)) {
+    throw "Migrator.Cli project was not found: $project"
 }
 
-Remove-Item -Recurse -Force $TempPublishDir -ErrorAction SilentlyContinue
-Remove-Item -Recurse -Force $ToolDir -ErrorAction SilentlyContinue
+if ($RunTests) {
+    Write-Host "Running tests before packaging..."
+    dotnet test (Join-Path $root "Migrator.sln") -c $Configuration --no-restore
+}
 
-New-Item -ItemType Directory -Force $TempPublishDir | Out-Null
-New-Item -ItemType Directory -Force $ToolDir | Out-Null
-New-Item -ItemType Directory -Force $DocsDir | Out-Null
-New-Item -ItemType Directory -Force $SchemasDir | Out-Null
-New-Item -ItemType Directory -Force $TemplatesDir | Out-Null
+Remove-Item -Recurse -Force $outputRoot -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $publishDir | Out-Null
+New-Item -ItemType Directory -Force -Path $bundleDir | Out-Null
+New-Item -ItemType Directory -Force -Path $docsDir | Out-Null
+New-Item -ItemType Directory -Force -Path $schemasDir | Out-Null
+New-Item -ItemType Directory -Force -Path $templatesDir | Out-Null
 
-$selfContainedValue = if ($FrameworkDependent) { "false" } else { "true" }
+$selfContainedValue = (-not $NoSelfContained).ToString().ToLowerInvariant()
 
-Write-Host "Publishing CLI..."
+Write-Host "Publishing CLI as regular folder, not single-file..."
+Write-Host "Runtime: $Runtime"
+Write-Host "SelfContained: $selfContainedValue"
 
-dotnet publish $ProjectPath `
+# Important: do NOT publish as a single-file executable.
+# Roslyn-based tools need real assembly files next to the executable.
+dotnet publish $project `
     -c $Configuration `
     -r $Runtime `
     --self-contained $selfContainedValue `
     /p:PublishSingleFile=false `
     /p:DebugType=None `
     /p:DebugSymbols=false `
-    -o $TempPublishDir
+    -o $publishDir
 
-Write-Host ""
-Write-Host "Copying full publish output to tool folder..."
+Write-Host "Copying full publish output..."
+Copy-Item -Path (Join-Path $publishDir "*") -Destination $bundleDir -Recurse -Force
 
-# Important: copy the whole publish directory, not only the exe.
-# Roslyn-based tools need real assembly files next to the executable.
-Copy-Item -Path (Join-Path $TempPublishDir "*") -Destination $ToolDir -Recurse -Force
+$publishedExe = Join-Path $bundleDir "Migrator.Cli.exe"
+$targetExe = Join-Path $bundleDir "$ToolName.exe"
 
-$PublishedExe = Join-Path $ToolDir "Migrator.Cli.exe"
-$FriendlyExe = Join-Path $ToolDir "migrator.exe"
-
-if (Test-Path $PublishedExe) {
-    Copy-Item $PublishedExe $FriendlyExe -Force
-} elseif (-not $FrameworkDependent) {
-    throw "Published executable was not found: $PublishedExe"
+if (Test-Path $publishedExe) {
+    Copy-Item $publishedExe $targetExe -Force
+}
+elseif (-not $NoSelfContained) {
+    throw "Published executable was not found: $publishedExe"
 }
 
 Write-Host "Copying docs/schema/templates..."
 
-$SchemaPath = Join-Path $RepoRoot "schemas\adapter-config.schema.json"
-if (Test-Path $SchemaPath) {
-    Copy-Item $SchemaPath $SchemasDir -Force
+$schema = Join-Path $root "schemas\adapter-config.schema.json"
+if (Test-Path $schema) {
+    Copy-Item $schema (Join-Path $schemasDir "adapter-config.schema.json") -Force
 }
 
-$DocsSource = Join-Path $RepoRoot "docs"
-if (Test-Path $DocsSource) {
-    Copy-Item -Path (Join-Path $DocsSource "*") -Destination $DocsDir -Recurse -Force
+$docsSource = Join-Path $root "docs"
+if (Test-Path $docsSource) {
+    Copy-Item -Path (Join-Path $docsSource "*") -Destination $docsDir -Recurse -Force
 }
 
-$ReadmePath = Join-Path $RepoRoot "README.md"
-if (Test-Path $ReadmePath) {
-    Copy-Item $ReadmePath (Join-Path $ToolDir "README.md") -Force
+$rootFiles = @(
+    "README.md",
+    "README.ru.md",
+    "AGENTS.md",
+    "FIRST_AGENT_PROMPT_TEMPLATE.md"
+)
+
+foreach ($file in $rootFiles) {
+    $source = Join-Path $root $file
+    if (Test-Path $source) {
+        Copy-Item $source (Join-Path $bundleDir (Split-Path $file -Leaf)) -Force
+    }
 }
 
-$AgentsPath = Join-Path $RepoRoot "AGENTS.md"
-if (Test-Path $AgentsPath) {
-    Copy-Item $AgentsPath (Join-Path $ToolDir "AGENTS.md") -Force
-}
-
-$FirstPromptTemplate = Join-Path $RepoRoot "FIRST_AGENT_PROMPT_TEMPLATE.md"
+$FirstPromptTemplate = Join-Path $root "FIRST_AGENT_PROMPT_TEMPLATE.md"
 if (Test-Path $FirstPromptTemplate) {
-    Copy-Item $FirstPromptTemplate $TemplatesDir -Force
+    Copy-Item $FirstPromptTemplate $templatesDir -Force
 }
 
-$RunMigratorTemplate = Join-Path $RepoRoot "run-migrator-template.ps1"
-if (Test-Path $RunMigratorTemplate) {
-    Copy-Item $RunMigratorTemplate $TemplatesDir -Force
-}
+$runTemplatePath = Join-Path $templatesDir "run-migrator-template.ps1"
+$runTemplateLines = @(
+    'param(',
+    '    [Parameter(Mandatory=$true)]',
+    '    [ValidateSet("doctor", "config-validate", "migrate", "verify", "verify-project", "explain-todo", "guard", "config-diff", "migration-board", "smoke-plan", "runtime-classify", "profile-match")]',
+    '    [string]$Mode,',
+    '',
+    '    [Parameter(Mandatory=$true)]',
+    '    [string]$Input,',
+    '',
+    '    [Parameter(Mandatory=$true)]',
+    '    [string]$Config,',
+    '',
+    '    [Parameter(Mandatory=$true)]',
+    '    [string]$Out,',
+    '',
+    '    [string]$Before,',
+    '    [string]$After,',
+    '    [string]$Format = "both"',
+    ')',
+    '',
+    '$ErrorActionPreference = "Stop"',
+    '$tool = Join-Path $PSScriptRoot "..\migrator.exe"',
+    '',
+    '$args = @("--mode", $Mode, "--format", $Format)',
+    '',
+    'if ($Mode -eq "guard") {',
+    '    if (-not $Before -or -not $After) { throw "guard mode requires -Before and -After" }',
+    '    $args += @("--before", $Before, "--after", $After, "--out", $Out)',
+    '}',
+    'elseif ($Mode -eq "config-diff") {',
+    '    if (-not $Before -or -not $After) { throw "config-diff mode requires -Before and -After" }',
+    '    $args += @("--before", $Before, "--after", $After, "--out", $Out)',
+    '}',
+    'else {',
+    '    $args += @("--input", $Input, "--config", $Config, "--out", $Out)',
+    '}',
+    '',
+    '& $tool @args',
+    'exit $LASTEXITCODE'
+)
+Set-Content -Path $runTemplatePath -Value $runTemplateLines -Encoding UTF8
 
-$AgentReadme = Join-Path $ToolDir "README_AGENT_TOOL.md"
-
-# Keep this generated README intentionally simple ASCII.
-# This avoids PowerShell parsing/encoding issues on Windows consoles.
-$AgentReadmeLines = @(
-    '# AST Migrator Agent CLI Bundle',
+$readmeAgent = Join-Path $bundleDir "README_AGENT_TOOL.md"
+$readmeLines = @(
+    '# AST Migrator CLI bundle for agents',
     '',
-    'This folder is intended to be given to a migration agent instead of the migrator source code.',
+    'This folder contains the compiled AST Migrator CLI and documentation for config-driven migration agents.',
     '',
-    'Use the migrator as a black-box CLI tool.',
+    'Important boundary:',
+    '  The migrator is provided as a compiled CLI tool.',
+    '  The agent must not search for or edit migrator C# source code.',
     '',
-    'Executable:',
+    'Run:',
     '  .\migrator.exe --help',
     '  .\Migrator.Cli.exe --help',
     '',
     'Do not move migrator.exe out of this folder.',
     'The executable depends on the DLL files published next to it.',
     '',
-    'Important rule:',
-    '  The migration agent must not edit migrator C# source code.',
+    'Allowed agent work:',
+    '  edit migration/profiles/*.adapter.json',
+    '  edit migration/migration-progress.md',
+    '  edit migration/pom-recovery.md',
+    '  edit migration/migrator-tickets.md',
+    '  create migration/run-* outputs',
+    '  run this CLI',
     '',
-    'If a core migrator limitation is found, create a ticket in:',
-    '  migration\migrator-tickets.md',
+    'Forbidden:',
+    '  edit source Selenium project',
+    '  edit generated .cs files as final solution',
+    '  edit migrator C# code',
+    '  suppress business logic blindly',
+    '  add broad POM suppressions without POM recovery',
     '',
-    'Included files:',
-    '  migrator.exe',
-    '  Migrator.Cli.exe',
-    '  required DLL dependencies',
-    '  schemas\adapter-config.schema.json',
-    '  docs\',
-    '  templates\',
+    'Read first:',
+    '  docs/agent-tool-boundary.md',
+    '  docs/migration-safety-playbook.md',
+    '  docs/pom-recovery-policy.md',
+    '  FIRST_AGENT_PROMPT_TEMPLATE.md',
+    '  schemas/adapter-config.schema.json',
     '',
     'Windows PowerShell execution policy:',
     '  Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass',
     '',
     'This affects only the current PowerShell session.'
 )
+Set-Content -Path $readmeAgent -Value $readmeLines -Encoding UTF8
 
-Set-Content -Path $AgentReadme -Value $AgentReadmeLines -Encoding UTF8
-
-Remove-Item -Recurse -Force $TempPublishDir -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force $publishDir -ErrorAction SilentlyContinue
 
 Write-Host ""
-Write-Host "Bundle created successfully:"
-Write-Host "  $ToolDir"
-Write-Host ""
-Write-Host "Tool folder contents:"
-Get-ChildItem $ToolDir |
-    Select-Object -First 30 Name, Length |
-    Format-Table -AutoSize
-
+Write-Host "Agent CLI bundle created: $bundleDir"
+Write-Host "Executable: $targetExe"
 Write-Host ""
 Write-Host "IMPORTANT:"
-Write-Host "  Give the agent the whole 'tool' folder, not just migrator.exe."
+Write-Host "  Give the agent the whole 'tool' folder, not just $ToolName.exe."
 Write-Host "  The executable needs the published DLL files next to it."
+Write-Host ""
+Write-Host "Tool folder preview:"
+Get-ChildItem $bundleDir | Select-Object -First 30 Name, Length | Format-Table -AutoSize
