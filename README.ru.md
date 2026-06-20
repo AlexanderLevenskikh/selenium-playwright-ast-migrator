@@ -75,6 +75,7 @@ dotnet run --project Migrator.Cli -- --mode orchestrate --input ./SeleniumTests 
 - [**Scaffold без инфраструктуры**](docs/user-guide/no-infra-scaffold.ru.md) — генерация Playwright проекта с нуля
 - [**Ограничения**](docs/user-guide/limitations.md) — честные границы возможностей инструмента
 - [**Agent Playbooks**](docs/agent-playbooks/README.md) — процедурные гайды для AI-агентов
+- [**POM recovery policy**](docs/pom-recovery-policy.md) — как агенту извлекать source truth из старых PageObject перед broad suppressions
 
 ## Справочная документация
 
@@ -82,6 +83,7 @@ dotnet run --project Migrator.Cli -- --mode orchestrate --input ./SeleniumTests 
 - [Locator Matching](docs/profile/locator-matching.md) — TargetKind и Match стратегия
 - [Method Mappings](docs/profile/method-mappings.md) — точные и шаблонные маппинги методов
 - [Parameterized Methods](docs/profile/parameterized-method-mappings.md) — паттерн-маппинги с подстановкой
+- [Placeholder mental model](docs/profile/placeholder-mental-model.md) — зачем нужны `{source}` и `{TARGET}`, и как N UiTargets + M method mappings дают N×M применений
 - [Profile Scoping](docs/profile/profile-scoping.md) — файловые override через Scopes
 - [Runtime Host](docs/profile/runtime-host.md) — TestHost-конфиг для генерации обёрток классов
 - [Target Discovery](docs/profile/target-discovery.md) — режим discover-target
@@ -165,6 +167,14 @@ dotnet run --project .\Migrator.Cli -- --mode index-pom --input "<Selenium proje
 Читать подробности: `docs/pom-indexing.md`.
 
 Правило: найденные POM-факты являются source truth, а `inferred-pom-candidates.json` — только черновик. Inferred candidates нельзя автоматически переносить в `adapter-config.json`: сначала найти POM/helper/source truth или спросить разработчика.
+
+## POM recovery перед broad suppression
+
+Broad suppressions для `page.*.*`, `pagef.*.*`, `lightbox.*.*`, `modal.*.*`, `dialog.*.*`, `popup.*.*` нельзя добавлять первым действием только ради снижения TODO.
+
+Сначала агент должен найти source POM declaration, извлечь selector evidence (`CreateControlByTid`, `WithDataTestId`, CSS, XPath, helper methods), проверить target Playwright architecture и попробовать добавить `UiTargets`/method mappings. Если config недостаточно, агент создаёт candidates в `migration/pom-candidates/` и обновляет `migration/pom-recovery.md`. Только после этого допустим documented suppression.
+
+Подробности: `docs/pom-recovery-policy.md`.
 
 ## Project-aware verify
 

@@ -10,6 +10,29 @@
 В отчётах должны жить объяснения решений.
 ```
 
+
+## Placeholder mental model for agents
+
+Запоминай config как две независимые части:
+
+```text
+UiTargets переводят существительные.
+Methods / ParameterizedMethods переводят глаголы.
+```
+
+`{source}` — это старое Selenium-выражение, например `page.SortBox`.
+`{TARGET}` — это уже безопасное Playwright-выражение, найденное через `UiTargets`, например `Page.GetByTestId("sort-box")`.
+
+В активном generated code почти всегда используй `{TARGET}`, а не `{source}`:
+
+```json
+"await {TARGET}.ClickAsync();"
+```
+
+Так один behavior mapping может работать для многих source objects: N `UiTargets` + M method mappings дают N×M применений без N×M строк в config.
+
+Подробности: [`docs/profile/placeholder-mental-model.md`](profile/placeholder-mental-model.md).
+
 ## Что можно и нужно выносить в adapter-config
 
 Project/domain-specific знания не должны попадать в `PlaywrightDotNetRenderer.cs` хардкодом.

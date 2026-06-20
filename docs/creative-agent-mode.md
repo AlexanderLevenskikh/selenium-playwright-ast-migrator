@@ -2,6 +2,23 @@
 
 Твоя цель — максимально продвигать миграцию Selenium C# → Playwright, используя интеллект, pattern mining и маленькие безопасные эксперименты. Creative Mode не означает хаос: ты можешь предлагать гипотезы и искать нестандартные решения, но обязан сохранять проверяемость, откатываемость и честную отчётность.
 
+
+
+## Tool boundary для Creative Mode
+
+Если миграция запускается через compiled CLI bundle, агент обязан считать мигратор внешним black-box tool.
+
+Разрешено менять config/profile и migration docs. Запрещено искать или править C# source code мигратора. Если найдено ограничение core migrator — создать тикет в `migration/migrator-tickets.md`.
+
+Перед началом прочитай:
+
+- `docs/agent-tool-boundary.md`
+- `docs/migration-safety-playbook.md`
+
+Особенно строго соблюдай правила для `WebDriver`, URL/external variables, cookies/localStorage, assertions и broad POM suppressions.
+
+Перед broad POM suppressions обязательно выполни POM recovery pass: найди исходные POM declarations, извлеки selector evidence, проверь target architecture, добавь config mappings или создай candidates в `migration/pom-candidates/`. Подробности: `docs/pom-recovery-policy.md`.
+
 ## Главный принцип
 
 Creative Mode разрешает творчески искать migration strategy, но не разрешает творчески выдумывать факты.
@@ -24,6 +41,23 @@ Creative Mode разрешает творчески искать migration strat
 * `page.MenuItems.SideMenuButtonSearch`
 
 Никогда не группируй TODO только по root `page` / `pagef`. Всегда группируй по полному source expression и normalized pattern.
+
+## POM recovery before suppression
+
+Broad suppressions по `page.*.*`, `lightbox.*.*`, `modal.*.*`, `dialog.*.*`, `popup.*.*` разрешены только после POM recovery attempt.
+
+Перед тем как suppress-ить POM expression:
+
+1. найди declaration в source Selenium POM;
+2. извлеки selector evidence (`CreateControlByTid`, `WithDataTestId`, CSS, XPath, helper methods);
+3. проверь target Playwright conventions;
+4. если можно — добавь `UiTargets` / `Methods` / `ParameterizedMethods`;
+5. если config недостаточно — создай candidate file в `migration/pom-candidates/`;
+6. обнови `migration/pom-recovery.md`;
+7. только после этого добавляй documented suppression, если перенос небезопасен.
+
+Цель — не обязательно перевести старый POM 1:1. Цель — не потерять source truth: selectors, data-tid, helper semantics, component hierarchy и reusable actions.
+
 
 ## Перед началом
 
@@ -635,3 +669,17 @@ If `Inferred locators > 0` or `Unknown locators > 0`, do not call the file runti
 5. честные leftovers.
 
 Creative Mode должен быть смелым в поиске решений, но строгим к фактам.
+
+
+## Placeholder model before writing mappings
+
+Before adding a `Methods` or `ParameterizedMethods` entry, use the nouns/verbs model:
+
+```text
+UiTargets translate source objects (nouns).
+Methods / ParameterizedMethods translate actions (verbs).
+```
+
+Use `{TARGET}` for active generated Playwright code. Use `{source}` mostly as source evidence in comments or diagnostics. If `{TARGET}` cannot be resolved, mine the source POM or add a `UiTargets` mapping first instead of emitting active code that references old Selenium objects.
+
+See [`docs/profile/placeholder-mental-model.md`](profile/placeholder-mental-model.md).

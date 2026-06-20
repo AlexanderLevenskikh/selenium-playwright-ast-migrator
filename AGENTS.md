@@ -69,6 +69,22 @@ dotnet run --project .\Migrator.Cli -- --mode index-pom --input "<Selenium proje
 
 Правило: найденные POM-факты являются source truth, а `inferred-pom-candidates.json` — только черновик. Inferred candidates нельзя автоматически переносить в `adapter-config.json`: сначала найти POM/helper/source truth или спросить разработчика.
 
+## POM recovery before broad suppression
+
+Broad suppressions по `page.*.*`, `pagef.*.*`, `lightbox.*.*`, `modal.*.*`, `dialog.*.*`, `popup.*.*` разрешены только после POM recovery attempt.
+
+Перед suppression агент должен:
+
+1. найти declaration в source Selenium POM;
+2. извлечь selector evidence (`CreateControlByTid`, `WithDataTestId`, CSS, XPath, helper methods);
+3. проверить target Playwright architecture;
+4. добавить `UiTargets` / method mappings, если можно;
+5. если config недостаточно — создать candidate files в `migration/pom-candidates/`;
+6. обновить `migration/pom-recovery.md`;
+7. только после этого добавить documented suppression, если перенос небезопасен.
+
+Цель — не переводить старый POM 1:1 любой ценой, а сохранить source truth и не потерять смысл тестов. Подробности: `docs/pom-recovery-policy.md`.
+
 ## Project-aware verify
 
 Для настоящей компиляции generated Playwright-кода используй режим `verify-project`, а не только standalone `verify`. Он создаёт временный `.csproj` в `--out/project-verify`, подключает generated-файлы, project/package references из `adapter-config.json` (`Verification`), умеет искать ближайший `.csproj`, рекурсивные `ProjectReference`, `Directory.Build.props/targets`, `Directory.Packages.props`, и классифицирует build diagnostics по причинам. Исходный проект не меняется. Подробнее: `docs/project-verification.md`.
@@ -252,6 +268,7 @@ Hard rules:
 - Never add Selenium/POM roots to `TargetKnownIdentifiers` unless they truly exist in target Playwright code.
 - Before escalation, build a top-50 backlog by full source expression and normalized pattern.
 - Escalate concrete generic blockers such as `ClickAndOpen<T>()` or `Table.Items.ElementAt(...)`, not the entire root `page`.
+- Before broad POM suppressions, run POM recovery and document results in `migration/pom-recovery.md`.
 
 Read and follow `docs/agent-playbooks/source-only-pattern-backlog.md` whenever TODO are dominated by `SOURCE_ONLY_IDENTIFIER`.
 
@@ -269,3 +286,24 @@ See [`docs/README.md`](docs/README.md) for the current documentation map.
 ## Agent modes
 
 Use Strict Mode for safe config-only iterations and Creative Mode for pattern mining/TS drafts. See [`docs/agent-modes.md`](docs/agent-modes.md).
+
+
+## Agent tool boundary
+
+Для project-migration с AI-agent предпочтительный режим — compiled CLI bundle без исходников мигратора.
+
+Агент должен работать с мигратором как с black-box tool:
+
+```powershell
+.\tools\migrator\migrator.exe --mode migrate ...
+```
+
+Агенту нельзя давать в workspace `Migrator.sln`, `Migrator.Core/`, `Migrator.Roslyn/`, `Migrator.PlaywrightDotNet/`, `Migrator.SeleniumCSharp/`, `Migrator.Cli/`, `Migrator.Tests/`.
+
+Если агент нашёл limitation core migrator, он создаёт тикет в `migration/migrator-tickets.md`, а не меняет C# код.
+
+Подробности:
+
+- `docs/agent-tool-boundary.md`
+- `docs/migration-safety-playbook.md`
+- `scripts/package-agent-cli-bundle.ps1`

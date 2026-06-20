@@ -19,6 +19,19 @@ Migrating E2E suites usually fails for boring reasons: thousands of repeated loc
 
 The goal is not magic conversion. The goal is to replace weeks of manual rewriting with a controlled migration loop: **source truth → profile config → generated code → verification → next pattern**.
 
+## Real migration result
+
+On one real complex Selenium C# project:
+
+- Initial TODO count: ~730
+- Tracked final-stage TODO, run-44
+- After validated core fixes + config refinements: 0
+- Syntax errors: 0
+- Build diagnostics: 0 before verify-project timeout
+
+The goal was not one-click magic, but an iterative migration workflow:
+analyze → mine patterns → update config → verify → patch only real migrator limitations.
+
 ## Supported targets
 
 | Source | Target | Status | Notes |
@@ -140,6 +153,10 @@ dotnet run --project Migrator.Cli -- \
 
 - [`docs/architecture.md`](docs/architecture.md) — architecture and module responsibilities.
 - [`docs/agent-modes.md`](docs/agent-modes.md) — Strict vs Creative mode and prompt inputs.
+- [`docs/agent-tool-boundary.md`](docs/agent-tool-boundary.md) — using the migrator as a compiled CLI bundle for agents.
+- [`docs/migration-safety-playbook.md`](docs/migration-safety-playbook.md) — safety rules for WebDriver, URLs, broad suppressions, waits and assertions.
+- [`docs/pom-recovery-policy.md`](docs/pom-recovery-policy.md) — POM recovery workflow before broad PageObject suppressions.
+- [`docs/profile/placeholder-mental-model.md`](docs/profile/placeholder-mental-model.md) — `{source}` vs `{TARGET}` and the nouns/verbs profile model.
 - [`docs/typescript-target.md`](docs/typescript-target.md) — experimental TypeScript target.
 - [`docs/wait-policy.md`](docs/wait-policy.md) — Selenium wait classification.
 - [`docs/explain-todo.md`](docs/explain-todo.md) — smart TODO markers and next actions.
@@ -166,6 +183,22 @@ The test suite covers parser behavior, adapter mappings, snapshots, compile-smok
 ```
 
 See [`docs/packaging-and-distribution.md`](docs/packaging-and-distribution.md) and [`docs/tool-installation.md`](docs/tool-installation.md).
+
+## Agent CLI bundle
+
+For AI-agent migrations, prefer giving the agent a compiled CLI bundle instead of the migrator source repository:
+
+```powershell
+.\scripts\package-agent-cli-bundle.ps1 -Runtime win-x64 -Output artifacts/agent-cli-bundle
+```
+
+Then copy `artifacts/agent-cli-bundle/tool` to the target project, for example:
+
+```text
+<target-playwright-project>/tools/migrator
+```
+
+The bundle contains `migrator.exe`, schema and agent-facing docs, but no C# source code. See [`docs/agent-tool-boundary.md`](docs/agent-tool-boundary.md).
 
 ## Philosophy
 

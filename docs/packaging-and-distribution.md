@@ -190,3 +190,122 @@ NuGet/tool решает доставку CLI, но не решает project-awa
 - Перед публикацией запускайте `dotnet test --no-restore`.
 - Перед публикацией проверяйте локальную установку из `artifacts/nuget`.
 - Не публикуйте пакет, если `config-validate` / `guard` показывают регрессии на пилотном проекте.
+
+
+## Standalone CLI bundle для агента
+
+Для AI-agent migration workflow лучше не давать агенту repository source code мигратора.
+
+Вместо этого соберите отдельную папку с:
+
+- single-file `migrator.exe`;
+- JSON schema;
+- agent-facing docs;
+- first prompt template;
+- wrapper template.
+
+Команда:
+
+```powershell
+.\scripts\package-agent-cli-bundle.ps1 `
+  -Runtime win-x64 `
+  -Output artifacts/agent-cli-bundle
+```
+
+Результат:
+
+```text
+artifacts/agent-cli-bundle/tool/
+  migrator.exe
+  README_AGENT_TOOL.md
+  FIRST_AGENT_PROMPT_TEMPLATE.md
+  run-migrator-template.ps1
+  schemas/
+    adapter-config.schema.json
+  docs/
+    agent-tool-boundary.md
+    migration-safety-playbook.md
+    ...
+```
+
+Эту папку можно скопировать в целевой Playwright-проект:
+
+```text
+<target-playwright-project>/tools/migrator/
+```
+
+И дать агенту путь именно до неё:
+
+```text
+<TARGET_PLAYWRIGHT_PROJECT_PATH>\tools\migrator
+```
+
+Агент должен запускать:
+
+```powershell
+.\tools\migrator\migrator.exe --mode migrate ...
+```
+
+а не:
+
+```powershell
+dotnet run --project Migrator.Cli ...
+```
+
+Так агент работает с мигратором как с black-box CLI и не может случайно начать править renderer/parser/recognizers вместо создания тикета.
+
+Подробнее:
+
+- `docs/agent-tool-boundary.md`
+- `docs/migration-safety-playbook.md`
+
+## Windows PowerShell execution policy
+
+Если PowerShell отказывается запускать скрипт упаковки и показывает ошибку вроде:
+
+```text
+Файл ...\scripts\package-agent-cli-bundle.ps1 не имеет цифровой подписи.
+Невозможно выполнить сценарий в указанной системе.
+```
+
+Запустите скрипт с временным обходом политики выполнения только для текущего процесса:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+.\scripts\package-agent-cli-bundle.ps1 `
+  -Runtime win-x64 `
+  -Output artifacts\agent-cli-bundle
+```
+
+Это изменение действует только в текущем окне PowerShell. После закрытия терминала системная политика выполнения останется прежней.
+
+Если файл был скачан из интернета или распакован из архива, Windows могла пометить его как небезопасный. В таком случае сначала разблокируйте файл:
+
+```powershell
+Unblock-File .\scripts\package-agent-cli-bundle.ps1
+```
+
+Или разблокируйте все файлы в распакованной папке проекта:
+
+```powershell
+Get-ChildItem -Recurse | Unblock-File
+```
+
+Также можно запустить скрипт одной командой без предварительного изменения политики в текущей сессии:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File .\scripts\package-agent-cli-bundle.ps1 `
+  -Runtime win-x64 `
+  -Output artifacts\agent-cli-bundle
+```
+
+Для PowerShell 7 используйте:
+
+```powershell
+pwsh -ExecutionPolicy Bypass -File .\scripts\package-agent-cli-bundle.ps1 `
+  -Runtime win-x64 `
+  -Output artifacts\agent-cli-bundle
+```
+
+Не рекомендуется глобально включать `Unrestricted`, если вы точно не понимаете, зачем это нужно. Для запуска этого скрипта достаточно временного `Bypass` на уровне текущего процесса.

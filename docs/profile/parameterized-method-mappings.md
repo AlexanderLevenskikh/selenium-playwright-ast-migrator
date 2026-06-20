@@ -8,6 +8,15 @@ Exact method mappings (`SourceMethod`) require one entry per argument variation.
 
 `ParameterizedMethodMapping` allows pattern-based matching with `{placeholderName}` syntax. Placeholder substitution is quote-aware: it distinguishes between placeholders inside C# string literals and raw C# expressions.
 
+
+## Mental model: nouns and verbs
+
+Use `UiTargets` to translate source objects ("nouns") and `ParameterizedMethods` to translate repeated actions ("verbs"). This lets one behavior mapping apply to many mapped objects instead of writing N x M concrete rules.
+
+In `TargetStatements`, `{source}` is the old Selenium receiver expression, while `{TARGET}` is the resolved Playwright target expression for that receiver. Prefer `{TARGET}` for active generated code.
+
+See [Placeholder mental model: nouns and verbs](placeholder-mental-model.md).
+
 ## Config Shape
 
 ```json

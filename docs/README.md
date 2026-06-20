@@ -18,6 +18,7 @@ This documentation is split by role and task. Prefer this index over browsing th
 - [Agent command set](agent-command-set.md)
 - [Agent playbooks](agent-playbooks/README.md)
 - [Safety rules](agent-playbooks/safety-rules.md)
+- [POM recovery policy](pom-recovery-policy.md)
 - [Source-only pattern backlog](agent-playbooks/source-only-pattern-backlog.md)
 
 ## For migration engineers
@@ -27,7 +28,9 @@ This documentation is split by role and task. Prefer this index over browsing th
 - [Architecture](architecture.md)
 - [Configuration layering](config-layering.md)
 - [Migration profiles](migration-profiles.md)
+- [Placeholder mental model](profile/placeholder-mental-model.md)
 - [POM indexing](pom-indexing.md)
+- [POM recovery policy](pom-recovery-policy.md)
 - [Project verification](project-verification.md)
 - [TypeScript target](typescript-target.md)
 - [Wait policy](wait-policy.md)

@@ -7,6 +7,20 @@ Adapter config supports two approaches for mapping project-specific helpers:
 1. **Exact `MethodMapping`** — maps a specific call to generated statements.
 2. **Template `MethodMapping`** — maps a method name pattern with argument substitution.
 
+
+## Placeholder mental model
+
+Treat profile mappings as two layers:
+
+```text
+UiTargets translate nouns.
+Methods / ParameterizedMethods translate verbs.
+```
+
+`{source}` is the old Selenium receiver. `{TARGET}` is the resolved Playwright expression for that receiver. Prefer `{TARGET}` in active target statements so a single behavior mapping can apply to many mapped source objects.
+
+See [Placeholder mental model: nouns and verbs](placeholder-mental-model.md).
+
 ## Priority Rule
 
 ```

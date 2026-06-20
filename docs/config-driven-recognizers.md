@@ -80,6 +80,8 @@ Do not suppress business assertions, navigation, create/save/delete methods, or 
 ```json
 {
   "SuppressedMethods": ["Console.WriteLine", "TestContext.WriteLine", "WriteLine"],
-  "SuppressedMethodPatterns": ["*.DumpDebugInfo(*)"]
+  "SuppressedMethodPatterns": ["*.DumpDebugInfo(*)", "*page.GoToDiscountsPage(*)"]
 }
 ```
+
+`SuppressedMethodPatterns` are evaluated before source-only safety checks. This is intentional for source helpers that declare temporary Selenium-side page variables but are known to be safe to omit from generated target code. Suppressed actions are rendered as source comments, not active code, and declared variables are not registered as target locals.
