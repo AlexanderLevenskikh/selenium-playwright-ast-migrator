@@ -105,4 +105,4 @@ Examples:
 | `page.Table.Items.ElementAt(i).Text` | `Tables`/list recognizer or escalation for table pattern |
 | `page.AddReasons.ClickAndOpen<T>()` | click/open/modal recognizer or method mapping |
 
-Do not escalate root-level `page` statistics. Build the pattern backlog described in `docs/agent-playbooks/source-only-pattern-backlog.md`.
+Do not escalate root-level `page` statistics. Build the pattern backlog described in `docs/source-only-pattern-backlog.md`.

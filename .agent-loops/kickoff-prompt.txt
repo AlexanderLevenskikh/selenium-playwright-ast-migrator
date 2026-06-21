@@ -1,0 +1,13 @@
+Read all files in .agent-loops/.
+
+Start Migrator Autopilot Loop.
+
+You are allowed and expected to make engineering decisions yourself.
+Do not ask me to choose between implementation options.
+Do not stop after partial progress.
+Continue until the selected migration block is fixed and verified, or until the stop policy requires a real stop.
+
+Current task:
+<PASTE CURRENT BLOCK / ERROR / LOG / TODO CATEGORY HERE>
+
+Use repository code, existing tests, snapshots, and command output as the source of truth.

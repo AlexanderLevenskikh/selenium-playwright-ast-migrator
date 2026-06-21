@@ -47,15 +47,14 @@ Migrator Maintainer
     migrator/
       migrator.exe
       README_AGENT_TOOL.md
-      FIRST_AGENT_PROMPT_TEMPLATE.md
+      AUTOPILOT_PROMPT.md
       schemas/
         adapter-config.schema.json
       docs/
         agent-tool-boundary.md
-        migration-safety-playbook.md
         pom-recovery-policy.md
         agent-command-set.md
-        agent-safety.md
+        autopilot-loop.md
         config-driven-recognizers.md
         project-verification.md
         explain-todo.md

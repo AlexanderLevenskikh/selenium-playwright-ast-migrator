@@ -1,319 +1,169 @@
-# Migrator — AGENTS.md
+# Migrator — Autopilot AGENTS.md
 
-## Обзор
+## Purpose
 
-Migrator — .NET 8 CLI-инструмент, преобразующий Selenium C# автотесты (NUnit) в Playwright .NET.
-Pipeline: **parse → recognize → IR → adapt → render → report**.
+Migrator is a .NET 8 CLI tool for converting Selenium C# / NUnit tests to Playwright tests.
 
-## Архитектура (кратко)
+Pipeline: **parse → recognize → IR → adapt/configure → render → report → verify**.
 
-| Проект | Ответственность |
+This repository is configured for **Autopilot Loop** work: an agent should continue through small verified iterations until the selected migration block is done or a real stop condition is reached.
+
+## Autopilot-first rule
+
+For development of the migrator itself, the primary workflow is now:
+
+1. Read `.agent-loops/README.md`.
+2. Read every file in `.agent-loops/`.
+3. Read this `AGENTS.md`.
+4. Start `Migrator Autopilot Loop`.
+5. Do not ask the user to choose between technical implementation options.
+6. Continue if status is `CONTINUE_AUTONOMOUSLY`.
+7. Stop only according to `.agent-loops/03-stop-policy.md`.
+
+The old human-checkpoint workflow is intentionally removed from this package.
+
+Forbidden stop phrases:
+
+- “Which option do you prefer?”
+- “Should I use approach A or B?”
+- “Do you want me to continue?”
+- “I can continue if you want.”
+- “There are several possible implementations.”
+
+Choose the safest option and continue.
+
+## Architecture
+
+| Project | Responsibility |
 |---|---|
-| `Migrator.Core` | Модели IR, интерфейсы, пайплайн, отчёт. **Ничего** от Roslyn/Selenium/Playwright. |
-| `Migrator.Roslyn` | Парсер (Roslyn AST → IR), recognizer'ы |
-| `Migrator.SeleniumCSharp` | Адаптер (JSON-конфиг → маппинг таргетов) |
-| `Migrator.PlaywrightDotNet` | Рендерер (IR → C# Playwright .NET) |
-| `Migrator.Cli` | Точка входа, командная строка |
-| `Migrator.Tests` | Тесты (xUnit), compile-smoke |
+| `Migrator.Core` | IR models, interfaces, pipeline, reports. No Roslyn/Selenium/Playwright implementation dependencies. |
+| `Migrator.Roslyn` | Roslyn parser and recognizers. |
+| `Migrator.SeleniumCSharp` | Selenium C# adapter and config-driven source mapping. |
+| `Migrator.PlaywrightDotNet` | Playwright .NET renderer. |
+| `Migrator.PlaywrightTypeScript` | Experimental Playwright TypeScript renderer. |
+| `Migrator.Cli` | CLI entry point and command modes. |
+| `Migrator.Tests` | Regression tests, snapshots, compile-smoke checks. |
 
-Core — только модели и контракты. Не класть в Core: зависимости от фреймворков, логику распознавания, конкретные реализации.
+Core must stay generic. Do not put framework-specific recognizer or renderer logic into `Migrator.Core`.
 
-## Ключевые файлы
+## Key files
 
-- `Migrator.Roslyn/RoslynTestFileParser.cs` — парсер, регистрация recognizer'ов (`CreateDefaultRecognizers`)
-- `Migrator.Roslyn/Recognizers/` — recognizer'ы (Click, SendKeys, Wait, Assert, и др.)
-- `Migrator.PlaywrightDotNet/PlaywrightDotNetRenderer.cs` — генерация C#
-- `Migrator.SeleniumCSharp/DefaultProjectAdapter.cs` — маппинг `TargetKind` из JSON
-- `Migrator.Core/Models/` — `TestAction`, `TargetExpression`, `TargetKind`, `RecognitionConfidence`
-- `Migrator.Tests/SnapshotTests.cs` — snapshot + compile-smoke тесты
+- `Migrator.Roslyn/RoslynTestFileParser.cs` — parser and recognizer registration.
+- `Migrator.Roslyn/Recognizers/` — Selenium/NUnit/FluentAssertions recognizers.
+- `Migrator.PlaywrightDotNet/PlaywrightDotNetRenderer.cs` — C# Playwright .NET generation.
+- `Migrator.SeleniumCSharp/DefaultProjectAdapter.cs` — JSON profile/config mapping.
+- `Migrator.Core/Models/TargetExpression.cs` — target expression model.
+- `Migrator.Core/Models/UnsupportedAction.cs` — unsupported action model.
+- `Migrator.Core/VerifyRunner.cs` — verification pipeline.
+- `Migrator.Tests/SnapshotTests.cs` — snapshot coverage.
+- `Migrator.Tests/TicketRegressionTests.cs` — regression coverage for known migration tickets.
+- `Migrator.Tests/CompileChecker.cs` — compile-smoke checks.
 
-## Развертывание
+## Mandatory checks
 
-Migrator — консольное .NET-приложение. Развёртывается как опубликованный exe:
+Run these whenever applicable:
 
 ```bash
-dotnet publish Migrator.Cli -c Release -o ./publish
+dotnet build
+dotnet test Migrator.Tests
 ```
 
-Не требует серверной части, базы данных, внешних сервисов.
-Работает локально или в CI.
+If a real source input is available, also run a verify/orchestrate command, for example:
 
-## Доступ к окружению
-
-Локальная разработка. Локальный профиль. Внешний доступ к API не требуется.
-
-## Ограничения агента
-
-- **Никогда** не деплоить и не менять инфраструктуру — приложения нет.
-- **Никогда** не запрашивать подтверждение у пользователя перед изменениями в коде.
-- Если задача требует доступа к внешним ресурсам (API, базы, окружения) — сообщить пользователю и остановиться.
-
-## Adapter-config/profile policy для агентов
-
-- Project-specific знания держи в `adapter-config.json`, profile или scope, не в renderer.
-- Для target-side enum/static helpers используй `TargetKnownTypes` / `TargetKnownIdentifiers`.
-- Для Selenium-only roots используй `SourceOnlyIdentifiers` (`page`, `pagef`, `lightbox`, `modal`, `dialog`, `popup`, `Driver`, `WebDriver`).
-- Не добавляй dummy declarations в renderer/generated output.
-- Active target declarations из `TargetStatements` регистрируются renderer’ом как method-scoped target locals; не веди глобальный список локальных переменных в config.
-- Перед изменениями migration profile прочитай `docs/agent-config-guidelines.md`.
-
-## POM-index first
-
-Перед массовым заполнением `adapter-config.json` по PageObject'ам используй режим `index-pom`:
-
-```powershell
-dotnet run --project .\Migrator.Cli -- --mode index-pom --input "<Selenium project or PageObject directory>" --out "pom-index" --format both
+```bash
+dotnet run --project Migrator.Cli -- --mode verify --input <SOURCE_SELENIUM_TESTS> --out <VERIFY_OUT>
 ```
 
-Читать подробности: `docs/pom-indexing.md`.
-
-Правило: найденные POM-факты являются source truth, а `inferred-pom-candidates.json` — только черновик. Inferred candidates нельзя автоматически переносить в `adapter-config.json`: сначала найти POM/helper/source truth или спросить разработчика.
-
-## POM recovery before broad suppression
-
-Broad suppressions по `page.*.*`, `pagef.*.*`, `lightbox.*.*`, `modal.*.*`, `dialog.*.*`, `popup.*.*` разрешены только после POM recovery attempt.
-
-Перед suppression агент должен:
-
-1. найти declaration в source Selenium POM;
-2. извлечь selector evidence (`CreateControlByTid`, `WithDataTestId`, CSS, XPath, helper methods);
-3. проверить target Playwright architecture;
-4. добавить `UiTargets` / method mappings, если можно;
-5. если config недостаточно — создать candidate files в `migration/pom-candidates/`;
-6. обновить `migration/pom-recovery.md`;
-7. только после этого добавить documented suppression, если перенос небезопасен.
-
-Цель — не переводить старый POM 1:1 любой ценой, а сохранить source truth и не потерять смысл тестов. Подробности: `docs/pom-recovery-policy.md`.
-
-## Suppression safety
-
-Suppression нельзя использовать как способ уменьшить TODO count. Запрещены broad suppressions для assertions и пользовательских действий:
-
-- `*.*.Should(*)`, `*.*.Should()`, `*Assert*`, `*Expect*`, `*Wait().EqualTo(*)`;
-- `*lightbox.*.Click(*)`, `*modal.*.Click(*)`, `*.*.SendKeys(*)`, `*.*.Fill(*)`, `*.*.SetValue(*)`, `*.*.Hover*`;
-- root-only patterns вроде `*page.RowCostTable.Rows*`, если они могут захватить assertions/actions.
-
-Если строка проверяет текст, значение, количество, видимость, URL или бизнес-данные — делай assertion mapping или оставляй failing/manual TODO. Нельзя превращать её в comment-only suppressed source.
-
-## Project-aware verify
-
-Для настоящей компиляции generated Playwright-кода используй режим `verify-project`, а не только standalone `verify`. Он создаёт временный `.csproj` в `--out/project-verify`, подключает generated-файлы, project/package references из `adapter-config.json` (`Verification`), умеет искать ближайший `.csproj`, рекурсивные `ProjectReference`, `Directory.Build.props/targets`, `Directory.Packages.props`, и классифицирует build diagnostics по причинам. Исходный проект не меняется. Подробнее: `docs/project-verification.md`.
-
-Агенту запрещено руками копировать generated files в продуктовый проект или править source project ради зелёной проверки. Если не хватает ссылок на инфраструктуру, добавляй их в `Verification.ProjectReferences` / `Verification.PackageReferences`.
-
-
-
-## Explain TODO / Agent Next Task
-
-После `migrate` или `verify-project` запускай режим объяснения TODO:
-
-```powershell
-dotnet run --project .\Migrator.Cli -- --mode explain-todo --input "<migration-output>" --out "todo-explanation" --format both
-```
-
-Он создаёт:
-
-- `explain-todo.md/json` — почему остались TODO и какие действия дадут максимальный эффект;
-- `agent-next-task.md` — готовую следующую задачу для агента.
-
-Агент должен читать `agent-next-task.md`, но по умолчанию менять только `adapter-config.json`. Если отчёт говорит, что нужна правка C# мигратора, агент должен остановиться и сформировать escalation report.
-
-
-## Migration workspace policy
-
-Все generated/report артефакты держи внутри `migration/`. CLI по умолчанию кладёт относительные `--out` туда: `--out orchestration-7` → `migration/orchestration-7`.
-
-Если указываешь `--out`, используй короткие имена (`orchestration-7`, `verify-project-4`) или явный путь `migration/...`. Не создавай output-папки в корне репозитория.
-
-Подробнее: `docs/migration-workspace.md`.
-
-## Agent safety loop
-
-После каждой значимой правки `adapter-config.json` агент обязан:
-
-1. сохранить предыдущую версию конфига;
-2. запустить `--mode config-validate`;
-3. запустить миграцию / `verify-project`;
-4. запустить `--mode guard --before <previous-run> --after <new-run>`;
-5. запустить `--mode config-diff --before <old-config> --after <new-config>`;
-6. остановиться и дать отчёт на русском.
-
-Если `config-validate` или `guard` падает — не продолжать. Нужно исправить или откатить последние изменения и объяснить причину.
-
-Подробнее: `docs/agent-safety.md`.
-
----
-
-## Milestone 3: переиспользование между проектами
-
-Мигратор поддерживает несколько `--config` слоёв. Передавай базовый профиль первым, проектный профиль последним:
-
-```powershell
-dotnet run --project .\Migrator.Cli -- --mode migrate --input "<tests>" --config "profiles/infrastructure-base.adapter.json" --config "profiles/projects/project.adapter.json" --out "project-migrate" --format both
-```
-
-Правило: общие правила направления живут в base profile, локальные селекторы и исключения — в project profile. Подробнее: `docs/config-layering.md`, `docs/migration-profiles.md`, `docs/bootstrap-project.md`.
-
-Новый режим для старта проекта:
-
-```powershell
-dotnet run --project .\Migrator.Cli -- --mode bootstrap-project --input "<tests>" --out "project-bootstrap" --format both
-```
-
-## Runtime readiness / smoke-plan
-
-После `migrate`/`verify-project` можно запустить `--mode smoke-plan`, чтобы выбрать самые близкие к runtime запуску тесты. Режим читает generated `.cs`, `project-verify-report.json` и `explain-todo.json`, затем пишет `smoke-plan.md/json`, `runtime-checklist.md` и `agent-runtime-next-task.md`. Агент должен брать Level 4/5 кандидаты по одному, не запускать весь пакет сразу и не править generated `.cs` вручную. Подробности: `docs/runtime-readiness.md`.
-
-## Milestone 6: правила для агента при упаковке tool
-
-Если пользователь просит упаковать или опубликовать мигратор, работай по `docs/agent-playbooks/package-and-publish-tool.md`.
-
-Обязательные правила:
-
-- не публикуй пакет без явного разрешения пользователя;
-- не записывай реальные токены/API keys в файлы;
-- перед pack запускай `dotnet test --no-restore`;
-- после pack проверяй локальную установку через `scripts/install-local-tool.ps1`;
-- для команд рекомендуй local tool manifest, а не global install;
-- публикуй preview-версии, пока CLI/config активно меняются.
-
-
-## Milestone 7: Agent-first workflow
-
-Для сложной миграции считай agent-first workflow основным пользовательским сценарием.
-
-Перед началом агент обязан прочитать:
-
-- `docs/agent-first-workflow.md`
-- `docs/agent-roles.md`
-- `docs/agent-command-set.md`
-- `docs/agent-first-checklist.md`
-- `docs/escalation-reports.md`
-- `docs/agent-playbooks/run-agent-migration-iteration.md`
-- `docs/agent-playbooks/escalate-to-developer.md`
-- `docs/agent-playbooks/reuse-existing-profile.md`
-- `docs/agent-playbooks/runtime-smoke-one-test.md`
-
-Правило ролей:
-
-- project-specific знания — в config/profile;
-- временные выводы и состояние — в `migration/`;
-- generic механика — в C# мигратора только после явного разрешения;
-- все user-facing отчёты — на русском.
-
-Если агент упирается в generic blocker, он не должен продолжать config churn. Нужно создать `migration/escalation-report.md` по `docs/escalation-reports.md`.
-
-## Doctor / preflight
-
-Перед первой миграцией нового проекта или пакета тестов запускай preflight-проверку:
-
-```powershell
-dotnet run --project .\Migrator.Cli -- --mode doctor --input "<tests>" --config "<profile.adapter.json>" --out "doctor" --format both
-```
-
-Режим ничего не меняет: он проверяет input, config layers, ближайший `.csproj`/`.sln`, `NuGet.config`, `Verification`, POM/source-truth кандидаты и доступность `dotnet`. Артефакты: `doctor-report.md/json` и `agent-doctor-next-task.md`. Подробности: `docs/doctor-mode.md`.
-
-
-## Milestone 9 agent notes: smart TODO + schema
-
-Generated TODO comments may contain `MIGRATOR:<CODE>` markers. Agents should use these codes to choose the next action:
-
-- `MISSING_MAPPING` → inspect POM/source truth and add adapter mapping.
-- `SOURCE_ONLY_IDENTIFIER` → do not mark the root as target-known; map the whole expression or leave TODO.
-- `UNRESOLVED_SYMBOL` → find the first earlier TODO that blocked the symbol.
-- `UNAVAILABLE_SYMBOLS` → add `TargetKnownTypes`/`TargetKnownIdentifiers` only when the symbol is truly available in target code.
-- `UNRESOLVED_PLACEHOLDER` → fix `SourceMethodPattern`/`TargetStatements` placeholders.
-- `TABLE_MAPPING_REQUIRED` → add `Tables` mapping with source-backed `RowTarget`.
-
-Use `schemas/adapter-config.schema.json` in config/profile files for editor hints. JSON Schema does not replace `config-validate`; always run safety validation after config changes.
-
-## Migration Board rule
-
-После `migrate` / `verify-project` / `smoke-plan` агент должен смотреть `migration-board.html` или `migration-board.md`, если файл есть. Не заставляй пользователя читать сырые JSON/MD отчёты, если доска уже собрана. Используй блок `Recommended next actions` как следующий план.
-
-## Profile match / reuse score
-
-Для переиспользования профилей между похожими проектами используй режим `profile-match`:
-
-```powershell
-selenium-pw-migrator --mode profile-match --input "<tests>" --config "profiles/infrastructure-base.adapter.json" --config "profiles/projects/<project>.adapter.json" --out "profile-match-<project>" --format both
-```
-
-Он ничего не меняет, а оценивает, насколько текущий проект похож на уже готовый migration profile, какие правила профиля реально встречаются в source-коде и какие выражения остались не покрыты. Основной файл для агента: `agent-profile-reuse-task.md`.
-
-## Milestone 12: runtime failure classifier and schema workflow
-
-New command modes:
-
-```powershell
-selenium-pw-migrator --mode runtime-classify --input "migration/runtime-logs" --out runtime-failure-classification --format both
-selenium-pw-migrator --mode config-schema --out schema --format both
-```
-
-`runtime-classify` reads runtime logs after a smoke run and groups failures into locator, timeout, assertion, navigation, auth/environment, setup, and browser-context categories. Use it before changing mappings after a failed Playwright run.
-
-`config-schema` writes `adapter-config.schema.json` into the migration workspace for editor/agent usage. JSON Schema complements but does not replace `config-validate`.
-
-See `docs/runtime-failure-classifier.md` and `docs/config-schema-workflow.md`.
-
-
-## Playwright TypeScript target guardrails
-
-- Use `--target ts` only when the user provides an existing Playwright TypeScript project via `--ts-project`.
-- Never generate TS migrations "in vacuum" without package.json, tsconfig.json and playwright.config.*.
-- Prefer TS-specific profile/config overrides; do not blindly reuse .NET TargetStatements.
-- After `migrate --target ts`, run `verify-ts-project` before claiming the generated TS is usable.
-- Do not edit generated `.spec.ts` manually. Fix mappings/profile rules instead.
-
-## SOURCE_ONLY_IDENTIFIER pattern backlog rule
-
-`SOURCE_ONLY_IDENTIFIER(page/pagef)` is a symptom, not a final root cause.
-
-Agents must not conclude that all `page.*` TODO are manual or impossible to fix through config. The root `page` is source-only, but concrete expressions under it can often be mapped through `UiTargets`, `Methods`, `ParameterizedMethods`, `Tables`, `Pagination`, or `TestHost`.
-
-Hard rules:
-
-- Never group TODO only by root identifier (`page`, `pagef`, `lightbox`, `modal`).
-- Never remove Selenium/POM roots from `SourceOnlyIdentifiers` only to reduce TODO.
-- Never add Selenium/POM roots to `TargetKnownIdentifiers` unless they truly exist in target Playwright code.
-- Before escalation, build a top-50 backlog by full source expression and normalized pattern.
-- Escalate concrete generic blockers such as `ClickAndOpen<T>()` or `Table.Items.ElementAt(...)`, not the entire root `page`.
-- Before broad POM suppressions, run POM recovery and document results in `migration/pom-recovery.md`.
-
-Read and follow `docs/agent-playbooks/source-only-pattern-backlog.md` whenever TODO are dominated by `SOURCE_ONLY_IDENTIFIER`.
-
-## WaitPolicy note
-
-Selenium explicit waits must be classified before generic source-only TODO handling. Actionability waits such as `WaitPresence`, `WaitVisible`, `WaitEnabled` are usually elided because Playwright auto-waits before actions/assertions. Product-state waits such as `ValidateLoading`, `WaitForLoaded`, table/grid/list refresh waits, modal/toast waits must be kept or converted to Playwright web-first assertions. Ambiguous waits become `[MIGRATOR:WAIT_REQUIRES_STATE_ASSERTION]`. See `docs/wait-policy.md`.
-
-
+Use actual repository paths. Inspect the repo instead of asking the user when paths are discoverable.
+
+## Engineering rules
+
+- Prefer Roslyn semantic model over regex/string parsing.
+- Use syntax fallback only when semantic data is unavailable.
+- Never transform C# string literals, comments, CSS selectors, XPath selectors, URLs, verbatim strings, or interpolated string content as executable code.
+- Generated Playwright code should compile whenever possible.
+- Unsupported cases must produce explicit TODO diagnostics rather than unsafe generated code.
+- Do not weaken tests to make them pass.
+- Add/update regression tests for behavior changes.
+- Snapshot changes must be intentional and explained.
+- Prefer small local fixes over broad rewrites.
+- Keep renderer output stable; avoid unrelated formatting churn.
+
+## Config/profile rules
+
+- Keep project-specific knowledge in `adapter-config.json` or migration profiles, not in generic renderer logic.
+- Do not invent selectors.
+- PageObject property names are not selectors.
+- Source truth must come from POM/helper code, config, or existing target Playwright code.
+- Use `TargetKnownTypes` / `TargetKnownIdentifiers` only for symbols that really exist in target code.
+- Keep Selenium-only roots in `SourceOnlyIdentifiers` when they are not target-side symbols.
+- Do not reduce TODO count through unsafe broad suppression.
+
+## Work queue
+
+Follow `.agent-loops/04-work-queue.md`.
+
+Default priority:
+
+1. Build errors in the migrator itself.
+2. Failing `Migrator.Tests` tests.
+3. Compile errors in generated Playwright output.
+4. High-frequency `UnsupportedAction` categories.
+5. Unresolved target expressions.
+6. TODOs that block compilation.
+7. TODOs that preserve compilation but reduce migration quality.
+8. Page object field/property transfer gaps.
+9. Renderer/snapshot mismatches.
+10. Adapter config improvements.
+11. Report/diagnostic improvements.
+12. Cleanup/refactoring.
+
+## Main CLI modes
+
+| Mode | Purpose |
+|---|---|
+| `doctor` | Preflight checks: input, config, project files, tooling, source truth hints. |
+| `analyze` | Parse Selenium files and produce reports without final generated code. |
+| `migrate` | Generate Playwright .NET or TS tests. |
+| `verify` | Lightweight generated-code verification. |
+| `verify-project` | Compile generated Playwright .NET tests against a real project/harness. |
+| `verify-ts-project` | Type-check generated Playwright TS tests inside an existing TS project. |
+| `orchestrate` | Run analyze → migrate → verify → reports for Playwright .NET. |
+| `index-pom` | Mine Selenium PageObjects and helper selectors. |
+| `profile-match` | Estimate whether existing profiles can be reused for a new project. |
+| `config-validate` | Validate profile safety and common mistakes. |
+| `config-diff` | Review config changes. |
+| `guard` | Compare before/after migration metrics and catch regressions. |
+| `explain-todo` | Turn TODO markers into prioritized root-cause insights. |
+| `smoke-plan` | Rank generated tests by runtime readiness. |
+| `runtime-classify` | Classify Playwright runtime failures after smoke runs. |
+| `migration-board` | Generate an HTML dashboard from migration artifacts. |
+| `config-schema` | Export JSON Schema for adapter config. |
+
+## Autopilot reports
+
+When stopping, use `.agent-loops/06-report-format.md`.
+
+Allowed final statuses:
+
+- `READY_FOR_ACCEPTANCE`
+- `TICKET_NEEDED`
+- `BLOCKED_BY_ENVIRONMENT`
+- `BLOCKED_BY_MISSING_INPUT`
+- `MAX_ITERATIONS_REACHED`
+
+If the status would be `CONTINUE_AUTONOMOUSLY`, do not stop. Continue.
 
 ## Documentation index
 
-See [`docs/README.md`](docs/README.md) for the current documentation map.
+Start here:
 
-
-## Agent modes
-
-Use Strict Mode for safe config-only iterations and Creative Mode for pattern mining/TS drafts. See [`docs/agent-modes.md`](docs/agent-modes.md).
-
-
-## Agent tool boundary
-
-Для project-migration с AI-agent предпочтительный режим — compiled CLI bundle без исходников мигратора.
-
-Агент должен работать с мигратором как с black-box tool:
-
-```powershell
-.\tools\migrator\migrator.exe --mode migrate ...
-```
-
-Агенту нельзя давать в workspace `Migrator.sln`, `Migrator.Core/`, `Migrator.Roslyn/`, `Migrator.PlaywrightDotNet/`, `Migrator.SeleniumCSharp/`, `Migrator.Cli/`, `Migrator.Tests/`.
-
-Если агент нашёл limitation core migrator, он создаёт тикет в `migration/migrator-tickets.md`, а не меняет C# код.
-
-Подробности:
-
-- `docs/agent-tool-boundary.md`
-- `docs/migration-safety-playbook.md`
-- `scripts/package-agent-cli-bundle.ps1`
+- `.agent-loops/README.md`
+- `docs/autopilot-loop.md`
+- `docs/README.md`
+- `docs/architecture.md`
+- `docs/project-verification.md`
+- `docs/explain-todo.md`
+- `docs/migration-board.md`
+- `docs/wait-policy.md`
+- `docs/typescript-target.md`
