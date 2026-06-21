@@ -160,6 +160,10 @@ public class DefaultProjectAdapter : IProjectAdapter
 
         // Parameterized: scope extends global (all patterns apply)
         var mergedParamMethods = _globalConfig.ParameterizedMethods.Concat(scope.ParameterizedMethods).ToList();
+        var mergedNavigationUrls = MergeNavigationUrls(_globalConfig.NavigationUrls, scope.NavigationUrls);
+        var navigationTargetStatement = !string.IsNullOrWhiteSpace(scope.NavigationTargetStatement)
+            ? scope.NavigationTargetStatement
+            : _globalConfig.NavigationTargetStatement;
 
         var testHost = scope.TestHost ?? _globalConfig.TestHost;
         var mergedTargetKnownTypes = MergeStrings(_globalConfig.TargetKnownTypes, scope.TargetKnownTypes);
@@ -170,7 +174,8 @@ public class DefaultProjectAdapter : IProjectAdapter
         return CreateResolvedConfig(_globalConfig, mergedTargets, mergedMethods,
             mergedParamMethods, testHost, _globalConfig.PageObjects,
             mergedTargetKnownTypes, mergedTargetKnownIdentifiers,
-            mergedSuppressedMethods, mergedSuppressedMethodPatterns);
+            mergedSuppressedMethods, mergedSuppressedMethodPatterns,
+            mergedNavigationUrls, navigationTargetStatement);
     }
 
     ResolvedFileConfig CreateResolvedConfig(ProjectAdapterConfig config, UiTargetMapping[] uiTargets,
@@ -179,7 +184,9 @@ public class DefaultProjectAdapter : IProjectAdapter
         IReadOnlyList<string>? targetKnownTypes = null,
         IReadOnlyList<string>? targetKnownIdentifiers = null,
         IReadOnlyList<string>? suppressedMethods = null,
-        IReadOnlyList<string>? suppressedMethodPatterns = null)
+        IReadOnlyList<string>? suppressedMethodPatterns = null,
+        IReadOnlyDictionary<string, string>? navigationUrls = null,
+        string? navigationTargetStatement = null)
     {
         var resolved = new ResolvedFileConfig(
             config,
@@ -187,7 +194,9 @@ public class DefaultProjectAdapter : IProjectAdapter
             targetKnownTypes,
             targetKnownIdentifiers,
             suppressedMethods,
-            suppressedMethodPatterns);
+            suppressedMethodPatterns,
+            navigationUrls,
+            navigationTargetStatement);
 
         foreach (var mapping in uiTargets)
         {
@@ -284,6 +293,24 @@ public class DefaultProjectAdapter : IProjectAdapter
                 result.Add(item.Trim());
         }
         return result.ToArray();
+    }
+
+    static IReadOnlyDictionary<string, string> MergeNavigationUrls(
+        IReadOnlyDictionary<string, string>? global,
+        IReadOnlyDictionary<string, string>? scope)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var kvp in global ?? new Dictionary<string, string>())
+        {
+            if (!string.IsNullOrWhiteSpace(kvp.Key))
+                result[kvp.Key.Trim()] = kvp.Value;
+        }
+        foreach (var kvp in scope ?? new Dictionary<string, string>())
+        {
+            if (!string.IsNullOrWhiteSpace(kvp.Key))
+                result[kvp.Key.Trim()] = kvp.Value;
+        }
+        return result;
     }
 
     static ProfileScope[] FindMatchingScopes(ProfileScope[] scopes, string sourceFilePath)
@@ -596,6 +623,7 @@ public class DefaultProjectAdapter : IProjectAdapter
                 wa.SourceMethod,
                 wa.FullSourceText,
                 wa.Kind) },
+            NavigationAction nav => new[] { ResolveNavigation(nav, resolved) },
             TableRowTextAccessAction trt => new[] { new TableRowTextAccessAction(
                 trt.SourceLine,
                 ResolveTargetWithLocalVars(trt.Target.SourceExpression, resolved, localVariableMappings),
@@ -777,6 +805,7 @@ public class DefaultProjectAdapter : IProjectAdapter
                 wa.SourceMethod,
                 wa.FullSourceText,
                 wa.Kind) },
+            NavigationAction nav => new[] { ResolveNavigation(nav, resolved) },
             MethodInvocationAction mi => TryResolveMethodMapping(mi, resolved),
             RawStatementAction raw => TryResolveRawStatement(raw, resolved),
             LocalDeclarationAction lds => TryResolveLocalDeclaration(lds, resolved),
@@ -784,6 +813,52 @@ public class DefaultProjectAdapter : IProjectAdapter
             AssertMultipleAction multiple => AdaptAssertMultiple(multiple, resolved),
             _ => new[] { action }
         };
+    }
+
+    NavigationAction ResolveNavigation(NavigationAction nav, ResolvedFileConfig resolved)
+    {
+        var originalUrl = nav.UrlExpression.Trim();
+        if (!resolved._navigationUrls.TryGetValue(originalUrl, out var mappedUrl))
+            return nav;
+
+        var urlExpression = ToCSharpStringExpression(mappedUrl);
+        var targetStatement = SubstituteNavigationTargetStatement(resolved._navigationTargetStatement, urlExpression);
+
+        return new NavigationAction(
+            nav.SourceLine,
+            urlExpression,
+            nav.PageVariableName,
+            nav.SourceText,
+            nav.Confidence,
+            targetStatement);
+    }
+
+    static string? SubstituteNavigationTargetStatement(string? template, string urlExpression)
+    {
+        if (string.IsNullOrWhiteSpace(template))
+            return null;
+
+        return template.Replace("{url}", urlExpression, StringComparison.Ordinal);
+    }
+
+    static string ToCSharpStringExpression(string value)
+    {
+        var trimmed = (value ?? string.Empty).Trim();
+        if (IsCSharpStringLiteral(trimmed))
+            return trimmed;
+
+        return "\"" + trimmed.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+    }
+
+    static bool IsCSharpStringLiteral(string value)
+    {
+        var trimmed = value.Trim();
+        return trimmed.Length >= 2 && (
+            (trimmed.StartsWith("\"", StringComparison.Ordinal) && trimmed.EndsWith("\"", StringComparison.Ordinal)) ||
+            (trimmed.StartsWith("@\"", StringComparison.Ordinal) && trimmed.EndsWith("\"", StringComparison.Ordinal)) ||
+            (trimmed.StartsWith("$\"", StringComparison.Ordinal) && trimmed.EndsWith("\"", StringComparison.Ordinal)) ||
+            (trimmed.StartsWith("$@\"", StringComparison.Ordinal) && trimmed.EndsWith("\"", StringComparison.Ordinal)) ||
+            (trimmed.StartsWith("@$\"", StringComparison.Ordinal) && trimmed.EndsWith("\"", StringComparison.Ordinal)));
     }
 
     IEnumerable<TestAction> TryResolveTextAssertionWithMapping(TextAssertionAction ta, ResolvedFileConfig resolved)
@@ -1203,12 +1278,6 @@ public class DefaultProjectAdapter : IProjectAdapter
         }
     }
 
-    bool IsCSharpStringLiteral(string text)
-    {
-        var trimmed = text.Trim();
-        return (trimmed.StartsWith("\"") && trimmed.EndsWith("\"") && trimmed.Length >= 2) ||
-               (trimmed.StartsWith("@\"") && trimmed.EndsWith("\"") && trimmed.Length >= 3);
-    }
 
     string StripStringLiteralQuotes(string text)
     {
@@ -2079,6 +2148,8 @@ public class DefaultProjectAdapter : IProjectAdapter
         internal IReadOnlyList<string> _targetKnownIdentifiers = Array.Empty<string>();
         internal IReadOnlyList<string> _suppressedMethods = Array.Empty<string>();
         internal IReadOnlyList<string> _suppressedMethodPatterns = Array.Empty<string>();
+        internal IReadOnlyDictionary<string, string> _navigationUrls = new Dictionary<string, string>(StringComparer.Ordinal);
+        internal string? _navigationTargetStatement;
         internal readonly TestHostConfig? _testHost;
         internal readonly ProjectAdapterConfig _globalConfig;
 
@@ -2088,7 +2159,9 @@ public class DefaultProjectAdapter : IProjectAdapter
             IReadOnlyList<string>? targetKnownTypes = null,
             IReadOnlyList<string>? targetKnownIdentifiers = null,
             IReadOnlyList<string>? suppressedMethods = null,
-            IReadOnlyList<string>? suppressedMethodPatterns = null)
+            IReadOnlyList<string>? suppressedMethodPatterns = null,
+            IReadOnlyDictionary<string, string>? navigationUrls = null,
+            string? navigationTargetStatement = null)
         {
             _globalConfig = globalConfig;
             _testHost = testHost;
@@ -2097,6 +2170,8 @@ public class DefaultProjectAdapter : IProjectAdapter
             _targetKnownIdentifiers = targetKnownIdentifiers ?? globalConfig.TargetKnownIdentifiers ?? Array.Empty<string>();
             _suppressedMethods = suppressedMethods ?? globalConfig.SuppressedMethods ?? Array.Empty<string>();
             _suppressedMethodPatterns = suppressedMethodPatterns ?? globalConfig.SuppressedMethodPatterns ?? Array.Empty<string>();
+            _navigationUrls = navigationUrls ?? globalConfig.NavigationUrls ?? new Dictionary<string, string>(StringComparer.Ordinal);
+            _navigationTargetStatement = navigationTargetStatement ?? globalConfig.NavigationTargetStatement;
         }
 
         /// <summary>

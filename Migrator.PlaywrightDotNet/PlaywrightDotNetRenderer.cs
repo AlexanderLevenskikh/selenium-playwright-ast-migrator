@@ -1993,11 +1993,25 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     void RenderNavigation(StringBuilder sb, NavigationAction action)
     {
-        sb.AppendLine($"{_indent}{_indent}await Page.GotoAsync({action.UrlExpression}); // line {action.SourceLine}");
+        if (!string.IsNullOrWhiteSpace(action.TargetStatement))
+        {
+            var statement = EnsureStatementTerminated(action.TargetStatement.Trim());
+            sb.AppendLine($"{_indent}{_indent}{statement} // line {action.SourceLine}");
+        }
+        else
+        {
+            sb.AppendLine($"{_indent}{_indent}await {_pageVariable}.GotoAsync({action.UrlExpression}); // line {action.SourceLine}");
+        }
+
         if (!string.IsNullOrEmpty(action.PageVariableName))
         {
-            RegisterSourceVar(action.PageVariableName, "Page");
+            RegisterSourceVar(action.PageVariableName, _pageVariable);
         }
+    }
+
+    static string EnsureStatementTerminated(string statement)
+    {
+        return statement.EndsWith(";", StringComparison.Ordinal) ? statement : statement + ";";
     }
 
     void RenderConditionalBlock(StringBuilder sb, ConditionalBlockAction action)

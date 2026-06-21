@@ -1,0 +1,14 @@
+Read CODEX.md and review the current git diff for the migration task.
+
+Focus on blockers only:
+- compile-safety regressions;
+- broad suppressions that hide business logic;
+- generated tests becoming false-green;
+- config changes that mask unresolved symbols instead of fixing root causes;
+- missing focused regression tests for engine behavior.
+
+Return:
+- verdict: ACCEPT / ACCEPT_WITH_NOTES / BLOCKED;
+- blockers;
+- suggested minimal fixes;
+- verification gaps.

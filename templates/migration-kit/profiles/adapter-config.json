@@ -9,6 +9,8 @@
   "TargetKnownIdentifiers": [],
   "TargetKnownTypes": [],
   "UiTargets": [],
+  "NavigationUrls": {},
+  "NavigationTargetStatement": "await Page.GotoAsync({url});",
   "ParameterizedMethods": [],
   "SuppressedMethodPatterns": [],
   "WaitPolicies": [],

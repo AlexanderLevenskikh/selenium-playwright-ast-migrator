@@ -1,0 +1,42 @@
+Read all files in .agent-loops-deps/.
+
+Start Dependency Security Autopilot Loop.
+
+You are allowed and expected to split the task into safe dependency batches yourself.
+Do not ask me to choose between dependency groups or technical migration approaches.
+Do not update everything at once.
+Do not stop after partial progress.
+Continue until the selected task is completed, verified, or the stop policy requires a real stop.
+
+Project scope:
+- Project path: <PROJECT_PATH>
+- Package manager: <yarn | npm | pnpm>
+- Node version: <NODE_VERSION>
+- Lockfile: <yarn.lock | package-lock.json | pnpm-lock.yaml>
+- Main app commands:
+  - install: <COMMAND>
+  - build: <COMMAND>
+  - typecheck: <COMMAND>
+  - lint: <COMMAND>
+  - test: <COMMAND>
+  - audit: <COMMAND>
+- Smoke/manual command if available: <COMMAND_OR_EMPTY>
+
+Runtime smoke:
+- Required for medium/high-risk runtime batches: <yes | no>
+- Start command: <COMMAND_OR_EMPTY>
+- Preview command: <COMMAND_OR_EMPTY>
+- Local URL: <http://localhost:...>
+- App ready selector: <CSS_SELECTOR_OR_EMPTY>
+- Browser/MCP available: <yes | no>
+- Basic scenario:
+  1. open <LOCAL_URL>
+  2. wait for app shell/login page/main route
+  3. verify no fatal console errors
+  4. verify no failed JS/CSS chunks
+- Extra scenario if available: <STEPS_OR_EMPTY>
+
+Current task:
+<PASTE DEPENDENCY UPDATE TASK / AUDIT REPORT / GROUPS / TARGET HERE>
+
+Use package.json, lockfile, audit output, dependency tree, changelogs/migration notes available in the repo, tests, build output, and command output as the source of truth.

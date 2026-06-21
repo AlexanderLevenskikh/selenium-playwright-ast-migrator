@@ -31,7 +31,13 @@ public class PackagingTests
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/prompts/loop-batch-prompt.txt")));
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/state/handoff.md")));
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/state/run-ledger.md")));
+        Assert.True(File.Exists(FindRepositoryFile("templates/codex/CODEX.md")));
+        Assert.True(File.Exists(FindRepositoryFile("templates/codex/prompts/ticket-fix-prompt.txt")));
+        Assert.True(File.Exists(FindRepositoryFile("templates/opencode-team/README.md")));
+        Assert.True(File.Exists(FindRepositoryFile("templates/loops-library/loops/ticket-fix-loop/kickoff-prompt.txt")));
         Assert.True(File.Exists(FindRepositoryFile("docs/migration-kit-mvp.md")));
+        Assert.True(File.Exists(FindRepositoryFile("docs/migration-kit-mvp3.md")));
+        Assert.True(File.Exists(FindRepositoryFile("docs/navigation-url-mapping.md")));
     }
 
     static string ElementValue(XDocument doc, string name)

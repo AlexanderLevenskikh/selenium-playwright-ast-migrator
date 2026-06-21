@@ -83,6 +83,15 @@
       },
       "description": "Pattern-based method mappings with {placeholder} support."
     },
+    "NavigationUrls": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Maps source-only navigation URL expressions such as Urls.BaseUrlPartners to target URL values. Plain values are rendered as C# string literals."
+    },
+    "NavigationTargetStatement": {
+      "type": "string",
+      "description": "Optional target statement template for mapped navigation. Must contain {url}, e.g. await GoToAsync({url});"
+    },
     "LocatorSettings": {
       "$ref": "#/$defs/locatorSettings"
     },
@@ -562,6 +571,14 @@
           "items": {
             "$ref": "#/$defs/parameterizedMethodMapping"
           }
+        },
+        "NavigationUrls": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "default": {}
+        },
+        "NavigationTargetStatement": {
+          "type": "string"
         },
         "TargetKnownTypes": {
           "type": "array",

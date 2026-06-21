@@ -27,7 +27,10 @@ The old human-checkpoint agent workflow was removed from this archive to avoid c
 - [`tool-installation.md`](tool-installation.md) — local tool installation.
 - [`packaging-and-distribution.md`](packaging-and-distribution.md) — packaging and distribution.
 - [`migration-kit-mvp.md`](migration-kit-mvp.md) — MVP-1 installable workspace, safe updates, and MVP-2 stateful loop.
+- [`migration-kit-mvp3.md`](migration-kit-mvp3.md) — optional Codex handoff, OpenCode team files, and loop library.
 
 ## Autopilot principle
 
 If the agent status is `CONTINUE_AUTONOMOUSLY`, the agent must continue without asking the user.
+
+- [`navigation-url-mapping.md`](navigation-url-mapping.md) — config-driven mapping for `Navigation.OpenPage<T>(Urls...)`.

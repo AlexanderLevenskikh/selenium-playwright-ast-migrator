@@ -4138,6 +4138,76 @@ public class NavigationOpenPageTests
     }
 }
 
+public class NavigationUrlMappingTests
+{
+    static TestFileModel CreateModel(params TestAction[] bodyActions)
+    {
+        return new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "NavUrlTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), bodyActions)
+            });
+    }
+
+    [Fact]
+    public void NavigationUrls_MapsSourceOnlyUrlExpression_ToStringLiteral()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            NavigationUrls: new System.Collections.Generic.Dictionary<string, string>
+            {
+                ["Urls.BaseUrlPartners"] = "catalogs?activeTab=partners&type=simple"
+            });
+
+        var adapter = new DefaultProjectAdapter(config);
+        var adapted = adapter.Adapt(CreateModel(
+            new NavigationAction(1, "Urls.BaseUrlPartners", null, "Navigation.OpenPage<PartnersPage>(Urls.BaseUrlPartners)")
+        ));
+
+        var output = new PlaywrightDotNetRenderer().Render(adapted);
+
+        Assert.Contains("await Page.GotoAsync(\"catalogs?activeTab=partners&type=simple\");", output);
+        Assert.DoesNotContain("Urls.BaseUrlPartners", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void NavigationTargetStatement_UsesConfiguredProjectHelper()
+    {
+        var config = new ProjectAdapterConfig(
+            "Test",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            NavigationUrls: new System.Collections.Generic.Dictionary<string, string>
+            {
+                ["Urls.BaseUrlDebt"] = "debt"
+            },
+            NavigationTargetStatement: "await GoToAsync({url});");
+
+        var adapter = new DefaultProjectAdapter(config);
+        var adapted = adapter.Adapt(CreateModel(
+            new NavigationAction(7, "Urls.BaseUrlDebt", "page", "var page = Navigation.OpenPage<DebtPage>(Urls.BaseUrlDebt)")
+        ));
+
+        var output = new PlaywrightDotNetRenderer().Render(adapted);
+
+        Assert.Contains("await GoToAsync(\"debt\"); // line 7", output);
+        Assert.DoesNotContain("Page.GotoAsync", output);
+        Assert.DoesNotContain("Urls.BaseUrlDebt", output);
+    }
+}
+
 public class WebDriverFindElementTests
 {
     static TestFileModel CreateModel(params TestAction[] bodyActions)

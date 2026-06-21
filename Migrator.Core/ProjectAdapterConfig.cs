@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace Migrator.Core;
@@ -56,6 +58,23 @@ public sealed class ProjectAdapterConfig
     /// </summary>
     [JsonPropertyName("ParameterizedMethods")]
     public ParameterizedMethodMapping[] ParameterizedMethods { get; init; } = Array.Empty<ParameterizedMethodMapping>();
+
+    /// <summary>
+    /// Maps source-only URL constants/expressions used by Navigation.OpenPage&lt;T&gt;(...) to target URL values.
+    /// Values may be plain relative URLs (rendered as C# string literals) or explicit C# string literals.
+    /// Example: { "Urls.BaseUrlPartners": "catalogs?activeTab=partners&type=simple" }.
+    /// </summary>
+    [JsonPropertyName("NavigationUrls")]
+    public Dictionary<string, string> NavigationUrls { get; init; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Optional project-specific target statement for mapped navigation actions.
+    /// Use {url} as placeholder for the mapped C# URL expression.
+    /// Example: "await GoToAsync({url});".
+    /// When absent, renderer keeps its default Page.GotoAsync({url}) behavior.
+    /// </summary>
+    [JsonPropertyName("NavigationTargetStatement")]
+    public string? NavigationTargetStatement { get; init; }
 
     /// <summary>
     /// Selector convention settings. When null, TestId mappings use default Page.GetByTestId().
@@ -151,12 +170,16 @@ public sealed class ProjectAdapterConfig
         string[]? GenericResultMethods = null,
         WaitPolicyMapping[]? WaitPolicies = null,
         string[]? SuppressedMethods = null,
-        string[]? SuppressedMethodPatterns = null)
+        string[]? SuppressedMethodPatterns = null,
+        Dictionary<string, string>? NavigationUrls = null,
+        string? NavigationTargetStatement = null)
     {
         this.SourceProjectName = SourceProjectName;
         this.UiTargets = UiTargets;
         this.PageObjects = PageObjects;
         this.Methods = Methods;
+        this.NavigationUrls = NavigationUrls ?? new Dictionary<string, string>(StringComparer.Ordinal);
+        this.NavigationTargetStatement = NavigationTargetStatement;
         this.LocatorSettings = LocatorSettings;
         this.TestHost = TestHost;
         this.ParameterizedMethods = ParameterizedMethods ?? Array.Empty<ParameterizedMethodMapping>();
@@ -647,6 +670,19 @@ public sealed class ProfileScope
     public ParameterizedMethodMapping[] ParameterizedMethods { get; init; } = Array.Empty<ParameterizedMethodMapping>();
 
     /// <summary>
+    /// Scope-specific navigation URL mappings. Merged with global NavigationUrls;
+    /// scope entries override global entries for the same source URL expression.
+    /// </summary>
+    [JsonPropertyName("NavigationUrls")]
+    public Dictionary<string, string> NavigationUrls { get; init; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Scope-specific navigation target statement. Overrides global NavigationTargetStatement when set.
+    /// </summary>
+    [JsonPropertyName("NavigationTargetStatement")]
+    public string? NavigationTargetStatement { get; init; }
+
+    /// <summary>
     /// Scope-specific target-known type additions. Unioned with global TargetKnownTypes.
     /// </summary>
     [JsonPropertyName("TargetKnownTypes")]
@@ -675,7 +711,8 @@ public sealed class ProfileScope
         UiTargetMapping[]? uiTargets = null, MethodMapping[]? methods = null,
         ParameterizedMethodMapping[]? parameterizedMethods = null,
         string[]? targetKnownTypes = null, string[]? targetKnownIdentifiers = null,
-        string[]? suppressedMethods = null, string[]? suppressedMethodPatterns = null)
+        string[]? suppressedMethods = null, string[]? suppressedMethodPatterns = null,
+        Dictionary<string, string>? navigationUrls = null, string? navigationTargetStatement = null)
     {
         Name = name;
         SourcePathPatterns = sourcePathPatterns;
@@ -683,6 +720,8 @@ public sealed class ProfileScope
         UiTargets = uiTargets ?? Array.Empty<UiTargetMapping>();
         Methods = methods ?? Array.Empty<MethodMapping>();
         ParameterizedMethods = parameterizedMethods ?? Array.Empty<ParameterizedMethodMapping>();
+        NavigationUrls = navigationUrls ?? new Dictionary<string, string>(StringComparer.Ordinal);
+        NavigationTargetStatement = navigationTargetStatement;
         TargetKnownTypes = targetKnownTypes ?? Array.Empty<string>();
         TargetKnownIdentifiers = targetKnownIdentifiers ?? Array.Empty<string>();
         SuppressedMethods = suppressedMethods ?? Array.Empty<string>();

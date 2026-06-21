@@ -1,0 +1,33 @@
+# Codex operating notes for Selenium → Playwright migration
+
+Use this file when a migration task is delegated to Codex instead of the default agent loop.
+
+## Boundary
+
+- Work on one bounded ticket at a time.
+- Prefer engine/config fixes over editing generated output.
+- Do not hide TODOs by adding broad suppressions.
+- Do not add `page` or `pagef` to `TargetKnownIdentifiers` just to silence unresolved symbols.
+- Keep generated tests compile-safe and deterministic.
+- Add focused regression tests for engine changes when a suitable test area exists.
+
+## Required inputs
+
+Read these before making changes:
+
+1. `migration/state/handoff.md`
+2. `migration/current-ticket.md`
+3. `migration/state/safety-checklist.md`
+4. latest `migration/runs/run-*/` summary or `migration-board.md`
+
+## Required output
+
+Return:
+
+- changed files;
+- exact verification commands run;
+- before/after metrics if available;
+- remaining risks;
+- anything intentionally not fixed.
+
+If verification cannot be run, say so explicitly.

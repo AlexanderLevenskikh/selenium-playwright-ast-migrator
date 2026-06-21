@@ -22,16 +22,25 @@ public sealed class NavigationAction : TestAction
     /// </summary>
     public string SourceText { get; }
 
+    /// <summary>
+    /// Optional fully-rendered target statement. Set by adapter config when navigation
+    /// must use a project-specific helper instead of the renderer fallback.
+    /// Example: await GoToAsync("catalogs");
+    /// </summary>
+    public string? TargetStatement { get; }
+
     public NavigationAction(
         int sourceLine,
         string urlExpression,
         string? pageVariableName,
         string sourceText,
-        RecognitionConfidence confidence = RecognitionConfidence.SyntaxFallback)
+        RecognitionConfidence confidence = RecognitionConfidence.SyntaxFallback,
+        string? targetStatement = null)
         : base(sourceLine, confidence)
     {
         UrlExpression = urlExpression;
         PageVariableName = pageVariableName;
         SourceText = sourceText;
+        TargetStatement = targetStatement;
     }
 }

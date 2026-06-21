@@ -1,0 +1,14 @@
+Read CODEX.md and the migration workspace state.
+
+Task: fix exactly the current ticket in `migration/current-ticket.md`.
+
+Rules:
+- Do not broaden scope.
+- Do not edit generated output as the final solution.
+- Prefer config or migrator engine fixes with regression tests.
+- Preserve safety: no false-green tests, no blind suppressions, no source-only identifiers emitted as active code.
+
+After changes:
+1. run the smallest relevant tests/build you can;
+2. update `migration/state/handoff.md` with the result;
+3. report changed files, verification, risks, and next recommended step.

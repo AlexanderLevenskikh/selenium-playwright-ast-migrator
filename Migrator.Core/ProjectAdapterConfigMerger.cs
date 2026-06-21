@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Text.Json;
 
 namespace Migrator.Core;
@@ -45,6 +47,8 @@ public static class ProjectAdapterConfigMerger
             LocatorSettings: MergeLocatorSettings(layers.Select(c => c.LocatorSettings)),
             TestHost: MergeTestHost(layers.Select(c => c.TestHost)),
             ParameterizedMethods: MergeBy(layers.SelectMany(c => c.ParameterizedMethods), x => x.SourceMethodPattern),
+            NavigationUrls: MergeDictionaries(layers.Select(c => c.NavigationUrls)),
+            NavigationTargetStatement: LastNonEmpty(layers.Select(c => c.NavigationTargetStatement)),
             Scopes: MergeScopes(layers.SelectMany(c => c.Scopes)),
             QualityGates: MergeQualityGates(layers.Select(c => c.QualityGates)),
             Tables: MergeBy(layers.SelectMany(c => c.Tables), x => x.SourceExpression),
@@ -92,6 +96,27 @@ public static class ProjectAdapterConfigMerger
                 result.Add(value);
         }
         return result.ToArray();
+    }
+
+    static Dictionary<string, string> MergeDictionaries(IEnumerable<IDictionary<string, string>?> layers)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var layer in layers)
+        {
+            if (layer == null)
+                continue;
+
+            foreach (var kvp in layer)
+            {
+                var key = kvp.Key?.Trim();
+                if (string.IsNullOrWhiteSpace(key))
+                    continue;
+
+                result[key] = kvp.Value ?? string.Empty;
+            }
+        }
+
+        return result;
     }
 
     static RecognizerAliasOptions MergeRecognizerAliases(IEnumerable<RecognizerAliasOptions?> options)
@@ -252,7 +277,11 @@ public static class ProjectAdapterConfigMerger
                 methods: MergeBy(existing.Methods.Concat(scope.Methods), x => x.SourceMethod),
                 parameterizedMethods: MergeBy(existing.ParameterizedMethods.Concat(scope.ParameterizedMethods), x => x.SourceMethodPattern),
                 targetKnownTypes: MergeStrings(existing.TargetKnownTypes.Concat(scope.TargetKnownTypes)),
-                targetKnownIdentifiers: MergeStrings(existing.TargetKnownIdentifiers.Concat(scope.TargetKnownIdentifiers)))
+                targetKnownIdentifiers: MergeStrings(existing.TargetKnownIdentifiers.Concat(scope.TargetKnownIdentifiers)),
+                suppressedMethods: MergeStrings(existing.SuppressedMethods.Concat(scope.SuppressedMethods)),
+                suppressedMethodPatterns: MergeStrings(existing.SuppressedMethodPatterns.Concat(scope.SuppressedMethodPatterns)),
+                navigationUrls: MergeDictionaries(new[] { existing.NavigationUrls, scope.NavigationUrls }),
+                navigationTargetStatement: LastNonEmpty(new[] { existing.NavigationTargetStatement, scope.NavigationTargetStatement }))
             {
                 Tables = MergeBy(existing.Tables.Concat(scope.Tables), x => x.SourceExpression),
                 Pagination = MergeBy(existing.Pagination.Concat(scope.Pagination), x => x.SourceExpression)

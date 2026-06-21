@@ -73,3 +73,24 @@ A new agent should start from `state/handoff.md`, not from chat memory.
 - Never suppress assertions silently.
 - Compile-green is a checkpoint, not the end of migration quality work.
 - Keep source truth in source tests, POM/helper code, config, or existing target Playwright code.
+
+## Optional MVP-3 helpers
+
+Codex handoff files are installed under `codex/` by default. Use them for one bounded ticket at a time:
+
+```text
+Read migration/codex/CODEX.md and migration/codex/prompts/ticket-fix-prompt.txt.
+Fix only the current ticket.
+```
+
+OpenCode team files are optional and can be installed with:
+
+```powershell
+.\tool\scripts\install-migration-kit.ps1 -Workspace migration -Update -Backup -WithTeam
+```
+
+Reusable loop templates can be installed with:
+
+```powershell
+.\tool\scripts\install-migration-kit.ps1 -Workspace migration -Update -Backup -WithLoopLibrary
+```

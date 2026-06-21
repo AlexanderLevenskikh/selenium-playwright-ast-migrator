@@ -9,11 +9,14 @@ param(
     [switch]$Force,
     [switch]$Backup,
     [switch]$NoRootAgentFiles,
+    [switch]$NoCodexFiles,
+    [switch]$WithTeam,
+    [switch]$WithLoopLibrary,
     [switch]$NoToolManifest
 )
 
 $ErrorActionPreference = "Stop"
-$KitVersion = "0.2.0"
+$KitVersion = "0.3.0"
 
 function Resolve-RepoRootFromScript {
     $scriptDir = Split-Path -Parent $PSCommandPath
@@ -223,6 +226,9 @@ $outputPath = Convert-ToAbsolutePath $Output $projectRoot
 $templateRoot = Join-Path $kitRoot "templates/migration-kit"
 $agentLoopsSource = Join-Path $kitRoot ".agent-loops"
 $agentStateSource = Join-Path $kitRoot ".agent-state"
+$codexTemplateSource = Join-Path $kitRoot "templates/codex"
+$teamTemplateSource = Join-Path $kitRoot "templates/opencode-team"
+$loopLibrarySource = Join-Path $kitRoot "templates/loops-library"
 
 if (-not (Test-Path $templateRoot)) {
     throw "Migration kit templates were not found: $templateRoot"
@@ -253,7 +259,7 @@ if ($Backup -and (Test-Path $script:workspacePath)) {
 }
 
 New-Item -ItemType Directory -Force -Path $script:workspacePath | Out-Null
-foreach ($dir in @("runs", "reports", "logs", "profiles", "prompts", "schemas", "state", "tickets", "evidence", "scripts", ".migration-kit")) {
+foreach ($dir in @("runs", "reports", "logs", "profiles", "prompts", "schemas", "state", "tickets", "evidence", "scripts", "codex", ".migration-kit")) {
     New-Item -ItemType Directory -Force -Path (Join-Path $script:workspacePath $dir) | Out-Null
 }
 
@@ -264,6 +270,23 @@ if (Test-Path $schemaSource) {
     $schemaDest = Join-Path $script:workspacePath "schemas/adapter-config.schema.json"
     $schemaContent = Get-Content -Raw -Path $schemaSource
     Write-TextFileSafe -DestinationPath $schemaDest -Content $schemaContent -ForceWrite:$Force -UpdateMode:$Update
+}
+
+if (-not $NoCodexFiles -and (Test-Path $codexTemplateSource)) {
+    Copy-DirectoryContents -SourceDirectory $codexTemplateSource -DestinationDirectory (Join-Path $script:workspacePath "codex") -ForceCopy:$Force -UpdateMode:$Update
+}
+
+if ($WithTeam -and (Test-Path $teamTemplateSource)) {
+    Copy-DirectoryContents -SourceDirectory $teamTemplateSource -DestinationDirectory (Join-Path $script:workspacePath "opencode-team") -ForceCopy:$Force -UpdateMode:$Update
+
+    $agentsTemplate = Join-Path $teamTemplateSource "project-template/AGENTS.md"
+    if (Test-Path $agentsTemplate) {
+        Set-TemplatedFile -SourcePath $agentsTemplate -DestinationPath (Join-Path $projectRoot "AGENTS.md") -Tokens $script:tokens -ForceWrite:$Force -UpdateMode:$Update
+    }
+}
+
+if ($WithLoopLibrary -and (Test-Path $loopLibrarySource)) {
+    Copy-DirectoryContents -SourceDirectory $loopLibrarySource -DestinationDirectory (Join-Path $script:workspacePath "loops-library") -ForceCopy:$Force -UpdateMode:$Update
 }
 
 if (-not $NoRootAgentFiles) {
@@ -342,6 +365,25 @@ $quickStartLines = @(
     "",
     "```text",
     "$(Join-Path $Workspace 'prompts/next-ticket-prompt.txt')",
+    "```",
+    "",
+    "## Optional: Codex bounded ticket",
+    "",
+    "```text",
+    "Read $(Join-Path $Workspace 'codex/CODEX.md') and $(Join-Path $Workspace 'codex/prompts/ticket-fix-prompt.txt').",
+    "Fix only the current ticket.",
+    "```",
+    "",
+    "## Optional: install OpenCode team files",
+    "",
+    "```powershell",
+    ".\tool\scripts\install-migration-kit.ps1 -Workspace `"$Workspace`" -Update -Backup -WithTeam",
+    "```",
+    "",
+    "OpenCode global template will be copied to:",
+    "",
+    "```text",
+    "$(Join-Path $Workspace 'opencode-team')",
     "```"
 )
 Write-TextFileSafe -DestinationPath $quickStart -Content ($quickStartLines -join [Environment]::NewLine) -ForceWrite:$Force -UpdateMode:$Update

@@ -1,0 +1,24 @@
+Read all files in .agent-loops-engineering/shared/.
+Read all files in .agent-loops-engineering/code-review-loop/.
+
+Start Code Review Loop.
+
+Review scope:
+- Project path: <PROJECT_PATH>
+- Diff source: <git diff | patch file | branch comparison | changed files>
+- Task/MR context: <PASTE_CONTEXT_OR_EMPTY>
+- Commands available:
+  - install/restore: <COMMAND_OR_EMPTY>
+  - build: <COMMAND_OR_EMPTY>
+  - typecheck/compile: <COMMAND_OR_EMPTY>
+  - lint: <COMMAND_OR_EMPTY>
+  - test: <COMMAND_OR_EMPTY>
+  - runtime smoke: <COMMAND_OR_EMPTY>
+- Browser/MCP available: <yes | no>
+
+Review goal:
+<WHAT TO FOCUS ON: conceptual review / regression risk / security / tests / runtime / general>
+
+Do not fix code unless explicitly requested.
+Do not ask me to choose between technical interpretations if repository evidence is enough.
+Classify findings by severity and give a final verdict.

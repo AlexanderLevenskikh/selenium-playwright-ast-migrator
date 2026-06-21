@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Text.Json;
 
 namespace Migrator.Core;
@@ -30,6 +32,8 @@ public static class ConfigValidator
         ValidateUiTargets(config.UiTargets, "UiTargets", errors);
         ValidateMethods(config.Methods, "Methods", errors);
         ValidateParameterizedMethods(config.ParameterizedMethods, "ParameterizedMethods", errors);
+        ValidateNavigationUrls(config.NavigationUrls, "NavigationUrls", errors);
+        ValidateNavigationTargetStatement(config.NavigationTargetStatement, "NavigationTargetStatement", errors);
         ValidateScopes(config.Scopes, errors);
         ValidateQualityGates(config.QualityGates, errors);
         ValidateVerification(config.Verification, errors);
@@ -236,6 +240,30 @@ public static class ConfigValidator
         }
     }
 
+    private static void ValidateNavigationUrls(IDictionary<string, string>? urls, string section, List<string> errors)
+    {
+        if (urls == null)
+            return;
+
+        foreach (var kvp in urls)
+        {
+            if (string.IsNullOrWhiteSpace(kvp.Key))
+                errors.Add($"{section} contains an empty source URL expression key.");
+
+            if (string.IsNullOrWhiteSpace(kvp.Value))
+                errors.Add($"{section}[\"{kvp.Key}\"] has an empty target URL value.");
+        }
+    }
+
+    private static void ValidateNavigationTargetStatement(string? statement, string section, List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(statement))
+            return;
+
+        if (!statement.Contains("{url}", StringComparison.Ordinal))
+            errors.Add($"{section} must contain the {{url}} placeholder.");
+    }
+
     private static void ValidateScopes(ProfileScope[] scopes, List<string> errors)
     {
         for (int i = 0; i < scopes.Length; i++)
@@ -255,6 +283,11 @@ public static class ConfigValidator
 
             if (scope.ParameterizedMethods.Length > 0)
                 ValidateParameterizedMethods(scope.ParameterizedMethods, $"{prefix}.ParameterizedMethods", errors);
+
+            if (scope.NavigationUrls.Count > 0)
+                ValidateNavigationUrls(scope.NavigationUrls, $"{prefix}.NavigationUrls", errors);
+
+            ValidateNavigationTargetStatement(scope.NavigationTargetStatement, $"{prefix}.NavigationTargetStatement", errors);
 
             if (scope.Tables.Length > 0)
                 ValidateTables(scope.Tables, $"{prefix}.Tables", errors);
