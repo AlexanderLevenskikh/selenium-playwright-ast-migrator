@@ -656,6 +656,18 @@ public class DefaultProjectAdapter : IProjectAdapter
             if (sourceExpression.StartsWith(entry.Key + ".", StringComparison.Ordinal) ||
                 sourceExpression == entry.Key)
             {
+                // If the expression contains ElementAt with an unsafe index, don't
+                // let the prefix fallback silently resolve it to the base locator.
+                // This prevents ElementAt(GetIndex()) or ElementAt(i + 1) from becoming
+                // an active mapped target that would generate incorrect .Nth() code.
+                var elemMatch = ElementAtRegex.Match(sourceExpression);
+                if (elemMatch.Success)
+                {
+                    var idx = elemMatch.Groups[1].Value.Trim();
+                    if (!int.TryParse(idx, out _) && !IsSafeIndexExpression(idx))
+                        continue;
+                }
+
                 return entry.Value;
             }
         }
@@ -1998,7 +2010,24 @@ public class DefaultProjectAdapter : IProjectAdapter
         if (string.IsNullOrWhiteSpace(indexExpression))
             return false;
 
-        return !indexExpression.Any(c => c is '\r' or '\n' or ';' or '{' or '}');
+        var s = indexExpression.Trim();
+
+        // Reject multiline, statement separators, and block delimiters
+        if (s.Any(c => c is '\r' or '\n' or ';' or '{' or '}'))
+            return false;
+
+        // Allow integer literals: 0, 1, 42, -1
+        if (int.TryParse(s, out _))
+            return true;
+
+        // Allow simple identifiers: element, elementOrder, i
+        if (s.Length > 0 && char.IsLetterOrDigit(s[0]) &&
+            s.Skip(1).All(c => char.IsLetterOrDigit(c) || c == '_') &&
+            !s.Any(c => c == '(' || c == ')' || c == '.' || c == '+' || c == '-' || c == '*' || c == '/'))
+            return true;
+
+        // Reject everything else: method calls, member access, binary expressions, etc.
+        return false;
     }
 
     static string? ExtractTableItemsSource(string expr)
@@ -2203,7 +2232,20 @@ public class DefaultProjectAdapter : IProjectAdapter
                                 literalIndex);
                         }
 
-                        // Dynamic index — return unresolved to trigger TODO
+                        // Allow simple variable identifiers (e.g. ElementAt(element))
+                        if (IsSafeIndexExpression(indexText))
+                        {
+                            return new MappedTarget(
+                                sourceExpression,
+                                tableMapped.TargetExpression,
+                                tableMapped.Kind,
+                                tableMapped.TestIdAttribute,
+                                "Nth",
+                                null,
+                                indexText);
+                        }
+
+                        // Dynamic index (method calls, expressions) — return unresolved to trigger TODO
                         return new UnresolvedTarget(sourceExpression);
                     }
                 }

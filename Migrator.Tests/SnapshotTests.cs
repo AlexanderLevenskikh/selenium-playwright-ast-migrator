@@ -5547,7 +5547,226 @@ public class BugFixRegressionTests
         }
     }
 
+    [Fact]
+    public void ResolveDynamicElementAt_SimpleIdentifier_IsSafe()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"migrator-elementat-ident-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var configPath = Path.Combine(tempDir, "config.json");
+            File.WriteAllText(configPath, @"{
+                ""UiTargets"": [{
+                    ""SourceExpression"": ""page.Table.Items"",
+                    ""TargetExpression"": ""row"",
+                    ""TargetKind"": ""Locator"",
+                    ""TestIdAttribute"": ""data-testid""
+                }]
+            }");
+            var adapter = new DefaultProjectAdapter(configPath);
+
+            var click = new ClickAction(1, "page.Table.Items.ElementAt(elementOrder)");
+            var model = adapter.Adapt(new TestFileModel(
+                FilePath: "t.cs", Namespace: "T", ClassName: "TC", BaseClassName: null,
+                SetUpActions: Array.Empty<TestAction>(),
+                Tests: new[] { new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(),
+                    new[] { click })
+            }));
+
+            var adaptedAction = model.Tests.First().BodyActions.First();
+            Assert.IsType<ClickAction>(adaptedAction);
+            var clickAction = (ClickAction)adaptedAction;
+            Assert.IsType<MappedTarget>(clickAction.Target);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void ResolveDynamicElementAt_MethodCall_StayUnresolved()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"migrator-elementat-unsafe-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var configPath = Path.Combine(tempDir, "config.json");
+            File.WriteAllText(configPath, @"{
+                ""UiTargets"": [{
+                    ""SourceExpression"": ""page.Table.Items"",
+                    ""TargetExpression"": ""row"",
+                    ""TargetKind"": ""Locator"",
+                    ""TestIdAttribute"": ""data-testid""
+                }]
+            }");
+            var adapter = new DefaultProjectAdapter(configPath);
+
+            var click = new ClickAction(1, "page.Table.Items.ElementAt(GetIndex())");
+            var model = adapter.Adapt(new TestFileModel(
+                FilePath: "t.cs", Namespace: "T", ClassName: "TC", BaseClassName: null,
+                SetUpActions: Array.Empty<TestAction>(),
+                Tests: new[] { new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(),
+                    new[] { click })
+            }));
+
+            var adaptedAction = model.Tests.First().BodyActions.First();
+            Assert.IsType<ClickAction>(adaptedAction);
+            var clickAction = (ClickAction)adaptedAction;
+            Assert.IsType<UnresolvedTarget>(clickAction.Target);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void ResolveDynamicElementAt_BinaryExpression_StayUnresolved()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"migrator-elementat-binary-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var configPath = Path.Combine(tempDir, "config.json");
+            File.WriteAllText(configPath, @"{
+                ""UiTargets"": [{
+                    ""SourceExpression"": ""page.Table.Items"",
+                    ""TargetExpression"": ""row"",
+                    ""TargetKind"": ""Locator"",
+                    ""TestIdAttribute"": ""data-testid""
+                }]
+            }");
+            var adapter = new DefaultProjectAdapter(configPath);
+
+            var click = new ClickAction(1, "page.Table.Items.ElementAt(i + 1)");
+            var model = adapter.Adapt(new TestFileModel(
+                FilePath: "t.cs", Namespace: "T", ClassName: "TC", BaseClassName: null,
+                SetUpActions: Array.Empty<TestAction>(),
+                Tests: new[] { new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(),
+                    new[] { click })
+            }));
+
+            var adaptedAction = model.Tests.First().BodyActions.First();
+            Assert.IsType<ClickAction>(adaptedAction);
+            var clickAction = (ClickAction)adaptedAction;
+            Assert.IsType<UnresolvedTarget>(clickAction.Target);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void ResolveDynamicElementAt_MemberAccess_StayUnresolved()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"migrator-elementat-member-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var configPath = Path.Combine(tempDir, "config.json");
+            File.WriteAllText(configPath, @"{
+                ""UiTargets"": [{
+                    ""SourceExpression"": ""page.Table.Items"",
+                    ""TargetExpression"": ""row"",
+                    ""TargetKind"": ""Locator"",
+                    ""TestIdAttribute"": ""data-testid""
+                }]
+            }");
+            var adapter = new DefaultProjectAdapter(configPath);
+
+            var click = new ClickAction(1, "page.Table.Items.ElementAt(foo.Bar)");
+            var model = adapter.Adapt(new TestFileModel(
+                FilePath: "t.cs", Namespace: "T", ClassName: "TC", BaseClassName: null,
+                SetUpActions: Array.Empty<TestAction>(),
+                Tests: new[] { new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(),
+                    new[] { click })
+            }));
+
+            var adaptedAction = model.Tests.First().BodyActions.First();
+            Assert.IsType<ClickAction>(adaptedAction);
+            var clickAction = (ClickAction)adaptedAction;
+            Assert.IsType<UnresolvedTarget>(clickAction.Target);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
     // --- TS-22.2: Conditional with suppressed body ---
+
+    [Fact]
+    public void Conditional_Integration_SuppressedBody_SourceOnlyCondition_Compiles()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"migrator-conditional-int-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+
+            // Write test source that parses to a conditional with a suppressed body
+            var sourceFile = Path.Combine(tempDir, "Test.cs");
+            File.WriteAllText(sourceFile, @"
+using NUnit.Framework;
+
+namespace Sample.Tests
+{
+    public class AgentReportHeadTests
+    {
+        [Test]
+        public void T1()
+        {
+            if (page.Table.Items.Count.Get() > 3)
+            {
+                DeleteException(page);
+            }
+        }
+    }
+}
+");
+
+            // Adapter config: map page.Table.Items and suppress DeleteException
+            var configPath = Path.Combine(tempDir, "config.json");
+            File.WriteAllText(configPath, @"{
+                ""UiTargets"": [{
+                    ""SourceExpression"": ""page.Table.Items"",
+                    ""TargetExpression"": ""row"",
+                    ""TargetKind"": ""Locator"",
+                    ""TestIdAttribute"": ""data-testid""
+                }],
+                ""SuppressedMethodPatterns"": [""*DeleteException(*)""]
+            }");
+
+            var adapter = new DefaultProjectAdapter(configPath);
+            var parser = new RoslynTestFileParser();
+            var renderer = new PlaywrightDotNetRenderer();
+
+            var sourceModel = parser.Parse(sourceFile);
+            var adapted = adapter.Adapt(sourceModel);
+            var output = renderer.Render(adapted);
+
+            // The condition references source-only 'page' — it should either be mapped or produce a safe TODO
+            // The suppressed body must NOT produce active source-only code
+            Assert.DoesNotContain("DeleteException(page)", output);
+            // Must compile without errors
+            Assert.True(CompileChecker.CompilesWithoutErrors(output),
+                CompileChecker.FormatErrors(output));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
 
     [Fact]
     public void Conditional_SuppressedBody_RendersAsComment()
