@@ -660,12 +660,15 @@ public class DefaultProjectAdapter : IProjectAdapter
                 // let the prefix fallback silently resolve it to the base locator.
                 // This prevents ElementAt(GetIndex()) or ElementAt(i + 1) from becoming
                 // an active mapped target that would generate incorrect .Nth() code.
-                var elemMatch = ElementAtRegex.Match(sourceExpression);
-                if (elemMatch.Success)
+                // Check both table-style (.Items.ElementAt) and general (collection.ElementAt) patterns.
+                var elemTableMatch = ElementAtRegex.Match(sourceExpression);
+                var elemGeneralMatch = Regex.Match(sourceExpression, @"\w+\s*\.\s*ElementAt\s*\(\s*([^)]+)\s*\)");
+                var generalIdx = elemGeneralMatch.Success ? elemGeneralMatch.Groups[1].Value.Trim() : null;
+                var tableIdx = elemTableMatch.Success ? elemTableMatch.Groups[1].Value.Trim() : null;
+                if ((elemTableMatch.Success && !int.TryParse(tableIdx!, out _) && !IsSafeIndexExpression(tableIdx!)) ||
+                    (elemGeneralMatch.Success && !int.TryParse(generalIdx!, out _) && !IsSafeIndexExpression(generalIdx!)))
                 {
-                    var idx = elemMatch.Groups[1].Value.Trim();
-                    if (!int.TryParse(idx, out _) && !IsSafeIndexExpression(idx))
-                        continue;
+                    continue;
                 }
 
                 return entry.Value;
@@ -2005,6 +2008,8 @@ public class DefaultProjectAdapter : IProjectAdapter
         };
     }
 
+    static readonly Regex SafeIdentifierRegex = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
+
     static bool IsSafeIndexExpression(string? indexExpression)
     {
         if (string.IsNullOrWhiteSpace(indexExpression))
@@ -2016,14 +2021,14 @@ public class DefaultProjectAdapter : IProjectAdapter
         if (s.Any(c => c is '\r' or '\n' or ';' or '{' or '}'))
             return false;
 
-        // Allow integer literals: 0, 1, 42, -1
+        // Allow integer literals: 0, 1, 42
         if (int.TryParse(s, out _))
             return true;
 
-        // Allow simple identifiers: element, elementOrder, i
-        if (s.Length > 0 && char.IsLetterOrDigit(s[0]) &&
-            s.Skip(1).All(c => char.IsLetterOrDigit(c) || c == '_') &&
-            !s.Any(c => c == '(' || c == ')' || c == '.' || c == '+' || c == '-' || c == '*' || c == '/'))
+        // Allow simple C# identifiers: must start with letter or underscore,
+        // followed by letters, digits, or underscores.
+        // Explicit regex prevents 1abc, i++, etc.
+        if (SafeIdentifierRegex.IsMatch(s))
             return true;
 
         // Reject everything else: method calls, member access, binary expressions, etc.
@@ -2153,6 +2158,18 @@ public class DefaultProjectAdapter : IProjectAdapter
                 if (sourceExpression.StartsWith(entry.Key + ".", StringComparison.Ordinal) ||
                     sourceExpression == entry.Key)
                 {
+                    // If the expression contains ElementAt with an unsafe index, don't
+                    // let the prefix fallback silently resolve it to the base locator.
+                    var elemTableMatch = ElementAtRegex.Match(sourceExpression);
+                    var elemGeneralMatch = Regex.Match(sourceExpression, @"\w+\s*\.\s*ElementAt\s*\(\s*([^)]+)\s*\)");
+                    var generalIdx = elemGeneralMatch.Success ? elemGeneralMatch.Groups[1].Value.Trim() : null;
+                    var tableIdx = elemTableMatch.Success ? elemTableMatch.Groups[1].Value.Trim() : null;
+                    if ((elemTableMatch.Success && !int.TryParse(tableIdx!, out _) && !IsSafeIndexExpression(tableIdx!)) ||
+                        (elemGeneralMatch.Success && !int.TryParse(generalIdx!, out _) && !IsSafeIndexExpression(generalIdx!)))
+                    {
+                        continue;
+                    }
+
                     return entry.Value;
                 }
             }

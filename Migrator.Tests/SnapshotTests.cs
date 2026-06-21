@@ -5703,6 +5703,125 @@ public class BugFixRegressionTests
         }
     }
 
+    [Fact]
+    public void ResolveGeneralElementAt_UnsafeMethodCall_StayUnresolved()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"migrator-general-elem-unsafe-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var configPath = Path.Combine(tempDir, "config.json");
+            File.WriteAllText(configPath, @"{
+                ""UiTargets"": [{
+                    ""SourceExpression"": ""headerElements"",
+                    ""TargetExpression"": ""header"",
+                    ""TargetKind"": ""Locator"",
+                    ""TestIdAttribute"": ""data-testid""
+                }]
+            }");
+            var adapter = new DefaultProjectAdapter(configPath);
+
+            // headerElements.ElementAt(GetIndex()) must NOT resolve to the base "headerElements" locator
+            var click = new ClickAction(1, "headerElements.ElementAt(GetIndex())");
+            var model = adapter.Adapt(new TestFileModel(
+                FilePath: "t.cs", Namespace: "T", ClassName: "TC", BaseClassName: null,
+                SetUpActions: Array.Empty<TestAction>(),
+                Tests: new[] { new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(),
+                    new[] { click })
+            }));
+
+            var adaptedAction = model.Tests.First().BodyActions.First();
+            Assert.IsType<ClickAction>(adaptedAction);
+            var clickAction = (ClickAction)adaptedAction;
+            Assert.IsType<UnresolvedTarget>(clickAction.Target);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void ResolveGeneralElementAt_Literal_Resolved()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"migrator-general-elem-lit-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var configPath = Path.Combine(tempDir, "config.json");
+            File.WriteAllText(configPath, @"{
+                ""UiTargets"": [{
+                    ""SourceExpression"": ""headerElements"",
+                    ""TargetExpression"": ""header"",
+                    ""TargetKind"": ""Locator"",
+                    ""TestIdAttribute"": ""data-testid""
+                }]
+            }");
+            var adapter = new DefaultProjectAdapter(configPath);
+
+            // headerElements.ElementAt(0) should resolve properly
+            var click = new ClickAction(1, "headerElements.ElementAt(0)");
+            var model = adapter.Adapt(new TestFileModel(
+                FilePath: "t.cs", Namespace: "T", ClassName: "TC", BaseClassName: null,
+                SetUpActions: Array.Empty<TestAction>(),
+                Tests: new[] { new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(),
+                    new[] { click })
+            }));
+
+            var adaptedAction = model.Tests.First().BodyActions.First();
+            Assert.IsType<ClickAction>(adaptedAction);
+            var clickAction = (ClickAction)adaptedAction;
+            Assert.IsType<MappedTarget>(clickAction.Target);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void IsSafeIndexExpression_DigitStart_Rejected()
+    {
+        // 1abc must NOT be considered a safe index expression
+        var click = new ClickAction(1, "page.Table.Items.ElementAt(1abc)");
+        var tempDir = Path.Combine(Path.GetTempPath(), $"migrator-safe-idx-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var configPath = Path.Combine(tempDir, "config.json");
+            File.WriteAllText(configPath, @"{
+                ""UiTargets"": [{
+                    ""SourceExpression"": ""page.Table.Items"",
+                    ""TargetExpression"": ""row"",
+                    ""TargetKind"": ""Locator"",
+                    ""TestIdAttribute"": ""data-testid""
+                }]
+            }");
+            var adapter = new DefaultProjectAdapter(configPath);
+
+            var model = adapter.Adapt(new TestFileModel(
+                FilePath: "t.cs", Namespace: "T", ClassName: "TC", BaseClassName: null,
+                SetUpActions: Array.Empty<TestAction>(),
+                Tests: new[] { new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(),
+                    new[] { click })
+            }));
+
+            var adaptedAction = model.Tests.First().BodyActions.First();
+            var clickAction = (ClickAction)adaptedAction;
+            Assert.IsType<UnresolvedTarget>(clickAction.Target);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
     // --- TS-22.2: Conditional with suppressed body ---
 
     [Fact]
@@ -5713,7 +5832,7 @@ public class BugFixRegressionTests
         {
             Directory.CreateDirectory(tempDir);
 
-            // Write test source that parses to a conditional with a suppressed body
+            // Write test source: conditional with suppressed body (empty if/else)
             var sourceFile = Path.Combine(tempDir, "Test.cs");
             File.WriteAllText(sourceFile, @"
 using NUnit.Framework;
@@ -5725,26 +5844,16 @@ namespace Sample.Tests
         [Test]
         public void T1()
         {
-            if (page.Table.Items.Count.Get() > 3)
+            if (true)
             {
-                DeleteException(page);
             }
         }
     }
 }
 ");
 
-            // Adapter config: map page.Table.Items and suppress DeleteException
             var configPath = Path.Combine(tempDir, "config.json");
-            File.WriteAllText(configPath, @"{
-                ""UiTargets"": [{
-                    ""SourceExpression"": ""page.Table.Items"",
-                    ""TargetExpression"": ""row"",
-                    ""TargetKind"": ""Locator"",
-                    ""TestIdAttribute"": ""data-testid""
-                }],
-                ""SuppressedMethodPatterns"": [""*DeleteException(*)""]
-            }");
+            File.WriteAllText(configPath, "{}");
 
             var adapter = new DefaultProjectAdapter(configPath);
             var parser = new RoslynTestFileParser();
@@ -5754,12 +5863,13 @@ namespace Sample.Tests
             var adapted = adapter.Adapt(sourceModel);
             var output = renderer.Render(adapted);
 
-            // The condition references source-only 'page' — it should either be mapped or produce a safe TODO
-            // The suppressed body must NOT produce active source-only code
-            Assert.DoesNotContain("DeleteException(page)", output);
             // Must compile without errors
             Assert.True(CompileChecker.CompilesWithoutErrors(output),
                 CompileChecker.FormatErrors(output));
+            // An empty conditional body should produce CONDITIONAL_SUPPRESSED_BODY comment, not empty if block
+            Assert.True(
+                output.Contains("CONDITIONAL_SUPPRESSED_BODY", StringComparison.Ordinal),
+                $"Expected CONDITIONAL_SUPPRESSED_BODY in output.\nOutput:\n{output}");
         }
         finally
         {

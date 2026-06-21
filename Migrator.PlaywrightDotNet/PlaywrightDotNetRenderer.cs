@@ -1944,6 +1944,22 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     void RenderConditionalBlock(StringBuilder sb, ConditionalBlockAction action)
     {
+        // If all branches are empty (e.g. body was fully suppressed), render condition as
+        // a preserved comment with the suppressed body note, regardless of unresolved condition
+        // symbols. The condition won't execute anyway since the body is suppressed.
+        var allEmpty = !action.IfActions.Any() && !action.ElseIfActions.Any() && !action.ElseActions.Any();
+        if (allEmpty)
+        {
+            AppendSmartTodo(
+                sb,
+                $"conditional block with suppressed body: {EscapeComment(action.ConditionExpression)}",
+                "CONDITIONAL_SUPPRESSED_BODY",
+                "All actions inside the conditional block were suppressed by adapter config. The condition expression is preserved for context.",
+                "Add adapter mappings for suppressed body actions if the translation is deterministic.");
+            AppendCommentLine(sb, _indent + _indent, $"if ({action.ConditionExpression}) {{ /* body suppressed */ }}");
+            return;
+        }
+
         var unresolvedConditions = FindUnresolvedConditionalSymbols(action).ToArray();
         if (unresolvedConditions.Length > 0)
         {
@@ -1956,21 +1972,6 @@ public class PlaywrightDotNetRenderer : IRenderer
             AppendCommentBlock(sb, _indent + _indent, RenderConditionalSourceSummary(action), "  ");
             foreach (var symbol in unresolvedConditions)
                 BlockSymbol(symbol);
-            return;
-        }
-
-        // If all branches are empty (e.g. body was fully suppressed), render condition as
-        // a preserved comment with the suppressed body note, rather than an empty block.
-        var allEmpty = !action.IfActions.Any() && !action.ElseIfActions.Any() && !action.ElseActions.Any();
-        if (allEmpty)
-        {
-            AppendSmartTodo(
-                sb,
-                $"conditional block with suppressed body: {EscapeComment(action.ConditionExpression)}",
-                "CONDITIONAL_SUPPRESSED_BODY",
-                "All actions inside the conditional block were suppressed by adapter config. The condition expression is preserved for context.",
-                "Add adapter mappings for suppressed body actions if the translation is deterministic.");
-            AppendCommentLine(sb, _indent + _indent, $"if ({action.ConditionExpression}) {{ /* body suppressed */ }}");
             return;
         }
 
