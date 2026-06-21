@@ -33,10 +33,18 @@ Do not ask me to choose between implementation options.
 Do not stop after partial progress.
 Continue until the selected migration block is fixed and verified, or until the stop policy requires a real stop.
 
+Migration scope:
+- Source Selenium project: <SOURCE_SELENIUM_PROJECT_PATH>
+- Target/generated Playwright project: <TARGET_PROJECT_OR_OUTPUT_PATH>
+- Migrator config/profile: <CONFIG_OR_PROFILE_PATH>
+- Verify/orchestrate output directory: <OUTPUT_DIR>
+- Latest migration board: <PATH_OR_EMPTY>
+- Latest project verify report: <PATH_OR_EMPTY>
+
 Current task:
 <PASTE CURRENT BLOCK / ERROR / LOG / TODO CATEGORY HERE>
 
-Use repository code, existing tests, snapshots, docs, CLI reports, and command output as the source of truth.
+Use repository code, existing tests, snapshots, docs, CLI reports, migration board, source Selenium tests, target project conventions, and command output as the source of truth.
 ```
 
 ## What changed compared to the old workflow
@@ -112,3 +120,30 @@ The verifier trusts only:
 - compile-smoke / verify results.
 
 The verifier does not trust the implementer’s claims.
+
+
+## Checkpoint is not completion
+
+A green build, green `verify-project`, or zero compile errors is a safe checkpoint, not the end of the migration, unless the user explicitly requested only compile/build work.
+
+When compile-fix completes, use two statuses if needed:
+
+```text
+Compile-fix batch: READY_FOR_ACCEPTANCE
+Overall migration loop: CONTINUE_AUTONOMOUSLY
+```
+
+If the latest migration board still has actionable TODOs, missing mappings, unresolved symbols, unsupported actions, empty tests, or runtime candidates, the agent should continue with the next batch.
+
+## Migration-quality trade-offs
+
+The agent must not stop merely because the next phase involves TODO reduction or mapping/suppression trade-offs.
+
+The correct behavior is to choose a small safe reversible batch, for example:
+
+- assess `EMPTY_TEST_AFTER_SUPPRESSION`;
+- map one source-backed repeated expression;
+- classify one unsupported helper-method family;
+- run one runtime smoke candidate.
+
+Stop only when the trade-off requires product/business semantics, unavailable source truth, destructive action, or another hard stop condition.

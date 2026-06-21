@@ -58,3 +58,35 @@ When a log shows a failing assertion, locate the expected behavior and add a reg
 When a log shows a compiler error, prioritize compile-safety before migration prettiness.
 
 When a log shows a TODO count/category, reduce or classify that category without causing unrelated regressions.
+
+## After clean compile
+
+When project verify is green and compile errors are zero, do not stop.
+
+Re-read the latest migration board/report and choose the next migration-quality batch.
+
+Default priority after clean compile:
+
+1. Assess `EMPTY_TEST_AFTER_SUPPRESSION` if suppressions dominate TODOs.
+2. Reduce high-impact source-backed `MISSING_MAPPING` patterns.
+3. Fix or classify `UNRESOLVED_SYMBOL` root causes.
+4. Classify/fix high-frequency `UNSUPPORTED_ACTION` families.
+5. Add small proven adapter/config mappings.
+6. Select one runtime smoke candidate only when project verify is green and the generated test has a meaningful active body.
+7. Classify runtime failures after evidence exists.
+
+## Small safe batch examples after clean compile
+
+Good examples:
+
+- inspect 5-10 empty generated tests and classify `EMPTY_TEST_AFTER_SUPPRESSION`;
+- map a proven `page.Pagination.Forward` expression using source/POM truth;
+- support one custom helper-method family with regression tests;
+- run one smoke candidate and classify its first runtime failure.
+
+Bad examples:
+
+- suppress every `page.*` expression;
+- globally mark Selenium page objects as target-known symbols;
+- manually edit generated `.cs` files as final solution;
+- run the whole runtime suite before first smoke candidates are validated.

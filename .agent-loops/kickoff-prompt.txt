@@ -1,4 +1,5 @@
 Read all files in .agent-loops/.
+Also read AGENTS.md and docs/autopilot-loop.md.
 
 Start Migrator Autopilot Loop.
 
@@ -7,7 +8,28 @@ Do not ask me to choose between implementation options.
 Do not stop after partial progress.
 Continue until the selected migration block is fixed and verified, or until the stop policy requires a real stop.
 
+Migration scope:
+- Source Selenium project: <SOURCE_SELENIUM_PROJECT_PATH>
+- Target/generated Playwright project: <TARGET_PROJECT_OR_OUTPUT_PATH>
+- Migrator config/profile: <CONFIG_OR_PROFILE_PATH>
+- Verify/orchestrate output directory: <OUTPUT_DIR>
+- Latest migration board: <PATH_OR_EMPTY>
+- Latest project verify report: <PATH_OR_EMPTY>
+- Expected verify/orchestrate command: <COMMAND_OR_EMPTY>
+- Expected project verify command: <COMMAND_OR_EMPTY>
+
+State/resume:
+- Create/update .agent-state/migrator-progress.md after every meaningful batch.
+- Create/update .agent-state/current-migration-batch.md while a batch is in progress.
+- Save important verify output to .agent-state/last-verify-output.md when useful.
+- Follow .agent-loops/10-state-and-resume.md for long-running loops.
+
 Current task:
 <PASTE CURRENT BLOCK / ERROR / LOG / TODO CATEGORY HERE>
 
-Use repository code, existing tests, snapshots, and command output as the source of truth.
+Important continuation rule:
+- A green build/project verify is a checkpoint, not final migration completion, unless the task is explicitly compile-only.
+- If a batch is READY_FOR_ACCEPTANCE but the migration board still has actionable work, overall status is CONTINUE_AUTONOMOUSLY.
+- Migration-quality trade-offs are not a stop reason by themselves. Choose the smallest safe reversible batch.
+
+Use repository code, existing tests, snapshots, docs, CLI reports, migration board, source Selenium tests, target project conventions, generated output, and command output as the source of truth.

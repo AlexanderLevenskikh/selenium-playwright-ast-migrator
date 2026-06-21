@@ -26,10 +26,18 @@ Do not ask me to choose between implementation options.
 Do not stop after partial progress.
 Continue until the selected migration block is fixed and verified, or until the stop policy requires a real stop.
 
+Migration scope:
+- Source Selenium project: <SOURCE_SELENIUM_PROJECT_PATH>
+- Target/generated Playwright project: <TARGET_PROJECT_OR_OUTPUT_PATH>
+- Migrator config/profile: <CONFIG_OR_PROFILE_PATH>
+- Verify/orchestrate output directory: <OUTPUT_DIR>
+- Latest migration board: <PATH_OR_EMPTY>
+- Latest project verify report: <PATH_OR_EMPTY>
+
 Current task:
 <PASTE CURRENT BLOCK / ERROR / LOG / TODO CATEGORY HERE>
 
-Use repository code, existing tests, snapshots, and command output as the source of truth.
+Use repository code, existing tests, snapshots, docs, CLI reports, migration board, source Selenium tests, target project conventions, and command output as the source of truth.
 ```
 
 ## Files
@@ -42,4 +50,8 @@ Use repository code, existing tests, snapshots, and command output as the source
 - `05-verifier-loop.md` — independent verification pass.
 - `06-report-format.md` — required final report format.
 - `07-ticket-needed-template.md` — local template for cases that really need a ticket.
+- `08-continuation-rule.md` — prevents stopping after green compile/project verify when migration work remains.
+- `09-continue-after-compile-fix-prompt.txt` — prompt for continuing after compile-fix milestone.
+- `10-state-and-resume.md` — state files and resume protocol for long-running loops.
+- `resume-prompt.txt` — restart prompt after interruption.
 - `kickoff-prompt.txt` — copy-paste startup prompt.

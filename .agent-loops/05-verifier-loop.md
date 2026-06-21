@@ -80,3 +80,16 @@ Always include:
 5. Coverage assessment.
 6. Risks.
 7. Acceptance recommendation.
+
+## Verify continuation behavior
+
+The verifier should check whether the implementer stopped too early.
+
+If a batch is `READY_FOR_ACCEPTANCE` but the migration board still has actionable categories, the verifier should report:
+
+```text
+Batch status: READY_FOR_ACCEPTANCE
+Overall loop recommendation: CONTINUE_AUTONOMOUSLY
+```
+
+A green build/project verify proves compile safety, not migration completeness.

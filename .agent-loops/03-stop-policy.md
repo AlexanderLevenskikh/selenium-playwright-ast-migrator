@@ -17,7 +17,10 @@ Continue without asking the user when:
 - source behavior matches an existing pattern;
 - build/test errors point to a clear fix;
 - a regression test needs to be added;
-- existing code has a nearby convention that can be followed.
+- existing code has a nearby convention that can be followed;
+- compile/build errors were fixed and the latest migration board still has actionable TODO/Unsupported/MissingMapping categories;
+- a completed batch is ready for acceptance but the overall migration loop still has next work;
+- the next phase involves migration-quality trade-offs that can be resolved with a small safe batch.
 
 ## Stop and ask/report
 
@@ -33,6 +36,9 @@ Stop only when:
 8. Maximum iterations are reached.
 9. The selected migration block is complete and verified.
 
+Migration-quality trade-off is not a stop reason by itself.
+Stop only if the trade-off requires product/business semantics, unavailable source truth, destructive action, or another hard stop condition.
+
 ## Forbidden stop reasons
 
 Do not stop with:
@@ -44,6 +50,11 @@ Do not stop with:
 - "There are several possible implementations."
 - "This is probably enough."
 - "I made partial progress."
+- "Project verify is green, so the whole migration is done."
+- "Generated code compiles, so I am finished."
+- "Only warnings remain, so I should stop."
+- "The next work is migration-quality improvement, so the user should decide."
+- "There are TODO reduction trade-offs, so I should stop."
 
 Instead, choose the safest approach and continue.
 

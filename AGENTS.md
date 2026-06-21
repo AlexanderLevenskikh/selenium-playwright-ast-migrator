@@ -29,8 +29,29 @@ Forbidden stop phrases:
 - “Do you want me to continue?”
 - “I can continue if you want.”
 - “There are several possible implementations.”
+- “Project verify is green, so I am done.”
+- “The next work is migration-quality improvement, so I should stop.”
+- “There are TODO reduction trade-offs, so the user should decide.”
 
 Choose the safest option and continue.
+
+
+## Checkpoint vs completion
+
+A green build, green `verify-project`, or zero compile errors is a checkpoint, not the end of the migration, unless the user explicitly requested only compile/build work.
+
+If the latest migration board still has actionable categories, use:
+
+```text
+Completed batch: READY_FOR_ACCEPTANCE
+Overall migration loop: CONTINUE_AUTONOMOUSLY
+```
+
+Do not stop only because generated code compiles or only warnings remain.
+
+Migration-quality trade-offs are not a stop reason by themselves. Choose the smallest safe reversible batch and continue unless the trade-off requires product/business semantics or unavailable source truth.
+
+Read `.agent-loops/08-continuation-rule.md` after any milestone batch.
 
 ## Architecture
 

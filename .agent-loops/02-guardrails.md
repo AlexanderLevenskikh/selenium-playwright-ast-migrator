@@ -61,3 +61,34 @@ These rules are mandatory.
 - Make the safest local decision.
 - Ask the user only when product/business semantics are required.
 - Do not stop merely because there are multiple reasonable implementations.
+
+## Checkpoint is not completion
+
+Do not treat a green build/project verify as completion of the whole migration when the board still has actionable TODOs, missing mappings, unresolved symbols, unsupported actions, empty tests, or blocked runtime candidates.
+
+Treat green compile as a safe checkpoint.
+
+Continue with the next highest-impact category unless the user explicitly asked only to fix compile/build errors.
+
+## Source-only identifier safety
+
+`SourceOnlyIdentifiers` are safe for compile preservation, but they may short-circuit mapping attempts.
+
+Before moving a high-frequency root such as `page`, `pagef`, `modal`, `dialog`, or similar to source-only behavior, understand the effect on Method/ParameterizedMethod mapping.
+
+A source-only root may trade compile errors for TODOs. That can be correct for compile-fix phase, but it is not a final migration-quality solution.
+
+After such a trade, continue with category reduction or classification.
+
+## Suppression safety
+
+Do not reduce TODO count by unsafe broad suppression.
+
+Before adding more suppressions, inspect whether existing suppressions created `EMPTY_TEST_AFTER_SUPPRESSION`.
+
+If tests became empty:
+
+- trace representative generated tests back to source Selenium tests;
+- distinguish technical wait/loader-only tests from accidentally suppressed meaningful tests;
+- prefer upstream mapping/root-cause fixes over more suppression;
+- document when suppression is intentionally preserving compile safety rather than migration completeness.

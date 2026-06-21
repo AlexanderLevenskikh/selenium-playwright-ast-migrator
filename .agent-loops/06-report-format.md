@@ -54,3 +54,26 @@ Keep a short internal note and continue.
 ## If ticket is needed
 
 Use `07-ticket-needed-template.md`.
+
+## Batch vs overall status
+
+When stopping after a milestone, report both statuses if they differ:
+
+```md
+## Batch status
+
+READY_FOR_ACCEPTANCE
+
+## Overall loop status
+
+CONTINUE_AUTONOMOUSLY
+
+## Why overall loop continues
+
+- Latest board still has actionable categories:
+  - ...
+```
+
+Use this especially after compile-fix work.
+
+A batch may be complete while the overall migration remains active.

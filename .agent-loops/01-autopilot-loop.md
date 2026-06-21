@@ -116,3 +116,37 @@ If status is `TICKET_NEEDED`, produce a ticket-ready explanation.
 Use a maximum of 12 implementation iterations for one user-provided block unless the user explicitly gives a different limit.
 
 If max iterations are reached, stop with `MAX_ITERATIONS_REACHED` and provide a useful partial report.
+
+## Phase continuation and safe checkpoints
+
+A green build or green project verify is a safe checkpoint, not necessarily the end of the migration.
+
+If compile errors become zero but the latest migration board/report still contains actionable TODOs, missing mappings, unresolved symbols, unsupported actions, empty tests, or runtime candidates, continue autonomously with the next category.
+
+Use separate statuses for the completed batch and the overall loop:
+
+```text
+Completed batch: READY_FOR_ACCEPTANCE
+Overall migration loop: CONTINUE_AUTONOMOUSLY
+```
+
+Do not stop only because the work shifts from compile-fix to migration-quality improvement.
+
+## Migration-quality trade-offs
+
+Migration-quality trade-offs are normal engineering work and are not a stop reason by themselves.
+
+When a trade-off appears, choose the smallest safe reversible batch.
+
+Examples:
+
+- inspect `EMPTY_TEST_AFTER_SUPPRESSION` before adding more broad suppressions;
+- map one proven PageObject expression instead of suppressing a whole root;
+- classify one unsupported helper-method family;
+- run one runtime smoke candidate instead of the whole suite.
+
+Stop only if the trade-off requires product/business semantics, missing source truth, destructive operations, or another hard stop condition.
+
+## Continuation rule
+
+Always read `.agent-loops/08-continuation-rule.md` when a batch reaches a milestone.

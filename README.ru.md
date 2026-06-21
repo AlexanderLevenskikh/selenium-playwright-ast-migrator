@@ -29,10 +29,18 @@ Do not ask me to choose between implementation options.
 Do not stop after partial progress.
 Continue until the selected migration block is fixed and verified, or until the stop policy requires a real stop.
 
+Migration scope:
+- Source Selenium project: <ПУТЬ_К_SOURCE_SELENIUM_PROJECT>
+- Target/generated Playwright project: <ПУТЬ_К_TARGET_PROJECT_OR_OUTPUT>
+- Migrator config/profile: <ПУТЬ_К_CONFIG_OR_PROFILE>
+- Verify/orchestrate output directory: <ПУТЬ_К_OUTPUT_DIR>
+- Latest migration board: <ПУТЬ_ИЛИ_ПУСТО>
+- Latest project verify report: <ПУТЬ_ИЛИ_ПУСТО>
+
 Current task:
 <ВСТАВЬ ТЕКУЩИЙ БЛОК / ОШИБКУ / ЛОГ / TODO-КАТЕГОРИЮ>
 
-Use repository code, existing tests, snapshots, docs, CLI reports, and command output as the source of truth.
+Use repository code, existing tests, snapshots, docs, CLI reports, migration board, source Selenium tests, target project conventions, and command output as the source of truth.
 ```
 
 Главные документы:
@@ -86,3 +94,10 @@ dotnet test Migrator.Tests/Migrator.Tests.csproj -v normal
 ```
 
 Если CLI-команды проходят, агент должен продолжать loop.
+
+
+## Checkpoint — не финал
+
+В Autopilot Loop зелёный build/project verify — это безопасный checkpoint, но не обязательно конец миграции.
+
+Если в migration board ещё есть actionable TODO, missing mappings, unsupported actions, empty tests или runtime candidates, агент должен продолжать следующий маленький безопасный batch.
