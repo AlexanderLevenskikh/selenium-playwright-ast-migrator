@@ -1,0 +1,29 @@
+Read all files in .agent-loops/.
+Read .agent-state/migrator-progress.md if it exists.
+
+Resume Migrator Autopilot Loop.
+
+Do not assume the previous agent's claims are true.
+First reconcile saved state with actual repository state.
+
+Resume steps:
+1. Inspect git status and git diff.
+2. Inspect the latest migration board/report.
+3. Inspect the latest project verify report.
+4. Read the last recorded batch and command results.
+5. Run the strongest affordable verification commands for the current scope.
+6. Classify current state:
+   - last batch kept;
+   - last batch reverted;
+   - last batch unsafe;
+   - last batch unknown;
+   - environment blocked.
+7. Do not start a new batch until the current batch is classified.
+8. Continue from the last safe checkpoint.
+
+If the last batch was compile-fix and project verify is green:
+- treat that batch as READY_FOR_ACCEPTANCE;
+- treat overall migration as CONTINUE_AUTONOMOUSLY if the board still has actionable categories;
+- continue according to .agent-loops/08-continuation-rule.md.
+
+Do not ask me whether to continue if status is CONTINUE_AUTONOMOUSLY or RESUME_READY.

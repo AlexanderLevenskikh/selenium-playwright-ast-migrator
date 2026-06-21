@@ -1,0 +1,39 @@
+Good. Treat this as completion of the compile-fix batch, not the whole migration.
+
+Status for previous batch:
+Compile-fix batch: READY_FOR_ACCEPTANCE.
+
+Continue Migrator Autopilot Loop.
+
+Re-read:
+- .agent-loops/
+- latest migration board
+- latest project verify report
+- generated reports/TODO diagnostics
+
+Current state:
+- Project verify is green.
+- Syntax/build errors are zero.
+- Remaining diagnostics are warnings only.
+- Migration board still contains actionable TODO/Unsupported/MissingMapping categories.
+
+Next task:
+Pick the next highest-priority migration gap from the latest migration board/report.
+
+Default priority:
+1. High-impact MISSING_MAPPING categories, especially repeated parameterized patterns like page.Table.Items.ElementAt(n).
+2. UNRESOLVED_SYMBOL root causes.
+3. EMPTY_TEST_AFTER_SUPPRESSION root causes.
+4. High-frequency UNSUPPORTED_ACTION categories.
+5. Runtime candidates only after TODO/actionable migration blockers are reduced.
+
+Do not stop because compile is green.
+A green compile/project verify is a checkpoint, not the final stopping condition.
+
+Continue until the next selected category is reduced, fully classified, or the stop policy requires TICKET_NEEDED.
+
+After changes:
+- run Migrator.Tests when applicable;
+- run verify/orchestrate on the same source scope;
+- update migration board/report;
+- continue autonomously if status is CONTINUE_AUTONOMOUSLY.
