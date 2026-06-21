@@ -134,8 +134,8 @@ public class RoslynTestFileParser : ITestFileParser
             .Select(m => ParseTestMethod(m, semanticModel))
             .ToList();
 
-        var classFields = testClass.ChildNodes().OfType<FieldDeclarationSyntax>()
-            .SelectMany(f => ParseClassField(f))
+        var classFields = testClass.ChildNodes()
+            .SelectMany(ParseClassMember)
             .ToList();
 
         return new TestFileModel(
@@ -181,6 +181,16 @@ public class RoslynTestFileParser : ITestFileParser
         return results;
     }
 
+    static IEnumerable<PageObjectFieldAction> ParseClassMember(SyntaxNode member)
+    {
+        return member switch
+        {
+            FieldDeclarationSyntax field => ParseClassField(field),
+            PropertyDeclarationSyntax property => ParseClassProperty(property),
+            _ => Enumerable.Empty<PageObjectFieldAction>()
+        };
+    }
+
     static IEnumerable<PageObjectFieldAction> ParseClassField(FieldDeclarationSyntax field)
     {
         var line = field.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
@@ -192,8 +202,29 @@ public class RoslynTestFileParser : ITestFileParser
             var fieldType = field.Declaration.Type.ToString();
             var initValue = variable.Initializer?.Value.ToString().Trim();
 
-            yield return new PageObjectFieldAction(line, fieldName, fieldType, initValue, declarationText);
+            yield return new PageObjectFieldAction(
+                line,
+                fieldName,
+                fieldType,
+                initValue,
+                declarationText,
+                requiresSemicolon: true);
         }
+    }
+
+    static IEnumerable<PageObjectFieldAction> ParseClassProperty(PropertyDeclarationSyntax property)
+    {
+        var line = property.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+        var declarationText = property.ToString().Trim().TrimEnd(';');
+        var requiresSemicolon = property.ExpressionBody != null || property.Initializer != null;
+
+        yield return new PageObjectFieldAction(
+            line,
+            property.Identifier.Text,
+            property.Type.ToString(),
+            property.ExpressionBody?.Expression.ToString().Trim(),
+            declarationText,
+            requiresSemicolon);
     }
 
     static bool IsInputFixtureFile(string filePath)

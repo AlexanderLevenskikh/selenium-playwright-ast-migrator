@@ -170,13 +170,13 @@ public class PlaywrightDotNetRenderer : IRenderer
         sb.AppendLine("{");
         sb.AppendLine();
 
-        // Render class-level fields
+        // Render class-level fields. Some source class members are intentionally
+        // omitted as non-portable (for example Selenium POM fields). Do not add
+        // an extra blank line when all members were omitted, otherwise strict
+        // snapshot tests get a harmless but noisy whitespace diff.
         var classFields = model.ClassFields as IList<PageObjectFieldAction> ?? model.ClassFields.ToList();
-        if (classFields.Count > 0)
-        {
-            RenderClassFields(sb, classFields);
+        if (classFields.Count > 0 && RenderClassFields(sb, classFields))
             sb.AppendLine();
-        }
 
         // Setup method — collect fixture-scoped blocked symbols for downstream test body blocking
         _setupBlockedSymbols.Clear();
@@ -354,41 +354,79 @@ public class PlaywrightDotNetRenderer : IRenderer
         sb.AppendLine($"{_indent}public Task DisposeAsync() => Task.CompletedTask;");
     }
 
-    void RenderClassFields(StringBuilder sb, IList<PageObjectFieldAction> fields)
+    bool RenderClassFields(StringBuilder sb, IList<PageObjectFieldAction> fields)
     {
+        var renderedAny = false;
+
         foreach (var field in fields)
         {
-            // Determine if this field can be rendered as-is or needs a TODO
-            var sourceOnlyId = FindReferencedSymbol(field.FullDeclaration, _sourceOnlyIdentifiers);
+            var declaration = field.FullDeclaration.Trim().TrimEnd(';');
+
+            var sourceOnlyId = FindReferencedSymbol(declaration, _sourceOnlyIdentifiers);
             if (sourceOnlyId != null)
             {
-                // Field references a source-only identifier — render as comment
-                sb.AppendLine($"{_indent}// [MIGRATOR:SOURCE_ONLY_IDENTIFIER] {sourceOnlyId} in field: {field.FieldName}");
-                sb.AppendLine($"{_indent}// {EscapeComment(field.FullDeclaration)}");
+                sb.AppendLine($"{_indent}// [MIGRATOR:SOURCE_ONLY_IDENTIFIER] {sourceOnlyId} in class member: {field.FieldName}");
+                sb.AppendLine($"{_indent}// {EscapeComment(declaration)}");
+                renderedAny = true;
                 continue;
             }
 
-            var hasUnresolved = ExtractIdentifiers(field.FullDeclaration)
-                .Any(id => !string.IsNullOrEmpty(id) &&
-                           !IsFrameworkKeyword(id) &&
-                           !IsFrameworkBuiltIn(id) &&
-                           !_targetKnownIdentifiers.Contains(id) &&
-                           !_targetKnownTypes.Contains(id) &&
-                           id != field.FieldName &&
-                           id != _pageVariable &&
-                           id != "Page");
+            if (ShouldOmitUnsupportedClassMember(field))
+                continue;
 
-            if (hasUnresolved)
+            if (ReferencesSeleniumOnlyClassMemberApi(declaration))
             {
-                // Field has unresolved types — render as TODO
-                sb.AppendLine($"{_indent}// [MIGRATOR:UNAVAILABLE_SYMBOLS] {EscapeComment(field.FullDeclaration)}");
+                sb.AppendLine($"{_indent}// [MIGRATOR:CLASS_MEMBER_REQUIRES_REVIEW] {EscapeComment(declaration)}");
+                renderedAny = true;
                 continue;
             }
 
-            // Render field as active code (strip trailing semicolon from FullDeclaration if present)
-            var decl = field.FullDeclaration.TrimEnd(';');
-            sb.AppendLine($"{_indent}{decl};");
+            if (field.RequiresSemicolon)
+                sb.AppendLine($"{_indent}{declaration};");
+            else
+                sb.AppendLine($"{_indent}{declaration}");
+
+            renderedAny = true;
         }
+
+        return renderedAny;
+    }
+
+    static bool ShouldOmitUnsupportedClassMember(PageObjectFieldAction field)
+    {
+        var fieldType = field.FieldType.Trim();
+
+        // Source Selenium page-object fields are not portable to the generated
+        // Playwright project: their types often do not exist there and rendering
+        // them as active members creates CS0246/CS1980 noise. Service/helper
+        // members are intentionally kept by the class-member transfer feature.
+        if (fieldType.Equals("dynamic", StringComparison.Ordinal))
+            return true;
+
+        if (fieldType.EndsWith("Page", StringComparison.Ordinal)
+            || fieldType.EndsWith("PageBase", StringComparison.Ordinal)
+            || fieldType.EndsWith("PageObject", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    static bool ReferencesSeleniumOnlyClassMemberApi(string declaration)
+    {
+        var markers = new[]
+        {
+            "WebDriver",
+            "IWebDriver",
+            "IWebElement",
+            "By.",
+            "OpenQA.Selenium",
+            "Kontur.Selone",
+            "Selone"
+        };
+
+        return markers.Any(marker => declaration.Contains(marker, StringComparison.Ordinal));
     }
 
     void RenderTestAttributes(StringBuilder sb, TestModel test)

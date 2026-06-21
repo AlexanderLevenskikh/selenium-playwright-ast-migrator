@@ -103,7 +103,8 @@ public class DefaultProjectAdapter : IProjectAdapter
             TargetKnownTypes = resolved._targetKnownTypes,
             TargetKnownIdentifiers = resolved._targetKnownIdentifiers,
             SuppressedMethods = resolved._suppressedMethods,
-            SuppressedMethodPatterns = resolved._suppressedMethodPatterns
+            SuppressedMethodPatterns = resolved._suppressedMethodPatterns,
+            ClassFields = sourceModel.ClassFields
         };
     }
 

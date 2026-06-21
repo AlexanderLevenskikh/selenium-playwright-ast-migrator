@@ -5638,6 +5638,138 @@ public class SpecialOfferTests
         Assert.Contains("ServiceProvider", output);
     }
 
+    [Fact]
+    public void ClassMembers_ExpressionBodiedProperty_FullPipeline_PreservedThroughAdapter()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"migrator-class-member-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var sourcePath = Path.Combine(tempDir, "DistributionPageShould.cs");
+            File.WriteAllText(sourcePath, @"
+using NUnit.Framework;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Sample;
+
+public interface IDistributionSettingsAdministrationService { }
+
+public class DistributionPageShould
+{
+    private IDistributionSettingsAdministrationService DistributionSettingsAdministrationService
+        => ServiceProvider.GetRequiredService<IDistributionSettingsAdministrationService>();
+
+    [Test]
+    public void SomeTest()
+    {
+    }
+}
+");
+            var configPath = Path.Combine(tempDir, "adapter-config.json");
+            File.WriteAllText(configPath, "{}");
+
+            var parser = new RoslynTestFileParser();
+            var adapter = new DefaultProjectAdapter(configPath);
+            var renderer = new PlaywrightDotNetRenderer();
+            var pipeline = new MigrationPipeline(parser, renderer, adapter);
+
+            var output = pipeline.ProcessFile(sourcePath).GeneratedOutput;
+
+            Assert.Contains("private IDistributionSettingsAdministrationService DistributionSettingsAdministrationService", output);
+            Assert.Contains("=> ServiceProvider.GetRequiredService<IDistributionSettingsAdministrationService>();", output);
+            Assert.DoesNotContain("UNAVAILABLE_SYMBOLS", output);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ClassMembers_AutoPropertyWithInitializer_RendersSingleSemicolon()
+    {
+        var property = new PageObjectFieldAction(
+            1,
+            "TariffName",
+            "string",
+            "\"Test\"",
+            "private string TariffName { get; set; } = \"Test\"",
+            requiresSemicolon: true);
+        var model = CreateModel(Array.Empty<TestAction>()) with
+        {
+            ClassFields = new[] { property }
+        };
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("private string TariffName { get; set; } = \"Test\";", output);
+        Assert.DoesNotContain("private string TariffName { get; set; } = \"Test\";;", output);
+    }
+
+    [Fact]
+    public void ClassMembers_SeleniumProperty_RendersReviewCommentNotActiveCode()
+    {
+        var property = new PageObjectFieldAction(
+            1,
+            "Button",
+            "IWebElement",
+            "WebDriver.FindElement(By.Id(\"x\"))",
+            "private IWebElement Button => WebDriver.FindElement(By.Id(\"x\"))",
+            requiresSemicolon: true);
+        var model = CreateModel(Array.Empty<TestAction>()) with
+        {
+            ClassFields = new[] { property }
+        };
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("[MIGRATOR:CLASS_MEMBER_REQUIRES_REVIEW]", output);
+        Assert.DoesNotContain("\tprivate IWebElement Button => WebDriver.FindElement", output);
+    }
+
+
+    [Fact]
+    public void ClassMembers_PageObjectField_IsOmittedNotActiveCode()
+    {
+        var field = new PageObjectFieldAction(
+            1,
+            "page",
+            "RegistryAgentPage",
+            null,
+            "private RegistryAgentPage page",
+            requiresSemicolon: true);
+        var model = CreateModel(Array.Empty<TestAction>()) with
+        {
+            ClassFields = new[] { field }
+        };
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.DoesNotContain("RegistryAgentPage page", output);
+    }
+
+    [Fact]
+    public void ClassMembers_DynamicField_IsOmittedNotActiveCode()
+    {
+        var field = new PageObjectFieldAction(
+            1,
+            "page",
+            "dynamic",
+            null,
+            "private dynamic page",
+            requiresSemicolon: true);
+        var model = CreateModel(Array.Empty<TestAction>()) with
+        {
+            ClassFields = new[] { field }
+        };
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.DoesNotContain("private dynamic page", output);
+        Assert.DoesNotContain("{\n\n\n\t[Test]", output);
+    }
+
     // --- TS-22.1: ResolveDynamicElementAt literal index ---
 
     [Fact]

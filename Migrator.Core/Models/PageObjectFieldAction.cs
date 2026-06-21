@@ -6,13 +6,21 @@ public sealed class PageObjectFieldAction : TestAction
     public string FieldType { get; }
     public string? InitializationValue { get; }
     public string FullDeclaration { get; }
+    public bool RequiresSemicolon { get; }
 
-    public PageObjectFieldAction(int sourceLine, string fieldName, string fieldType, string? initializationValue = null, string? fullDeclaration = null)
+    public PageObjectFieldAction(
+        int sourceLine,
+        string fieldName,
+        string fieldType,
+        string? initializationValue = null,
+        string? fullDeclaration = null,
+        bool requiresSemicolon = true)
         : base(sourceLine)
     {
         FieldName = fieldName;
         FieldType = fieldType;
         InitializationValue = initializationValue;
         FullDeclaration = fullDeclaration ?? $"{fieldType} {fieldName}";
+        RequiresSemicolon = requiresSemicolon;
     }
 }
