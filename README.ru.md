@@ -10,6 +10,7 @@
 - Строит промежуточную модель действий.
 - Применяет project-specific profile/config mappings.
 - Генерирует Playwright .NET тесты.
+- Поддерживает режим `scaffold` для создания минимального compile-ready Playwright .NET проекта, если инфраструктуры ещё нет.
 - Пишет отчёты, TODO diagnostics, migration board и verify artifacts.
 - Позволяет агенту работать в closed loop: исправить → проверить → продолжить.
 
@@ -45,7 +46,7 @@ Use repository code, existing tests, snapshots, docs, CLI reports, and command o
 ```bash
 dotnet restore
 dotnet build
-dotnet test Migrator.Tests
+dotnet test Migrator.Tests/Migrator.Tests.csproj
 ```
 
 Пример запуска миграции:
@@ -59,8 +60,29 @@ dotnet run --project Migrator.Cli -- \
   --format both
 ```
 
+## Если Playwright-инфраструктуры ещё нет
+
+Можно сгенерировать минимальный проект через режим `scaffold`:
+
+```bash
+dotnet run --project Migrator.Cli -- --mode scaffold --out ./generated-scaffold
+```
+
+Этот режим создаёт стартовый compile-ready scaffold. Он не гарантирует runtime-прохождение тестов: auth, routes, окружение и project-specific поведение нужно настроить под конкретный проект.
+
 ## Правило режима Autopilot
 
 Если статус агента `CONTINUE_AUTONOMOUSLY`, агент должен продолжать без вопроса пользователю.
 
 Пользователь отвечает за финальную приёмку, а не за выбор между техническими вариантами реализации.
+
+## Troubleshooting: Rider/ReSharper test runner
+
+Если Rider/ReSharper показывает ошибку вида `dotnet.exe exited with code '0': Not available`, не считай это источником истины для Autopilot Loop. Проверь результат из терминала:
+
+```bash
+dotnet build
+dotnet test Migrator.Tests/Migrator.Tests.csproj -v normal
+```
+
+Если CLI-команды проходят, агент должен продолжать loop.

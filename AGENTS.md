@@ -65,7 +65,7 @@ Run these whenever applicable:
 
 ```bash
 dotnet build
-dotnet test Migrator.Tests
+dotnet test Migrator.Tests/Migrator.Tests.csproj
 ```
 
 If a real source input is available, also run a verify/orchestrate command, for example:

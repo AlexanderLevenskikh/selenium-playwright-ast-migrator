@@ -69,7 +69,7 @@ Run when applicable:
 
 ```bash
 dotnet build
-dotnet test Migrator.Tests
+dotnet test Migrator.Tests/Migrator.Tests.csproj
 ```
 
 For a real source project, also run:
