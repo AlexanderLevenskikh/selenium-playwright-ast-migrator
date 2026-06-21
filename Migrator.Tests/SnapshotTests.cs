@@ -5486,6 +5486,141 @@ public class BugFixRegressionTests
         Assert.Contains("Page.Locator", output);
     }
 
+    [Fact]
+    public void Reassignment_WaitForPage_FullPipeline_RendersAssignmentWithoutVar()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"migrator-reassign-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var sourcePath = Path.Combine(tempDir, "DiscountTests.cs");
+            File.WriteAllText(sourcePath, @"
+using NUnit.Framework;
+
+namespace Sample;
+
+public class DiscountTests
+{
+    [Test]
+    public void ReopenDiscountPage()
+    {
+        discountOnProductPage = Browser.WaitForPage<DiscountOnProductPage>();
+    }
+}
+");
+
+            var configPath = Path.Combine(tempDir, "adapter-config.json");
+            File.WriteAllText(configPath, @"{
+  ""ParameterizedMethods"": [
+    {
+      ""SourceMethodPattern"": ""Browser.WaitForPage<{T}>()"",
+      ""TargetStatements"": [""var {result} = await Navigation.GoToAsync<{T}>(x => x);""]
+    }
+  ]
+}");
+
+            var parser = new RoslynTestFileParser();
+            var adapter = new DefaultProjectAdapter(configPath);
+            var renderer = new PlaywrightDotNetRenderer();
+            var pipeline = new MigrationPipeline(parser, renderer, adapter);
+
+            var output = pipeline.ProcessFile(sourcePath).GeneratedOutput;
+
+            Assert.Contains("discountOnProductPage = await Navigation.GoToAsync<DiscountOnProductPage>(x => x);", output);
+            Assert.DoesNotContain("var discountOnProductPage = await Navigation", output);
+            Assert.DoesNotContain("Browser.WaitForPage", output);
+            Assert.DoesNotContain("{result}", output);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Reassignment_GoToPage_FullPipeline_RendersAssignmentWithoutVar()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"migrator-gotopage-reassign-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var sourcePath = Path.Combine(tempDir, "SpecialOfferTests.cs");
+            File.WriteAllText(sourcePath, @"
+using NUnit.Framework;
+
+namespace Sample;
+
+public class SpecialOfferTests
+{
+    [Test]
+    public void ReopenSpecialOfferPage()
+    {
+        page = Browser.GoToPage<SpecialOfferPage>(SpecialOfferPage.Uri);
+    }
+}
+");
+
+            var configPath = Path.Combine(tempDir, "adapter-config.json");
+            File.WriteAllText(configPath, @"{
+  ""ParameterizedMethods"": [
+    {
+      ""SourceMethodPattern"": ""Browser.GoToPage<{T}>({url})"",
+      ""TargetStatements"": [""var {result} = await Navigation.GoToAsync<{T}>({url});""]
+    }
+  ]
+}");
+
+            var parser = new RoslynTestFileParser();
+            var adapter = new DefaultProjectAdapter(configPath);
+            var renderer = new PlaywrightDotNetRenderer();
+            var pipeline = new MigrationPipeline(parser, renderer, adapter);
+
+            var output = pipeline.ProcessFile(sourcePath).GeneratedOutput;
+
+            Assert.Contains("page = await Navigation.GoToAsync<SpecialOfferPage>(SpecialOfferPage.Uri);", output);
+            Assert.DoesNotContain("var page = await Navigation", output);
+            Assert.DoesNotContain("Browser.GoToPage", output);
+            Assert.DoesNotContain("{result}", output);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TargetPageVariable_NormalizesConfiguredUppercasePageGetByTestId()
+    {
+        var assertion = new VisibilityAssertionAction(
+            1,
+            TargetExpression.Mapped("page.ForbiddenInformer", "Page.GetByTestId(\"forbidden-informer\")", TargetKind.PlaywrightLocator),
+            VisibilityKind.Visible);
+        var model = CreateModel(new[] { assertion }) with
+        {
+            TestHost = new TestHostConfig { TargetPageVariable = "page" }
+        };
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("await Expect(page.GetByTestId(\"forbidden-informer\")).ToBeVisibleAsync();", output);
+        Assert.DoesNotContain("Page.GetByTestId", output);
+    }
+
+    [Fact]
+    public void TargetPageVariable_NormalizesConfiguredLowercasePageToDefaultPage()
+    {
+        var assertion = new VisibilityAssertionAction(
+            1,
+            TargetExpression.Mapped("page.ForbiddenInformer", "page.GetByTestId(\"forbidden-informer\")", TargetKind.PlaywrightLocator),
+            VisibilityKind.Visible);
+        var model = CreateModel(new[] { assertion });
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("await Expect(Page.GetByTestId(\"forbidden-informer\")).ToBeVisibleAsync();", output);
+        Assert.DoesNotContain("page.GetByTestId", output);
+    }
+
     // --- Bug C: Class Fields ---
 
     [Fact]
@@ -5822,6 +5957,28 @@ public class BugFixRegressionTests
         }
     }
 
+    [Fact]
+    public void Renderer_NthIndexExpression_UnsafeMethodCall_DoesNotRenderActiveNth()
+    {
+        var click = new ClickAction(
+            1,
+            TargetExpression.MappedWithIndexExpression(
+                "page.Table.Items.ElementAt(GetIndex())",
+                "Page.Locator(\".row\")",
+                TargetKind.RawExpression,
+                testIdAttribute: null,
+                match: "Nth",
+                nthIndexExpression: "GetIndex()"));
+
+        var model = CreateModel(new[] { click });
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.DoesNotContain(".Nth(GetIndex())", output);
+        Assert.Contains("Page.Locator(\".row\").ClickAsync", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
     // --- TS-22.2: Conditional with suppressed body ---
 
     [Fact]
@@ -5870,6 +6027,75 @@ namespace Sample.Tests
             Assert.True(
                 output.Contains("CONDITIONAL_SUPPRESSED_BODY", StringComparison.Ordinal),
                 $"Expected CONDITIONAL_SUPPRESSED_BODY in output.\nOutput:\n{output}");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void Conditional_Integration_SuppressedBody_SourceOnlyCountCondition_RendersSuppressedBodyComment()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"migrator-conditional-count-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+
+            var sourceFile = Path.Combine(tempDir, "Test.cs");
+            File.WriteAllText(sourceFile, @"
+using NUnit.Framework;
+
+namespace Sample.Tests
+{
+    public class PartnersExceptionsTests
+    {
+        private dynamic page;
+
+        private void DeleteException(dynamic page)
+        {
+        }
+
+        [Test]
+        public void T1()
+        {
+            if (page.Table.Items.Count.Get() > 3)
+            {
+                DeleteException(page);
+            }
+        }
+    }
+}
+");
+
+            var configPath = Path.Combine(tempDir, "config.json");
+            File.WriteAllText(configPath, @"{
+                ""UiTargets"": [{
+                    ""SourceExpression"": ""page.Table.Items"",
+                    ""TargetExpression"": ""row"",
+                    ""TargetKind"": ""Locator"",
+                    ""TestIdAttribute"": ""data-testid""
+                }],
+                ""SuppressedMethodPatterns"": [
+                    ""*DeleteException(*)""
+                ]
+            }");
+
+            var adapter = new DefaultProjectAdapter(configPath);
+            var parser = new RoslynTestFileParser();
+            var renderer = new PlaywrightDotNetRenderer();
+
+            var sourceModel = parser.Parse(sourceFile);
+            var adapted = adapter.Adapt(sourceModel);
+            var output = renderer.Render(adapted);
+
+            Assert.Contains("CONDITIONAL_SUPPRESSED_BODY", output);
+            Assert.DoesNotContain("CONDITIONAL_UNRESOLVED_SYMBOL", output);
+            Assert.DoesNotContain("SOURCE_ONLY_IDENTIFIER", output);
+            Assert.DoesNotContain("DeleteException(page);", output);
+            Assert.True(CompileChecker.CompilesWithoutErrors(output),
+                CompileChecker.FormatErrors(output));
         }
         finally
         {

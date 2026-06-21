@@ -1326,25 +1326,45 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     static string SubstituteResultPlaceholderBeforeDedup(string statement, MappedMethodInvocationAction action)
     {
-        if (!statement.Contains("{result}", StringComparison.Ordinal))
-            return statement;
-
         if (string.IsNullOrWhiteSpace(action.ResultVariable))
             return statement;
 
         var resultVar = action.ResultVariable!;
-        var substituted = statement.Replace("{result}", resultVar, StringComparison.Ordinal);
+        var substituted = statement.Contains("{result}", StringComparison.Ordinal)
+            ? statement.Replace("{result}", resultVar, StringComparison.Ordinal)
+            : statement;
 
-        // If the source was a reassignment (e.g. `page = Method()`), the TargetStatements
-        // template likely uses `var {result} = ...`, but `var` is wrong for reassignment.
-        // Strip leading `var ` when the original source is an assignment without var declaration.
-        if (substituted.StartsWith("var ", StringComparison.Ordinal) &&
-            action.FullSourceText.StartsWith(resultVar + " ="))
+        // If the source was a reassignment (e.g. `page = Method()`), TargetStatements
+        // templates often still use declaration form (`var {result} = ...`). For an
+        // existing variable assignment that would generate invalid/incorrect code:
+        // `var page = ...` instead of `page = ...`.
+        //
+        // Important: DefaultProjectAdapter may already substitute {result} before the
+        // renderer sees the statement, so this must also handle `var page = ...` and
+        // `var page= ...` with no remaining placeholder.
+        if (IsSourceReassignment(action.FullSourceText, resultVar))
         {
-            substituted = substituted.Substring(4);
+            substituted = Regex.Replace(
+                substituted,
+                $@"^\s*var\s+{Regex.Escape(resultVar)}\s*=",
+                $"{resultVar} =",
+                RegexOptions.CultureInvariant);
+
+            // Normalize the assignment spacing for templates like `var {result}= await ...`.
+            substituted = Regex.Replace(
+                substituted,
+                $@"^\s*{Regex.Escape(resultVar)}\s*=\s*",
+                $"{resultVar} = ",
+                RegexOptions.CultureInvariant);
         }
 
         return substituted;
+    }
+
+    static bool IsSourceReassignment(string sourceText, string variableName)
+    {
+        var pattern = $@"^\s*{Regex.Escape(variableName)}\s*=";
+        return Regex.IsMatch(sourceText, pattern);
     }
 
     /// <summary>
@@ -1947,8 +1967,8 @@ public class PlaywrightDotNetRenderer : IRenderer
         // If all branches are empty (e.g. body was fully suppressed), render condition as
         // a preserved comment with the suppressed body note, regardless of unresolved condition
         // symbols. The condition won't execute anyway since the body is suppressed.
-        var allEmpty = !action.IfActions.Any() && !action.ElseIfActions.Any() && !action.ElseActions.Any();
-        if (allEmpty)
+        var allEmptyOrSafelySuppressed = ConditionalBranchesEmptyOrSafelySuppressed(action);
+        if (allEmptyOrSafelySuppressed)
         {
             AppendSmartTodo(
                 sb,
@@ -1997,6 +2017,27 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
 
         sb.AppendLine($"{_indent}{_indent}}}");
+    }
+
+    bool ConditionalBranchesEmptyOrSafelySuppressed(ConditionalBlockAction action)
+    {
+        return BranchEmptyOrSafelySuppressed(action.IfActions)
+            && action.ElseIfActions.All(e => BranchEmptyOrSafelySuppressed(e.Actions))
+            && BranchEmptyOrSafelySuppressed(action.ElseActions);
+    }
+
+    bool BranchEmptyOrSafelySuppressed(IReadOnlyList<TestAction> actions)
+    {
+        if (actions.Count == 0)
+            return true;
+
+        return actions.All(IsSafelySuppressibleConditionalBodyAction);
+    }
+
+    bool IsSafelySuppressibleConditionalBodyAction(TestAction action)
+    {
+        var sourceText = GetActionSourceText(action);
+        return IsSuppressedAction(action, sourceText) && !IsAssertionLikeSource(sourceText);
     }
 
     IEnumerable<string> FindUnresolvedConditionalSymbols(ConditionalBlockAction action)
@@ -2089,8 +2130,12 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     string RenderPlaywrightLocator(MappedTarget? mapped, string rendered)
     {
-        if (rendered.StartsWith($"{_pageVariable}.") || rendered.StartsWith("Page."))
-            return ApplyMatchStrategy(rendered, mapped);
+        // Target config may already contain a fully-qualified Playwright expression,
+        // historically written with Page.*. Normalize that root to the configured
+        // target page variable so scoped projects can use lowercase `page` without
+        // producing CS0117 against the Page type.
+        if (TryNormalizePlaywrightPageRoot(rendered, out var normalizedRendered))
+            return ApplyMatchStrategy(normalizedRendered, mapped);
 
         // Legacy: TargetExpression already contains Playwright call like GetByTestId("x")
         if (IsLegacyPlaywrightFragment(rendered))
@@ -2107,6 +2152,33 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
 
         return $"{_pageVariable}.{rendered}";
+    }
+
+    bool TryNormalizePlaywrightPageRoot(string rendered, out string normalized)
+    {
+        normalized = rendered;
+
+        if (rendered.StartsWith($"{_pageVariable}.", StringComparison.Ordinal))
+            return true;
+
+        if (TryReplacePlaywrightPageRoot(rendered, "Page", out normalized))
+            return true;
+
+        if (TryReplacePlaywrightPageRoot(rendered, "page", out normalized))
+            return true;
+
+        return false;
+    }
+
+    bool TryReplacePlaywrightPageRoot(string expression, string root, out string normalized)
+    {
+        normalized = expression;
+        var prefix = root + ".";
+        if (!expression.StartsWith(prefix, StringComparison.Ordinal))
+            return false;
+
+        normalized = _pageVariable + expression.Substring(root.Length);
+        return true;
     }
 
     string RenderTextLocator(MappedTarget? mapped)
@@ -2363,12 +2435,22 @@ public class PlaywrightDotNetRenderer : IRenderer
         return false;
     }
 
+    static readonly Regex SafeIndexIdentifierRegex = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
+
     static bool IsSafeIndexExpression(string? indexExpression)
     {
         if (string.IsNullOrWhiteSpace(indexExpression))
             return false;
 
-        return !indexExpression.Any(c => c is '\r' or '\n' or ';' or '{' or '}');
+        var s = indexExpression.Trim();
+
+        if (s.Any(c => c is '\r' or '\n' or ';' or '{' or '}'))
+            return false;
+
+        if (int.TryParse(s, out _))
+            return true;
+
+        return SafeIndexIdentifierRegex.IsMatch(s);
     }
 
     static string EscapeStringLiteral(string? value)

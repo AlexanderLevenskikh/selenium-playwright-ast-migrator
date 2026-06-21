@@ -319,9 +319,15 @@ public class RoslynTestFileParser : ITestFileParser
             return TryExtractConditionalBlock(ifStmt, semanticModel, line);
         }
 
-        // Assignments in expression statements — preserve as raw statements
-        if (statement is ExpressionStatementSyntax { Expression: AssignmentExpressionSyntax })
+        // Reassignments such as
+        //   page = Browser.GoToPage<MyPage>(MyPage.Uri);
+        // should stay structured so ParameterizedMethods can handle them with
+        // the existing {result} placeholder without emitting a new `var`.
+        if (statement is ExpressionStatementSyntax { Expression: AssignmentExpressionSyntax assignment })
         {
+            if (TryExtractGenericInvocationAssignment(assignment, line) is { } genericInvocationAssignment)
+                return genericInvocationAssignment;
+
             var text = statement.ToString().Trim().Trim(';');
             return new RawStatementAction(line, text);
         }
@@ -669,6 +675,48 @@ public class RoslynTestFileParser : ITestFileParser
         "ClickAndFollow",
         "ClickAndOpen",
     };
+
+    TestAction? TryExtractGenericInvocationAssignment(AssignmentExpressionSyntax assignment, int line)
+    {
+        if (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression))
+            return null;
+
+        var targetVariable = assignment.Left.ToString().Trim();
+        if (string.IsNullOrWhiteSpace(targetVariable))
+            return null;
+
+        var invocation = assignment.Right switch
+        {
+            InvocationExpressionSyntax direct => direct,
+            AwaitExpressionSyntax { Expression: InvocationExpressionSyntax awaited } => awaited,
+            _ => null
+        };
+
+        if (invocation == null)
+            return null;
+
+        if (!IsGenericInvocation(invocation))
+            return null;
+
+        var methodName = GetMethodName(invocation);
+        if (!_genericResultMethods.Contains(methodName))
+            return null;
+
+        var receiverText = GetReceiverText(invocation);
+        var fullText = assignment.ToString().Trim().TrimEnd(';');
+        var argumentTexts = invocation.ArgumentList.Arguments
+            .Select(a => a.Expression.ToString())
+            .ToArray();
+
+        return new MethodInvocationAction(
+            line,
+            receiverText,
+            methodName,
+            fullText,
+            argumentTexts,
+            targetVariable,
+            RecognitionConfidence.SyntaxFallback);
+    }
 
     TestAction? TryExtractGenericInvocationDeclaration(LocalDeclarationStatementSyntax lds, int line)
     {

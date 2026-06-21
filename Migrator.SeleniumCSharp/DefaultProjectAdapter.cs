@@ -1002,10 +1002,14 @@ public class DefaultProjectAdapter : IProjectAdapter
     TestAction? TryMatchParameterized(MethodInvocationAction mi, ResolvedFileConfig resolved)
     {
         var fullText = mi.FullSourceText.TrimEnd(';');
+        var assignmentRightSide = TryExtractSimpleAssignmentRightSide(fullText);
 
         foreach (var mapping in resolved._parameterizedMethods)
         {
-            var placeholders = TryMatchPattern(mapping.SourceMethodPattern, fullText, mi.ArgumentTexts);
+            var placeholders = TryMatchPattern(mapping.SourceMethodPattern, fullText, mi.ArgumentTexts)
+                ?? (assignmentRightSide == null
+                    ? null
+                    : TryMatchPattern(mapping.SourceMethodPattern, assignmentRightSide, mi.ArgumentTexts));
             if (placeholders != null)
             {
                 if (!placeholders.ContainsKey("source"))
@@ -1060,6 +1064,21 @@ public class DefaultProjectAdapter : IProjectAdapter
         }
 
         return null;
+    }
+
+    static string? TryExtractSimpleAssignmentRightSide(string sourceText)
+    {
+        if (string.IsNullOrWhiteSpace(sourceText))
+            return null;
+
+        // Keep this intentionally conservative: we only need simple reassignment
+        // forms such as `page = Browser.GoToPage<T>(...)`. Local declarations
+        // (`var page = ...`) are parsed separately and should keep their own path.
+        var match = Regex.Match(sourceText.Trim(), @"^(?!var\s+)(?<left>[A-Za-z_][A-Za-z0-9_\.]*?)\s*=\s*(?<right>.+)$");
+        if (!match.Success)
+            return null;
+
+        return match.Groups["right"].Value.Trim().TrimEnd(';');
     }
 
     static void NormalizeFluentAssertionsPlaceholders(Dictionary<string, PlaceholderValue> placeholders)
