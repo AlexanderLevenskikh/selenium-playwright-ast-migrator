@@ -198,7 +198,7 @@ dotnet run --project .\Migrator.Cli -- --mode index-pom --input "<Selenium proje
 
 Читать подробности: `docs/pom-indexing.md`.
 
-Правило: найденные POM-факты являются source truth, а `inferred-pom-candidates.json` — только черновик. Inferred candidates нельзя автоматически переносить в `adapter-config.json`: сначала найти POM/helper/source truth или спросить разработчика.
+Правило: найденные POM-факты являются source truth, а `inferred-pom-candidates.json` — только черновик. Inferred candidates нельзя автоматически переносить в `adapter-config.json`: сначала найти POM/helper/source truth; если это невозможно безопасно вывести из кода, классифицировать как `TICKET_NEEDED`.
 
 ## Project-aware verify
 
@@ -221,7 +221,7 @@ dotnet run --project .\Migrator.Cli -- --mode explain-todo --input "<migration-o
 - `explain-todo.md/json` — почему остались TODO и какие действия дадут максимальный эффект;
 - `agent-next-task.md` — готовую следующую задачу для агента.
 
-Агент должен читать `agent-next-task.md`, но по умолчанию менять только `adapter-config.json`. Если отчёт говорит, что нужна правка C# мигратора, агент должен остановиться и сформировать escalation report.
+Агент должен читать `agent-next-task.md`, но по умолчанию менять только `adapter-config.json`. Если отчёт говорит, что нужна правка C# мигратора, агент должен перейти к migrator-code fix loop либо классифицировать blocker по `.agent-loops/03-stop-policy.md`.
 
 
 ## Рабочая папка агента

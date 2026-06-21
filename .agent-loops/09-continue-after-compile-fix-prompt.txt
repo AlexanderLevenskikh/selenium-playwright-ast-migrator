@@ -1,0 +1,49 @@
+Good. Treat the previous result as completion of the compile-fix batch, not the whole migration.
+
+Status for previous batch:
+Compile-fix batch: READY_FOR_ACCEPTANCE.
+
+Overall migration status:
+CONTINUE_AUTONOMOUSLY.
+
+Read:
+- .agent-loops/08-continuation-rule.md
+- latest migration board
+- latest project verify report
+- latest generated reports/TODO diagnostics
+- git diff
+
+Current state:
+- Project verify is green.
+- Syntax/build errors are zero.
+- Remaining diagnostics are warnings only.
+- Migration board still contains actionable TODO/Unsupported/MissingMapping categories.
+
+Do not stop because compile is green.
+Do not stop because the next phase involves migration-quality trade-offs.
+A green compile/project verify is a checkpoint, not the final stopping condition.
+
+Next task:
+Pick the next smallest safe migration-quality batch from the latest board/report.
+
+Default priority:
+1. If `EMPTY_TEST_AFTER_SUPPRESSION` is significant, assess whether existing suppressions accidentally emptied meaningful tests before adding more suppressions.
+2. Otherwise reduce a high-impact source-backed `MISSING_MAPPING` pattern.
+3. Then reduce an `UNRESOLVED_SYMBOL` root cause.
+4. Then classify/fix high-frequency `UNSUPPORTED_ACTION`.
+5. Runtime candidates only after project verify is green and candidate body is meaningful.
+
+Rules:
+- Do not invent selectors.
+- Do not suppress business logic without source inspection.
+- Prefer source-backed mapping over broad suppression.
+- Prefer a small reversible batch over a broad speculative fix.
+- If a completed batch is `READY_FOR_ACCEPTANCE` but the board still has actionable work, continue.
+
+After changes:
+- run Migrator.Tests when applicable;
+- run verify/orchestrate on the same source scope;
+- regenerate migration board/report;
+- compare TODO categories before/after;
+- update state/checkpoint if available;
+- continue autonomously if status is CONTINUE_AUTONOMOUSLY.

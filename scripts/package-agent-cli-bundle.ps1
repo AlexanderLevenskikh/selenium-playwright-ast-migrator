@@ -86,8 +86,7 @@ if (Test-Path $docsSource) {
 $rootFiles = @(
     "README.md",
     "README.ru.md",
-    "AGENTS.md",
-    "FIRST_AGENT_PROMPT_TEMPLATE.md"
+    "AGENTS.md"
 )
 
 foreach ($file in $rootFiles) {
@@ -97,9 +96,9 @@ foreach ($file in $rootFiles) {
     }
 }
 
-$FirstPromptTemplate = Join-Path $root "FIRST_AGENT_PROMPT_TEMPLATE.md"
-if (Test-Path $FirstPromptTemplate) {
-    Copy-Item $FirstPromptTemplate $templatesDir -Force
+$agentLoopsSource = Join-Path $root ".agent-loops"
+if (Test-Path $agentLoopsSource) {
+    Copy-Item -Path $agentLoopsSource -Destination (Join-Path $bundleDir ".agent-loops") -Recurse -Force
 }
 
 $runTemplatePath = Join-Path $templatesDir "run-migrator-template.ps1"
@@ -179,9 +178,9 @@ $readmeLines = @(
     '',
     'Read first:',
     '  docs/agent-tool-boundary.md',
-    '  docs/migration-safety-playbook.md',
+    '  docs/autopilot-loop.md',
     '  docs/pom-recovery-policy.md',
-    '  FIRST_AGENT_PROMPT_TEMPLATE.md',
+    '  .agent-loops/kickoff-prompt.txt',
     '  schemas/adapter-config.schema.json',
     '',
     'Windows PowerShell execution policy:',

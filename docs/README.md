@@ -1,52 +1,32 @@
 # Documentation index
 
-This documentation is split by role and task. Prefer this index over browsing the whole folder.
+This package is cleaned for **Autopilot Loop** testing.
 
-## For users
+The old human-checkpoint agent workflow was removed from this archive to avoid conflicting instructions.
 
-- [Quick start](user-guide/quick-start.md)
-- [Migration workflow](user-guide/migration-workflow.md)
-- [Project profile cookbook](user-guide/project-profile-cookbook.md)
-- [Common recipes](user-guide/common-recipes.md)
-- [Reports and quality gates](user-guide/reports-and-quality-gates.md)
-- [Limitations](user-guide/limitations.md)
+## Start here
 
-## For AI agents
+- [`../AGENTS.md`](../AGENTS.md) — repository-level agent rules.
+- [`../.agent-loops/README.md`](../.agent-loops/README.md) — local loop package.
+- [`autopilot-loop.md`](autopilot-loop.md) — how to run the new workflow.
 
-- [Agent modes: Strict and Creative](agent-modes.md)
-- [Agent first workflow](agent-first-workflow.md)
-- [Agent command set](agent-command-set.md)
-- [Agent playbooks](agent-playbooks/README.md)
-- [Safety rules](agent-playbooks/safety-rules.md)
-- [POM recovery policy](pom-recovery-policy.md)
-- [Source-only pattern backlog](agent-playbooks/source-only-pattern-backlog.md)
+## Core technical docs
 
-## For migration engineers
+- [`architecture.md`](architecture.md) — project architecture.
+- [`project-verification.md`](project-verification.md) — verifying generated code against real projects.
+- [`explain-todo.md`](explain-todo.md) — TODO explanation reports.
+- [`migration-board.md`](migration-board.md) — dashboard for migration artifacts.
+- [`pom-indexing.md`](pom-indexing.md) — PageObject indexing.
+- [`pom-recovery-policy.md`](pom-recovery-policy.md) — selector/source-truth recovery.
+- [`wait-policy.md`](wait-policy.md) — wait classification.
+- [`typescript-target.md`](typescript-target.md) — experimental Playwright TypeScript target.
+- [`config-layering.md`](config-layering.md) — layered config/profile model.
+- [`config-schema-workflow.md`](config-schema-workflow.md) — JSON schema workflow.
+- [`runtime-readiness.md`](runtime-readiness.md) — smoke candidate scoring.
+- [`runtime-failure-classifier.md`](runtime-failure-classifier.md) — runtime failure classification.
+- [`tool-installation.md`](tool-installation.md) — local tool installation.
+- [`packaging-and-distribution.md`](packaging-and-distribution.md) — packaging and distribution.
 
-- [Refactoring notes](refactoring-notes.md)
+## Autopilot principle
 
-- [Architecture](architecture.md)
-- [Configuration layering](config-layering.md)
-- [Migration profiles](migration-profiles.md)
-- [Placeholder mental model](profile/placeholder-mental-model.md)
-- [POM indexing](pom-indexing.md)
-- [POM recovery policy](pom-recovery-policy.md)
-- [Project verification](project-verification.md)
-- [TypeScript target](typescript-target.md)
-- [Wait policy](wait-policy.md)
-
-## Reports and analysis
-
-- [Explain TODO](explain-todo.md)
-- [Smart TODO comments](smart-todo-comments.md)
-- [Migration board](migration-board.md)
-- [Runtime readiness](runtime-readiness.md)
-- [Runtime failure classifier](runtime-failure-classifier.md)
-- [Profile match](profile-match.md)
-
-## Packaging and schema
-
-- [Tool installation](tool-installation.md)
-- [Packaging and distribution](packaging-and-distribution.md)
-- [JSON Schema](json-schema.md)
-- [Config schema workflow](config-schema-workflow.md)
+If the agent status is `CONTINUE_AUTONOMOUSLY`, the agent must continue without asking the user.
