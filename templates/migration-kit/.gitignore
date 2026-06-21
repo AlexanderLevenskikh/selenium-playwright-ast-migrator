@@ -1,0 +1,26 @@
+# Local migration run artifacts
+runs/
+reports/
+logs/
+generated/
+verify-project*/
+orchestration*/
+*.log
+
+# Keep workspace docs/state/config templates reviewable if the team wants to commit them
+!README.md
+!.gitignore
+!agent-state.md
+!current-ticket.md
+!profiles/
+!profiles/**
+!prompts/
+!prompts/**
+!state/
+!state/**
+
+# Kit update metadata
+.migration-kit/backups/
+.migration-kit/updates/
+!.migration-kit/
+!.migration-kit/version.json

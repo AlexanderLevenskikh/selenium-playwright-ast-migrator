@@ -1,0 +1,32 @@
+Read `.agent-loops/README.md` and every file in `.agent-loops/`.
+Read `{{WORKSPACE}}/agent-state.md`, `{{WORKSPACE}}/current-ticket.md`, and the MVP-2 state files under `{{WORKSPACE}}/state/`.
+
+Run exactly one Selenium → Playwright migration loop batch.
+
+Batch protocol:
+1. Reconcile the last safe checkpoint from `{{WORKSPACE}}/state/handoff.md` and `{{WORKSPACE}}/state/run-ledger.md`.
+2. Identify the current ticket from `{{WORKSPACE}}/current-ticket.md`.
+3. Make the smallest safe change for that ticket.
+4. Run the cheapest relevant verification first, then the broader verify/project verify if the cheap check passes.
+5. Update all state files listed below.
+6. Stop with one of these statuses only:
+   - CONTINUE_AUTONOMOUSLY
+   - READY_FOR_ACCEPTANCE
+   - TICKET_NEEDED
+   - BLOCKED_BY_ENVIRONMENT
+   - BLOCKED_BY_MISSING_INPUT
+   - UNSAFE_REVERTED
+
+Required state updates after the batch:
+- `{{WORKSPACE}}/agent-state.md`
+- `{{WORKSPACE}}/current-ticket.md`
+- `{{WORKSPACE}}/state/run-ledger.md`
+- `{{WORKSPACE}}/state/decision-log.md`
+- `{{WORKSPACE}}/state/handoff.md`
+
+Safety gates:
+- Do not make tests falsely green.
+- Do not silently suppress assertions or business checks.
+- Do not edit generated files as the final fix.
+- Do not add broad `TargetKnownIdentifiers` only to hide unresolved source-side symbols.
+- If the change is unsafe or makes metrics worse without clear justification, revert it and mark `UNSAFE_REVERTED`.

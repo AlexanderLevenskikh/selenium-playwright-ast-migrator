@@ -25,6 +25,13 @@ public class PackagingTests
         Assert.True(File.Exists(FindRepositoryFile("scripts/install-local-tool.ps1")));
         Assert.True(File.Exists(FindRepositoryFile("docs/packaging-and-distribution.md")));
         Assert.True(File.Exists(FindRepositoryFile("docs/tool-installation.md")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/install-migration-kit.ps1")));
+        Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/README.md")));
+        Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/prompts/kickoff-prompt.txt")));
+        Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/prompts/loop-batch-prompt.txt")));
+        Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/state/handoff.md")));
+        Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/state/run-ledger.md")));
+        Assert.True(File.Exists(FindRepositoryFile("docs/migration-kit-mvp.md")));
     }
 
     static string ElementValue(XDocument doc, string name)

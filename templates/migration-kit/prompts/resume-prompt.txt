@@ -1,0 +1,22 @@
+Read `.agent-loops/README.md` and every file in `.agent-loops/`.
+Read `{{WORKSPACE}}/agent-state.md`, `{{WORKSPACE}}/current-ticket.md`, and all files under `{{WORKSPACE}}/state/`.
+
+Resume Selenium → Playwright Migrator Autopilot Loop.
+
+Do not trust the previous summary blindly. Reconcile it with:
+- git status / git diff;
+- latest generated output under `{{WORKSPACE}}/runs`;
+- latest verify/project-verify report;
+- latest migration board / explain-todo report.
+
+Then classify the last batch:
+- kept;
+- reverted;
+- unsafe;
+- unknown;
+- environment blocked.
+
+Continue only from the last safe checkpoint.
+
+
+Before continuing, rewrite `{{WORKSPACE}}/state/handoff.md` if it is stale or contradicts the latest run artifacts.

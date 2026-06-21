@@ -17,6 +17,7 @@ $bundleDir = Join-Path $outputRoot "tool"
 $docsDir = Join-Path $bundleDir "docs"
 $schemasDir = Join-Path $bundleDir "schemas"
 $templatesDir = Join-Path $bundleDir "templates"
+$scriptsDir = Join-Path $bundleDir "scripts"
 
 Write-Host "Packaging AST Migrator CLI bundle"
 Write-Host "Repo root: $root"
@@ -40,6 +41,7 @@ New-Item -ItemType Directory -Force -Path $bundleDir | Out-Null
 New-Item -ItemType Directory -Force -Path $docsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $schemasDir | Out-Null
 New-Item -ItemType Directory -Force -Path $templatesDir | Out-Null
+New-Item -ItemType Directory -Force -Path $scriptsDir | Out-Null
 
 $selfContainedValue = (-not $NoSelfContained).ToString().ToLowerInvariant()
 
@@ -99,6 +101,16 @@ foreach ($file in $rootFiles) {
 $agentLoopsSource = Join-Path $root ".agent-loops"
 if (Test-Path $agentLoopsSource) {
     Copy-Item -Path $agentLoopsSource -Destination (Join-Path $bundleDir ".agent-loops") -Recurse -Force
+}
+
+$templatesSource = Join-Path $root "templates"
+if (Test-Path $templatesSource) {
+    Copy-Item -Path (Join-Path $templatesSource "*") -Destination $templatesDir -Recurse -Force
+}
+
+$installMigrationKit = Join-Path $root "scripts\install-migration-kit.ps1"
+if (Test-Path $installMigrationKit) {
+    Copy-Item $installMigrationKit (Join-Path $scriptsDir "install-migration-kit.ps1") -Force
 }
 
 $runTemplatePath = Join-Path $templatesDir "run-migrator-template.ps1"
@@ -176,11 +188,18 @@ $readmeLines = @(
     '  suppress business logic blindly',
     '  add broad POM suppressions without POM recovery',
     '',
+    'Quick install into a migration project:',
+    '  scripts/install-migration-kit.ps1 -Workspace migration -Source <selenium-tests> -Config migration/profiles/adapter-config.json',
+    '',
+    'Safe update of an existing migration workspace:',
+    '  scripts/install-migration-kit.ps1 -Workspace migration -Update -Backup',
+    '',
     'Read first:',
     '  docs/agent-tool-boundary.md',
     '  docs/autopilot-loop.md',
     '  docs/pom-recovery-policy.md',
     '  .agent-loops/kickoff-prompt.txt',
+    '  templates/migration-kit/prompts/loop-batch-prompt.txt',
     '  schemas/adapter-config.schema.json',
     '',
     'Windows PowerShell execution policy:',

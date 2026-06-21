@@ -1,0 +1,33 @@
+Use the latest migration board and verify output under `{{WORKSPACE}}`.
+
+Prepare the next actionable ticket. Do not implement yet.
+
+Return exactly these sections:
+
+## Findings
+
+## Evidence
+
+Include representative source snippets, generated snippets, config snippets, files/lines, and diagnostic categories.
+
+## Root cause groups
+
+Group repeated symptoms by upstream cause.
+
+## Recommended next ticket
+
+Include:
+- title;
+- fix type: CONFIG_FIX / ENGINE_FIX / TARGET_PROJECT_INFRA / SOURCE_TRUTH_MANUAL / NEED_MORE_EVIDENCE;
+- expected output;
+- files likely to change;
+- regression tests to add;
+- verification commands.
+
+## Why this is the next best ticket
+
+## Risks
+
+## Expected impact
+
+Do not propose adding target-known identifiers merely to hide unresolved source-side symbols.

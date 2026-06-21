@@ -26,6 +26,7 @@ The old human-checkpoint agent workflow was removed from this archive to avoid c
 - [`runtime-failure-classifier.md`](runtime-failure-classifier.md) — runtime failure classification.
 - [`tool-installation.md`](tool-installation.md) — local tool installation.
 - [`packaging-and-distribution.md`](packaging-and-distribution.md) — packaging and distribution.
+- [`migration-kit-mvp.md`](migration-kit-mvp.md) — MVP-1 installable workspace, safe updates, and MVP-2 stateful loop.
 
 ## Autopilot principle
 
