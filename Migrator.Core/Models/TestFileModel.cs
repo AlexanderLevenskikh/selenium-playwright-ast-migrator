@@ -15,6 +15,13 @@ public sealed record TestFileModel
     public IEnumerable<TestModel> Tests { get; init; } = Array.Empty<TestModel>();
 
     /// <summary>
+    /// Class-level field declarations parsed from the source test file.
+    /// Contains fields like `ServiceProvider`, `PageObject`, etc. that are used by test methods.
+    /// These are parsed by Roslyn and may need to be rendered as class-level fields in the generated file.
+    /// </summary>
+    public IEnumerable<PageObjectFieldAction> ClassFields { get; init; } = Array.Empty<PageObjectFieldAction>();
+
+    /// <summary>
     /// Optional runtime host rendering settings. When set, the renderer uses these
     /// to emit project-specific class wrapper (usings, namespace, base class, attributes, setup).
     /// Set by the adapter from config, not by the parser.

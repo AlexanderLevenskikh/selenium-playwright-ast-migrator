@@ -669,7 +669,8 @@ public class DefaultProjectAdapter : IProjectAdapter
         if (tableMatch.Success)
         {
             var indexText = tableMatch.Groups[1].Value.Trim();
-            if (!IsSafeIndexExpression(indexText) || int.TryParse(indexText, out _))
+            // Reject only non-literal, unsafe expressions. Literal ints like 0, 1, 2 are safe.
+            if (!IsSafeIndexExpression(indexText) && !int.TryParse(indexText, out _))
                 return new UnresolvedTarget(sourceExpression);
 
             var tableItemsExpr = ExtractTableItemsSource(sourceExpression);
@@ -691,7 +692,8 @@ public class DefaultProjectAdapter : IProjectAdapter
         {
             var receiver = generalMatch.Groups[1].Value;
             var indexText = generalMatch.Groups[2].Value.Trim();
-            if (!IsSafeIndexExpression(indexText) || int.TryParse(indexText, out _))
+            // Reject only non-literal, unsafe expressions. Literal ints like 0, 1, 2 are safe.
+            if (!IsSafeIndexExpression(indexText) && !int.TryParse(indexText, out _))
                 return new UnresolvedTarget(sourceExpression);
 
             var receiverTarget = resolved.ResolveTarget(receiver);
@@ -1605,6 +1607,22 @@ public class DefaultProjectAdapter : IProjectAdapter
         return match.Success ? match.Groups["name"].Value : null;
     }
 
+    /// <summary>
+    /// Extracts the LHS variable from a reassignment like `page = Method()` or `discountOnProductPage = Browser.WaitForPage<T>()`.
+    /// Returns null if the statement is not a simple variable assignment.
+    /// </summary>
+    static string? ExtractReassignmentVariable(string statement)
+    {
+        var match = Regex.Match(statement, @"^\s*(?<name>\w+)\s*=");
+        if (!match.Success)
+            return null;
+        var name = match.Groups["name"].Value;
+        // Reject keywords and declarations that look like type + name
+        if (name is "var" or "new" or "const" or "readonly" or "static" or "public" or "private" or "protected" or "internal" or "virtual" or "override" or "abstract" or "sealed")
+            return null;
+        return name;
+    }
+
     IEnumerable<TestAction> TryResolveRawStatement(RawStatementAction raw, ResolvedFileConfig resolved)
     {
         var text = raw.SourceText.Trim().TrimEnd(';');
@@ -1635,6 +1653,33 @@ public class DefaultProjectAdapter : IProjectAdapter
                         targetExpr: null,
                         sourceMethod: null,
                         resultVariable: resultVariable)
+                };
+            }
+        }
+
+        // Handle reassignment: `x = Method()` — extract LHS as resultVariable
+        var reassignmentVar = ExtractReassignmentVariable(text);
+        if (reassignmentVar != null)
+        {
+            var eqIdx2 = text.IndexOf('=');
+            var rightSide = text.Substring(eqIdx2 + 1).Trim();
+
+            var mappedReassign = TryResolveInvocationText(raw.SourceLine, rightSide, resolved, reassignmentVar);
+            if (mappedReassign != null)
+                return mappedReassign;
+
+            if (rightSide.Contains('(') && resolved._methodStatementsMap.TryGetValue(rightSide, out var reassignMapping))
+            {
+                return new[]
+                {
+                    new MappedMethodInvocationAction(
+                        raw.SourceLine,
+                        raw.SourceText,
+                        reassignMapping.Statements,
+                        reassignMapping.RequiresReview,
+                        targetExpr: null,
+                        sourceMethod: null,
+                        resultVariable: reassignmentVar)
                 };
             }
         }

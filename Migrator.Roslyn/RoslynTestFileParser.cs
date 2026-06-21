@@ -134,6 +134,10 @@ public class RoslynTestFileParser : ITestFileParser
             .Select(m => ParseTestMethod(m, semanticModel))
             .ToList();
 
+        var classFields = testClass.ChildNodes().OfType<FieldDeclarationSyntax>()
+            .SelectMany(f => ParseClassField(f))
+            .ToList();
+
         return new TestFileModel(
             FilePath: filePath,
             Namespace: ns,
@@ -141,7 +145,10 @@ public class RoslynTestFileParser : ITestFileParser
             BaseClassName: baseClassName,
             SetUpActions: setUpActions,
             Tests: tests
-        );
+        )
+        {
+            ClassFields = classFields
+        };
     }
 
     public IEnumerable<TestFileModel> ParseDirectory(string directoryPath)
@@ -172,6 +179,21 @@ public class RoslynTestFileParser : ITestFileParser
             }
         }
         return results;
+    }
+
+    static IEnumerable<PageObjectFieldAction> ParseClassField(FieldDeclarationSyntax field)
+    {
+        var line = field.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+        var declarationText = field.ToString().Trim().TrimEnd(';');
+
+        foreach (var variable in field.Declaration.Variables)
+        {
+            var fieldName = variable.Identifier.Text;
+            var fieldType = field.Declaration.Type.ToString();
+            var initValue = variable.Initializer?.Value.ToString().Trim();
+
+            yield return new PageObjectFieldAction(line, fieldName, fieldType, initValue, declarationText);
+        }
     }
 
     static bool IsInputFixtureFile(string filePath)
@@ -786,9 +808,10 @@ public class RoslynTestFileParser : ITestFileParser
         var allActions = ifActions.Concat(elseIfActions.SelectMany(e => e.Actions))
             .Concat(elseActions).ToList();
 
-        // Only create ConditionalBlockAction if there are at least some actions inside
-        if (allActions.Count == 0)
-            return null;
+        // Always create ConditionalBlockAction, even with empty body.
+        // When all body actions are suppressed (e.g. by SuppressedMethodPatterns),
+        // the condition expression still carries semantic value that should be preserved.
+        // The renderer handles empty-body conditionals by emitting condition + suppressed comment.
 
         return new ConditionalBlockAction(
             line,

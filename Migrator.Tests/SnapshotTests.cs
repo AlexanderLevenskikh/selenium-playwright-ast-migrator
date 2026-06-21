@@ -5422,3 +5422,192 @@ public class AssertMultipleTests
         }
     }
 }
+
+public class BugFixRegressionTests
+{
+    static TestFileModel CreateModel(TestAction[] bodyActions)
+    {
+        return new TestFileModel(
+            FilePath: "fake.cs",
+            Namespace: "Test",
+            ClassName: "BugFixTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(), bodyActions)
+            });
+    }
+
+    // --- Bug B: Reassignment ---
+
+    [Fact]
+    public void Reassignment_ResultVariable_IsExtracted()
+    {
+        var mappedAction = new MappedMethodInvocationAction(
+            1,
+            "discountOnProductPage = Browser.WaitForPage<DiscountOnProductPage>()",
+            new[] { "var {result} = await Navigation.GoToAsync<DiscountOnProductPage>(x => x);" },
+            sourceMethod: "Browser.WaitForPage<{T}>()",
+            resultVariable: "discountOnProductPage");
+
+        var model = CreateModel(new[] { mappedAction });
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.DoesNotContain("var discountOnProductPage = await Navigation", output);
+        Assert.Contains("discountOnProductPage = await Navigation", output);
+        Assert.DoesNotContain("{result}", output);
+    }
+
+    // --- Bug E: TargetPageVariable ---
+
+    [Fact]
+    public void TargetPageVariable_LowercasePage_IsUsed()
+    {
+        var click = new ClickAction(1, TargetExpression.Mapped("page.Button", "btn", TargetKind.PlaywrightLocator, "data-tid", null, null));
+        var model = CreateModel(new[] { click }) with
+        {
+            TestHost = new TestHostConfig { TargetPageVariable = "page" }
+        };
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("page.Locator", output);
+        Assert.DoesNotContain("Page.Locator", output);
+    }
+
+    [Fact]
+    public void TargetPageVariable_DefaultsToUppercasePage()
+    {
+        var click = new ClickAction(1, TargetExpression.Mapped("page.Button", "btn", TargetKind.PlaywrightLocator, "data-tid", null, null));
+        var model = CreateModel(new[] { click });
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("Page.Locator", output);
+    }
+
+    // --- Bug C: Class Fields ---
+
+    [Fact]
+    public void ClassFields_SourceOnlyIdentifier_RendersAsComment()
+    {
+        var field = new PageObjectFieldAction(1, "ServiceProvider", "IServiceProvider", null, "IServiceProvider ServiceProvider = ...");
+        var model = CreateModel(Array.Empty<TestAction>()) with
+        {
+            ClassFields = new[] { field },
+            SourceOnlyIdentifiers = new[] { "IServiceProvider" }
+        };
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("// [MIGRATOR:SOURCE_ONLY_IDENTIFIER]", output);
+        Assert.Contains("ServiceProvider", output);
+    }
+
+    // --- TS-22.1: ResolveDynamicElementAt literal index ---
+
+    [Fact]
+    public void ResolveDynamicElementAt_LiteralIndex_Resolves()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"migrator-elementat-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var configPath = Path.Combine(tempDir, "config.json");
+            File.WriteAllText(configPath, @"{
+                ""UiTargets"": [{
+                    ""SourceExpression"": ""page.Table.Items"",
+                    ""TargetExpression"": ""row"",
+                    ""TargetKind"": ""Locator"",
+                    ""TestIdAttribute"": ""data-testid""
+                }]
+            }");
+            var adapter = new DefaultProjectAdapter(configPath);
+
+            var click = new ClickAction(1, "page.Table.Items.ElementAt(0)");
+            var model = adapter.Adapt(new TestFileModel(
+                FilePath: "t.cs", Namespace: "T", ClassName: "TC", BaseClassName: null,
+                SetUpActions: Array.Empty<TestAction>(),
+                Tests: new[] { new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(),
+                    new[] { click })
+            }));
+
+            var adaptedAction = model.Tests.First().BodyActions.First();
+            Assert.IsType<ClickAction>(adaptedAction);
+            var clickAction = (ClickAction)adaptedAction;
+            Assert.IsType<MappedTarget>(clickAction.Target);
+            var mapped = (MappedTarget)clickAction.Target;
+            Assert.Equal("Nth", mapped.Match);
+            Assert.Equal("0", mapped.NthIndexExpression);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    // --- TS-22.2: Conditional with suppressed body ---
+
+    [Fact]
+    public void Conditional_SuppressedBody_RendersAsComment()
+    {
+        var conditional = new ConditionalBlockAction(
+            1,
+            "count > 3",
+            Array.Empty<TestAction>(),
+            Array.Empty<(string Condition, IReadOnlyList<TestAction> Actions)>(),
+            Array.Empty<TestAction>());
+
+        var model = CreateModel(new[] { conditional }) with
+        {
+            TargetKnownIdentifiers = new[] { "count" }
+        };
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("CONDITIONAL_SUPPRESSED_BODY", output);
+        Assert.Contains("count > 3", output);
+        Assert.DoesNotContain("if (count > 3) { }", output);
+    }
+
+    // --- TS-22.5: Empty test soft suppress ---
+
+    [Fact]
+    public void EmptyTestAfterSuppression_UsesAssertInconclusive()
+    {
+        var model = CreateModel(new TestAction[]
+        {
+            new RawStatementAction(1, "page.WaitLoaded()")
+        }) with
+        {
+            SuppressedMethodPatterns = new[] { "*page.WaitLoaded(*)" }
+        };
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("EMPTY_TEST_AFTER_SUPPRESSION", output);
+        Assert.Contains("Assert.Inconclusive", output);
+        Assert.DoesNotContain("throw new NotImplementedException", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void EmptyTestAfterSuppression_XUnit_UsesAssertSkip()
+    {
+        var model = CreateModel(new TestAction[]
+        {
+            new RawStatementAction(1, "page.WaitLoaded()")
+        }) with
+        {
+            SuppressedMethodPatterns = new[] { "*page.WaitLoaded(*)" },
+            TestHost = new TestHostConfig { TargetTestFramework = "xunit" }
+        };
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("EMPTY_TEST_AFTER_SUPPRESSION", output);
+        Assert.Contains("Assert.Skip", output);
+        Assert.DoesNotContain("throw new NotImplementedException", output);
+    }
+}

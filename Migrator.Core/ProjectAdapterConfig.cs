@@ -535,6 +535,13 @@ public sealed class TestHostConfig
     /// Example: "CatalogPrincipalsFilterPlaywrightTests"
     /// </summary>
     public string? ClassName { get; init; }
+
+    /// <summary>
+    /// C# identifier for the Playwright page variable. Used by the renderer in locator expressions.
+    /// Defaults to "page" when not set. Example: "Page" (uppercase) if your base class uses a property.
+    /// </summary>
+    [JsonPropertyName("TargetPageVariable")]
+    public string? TargetPageVariable { get; init; }
 }
 
 /// <summary>

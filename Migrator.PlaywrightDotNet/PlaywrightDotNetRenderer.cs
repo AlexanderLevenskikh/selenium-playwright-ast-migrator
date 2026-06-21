@@ -32,10 +32,12 @@ public class PlaywrightDotNetRenderer : IRenderer
     TargetTestFramework _targetTestFramework = TargetTestFramework.NUnit;
     bool _useAssertionsExpect;
     bool _useAssertionsExpectExplicit;
+    string _pageVariable;
 
     public PlaywrightDotNetRenderer(string indent = "\t")
     {
         _indent = indent;
+        _pageVariable = "Page";
     }
 
     public PlaywrightDotNetRenderer(bool useAssertionsExpect, string indent = "\t")
@@ -43,6 +45,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         _indent = indent;
         _useAssertionsExpect = useAssertionsExpect;
         _useAssertionsExpectExplicit = true;
+        _pageVariable = "Page";
     }
 
     static TargetTestFramework ResolveTargetTestFramework(TestHostConfig? testHost)
@@ -74,6 +77,7 @@ public class PlaywrightDotNetRenderer : IRenderer
 
         var testHost = model.TestHost;
         _targetTestFramework = ResolveTargetTestFramework(testHost);
+        _pageVariable = testHost?.TargetPageVariable ?? "Page";
         _sourceOnlyIdentifiers = new HashSet<string>(
             model.SourceOnlyIdentifiers ?? Array.Empty<string>(),
             StringComparer.Ordinal);
@@ -165,6 +169,14 @@ public class PlaywrightDotNetRenderer : IRenderer
         sb.AppendLine($"public class {className} : {inheritance}");
         sb.AppendLine("{");
         sb.AppendLine();
+
+        // Render class-level fields
+        var classFields = model.ClassFields as IList<PageObjectFieldAction> ?? model.ClassFields.ToList();
+        if (classFields.Count > 0)
+        {
+            RenderClassFields(sb, classFields);
+            sb.AppendLine();
+        }
 
         // Setup method — collect fixture-scoped blocked symbols for downstream test body blocking
         _setupBlockedSymbols.Clear();
@@ -342,6 +354,43 @@ public class PlaywrightDotNetRenderer : IRenderer
         sb.AppendLine($"{_indent}public Task DisposeAsync() => Task.CompletedTask;");
     }
 
+    void RenderClassFields(StringBuilder sb, IList<PageObjectFieldAction> fields)
+    {
+        foreach (var field in fields)
+        {
+            // Determine if this field can be rendered as-is or needs a TODO
+            var sourceOnlyId = FindReferencedSymbol(field.FullDeclaration, _sourceOnlyIdentifiers);
+            if (sourceOnlyId != null)
+            {
+                // Field references a source-only identifier — render as comment
+                sb.AppendLine($"{_indent}// [MIGRATOR:SOURCE_ONLY_IDENTIFIER] {sourceOnlyId} in field: {field.FieldName}");
+                sb.AppendLine($"{_indent}// {EscapeComment(field.FullDeclaration)}");
+                continue;
+            }
+
+            var hasUnresolved = ExtractIdentifiers(field.FullDeclaration)
+                .Any(id => !string.IsNullOrEmpty(id) &&
+                           !IsFrameworkKeyword(id) &&
+                           !IsFrameworkBuiltIn(id) &&
+                           !_targetKnownIdentifiers.Contains(id) &&
+                           !_targetKnownTypes.Contains(id) &&
+                           id != field.FieldName &&
+                           id != _pageVariable &&
+                           id != "Page");
+
+            if (hasUnresolved)
+            {
+                // Field has unresolved types — render as TODO
+                sb.AppendLine($"{_indent}// [MIGRATOR:UNAVAILABLE_SYMBOLS] {EscapeComment(field.FullDeclaration)}");
+                continue;
+            }
+
+            // Render field as active code (strip trailing semicolon from FullDeclaration if present)
+            var decl = field.FullDeclaration.TrimEnd(';');
+            sb.AppendLine($"{_indent}{decl};");
+        }
+    }
+
     void RenderTestAttributes(StringBuilder sb, TestModel test)
     {
         if (_targetTestFramework == TargetTestFramework.XUnit)
@@ -423,7 +472,16 @@ public class PlaywrightDotNetRenderer : IRenderer
         if (TestBodyBecameEmptyAfterMigration(body.ToString()))
         {
             body.AppendLine($"{_indent}{_indent}// TODO: test body became empty after suppression [MIGRATOR:EMPTY_TEST_AFTER_SUPPRESSION]");
-            body.AppendLine($"{_indent}{_indent}throw new NotImplementedException(\"MIGRATOR: test body became empty after suppression; review suppressed statements.\");");
+            body.AppendLine($"{_indent}{_indent}//   Reason: All test body actions were suppressed by adapter config.");
+            body.AppendLine($"{_indent}{_indent}//   Next: Add adapter mappings for suppressed actions or manually migrate this test.");
+            if (_targetTestFramework == TargetTestFramework.XUnit)
+            {
+                body.AppendLine($"{_indent}{_indent}Assert.Skip(\"MIGRATOR: test body became empty after suppression; review suppressed statements.\");");
+            }
+            else
+            {
+                body.AppendLine($"{_indent}{_indent}Assert.Inconclusive(\"MIGRATOR: test body became empty after suppression; review suppressed statements.\");");
+            }
         }
 
         sb.Append(body);
@@ -1274,7 +1332,19 @@ public class PlaywrightDotNetRenderer : IRenderer
         if (string.IsNullOrWhiteSpace(action.ResultVariable))
             return statement;
 
-        return statement.Replace("{result}", action.ResultVariable!, StringComparison.Ordinal);
+        var resultVar = action.ResultVariable!;
+        var substituted = statement.Replace("{result}", resultVar, StringComparison.Ordinal);
+
+        // If the source was a reassignment (e.g. `page = Method()`), the TargetStatements
+        // template likely uses `var {result} = ...`, but `var` is wrong for reassignment.
+        // Strip leading `var ` when the original source is an assignment without var declaration.
+        if (substituted.StartsWith("var ", StringComparison.Ordinal) &&
+            action.FullSourceText.StartsWith(resultVar + " ="))
+        {
+            substituted = substituted.Substring(4);
+        }
+
+        return substituted;
     }
 
     /// <summary>
@@ -1889,6 +1959,21 @@ public class PlaywrightDotNetRenderer : IRenderer
             return;
         }
 
+        // If all branches are empty (e.g. body was fully suppressed), render condition as
+        // a preserved comment with the suppressed body note, rather than an empty block.
+        var allEmpty = !action.IfActions.Any() && !action.ElseIfActions.Any() && !action.ElseActions.Any();
+        if (allEmpty)
+        {
+            AppendSmartTodo(
+                sb,
+                $"conditional block with suppressed body: {EscapeComment(action.ConditionExpression)}",
+                "CONDITIONAL_SUPPRESSED_BODY",
+                "All actions inside the conditional block were suppressed by adapter config. The condition expression is preserved for context.",
+                "Add adapter mappings for suppressed body actions if the translation is deterministic.");
+            AppendCommentLine(sb, _indent + _indent, $"if ({action.ConditionExpression}) {{ /* body suppressed */ }}");
+            return;
+        }
+
         sb.AppendLine($"{_indent}{_indent}if ({action.ConditionExpression})");
         sb.AppendLine($"{_indent}{_indent}{{");
         foreach (var a in action.IfActions)
@@ -1964,7 +2049,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         {
             var attr = EscapeAttribute(mapped.TestIdAttribute);
             var value = EscapeString(ExtractTestIdValue(mapped.TargetExpression));
-            var expr = $"Page.Locator(\"[{attr}='{value}']\")";
+            var expr = $"{_pageVariable}.Locator(\"[{attr}='{value}']\")";
             return ApplyMatchStrategy(expr, mapped);
         }
 
@@ -1978,57 +2063,57 @@ public class PlaywrightDotNetRenderer : IRenderer
             TargetKind.Text => RenderTextLocator(mapped: target as MappedTarget),
             TargetKind.PageObjectProperty => rendered,
             TargetKind.RawExpression => ApplyMatchStrategy(rendered, target as MappedTarget),
-            _ => $"Page.Locator(\"TODO: {target.SourceExpression}\")"
+            _ => $"{_pageVariable}.Locator(\"TODO: {target.SourceExpression}\")"
         };
     }
 
     string RenderCssSelectorLocator(MappedTarget? mapped)
     {
         var selector = EscapeStringLiteral(mapped?.TargetExpression ?? "TODO");
-        return ApplyMatchStrategy($"Page.Locator(\"{selector}\")", mapped);
+        return ApplyMatchStrategy($"{_pageVariable}.Locator(\"{selector}\")", mapped);
     }
 
     string RenderTestIdBeginningLocator(MappedTarget? mapped)
     {
         var attr = EscapeAttribute(mapped?.TestIdAttribute ?? "data-testid");
         var prefix = EscapeAttributeValue(mapped?.TargetExpression ?? "TODO");
-        return ApplyMatchStrategy($"Page.Locator(\"[{attr}^='{prefix}']\")", mapped);
+        return ApplyMatchStrategy($"{_pageVariable}.Locator(\"[{attr}^='{prefix}']\")", mapped);
     }
 
     string RenderClassNameBeginningLocator(MappedTarget? mapped)
     {
         var prefix = EscapeAttributeValue(mapped?.TargetExpression ?? "TODO");
-        return ApplyMatchStrategy($"Page.Locator(\"[class^='{prefix}']\")", mapped);
+        return ApplyMatchStrategy($"{_pageVariable}.Locator(\"[class^='{prefix}']\")", mapped);
     }
 
     string RenderPlaywrightLocator(MappedTarget? mapped, string rendered)
     {
-        if (rendered.StartsWith("Page."))
+        if (rendered.StartsWith($"{_pageVariable}.") || rendered.StartsWith("Page."))
             return ApplyMatchStrategy(rendered, mapped);
 
         // Legacy: TargetExpression already contains Playwright call like GetByTestId("x")
         if (IsLegacyPlaywrightFragment(rendered))
         {
-            var expr = $"Page.{rendered}";
+            var expr = $"{_pageVariable}.{rendered}";
             return ApplyMatchStrategy(expr, mapped);
         }
 
         // Semantic: TargetExpression is a raw test-id value like "submit"
         if (mapped != null)
         {
-            var expr = $"Page.GetByTestId(\"{ExtractTestIdValue(mapped.TargetExpression)}\")";
+            var expr = $"{_pageVariable}.GetByTestId(\"{ExtractTestIdValue(mapped.TargetExpression)}\")";
             return ApplyMatchStrategy(expr, mapped);
         }
 
-        return $"Page.{rendered}";
+        return $"{_pageVariable}.{rendered}";
     }
 
     string RenderTextLocator(MappedTarget? mapped)
     {
         if (mapped == null)
-            return "Page.GetByText(\"TODO\")";
+            return $"{_pageVariable}.GetByText(\"TODO\")";
 
-        var expr = $"Page.GetByText(\"{EscapeString(mapped.TargetExpression)}\")";
+        var expr = $"{_pageVariable}.GetByText(\"{EscapeString(mapped.TargetExpression)}\")";
         return ApplyMatchStrategy(expr, mapped);
     }
 
@@ -2324,7 +2409,7 @@ public class PlaywrightDotNetRenderer : IRenderer
             "TABLE_MAPPING_REQUIRED",
             "The table/list source expression is not mapped to a Playwright row target.",
             "Add a Tables mapping with RowTarget based on POM/source truth.");
-            sb.AppendLine($"{_indent}{_indent}// var {NextTempVar("rowText")} = await Page.Locator(\"TODO: {escapedLocator}\").TextContentAsync();");
+            sb.AppendLine($"{_indent}{_indent}// var {NextTempVar("rowText")} = await {_pageVariable}.Locator(\"TODO: {escapedLocator}\").TextContentAsync();");
         }
         else
         {
@@ -2616,8 +2701,8 @@ public class PlaywrightDotNetRenderer : IRenderer
             if (knownSymbols.Contains(id)) continue;
 
             // Check if it's a property/method chain on a known receiver
-            // e.g. "Page.Locator(...)" — "Page" is known (Playwright Page property, uppercase only)
-            if (id == "Page") continue;
+            // e.g. "page.Locator(...)" — the page variable is known (Playwright Page)
+            if (id == "Page" || id == _pageVariable) continue;
 
             unavailable.Add(id);
         }
@@ -2903,21 +2988,22 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     /// <summary>
     /// Returns true if the statement is a variable declaration that assigns a Playwright locator.
-    /// These are target-safe: the RHS uses Page.Locator, Page.GetByTestId, etc. or chains off
+    /// These are target-safe: the RHS uses page.Locator, page.GetByTestId, etc. or chains off
     /// a known resolved locator. Such declarations should be rendered as active code, their
     /// declared variables registered as local aliases, and NOT blocked.
     /// </summary>
-    static bool IsTargetSafeDeclaration(string sourceText)
+    bool IsTargetSafeDeclaration(string sourceText)
     {
         var text = sourceText.Trim().TrimEnd(';');
 
-        // Match: var name = Page.Locator("...");
-        //        var name = Page.GetByTestId("...");
-        //        var name = Page.GetByText("...");
-        //        var name = Page.GetByRole(AriaRole.Button);
-        //        ILocator name = Page.Locator("...");
-        //        Locator name = Page.Locator("...");
-        if (Regex.IsMatch(text, @"^\s*(?:var|(?:I)?Locator)\s+\w+\s*=\s*Page\s*\.\s*(?:Locator|GetByTestId|GetByText|GetByRole)\s*\("))
+        // Match: var name = page.Locator("...");
+        //        var name = page.GetByTestId("...");
+        //        var name = page.GetByText("...");
+        //        var name = page.GetByRole(AriaRole.Button);
+        //        ILocator name = page.Locator("...");
+        //        Locator name = page.Locator("...");
+        var pagePattern = $"^\\s*(?:var|(?:I)?Locator)\\s+\\w+\\s*=\\s*{Regex.Escape(_pageVariable)}\\s*\\.\\s*(?:Locator|GetByTestId|GetByText|GetByRole)\\s*\\(";
+        if (Regex.IsMatch(text, pagePattern))
             return true;
 
         // Match: var name = knownAlias.Locator("...") — where knownAlias will be checked separately
@@ -2941,16 +3027,17 @@ public class PlaywrightDotNetRenderer : IRenderer
 
     /// <summary>
     /// For a target-safe declaration, extracts the root symbol from the RHS
-    /// (e.g. "Page" from "Page.Locator(...)" or "table" from "table.Locator(...)").
+    /// (e.g. "page" from "page.Locator(...)" or "table" from "table.Locator(...)").
     /// Returns null if the declaration does not use a known receiver.
     /// </summary>
-    static string? ExtractTargetSafeRootSymbol(string sourceText)
+    string? ExtractTargetSafeRootSymbol(string sourceText)
     {
         var text = sourceText.Trim().TrimEnd(';');
 
-        // Direct Page.* call
-        if (Regex.IsMatch(text, @"^\s*(?:var|(?:I)?Locator)\s+\w+\s*=\s*Page\s*\.\s*(?:Locator|GetByTestId|GetByText|GetByRole)\s*\("))
-            return "Page";
+        // Direct page.* call
+        var pagePattern = $"^\\s*(?:var|(?:I)?Locator)\\s+\\w+\\s*=\\s*{Regex.Escape(_pageVariable)}\\s*\\.\\s*(?:Locator|GetByTestId|GetByText|GetByRole)\\s*\\(";
+        if (Regex.IsMatch(text, pagePattern))
+            return _pageVariable;
 
         // Alias.* call — extract the alias identifier
         var aliasMatch = Regex.Match(text, @"^\s*(?:var|(?:I)?Locator)\s+\w+\s*=\s*(\w+)\s*\.\s*(?:Locator|GetByTestId|GetByText)\s*\(");
@@ -3029,7 +3116,7 @@ public class PlaywrightDotNetRenderer : IRenderer
                 "TABLE_MAPPING_REQUIRED",
                 "The table/list access pattern is not mapped to a Playwright row target.",
                 "Add a Tables mapping with RowTarget based on POM/source truth.");
-            sb.AppendLine($"{_indent}{_indent}// var {NextTempVar("row")} = Page.Locator(\"TODO: {action.SourceText}\").Nth({action.IndexExpression});");
+            sb.AppendLine($"{_indent}{_indent}// var {NextTempVar("row")} = {_pageVariable}.Locator(\"TODO: {action.SourceText}\").Nth({action.IndexExpression});");
         }
         else
         {
@@ -3057,8 +3144,8 @@ public class PlaywrightDotNetRenderer : IRenderer
         }
 
         if (hasIndex)
-            return $"Page.Locator(\"TODO: {target.SourceExpression}\").Nth({rowIdx})";
+            return $"{_pageVariable}.Locator(\"TODO: {target.SourceExpression}\").Nth({rowIdx})";
 
-        return $"Page.Locator(\"TODO: {target.SourceExpression}\")";
+        return $"{_pageVariable}.Locator(\"TODO: {target.SourceExpression}\")";
     }
 }

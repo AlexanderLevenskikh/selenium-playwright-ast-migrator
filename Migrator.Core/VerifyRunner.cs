@@ -474,7 +474,7 @@ public static class VerifyRunner
     {
         return Regex.IsMatch(
             line,
-            @"\bPage\.(?:Locator|GetBy\w+)\s*\([^;\r\n]*""\s*TODO",
+            @"\b(?:Page|page)\.(?:Locator|GetBy\w+)\s*\([^;\r\n]*""\s*TODO",
             RegexOptions.IgnoreCase);
     }
 

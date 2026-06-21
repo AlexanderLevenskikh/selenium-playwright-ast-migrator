@@ -527,7 +527,8 @@ public class SampleTests
         var output = new PlaywrightDotNetRenderer().Render(model);
 
         Assert.Contains("EMPTY_TEST_AFTER_SUPPRESSION", output);
-        Assert.Contains("throw new NotImplementedException", output);
+        Assert.Contains("Assert.Inconclusive", output);
+        Assert.DoesNotContain("throw new NotImplementedException", output);
     }
 
     [Fact]
