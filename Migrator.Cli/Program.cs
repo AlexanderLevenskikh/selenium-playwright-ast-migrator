@@ -56,7 +56,7 @@ if (mode == "guard")
     return guardExitCode;
 }
 
-if (mode != "discover-target" && mode != "scaffold" && mode != "bootstrap-project" && mode != "config-schema" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && !File.Exists(inputPath) && !Directory.Exists(inputPath))
+if (mode != "discover-target" && mode != "helper-inventory" && mode != "scaffold" && mode != "bootstrap-project" && mode != "config-schema" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && !File.Exists(inputPath) && !Directory.Exists(inputPath))
 {
     Console.Error.WriteLine($"Input not found: {inputPath}");
     return 1;
@@ -151,6 +151,13 @@ if (mode == "index-pom")
 {
     var indexPomExitCode = RunIndexPom(inputPath, outPath, format);
     return indexPomExitCode;
+}
+
+// Handle helper-inventory mode — scans helper/POM method bodies and infers MethodSemantics candidates.
+if (mode == "helper-inventory")
+{
+    var helperInventoryExitCode = HelperInventoryCommand.RunHelperInventory(inputPath, outPath, format);
+    return helperInventoryExitCode;
 }
 
 // Handle explain-todo mode — explains migration TODO/root causes from existing artifacts.
@@ -6104,9 +6111,9 @@ static CliOptions? ParseArgs(string[] args)
         }
     }
 
-    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "verify-ts-project" && mode != "doctor" && mode != "explain-todo" && mode != "smoke-plan" && mode != "runtime-classify" && mode != "migration-board" && mode != "profile-match" && mode != "config-schema" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "orchestrate" && mode != "scaffold" && mode != "bootstrap-project")
+    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "verify-ts-project" && mode != "doctor" && mode != "explain-todo" && mode != "smoke-plan" && mode != "runtime-classify" && mode != "migration-board" && mode != "profile-match" && mode != "config-schema" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "helper-inventory" && mode != "orchestrate" && mode != "scaffold" && mode != "bootstrap-project")
     {
-        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project");
+        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-diff|guard|propose|discover-target|index-pom|helper-inventory|orchestrate|scaffold|bootstrap-project");
         return null;
     }
 
@@ -6170,6 +6177,7 @@ static CliOptions? ParseArgs(string[] args)
             "propose" => "mapping-proposals",
             "discover-target" => "target-discovery",
             "index-pom" => "pom-index",
+            "helper-inventory" => "helper-inventory",
             "orchestrate" => "orchestration",
             "scaffold" => "generated-scaffold",
             "bootstrap-project" => "project-bootstrap",
@@ -6325,6 +6333,10 @@ Modes:
                     Outputs pom-index.generated.json/md, inferred-pom-candidates.json,
                     and adapter-config.pom-draft.json. Does NOT modify config.
                     Missing POMs are emitted as inferred candidates requiring review.
+  helper-inventory
+                  Scan helper/POM method bodies and infer MethodSemantics candidates.
+                    Outputs helper-inventory.md/json, method-semantics.candidates.json,
+                    and agent-helper-semantics-task.md. Does NOT modify config/source.
   orchestrate     Dry-run orchestration mode. Runs analyze → migrate → verify → propose
                      in sequence, writes stage artifacts into subdirectories, and produces
                      orchestration-report.md and orchestration-report.json. Does NOT modify
@@ -6341,13 +6353,14 @@ Modes:
 
 Options:
     --mode <mode>                 Operation mode (required)
-                                    analyze|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-diff|guard|propose|discover-target|index-pom|orchestrate|scaffold|bootstrap-project
+                                    analyze|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-diff|guard|propose|discover-target|index-pom|helper-inventory|orchestrate|scaffold|bootstrap-project
     --input <file-or-directory>   Input .cs file or directory (required).
                                     For propose/explain-todo/migration-board: directory with report files.
                                     For runtime-classify: runtime log file or directory with logs/reports.
                                     For doctor/profile-match: source tests/project directory to validate/compare before migration.
                                     For discover-target: target Playwright project root.
                                     For index-pom: Selenium project/PageObject directory.
+                                    For helper-inventory: Selenium helper/POM/source directory.
                                     For orchestrate: source Selenium tests directory.
                                     For verify-project: source Selenium tests directory;
                                       project refs come from adapter-config Verification,

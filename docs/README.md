@@ -35,3 +35,5 @@ The old human-checkpoint agent workflow was removed from this archive to avoid c
 If the agent status is `CONTINUE_AUTONOMOUSLY`, the agent must continue without asking the user.
 
 - [`navigation-url-mapping.md`](navigation-url-mapping.md) — config-driven mapping for `Navigation.OpenPage<T>(Urls...)`.
+
+- [Helper body inventory](helper-body-inventory.md) — scan Selenium helper/POM method bodies and infer MethodSemantics candidates.

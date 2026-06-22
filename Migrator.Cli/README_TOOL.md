@@ -34,3 +34,11 @@ See repository docs:
 - `docs/tool-installation.md`
 - `docs/migration-kit-mvp4.md`
 - `docs/agent-config-guidelines.md`
+
+## Helper body inventory
+
+Use `--mode helper-inventory` to scan Selenium helper/POM method bodies and generate reviewable MethodSemantics candidates. This mode does not modify config or source files.
+
+```bash
+selenium-pw-migrator --mode helper-inventory --input ./selenium_tests --out migration/helper-inventory --format both
+```

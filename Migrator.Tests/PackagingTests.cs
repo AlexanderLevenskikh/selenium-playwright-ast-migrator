@@ -40,6 +40,7 @@ public class PackagingTests
         Assert.True(File.Exists(FindRepositoryFile("docs/migration-kit-mvp3.md")));
         Assert.True(File.Exists(FindRepositoryFile("docs/migration-kit-mvp4.md")));
         Assert.True(File.Exists(FindRepositoryFile("docs/navigation-url-mapping.md")));
+        Assert.True(File.Exists(FindRepositoryFile("docs/helper-body-inventory.md")));
     }
 
     static string ElementValue(XDocument doc, string name)
