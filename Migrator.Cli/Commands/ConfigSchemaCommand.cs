@@ -11,56 +11,56 @@ using Migrator.SeleniumCSharp;
 
 internal static class ConfigSchemaCommand
 {
-public static int RunConfigSchema(string outPath, string format)
-{
-    Directory.CreateDirectory(outPath);
-    var schemaText = LoadAdapterConfigSchemaText();
-    var schemaPath = Path.Combine(outPath, "adapter-config.schema.json");
-    File.WriteAllText(schemaPath, schemaText);
-
-    if (format == "text" || format == "both")
-        File.WriteAllText(Path.Combine(outPath, "adapter-config.schema.usage.md"), WriteConfigSchemaUsageMarkdown(schemaPath));
-    if (format == "json" || format == "both")
+    public static int RunConfigSchema(string outPath, string format)
     {
-        var report = new ConfigSchemaReport(DateTimeOffset.UtcNow, Path.GetFullPath(schemaPath), "adapter-config.schema.json", new[]
+        Directory.CreateDirectory(outPath);
+        var schemaText = LoadAdapterConfigSchemaText();
+        var schemaPath = Path.Combine(outPath, "adapter-config.schema.json");
+        File.WriteAllText(schemaPath, schemaText);
+
+        if (format == "text" || format == "both")
+            File.WriteAllText(Path.Combine(outPath, "adapter-config.schema.usage.md"), WriteConfigSchemaUsageMarkdown(schemaPath));
+        if (format == "json" || format == "both")
         {
+            var report = new ConfigSchemaReport(DateTimeOffset.UtcNow, Path.GetFullPath(schemaPath), "adapter-config.schema.json", new[]
+            {
             "Add a $schema property to adapter-config/profile files for editor hints.",
             "Run config-validate after schema edits; JSON Schema complements but does not replace safety validation."
         });
-        File.WriteAllText(Path.Combine(outPath, "config-schema-report.json"), System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            File.WriteAllText(Path.Combine(outPath, "config-schema-report.json"), System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        }
+
+        Console.WriteLine($"Adapter-config JSON Schema written to: {Path.GetFullPath(schemaPath)}");
+        return 0;
     }
 
-    Console.WriteLine($"Adapter-config JSON Schema written to: {Path.GetFullPath(schemaPath)}");
-    return 0;
-}
-
-public static string LoadAdapterConfigSchemaText()
-{
-    foreach (var candidate in AdapterConfigSchemaCandidatePaths())
+    public static string LoadAdapterConfigSchemaText()
     {
-        if (File.Exists(candidate))
-            return File.ReadAllText(candidate);
+        foreach (var candidate in AdapterConfigSchemaCandidatePaths())
+        {
+            if (File.Exists(candidate))
+                return File.ReadAllText(candidate);
+        }
+
+        return MinimalAdapterConfigSchemaText();
     }
 
-    return MinimalAdapterConfigSchemaText();
-}
-
-public static IEnumerable<string> AdapterConfigSchemaCandidatePaths()
-{
-    yield return Path.Combine(Environment.CurrentDirectory, "schemas", "adapter-config.schema.json");
-    yield return Path.Combine(AppContext.BaseDirectory, "schemas", "adapter-config.schema.json");
-
-    var dir = new DirectoryInfo(Environment.CurrentDirectory);
-    while (dir != null)
+    public static IEnumerable<string> AdapterConfigSchemaCandidatePaths()
     {
-        yield return Path.Combine(dir.FullName, "schemas", "adapter-config.schema.json");
-        dir = dir.Parent;
-    }
-}
+        yield return Path.Combine(Environment.CurrentDirectory, "schemas", "adapter-config.schema.json");
+        yield return Path.Combine(AppContext.BaseDirectory, "schemas", "adapter-config.schema.json");
 
-public static string WriteConfigSchemaUsageMarkdown(string schemaPath)
-{
-    return $$"""
+        var dir = new DirectoryInfo(Environment.CurrentDirectory);
+        while (dir != null)
+        {
+            yield return Path.Combine(dir.FullName, "schemas", "adapter-config.schema.json");
+            dir = dir.Parent;
+        }
+    }
+
+    public static string WriteConfigSchemaUsageMarkdown(string schemaPath)
+    {
+        return $$"""
 # Adapter Config JSON Schema
 
 Schema written to:
@@ -89,11 +89,11 @@ Important:
 selenium-pw-migrator --mode config-validate --config adapter-config.json --out config-validate
 ```
 """;
-}
+    }
 
-public static string MinimalAdapterConfigSchemaText()
-{
-    return """
+    public static string MinimalAdapterConfigSchemaText()
+    {
+        return """
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.local/selenium-playwright-ast-migrator/adapter-config.schema.json",
@@ -118,5 +118,5 @@ public static string MinimalAdapterConfigSchemaText()
   }
 }
 """;
-}
+    }
 }

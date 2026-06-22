@@ -11,6 +11,9 @@ using Migrator.PlaywrightTypeScript;
 using Migrator.Roslyn;
 using Migrator.SeleniumCSharp;
 
+if (args.Length > 0 && string.Equals(args[0], "kit", StringComparison.OrdinalIgnoreCase))
+    return KitCommand.Run(args.Skip(1).ToArray());
+
 var opts = ParseArgs(args);
 
 if (opts == null)

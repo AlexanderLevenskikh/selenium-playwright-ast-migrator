@@ -16,7 +16,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$KitVersion = "0.3.0"
+$KitVersion = "0.4.0"
 
 function Resolve-RepoRootFromScript {
     $scriptDir = Split-Path -Parent $PSCommandPath
@@ -319,7 +319,13 @@ $quickStartLines = @(
     "",
     "## Install/update",
     "",
-    "Initial install:",
+    "Cross-platform CLI install:",
+    "",
+    "```bash",
+    "$ToolCommand kit init --workspace `"$Workspace`" --source `"$Source`" --config `"$Config`" --out `"$Output`"",
+    "```",
+    "",
+    "Windows PowerShell wrapper:",
     "",
     "```powershell",
     ".\tool\scripts\install-migration-kit.ps1 -Workspace `"$Workspace`" -Source `"$Source`" -Config `"$Config`" -Output `"$Output`" -ToolCommand `"$ToolCommand`"",
@@ -327,11 +333,21 @@ $quickStartLines = @(
     "",
     "Safe update without overwriting project-owned files:",
     "",
+    "```bash",
+    "$ToolCommand kit update --workspace `"$Workspace`" --backup",
+    "```",
+    "",
     "```powershell",
     ".\tool\scripts\install-migration-kit.ps1 -Workspace `"$Workspace`" -Update -Backup",
     "```",
     "",
     "## 1. Validate the environment",
+    "",
+    "```bash",
+    "$ToolCommand kit doctor --workspace `"$Workspace`" --config `"$Config`"",
+    "```",
+    "",
+    "Source-project doctor is still available:",
     "",
     "```powershell",
     "$ToolCommand --mode doctor --input `"$Source`" --config `"$Config`" --out `"$Output`" --format both",

@@ -28,6 +28,7 @@ The old human-checkpoint agent workflow was removed from this archive to avoid c
 - [`packaging-and-distribution.md`](packaging-and-distribution.md) — packaging and distribution.
 - [`migration-kit-mvp.md`](migration-kit-mvp.md) — MVP-1 installable workspace, safe updates, and MVP-2 stateful loop.
 - [`migration-kit-mvp3.md`](migration-kit-mvp3.md) — optional Codex handoff, OpenCode team files, and loop library.
+- [`migration-kit-mvp4.md`](migration-kit-mvp4.md) — cross-platform `migrator kit init/update/doctor/next-ticket` commands.
 
 ## Autopilot principle
 

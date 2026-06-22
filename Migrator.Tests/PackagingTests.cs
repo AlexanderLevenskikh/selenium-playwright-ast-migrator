@@ -26,6 +26,7 @@ public class PackagingTests
         Assert.True(File.Exists(FindRepositoryFile("docs/packaging-and-distribution.md")));
         Assert.True(File.Exists(FindRepositoryFile("docs/tool-installation.md")));
         Assert.True(File.Exists(FindRepositoryFile("scripts/install-migration-kit.ps1")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/install-migration-kit.sh")));
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/README.md")));
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/prompts/kickoff-prompt.txt")));
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/prompts/loop-batch-prompt.txt")));
@@ -37,6 +38,7 @@ public class PackagingTests
         Assert.True(File.Exists(FindRepositoryFile("templates/loops-library/loops/ticket-fix-loop/kickoff-prompt.txt")));
         Assert.True(File.Exists(FindRepositoryFile("docs/migration-kit-mvp.md")));
         Assert.True(File.Exists(FindRepositoryFile("docs/migration-kit-mvp3.md")));
+        Assert.True(File.Exists(FindRepositoryFile("docs/migration-kit-mvp4.md")));
         Assert.True(File.Exists(FindRepositoryFile("docs/navigation-url-mapping.md")));
     }
 

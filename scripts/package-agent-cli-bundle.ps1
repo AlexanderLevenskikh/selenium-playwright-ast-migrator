@@ -113,6 +113,11 @@ if (Test-Path $installMigrationKit) {
     Copy-Item $installMigrationKit (Join-Path $scriptsDir "install-migration-kit.ps1") -Force
 }
 
+$installMigrationKitSh = Join-Path $root "scripts\install-migration-kit.sh"
+if (Test-Path $installMigrationKitSh) {
+    Copy-Item $installMigrationKitSh (Join-Path $scriptsDir "install-migration-kit.sh") -Force
+}
+
 $runTemplatePath = Join-Path $templatesDir "run-migrator-template.ps1"
 $runTemplateLines = @(
     'param(',
@@ -189,10 +194,14 @@ $readmeLines = @(
     '  add broad POM suppressions without POM recovery',
     '',
     'Quick install into a migration project:',
+    '  .\migrator.exe kit init --workspace migration --source <selenium-tests> --config migration/profiles/adapter-config.json',
     '  scripts/install-migration-kit.ps1 -Workspace migration -Source <selenium-tests> -Config migration/profiles/adapter-config.json',
+    '  scripts/install-migration-kit.sh --workspace migration --source <selenium-tests> --config migration/profiles/adapter-config.json',
     '',
     'Safe update of an existing migration workspace:',
+    '  .\migrator.exe kit update --workspace migration --backup',
     '  scripts/install-migration-kit.ps1 -Workspace migration -Update -Backup',
+    '  scripts/install-migration-kit.sh --workspace migration --update --backup',
     '',
     'Optional Codex bounded-ticket prompts:',
     '  templates/codex/CODEX.md (after install: migration/codex/CODEX.md)',
