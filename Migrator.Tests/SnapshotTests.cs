@@ -6362,6 +6362,87 @@ namespace Sample.Tests
         Assert.DoesNotContain("if (count > 3) { }", output);
     }
 
+
+
+    [Fact]
+    public void SuppressedSideEffect_BlocksDownstreamResolvedAssertion()
+    {
+        var actions = new TestAction[]
+        {
+            new MethodInvocationAction(
+                45,
+                "page.BillNumber",
+                "InputAndAccept",
+                "page.BillNumber.InputAndAccept(\"21931973650K1\")"),
+            new MethodInvocationAction(
+                46,
+                "page.Loader",
+                "ValidateLoading",
+                "page.Loader.ValidateLoading()"),
+            new TextAssertionAction(
+                47,
+                TargetExpression.Mapped(
+                    "page.RegistryHead.Rows.ElementAt(2)",
+                    "Page.Locator(\"[data-test='t_table_row_item']\").Nth(2)",
+                    TargetKind.RawExpression),
+                TextAssertionKind.TextEquals,
+                "\"21931973650K1\"")
+        };
+
+        var model = CreateModel(actions) with
+        {
+            SuppressedMethodPatterns = new[]
+            {
+                "*InputAndAccept(*)",
+                "*ValidateLoading(*)"
+            }
+        };
+
+        var output = new PlaywrightDotNetRenderer(useAssertionsExpect: true).Render(model);
+
+        Assert.Contains("source suppressed: page.BillNumber.InputAndAccept", output);
+        Assert.Contains("DEPENDS_ON_SUPPRESSED_SIDE_EFFECT", output);
+        Assert.Contains("depends on suppressed side-effect at line 45", output);
+        Assert.DoesNotContain("ToHaveTextAsync", output);
+        Assert.Contains("Assert.Inconclusive", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void SuppressedWaitLikeAction_DoesNotBlockDownstreamResolvedAssertion()
+    {
+        var actions = new TestAction[]
+        {
+            new MethodInvocationAction(
+                46,
+                "page.Loader",
+                "ValidateLoading",
+                "page.Loader.ValidateLoading()"),
+            new TextAssertionAction(
+                47,
+                TargetExpression.Mapped(
+                    "page.RegistryHead.Rows.ElementAt(2)",
+                    "Page.Locator(\"[data-test='t_table_row_item']\").Nth(2)",
+                    TargetKind.RawExpression),
+                TextAssertionKind.TextEquals,
+                "\"21931973650K1\"")
+        };
+
+        var model = CreateModel(actions) with
+        {
+            SuppressedMethodPatterns = new[] { "*ValidateLoading(*)" }
+        };
+
+        var output = new PlaywrightDotNetRenderer(useAssertionsExpect: true).Render(model);
+
+        Assert.Contains("source suppressed: page.Loader.ValidateLoading()", output);
+        Assert.DoesNotContain("DEPENDS_ON_SUPPRESSED_SIDE_EFFECT", output);
+        Assert.Contains("ToHaveTextAsync(\"21931973650K1\")", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
     // --- TS-22.5: Empty test soft suppress ---
 
     [Fact]

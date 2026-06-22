@@ -32,6 +32,9 @@ public class PlaywrightDotNetRenderer : IRenderer
     TargetTestFramework _targetTestFramework = TargetTestFramework.NUnit;
     bool _useAssertionsExpect;
     bool _useAssertionsExpectExplicit;
+    bool _hasSuppressedSideEffect;
+    int _suppressedSideEffectLine;
+    string? _suppressedSideEffectSource;
     string _pageVariable;
 
     public PlaywrightDotNetRenderer(string indent = "\t")
@@ -643,13 +646,33 @@ public class PlaywrightDotNetRenderer : IRenderer
         if (IsSuppressedAction(action, sourceText))
         {
             if (IsAssertionLikeSource(sourceText))
+            {
                 RenderUnsafeSuppressedAssertion(sb, action, sourceText);
+            }
             else
+            {
                 RenderSuppressedAction(sb, action, sourceText);
+
+                if (IsSuppressedSideEffectAction(action, sourceText))
+                    MarkSuppressedSideEffect(action, sourceText);
+            }
 
             if (action is NavigationAction suppressedNavigation)
                 EmitNavigationFallbackDeclarations(sb, suppressedNavigation);
 
+            return;
+        }
+
+        if (_hasSuppressedSideEffect && !IsCompileOnlySafeAfterSuppressedSideEffect(action, sourceText))
+        {
+            foreach (var variable in declaredVariables)
+                BlockSymbol(variable);
+
+            RenderBlockedActionAsComment(
+                sb,
+                action,
+                SuppressedSideEffectReason(),
+                sourceText);
             return;
         }
 
@@ -903,6 +926,8 @@ public class PlaywrightDotNetRenderer : IRenderer
             return "SOURCE_ONLY_IDENTIFIER";
         if (reason.StartsWith("depends on unresolved symbol", StringComparison.Ordinal))
             return "UNRESOLVED_SYMBOL";
+        if (reason.StartsWith("depends on suppressed side-effect", StringComparison.Ordinal))
+            return "DEPENDS_ON_SUPPRESSED_SIDE_EFFECT";
         return "BLOCKED_ACTION";
     }
 
@@ -912,6 +937,8 @@ public class PlaywrightDotNetRenderer : IRenderer
             return "The statement references a Selenium/source-side symbol that must not be emitted as active Playwright code.";
         if (reason.StartsWith("depends on unresolved symbol", StringComparison.Ordinal))
             return "A previously unresolved or blocked symbol is required by this statement, so rendering it active would hide a migration problem.";
+        if (reason.StartsWith("depends on suppressed side-effect", StringComparison.Ordinal))
+            return "An earlier source action that changes browser/application state was suppressed. Later actions may depend on that missing state change, so they are not safe to keep active.";
         return "Safety checks blocked this statement from active rendering.";
     }
 
@@ -921,6 +948,8 @@ public class PlaywrightDotNetRenderer : IRenderer
             return "Map the whole source expression through adapter-config or leave it as TODO; do not mark source-only roots as target-known.";
         if (reason.StartsWith("depends on unresolved symbol", StringComparison.Ordinal))
             return "Find the first TODO that blocks this symbol, then add a source-backed mapping or escalate if it is a generic migrator issue.";
+        if (reason.StartsWith("depends on suppressed side-effect", StringComparison.Ordinal))
+            return "Map the suppressed upstream side-effect via UiTargets/ParameterizedMethods/POM translation first, or keep this test manual; do not run downstream assertions alone.";
         return "Inspect source truth and decide whether this is a missing mapping, source-only code, or unsupported semantics.";
     }
 
@@ -1761,6 +1790,100 @@ public class PlaywrightDotNetRenderer : IRenderer
         sb.AppendLine($"{_indent}{_indent}// TODO: assertion/check matched SuppressedMethodPatterns and was NOT suppressed // line {action.SourceLine} [MIGRATOR:ASSERTION_SUPPRESSION_BLOCKED]");
         AppendCommentBlock(sb, _indent + _indent, sourceText, "source assertion: ");
         sb.AppendLine($"{_indent}{_indent}throw new NotImplementedException(\"MIGRATOR: assertion/check was matched by SuppressedMethodPatterns and must be migrated, not suppressed.\");");
+    }
+
+
+    bool IsSuppressedSideEffectAction(TestAction action, string sourceText)
+    {
+        if (string.IsNullOrWhiteSpace(sourceText))
+            return false;
+
+        if (IsAssertionLikeSource(sourceText))
+            return false;
+
+        if (IsWaitLikeSource(sourceText))
+            return false;
+
+        if (IsReadOnlyProbeSource(sourceText))
+            return false;
+
+        if (IsLegacyPageAliasAssignment(sourceText))
+            return false;
+
+        return action switch
+        {
+            ClickAction or SendKeysAction or PressAction or NavigationAction => true,
+            _ => ContainsStateChangingSourceCall(sourceText)
+        };
+    }
+
+    static bool IsReadOnlyProbeSource(string sourceText)
+    {
+        var text = NormalizeCSharpOperatorSpacing(sourceText);
+
+        // Read-only POM probes are often suppressed because they reference legacy page objects,
+        // but they do not mutate browser/application state. They may be replaced with compile-only
+        // declaration stubs and still safely drive later conditions such as `if (element1)`.
+        return Regex.IsMatch(
+            text,
+            @"\.(?:Visible|Exists|Count|Text|Value|Enabled|Selected)\s*\.\s*Get\s*\(",
+            RegexOptions.IgnoreCase);
+    }
+
+    static bool IsLegacyPageAliasAssignment(string sourceText)
+    {
+        var text = NormalizeCSharpOperatorSpacing(sourceText).Trim().TrimEnd(';').Trim();
+        return Regex.IsMatch(text, @"^page\s*=\s*pagef$", RegexOptions.IgnoreCase);
+    }
+
+    static bool ContainsStateChangingSourceCall(string sourceText)
+    {
+        var text = NormalizeCSharpOperatorSpacing(sourceText);
+
+        return Regex.IsMatch(
+            text,
+            @"(?:^|\.)\s*(?:Click\w*|Input\w*|Fill\w*|Type\w*|SendKeys|Press|Select\w*|Set\w*|Clear\w*|Accept\w*|Choose\w*|Delete\w*|Create\w*|Edit\w*|Save\w*|Open\w*|GoTo\w*|Navigate\w*|ManualInput\w*|Change\w*|Add\w*|Remove\w*|Submit\w*|Upload\w*|Download\w*|Drag\w*|Drop\w*)\s*\(",
+            RegexOptions.IgnoreCase);
+    }
+
+    static bool IsWaitLikeSource(string sourceText)
+    {
+        var text = NormalizeCSharpOperatorSpacing(sourceText);
+        return Regex.IsMatch(
+            text,
+            @"\b(?:Wait|WaitPresence|WaitAbsence|ValidateLoading|Loader|Loading|SpinWait|Sleep)\b",
+            RegexOptions.IgnoreCase);
+    }
+
+    void MarkSuppressedSideEffect(TestAction action, string sourceText)
+    {
+        _hasSuppressedSideEffect = true;
+        if (_suppressedSideEffectSource == null)
+        {
+            _suppressedSideEffectSource = sourceText;
+            _suppressedSideEffectLine = action.SourceLine;
+        }
+    }
+
+    bool IsCompileOnlySafeAfterSuppressedSideEffect(TestAction action, string sourceText)
+    {
+        return action switch
+        {
+            LocatorDeclarationAction => true,
+            RawStatementAction raw when IsTargetSafeDeclaration(raw.SourceText) => true,
+            RawStatementAction raw when IsLegacyPageAliasAssignment(raw.SourceText) => true,
+            _ => false
+        };
+    }
+
+    string SuppressedSideEffectReason()
+    {
+        var line = _suppressedSideEffectLine > 0 ? $" at line {_suppressedSideEffectLine}" : string.Empty;
+        var source = string.IsNullOrWhiteSpace(_suppressedSideEffectSource)
+            ? string.Empty
+            : $": {EscapeComment(_suppressedSideEffectSource!)}";
+
+        return $"depends on suppressed side-effect{line}{source}";
     }
 
     static bool IsAssertionLikeSource(string? sourceText)
@@ -2607,6 +2730,9 @@ public class PlaywrightDotNetRenderer : IRenderer
         _blockedSymbols.Clear();
         _localAliases.Clear();
         _targetLocals.Clear();
+        _hasSuppressedSideEffect = false;
+        _suppressedSideEffectLine = 0;
+        _suppressedSideEffectSource = null;
     }
 
     void RegisterSourceVar(string originalName, string generatedName)
