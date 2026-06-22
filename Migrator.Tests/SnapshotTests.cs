@@ -4136,6 +4136,41 @@ public class NavigationOpenPageTests
         Assert.True(CompileChecker.CompilesWithoutErrors(output),
             CompileChecker.FormatErrors(output));
     }
+
+    [Fact]
+    public void SuppressedNavigationOpenPage_EmitsFallbackAliasesForLegacyPageAssignment()
+    {
+        var renderer = new PlaywrightDotNetRenderer();
+        var model = new TestFileModel(
+            FilePath: "t.cs",
+            Namespace: "Test",
+            ClassName: "NavTest",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel("T1", null, Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(),
+                    new TestAction[]
+                    {
+                        new NavigationAction(1, "Urls.BaseUrlPartners + \"#suspensions\"", "pagef", "var pagef = Navigation.OpenPage<CatalogPartnersPage>(Urls.BaseUrlPartners + \"#suspensions\")"),
+                        new RawStatementAction(2, "page = pagef;")
+                    })
+            })
+            {
+                SuppressedMethodPatterns = new[] { "*Navigation.OpenPage*" },
+                SourceOnlyIdentifiers = new[] { "Urls" }
+            };
+
+        var output = renderer.Render(model);
+
+        Assert.Contains("var pagef = Page; // MIGRATOR: compile-only navigation page variable fallback [MIGRATOR:NAVIGATION_FALLBACK_DECLARATION]", output);
+        Assert.Contains("var page = Page; // MIGRATOR: compile-only navigation page variable fallback [MIGRATOR:NAVIGATION_FALLBACK_DECLARATION]", output);
+        Assert.Contains("page = pagef; // line 2", output);
+        Assert.DoesNotContain("CS0103", CompileChecker.FormatErrors(output));
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
 }
 
 public class NavigationUrlMappingTests

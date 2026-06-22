@@ -646,6 +646,10 @@ public class PlaywrightDotNetRenderer : IRenderer
                 RenderUnsafeSuppressedAssertion(sb, action, sourceText);
             else
                 RenderSuppressedAction(sb, action, sourceText);
+
+            if (action is NavigationAction suppressedNavigation)
+                EmitNavigationFallbackDeclarations(sb, suppressedNavigation);
+
             return;
         }
 
@@ -2007,6 +2011,43 @@ public class PlaywrightDotNetRenderer : IRenderer
         {
             RegisterSourceVar(action.PageVariableName, _pageVariable);
         }
+    }
+
+    void EmitNavigationFallbackDeclarations(StringBuilder sb, NavigationAction action)
+    {
+        // Suppressed Navigation.OpenPage<T>(...) can still be the source of legacy page aliases
+        // used by downstream raw statements such as `page = pagef;`. When the navigation itself
+        // is suppressed (for example because an Urls.* concatenation is source-only/unmapped),
+        // keep the test compile-safe by declaring aliases to the Playwright Page property.
+        // This is intentionally marked as compile-only so runtime semantics remain reviewable.
+        if (!string.IsNullOrWhiteSpace(action.PageVariableName))
+            EmitNavigationFallbackDeclaration(sb, action.PageVariableName!);
+
+        if (string.Equals(action.PageVariableName, "pagef", StringComparison.Ordinal))
+            EmitNavigationFallbackDeclaration(sb, "page");
+    }
+
+    void EmitNavigationFallbackDeclaration(StringBuilder sb, string variableName)
+    {
+        variableName = variableName.Trim().TrimStart('@');
+        if (string.IsNullOrWhiteSpace(variableName))
+            return;
+
+        if (_targetLocals.Contains(variableName))
+        {
+            RegisterSourceVar(variableName, variableName);
+            return;
+        }
+
+        if (string.Equals(variableName, _pageVariable, StringComparison.Ordinal))
+        {
+            RegisterSourceVar(variableName, _pageVariable);
+            return;
+        }
+
+        sb.AppendLine($"{_indent}{_indent}var {variableName} = {_pageVariable}; // MIGRATOR: compile-only navigation page variable fallback [MIGRATOR:NAVIGATION_FALLBACK_DECLARATION]");
+        RegisterTargetLocal(variableName);
+        RegisterSourceVar(variableName, variableName);
     }
 
     static string EnsureStatementTerminated(string statement)
