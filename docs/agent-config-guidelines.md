@@ -219,9 +219,9 @@ dotnet run --project .\Migrator.Cli -- --mode explain-todo --input "<migration-o
 Он создаёт:
 
 - `explain-todo.md/json` — почему остались TODO и какие действия дадут максимальный эффект;
-- `agent-next-task.md` — готовую следующую задачу для агента.
+- `agent-next-task.md` — готовую bounded-задачу для агента: run context, quality gates, exact next task, commands, helper-inventory rule, acceptance criteria.
 
-Агент должен читать `agent-next-task.md`, но по умолчанию менять только `adapter-config.json`. Если отчёт говорит, что нужна правка C# мигратора, агент должен перейти к migrator-code fix loop либо классифицировать blocker по `.agent-loops/03-stop-policy.md`.
+Агент должен читать `agent-next-task.md`, но по умолчанию менять только `adapter-config.json`. Если задача касается suppressions, `MethodSemantics` или project/POM helper wrappers, сначала используй `--mode helper-inventory` или приложи source-body evidence; не угадывай семантику helper-а по имени. Если отчёт говорит, что нужна правка C# мигратора, агент должен перейти к migrator-code fix loop либо классифицировать blocker по `.agent-loops/03-stop-policy.md`.
 
 
 ## Рабочая папка агента

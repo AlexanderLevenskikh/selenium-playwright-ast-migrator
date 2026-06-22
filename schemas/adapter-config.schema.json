@@ -38,7 +38,7 @@
       },
       "uniqueItems": true,
       "default": [],
-      "description": "Glob-like source method patterns that should be preserved as source comments before source-only safety checks."
+      "description": "Glob-like source method patterns that should be preserved as source comments before source-only safety checks. This field is not regex-based: patterns containing regex-looking tokens such as .*, \\., ^, $, [], +, ?, {}, or \\( are reported by config-validate."
     },
     "TargetKnownTypes": {
       "type": "array",
@@ -608,7 +608,8 @@
             "type": "string"
           },
           "uniqueItems": true,
-          "default": []
+          "default": [],
+          "description": "Scope-specific glob-like suppression patterns. Not regex-based; config-validate warns on regex-looking tokens."
         },
         "Tables": {
           "type": "array",

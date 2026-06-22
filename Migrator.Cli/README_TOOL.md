@@ -42,3 +42,7 @@ Use `--mode helper-inventory` to scan Selenium helper/POM method bodies and gene
 ```bash
 selenium-pw-migrator --mode helper-inventory --input ./selenium_tests --out migration/helper-inventory --format both
 ```
+
+### Normalized TODO grouping
+
+`explain-todo`, `agent-next-task`, and `migration-board` now include normalized root-cause groups. These keep the raw TODO list intact while grouping repeated issues by method family, table/list family, source-only root, or suppressed side-effect family. Use this section to pick reusable config/engine batches instead of fixing one generated TODO line at a time.

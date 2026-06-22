@@ -72,6 +72,8 @@ record ProjectVerifyDiagnostic(string Raw, string Code, string Severity, string 
 record TodoExplanationReport(
     DateTimeOffset GeneratedAtUtc,
     string Source,
+    string ArtifactRoot,
+    bool RecursiveArtifactLookup,
     int FilesProcessed,
     int TestsFound,
     int ActionsFound,
@@ -84,6 +86,8 @@ record TodoExplanationReport(
     int SyntaxErrors,
     string? ProjectVerifyStatus,
     TodoInsight[] Insights,
+    NormalizedTodoGroup[] NormalizedRootCauses,
+    TableMappingCandidate[] TableMappingCandidates,
     string NextBestAction);
 
 record TodoInsight(
@@ -97,12 +101,43 @@ record TodoInsight(
     bool RequiresSourceTruth,
     bool RequiresDeveloper,
     string[] Evidence);
+record NormalizedTodoGroup(
+    string Category,
+    string GroupKey,
+    string DisplayName,
+    int Count,
+    string ExampleFile,
+    int ExampleLine,
+    string SuggestedAction,
+    string[] RepresentativeFiles,
+    string[] Evidence);
+record TableMappingCandidate(
+    string GroupKey,
+    string SourceRoot,
+    string AccessorKind,
+    string AssertionKind,
+    int Count,
+    string ExampleFile,
+    int ExampleLine,
+    string SourceExpression,
+    string SuggestedUiTargetRoot,
+    string SuggestedConfigHint,
+    string[] Evidence);
+record AgentNextTaskPlan(string Priority, string Category, string Title, string Reason, string Action, string ExampleFile, int ExampleLine, string[] Evidence);
 
 record GeneratedTestMethodStats(string File, string TestName, int StartLine, int ActiveLines, int TodoLines, int ExecutableLines, double ActiveRatio, int AwaitCount, int ExpectOrAssertCount, int LocatorCount);
-record MigrationBoardReport(DateTimeOffset GeneratedAtUtc, string Source, ArtifactSummary Summary, string? ProjectVerifyStatus, int ProjectDiagnostics, int GeneratedFiles, int RuntimeReadyCandidates, int SmokeCandidates, MigrationBoardFileCard[] FileCards, TodoInsight[] TopInsights, SmokeCandidate[] TopSmokeCandidates, string[] RecommendedNextActions, string[] Artifacts);
+record MigrationBoardReport(DateTimeOffset GeneratedAtUtc, string Source, string ArtifactRoot, bool RecursiveArtifactLookup, ArtifactLookupCandidate[] ArtifactCandidates, ArtifactSummary Summary, MigrationQualityGates QualityGates, string? ProjectVerifyStatus, int ProjectDiagnostics, int GeneratedFiles, int RuntimeReadyCandidates, int SmokeCandidates, MigrationBoardFileCard[] FileCards, TodoInsight[] TopInsights, NormalizedTodoGroup[] TopNormalizedRootCauses, TableMappingCandidate[] TableMappingCandidates, SmokeCandidate[] TopSmokeCandidates, string[] RecommendedNextActions, string[] Artifacts);
+record MigrationQualityGates(string ProjectVerifyStatus, int CompileErrors, int EmptyTestsAfterSuppression, int SuppressedSideEffectDependencies, int? SuppressedMethodPatterns, int? SuspiciousSuppressionPatterns, string[] Warnings);
 record MigrationBoardFileCard(string File, int Tests, int TodoLines, int CompileErrors, int CompileWarnings, double ActiveRatio, double BestScore, string BestReadinessLevel, string BestTestName);
-record SmokePlanReport(DateTimeOffset GeneratedAtUtc, string Source, string? ProjectVerifyStatus, int GeneratedFiles, int TestsFound, int RuntimeReadyCandidates, int SmokeCandidates, SmokeCandidate[] Candidates, string[] RecommendedNextActions);
+record SmokePlanReport(DateTimeOffset GeneratedAtUtc, string Source, string ArtifactRoot, bool RecursiveArtifactLookup, string? ProjectVerifyStatus, int GeneratedFiles, int TestsFound, int RuntimeReadyCandidates, int SmokeCandidates, SmokeCandidate[] Candidates, string[] RecommendedNextActions);
 record SmokeCandidate(string File, string TestName, int StartLine, int ActiveLines, int TodoLines, double ActiveRatio, int CompileErrors, int CompileWarnings, int AwaitCount, int ExpectOrAssertCount, int LocatorCount, double Score, string ReadinessLevel, string[] Checklist);
+record ArtifactLookupCandidate(string FileName, string Path, DateTimeOffset LastWriteTimeUtc);
+sealed class ArtifactLookupException : Exception
+{
+    public ArtifactLookupException(string message) : base(message)
+    {
+    }
+}
 
 record PomIndexReport(DateTimeOffset GeneratedAtUtc, string InputPath, int FilesScanned, PomFact[] Facts, PomUsageCandidate[] InferredCandidates, string[] Warnings);
 record PomFact(string SourceExpression, string OwnerType, string MemberName, string MemberKind, string Selector, string SelectorKind, string TargetKindSuggestion, string TargetExpressionSuggestion, string SourceFile, int SourceLine, string Confidence, bool RequiresReview, string Notes);
@@ -130,4 +165,4 @@ record DoctorReport(DateTimeOffset GeneratedAtUtc, string Status, string InputPa
 record DoctorCheck(string Status, string Code, string Message, string? Location, string SuggestedAction);
 record SimpleProcessResult(int ExitCode, string StdOut, string StdErr);
 
-record CliOptions(string Mode, string Input, string Out, string? Config, string[] Configs, string Format, bool FailOnUnsupported, bool FailOnTodo, string Workspace, string? Before, string? After, string Target, string? TsProject);
+record CliOptions(string Mode, string Input, string Out, string? Config, string[] Configs, string Format, bool FailOnUnsupported, bool FailOnTodo, string Workspace, string? Before, string? After, string Target, string? TsProject, bool RecursiveArtifacts);

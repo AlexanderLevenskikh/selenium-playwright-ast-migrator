@@ -30,3 +30,7 @@ Safety gates:
 - Do not edit generated files as the final fix.
 - Do not add broad `TargetKnownIdentifiers` only to hide unresolved source-side symbols.
 - If the change is unsafe or makes metrics worse without clear justification, revert it and mark `UNSAFE_REVERTED`.
+
+
+Helper/POM evidence rule:
+- If the current ticket involves suppressions, `MethodSemantics`, unknown helpers, or project/POM wrapper methods, run or request `--mode helper-inventory` before adding suppressions or mappings. Do not guess helper semantics from method names alone.

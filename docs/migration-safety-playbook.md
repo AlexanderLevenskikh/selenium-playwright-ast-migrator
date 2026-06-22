@@ -42,6 +42,8 @@ Core migrator code можно менять только если найдено 
 
 `SuppressedMethodPatterns` можно использовать только для кода, который подтверждённо не должен переезжать в Playwright в активном виде.
 
+Важно: `SuppressedMethodPatterns` — это glob-like patterns, **не regex**. Regex-looking записи вроде `.*Foo.*\.Bar\(` должны попадать в `config-validate` warning. Если речь о project/POM helper-е, сначала запусти `--mode helper-inventory`, изучи тело helper-а и только потом выбирай `MethodSemantics`, mapping или осознанное elide.
+
 Безопасные кандидаты:
 
 - legacy Selenium lifecycle;

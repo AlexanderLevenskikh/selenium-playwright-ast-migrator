@@ -337,6 +337,14 @@ public class RoslynTestFileParser : ITestFileParser
             if (TryExtractGenericInvocationDeclaration(lds, line) is { } genericInvocationDecl)
                 return genericInvocationDecl;
 
+            // Receiverless project helper declarations such as
+            //   var result = CreateDopCalc(lightbox);
+            // should also stay structured. The parser often cannot resolve these
+            // without project references, but adapter config / MethodSemantics can
+            // still map them later when source truth is known.
+            if (TryExtractUnqualifiedHelperInvocationDeclaration(lds, semanticModel, line) is { } helperInvocationDecl)
+                return helperInvocationDecl;
+
             if (TryExtractLocalDeclaration(lds, line) is { } localDecl)
                 return localDecl;
 
@@ -358,6 +366,13 @@ public class RoslynTestFileParser : ITestFileParser
         {
             if (TryExtractGenericInvocationAssignment(assignment, line) is { } genericInvocationAssignment)
                 return genericInvocationAssignment;
+
+            // Keep receiverless helper assignments structured too, e.g.
+            //   calculation = CreateDopCalc(lightbox);
+            // so they can be mapped with ParameterizedMethods instead of becoming
+            // opaque raw statements.
+            if (TryExtractUnqualifiedHelperInvocationAssignment(assignment, semanticModel, line) is { } helperInvocationAssignment)
+                return helperInvocationAssignment;
 
             var text = statement.ToString().Trim().Trim(';');
             return new RawStatementAction(line, text);
@@ -425,6 +440,22 @@ public class RoslynTestFileParser : ITestFileParser
         // --- Builtin/System calls — skip ---
         if (symbolResolved && IsBuiltinSystemMethod(methodSymbol!))
             return null;
+
+        // Receiverless project helpers such as CreateDopCalc(lightbox) frequently
+        // fail semantic resolution in migration mode because we compile the source
+        // file with only lightweight framework references. Preserve them as
+        // structured MethodInvocationAction so adapter config, MethodSemantics, or
+        // helper-inventory evidence can classify them later.
+        if (!symbolResolved && IsUnqualifiedHelperInvocation(invocation, methodName, receiverText))
+        {
+            return new MethodInvocationAction(
+                line,
+                receiverExpression: string.Empty,
+                methodName,
+                fullText,
+                argumentTexts,
+                RecognitionConfidence.SyntaxFallback);
+        }
 
         return new UnsupportedAction(line, fullText, symbolResolved
             ? "Semantic match not implemented for this method"
@@ -670,6 +701,32 @@ public class RoslynTestFileParser : ITestFileParser
         };
     }
 
+    static bool IsUnqualifiedHelperInvocation(InvocationExpressionSyntax invocation, string methodName, string receiverText)
+    {
+        if (!string.IsNullOrWhiteSpace(receiverText))
+            return false;
+
+        if (invocation.Expression is not IdentifierNameSyntax)
+            return false;
+
+        if (string.IsNullOrWhiteSpace(methodName))
+            return false;
+
+        // Keep compiler/language pseudo-calls and common framework shorthands out
+        // of the project-helper fallback. They should remain ignored/unsupported
+        // unless a recognizer intentionally handles them.
+        var excluded = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "nameof",
+            "typeof",
+            "sizeof",
+            "checked",
+            "unchecked"
+        };
+
+        return !excluded.Contains(methodName);
+    }
+
     static bool IsMeaningfulStatement(StatementSyntax statement)
     {
         return statement switch
@@ -706,6 +763,88 @@ public class RoslynTestFileParser : ITestFileParser
         "ClickAndFollow",
         "ClickAndOpen",
     };
+
+    TestAction? TryExtractUnqualifiedHelperInvocationDeclaration(LocalDeclarationStatementSyntax lds, SemanticModel semanticModel, int line)
+    {
+        var declaration = lds.Declaration;
+        if (declaration.Variables.Count == 0)
+            return null;
+
+        var variable = declaration.Variables[0];
+        var invocation = variable.Initializer?.Value switch
+        {
+            InvocationExpressionSyntax direct => direct,
+            AwaitExpressionSyntax { Expression: InvocationExpressionSyntax awaited } => awaited,
+            _ => null
+        };
+
+        if (invocation == null)
+            return null;
+
+        var methodName = GetMethodName(invocation);
+        var receiverText = GetReceiverText(invocation);
+        if (!IsUnqualifiedHelperInvocation(invocation, methodName, receiverText))
+            return null;
+
+        var symbolResolved = semanticModel.GetSymbolInfo(invocation).Symbol is IMethodSymbol;
+        if (symbolResolved)
+            return null;
+
+        var argumentTexts = invocation.ArgumentList.Arguments
+            .Select(a => a.Expression.ToString())
+            .ToArray();
+
+        return new MethodInvocationAction(
+            line,
+            receiverExpression: string.Empty,
+            methodName,
+            invocation.ToString().Trim().TrimEnd(';'),
+            argumentTexts,
+            variable.Identifier.Text,
+            RecognitionConfidence.SyntaxFallback);
+    }
+
+    TestAction? TryExtractUnqualifiedHelperInvocationAssignment(AssignmentExpressionSyntax assignment, SemanticModel semanticModel, int line)
+    {
+        if (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression))
+            return null;
+
+        var invocation = assignment.Right switch
+        {
+            InvocationExpressionSyntax direct => direct,
+            AwaitExpressionSyntax { Expression: InvocationExpressionSyntax awaited } => awaited,
+            _ => null
+        };
+
+        if (invocation == null)
+            return null;
+
+        var methodName = GetMethodName(invocation);
+        var receiverText = GetReceiverText(invocation);
+        if (!IsUnqualifiedHelperInvocation(invocation, methodName, receiverText))
+            return null;
+
+        var symbolResolved = semanticModel.GetSymbolInfo(invocation).Symbol is IMethodSymbol;
+        if (symbolResolved)
+            return null;
+
+        var targetVariable = assignment.Left.ToString().Trim();
+        if (string.IsNullOrWhiteSpace(targetVariable) || !Regex.IsMatch(targetVariable, @"^@?[A-Za-z_][A-Za-z0-9_]*$"))
+            return null;
+
+        var argumentTexts = invocation.ArgumentList.Arguments
+            .Select(a => a.Expression.ToString())
+            .ToArray();
+
+        return new MethodInvocationAction(
+            line,
+            receiverExpression: string.Empty,
+            methodName,
+            assignment.ToString().Trim().TrimEnd(';'),
+            argumentTexts,
+            targetVariable,
+            RecognitionConfidence.SyntaxFallback);
+    }
 
     TestAction? TryExtractGenericInvocationAssignment(AssignmentExpressionSyntax assignment, int line)
     {

@@ -33,6 +33,7 @@ string? beforePath = opts.Before;
 string? afterPath = opts.After;
 string target = opts.Target;
 string? tsProjectPath = opts.TsProject;
+bool recursiveArtifacts = opts.RecursiveArtifacts;
 
 // Agent-safety modes operate on config/report artifacts and do not process source files.
 if (mode == "config-validate")
@@ -163,14 +164,14 @@ if (mode == "helper-inventory")
 // Handle explain-todo mode — explains migration TODO/root causes from existing artifacts.
 if (mode == "explain-todo")
 {
-    var explainExitCode = RunExplainTodo(inputPath, outPath, format);
+    var explainExitCode = RunExplainTodo(inputPath, outPath, format, recursiveArtifacts);
     return explainExitCode;
 }
 
 // Handle smoke-plan mode — ranks generated tests by runtime readiness and writes checklists.
 if (mode == "smoke-plan")
 {
-    var smokeExitCode = RunSmokePlan(inputPath, outPath, format);
+    var smokeExitCode = RunSmokePlan(inputPath, outPath, format, recursiveArtifacts);
     return smokeExitCode;
 }
 
@@ -191,7 +192,7 @@ if (mode == "config-schema")
 // Handle migration-board mode — builds an HTML dashboard from migration artifacts.
 if (mode == "migration-board")
 {
-    var boardExitCode = RunMigrationBoard(inputPath, outPath, format);
+    var boardExitCode = RunMigrationBoard(inputPath, outPath, format, recursiveArtifacts);
     return boardExitCode;
 }
 
@@ -1702,7 +1703,7 @@ static void GenerateDraftConfig(IReadOnlyDictionary<string, (int Count, string F
 }
 
 
-static int RunExplainTodo(string inputPath, string outPath, string format)
+static int RunExplainTodo(string inputPath, string outPath, string format, bool recursiveArtifacts)
 {
     Directory.CreateDirectory(outPath);
 
@@ -1716,11 +1717,22 @@ static int RunExplainTodo(string inputPath, string outPath, string format)
         return 1;
     }
 
-    var report = BuildExplainTodoReportFromArtifacts(artifactDir);
+    TodoExplanationReport report;
+    try
+    {
+        report = BuildExplainTodoReportFromArtifacts(artifactDir, recursiveArtifacts);
+    }
+    catch (ArtifactLookupException ex)
+    {
+        Console.Error.WriteLine(ex.Message);
+        return 2;
+    }
+
     WriteExplainTodoReport(report, outPath, format);
 
     Console.WriteLine("=== Explain TODO ===");
     Console.WriteLine($"Input artifacts: {artifactDir}");
+    Console.WriteLine($"Artifact lookup: {(recursiveArtifacts ? "recursive" : "direct-only")}");
     Console.WriteLine($"TODO comments: {report.TodoComments}");
     Console.WriteLine($"Insights: {report.Insights.Length}");
     if (report.Insights.Length > 0)
@@ -1851,6 +1863,8 @@ static TodoExplanationReport BuildExplainTodoReport(
     return new TodoExplanationReport(
         GeneratedAtUtc: DateTimeOffset.UtcNow,
         Source: "pipeline",
+        ArtifactRoot: "pipeline",
+        RecursiveArtifactLookup: false,
         FilesProcessed: summary.FilesProcessed,
         TestsFound: summary.TestsFound,
         ActionsFound: summary.ActionsFound,
@@ -1865,6 +1879,8 @@ static TodoExplanationReport BuildExplainTodoReport(
             ?? 0,
         ProjectVerifyStatus: projectVerifyReport?.Status,
         Insights: ordered,
+        NormalizedRootCauses: BuildNormalizedTodoGroups(ordered),
+        TableMappingCandidates: BuildTableMappingCandidates(ordered),
         NextBestAction: ordered.FirstOrDefault()?.SuggestedAction ?? "No TODO/actionable issue found. Move to project verify or runtime smoke.");
 }
 
@@ -1956,6 +1972,7 @@ static string SmartTodoReason(string code)
         "WAIT_MAPPING_REQUIRED" => "A product-state wait such as loader/table/modal synchronization needs a mapped Playwright target.",
         "WAIT_REQUIRES_STATE_ASSERTION" => "A custom wait is ambiguous and should be replaced with a concrete state assertion, not a fixed timeout.",
         "UNSUPPORTED_ACTION" => "The recognizer/adapter could not safely translate this source action.",
+        "HELPER_METHOD_REQUIRES_MAPPING" => "A receiverless project/helper method was preserved structurally but has no target mapping yet.",
         _ => "Generated TODO contains a migrator classification code."
     };
 }
@@ -1977,13 +1994,14 @@ static string SmartTodoSuggestedAction(string code)
         "WAIT_MAPPING_REQUIRED" => "Map the loader/table/modal/toast target or add a Method/ParameterizedMethod wait mapping.",
         "WAIT_REQUIRES_STATE_ASSERTION" => "Replace with loader/table/modal/toast/url/download assertion after checking source truth.",
         "UNSUPPORTED_ACTION" => "Classify as missing mapping, unsupported business semantics, or generic migrator gap.",
+        "HELPER_METHOD_REQUIRES_MAPPING" => "Run --mode helper-inventory or inspect helper body, then add MethodSemantics/Methods/ParameterizedMethods mapping.",
         _ => "Inspect source truth and decide whether this is config work or developer escalation."
     };
 }
 
 static bool SmartTodoRequiresSourceTruth(string code)
 {
-    return code is "MISSING_MAPPING" or "RAW_STATEMENT" or "RAW_LOCAL_DECLARATION" or "TABLE_MAPPING_REQUIRED" or "WAIT_MAPPING_REQUIRED" or "WAIT_REQUIRES_STATE_ASSERTION" or "UNSUPPORTED_ACTION";
+    return code is "MISSING_MAPPING" or "RAW_STATEMENT" or "RAW_LOCAL_DECLARATION" or "TABLE_MAPPING_REQUIRED" or "WAIT_MAPPING_REQUIRED" or "WAIT_REQUIRES_STATE_ASSERTION" or "UNSUPPORTED_ACTION" or "HELPER_METHOD_REQUIRES_MAPPING";
 }
 
 static bool SmartTodoMayNeedDeveloper(string code)
@@ -1991,13 +2009,368 @@ static bool SmartTodoMayNeedDeveloper(string code)
     return code is "UNRESOLVED_SYMBOL" or "UNAVAILABLE_SYMBOLS" or "UNRESOLVED_PLACEHOLDER" or "WAIT_REQUIRES_STATE_ASSERTION";
 }
 
-static TodoExplanationReport BuildExplainTodoReportFromArtifacts(string artifactDir)
+static NormalizedTodoGroup[] BuildNormalizedTodoGroups(IEnumerable<TodoInsight> insights)
 {
-    var reportPath = FindFirstExisting(artifactDir, "report.json");
-    var unmappedPath = FindFirstExisting(artifactDir, "unmapped-targets.json");
-    var unsupportedPath = FindFirstExisting(artifactDir, "unsupported-actions.json");
-    var verifyPath = FindFirstExisting(artifactDir, "verify-report.json");
-    var projectVerifyPath = FindFirstExisting(artifactDir, "project-verify-report.json");
+    var groups = new Dictionary<(string Category, string Key), NormalizedTodoGroupBuilder>();
+
+    foreach (var insight in insights)
+    {
+        var normalized = NormalizeTodoGroup(insight);
+        var key = (insight.Category, normalized.Key);
+        if (!groups.TryGetValue(key, out var builder))
+        {
+            builder = new NormalizedTodoGroupBuilder(
+                insight.Category,
+                normalized.Key,
+                normalized.DisplayName,
+                normalized.SuggestedAction);
+            groups[key] = builder;
+        }
+
+        builder.Count += Math.Max(1, insight.EstimatedImpact);
+        if (string.IsNullOrWhiteSpace(builder.ExampleFile) && !string.IsNullOrWhiteSpace(insight.ExampleFile))
+        {
+            builder.ExampleFile = insight.ExampleFile;
+            builder.ExampleLine = insight.ExampleLine;
+        }
+
+        if (!string.IsNullOrWhiteSpace(insight.ExampleFile) && builder.RepresentativeFiles.Count < 5)
+            builder.RepresentativeFiles.Add(PathRedaction.Redact(insight.ExampleFile));
+
+        foreach (var evidence in insight.Evidence)
+        {
+            if (builder.Evidence.Count >= 5)
+                break;
+            if (!string.IsNullOrWhiteSpace(evidence))
+                builder.Evidence.Add(evidence.Trim());
+        }
+    }
+
+    return groups.Values
+        .OrderByDescending(g => g.Count)
+        .ThenBy(g => g.Category, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(g => g.GroupKey, StringComparer.OrdinalIgnoreCase)
+        .Select(g => g.ToGroup())
+        .ToArray();
+}
+
+static TableMappingCandidate[] BuildTableMappingCandidates(IEnumerable<TodoInsight> insights)
+{
+    var candidates = new Dictionary<string, TableMappingCandidateBuilder>(StringComparer.OrdinalIgnoreCase);
+
+    foreach (var insight in insights)
+    {
+        if (!insight.Category.Equals("TABLE_MAPPING_REQUIRED", StringComparison.OrdinalIgnoreCase))
+            continue;
+
+        var allEvidence = insight.Evidence.Length == 0
+            ? new[] { insight.Title }
+            : insight.Evidence;
+
+        var evidenceExpressions = allEvidence
+            .Select(ExtractLikelySourceExpression)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var expression = evidenceExpressions.FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(expression))
+            expression = ExtractLikelySourceExpression(insight.Title);
+        if (string.IsNullOrWhiteSpace(expression))
+            continue;
+
+        var sourceRoot = NormalizeTableRoot(expression);
+        var accessor = ExtractTableAccessorKind(expression);
+        var assertion = ExtractAssertionKind(expression);
+        var groupKey = $"table:{sourceRoot}:{accessor}:{assertion}";
+
+        if (!candidates.TryGetValue(groupKey, out var builder))
+        {
+            builder = new TableMappingCandidateBuilder(
+                groupKey,
+                sourceRoot,
+                accessor,
+                assertion,
+                SuggestUiTargetRootForTable(sourceRoot),
+                BuildTableMappingConfigHint(sourceRoot, accessor, assertion));
+            candidates[groupKey] = builder;
+        }
+
+        builder.Count += Math.Max(1, insight.EstimatedImpact);
+        if (string.IsNullOrWhiteSpace(builder.ExampleFile) && !string.IsNullOrWhiteSpace(insight.ExampleFile))
+        {
+            builder.ExampleFile = insight.ExampleFile;
+            builder.ExampleLine = insight.ExampleLine;
+        }
+
+        if (string.IsNullOrWhiteSpace(builder.SourceExpression))
+            builder.SourceExpression = expression;
+
+        foreach (var e in evidenceExpressions)
+        {
+            if (builder.Evidence.Count >= 8)
+                break;
+            builder.Evidence.Add(e);
+        }
+    }
+
+    return candidates.Values
+        .OrderByDescending(x => x.Count)
+        .ThenBy(x => x.SourceRoot, StringComparer.OrdinalIgnoreCase)
+        .Select(x => x.ToCandidate())
+        .ToArray();
+}
+
+static string SuggestUiTargetRootForTable(string sourceRoot)
+{
+    if (string.IsNullOrWhiteSpace(sourceRoot) || sourceRoot.Equals("unknown-table", StringComparison.OrdinalIgnoreCase))
+        return "<source-backed-table-root>";
+
+    return sourceRoot;
+}
+
+static string BuildTableMappingConfigHint(string sourceRoot, string accessor, string assertion)
+{
+    var root = string.IsNullOrWhiteSpace(sourceRoot) ? "<source-table-root>" : sourceRoot;
+    return $"Add one source-backed UiTargets/Tables mapping for `{root}`; RowTarget should represent `{accessor}` rows and cover `{assertion}` assertions. Verify selector/POM truth before changing config.";
+}
+
+static (string Key, string DisplayName, string SuggestedAction) NormalizeTodoGroup(TodoInsight insight)
+{
+    var text = string.Join("\n", insight.Evidence.Prepend(insight.Title));
+    return insight.Category switch
+    {
+        "MANUAL_REVIEW" or "RAW_STATEMENT" or "UNSUPPORTED_ACTION" or "HELPER_METHOD_REQUIRES_MAPPING" => NormalizeMethodFamily(insight.Category, text),
+        "TABLE_MAPPING_REQUIRED" => NormalizeTableFamily(text),
+        "SOURCE_ONLY_IDENTIFIER" or "UNAVAILABLE_SYMBOLS" or "UNRESOLVED_SYMBOL" => NormalizeSourceOnlyFamily(insight.Category, text),
+        "DEPENDS_ON_SUPPRESSED_SIDE_EFFECT" => NormalizeSuppressedSideEffectFamily(text),
+        _ => (NormalizeGenericKey(insight.Title), insight.Title, insight.SuggestedAction)
+    };
+}
+
+static (string Key, string DisplayName, string SuggestedAction) NormalizeMethodFamily(string category, string text)
+{
+    var method = ExtractMethodFamily(text);
+    if (!string.IsNullOrWhiteSpace(method))
+    {
+        return ($"method:{method}",
+            $"{category}: method family `{method}`",
+            "Group all occurrences of this helper/method family; inspect source/helper body or run --mode helper-inventory before adding MethodSemantics/ParameterizedMethods.");
+    }
+
+    return (NormalizeGenericKey(text),
+        $"{category}: unclassified helper/raw family",
+        "Inspect representative source snippets and classify this family before changing mappings or suppressions.");
+}
+
+static (string Key, string DisplayName, string SuggestedAction) NormalizeTableFamily(string text)
+{
+    var expression = ExtractLikelySourceExpression(text);
+    var root = NormalizeTableRoot(expression);
+    var accessor = ExtractTableAccessorKind(expression);
+    var assertion = ExtractAssertionKind(expression);
+    var key = $"table:{root}:{accessor}:{assertion}";
+    return (key,
+        $"Table/list mapping `{root}` via `{accessor}` ({assertion})",
+        "Add or refine one source-backed table/list mapping for the base target; do not fix each row/index one by one.");
+}
+
+static (string Key, string DisplayName, string SuggestedAction) NormalizeSourceOnlyFamily(string category, string text)
+{
+    var root = ExtractSourceOnlyRoot(text);
+    return ($"root:{root}",
+        $"{category}: source-only root `{root}`",
+        root.Equals("page", StringComparison.OrdinalIgnoreCase) || root.Equals("pagef", StringComparison.OrdinalIgnoreCase)
+            ? "Fix the upstream lifecycle/mapping that introduced page/pagef; do not add page/pagef as target-known just to hide the issue."
+            : "Map the full source expression or classify it explicitly; do not mark source-only roots as target-known unless they truly exist in target code.");
+}
+
+static (string Key, string DisplayName, string SuggestedAction) NormalizeSuppressedSideEffectFamily(string text)
+{
+    var source = ExtractSuppressedSideEffectSource(text);
+    var method = ExtractMethodFamily(source);
+    if (string.IsNullOrWhiteSpace(method))
+        method = ExtractMethodFamily(text);
+    if (string.IsNullOrWhiteSpace(method))
+        method = "unknown-side-effect";
+
+    return ($"suppressed-side-effect:{method}",
+        $"Suppressed side-effect family `{method}`",
+        "Do not keep downstream assertions active until this upstream side-effect is mapped or explicitly classified. If it is a project/POM helper, run --mode helper-inventory and add MethodSemantics/ParameterizedMethods.");
+}
+
+static string ExtractMethodFamily(string text)
+{
+    if (string.IsNullOrWhiteSpace(text))
+        return "";
+
+    var source = ExtractLikelySourceExpression(text);
+    var matches = System.Text.RegularExpressions.Regex.Matches(
+        source,
+        @"(?<name>[A-Za-z_][A-Za-z0-9_]*(?:\s*<[^>]+>)?)\s*\(");
+    if (matches.Count == 0)
+        return "";
+
+    var last = matches[matches.Count - 1].Groups["name"].Value;
+    last = System.Text.RegularExpressions.Regex.Replace(last, @"\s+", "");
+    var receiver = ExtractReceiverBeforeMethod(source, last);
+    if (string.IsNullOrWhiteSpace(receiver))
+        return last;
+
+    var root = receiver.Split('.', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? receiver;
+    if (root.Equals("Loader", StringComparison.OrdinalIgnoreCase))
+        return $"Loader.{last}";
+    if (root.Equals("Navigation", StringComparison.OrdinalIgnoreCase) || root.Equals("Browser", StringComparison.OrdinalIgnoreCase))
+        return $"{root}.{last}";
+
+    return last;
+}
+
+static string ExtractReceiverBeforeMethod(string source, string method)
+{
+    var simpleMethod = method;
+    var genericStart = simpleMethod.IndexOf('<');
+    if (genericStart >= 0)
+        simpleMethod = simpleMethod[..genericStart];
+
+    var pattern = $@"(?<receiver>[A-Za-z_][A-Za-z0-9_\.<>]*)\.{System.Text.RegularExpressions.Regex.Escape(simpleMethod)}\s*(<[^>]+>)?\s*\(";
+    var match = System.Text.RegularExpressions.Regex.Match(source, pattern);
+    return match.Success ? match.Groups["receiver"].Value : "";
+}
+
+static string ExtractLikelySourceExpression(string text)
+{
+    if (string.IsNullOrWhiteSpace(text))
+        return "";
+
+    var sourceMatch = System.Text.RegularExpressions.Regex.Match(text, @"Source:\s*(?<source>.*?)(?:\r?\n|$)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    if (sourceMatch.Success)
+        return CleanupSourceExpression(sourceMatch.Groups["source"].Value);
+
+    var suppressedMatch = System.Text.RegularExpressions.Regex.Match(text, @"side-effect at line \d+:\s*(?<source>.*?)(?:\s*\[MIGRATOR:|\r?\n|$)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    if (suppressedMatch.Success)
+        return CleanupSourceExpression(suppressedMatch.Groups["source"].Value);
+
+    var todoMatch = System.Text.RegularExpressions.Regex.Match(text, @"//\s*TODO:\s*(?<source>.*?)(?:\s*\[MIGRATOR:|\r?\n|$)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    if (todoMatch.Success)
+        return CleanupSourceExpression(todoMatch.Groups["source"].Value);
+
+    return CleanupSourceExpression(text.Split('\n').FirstOrDefault(l => !string.IsNullOrWhiteSpace(l)) ?? text);
+}
+
+static string ExtractSuppressedSideEffectSource(string text)
+{
+    var source = ExtractLikelySourceExpression(text);
+    if (!string.IsNullOrWhiteSpace(source))
+        return source;
+
+    var match = System.Text.RegularExpressions.Regex.Match(text, @"source suppressed:\s*(?<source>.*?)(?:\r?\n|$)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    return match.Success ? CleanupSourceExpression(match.Groups["source"].Value) : text;
+}
+
+static string CleanupSourceExpression(string value)
+{
+    var text = value.Trim().Trim('`');
+    text = text.Replace("//", " ").Trim();
+    text = System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ");
+    return text.TrimEnd(';');
+}
+
+static string NormalizeTableRoot(string expression)
+{
+    if (string.IsNullOrWhiteSpace(expression))
+        return "unknown-table";
+
+    var source = CleanupSourceExpression(expression);
+
+    // Most legacy POM tables look like page.Table.Items.ElementAt(i).Foo or page.Registry.Rows.ElementAt(i).Foo.
+    // Group by the stable table/root expression, not by row index or expected assertion value.
+    var collectionElementAt = System.Text.RegularExpressions.Regex.Match(source,
+        @"(?<root>[A-Za-z_][A-Za-z0-9_\.]*?)\.(?:Items|Rows)\.ElementAt\(",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    if (collectionElementAt.Success)
+        return NormalizeExpressionPlaceholders(collectionElementAt.Groups["root"].Value);
+
+    var collectionRoot = System.Text.RegularExpressions.Regex.Match(source,
+        @"(?<root>[A-Za-z_][A-Za-z0-9_\.]*?)\.(?:Items|Rows)\b",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    if (collectionRoot.Success)
+        return NormalizeExpressionPlaceholders(collectionRoot.Groups["root"].Value);
+
+    var directElementAt = System.Text.RegularExpressions.Regex.Match(source,
+        @"(?<root>[A-Za-z_][A-Za-z0-9_\.]*)\.ElementAt\(",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    if (directElementAt.Success)
+        return NormalizeExpressionPlaceholders(directElementAt.Groups["root"].Value);
+
+    var semanticTableName = System.Text.RegularExpressions.Regex.Match(source,
+        @"(?<root>[A-Za-z_][A-Za-z0-9_\.]*?(?:Table|Registry|Grid|List)[A-Za-z0-9_\.]*)\.",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    if (semanticTableName.Success)
+        return NormalizeExpressionPlaceholders(semanticTableName.Groups["root"].Value);
+
+    return NormalizeExpressionPlaceholders(source.Length > 90 ? source[..90] : source);
+}
+
+static string ExtractTableAccessorKind(string expression)
+{
+    if (expression.Contains("Items.ElementAt", StringComparison.OrdinalIgnoreCase)) return "Items.ElementAt";
+    if (expression.Contains("Rows.ElementAt", StringComparison.OrdinalIgnoreCase)) return "Rows.ElementAt";
+    if (expression.Contains("ElementAt", StringComparison.OrdinalIgnoreCase)) return "ElementAt";
+    if (expression.Contains("Nth", StringComparison.OrdinalIgnoreCase)) return "Nth";
+    if (expression.Contains("Cells", StringComparison.OrdinalIgnoreCase)) return "Cells";
+    return "table-access";
+}
+
+static string ExtractAssertionKind(string expression)
+{
+    if (expression.Contains(".Sum", StringComparison.OrdinalIgnoreCase)) return "Sum";
+    if (expression.Contains(".Text", StringComparison.OrdinalIgnoreCase) || expression.Contains("ToHaveText", StringComparison.OrdinalIgnoreCase)) return "Text";
+    if (expression.Contains(".Count", StringComparison.OrdinalIgnoreCase)) return "Count";
+    if (expression.Contains("Visible", StringComparison.OrdinalIgnoreCase) || expression.Contains("ToBeVisible", StringComparison.OrdinalIgnoreCase)) return "Visibility";
+    return "unknown-assertion";
+}
+
+static string ExtractSourceOnlyRoot(string text)
+{
+    var expression = ExtractLikelySourceExpression(text);
+    var candidates = new[] { "pagef", "page", "Urls", "Browser", "Navigation", "WebDriver", "driver" };
+    foreach (var candidate in candidates)
+    {
+        if (System.Text.RegularExpressions.Regex.IsMatch(expression, $@"\b{System.Text.RegularExpressions.Regex.Escape(candidate)}\b"))
+            return candidate;
+    }
+
+    var match = System.Text.RegularExpressions.Regex.Match(expression, @"\b(?<root>[A-Za-z_][A-Za-z0-9_]*)\s*\.");
+    return match.Success ? match.Groups["root"].Value : "unknown-root";
+}
+
+static string NormalizeGenericKey(string value)
+{
+    var cleaned = NormalizeExpressionPlaceholders(value);
+    return cleaned.Length > 120 ? cleaned[..120] : cleaned;
+}
+
+static string NormalizeExpressionPlaceholders(string value)
+{
+    var text = value.Trim();
+    text = System.Text.RegularExpressions.Regex.Replace(text, @"""(?:\\.|[^""])*""", "\"*\"");
+    text = System.Text.RegularExpressions.Regex.Replace(text, @"'[^']*'", "'*'");
+    text = System.Text.RegularExpressions.Regex.Replace(text, @"\b\d+\b", "#");
+    text = System.Text.RegularExpressions.Regex.Replace(text, @"ElementAt\s*\([^)]*\)", "ElementAt(*)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    text = System.Text.RegularExpressions.Regex.Replace(text, @"Nth\s*\([^)]*\)", "Nth(*)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    text = System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ");
+    return text;
+}
+
+static TodoExplanationReport BuildExplainTodoReportFromArtifacts(string artifactDir, bool recursiveArtifacts = false)
+{
+    ValidateArtifactLookupRoot(artifactDir, recursiveArtifacts);
+    var reportPath = FindFirstExisting(artifactDir, "report.json", recursiveArtifacts);
+    var unmappedPath = FindFirstExisting(artifactDir, "unmapped-targets.json", recursiveArtifacts);
+    var unsupportedPath = FindFirstExisting(artifactDir, "unsupported-actions.json", recursiveArtifacts);
+    var verifyPath = FindFirstExisting(artifactDir, "verify-report.json", recursiveArtifacts);
+    var projectVerifyPath = FindFirstExisting(artifactDir, "project-verify-report.json", recursiveArtifacts);
 
     var summary = new ArtifactSummary();
     if (reportPath != null)
@@ -2037,12 +2410,43 @@ static TodoExplanationReport BuildExplainTodoReportFromArtifacts(string artifact
     var built = BuildExplainTodoReport(fakeSummary, unmapped, unsupported, projectVerify);
     return built with
     {
-        Source = artifactDir,
+        Source = Path.GetFullPath(artifactDir),
+        ArtifactRoot = Path.GetFullPath(artifactDir),
+        RecursiveArtifactLookup = recursiveArtifacts,
         SyntaxErrors = Math.Max(built.SyntaxErrors, summary.SyntaxErrors),
         ProjectVerifyStatus = projectVerify?.Status ?? summary.VerifyStatus
     };
 }
 
+
+
+static void AppendQualityGatesHtml(StringBuilder sb, MigrationQualityGates gates)
+{
+    sb.AppendLine("<h2 class=\"section\">Quality gates</h2>");
+    sb.AppendLine("<table><thead><tr><th>Gate</th><th>Value</th><th>Status</th></tr></thead><tbody>");
+    QualityGateRow(sb, "Project verify", gates.ProjectVerifyStatus, QualityGateStatusCss(gates.ProjectVerifyStatus.Equals("passed", StringComparison.OrdinalIgnoreCase), gates.ProjectVerifyStatus.Equals("not-run", StringComparison.OrdinalIgnoreCase)));
+    QualityGateRow(sb, "Compile errors", gates.CompileErrors.ToString(), QualityGateStatusCss(gates.CompileErrors == 0, false));
+    QualityGateRow(sb, "EMPTY_TEST_AFTER_SUPPRESSION", gates.EmptyTestsAfterSuppression.ToString(), QualityGateStatusCss(gates.EmptyTestsAfterSuppression == 0, false));
+    QualityGateRow(sb, "DEPENDS_ON_SUPPRESSED_SIDE_EFFECT", gates.SuppressedSideEffectDependencies.ToString(), QualityGateStatusCss(gates.SuppressedSideEffectDependencies == 0, false));
+    QualityGateRow(sb, "SuppressedMethodPatterns", FormatNullableMetric(gates.SuppressedMethodPatterns), gates.SuppressedMethodPatterns.HasValue ? "" : "warn");
+    QualityGateRow(sb, "Regex-looking suppressions", FormatNullableMetric(gates.SuspiciousSuppressionPatterns), QualityGateStatusCss((gates.SuspiciousSuppressionPatterns ?? 0) == 0, !gates.SuspiciousSuppressionPatterns.HasValue));
+    sb.AppendLine("</tbody></table>");
+    if (gates.Warnings.Length > 0)
+    {
+        sb.AppendLine("<div class=\"card\" style=\"margin-top:12px\"><strong>Quality gate warnings</strong><ul>");
+        foreach (var warning in gates.Warnings)
+            sb.AppendLine($"<li>{Html(warning)}</li>");
+        sb.AppendLine("</ul></div>");
+    }
+}
+
+static void QualityGateRow(StringBuilder sb, string gate, string value, string css)
+{
+    var status = string.IsNullOrWhiteSpace(css) ? "ok" : css == "bad" ? "risk" : css == "warn" ? "not-run" : css;
+    sb.AppendLine($"<tr><td><code>{Html(gate)}</code></td><td>{Html(value)}</td><td><span class=\"pill {css}\">{Html(status)}</span></td></tr>");
+}
+
+static string QualityGateStatusCss(bool ok, bool unknown) => unknown ? "warn" : ok ? "ok" : "bad";
 
 static IReadOnlyList<MigrationReport> ReadGeneratedFileReports(string artifactDir)
 {
@@ -2083,16 +2487,112 @@ static IReadOnlyList<MigrationReport> ReadGeneratedFileReports(string artifactDi
     return reports;
 }
 
-static string? FindFirstExisting(string dir, string fileName)
+static string[] ArtifactLookupFileNames() => new[]
+{
+    "report.json", "unmapped-targets.json", "unsupported-actions.json", "verify-report.json", "project-verify-report.json",
+    "explain-todo.json", "explain-todo.md", "agent-next-task.md", "smoke-plan.json", "smoke-plan.md",
+    "runtime-checklist.md", "agent-runtime-next-task.md", "migration-board.json", "migration-board.md", "migration-board.html",
+    "config-validate-report.json", "config-validate-report.md"
+};
+
+static void ValidateArtifactLookupRoot(string dir, bool recursiveArtifacts)
+{
+    if (!Directory.Exists(dir))
+        return;
+
+    if (recursiveArtifacts)
+        return;
+
+    if (HasDirectArtifactEvidence(dir))
+        return;
+
+    var nested = CollectArtifactCandidates(dir).Take(20).ToArray();
+    if (nested.Length == 0)
+        return;
+
+    var sb = new StringBuilder();
+    sb.AppendLine($"Artifact directory does not look like a single run directory: {dir}");
+    sb.AppendLine("Default artifact lookup is non-recursive to avoid mixing stale report/verify files from unrelated runs.");
+    sb.AppendLine("Pass a concrete run directory, or use --recursive-artifacts after reviewing candidates.");
+    sb.AppendLine("Nested artifact candidates found:");
+    foreach (var candidate in nested)
+        sb.AppendLine($"- {candidate.FileName}: {candidate.Path}");
+    throw new ArtifactLookupException(sb.ToString().TrimEnd());
+}
+
+static bool HasDirectArtifactEvidence(string dir)
+{
+    if (ArtifactLookupFileNames().Any(name => File.Exists(Path.Combine(dir, name))))
+        return true;
+
+    if (Directory.Exists(Path.Combine(dir, "generated")))
+        return true;
+
+    return Directory.EnumerateFiles(dir, "*.cs", SearchOption.TopDirectoryOnly)
+        .Any(path =>
+        {
+            try
+            {
+                var text = File.ReadAllText(path);
+                return text.Contains("// Generated by Migrator", StringComparison.Ordinal)
+                    || text.Contains("MIGRATOR:", StringComparison.Ordinal);
+            }
+            catch
+            {
+                return false;
+            }
+        });
+}
+
+static ArtifactLookupCandidate[] CollectArtifactCandidates(string dir)
+{
+    if (!Directory.Exists(dir))
+        return Array.Empty<ArtifactLookupCandidate>();
+
+    return ArtifactLookupFileNames()
+        .SelectMany(name => Directory.EnumerateFiles(dir, name, SearchOption.AllDirectories)
+            .Where(path => !Path.GetDirectoryName(path)!.Equals(dir, StringComparison.OrdinalIgnoreCase))
+            .Select(path => new ArtifactLookupCandidate(
+                FileName: name,
+                Path: Path.GetFullPath(path),
+                LastWriteTimeUtc: File.GetLastWriteTimeUtc(path))))
+        .OrderBy(x => x.FileName, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(x => x.Path, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+}
+
+static string? FindFirstExisting(string dir, string fileName, bool recursiveArtifacts = false)
 {
     var direct = Path.Combine(dir, fileName);
     if (File.Exists(direct))
         return direct;
 
-    return Directory.EnumerateFiles(dir, fileName, SearchOption.AllDirectories)
-        .OrderBy(p => p.Length)
-        .FirstOrDefault();
+    if (!recursiveArtifacts)
+        return null;
+
+    var candidates = Directory.EnumerateFiles(dir, fileName, SearchOption.AllDirectories)
+        .Where(path => !Path.GetFullPath(path).Equals(Path.GetFullPath(direct), StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(File.GetLastWriteTimeUtc)
+        .ThenBy(path => path, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    if (candidates.Length == 0)
+        return null;
+
+    if (candidates.Length > 1)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"Multiple artifact candidates found for {fileName} under {dir}.");
+        sb.AppendLine("Recursive artifact lookup is intentionally fail-fast to prevent mixing unrelated runs.");
+        sb.AppendLine("Pass a concrete run directory instead. Candidates:");
+        foreach (var candidate in candidates.Take(20))
+            sb.AppendLine($"- {candidate}");
+        throw new ArtifactLookupException(sb.ToString().TrimEnd());
+    }
+
+    return candidates[0];
 }
+
 
 static void ReadSummaryReport(string path, ArtifactSummary summary)
 {
@@ -2276,6 +2776,19 @@ static int ReadInt(System.Text.Json.JsonElement element, string propertyName)
     return 0;
 }
 
+static bool ReadBool(System.Text.Json.JsonElement element, string propertyName)
+{
+    if (!element.TryGetProperty(propertyName, out var p))
+        return false;
+    if (p.ValueKind == System.Text.Json.JsonValueKind.True)
+        return true;
+    if (p.ValueKind == System.Text.Json.JsonValueKind.False)
+        return false;
+    if (p.ValueKind == System.Text.Json.JsonValueKind.String && bool.TryParse(p.GetString(), out var value))
+        return value;
+    return false;
+}
+
 static string? ReadString(System.Text.Json.JsonElement element, string propertyName)
 {
     if (!element.TryGetProperty(propertyName, out var p))
@@ -2290,6 +2803,8 @@ static string WriteExplainTodoMarkdown(TodoExplanationReport report)
     sb.AppendLine();
     sb.AppendLine($"- **Generated**: {report.GeneratedAtUtc:yyyy-MM-dd HH:mm:ss zzz}");
     sb.AppendLine($"- **Source**: `{report.Source}`");
+    sb.AppendLine($"- **Artifact root**: `{report.ArtifactRoot}`");
+    sb.AppendLine($"- **Artifact lookup**: `{(report.RecursiveArtifactLookup ? "recursive" : "direct-only")}`");
     sb.AppendLine($"- **Files**: `{report.FilesProcessed}`");
     sb.AppendLine($"- **Tests**: `{report.TestsFound}`");
     sb.AppendLine($"- **Actions**: `{report.ActionsFound}`");
@@ -2305,6 +2820,10 @@ static string WriteExplainTodoMarkdown(TodoExplanationReport report)
     sb.AppendLine("## Следующий лучший шаг");
     sb.AppendLine();
     sb.AppendLine(report.NextBestAction);
+    sb.AppendLine();
+    AppendNormalizedRootCausesMarkdown(sb, report.NormalizedRootCauses);
+    sb.AppendLine();
+    AppendTableMappingCandidatesMarkdown(sb, report.TableMappingCandidates);
     sb.AppendLine();
     sb.AppendLine("## Что делать дальше");
     sb.AppendLine();
@@ -2349,52 +2868,384 @@ static string WriteExplainTodoMarkdown(TodoExplanationReport report)
     return sb.ToString();
 }
 
+static void AppendNormalizedRootCausesMarkdown(StringBuilder sb, NormalizedTodoGroup[] groups)
+{
+    sb.AppendLine("## Top normalized root causes");
+    sb.AppendLine();
+    if (groups.Length == 0)
+    {
+        sb.AppendLine("Normalized root-cause groups are not available for this report.");
+        return;
+    }
+
+    sb.AppendLine("| # | Category | Group | Count | Example | Suggested action |");
+    sb.AppendLine("|---|---|---|---:|---|---|");
+    for (var i = 0; i < Math.Min(20, groups.Length); i++)
+    {
+        var group = groups[i];
+        var example = string.IsNullOrWhiteSpace(group.ExampleFile) ? "" : $"`{PathRedaction.Redact(group.ExampleFile)}:{group.ExampleLine}`";
+        sb.AppendLine($"| {i + 1} | `{EscapeMd(group.Category)}` | {EscapeMd(group.DisplayName)} | {group.Count} | {example} | {EscapeMd(group.SuggestedAction)} |");
+    }
+}
+
+static void AppendTableMappingCandidatesMarkdown(StringBuilder sb, TableMappingCandidate[] candidates)
+{
+    sb.AppendLine("## Table/list mapping candidates");
+    sb.AppendLine();
+    if (candidates.Length == 0)
+    {
+        sb.AppendLine("No table/list mapping candidates were inferred. If table TODOs exist, inspect raw evidence and improve TABLE_MAPPING_REQUIRED markers.");
+        return;
+    }
+
+    sb.AppendLine("| # | Source root | Accessor | Assertion | Count | Suggested config hint | Example |");
+    sb.AppendLine("|---|---|---|---|---:|---|---|");
+    for (var i = 0; i < Math.Min(20, candidates.Length); i++)
+    {
+        var c = candidates[i];
+        var example = string.IsNullOrWhiteSpace(c.ExampleFile) ? "" : $"`{PathRedaction.Redact(c.ExampleFile)}:{c.ExampleLine}`";
+        sb.AppendLine($"| {i + 1} | `{EscapeMd(c.SourceRoot)}` | `{EscapeMd(c.AccessorKind)}` | `{EscapeMd(c.AssertionKind)}` | {c.Count} | {EscapeMd(c.SuggestedConfigHint)} | {example} |");
+    }
+}
+
 static string WriteAgentNextTaskMarkdown(TodoExplanationReport report)
 {
-    var first = report.Insights.FirstOrDefault();
+    var prioritized = SelectAgentNextTask(report);
+    var topInsights = report.Insights.Take(10).ToArray();
+    var emptyTests = CountInsightImpact(report, "EMPTY_TEST_AFTER_SUPPRESSION");
+    var suppressedSideEffects = CountInsightImpact(report, "DEPENDS_ON_SUPPRESSED_SIDE_EFFECT");
+    var helperRisks = CountHelperRelatedInsights(report);
+    var verifyStatus = string.IsNullOrWhiteSpace(report.ProjectVerifyStatus) ? "not-run" : report.ProjectVerifyStatus!;
+
     var sb = new StringBuilder();
     sb.AppendLine("# Agent Next Task");
     sb.AppendLine();
     sb.AppendLine("Ты продолжаешь миграцию Selenium C# → Playwright .NET через AST Migrator.");
+    sb.AppendLine("Работай как bounded batch: сначала проверь контекст и gates, затем сделай один измеримый шаг, обнови артефакты и handoff.");
     sb.AppendLine();
-    sb.AppendLine("## Текущий статус");
+
+    sb.AppendLine("## Run context");
     sb.AppendLine();
-    sb.AppendLine($"- TODO: `{report.TodoComments}`");
-    sb.AppendLine($"- Unmapped targets: `{report.UnmappedTargets}`");
-    sb.AppendLine($"- Unsupported actions: `{report.UnsupportedActions}`");
-    sb.AppendLine($"- Project verify: `{report.ProjectVerifyStatus ?? "not-run"}`");
+    sb.AppendLine($"- Artifact root: `{PathRedaction.Redact(report.ArtifactRoot)}`");
+    sb.AppendLine($"- Artifact lookup: `{(report.RecursiveArtifactLookup ? "recursive" : "direct-only")}`");
+    sb.AppendLine($"- Project verify: `{verifyStatus}`");
+    sb.AppendLine($"- Files/tests/actions: `{report.FilesProcessed}` / `{report.TestsFound}` / `{report.ActionsFound}`");
+    sb.AppendLine($"- TODO/unmapped/unsupported: `{report.TodoComments}` / `{report.UnmappedTargets}` / `{report.UnsupportedActions}`");
+    sb.AppendLine($"- Syntax/compile diagnostics: `{report.SyntaxErrors}`");
     sb.AppendLine();
-    sb.AppendLine("## Следующий рекомендуемый шаг");
+
+    sb.AppendLine("## Quality gates / safety signals");
     sb.AppendLine();
-    if (first == null)
+    sb.AppendLine($"- EMPTY_TEST_AFTER_SUPPRESSION: `{emptyTests}`");
+    sb.AppendLine($"- DEPENDS_ON_SUPPRESSED_SIDE_EFFECT: `{suppressedSideEffects}`");
+    sb.AppendLine($"- Helper/POM semantics signals: `{helperRisks}`");
+    if (IsVerifyMissingOrNotRun(report))
+        sb.AppendLine("- Gate: `Project verify is not-run` — runtime-ready claims are not trustworthy until fresh verify-project exists.");
+    if (emptyTests > 0 || suppressedSideEffects > 0)
+        sb.AppendLine("- Gate: suppression safety risk exists — treat as safety work, not ordinary TODO reduction.");
+    if (helperRisks > 0)
+        sb.AppendLine("- Gate: helper/POM wrappers are involved — run or inspect `--mode helper-inventory` before adding suppressions or MethodSemantics guesses.");
+    sb.AppendLine();
+
+    sb.AppendLine("## Exact next task");
+    sb.AppendLine();
+    sb.AppendLine($"Priority: `{prioritized.Priority}`");
+    sb.AppendLine($"Category: `{prioritized.Category}`");
+    sb.AppendLine();
+    sb.AppendLine($"Task: **{prioritized.Title}**");
+    sb.AppendLine();
+    sb.AppendLine($"Why: {prioritized.Reason}");
+    sb.AppendLine();
+    sb.AppendLine($"Action: {prioritized.Action}");
+    if (!string.IsNullOrWhiteSpace(prioritized.ExampleFile))
+        sb.AppendLine($"\nRepresentative example: `{PathRedaction.Redact(prioritized.ExampleFile)}:{prioritized.ExampleLine}`");
+    if (prioritized.Evidence.Length > 0)
     {
-        sb.AppendLine("Явных TODO/root-cause проблем не найдено. Запусти verify-project или выбери runtime smoke candidates.");
+        sb.AppendLine();
+        sb.AppendLine("Evidence:");
+        foreach (var evidence in prioritized.Evidence.Take(5))
+            sb.AppendLine($"- `{EscapeMd(evidence)}`");
+    }
+    sb.AppendLine();
+
+    sb.AppendLine("## Top root-cause candidates");
+    sb.AppendLine();
+    if (topInsights.Length == 0)
+    {
+        sb.AppendLine("No TODO/root-cause candidates were found in explain-todo. Move to verify-project or runtime smoke after checking generated artifacts.");
     }
     else
     {
-        sb.AppendLine($"Категория: `{first.Category}`");
-        sb.AppendLine();
-        sb.AppendLine($"Задача: **{first.Title}**");
-        sb.AppendLine();
-        sb.AppendLine($"Почему: {first.Reason}");
-        sb.AppendLine();
-        sb.AppendLine($"Что сделать: {first.SuggestedAction}");
-        if (!string.IsNullOrWhiteSpace(first.ExampleFile))
-            sb.AppendLine($"\nПример: `{PathRedaction.Redact(first.ExampleFile)}:{first.ExampleLine}`");
+        sb.AppendLine("| # | Category | Impact | Example | Suggested action |");
+        sb.AppendLine("|---|---|---:|---|---|");
+        for (var i = 0; i < topInsights.Length; i++)
+        {
+            var insight = topInsights[i];
+            var example = string.IsNullOrWhiteSpace(insight.ExampleFile)
+                ? ""
+                : $"`{PathRedaction.Redact(insight.ExampleFile)}:{insight.ExampleLine}`";
+            sb.AppendLine($"| {i + 1} | `{EscapeMd(insight.Category)}` | {insight.EstimatedImpact} | {example} | {EscapeMd(insight.SuggestedAction)} |");
+        }
     }
     sb.AppendLine();
-    sb.AppendLine("## Ограничения");
+
+    sb.AppendLine("## Top normalized root causes");
     sb.AppendLine();
-    sb.AppendLine("- Не меняй исходный проект.");
-    sb.AppendLine("- Не редактируй generated `.cs` вручную.");
-    sb.AppendLine("- По умолчанию меняй только `adapter-config.json`.");
-    sb.AppendLine("- Если нужен C# fix мигратора — остановись и сформируй escalation report.");
-    sb.AppendLine("- Если нужен selector/POM — найди source truth; не угадывай молча.");
+    if (report.NormalizedRootCauses.Length == 0)
+    {
+        sb.AppendLine("No normalized root-cause groups are available. Use raw candidates above.");
+    }
+    else
+    {
+        sb.AppendLine("| # | Category | Group | Count | Suggested action |");
+        sb.AppendLine("|---|---|---|---:|---|");
+        for (var i = 0; i < Math.Min(10, report.NormalizedRootCauses.Length); i++)
+        {
+            var group = report.NormalizedRootCauses[i];
+            sb.AppendLine($"| {i + 1} | `{EscapeMd(group.Category)}` | {EscapeMd(group.DisplayName)} | {group.Count} | {EscapeMd(group.SuggestedAction)} |");
+        }
+    }
     sb.AppendLine();
-    sb.AppendLine("## Формат ответа");
+
+    if (report.TableMappingCandidates.Length > 0)
+    {
+        sb.AppendLine("## Table/list mapping candidates");
+        sb.AppendLine();
+        sb.AppendLine("Use these as families. Do not fix row/index TODOs one by one.");
+        sb.AppendLine();
+        sb.AppendLine("| # | Source root | Accessor | Assertion | Count | Hint |");
+        sb.AppendLine("|---|---|---|---|---:|---|");
+        for (var i = 0; i < Math.Min(10, report.TableMappingCandidates.Length); i++)
+        {
+            var c = report.TableMappingCandidates[i];
+            sb.AppendLine($"| {i + 1} | `{EscapeMd(c.SourceRoot)}` | `{EscapeMd(c.AccessorKind)}` | `{EscapeMd(c.AssertionKind)}` | {c.Count} | {EscapeMd(c.SuggestedConfigHint)} |");
+        }
+        sb.AppendLine();
+    }
+
+    sb.AppendLine("## Commands to run / update");
     sb.AppendLine();
-    sb.AppendLine("Отвечай на русском. После этапа покажи метрики до/после. Если статус `CONTINUE_AUTONOMOUSLY`, продолжай без вопроса пользователю.");
+    sb.AppendLine("Use concrete project paths from the current migration workspace; do not point report commands at a parent folder containing multiple runs.");
+    sb.AppendLine();
+    sb.AppendLine("```powershell");
+    sb.AppendLine($"dotnet run --project Migrator.Cli -- --mode explain-todo --input \"{PathRedaction.Redact(report.ArtifactRoot)}\" --out \"<next-explain-out>\" --format both");
+    sb.AppendLine($"dotnet run --project Migrator.Cli -- --mode migration-board --input \"{PathRedaction.Redact(report.ArtifactRoot)}\" --out \"<next-board-out>\" --format both");
+    if (ShouldRecommendHelperInventory(report))
+        sb.AppendLine("dotnet run --project Migrator.Cli -- --mode helper-inventory --input \"<selenium-tests-or-helper-root>\" --out \"<helper-inventory-out>\" --format both");
+    sb.AppendLine("dotnet test Migrator.Tests/Migrator.Tests.csproj");
+    sb.AppendLine("```");
+    sb.AppendLine();
+    if (IsVerifyMissingOrNotRun(report))
+    {
+        sb.AppendLine("Fresh verify-project is required before runtime-ready claims:");
+        sb.AppendLine();
+        sb.AppendLine("```powershell");
+        sb.AppendLine("dotnet run --project Migrator.Cli -- --mode verify-project --input \"<selenium-tests-root>\" --config \"<adapter-config.json>\" --out \"<verify-out>\" --format both");
+        sb.AppendLine("```");
+        sb.AppendLine();
+    }
+
+    sb.AppendLine("## Helper inventory rule");
+    sb.AppendLine();
+    sb.AppendLine("Run/request `--mode helper-inventory` before changing suppressions or MethodSemantics for project/POM wrappers such as `InputAndAccept`, `ValidateLoading`, `ClickAndOpen`, `ManualInputValue`, unqualified helper calls, or unknown business helpers. Do not infer helper semantics by name alone.");
+    sb.AppendLine();
+
+    sb.AppendLine("## Acceptance criteria");
+    sb.AppendLine();
+    foreach (var criterion in BuildAgentAcceptanceCriteria(report, prioritized))
+        sb.AppendLine($"- {criterion}");
+    sb.AppendLine();
+
+    sb.AppendLine("## Do not do");
+    sb.AppendLine();
+    sb.AppendLine("- Do not edit generated `.cs` files manually.");
+    sb.AppendLine("- Do not add broad suppressions just to reduce TODO count.");
+    sb.AppendLine("- Do not add `page`/`pagef` to known identifiers to hide a root cause.");
+    sb.AppendLine("- Do not mark runtime-ready if project verify is missing or failed.");
+    sb.AppendLine("- Do not guess selectors or helper semantics without source/POM/helper evidence.");
+    sb.AppendLine("- If the fix requires engine code, add focused regression tests and keep the patch small.");
+    sb.AppendLine();
+
+    sb.AppendLine("## Required final response format");
+    sb.AppendLine();
+    sb.AppendLine("### Summary");
+    sb.AppendLine("### Files changed");
+    sb.AppendLine("### Commands run");
+    sb.AppendLine("### Metrics before/after");
+    sb.AppendLine("### Quality gate status");
+    sb.AppendLine("### Remaining risks");
+    sb.AppendLine("### Next exact task");
     return sb.ToString();
+}
+
+static AgentNextTaskPlan SelectAgentNextTask(TodoExplanationReport report)
+{
+    if (IsVerifyMissingOrNotRun(report))
+    {
+        return new AgentNextTaskPlan(
+            Priority: "P0_VERIFY_PROJECT",
+            Category: "PROJECT_VERIFY_NOT_RUN",
+            Title: "Run fresh verify-project before runtime-ready or smoke claims",
+            Reason: "The current artifact batch does not contain a passed fresh project verify. Compile/runtime claims can be stale until verify-project is regenerated for this exact run.",
+            Action: "Run `--mode verify-project` for the current input/config, then regenerate migration-board/explain-todo from the concrete run directory.",
+            ExampleFile: "",
+            ExampleLine: 0,
+            Evidence: Array.Empty<string>());
+    }
+
+    if (report.SyntaxErrors > 0 || report.ProjectVerifyStatus?.Equals("failed", StringComparison.OrdinalIgnoreCase) == true)
+    {
+        return new AgentNextTaskPlan(
+            Priority: "P0_COMPILE",
+            Category: "PROJECT_VERIFY_FAILED",
+            Title: "Fix compile/project verify errors first",
+            Reason: "Generated code is not compile-stable. TODO reduction should wait until compile errors are understood.",
+            Action: "Open project-verify-report, classify top diagnostics, fix the smallest root cause, and rerun verify-project.",
+            ExampleFile: "",
+            ExampleLine: 0,
+            Evidence: Array.Empty<string>());
+    }
+
+    var emptyTests = FindInsight(report, "EMPTY_TEST_AFTER_SUPPRESSION");
+    var suppressedSideEffects = FindInsight(report, "DEPENDS_ON_SUPPRESSED_SIDE_EFFECT");
+    var safety = suppressedSideEffects ?? emptyTests;
+    if (safety != null)
+    {
+        return new AgentNextTaskPlan(
+            Priority: "P1_SUPPRESSION_SAFETY",
+            Category: safety.Category,
+            Title: safety.Title,
+            Reason: "Suppression safety issues can produce hollow or invalid tests even when compile is green.",
+            Action: "Classify the upstream suppressed method family. Use `--mode helper-inventory` for project/POM helpers, then replace unsafe suppressions with MethodSemantics/explicit mappings or keep downstream code blocked.",
+            ExampleFile: safety.ExampleFile,
+            ExampleLine: safety.ExampleLine,
+            Evidence: safety.Evidence);
+    }
+
+    var tableCandidate = report.TableMappingCandidates.FirstOrDefault();
+    if (tableCandidate != null)
+    {
+        return new AgentNextTaskPlan(
+            Priority: "P2_TABLE_MAPPING",
+            Category: "TABLE_MAPPING_REQUIRED",
+            Title: $"Add source-backed table/list mapping for `{tableCandidate.SourceRoot}`",
+            Reason: "Table/list TODOs should be fixed as reusable table families, not one row/index at a time.",
+            Action: tableCandidate.SuggestedConfigHint,
+            ExampleFile: tableCandidate.ExampleFile,
+            ExampleLine: tableCandidate.ExampleLine,
+            Evidence: tableCandidate.Evidence);
+    }
+
+    var first = report.Insights.FirstOrDefault();
+    if (first == null)
+    {
+        return new AgentNextTaskPlan(
+            Priority: "P2_RUNTIME_SMOKE",
+            Category: "NO_ACTIONABLE_TODO",
+            Title: "No actionable TODO root cause found",
+            Reason: "explain-todo did not find actionable TODO categories.",
+            Action: "Run smoke-plan/runtime checklist or inspect verify-project output for residual risks.",
+            ExampleFile: "",
+            ExampleLine: 0,
+            Evidence: Array.Empty<string>());
+    }
+
+    var priority = first.Category switch
+    {
+        "TABLE_MAPPING_REQUIRED" => "P2_TABLE_MAPPING",
+        "MANUAL_REVIEW" => "P2_METHOD_FAMILY_GROUPING",
+        "UNSUPPORTED_ACTION" => "P2_UNSUPPORTED_CLASSIFICATION",
+        "HELPER_METHOD_REQUIRES_MAPPING" => "P2_HELPER_OR_MAPPING",
+        "RAW_STATEMENT" => "P2_HELPER_OR_MAPPING",
+        "WAIT_MAPPING_REQUIRED" => "P2_WAIT_MAPPING",
+        _ => "P2_ROOT_CAUSE"
+    };
+
+    return new AgentNextTaskPlan(
+        Priority: priority,
+        Category: first.Category,
+        Title: first.Title,
+        Reason: first.Reason,
+        Action: first.SuggestedAction,
+        ExampleFile: first.ExampleFile,
+        ExampleLine: first.ExampleLine,
+        Evidence: first.Evidence);
+}
+
+static TodoInsight? FindInsight(TodoExplanationReport report, string category) =>
+    report.Insights.FirstOrDefault(i => i.Category.Equals(category, StringComparison.OrdinalIgnoreCase));
+
+static int CountInsightImpact(TodoExplanationReport report, string category) =>
+    report.Insights
+        .Where(i => i.Category.Equals(category, StringComparison.OrdinalIgnoreCase))
+        .Sum(i => i.EstimatedImpact);
+
+static int CountHelperRelatedInsights(TodoExplanationReport report) =>
+    report.Insights
+        .Where(i => IsHelperRelatedInsight(i))
+        .Sum(i => Math.Max(1, i.EstimatedImpact));
+
+static bool IsHelperRelatedInsight(TodoInsight insight)
+{
+    var text = string.Join(" ", new[] { insight.Category, insight.Title, insight.Reason, insight.SuggestedAction }.Concat(insight.Evidence));
+    return text.Contains("helper", StringComparison.OrdinalIgnoreCase)
+        || text.Contains("wrapper", StringComparison.OrdinalIgnoreCase)
+        || text.Contains("POM", StringComparison.OrdinalIgnoreCase)
+        || text.Contains("InputAndAccept", StringComparison.OrdinalIgnoreCase)
+        || text.Contains("ValidateLoading", StringComparison.OrdinalIgnoreCase)
+        || text.Contains("ClickAndOpen", StringComparison.OrdinalIgnoreCase)
+        || text.Contains("ManualInputValue", StringComparison.OrdinalIgnoreCase)
+        || text.Contains("Loader", StringComparison.OrdinalIgnoreCase);
+}
+
+static bool ShouldRecommendHelperInventory(TodoExplanationReport report) =>
+    CountHelperRelatedInsights(report) > 0
+    || CountInsightImpact(report, "DEPENDS_ON_SUPPRESSED_SIDE_EFFECT") > 0
+    || report.Insights.Any(i => i.Category is "UNSUPPORTED_ACTION" or "RAW_STATEMENT" or "WAIT_MAPPING_REQUIRED" or "MANUAL_REVIEW" or "HELPER_METHOD_REQUIRES_MAPPING");
+
+static bool IsVerifyMissingOrNotRun(TodoExplanationReport report) =>
+    string.IsNullOrWhiteSpace(report.ProjectVerifyStatus)
+    || report.ProjectVerifyStatus.Equals("not-run", StringComparison.OrdinalIgnoreCase);
+
+static IEnumerable<string> BuildAgentAcceptanceCriteria(TodoExplanationReport report, AgentNextTaskPlan plan)
+{
+    if (plan.Priority.StartsWith("P0_VERIFY_PROJECT", StringComparison.OrdinalIgnoreCase))
+    {
+        yield return "Fresh `project-verify-report.md/json` exists for the current concrete run/config.";
+        yield return "`migration-board` regenerated from that concrete run directory; no parent-folder artifact mixing.";
+        yield return "Runtime-ready/smoke claims are either updated from verify-project or explicitly withheld.";
+        yield break;
+    }
+
+    if (plan.Priority.StartsWith("P0_COMPILE", StringComparison.OrdinalIgnoreCase))
+    {
+        yield return "Top compile diagnostic root cause is fixed or escalated with evidence.";
+        yield return "`verify-project` rerun and compile error count does not increase.";
+        yield break;
+    }
+
+    if (plan.Priority.StartsWith("P1_SUPPRESSION", StringComparison.OrdinalIgnoreCase))
+    {
+        yield return "No new broad suppressions are added.";
+        yield return "Each touched suppressed method family is classified as SafeWaitElide, ProjectWaitHelper, RequiredSideEffect, ReadOnlyProbe, or UnknownUnsafe.";
+        yield return "If project/POM helpers are involved, `--mode helper-inventory` output or source-body evidence is referenced.";
+        yield return "`EMPTY_TEST_AFTER_SUPPRESSION` and `DEPENDS_ON_SUPPRESSED_SIDE_EFFECT` counts do not increase.";
+        yield break;
+    }
+
+    if (plan.Priority.StartsWith("P2_TABLE", StringComparison.OrdinalIgnoreCase))
+    {
+        yield return "Table/list TODOs are grouped by source root/accessor/assertion kind; do not fix individual row/index TODOs one by one.";
+        yield return "Any new UiTargets/Tables mapping is backed by source/POM selector truth.";
+        yield return "Before/after metrics include TABLE_MAPPING_REQUIRED count and affected table family count.";
+    }
+
+    if (ShouldRecommendHelperInventory(report))
+        yield return "If helper/POM wrappers are touched, helper-inventory evidence is generated or explicitly cited.";
+
+    yield return "Focused regression tests are added for engine changes; config-only changes include before/after metrics.";
+    yield return "Generated reports are refreshed from a concrete run directory, not a parent artifact folder.";
+    yield return "Metrics before/after are reported: TODO, unmapped, unsupported, empty tests, suppressed side-effect dependencies.";
 }
 
 static string TrimForTitle(string value, int max)
@@ -2416,7 +3267,7 @@ static string EscapeMd(string value) => value.Replace("|", "\\|").Replace("\r", 
 
 // --- Runtime readiness / smoke-plan mode ---
 
-static int RunSmokePlan(string inputPath, string outPath, string format)
+static int RunSmokePlan(string inputPath, string outPath, string format, bool recursiveArtifacts)
 {
     if (!Directory.Exists(inputPath))
     {
@@ -2425,11 +3276,22 @@ static int RunSmokePlan(string inputPath, string outPath, string format)
     }
 
     Directory.CreateDirectory(outPath);
-    var report = BuildSmokePlanReportFromArtifacts(inputPath);
+    SmokePlanReport report;
+    try
+    {
+        report = BuildSmokePlanReportFromArtifacts(inputPath, recursiveArtifacts);
+    }
+    catch (ArtifactLookupException ex)
+    {
+        Console.Error.WriteLine(ex.Message);
+        return 2;
+    }
+
     WriteSmokePlanReport(report, outPath, format);
 
     Console.WriteLine("=== Smoke Plan Summary ===");
     Console.WriteLine($"Source: {inputPath}");
+    Console.WriteLine($"Artifact lookup: {(recursiveArtifacts ? "recursive" : "direct-only")}");
     Console.WriteLine($"Generated files: {report.GeneratedFiles}");
     Console.WriteLine($"Tests found: {report.TestsFound}");
     Console.WriteLine($"Runtime-ready: {report.RuntimeReadyCandidates}");
@@ -2454,11 +3316,12 @@ static void WriteSmokePlanArtifacts(string artifactDir, string outPath, string f
     }
 }
 
-static SmokePlanReport BuildSmokePlanReportFromArtifacts(string artifactDir)
+static SmokePlanReport BuildSmokePlanReportFromArtifacts(string artifactDir, bool recursiveArtifacts = false)
 {
-    var projectVerifyPath = FindFirstExisting(artifactDir, "project-verify-report.json");
+    ValidateArtifactLookupRoot(artifactDir, recursiveArtifacts);
+    var projectVerifyPath = FindFirstExisting(artifactDir, "project-verify-report.json", recursiveArtifacts);
     var projectVerify = projectVerifyPath != null ? ReadProjectVerifyReport(projectVerifyPath) : null;
-    var explainPath = FindFirstExisting(artifactDir, "explain-todo.json");
+    var explainPath = FindFirstExisting(artifactDir, "explain-todo.json", recursiveArtifacts);
     var explain = explainPath != null ? ReadTodoExplanationReport(explainPath) : null;
     var generatedFiles = FindGeneratedCsFiles(artifactDir).ToArray();
 
@@ -2491,6 +3354,8 @@ static SmokePlanReport BuildSmokePlanReportFromArtifacts(string artifactDir)
     return new SmokePlanReport(
         GeneratedAtUtc: DateTimeOffset.UtcNow,
         Source: Path.GetFullPath(artifactDir),
+        ArtifactRoot: Path.GetFullPath(artifactDir),
+        RecursiveArtifactLookup: recursiveArtifacts,
         ProjectVerifyStatus: projectVerify?.Status,
         GeneratedFiles: generatedFiles.Length,
         TestsFound: ordered.Length,
@@ -2509,6 +3374,8 @@ static TodoExplanationReport? ReadTodoExplanationReport(string path)
         return new TodoExplanationReport(
             GeneratedAtUtc: ReadDateTimeOffset(root, "GeneratedAtUtc") ?? DateTimeOffset.UtcNow,
             Source: ReadString(root, "Source") ?? path,
+            ArtifactRoot: ReadString(root, "ArtifactRoot") ?? ReadString(root, "Source") ?? path,
+            RecursiveArtifactLookup: ReadBool(root, "RecursiveArtifactLookup"),
             FilesProcessed: ReadInt(root, "FilesProcessed"),
             TestsFound: ReadInt(root, "TestsFound"),
             ActionsFound: ReadInt(root, "ActionsFound"),
@@ -2521,12 +3388,69 @@ static TodoExplanationReport? ReadTodoExplanationReport(string path)
             SyntaxErrors: ReadInt(root, "SyntaxErrors"),
             ProjectVerifyStatus: ReadString(root, "ProjectVerifyStatus"),
             Insights: Array.Empty<TodoInsight>(),
+            NormalizedRootCauses: ReadNormalizedTodoGroups(root),
+            TableMappingCandidates: ReadTableMappingCandidates(root),
             NextBestAction: ReadString(root, "NextBestAction") ?? "Run smoke-plan or explain-todo.");
     }
     catch
     {
         return null;
     }
+}
+
+static TableMappingCandidate[] ReadTableMappingCandidates(System.Text.Json.JsonElement root)
+{
+    if (!root.TryGetProperty("TableMappingCandidates", out var candidates) || candidates.ValueKind != System.Text.Json.JsonValueKind.Array)
+        return Array.Empty<TableMappingCandidate>();
+
+    var result = new List<TableMappingCandidate>();
+    foreach (var candidate in candidates.EnumerateArray())
+    {
+        result.Add(new TableMappingCandidate(
+            GroupKey: ReadString(candidate, "GroupKey") ?? "unknown",
+            SourceRoot: ReadString(candidate, "SourceRoot") ?? "unknown-table",
+            AccessorKind: ReadString(candidate, "AccessorKind") ?? "table-access",
+            AssertionKind: ReadString(candidate, "AssertionKind") ?? "unknown-assertion",
+            Count: ReadInt(candidate, "Count"),
+            ExampleFile: ReadString(candidate, "ExampleFile") ?? "",
+            ExampleLine: ReadInt(candidate, "ExampleLine"),
+            SourceExpression: ReadString(candidate, "SourceExpression") ?? "",
+            SuggestedUiTargetRoot: ReadString(candidate, "SuggestedUiTargetRoot") ?? "<source-backed-table-root>",
+            SuggestedConfigHint: ReadString(candidate, "SuggestedConfigHint") ?? "Add source-backed table/list mapping.",
+            Evidence: ReadStringArray(candidate, "Evidence")));
+    }
+
+    return result
+        .OrderByDescending(x => x.Count)
+        .ThenBy(x => x.SourceRoot, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+}
+
+static NormalizedTodoGroup[] ReadNormalizedTodoGroups(System.Text.Json.JsonElement root)
+{
+    if (!root.TryGetProperty("NormalizedRootCauses", out var groups) || groups.ValueKind != System.Text.Json.JsonValueKind.Array)
+        return Array.Empty<NormalizedTodoGroup>();
+
+    var result = new List<NormalizedTodoGroup>();
+    foreach (var group in groups.EnumerateArray())
+    {
+        result.Add(new NormalizedTodoGroup(
+            Category: ReadString(group, "Category") ?? "UNKNOWN",
+            GroupKey: ReadString(group, "GroupKey") ?? "unknown",
+            DisplayName: ReadString(group, "DisplayName") ?? ReadString(group, "GroupKey") ?? "unknown",
+            Count: ReadInt(group, "Count"),
+            ExampleFile: ReadString(group, "ExampleFile") ?? "",
+            ExampleLine: ReadInt(group, "ExampleLine"),
+            SuggestedAction: ReadString(group, "SuggestedAction") ?? "Inspect representative source truth.",
+            RepresentativeFiles: ReadStringArray(group, "RepresentativeFiles"),
+            Evidence: ReadStringArray(group, "Evidence")));
+    }
+
+    return result
+        .OrderByDescending(x => x.Count)
+        .ThenBy(x => x.Category, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(x => x.GroupKey, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
 }
 
 static IEnumerable<string> FindGeneratedCsFiles(string artifactDir)
@@ -2775,6 +3699,8 @@ static string WriteSmokePlanMarkdown(SmokePlanReport report)
     sb.AppendLine();
     sb.AppendLine($"- **Generated**: {report.GeneratedAtUtc:yyyy-MM-dd HH:mm:ss zzz}");
     sb.AppendLine($"- **Source**: `{report.Source}`");
+    sb.AppendLine($"- **Artifact root**: `{report.ArtifactRoot}`");
+    sb.AppendLine($"- **Artifact lookup**: `{(report.RecursiveArtifactLookup ? "recursive" : "direct-only")}`");
     sb.AppendLine($"- **Project verify**: `{report.ProjectVerifyStatus ?? "not-run"}`");
     sb.AppendLine($"- **Generated files**: `{report.GeneratedFiles}`");
     sb.AppendLine($"- **Tests found**: `{report.TestsFound}`");
@@ -2875,7 +3801,7 @@ static string WriteAgentRuntimeNextTaskMarkdown(SmokePlanReport report)
 
 // --- Migration board mode ---
 
-static int RunMigrationBoard(string inputPath, string outPath, string format)
+static int RunMigrationBoard(string inputPath, string outPath, string format, bool recursiveArtifacts)
 {
     if (!Directory.Exists(inputPath))
     {
@@ -2884,13 +3810,25 @@ static int RunMigrationBoard(string inputPath, string outPath, string format)
     }
 
     Directory.CreateDirectory(outPath);
-    var report = BuildMigrationBoardReportFromArtifacts(inputPath);
+    MigrationBoardReport report;
+    try
+    {
+        report = BuildMigrationBoardReportFromArtifacts(inputPath, recursiveArtifacts);
+    }
+    catch (ArtifactLookupException ex)
+    {
+        Console.Error.WriteLine(ex.Message);
+        return 2;
+    }
+
     WriteMigrationBoardReport(report, outPath, format);
 
     Console.WriteLine("=== Migration Board ===");
     Console.WriteLine($"Source: {inputPath}");
+    Console.WriteLine($"Artifact lookup: {(recursiveArtifacts ? "recursive" : "direct-only")}");
     Console.WriteLine($"Files: {report.Summary.FilesProcessed}, Tests: {report.Summary.TestsFound}, TODO: {report.Summary.TodoComments}");
     Console.WriteLine($"Project verify: {report.ProjectVerifyStatus ?? "not-run"}");
+    Console.WriteLine($"Quality gates: empty-tests={report.QualityGates.EmptyTestsAfterSuppression}, suppressed-side-effects={report.QualityGates.SuppressedSideEffectDependencies}, regex-like-suppressions={FormatNullableMetric(report.QualityGates.SuspiciousSuppressionPatterns)}");
     Console.WriteLine($"Smoke candidates: {report.SmokeCandidates}, Runtime-ready: {report.RuntimeReadyCandidates}");
     Console.WriteLine($"Migration board written to: {Path.GetFullPath(outPath)}");
     return 0;
@@ -2911,12 +3849,13 @@ static void WriteMigrationBoardArtifacts(string artifactDir, string outPath, str
     }
 }
 
-static MigrationBoardReport BuildMigrationBoardReportFromArtifacts(string artifactDir)
+static MigrationBoardReport BuildMigrationBoardReportFromArtifacts(string artifactDir, bool recursiveArtifacts = false)
 {
+    ValidateArtifactLookupRoot(artifactDir, recursiveArtifacts);
     var summary = new ArtifactSummary();
-    var reportPath = FindFirstExisting(artifactDir, "report.json");
-    var verifyPath = FindFirstExisting(artifactDir, "verify-report.json");
-    var projectVerifyPath = FindFirstExisting(artifactDir, "project-verify-report.json");
+    var reportPath = FindFirstExisting(artifactDir, "report.json", recursiveArtifacts);
+    var verifyPath = FindFirstExisting(artifactDir, "verify-report.json", recursiveArtifacts);
+    var projectVerifyPath = FindFirstExisting(artifactDir, "project-verify-report.json", recursiveArtifacts);
 
     if (reportPath != null)
         ReadSummaryReport(reportPath, summary);
@@ -2930,7 +3869,7 @@ static MigrationBoardReport BuildMigrationBoardReportFromArtifacts(string artifa
         summary.SyntaxErrors = Math.Max(summary.SyntaxErrors, projectVerify.ClassifiedDiagnostics.Count(d => d.Severity.Equals("error", StringComparison.OrdinalIgnoreCase)));
     }
 
-    var explain = BuildExplainTodoReportFromArtifacts(artifactDir);
+    var explain = BuildExplainTodoReportFromArtifacts(artifactDir, recursiveArtifacts);
     summary.FilesProcessed = Math.Max(summary.FilesProcessed, explain.FilesProcessed);
     summary.TestsFound = Math.Max(summary.TestsFound, explain.TestsFound);
     summary.ActionsFound = Math.Max(summary.ActionsFound, explain.ActionsFound);
@@ -2943,20 +3882,32 @@ static MigrationBoardReport BuildMigrationBoardReportFromArtifacts(string artifa
     summary.SyntaxErrors = Math.Max(summary.SyntaxErrors, explain.SyntaxErrors);
     summary.VerifyStatus ??= explain.ProjectVerifyStatus;
 
-    var smoke = BuildSmokePlanReportFromArtifacts(artifactDir);
+    var smoke = BuildSmokePlanReportFromArtifacts(artifactDir, recursiveArtifacts);
     var fileCards = BuildMigrationBoardFileCards(smoke, projectVerify).ToArray();
     var topInsights = explain.Insights
         .OrderByDescending(x => x.EstimatedImpact)
         .ThenBy(x => x.Category, StringComparer.OrdinalIgnoreCase)
         .Take(25)
         .ToArray();
+    var topNormalized = explain.NormalizedRootCauses
+        .OrderByDescending(x => x.Count)
+        .ThenBy(x => x.Category, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(x => x.GroupKey, StringComparer.OrdinalIgnoreCase)
+        .Take(25)
+        .ToArray();
     var topSmoke = smoke.Candidates.Take(20).ToArray();
-    var artifacts = FindBoardArtifacts(artifactDir).ToArray();
+    var artifacts = FindBoardArtifacts(artifactDir, recursiveArtifacts).ToArray();
+    var artifactCandidates = recursiveArtifacts ? CollectArtifactCandidates(artifactDir).ToArray() : Array.Empty<ArtifactLookupCandidate>();
+    var qualityGates = BuildMigrationQualityGates(artifactDir, recursiveArtifacts, summary, projectVerify);
 
     return new MigrationBoardReport(
         GeneratedAtUtc: DateTimeOffset.UtcNow,
         Source: Path.GetFullPath(artifactDir),
+        ArtifactRoot: Path.GetFullPath(artifactDir),
+        RecursiveArtifactLookup: recursiveArtifacts,
+        ArtifactCandidates: artifactCandidates,
         Summary: summary,
+        QualityGates: qualityGates,
         ProjectVerifyStatus: projectVerify?.Status ?? summary.VerifyStatus,
         ProjectDiagnostics: projectVerify?.Diagnostics.Length ?? 0,
         GeneratedFiles: smoke.GeneratedFiles,
@@ -2964,8 +3915,10 @@ static MigrationBoardReport BuildMigrationBoardReportFromArtifacts(string artifa
         SmokeCandidates: smoke.SmokeCandidates,
         FileCards: fileCards,
         TopInsights: topInsights,
+        TopNormalizedRootCauses: topNormalized,
+        TableMappingCandidates: explain.TableMappingCandidates.Take(25).ToArray(),
         TopSmokeCandidates: topSmoke,
-        RecommendedNextActions: BuildMigrationBoardNextActions(summary, explain, smoke, projectVerify).ToArray(),
+        RecommendedNextActions: BuildMigrationBoardNextActions(summary, explain, smoke, projectVerify, qualityGates).ToArray(),
         Artifacts: artifacts);
 }
 
@@ -2995,29 +3948,142 @@ static IEnumerable<MigrationBoardFileCard> BuildMigrationBoardFileCards(SmokePla
     }
 }
 
-static IEnumerable<string> FindBoardArtifacts(string artifactDir)
+static IEnumerable<string> FindBoardArtifacts(string artifactDir, bool recursiveArtifacts = false)
 {
     var names = new[]
     {
         "report.json", "verify-report.json", "project-verify-report.json", "explain-todo.md", "explain-todo.json",
         "agent-next-task.md", "smoke-plan.md", "smoke-plan.json", "runtime-checklist.md", "agent-runtime-next-task.md",
-        "unmapped-targets.json", "unsupported-actions.json", "pom-index.generated.json", "doctor-report.md", "guard-report.md", "config-validate-report.md"
+        "unmapped-targets.json", "unsupported-actions.json", "pom-index.generated.json", "doctor-report.md", "guard-report.md", "config-validate-report.md", "config-validate-report.json"
     };
 
     foreach (var name in names)
     {
-        var found = FindFirstExisting(artifactDir, name);
+        var found = FindFirstExisting(artifactDir, name, recursiveArtifacts);
         if (found != null)
             yield return Path.GetFullPath(found);
     }
 }
 
-static IEnumerable<string> BuildMigrationBoardNextActions(ArtifactSummary summary, TodoExplanationReport explain, SmokePlanReport smoke, ProjectVerifyReport? projectVerify)
+static MigrationQualityGates BuildMigrationQualityGates(string artifactDir, bool recursiveArtifacts, ArtifactSummary summary, ProjectVerifyReport? projectVerify)
+{
+    var compileErrors = Math.Max(summary.SyntaxErrors, projectVerify?.ClassifiedDiagnostics.Count(d => d.Severity.Equals("error", StringComparison.OrdinalIgnoreCase)) ?? 0);
+    var emptyTests = CountGeneratedMarkerOccurrences(artifactDir, "MIGRATOR:EMPTY_TEST_AFTER_SUPPRESSION");
+    var suppressedSideEffects = CountGeneratedMarkerOccurrences(artifactDir, "MIGRATOR:DEPENDS_ON_SUPPRESSED_SIDE_EFFECT");
+    var (suppressedPatternCount, suspiciousSuppressionCount) = ReadSuppressionMetricsFromConfigValidate(artifactDir, recursiveArtifacts);
+    var projectStatus = projectVerify?.Status ?? summary.VerifyStatus ?? "not-run";
+
+    var warnings = new List<string>();
+    if (projectVerify == null)
+        warnings.Add("Project verify is not-run: runtime-ready claims are not trustworthy until fresh verify-project exists.");
+    if (compileErrors > 0)
+        warnings.Add($"Compile/syntax errors present: {compileErrors}. Fix compile truth before runtime work.");
+    if (emptyTests > 0)
+        warnings.Add($"Empty tests after suppression: {emptyTests}. Treat as safety risk, not ordinary TODO.");
+    if (suppressedSideEffects > 0)
+        warnings.Add($"Downstream code depends on suppressed side-effects: {suppressedSideEffects}. Map upstream side-effects before running those tests.");
+    if ((suspiciousSuppressionCount ?? 0) > 0)
+        warnings.Add($"Regex-looking suppression patterns: {suspiciousSuppressionCount}. Run config-validate and helper-inventory before trusting suppressions.");
+
+    return new MigrationQualityGates(
+        ProjectVerifyStatus: projectStatus,
+        CompileErrors: compileErrors,
+        EmptyTestsAfterSuppression: emptyTests,
+        SuppressedSideEffectDependencies: suppressedSideEffects,
+        SuppressedMethodPatterns: suppressedPatternCount,
+        SuspiciousSuppressionPatterns: suspiciousSuppressionCount,
+        Warnings: warnings.ToArray());
+}
+
+static int CountGeneratedMarkerOccurrences(string artifactDir, string marker)
+{
+    if (!Directory.Exists(artifactDir))
+        return 0;
+
+    var count = 0;
+    foreach (var file in Directory.EnumerateFiles(artifactDir, "*.cs", SearchOption.AllDirectories)
+        .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                 && !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)))
+    {
+        try
+        {
+            var text = File.ReadAllText(file);
+            var index = 0;
+            while ((index = text.IndexOf(marker, index, StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                index += marker.Length;
+            }
+        }
+        catch
+        {
+            // Ignore unreadable generated file candidates; board generation is advisory.
+        }
+    }
+
+    return count;
+}
+
+static (int? SuppressedMethodPatterns, int? SuspiciousSuppressionPatterns) ReadSuppressionMetricsFromConfigValidate(string artifactDir, bool recursiveArtifacts)
+{
+    var configValidatePath = FindFirstExisting(artifactDir, "config-validate-report.json", recursiveArtifacts);
+    if (configValidatePath == null)
+        return (null, null);
+
+    try
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(configValidatePath));
+        var root = doc.RootElement;
+        int? suppressed = null;
+        if (root.TryGetProperty("Metrics", out var metrics) && metrics.ValueKind == System.Text.Json.JsonValueKind.Array)
+        {
+            foreach (var metric in metrics.EnumerateArray())
+            {
+                var name = ReadString(metric, "Name");
+                if (name != null && name.Equals("SuppressedMethodPatterns", StringComparison.OrdinalIgnoreCase))
+                    suppressed = ReadInt(metric, "Value");
+            }
+        }
+
+        var suspicious = 0;
+        if (root.TryGetProperty("Issues", out var issues) && issues.ValueKind == System.Text.Json.JsonValueKind.Array)
+        {
+            suspicious = issues.EnumerateArray()
+                .Count(issue => string.Equals(ReadString(issue, "Code"), "REGEX_LIKE_SUPPRESSION_PATTERN", StringComparison.OrdinalIgnoreCase));
+        }
+
+        return (suppressed, suspicious);
+    }
+    catch
+    {
+        return (null, null);
+    }
+}
+
+static IEnumerable<string> BuildMigrationBoardNextActions(ArtifactSummary summary, TodoExplanationReport explain, SmokePlanReport smoke, ProjectVerifyReport? projectVerify, MigrationQualityGates qualityGates)
 {
     if (projectVerify == null)
         yield return "Запусти `--mode verify-project`, чтобы получить настоящую проектную компиляцию.";
     else if (!projectVerify.Status.Equals("passed", StringComparison.OrdinalIgnoreCase))
         yield return "Сначала открой `project-verify-report.md` и разрули compile errors: runtime пока рано.";
+
+    if (qualityGates.EmptyTestsAfterSuppression > 0 || qualityGates.SuppressedSideEffectDependencies > 0)
+        yield return $"Safety-gate batch: разбери EMPTY_TEST_AFTER_SUPPRESSION={qualityGates.EmptyTestsAfterSuppression}, DEPENDS_ON_SUPPRESSED_SIDE_EFFECT={qualityGates.SuppressedSideEffectDependencies} перед расширением runtime-ready списка.";
+
+    if ((qualityGates.SuspiciousSuppressionPatterns ?? 0) > 0)
+        yield return "Запусти/проверь `--mode config-validate` и `--mode helper-inventory`: есть regex-looking suppressions, которые могут быть no-op при glob semantics.";
+
+    if (explain.NormalizedRootCauses.Length > 0)
+    {
+        var normalized = explain.NormalizedRootCauses.OrderByDescending(x => x.Count).First();
+        yield return $"Top normalized root cause: {normalized.DisplayName} ({normalized.Count}). {normalized.SuggestedAction}";
+    }
+
+    if (explain.TableMappingCandidates.Length > 0)
+    {
+        var table = explain.TableMappingCandidates.OrderByDescending(x => x.Count).First();
+        yield return $"Top table/list mapping candidate: `{table.SourceRoot}` via `{table.AccessorKind}` ({table.AssertionKind}, {table.Count}). {table.SuggestedConfigHint}";
+    }
 
     if (explain.Insights.Length > 0)
         yield return $"Следующий лучший config-шаг: {explain.NextBestAction}";
@@ -3056,11 +4122,17 @@ static string WriteMigrationBoardMarkdown(MigrationBoardReport report)
     sb.AppendLine();
     sb.AppendLine($"- **Generated**: {report.GeneratedAtUtc:yyyy-MM-dd HH:mm:ss zzz}");
     sb.AppendLine($"- **Source**: `{PathRedaction.Redact(report.Source)}`");
+    sb.AppendLine($"- **Artifact root**: `{PathRedaction.Redact(report.ArtifactRoot)}`");
+    sb.AppendLine($"- **Artifact lookup**: `{(report.RecursiveArtifactLookup ? "recursive" : "direct-only")}`");
+    if (report.ArtifactCandidates.Length > 0)
+        sb.AppendLine($"- **Recursive candidates**: `{report.ArtifactCandidates.Length}`");
     sb.AppendLine($"- **Project verify**: `{report.ProjectVerifyStatus ?? "not-run"}`");
     sb.AppendLine($"- **TODO**: `{report.Summary.TodoComments}`");
     sb.AppendLine($"- **Syntax/compile errors**: `{report.Summary.SyntaxErrors}`");
     sb.AppendLine($"- **Runtime-ready**: `{report.RuntimeReadyCandidates}`");
     sb.AppendLine($"- **Smoke candidates**: `{report.SmokeCandidates}`");
+    sb.AppendLine();
+    AppendQualityGatesMarkdown(sb, report.QualityGates);
     sb.AppendLine();
     sb.AppendLine("## Recommended next actions");
     foreach (var action in report.RecommendedNextActions)
@@ -3077,6 +4149,29 @@ static string WriteMigrationBoardMarkdown(MigrationBoardReport report)
         sb.AppendLine($"| {i + 1} | `{EscapeMd(x.Category)}` | {x.EstimatedImpact} | {EscapeMd(x.Title)} | {EscapeMd(x.SuggestedAction)} |");
     }
     sb.AppendLine();
+    sb.AppendLine("## Top normalized root causes");
+    sb.AppendLine("| # | Category | Group | Count | Suggested action |");
+    sb.AppendLine("|---|---|---|---:|---|");
+    for (var i = 0; i < Math.Min(20, report.TopNormalizedRootCauses.Length); i++)
+    {
+        var x = report.TopNormalizedRootCauses[i];
+        sb.AppendLine($"| {i + 1} | `{EscapeMd(x.Category)}` | {EscapeMd(x.DisplayName)} | {x.Count} | {EscapeMd(x.SuggestedAction)} |");
+    }
+    if (report.TopNormalizedRootCauses.Length == 0)
+        sb.AppendLine("|  |  | Normalized groups not available | 0 | Run explain-todo for this concrete run directory. |");
+    sb.AppendLine();
+    sb.AppendLine("## Table/list mapping candidates");
+    sb.AppendLine("| # | Source root | Accessor | Assertion | Count | Suggested config hint | Example |");
+    sb.AppendLine("|---|---|---|---|---:|---|---|");
+    for (var i = 0; i < Math.Min(20, report.TableMappingCandidates.Length); i++)
+    {
+        var x = report.TableMappingCandidates[i];
+        var example = string.IsNullOrWhiteSpace(x.ExampleFile) ? "" : $"`{EscapeMd(PathRedaction.Redact(x.ExampleFile))}:{x.ExampleLine}`";
+        sb.AppendLine($"| {i + 1} | `{EscapeMd(x.SourceRoot)}` | `{EscapeMd(x.AccessorKind)}` | `{EscapeMd(x.AssertionKind)}` | {x.Count} | {EscapeMd(x.SuggestedConfigHint)} | {example} |");
+    }
+    if (report.TableMappingCandidates.Length == 0)
+        sb.AppendLine("|  |  |  |  | 0 | No table/list candidates inferred. |  |");
+    sb.AppendLine();
     sb.AppendLine("## Runtime candidates");
     sb.AppendLine("| # | Level | Score | Test | TODO | Active | File |");
     sb.AppendLine("|---|---|---:|---|---:|---:|---|");
@@ -3087,6 +4182,31 @@ static string WriteMigrationBoardMarkdown(MigrationBoardReport report)
     }
     return sb.ToString();
 }
+
+
+static void AppendQualityGatesMarkdown(StringBuilder sb, MigrationQualityGates gates)
+{
+    sb.AppendLine("## Quality gates");
+    sb.AppendLine("| Gate | Value | Status |");
+    sb.AppendLine("|---|---:|---|");
+    sb.AppendLine($"| Project verify | `{EscapeMd(gates.ProjectVerifyStatus)}` | {QualityGateStatus(gates.ProjectVerifyStatus.Equals("passed", StringComparison.OrdinalIgnoreCase), gates.ProjectVerifyStatus.Equals("not-run", StringComparison.OrdinalIgnoreCase))} |");
+    sb.AppendLine($"| Compile errors | {gates.CompileErrors} | {QualityGateStatus(gates.CompileErrors == 0, false)} |");
+    sb.AppendLine($"| EMPTY_TEST_AFTER_SUPPRESSION | {gates.EmptyTestsAfterSuppression} | {QualityGateStatus(gates.EmptyTestsAfterSuppression == 0, false)} |");
+    sb.AppendLine($"| DEPENDS_ON_SUPPRESSED_SIDE_EFFECT | {gates.SuppressedSideEffectDependencies} | {QualityGateStatus(gates.SuppressedSideEffectDependencies == 0, false)} |");
+    sb.AppendLine($"| SuppressedMethodPatterns | {FormatNullableMetric(gates.SuppressedMethodPatterns)} | {(gates.SuppressedMethodPatterns.HasValue ? "info" : "not-run")} |");
+    sb.AppendLine($"| Regex-looking suppressions | {FormatNullableMetric(gates.SuspiciousSuppressionPatterns)} | {QualityGateStatus((gates.SuspiciousSuppressionPatterns ?? 0) == 0, !gates.SuspiciousSuppressionPatterns.HasValue)} |");
+    if (gates.Warnings.Length > 0)
+    {
+        sb.AppendLine();
+        sb.AppendLine("### Quality gate warnings");
+        foreach (var warning in gates.Warnings)
+            sb.AppendLine($"- {EscapeMd(warning)}");
+    }
+}
+
+static string QualityGateStatus(bool ok, bool unknown) => unknown ? "not-run" : ok ? "ok" : "risk";
+
+static string FormatNullableMetric(int? value) => value.HasValue ? value.Value.ToString() : "not-run";
 
 static string WriteMigrationBoardHtml(MigrationBoardReport report)
 {
@@ -3113,6 +4233,8 @@ static string WriteMigrationBoardHtml(MigrationBoardReport report)
     MetricCard(sb, "Smoke", $"{report.RuntimeReadyCandidates}/{report.SmokeCandidates}", "ready / candidates", report.RuntimeReadyCandidates > 0 ? "ok" : report.SmokeCandidates > 0 ? "warn" : "");
     sb.AppendLine("</section>");
 
+    AppendQualityGatesHtml(sb, report.QualityGates);
+
     sb.AppendLine("<h2 class=\"section\">Recommended next actions</h2>");
     if (report.RecommendedNextActions.Length == 0)
         sb.AppendLine("<div class=\"card empty\">No recommendations found. Check input artifacts.</div>");
@@ -3133,6 +4255,29 @@ static string WriteMigrationBoardHtml(MigrationBoardReport report)
         var x = report.TopInsights[i];
         var where = string.IsNullOrWhiteSpace(x.ExampleFile) ? "" : $"{PathRedaction.Redact(x.ExampleFile)}:{x.ExampleLine}";
         sb.AppendLine($"<tr><td>{i + 1}</td><td><span class=\"pill warn\">{Html(x.Category)}</span></td><td>{x.EstimatedImpact}</td><td>{Html(x.Title)}</td><td>{Html(x.SuggestedAction)}</td><td><code>{Html(where)}</code></td></tr>");
+    }
+    sb.AppendLine("</tbody></table>");
+
+    sb.AppendLine("<h2 class=\"section\">Top normalized root causes</h2>");
+    sb.AppendLine("<table><thead><tr><th>#</th><th>Category</th><th>Group</th><th>Count</th><th>Suggested action</th></tr></thead><tbody>");
+    if (report.TopNormalizedRootCauses.Length == 0)
+        sb.AppendLine("<tr><td colspan=\"5\" class=\"empty\">No normalized root-cause groups found.</td></tr>");
+    for (var i = 0; i < Math.Min(25, report.TopNormalizedRootCauses.Length); i++)
+    {
+        var x = report.TopNormalizedRootCauses[i];
+        sb.AppendLine($"<tr><td>{i + 1}</td><td><span class=\"pill warn\">{Html(x.Category)}</span></td><td>{Html(x.DisplayName)}</td><td>{x.Count}</td><td>{Html(x.SuggestedAction)}</td></tr>");
+    }
+    sb.AppendLine("</tbody></table>");
+
+    sb.AppendLine("<h2 class=\"section\">Table/list mapping candidates</h2>");
+    sb.AppendLine("<table><thead><tr><th>#</th><th>Source root</th><th>Accessor</th><th>Assertion</th><th>Count</th><th>Suggested config hint</th><th>Example</th></tr></thead><tbody>");
+    if (report.TableMappingCandidates.Length == 0)
+        sb.AppendLine("<tr><td colspan=\"7\" class=\"empty\">No table/list mapping candidates inferred.</td></tr>");
+    for (var i = 0; i < Math.Min(25, report.TableMappingCandidates.Length); i++)
+    {
+        var x = report.TableMappingCandidates[i];
+        var example = string.IsNullOrWhiteSpace(x.ExampleFile) ? "" : $"{PathRedaction.Redact(x.ExampleFile)}:{x.ExampleLine}";
+        sb.AppendLine($"<tr><td>{i + 1}</td><td><code>{Html(x.SourceRoot)}</code></td><td><code>{Html(x.AccessorKind)}</code></td><td><code>{Html(x.AssertionKind)}</code></td><td>{x.Count}</td><td>{Html(x.SuggestedConfigHint)}</td><td><code>{Html(example)}</code></td></tr>");
     }
     sb.AppendLine("</tbody></table>");
 
@@ -5238,7 +6383,9 @@ static ConfigMetric[] BuildConfigMetrics(ProjectAdapterConfig config)
         new ConfigMetric("Scopes", config.Scopes.Length),
         new ConfigMetric("SourceOnlyIdentifiers", config.SourceOnlyIdentifiers.Length),
         new ConfigMetric("TargetKnownTypes", config.TargetKnownTypes.Length),
-        new ConfigMetric("TargetKnownIdentifiers", config.TargetKnownIdentifiers.Length)
+        new ConfigMetric("TargetKnownIdentifiers", config.TargetKnownIdentifiers.Length),
+        new ConfigMetric("SuppressedMethodPatterns", FlattenSuppressedMethodPatterns(config).Count()),
+        new ConfigMetric("RegexLikeSuppressedMethodPatterns", FlattenSuppressedMethodPatterns(config).Count(x => LooksLikeRegexSuppressedMethodPattern(x.Value)) )
     };
 }
 
@@ -5272,6 +6419,13 @@ static IEnumerable<ConfigSafetyIssue> AnalyzeConfigSafety(ProjectAdapterConfig c
 
     foreach (var (pattern, location) in FlattenSuppressedMethodPatterns(config))
     {
+        if (LooksLikeRegexSuppressedMethodPattern(pattern))
+        {
+            issues.Add(new ConfigSafetyIssue("warning", "REGEX_LIKE_SUPPRESSION_PATTERN",
+                $"SuppressedMethodPatterns entry '{pattern}' looks like a regular expression, but SuppressedMethodPatterns uses glob semantics.", location,
+                "Use glob syntax such as *Loader.ValidateLoading(*) instead of regex syntax, or move project helper wrappers to MethodSemantics. Before classifying helper wrappers, run `--mode helper-inventory` to inspect helper/POM bodies."));
+        }
+
         if (LooksLikeAssertionSuppression(pattern))
         {
             issues.Add(new ConfigSafetyIssue("error", "DANGEROUS_ASSERTION_SUPPRESSION",
@@ -5444,6 +6598,20 @@ static bool LooksLikeInteractionSuppressedMethod(string method)
     }.Any(token => method.Equals(token, StringComparison.OrdinalIgnoreCase));
 }
 
+static bool LooksLikeRegexSuppressedMethodPattern(string pattern)
+{
+    if (string.IsNullOrWhiteSpace(pattern))
+        return false;
+
+    var suspiciousTokens = new[]
+    {
+        @".*", @"\.", @"\(", @"\d", @"\s", @"\w", @"\b",
+        "^", "$", "[", "]", "+", "?", "{", "}", "|"
+    };
+
+    return suspiciousTokens.Any(token => pattern.Contains(token, StringComparison.Ordinal));
+}
+
 static bool IsKnownHarmlessWaitSuppression(string normalizedPattern)
 {
     return normalizedPattern.Contains("WaitLoaded(", StringComparison.OrdinalIgnoreCase)
@@ -5518,6 +6686,13 @@ static IEnumerable<ConfigSafetyIssue> BuildConfigDiffRisks(ProjectAdapterConfig 
     var beforeSuppressedPatterns = FlattenSuppressedMethodPatterns(before).Select(x => x.Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
     foreach (var (pattern, location) in FlattenSuppressedMethodPatterns(after).Where(x => !beforeSuppressedPatterns.Contains(x.Value)))
     {
+        if (LooksLikeRegexSuppressedMethodPattern(pattern))
+        {
+            risks.Add(new ConfigSafetyIssue("warning", "REGEX_LIKE_SUPPRESSION_PATTERN_ADDED",
+                $"Regex-looking SuppressedMethodPatterns entry was added: '{pattern}'.", location,
+                "SuppressedMethodPatterns is glob-based. Convert this to glob syntax or classify the helper through MethodSemantics after running `--mode helper-inventory`."));
+        }
+
         if (LooksLikeAssertionSuppression(pattern))
         {
             risks.Add(new ConfigSafetyIssue("error", "DANGEROUS_ASSERTION_SUPPRESSION_ADDED",
@@ -5636,7 +6811,12 @@ static string WriteConfigDiffMarkdown(ConfigDiffReport report)
     sb.AppendLine("## Risks");
     if (report.Risks.Length == 0) sb.AppendLine("No high-risk changes detected.");
     foreach (var risk in report.Risks)
-        sb.AppendLine($"- **{risk.Severity.ToUpperInvariant()} {risk.Code}**: {risk.Message} ({risk.Location})");
+    {
+        var suggestedAction = string.IsNullOrWhiteSpace(risk.SuggestedAction)
+            ? string.Empty
+            : $" Suggested action: {risk.SuggestedAction}";
+        sb.AppendLine($"- **{risk.Severity.ToUpperInvariant()} {risk.Code}**: {risk.Message} ({risk.Location}){suggestedAction}");
+    }
     sb.AppendLine();
     sb.AppendLine("## Changes");
     foreach (var change in report.Changes)
@@ -5986,6 +7166,7 @@ static CliOptions? ParseArgs(string[] args)
     string? after = null;
     string target = "dotnet";
     string? tsProject = null;
+    bool recursiveArtifacts = false;
 
     for (int i = 0; i < args.Length; i++)
     {
@@ -6094,6 +7275,10 @@ static CliOptions? ParseArgs(string[] args)
             case "--fail-on-todo":
                 failOnTodo = true;
                 break;
+            case "--recursive-artifacts":
+            case "--recursive":
+                recursiveArtifacts = true;
+                break;
             default:
                 if (args[i].StartsWith("-"))
                 {
@@ -6199,7 +7384,7 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
-    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, tsProject);
+    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, tsProject, recursiveArtifacts);
 }
 
 static string ResolveOutputDirectory(string outDir, string workspace)
@@ -6294,8 +7479,11 @@ Modes:
                     Does NOT modify config or source project files.
   explain-todo    Explain remaining TODO/root causes from existing migration artifacts.
                     Reads report.json, unmapped-targets.json, unsupported-actions.json,
-                    verify-report.json, project-verify-report.json when present. Outputs
-                    explain-todo.md/json and agent-next-task.md. Does NOT modify config.
+                    verify-report.json, project-verify-report.json when present in the
+                    provided run directory. Recursive artifact lookup is disabled by
+                    default to avoid mixing stale runs; use --recursive-artifacts only
+                    when you intentionally want nested lookup. Outputs explain-todo.md/json
+                    and agent-next-task.md. Does NOT modify config.
   smoke-plan      Rank generated tests by runtime readiness. Reads generated .cs files,
                     report.json, explain-todo.json, and project-verify-report.json when
                     present. Outputs smoke-plan.md/json, runtime-checklist.md, and
@@ -6310,8 +7498,11 @@ Modes:
                     integration and agent workflows. Does not validate project code.
   migration-board Build an HTML dashboard from existing migration artifacts. Reads
                     report.json, explain-todo.json, smoke-plan.json, verify-report.json,
-                    project-verify-report.json, generated files, and related artifacts.
-                    Outputs migration-board.html/json. Does NOT modify config/source.
+                    project-verify-report.json, generated files, and related artifacts
+                    from the provided run directory. Recursive artifact lookup is disabled
+                    by default to avoid mixing stale runs; use --recursive-artifacts only
+                    when you intentionally want nested lookup. Outputs migration-board.html/json.
+                    Does NOT modify config/source.
   profile-match   Compare a source test project with one or more adapter-config/profile
                     layers and estimate reuse potential. Outputs profile-match.md/json
                     and agent-profile-reuse-task.md. Does NOT modify config/source.
@@ -6383,6 +7574,8 @@ Options:
    --before <path>                Previous config/artifact path for config-diff/guard
    --after <path>                 New config/artifact path for config-diff/guard
    --format <text|json|both>     Report format (default: both)
+   --recursive-artifacts         Allow nested artifact lookup for explain-todo/smoke-plan/migration-board.
+                                  If multiple candidates are found, the command fails and lists them.
    --fail-on-unsupported         Exit code 2 if unsupported actions exist
    --fail-on-todo                Exit code 3 if TODO comments exist
    --help, -h                    Show this help
@@ -6420,4 +7613,74 @@ Output workspace examples:
   --out migration/custom-run       writes to migration/custom-run
   --out C:\temp\migration-run     writes to absolute path C:\temp\migration-run
 ");
+}
+
+sealed class NormalizedTodoGroupBuilder
+{
+    public string Category { get; }
+    public string GroupKey { get; }
+    public string DisplayName { get; }
+    public string SuggestedAction { get; }
+    public int Count { get; set; }
+    public string ExampleFile { get; set; } = "";
+    public int ExampleLine { get; set; }
+    public HashSet<string> RepresentativeFiles { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public List<string> Evidence { get; } = new();
+
+    public NormalizedTodoGroupBuilder(string category, string groupKey, string displayName, string suggestedAction)
+    {
+        Category = category;
+        GroupKey = groupKey;
+        DisplayName = displayName;
+        SuggestedAction = suggestedAction;
+    }
+
+    public NormalizedTodoGroup ToGroup() => new(
+        Category,
+        GroupKey,
+        DisplayName,
+        Count,
+        ExampleFile,
+        ExampleLine,
+        SuggestedAction,
+        RepresentativeFiles.Take(5).ToArray(),
+        Evidence.Take(5).ToArray());
+}
+
+sealed class TableMappingCandidateBuilder
+{
+    public string GroupKey { get; }
+    public string SourceRoot { get; }
+    public string AccessorKind { get; }
+    public string AssertionKind { get; }
+    public string SuggestedUiTargetRoot { get; }
+    public string SuggestedConfigHint { get; }
+    public int Count { get; set; }
+    public string ExampleFile { get; set; } = "";
+    public int ExampleLine { get; set; }
+    public string SourceExpression { get; set; } = "";
+    public List<string> Evidence { get; } = new();
+
+    public TableMappingCandidateBuilder(string groupKey, string sourceRoot, string accessorKind, string assertionKind, string suggestedUiTargetRoot, string suggestedConfigHint)
+    {
+        GroupKey = groupKey;
+        SourceRoot = sourceRoot;
+        AccessorKind = accessorKind;
+        AssertionKind = assertionKind;
+        SuggestedUiTargetRoot = suggestedUiTargetRoot;
+        SuggestedConfigHint = suggestedConfigHint;
+    }
+
+    public TableMappingCandidate ToCandidate() => new(
+        GroupKey,
+        SourceRoot,
+        AccessorKind,
+        AssertionKind,
+        Count,
+        ExampleFile,
+        ExampleLine,
+        SourceExpression,
+        SuggestedUiTargetRoot,
+        SuggestedConfigHint,
+        Evidence.Distinct(StringComparer.OrdinalIgnoreCase).Take(8).ToArray());
 }

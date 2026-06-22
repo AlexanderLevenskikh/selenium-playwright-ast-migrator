@@ -56,3 +56,16 @@ The inventory infers one of these review labels:
 ## Important safety rule
 
 `method-semantics.candidates.json` is a draft. Do not auto-merge it. A human or source-aware agent must review the top families, especially `RequiredSideEffect` and `UnknownUnsafe`.
+
+## Receiverless helper calls
+
+The C# parser preserves receiverless project helper calls such as:
+
+```csharp
+CreateDopCalc(lightbox);
+CreateSubordination(lightbox);
+```
+
+as structured `MethodInvocationAction` items when semantic resolution is unavailable. This is intentional: these calls often live in test base classes or helper layers that are not referenced by the lightweight parser compilation. Keeping them structured lets `Methods`, `ParameterizedMethods`, and helper-inventory evidence classify them later instead of collapsing them into generic unsupported/raw statements.
+
+If such a helper has no mapping, generated output uses `MIGRATOR:HELPER_METHOD_REQUIRES_MAPPING` and tells the next agent to run `--mode helper-inventory` or inspect the helper body before suppressing it.

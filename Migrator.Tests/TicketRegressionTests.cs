@@ -820,6 +820,109 @@ public class SampleTests
         Assert.Equal(WaitForKind.ActionabilityElided, wait.Kind);
     }
 
+
+    [Fact]
+    public void UnqualifiedHelperInvocation_ParsesAsStructuredMethodInvocation()
+    {
+        var file = Path.GetTempFileName() + ".cs";
+        try
+        {
+            File.WriteAllText(file, @"
+using NUnit.Framework;
+
+public class HelperTests
+{
+    [Test]
+    public void T1()
+    {
+        CreateDopCalc(lightbox);
+    }
+}
+");
+
+            var model = new RoslynTestFileParser().Parse(file);
+            var action = Assert.Single(model.Tests.Single().BodyActions);
+            var helper = Assert.IsType<MethodInvocationAction>(action);
+
+            Assert.Equal("CreateDopCalc", helper.MethodName);
+            Assert.Equal(string.Empty, helper.ReceiverExpression);
+            Assert.Equal("CreateDopCalc(lightbox)", helper.FullSourceText);
+            Assert.Equal("lightbox", Assert.Single(helper.ArgumentTexts));
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void UnqualifiedHelperInvocation_UsesParameterizedMapping()
+    {
+        var file = Path.GetTempFileName() + ".cs";
+        try
+        {
+            File.WriteAllText(file, @"
+using NUnit.Framework;
+
+public class HelperTests
+{
+    [Test]
+    public void T1()
+    {
+        CreateDopCalc(lightbox);
+    }
+}
+");
+
+            var sourceModel = new RoslynTestFileParser().Parse(file);
+            var config = new ProjectAdapterConfig(
+                "sample",
+                Array.Empty<UiTargetMapping>(),
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>(),
+                ParameterizedMethods: new[]
+                {
+                    new ParameterizedMethodMapping(
+                        "CreateDopCalc({lightbox})",
+                        new[] { "await CreateDopCalcAsync({lightbox});" },
+                        requiresReview: false)
+                });
+
+            var model = new DefaultProjectAdapter(config).Adapt(sourceModel);
+            var output = new PlaywrightDotNetRenderer().Render(model);
+
+            Assert.Contains("await CreateDopCalcAsync(lightbox);", output);
+            Assert.DoesNotContain("HELPER_METHOD_REQUIRES_MAPPING", output);
+            Assert.DoesNotContain("UNSUPPORTED_ACTION", output);
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void UnqualifiedHelperInvocation_WithoutMapping_RendersHelperTodo()
+    {
+        var model = CreateModel(new TestAction[]
+        {
+            new MethodInvocationAction(
+                10,
+                string.Empty,
+                "CreateDopCalc",
+                "CreateDopCalc(lightbox)",
+                new[] { "lightbox" },
+                RecognitionConfidence.SyntaxFallback)
+        });
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("HELPER_METHOD_REQUIRES_MAPPING", output);
+        Assert.Contains("helper method requires mapping: CreateDopCalc", output);
+        Assert.Contains("--mode helper-inventory", output);
+        Assert.DoesNotContain("UNSUPPORTED_ACTION", output);
+    }
+
     static TestFileModel CreateModel(IEnumerable<TestAction> actions) =>
         new(
             FilePath: "Sample.cs",

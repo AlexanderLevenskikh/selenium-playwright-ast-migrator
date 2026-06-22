@@ -26,7 +26,9 @@ dotnet run --project .\Migrator.Cli -- --mode explain-todo --input "migrate_disc
 
 ## Что читает
 
-Режим ищет в `--input` и вложенных папках:
+По умолчанию режим читает артефакты **только из указанной директории**. Это защищает агента от смешивания `report.json` / verify reports из разных run. Рекурсивный поиск разрешён только явно через `--recursive-artifacts`; если найдено несколько кандидатов одного типа, команда должна остановиться и показать список.
+
+Режим ищет в concrete run directory:
 
 - `report.json`
 - `unmapped-targets.json`
@@ -38,7 +40,7 @@ dotnet run --project .\Migrator.Cli -- --mode explain-todo --input "migrate_disc
 
 - `explain-todo.md` — человекочитаемый разбор: почему остались TODO и что даст максимальный эффект.
 - `explain-todo.json` — машинночитаемый отчёт для агента/CI.
-- `agent-next-task.md` — готовая следующая задача для агента.
+- `agent-next-task.md` — готовая следующая задача для агента: run context, quality gates, exact next task, commands, helper-inventory rule, acceptance criteria и “do not do” constraints.
 
 ## Как это помогает
 
@@ -49,7 +51,9 @@ dotnet run --project .\Migrator.Cli -- --mode explain-todo --input "migrate_disc
 - где искать source truth;
 - что можно решить через `adapter-config.json`;
 - что требует разработчика;
-- какой следующий шаг самый выгодный.
+- какой следующий шаг самый выгодный;
+- когда свежий `verify-project` обязателен;
+- когда нужно запускать `--mode helper-inventory` перед suppressions/MethodSemantics для POM/helper wrappers.
 
 ## Правила для агента
 
@@ -106,3 +110,49 @@ Examples:
 | `page.AddReasons.ClickAndOpen<T>()` | click/open/modal recognizer or method mapping |
 
 Do not escalate root-level `page` statistics. Build the pattern backlog described in `docs/source-only-pattern-backlog.md`.
+
+
+## Agent Next Task contract
+
+`agent-next-task.md` должен быть bounded handoff для следующего агента, а не generic advice. Он обязан включать:
+
+- concrete artifact root и artifact lookup mode;
+- project verify status;
+- TODO/unmapped/unsupported counts;
+- safety signals: `EMPTY_TEST_AFTER_SUPPRESSION`, `DEPENDS_ON_SUPPRESSED_SIDE_EFFECT`;
+- exact next task с priority/category/reason/action;
+- команды для следующего batch;
+- явное правило: если затрагиваются suppressions, `MethodSemantics`, unknown helper/POM wrappers (`InputAndAccept`, `ValidateLoading`, `ClickAndOpen`, `ManualInputValue` и подобные), сначала запускать или запросить `--mode helper-inventory`.
+
+## Normalized root-cause groups
+
+`explain-todo` keeps raw TODO insights, but also emits `NormalizedRootCauses` in JSON and a `Top normalized root causes` section in markdown.
+
+This section groups repeated TODOs by reusable fix family rather than exact line/message. Examples:
+
+- `DEPENDS_ON_SUPPRESSED_SIDE_EFFECT` → suppressed upstream method family such as `InputAndAccept` or `ClickAndOpen`;
+- `TABLE_MAPPING_REQUIRED` → table/list root + accessor kind + assertion kind, ignoring specific row indexes and expected values;
+- `SOURCE_ONLY_IDENTIFIER` / `UNRESOLVED_SYMBOL` / `UNAVAILABLE_SYMBOLS` → source-only root such as `page`, `pagef`, `Urls`;
+- `MANUAL_REVIEW` / `RAW_STATEMENT` / `UNSUPPORTED_ACTION` → helper/method family such as `CreateDopCalc`.
+
+Agents should use normalized groups to choose one reusable batch. Do not fix table rows or suppressed helper usages one-by-one when a family-level mapping or `MethodSemantics` entry is possible.
+
+### HELPER_METHOD_REQUIRES_MAPPING
+
+`HELPER_METHOD_REQUIRES_MAPPING` means a receiverless project helper call, for example `CreateDopCalc(lightbox)`, was preserved as a structured action but no target mapping was found.
+
+Do not suppress these calls by name alone. Run or request `--mode helper-inventory` and use source-body evidence to decide whether the helper is a required side effect, project wait helper, read-only probe, assertion helper, or unsafe/manual migration.
+
+## Table/list mapping candidates
+
+When `TABLE_MAPPING_REQUIRED` TODOs are present, `explain-todo` now emits a dedicated `TableMappingCandidates` JSON array and a markdown section named `Table/list mapping candidates`.
+
+These candidates group table/list TODOs by reusable source family instead of exact row index or expected value:
+
+- source root, for example `page.RegistryHead`;
+- accessor kind, for example `Rows.ElementAt` or `Items.ElementAt`;
+- assertion kind, for example `Text`, `Sum`, `Count`, or `Visibility`;
+- representative evidence and config hint.
+
+Use this section to add one source-backed `UiTargets`/`Tables` mapping for a table family. Do not fix `ElementAt(0)`, `ElementAt(1)`, `ElementAt(2)` as separate one-off mappings.
+

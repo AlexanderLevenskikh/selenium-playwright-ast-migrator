@@ -1672,6 +1672,19 @@ public class PlaywrightDotNetRenderer : IRenderer
     void RenderMethodInvocation(StringBuilder sb, MethodInvocationAction action)
     {
         AppendCommentBlock(sb, _indent + _indent, $"[{action.MethodName}] {action.FullSourceText} // line {action.SourceLine}");
+
+        if (IsUnqualifiedHelperInvocation(action))
+        {
+            AppendSmartTodo(
+                sb,
+                $"helper method requires mapping: {action.MethodName}",
+                "HELPER_METHOD_REQUIRES_MAPPING",
+                "Receiverless project/helper invocation was preserved structurally, but no target mapping was found. Its body may contain Selenium or business-specific side effects.",
+                "Run --mode helper-inventory or inspect the helper body, then add MethodSemantics, Methods, or ParameterizedMethods mapping. Do not suppress unknown helpers without source evidence.",
+                action.FullSourceText);
+            return;
+        }
+
         if (!IsLowPriorityMethod(action.MethodName, action.FullSourceText))
         {
             AppendSmartTodo(
@@ -1682,6 +1695,10 @@ public class PlaywrightDotNetRenderer : IRenderer
                 "Add Method/ParameterizedMethod mapping when source truth confirms deterministic target behavior.");
         }
     }
+
+    static bool IsUnqualifiedHelperInvocation(MethodInvocationAction action) =>
+        string.IsNullOrWhiteSpace(action.ReceiverExpression)
+        && !string.IsNullOrWhiteSpace(action.MethodName);
 
     void RenderUnsupported(StringBuilder sb, UnsupportedAction action)
     {

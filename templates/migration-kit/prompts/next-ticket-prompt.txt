@@ -31,3 +31,8 @@ Include:
 ## Expected impact
 
 Do not propose adding target-known identifiers merely to hide unresolved source-side symbols.
+
+
+## Helper/POM evidence rule
+
+If the next ticket touches project helper wrappers, POM methods, suppressions, `MethodSemantics`, or unknown helper calls, include `--mode helper-inventory` in the evidence plan before recommending broad suppression or mapping. Use it to inspect helper/POM method bodies and classify methods as SafeWaitElide, ProjectWaitHelper, RequiredSideEffect, ReadOnlyProbe, AssertionHelper, or UnknownUnsafe.

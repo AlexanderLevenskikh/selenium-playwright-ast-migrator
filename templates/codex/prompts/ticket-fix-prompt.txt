@@ -12,3 +12,6 @@ After changes:
 1. run the smallest relevant tests/build you can;
 2. update `migration/state/handoff.md` with the result;
 3. report changed files, verification, risks, and next recommended step.
+
+
+Helper/POM evidence rule: if this ticket changes suppressions, `MethodSemantics`, or project/POM helper wrapper mappings, run or request `--mode helper-inventory` first and base decisions on the generated helper body evidence.

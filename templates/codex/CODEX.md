@@ -31,3 +31,8 @@ Return:
 - anything intentionally not fixed.
 
 If verification cannot be run, say so explicitly.
+
+
+## Helper/POM evidence rule
+
+When a ticket touches suppressions, `MethodSemantics`, or project/POM helper wrappers, use the helper inventory report if available. If it is missing, recommend or run `--mode helper-inventory` before adding broad suppressions or treating wrappers as safe. Do not infer helper semantics from method names alone.

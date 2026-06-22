@@ -86,6 +86,8 @@ Do not reduce TODO count by unsafe broad suppression.
 
 Before adding more suppressions, inspect whether existing suppressions created `EMPTY_TEST_AFTER_SUPPRESSION`.
 
+If a suppression or `MethodSemantics` decision touches project/POM helper wrappers, first run or request `--mode helper-inventory` and base the decision on helper body evidence. Do not infer helper semantics from names alone.
+
 If tests became empty:
 
 - trace representative generated tests back to source Selenium tests;
