@@ -706,7 +706,7 @@ public class RoslynTestFileParser : ITestFileParser
         if (!string.IsNullOrWhiteSpace(receiverText))
             return false;
 
-        if (invocation.Expression is not IdentifierNameSyntax)
+        if (invocation.Expression is not (IdentifierNameSyntax or GenericNameSyntax))
             return false;
 
         if (string.IsNullOrWhiteSpace(methodName))
@@ -757,6 +757,7 @@ public class RoslynTestFileParser : ITestFileParser
     {
         "GoToPage",
         "GoToPageWithUserAccessRight",
+        "GoToPageWithSupportUserAccessRight",
         "OpenPage",
         "WaitForPage",
         "Click",

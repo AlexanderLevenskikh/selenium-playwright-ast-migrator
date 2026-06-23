@@ -31,8 +31,8 @@ Stop only when:
 3. Required files or configs are missing and cannot be inferred.
 4. The same failure repeats after 3 serious fix attempts.
 5. A needed dependency/tool is unavailable.
-6. The next step requires destructive action.
-7. The task would require a broad architecture rewrite outside the selected block.
+6. The next step requires destructive action or writing outside allowed write paths.
+7. The task would require source edits not allowed by the current ticket or a broad architecture rewrite outside the selected block.
 8. Maximum iterations are reached.
 9. The selected migration block is complete and verified.
 
@@ -57,6 +57,8 @@ Do not stop with:
 - "There are TODO reduction trade-offs, so I should stop."
 
 Instead, choose the safest approach and continue.
+
+When a hard stop is reached, do not ask “continue?”. Produce the required stop output with one concrete next action.
 
 ## Stop output
 

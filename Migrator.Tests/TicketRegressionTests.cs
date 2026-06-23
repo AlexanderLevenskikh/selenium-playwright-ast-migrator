@@ -923,6 +923,123 @@ public class HelperTests
         Assert.DoesNotContain("UNSUPPORTED_ACTION", output);
     }
 
+
+    [Fact]
+    public void UnqualifiedGenericHelperInvocation_ParsesAsStructuredMethodInvocation()
+    {
+        var file = Path.GetTempFileName() + ".cs";
+        try
+        {
+            File.WriteAllText(file, @"
+using NUnit.Framework;
+
+public class HelperTests
+{
+    [Test]
+    public void T1()
+    {
+        var page = GoToPageWithSupportUserAccessRight<ProjectsPage>(productId, AccessRight.View);
+    }
+}
+");
+
+            var model = new RoslynTestFileParser().Parse(file);
+            var action = Assert.Single(model.Tests.Single().BodyActions);
+            var helper = Assert.IsType<MethodInvocationAction>(action);
+
+            Assert.Equal("GoToPageWithSupportUserAccessRight", helper.MethodName);
+            Assert.Equal(string.Empty, helper.ReceiverExpression);
+            Assert.Equal("page", helper.ResultVariable);
+            Assert.Contains("<ProjectsPage>", helper.FullSourceText);
+            Assert.Equal(new[] { "productId", "AccessRight.View" }, helper.ArgumentTexts);
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void UnqualifiedGenericHelperInvocation_UsesParameterizedMapping()
+    {
+        var file = Path.GetTempFileName() + ".cs";
+        try
+        {
+            File.WriteAllText(file, @"
+using NUnit.Framework;
+
+public class HelperTests
+{
+    [Test]
+    public void T1()
+    {
+        var page = GoToPageWithSupportUserAccessRight<ProjectsPage>(productId, AccessRight.View);
+    }
+}
+");
+
+            var sourceModel = new RoslynTestFileParser().Parse(file);
+            var config = new ProjectAdapterConfig(
+                "sample",
+                Array.Empty<UiTargetMapping>(),
+                Array.Empty<PageObjectMapping>(),
+                Array.Empty<MethodMapping>(),
+                ParameterizedMethods: new[]
+                {
+                    new ParameterizedMethodMapping(
+                        "GoToPageWithSupportUserAccessRight<{T}>({productId}, {right})",
+                        new[] { "var {result} = await OpenWithSupportUserAccessRightAsync<{T}>({productId}, {right});" },
+                        requiresReview: false)
+                });
+
+            var model = new DefaultProjectAdapter(config).Adapt(sourceModel);
+            var output = new PlaywrightDotNetRenderer().Render(model);
+
+            Assert.Contains("var page = await OpenWithSupportUserAccessRightAsync<ProjectsPage>(productId, AccessRight.View);", output);
+            Assert.DoesNotContain("HELPER_METHOD_REQUIRES_MAPPING", output);
+            Assert.DoesNotContain("UNSUPPORTED_ACTION", output);
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void TargetSafeDeclaration_WithSourceOnlyArgument_RendersTodoInsteadOfActiveCode()
+    {
+        var model = CreateModel(new TestAction[]
+        {
+            new RawStatementAction(120, "var locator = Page.Locator(Urls.LegacySelector)")
+        }) with
+        {
+            SourceOnlyIdentifiers = new[] { "Urls" }
+        };
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("SOURCE_ONLY_IN_STATEMENT", output);
+        Assert.Contains("Urls.LegacySelector", output);
+        Assert.DoesNotMatch(@"(?m)^\s*var\s+locator\s*=\s*Page\.Locator\(Urls\.LegacySelector\)", output);
+    }
+
+    [Fact]
+    public void TrivialCommaRawFragment_IsNotRenderedAsActiveCodeEvenWhenSymbolsAreKnown()
+    {
+        var model = CreateModel(new TestAction[]
+        {
+            new RawStatementAction(121, "MarketerAccessRight.View,")
+        }) with
+        {
+            TargetKnownTypes = new[] { "MarketerAccessRight" }
+        };
+
+        var output = new PlaywrightDotNetRenderer().Render(model);
+
+        Assert.Contains("// source: MarketerAccessRight.View, // line 121", output);
+        Assert.DoesNotMatch(@"(?m)^\s*MarketerAccessRight\.View,;\s*// line 121", output);
+    }
+
     static TestFileModel CreateModel(IEnumerable<TestAction> actions) =>
         new(
             FilePath: "Sample.cs",

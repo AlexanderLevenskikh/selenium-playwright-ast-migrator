@@ -173,6 +173,7 @@ public sealed class RecognizerOptions
     {
         "GoToPage",
         "GoToPageWithUserAccessRight",
+        "GoToPageWithSupportUserAccessRight",
         "OpenPage",
         "WaitForPage",
         "Click",

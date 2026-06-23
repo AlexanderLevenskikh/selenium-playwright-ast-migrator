@@ -1,7 +1,21 @@
 Read all files in .agent-loops/.
+Read .agent-loops/11-strict-ticket-boundaries.md.
 Read .agent-state/migrator-progress.md if it exists.
 
 Resume Migrator Autopilot Loop.
+
+Allowed input paths:
+- <ALLOWED_INPUT_PATH_1>
+- <ALLOWED_INPUT_PATH_2>
+
+Allowed write paths:
+- <ALLOWED_WRITE_PATH_1>
+
+Forbidden paths:
+- parent directories outside allowed input/write roots
+- repository source folders unless explicitly listed as allowed write paths
+
+Do not search outside allowed paths. Do not edit source files unless explicitly allowed. Do not ask “continue?”.
 
 Do not assume the previous agent's claims are true.
 First reconcile saved state with actual repository state.

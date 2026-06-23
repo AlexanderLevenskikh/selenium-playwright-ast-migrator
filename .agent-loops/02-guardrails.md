@@ -55,6 +55,15 @@ These rules are mandatory.
 - Avoid duplicate page object declarations in generated Playwright classes.
 - If a field/property maps to a Playwright page object wrapper, ensure generated code compiles.
 
+## Strict ticket and path boundaries
+
+When a task provides allowed input/write paths, those paths are mandatory boundaries.
+Do not search parent directories, do not discover neighboring repositories, and do not edit source files outside allowed write paths.
+
+If the task provides DLLs or artifacts, do not locate matching source code. Analyze the provided inputs and report source-change needs as findings.
+
+Do not fix unrelated problems found during investigation. Keep every change tied to the current ticket.
+
 ## Autonomy
 
 - Do not ask the user to choose between technical options.

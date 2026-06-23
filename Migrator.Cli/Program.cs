@@ -1441,37 +1441,6 @@ static string EscapeCsv(string value)
     return value;
 }
 
-static Dictionary<string, (int Count, string File, int Line)> CollectAllUnmapped(List<PipelineResult> results)
-{
-    var allUnmapped = new Dictionary<string, (int Count, string File, int Line)>();
-
-    foreach (var result in results)
-    {
-        var report = result.Report;
-        var allActions = result.TargetModel.Tests.SelectMany(t => t.BodyActions)
-            .Concat(result.TargetModel.SetUpActions).ToList();
-
-        foreach (var action in allActions)
-        {
-            var target = GetTarget(action);
-
-            if (target is { Kind: TargetKind.Unresolved })
-            {
-                var key = target.SourceExpression;
-                if (!allUnmapped.ContainsKey(key))
-                    allUnmapped[key] = (1, report.SourceFilePath, action.SourceLine);
-                else
-                {
-                    var existing = allUnmapped[key];
-                    allUnmapped[key] = (existing.Count + 1, existing.File, existing.Line);
-                }
-            }
-        }
-    }
-
-    return allUnmapped;
-}
-
 static TargetExpression? GetTarget(TestAction action)
 {
     return action switch

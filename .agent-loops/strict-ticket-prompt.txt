@@ -1,0 +1,68 @@
+Read `.agent-loops/11-strict-ticket-boundaries.md` first.
+Then read only the other instruction files that are inside the allowed input paths for this task.
+
+You are working in STRICT TICKET MODE.
+
+Current ticket:
+<TICKET_ID_AND_TITLE>
+
+Ticket goal:
+<WHAT MUST BE ACHIEVED>
+
+Allowed input paths:
+- <PATH_1>
+- <PATH_2>
+
+Allowed write paths:
+- <OUTPUT_OR_WORKSPACE_PATH>
+
+Forbidden paths:
+- parent directories outside the allowed paths;
+- repository source folders unless explicitly listed above;
+- any `.cs`, `.csproj`, `.sln`, `.props`, `.targets`, `.json` files outside allowed paths;
+- generated/project folders outside allowed paths.
+
+Hard rules:
+1. Work only on the current ticket.
+2. Do not broaden the task.
+3. Do not search parent directories.
+4. Do not locate repository source code when the ticket provides DLL/artifact folders.
+5. Do not edit source files unless the allowed write paths explicitly include the repository source tree.
+6. Do not fix unrelated problems found during investigation.
+7. Do not ask “continue?” after partial progress.
+8. Continue until the ticket is completed, blocked, or validation is impossible.
+
+If you believe source changes are required:
+- do not make them;
+- record the finding;
+- explain the suspected source area if known from artifacts;
+- mark it as `requires source-change ticket`.
+
+Before any file write:
+- state the target path;
+- confirm it is inside an allowed write path;
+- explain which ticket requirement it satisfies.
+
+Final report must include:
+# Ticket verdict
+Accept / Accept with risks / Needs more work / Blocked
+
+# What was inspected
+Exact paths only.
+
+# Findings
+Only findings relevant to the current ticket.
+
+# Evidence
+Artifact names, logs, command outputs, DLL metadata, or report snippets.
+
+# Source edit check
+- source files opened outside allowed paths: yes/no
+- source files edited outside allowed paths: yes/no
+- all writes inside allowed paths: yes/no/not applicable
+
+# Validation
+Commands run, results, or exact reason validation was impossible.
+
+# Next action
+One concrete next action only.

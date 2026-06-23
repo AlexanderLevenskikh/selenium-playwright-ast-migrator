@@ -35,6 +35,24 @@ Forbidden stop phrases:
 
 Choose the safest option and continue.
 
+## Strict ticket / workspace boundaries
+
+When the user provides explicit paths, a DLL/artifact folder, a ticket folder,
+or a restricted workspace, those boundaries are the task contract. Read
+`.agent-loops/11-strict-ticket-boundaries.md` before doing any work.
+
+Hard rules:
+
+- Do not traverse parent directories looking for source code, solutions, configs, or artifacts.
+- Do not search the user's Desktop/home/work folders unless that exact path was allowed.
+- If the task points to DLLs or artifacts, treat them as the source of truth; do not locate or edit matching source code.
+- Do not edit repository source files unless the current ticket explicitly allows source edits and the repository path is listed as an allowed write path.
+- Do not broaden the current ticket into general cleanup or unrelated fixes.
+- Before writing a file, verify that the path is inside an allowed write root.
+- If source changes appear necessary but source editing is not allowed, report `requires source-change ticket` instead of making the change.
+
+Restricted path rules override generic discovery advice in this file.
+
 
 ## Checkpoint vs completion
 
@@ -95,7 +113,7 @@ If a real source input is available, also run a verify/orchestrate command, for 
 dotnet run --project Migrator.Cli -- --mode verify --input <SOURCE_SELENIUM_TESTS> --out <VERIFY_OUT>
 ```
 
-Use actual repository paths. Inspect the repo instead of asking the user when paths are discoverable.
+Use actual repository paths only when they are inside the allowed workspace for the current task. Do not discover paths by walking outside allowed roots; ask/report `BLOCKED_BY_MISSING_INPUT` instead.
 
 ## Engineering rules
 

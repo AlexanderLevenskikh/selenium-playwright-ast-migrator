@@ -18,6 +18,7 @@ The user is responsible for final acceptance, not for ordinary engineering decis
 
 ```text
 Read all files in .agent-loops/.
+Read .agent-loops/11-strict-ticket-boundaries.md especially carefully.
 
 Start Migrator Autopilot Loop.
 
@@ -34,10 +35,23 @@ Migration scope:
 - Latest migration board: <PATH_OR_EMPTY>
 - Latest project verify report: <PATH_OR_EMPTY>
 
+Allowed input paths:
+- <ALLOWED_INPUT_PATH_1>
+- <ALLOWED_INPUT_PATH_2>
+
+Allowed write paths:
+- <ALLOWED_WRITE_PATH_1>
+
+Forbidden paths:
+- <FORBIDDEN_OR_PARENT_PATHS>
+
 Current task:
 <PASTE CURRENT BLOCK / ERROR / LOG / TODO CATEGORY HERE>
 
-Use repository code, existing tests, snapshots, docs, CLI reports, migration board, source Selenium tests, target project conventions, and command output as the source of truth.
+Do not ask “continue?”. Continue within the current ticket until it is completed, blocked, or validation is impossible.
+Do not search outside allowed paths. Do not edit source files unless the repository source tree is listed as an allowed write path.
+
+Use only allowed repository code, existing tests, snapshots, docs, CLI reports, migration board, source Selenium tests, target project conventions, and command output as the source of truth.
 ```
 
 ## Files
@@ -53,5 +67,7 @@ Use repository code, existing tests, snapshots, docs, CLI reports, migration boa
 - `08-continuation-rule.md` — prevents stopping after green compile/project verify when migration work remains.
 - `09-continue-after-compile-fix-prompt.txt` — prompt for continuing after compile-fix milestone.
 - `10-state-and-resume.md` — state files and resume protocol for long-running loops.
+- `11-strict-ticket-boundaries.md` — hard path/ticket boundary rules for restricted workspaces and DLL/artifact tasks.
+- `strict-ticket-prompt.txt` — copy-paste prompt for restricted ticket mode.
 - `resume-prompt.txt` — restart prompt after interruption.
 - `kickoff-prompt.txt` — copy-paste startup prompt.

@@ -819,6 +819,7 @@ public class PlaywrightDotNetRenderer : IRenderer
         // where `loader` is a known local alias.
         if (action is RawStatementAction rawResolved
             && !HasLineBreak(rawResolved.SourceText)
+            && !IsTrivialRawStatement(rawResolved.SourceText)
             && AllSymbolsResolved(rawResolved.SourceText, declaredVariables))
         {
             RenderResolvedRawStatement(sb, rawResolved);
@@ -1752,6 +1753,23 @@ public class PlaywrightDotNetRenderer : IRenderer
     void RenderTargetSafeDeclaration(StringBuilder sb, RawStatementAction action)
     {
         var source = action.SourceText.Trim();
+
+        // Target-safe declarations are intentionally rendered as active code only when
+        // they do not reference source-only project symbols. A statement such as
+        // `var url = Urls.Legacy + path` may look syntactically safe but still fail
+        // in the target project if `Urls` is source-only. Prefer an explicit TODO
+        // over generating uncompilable code.
+        if (FindReferencedSymbol(source, _sourceOnlyIdentifiers) is string sourceOnlySymbol)
+        {
+            AppendSmartTodo(
+                sb,
+                $"source-only type/variable in statement: {EscapeComment(source)}",
+                "SOURCE_ONLY_IN_STATEMENT",
+                $"The statement references '{sourceOnlySymbol}' which is not available in the target project.",
+                "Find target equivalent and add a Method/ParameterizedMethod mapping, or manually migrate the statement.");
+            return;
+        }
+
         var line = source.EndsWith(";", StringComparison.Ordinal)
             ? $"{source} // line {action.SourceLine}"
             : $"{source}; // line {action.SourceLine}";
@@ -2077,6 +2095,15 @@ public class PlaywrightDotNetRenderer : IRenderer
     static bool IsTrivialRawStatement(string sourceText)
     {
         var text = sourceText.Trim().TrimEnd(';');
+
+        // Bare delimiters and comma-terminated fragments are usually remnants of
+        // split multiline statements or collection/argument lists. They are not
+        // valid standalone C# statements and should never be emitted as active code.
+        if (text.Length <= 3 && text.Replace(")", "").Replace("]", "").Replace(",", "").Trim().Length == 0)
+            return true;
+
+        if (text.EndsWith(",", StringComparison.Ordinal))
+            return true;
 
         // Variable declarations are NOT trivial — the variable may be used later.
         if (text.StartsWith("var ", StringComparison.Ordinal))
