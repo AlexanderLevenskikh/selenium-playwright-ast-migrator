@@ -47,6 +47,17 @@ These rules are mandatory.
 - Generated adapter drafts must not pretend unsupported cases are solved.
 - Prefer reporting unmapped targets clearly over inventing locator mappings.
 
+## POM/helper recovery
+
+- Do not treat low target Playwright POM coverage as an automatic blocker.
+- Before declaring POM coverage insufficient, run or inspect `--mode index-pom` on the Selenium project/POM directory.
+- Before mapping, suppressing, or classifying project/POM helper wrappers, run or inspect `--mode helper-inventory`.
+- Use Selenium POM selector evidence such as `ByTId("x")`, `CreateControlByTid(...)`, explicit `data-tid`, CSS, XPath, or resolved selector constants.
+- Do not invent selectors. PageObject names and property names are not selectors.
+- Prefer existing target POM member → generated POM scaffold/member in migration output → raw Playwright locator from proven selector → explicit TODO.
+- Generate POM candidates only inside migration/output paths. Do not modify production target PageObjects unless explicitly allowed.
+- If a selector or helper side effect cannot be proven, keep/report TODO instead of suppressing or guessing.
+
 ## Page objects and fields/properties
 
 - Transfer simple class fields/properties only when initializer semantics are safe.

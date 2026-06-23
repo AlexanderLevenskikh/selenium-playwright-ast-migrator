@@ -17,6 +17,8 @@ A migration gap may be:
 - unresolved target expression;
 - TODO in generated output;
 - missing page object field/property transfer;
+- missing generated target POM scaffolding when Selenium POM has selector evidence;
+- helper/POM semantics not classified through helper-inventory;
 - incorrect renderer output;
 - snapshot mismatch;
 - semantic mismatch between Selenium source and Playwright output;
@@ -46,14 +48,29 @@ For each iteration:
 
 1. Inspect the current failure, TODO category, unsupported action, or requested migration block.
 2. Classify the issue.
-3. Find the smallest reproducible input or existing regression test.
-4. Add or update a regression test when behavior is reproducible.
-5. Implement the smallest safe fix.
-6. Run verification commands.
-7. Read command output carefully.
-8. If verification fails with actionable information, fix and repeat.
-9. If verification succeeds, move to the next highest-priority gap inside the selected block.
-10. Stop only if the stop policy says to stop.
+3. If PageObjects/helpers are involved, use `index-pom` / `helper-inventory` evidence before deciding mappings, suppressions, POM scaffolds, or raw locator fallback.
+4. Find the smallest reproducible input or existing regression test.
+5. Add or update a regression test when behavior is reproducible.
+6. Implement the smallest safe fix.
+7. Run verification commands.
+8. Read command output carefully.
+9. If verification fails with actionable information, fix and repeat.
+10. If verification succeeds, move to the next highest-priority gap inside the selected block.
+11. Stop only if the stop policy says to stop.
+
+## POM/helper recovery requirement
+
+When a migration block contains PageObject expressions, missing target POM classes, source-only POM roots, or project helper wrappers, read `.agent-loops/12-pom-helper-recovery-policy.md`.
+
+Required order:
+
+1. Run or inspect `index-pom` for Selenium PageObject selector evidence.
+2. Run or inspect `helper-inventory` for helper/POM wrapper semantics.
+3. Use existing target Playwright POMs only as style/convention examples.
+4. If target POM coverage is missing but Selenium selector evidence exists, generate POM scaffold/members in the migration output path or use raw Playwright locators from proven selectors.
+5. Stop with `TICKET_NEEDED` only when selector/helper semantics cannot be proven from allowed inputs or the needed write path is forbidden.
+
+Do not invent selectors. `ByTId("value")` and equivalent source POM selector factories are source truth; PageObject names are not selectors.
 
 ## Verification commands
 

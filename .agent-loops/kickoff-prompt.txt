@@ -1,5 +1,5 @@
 Read all files in .agent-loops/.
-Also read AGENTS.md, docs/autopilot-loop.md, and .agent-loops/11-strict-ticket-boundaries.md.
+Also read AGENTS.md, docs/autopilot-loop.md, .agent-loops/11-strict-ticket-boundaries.md, and .agent-loops/12-pom-helper-recovery-policy.md.
 
 Start Migrator Autopilot Loop.
 
@@ -13,6 +13,8 @@ Migration scope:
 - Source Selenium project: <SOURCE_SELENIUM_PROJECT_PATH>
 - Target/generated Playwright project: <TARGET_PROJECT_OR_OUTPUT_PATH>
 - Migrator config/profile: <CONFIG_OR_PROFILE_PATH>
+- Compiled migrator tool, if compiled-tool-only mode: <COMPILED_TOOL_PATH_OR_EMPTY>
+- Existing Playwright POM examples: <TARGET_POM_EXAMPLES_PATH_OR_EMPTY>
 - Verify/orchestrate output directory: <OUTPUT_DIR>
 - Latest migration board: <PATH_OR_EMPTY>
 - Latest project verify report: <PATH_OR_EMPTY>
@@ -41,6 +43,18 @@ State/resume:
 - Create/update .agent-state/current-migration-batch.md while a batch is in progress.
 - Save important verify output to .agent-state/last-verify-output.md when useful.
 - Follow .agent-loops/10-state-and-resume.md for long-running loops.
+
+Command/path rule:
+- If compiled migrator tool is provided, run that tool directly and do not search for `Migrator.Cli`, `.sln`, `.csproj`, or migrator source code.
+
+POM/helper recovery rules:
+- Run or inspect `index-pom` before large PageObject/config mapping work.
+- Run or inspect `helper-inventory` before mapping/suppressing project/POM helpers.
+- Missing target Playwright POM coverage is not automatically `TICKET_NEEDED`.
+- If Selenium POM has real selector evidence (`ByTId`, `CreateControlByTid`, `data-tid`, CSS, XPath, resolved constants), use it.
+- Do not invent selectors. PageObject class/property names are not selectors.
+- Prefer existing target POM → generated POM in migration output → raw locator from proven selector → TODO.
+- Do not modify production target POMs unless explicitly allowed.
 
 Current task:
 <PASTE CURRENT BLOCK / ERROR / LOG / TODO CATEGORY HERE>

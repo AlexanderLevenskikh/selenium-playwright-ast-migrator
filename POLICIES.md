@@ -417,6 +417,15 @@ TestIdBeginning → Page.GetByTestId("row-cost-rule-setting-")
 
 # 9. Выполнение команд
 
+## POM/helper recovery policy
+
+- Run or inspect `index-pom` before large PageObject/config work.
+- Run or inspect `helper-inventory` before mapping/suppressing project or POM helper wrappers.
+- Low target Playwright POM coverage is not automatically `TICKET_NEEDED`.
+- Use real selector evidence from Selenium POM (`ByTId`, `CreateControlByTid`, `data-tid`, CSS, XPath, resolved constants).
+- Prefer existing target POM → generated POM in migration output → raw locator from proven selector → explicit TODO.
+- Do not invent selectors or modify production target POMs unless explicitly allowed.
+
 ## Если есть shell/tool access
 
 Если у тебя есть реальный доступ к терминалу, выполняй команды сам.

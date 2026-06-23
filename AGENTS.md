@@ -134,6 +134,10 @@ Use actual repository paths only when they are inside the allowed workspace for 
 - Do not invent selectors.
 - PageObject property names are not selectors.
 - Source truth must come from POM/helper code, config, or existing target Playwright code.
+- Before large POM/config work, run or inspect `index-pom`.
+- Before mapping/suppressing POM or project helper wrappers, run or inspect `helper-inventory`.
+- Missing target Playwright POM coverage is not automatically `TICKET_NEEDED`: generate POM scaffolds in migration output or use raw locators when Selenium POM selectors are proven.
+- Prefer locator strategy: existing target POM member → generated POM in migration output → raw Playwright locator from proven selector → explicit TODO.
 - Use `TargetKnownTypes` / `TargetKnownIdentifiers` only for symbols that really exist in target code.
 - Keep Selenium-only roots in `SourceOnlyIdentifiers` when they are not target-side symbols.
 - Do not reduce TODO count through unsafe broad suppression.
@@ -169,6 +173,7 @@ Default priority:
 | `verify-ts-project` | Type-check generated Playwright TS tests inside an existing TS project. |
 | `orchestrate` | Run analyze → migrate → verify → reports for Playwright .NET. |
 | `index-pom` | Mine Selenium PageObjects and helper selectors. |
+| `helper-inventory` | Inspect Selenium helper/POM method bodies before MethodSemantics, mappings, or suppressions. |
 | `profile-match` | Estimate whether existing profiles can be reused for a new project. |
 | `config-validate` | Validate profile safety and common mistakes. |
 | `config-diff` | Review config changes. |
@@ -206,3 +211,4 @@ Start here:
 - `docs/migration-board.md`
 - `docs/wait-policy.md`
 - `docs/typescript-target.md`
+- `.agent-loops/12-pom-helper-recovery-policy.md`

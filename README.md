@@ -25,7 +25,7 @@ Give your coding agent this prompt from the repository root:
 
 ```text
 Read all files in .agent-loops/.
-Also read AGENTS.md and docs/autopilot-loop.md.
+Also read AGENTS.md, docs/autopilot-loop.md, and .agent-loops/12-pom-helper-recovery-policy.md.
 
 Start Migrator Autopilot Loop.
 
@@ -38,6 +38,8 @@ Migration scope:
 - Source Selenium project: <SOURCE_SELENIUM_PROJECT_PATH>
 - Target/generated Playwright project: <TARGET_PROJECT_OR_OUTPUT_PATH>
 - Migrator config/profile: <CONFIG_OR_PROFILE_PATH>
+- Compiled migrator tool, if compiled-tool-only mode: <COMPILED_TOOL_PATH_OR_EMPTY>
+- Existing Playwright POM examples: <TARGET_POM_EXAMPLES_PATH_OR_EMPTY>
 - Verify/orchestrate output directory: <OUTPUT_DIR>
 - Latest migration board: <PATH_OR_EMPTY>
 - Latest project verify report: <PATH_OR_EMPTY>
@@ -129,6 +131,12 @@ migration/orchestration-1/
 - Elide Selenium actionability waits, but preserve product-state waits such as loader/table/modal synchronization.
 - Prefer Roslyn semantic model over text/regex parsing.
 - Generated Playwright code should compile whenever possible.
+
+## POM/helper recovery
+
+Low existing Playwright POM coverage is not automatically a blocker. Before declaring `TICKET_NEEDED`, run or inspect `index-pom` for Selenium PageObject selector evidence and `helper-inventory` for helper/POM wrapper semantics.
+
+If Selenium POM contains proven selectors such as `ByTId("value")`, `CreateControlByTid(...)`, explicit `data-tid`, CSS, XPath, or resolved constants, prefer: existing target POM member → generated POM scaffold in migration output → raw Playwright locator from proven selector → explicit TODO. Never invent selectors from PageObject/property names.
 
 ## Development
 

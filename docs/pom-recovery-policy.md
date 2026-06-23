@@ -29,6 +29,19 @@ Try to recover source truth from Selenium PageObjects and convert it into one of
 
 The goal is not to blindly translate every old POM class 1:1. The goal is to preserve useful source truth: selectors, data-tid values, URLs, component hierarchy, reusable user actions, and synchronization rules.
 
+## Missing target POM is not a blocker
+
+If the existing Playwright target project has low POM coverage, do not immediately stop with `TICKET_NEEDED`.
+
+Use this decision order:
+
+1. reuse an existing target Playwright POM member when it exists and matches the source semantics;
+2. generate a Playwright POM candidate/scaffold inside the allowed output or migration folder using Selenium POM selector evidence;
+3. use a raw Playwright locator in generated output when selector evidence is proven and a POM scaffold is not available or not worth creating;
+4. emit TODO / ticket only when selector evidence or helper semantics cannot be proven.
+
+`ByTId("value")`, `CreateControlByTid(...)`, explicit `data-tid`, CSS, XPath, and resolved selector constants are valid selector evidence. PageObject names and property names are not.
+
 ## POM recovery loop
 
 For every repeated source-only POM pattern:

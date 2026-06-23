@@ -31,6 +31,8 @@ Migration scope:
 - Source Selenium project: <SOURCE_SELENIUM_PROJECT_PATH>
 - Target/generated Playwright project: <TARGET_PROJECT_OR_OUTPUT_PATH>
 - Migrator config/profile: <CONFIG_OR_PROFILE_PATH>
+- Compiled migrator tool, if compiled-tool-only mode: <COMPILED_TOOL_PATH_OR_EMPTY>
+- Existing Playwright POM examples: <TARGET_POM_EXAMPLES_PATH_OR_EMPTY>
 - Verify/orchestrate output directory: <OUTPUT_DIR>
 - Latest migration board: <PATH_OR_EMPTY>
 - Latest project verify report: <PATH_OR_EMPTY>
@@ -47,6 +49,8 @@ Forbidden paths:
 
 Current task:
 <PASTE CURRENT BLOCK / ERROR / LOG / TODO CATEGORY HERE>
+
+If POMs/helpers are involved: run or inspect `index-pom` and `helper-inventory`; missing target POMs are not automatic blockers; generate POM scaffolds only in migration output or use raw locators from proven selectors; never invent selectors.
 
 Do not ask “continue?”. Continue within the current ticket until it is completed, blocked, or validation is impossible.
 Do not search outside allowed paths. Do not edit source files unless the repository source tree is listed as an allowed write path.
@@ -67,6 +71,7 @@ Use only allowed repository code, existing tests, snapshots, docs, CLI reports, 
 - `08-continuation-rule.md` — prevents stopping after green compile/project verify when migration work remains.
 - `09-continue-after-compile-fix-prompt.txt` — prompt for continuing after compile-fix milestone.
 - `10-state-and-resume.md` — state files and resume protocol for long-running loops.
+- `12-pom-helper-recovery-policy.md` — POM/helper source-truth, generated POM, helper-inventory, and raw locator fallback rules.
 - `11-strict-ticket-boundaries.md` — hard path/ticket boundary rules for restricted workspaces and DLL/artifact tasks.
 - `strict-ticket-prompt.txt` — copy-paste prompt for restricted ticket mode.
 - `resume-prompt.txt` — restart prompt after interruption.

@@ -20,7 +20,7 @@
 
 ```text
 Read all files in .agent-loops/.
-Also read AGENTS.md and docs/autopilot-loop.md.
+Also read AGENTS.md, docs/autopilot-loop.md, and .agent-loops/12-pom-helper-recovery-policy.md.
 
 Start Migrator Autopilot Loop.
 
@@ -33,6 +33,8 @@ Migration scope:
 - Source Selenium project: <ПУТЬ_К_SOURCE_SELENIUM_PROJECT>
 - Target/generated Playwright project: <ПУТЬ_К_TARGET_PROJECT_OR_OUTPUT>
 - Migrator config/profile: <ПУТЬ_К_CONFIG_OR_PROFILE>
+- Compiled migrator tool, если режим compiled-tool-only: <ПУТЬ_К_COMPILED_TOOL_ИЛИ_ПУСТО>
+- Existing Playwright POM examples: <ПУТЬ_К_ALLOWED_TARGET_POM_EXAMPLES_ИЛИ_ПУСТО>
 - Verify/orchestrate output directory: <ПУТЬ_К_OUTPUT_DIR>
 - Latest migration board: <ПУТЬ_ИЛИ_ПУСТО>
 - Latest project verify report: <ПУТЬ_ИЛИ_ПУСТО>
@@ -48,6 +50,12 @@ Use repository code, existing tests, snapshots, docs, CLI reports, migration boa
 - [`.agent-loops/README.md`](.agent-loops/README.md)
 - [`docs/autopilot-loop.md`](docs/autopilot-loop.md)
 - [`AGENTS.md`](AGENTS.md)
+
+## POM/helper recovery
+
+Низкое покрытие существующими Playwright POM не является автоматическим blocker-ом. Перед `TICKET_NEEDED` агент должен запустить или изучить `index-pom` для selector evidence из Selenium POM и `helper-inventory` для helper/POM wrapper semantics.
+
+Если Selenium POM содержит доказанные selectors (`ByTId("value")`, `CreateControlByTid(...)`, явный `data-tid`, CSS, XPath, resolved constants), порядок такой: существующий target POM member → generated POM scaffold в migration/output → raw Playwright locator из доказанного selector-а → explicit TODO. Нельзя придумывать selectors по именам PageObject/property.
 
 ## Основные команды
 

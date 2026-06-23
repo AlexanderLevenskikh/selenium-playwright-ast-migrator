@@ -15,6 +15,9 @@ Continue without asking the user when:
 - generated output has TODOs outside the current selected category;
 - adapter draft can represent the missing mapping;
 - source behavior matches an existing pattern;
+- Selenium POM contains proven selector evidence and missing target POMs can be generated in migration output;
+- a raw Playwright locator can be generated from proven selector evidence;
+- helper semantics can be classified by running or inspecting `helper-inventory`;
 - build/test errors point to a clear fix;
 - a regression test needs to be added;
 - existing code has a nearby convention that can be followed;
@@ -26,7 +29,7 @@ Continue without asking the user when:
 
 Stop only when:
 
-1. Source behavior is genuinely ambiguous and unsafe to infer.
+1. Source behavior is genuinely ambiguous and unsafe to infer after `index-pom` / `helper-inventory` evidence is unavailable or insufficient.
 2. The fix requires product-specific or business-domain knowledge.
 3. Required files or configs are missing and cannot be inferred.
 4. The same failure repeats after 3 serious fix attempts.
@@ -55,6 +58,8 @@ Do not stop with:
 - "Only warnings remain, so I should stop."
 - "The next work is migration-quality improvement, so the user should decide."
 - "There are TODO reduction trade-offs, so I should stop."
+- "Target Playwright POM coverage is low, so migration is pointless."
+- "Missing target POM class means TICKET_NEEDED even though Selenium POM has `ByTId`/selector evidence."
 
 Instead, choose the safest approach and continue.
 

@@ -8,6 +8,8 @@ Scope:
 - Source Selenium project: {{SOURCE}}
 - Target/generated Playwright project: {{TARGET}}
 - Migrator config/profile: {{CONFIG}}
+- Compiled migrator tool, if compiled-tool-only mode: {{COMPILED_TOOL}}
+- Existing Playwright POM examples: {{TARGET_POM_EXAMPLES}}
 - Workspace: {{WORKSPACE}}
 - First output directory: {{OUTPUT}}
 

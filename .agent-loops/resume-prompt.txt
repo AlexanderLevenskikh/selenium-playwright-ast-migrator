@@ -25,15 +25,16 @@ Resume steps:
 2. Inspect the latest migration board/report.
 3. Inspect the latest project verify report.
 4. Read the last recorded batch and command results.
-5. Run the strongest affordable verification commands for the current scope.
-6. Classify current state:
+5. If POM/helper categories are present, inspect latest `index-pom` and `helper-inventory` outputs or run them before changing mappings/suppressions.
+6. Run the strongest affordable verification commands for the current scope.
+7. Classify current state:
    - last batch kept;
    - last batch reverted;
    - last batch unsafe;
    - last batch unknown;
    - environment blocked.
-7. Do not start a new batch until the current batch is classified.
-8. Continue from the last safe checkpoint.
+8. Do not start a new batch until the current batch is classified.
+9. Continue from the last safe checkpoint.
 
 If the last batch was compile-fix and project verify is green:
 - treat that batch as READY_FOR_ACCEPTANCE;

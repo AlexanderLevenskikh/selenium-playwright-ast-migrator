@@ -200,6 +200,18 @@ dotnet run --project .\Migrator.Cli -- --mode index-pom --input "<Selenium proje
 
 Правило: найденные POM-факты являются source truth, а `inferred-pom-candidates.json` — только черновик. Inferred candidates нельзя автоматически переносить в `adapter-config.json`: сначала найти POM/helper/source truth; если это невозможно безопасно вывести из кода, классифицировать как `TICKET_NEEDED`.
 
+## POM generation and raw locator fallback
+
+Низкое покрытие существующими Playwright POM не является само по себе `TICKET_NEEDED`.
+Если Selenium POM содержит реальные selector evidence (`ByTId`, `CreateControlByTid`, `data-tid`, CSS, XPath, resolved constants), агент должен использовать их в таком порядке:
+
+1. существующий target POM member, если он реально найден;
+2. generated POM scaffold/member в разрешённой output/migration-папке;
+3. raw Playwright locator из доказанного selector-а;
+4. TODO, если selector/helper semantics не доказаны.
+
+Existing Playwright POM можно использовать как style example, но отсутствие аналога не блокирует migration run. Запрещено придумывать selector по имени PageObject/property.
+
 ## Project-aware verify
 
 Для настоящей компиляции generated Playwright-кода используй режим `verify-project`, а не только standalone `verify`. Он создаёт временный `.csproj` в `--out/project-verify`, подключает generated-файлы, project/package references из `adapter-config.json` (`Verification`), умеет искать ближайший `.csproj`, рекурсивные `ProjectReference`, `Directory.Build.props/targets`, `Directory.Packages.props`, и классифицирует build diagnostics по причинам. Исходный проект не меняется. Подробнее: `docs/project-verification.md`.

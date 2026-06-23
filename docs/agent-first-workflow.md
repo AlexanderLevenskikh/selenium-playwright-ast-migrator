@@ -31,7 +31,7 @@
 
 - читать исходный Selenium test project;
 - читать POM, base classes, helpers, extension methods;
-- запускать `migrate`, `verify`, `verify-project`, `index-pom`, `explain-todo`, `smoke-plan`;
+- запускать `migrate`, `verify`, `verify-project`, `index-pom`, `helper-inventory`, `explain-todo`, `smoke-plan`;
 - менять `adapter-config.json` или project profile;
 - добавлять high-confidence mappings по найденному source truth;
 - запускать `config-validate`, `config-diff`, `guard`;
@@ -44,9 +44,10 @@
 - нужно менять C# код мигратора;
 - нужно менять исходный проект;
 - нужна ручная правка generated `.cs`;
-- source truth не найден, а mapping будет догадкой;
+- source truth не найден после `index-pom` / `helper-inventory`, а mapping будет догадкой;
 - `guard` показывает регрессию;
 - `verify-project` падает из-за generic blocker мигратора;
+- для нужного POM/helper нет selector/body evidence, а raw locator или scaffold были бы догадкой;
 - runtime failure требует продуктового знания, которого нет в источниках.
 
 ## Безопасные границы
