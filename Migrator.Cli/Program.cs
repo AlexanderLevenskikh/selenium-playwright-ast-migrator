@@ -273,6 +273,9 @@ switch (mode)
     case "analyze":
         RunAnalyze(summary, outPath, format, loadedConfig, resultsList, allUnmapped);
         break;
+    case "dump-ir":
+        RunDumpIr(outPath, format, resultsList);
+        break;
     case "migrate":
         RunMigrate(summary, outPath, format, loadedConfig, resultsList, allUnmapped, target);
         break;
@@ -321,6 +324,28 @@ static int ApplyQualityGate(MigrationSummaryReport summary, bool failOnUnsupport
 }
 
 // --- Mode implementations ---
+
+static void RunDumpIr(string outPath, string format, List<PipelineResult> results)
+{
+    Directory.CreateDirectory(outPath);
+
+    var document = IrDumpWriter.Build(results);
+
+    if (format == "json" || format == "both")
+        File.WriteAllText(Path.Combine(outPath, "ir-dump.json"), IrDumpWriter.ToJson(document));
+
+    if (format == "text" || format == "both")
+        File.WriteAllText(Path.Combine(outPath, "ir-dump.md"), IrDumpWriter.ToMarkdown(document));
+
+    Console.WriteLine("=== Legacy IR Dump ===");
+    Console.WriteLine($"Files: {document.Summary.Files}");
+    Console.WriteLine($"Source tests: {document.Summary.SourceTests}");
+    Console.WriteLine($"Target tests: {document.Summary.TargetTests}");
+    Console.WriteLine($"Target actions: {document.Summary.TargetActions}");
+    Console.WriteLine($"Unsupported actions: {document.Summary.TargetUnsupportedActions}");
+    Console.WriteLine($"Unresolved targets: {document.Summary.TargetUnresolvedTargets}");
+    Console.WriteLine($"IR dump written to: {Path.GetFullPath(outPath)}");
+}
 
 static void RunAnalyze(MigrationSummaryReport summary, string outPath, string format, ProjectAdapterConfig? config, List<PipelineResult> results, IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped)
 {
@@ -1739,8 +1764,37 @@ static void WriteExplainTodoReport(TodoExplanationReport report, string outPath,
     if (format == "text" || format == "both")
     {
         File.WriteAllText(Path.Combine(outPath, "explain-todo.md"), WriteExplainTodoMarkdown(report));
-        File.WriteAllText(Path.Combine(outPath, "agent-next-task.md"), WriteAgentNextTaskMarkdown(report));
+
+        // agent-next-task is a convenience handoff artifact. Keep explain-todo itself
+        // robust even if a newly-added handoff section has a formatting bug: the main
+        // explain-todo.md/json artifacts should still be emitted for diagnosis.
+        try
+        {
+            File.WriteAllText(Path.Combine(outPath, "agent-next-task.md"), WriteAgentNextTaskMarkdown(report));
+        }
+        catch (Exception ex)
+        {
+            File.WriteAllText(
+                Path.Combine(outPath, "agent-next-task.md"),
+                WriteAgentNextTaskFallbackMarkdown(report, ex));
+        }
     }
+}
+
+static string WriteAgentNextTaskFallbackMarkdown(TodoExplanationReport report, Exception ex)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Agent Next Task");
+    sb.AppendLine();
+    sb.AppendLine("agent-next-task.md could not be rendered completely, but explain-todo.md/json were written.");
+    sb.AppendLine();
+    sb.AppendLine($"- Artifact root: `{PathRedaction.Redact(report.ArtifactRoot)}`");
+    sb.AppendLine($"- TODO: `{report.TodoComments}`");
+    sb.AppendLine($"- Insights: `{report.Insights.Length}`");
+    sb.AppendLine($"- Error: `{EscapeMd(ex.GetType().Name)}: {EscapeMd(ex.Message)}`");
+    sb.AppendLine();
+    sb.AppendLine("Open explain-todo.md and fix the report-rendering bug before relying on this handoff file.");
+    return sb.ToString();
 }
 
 static TodoExplanationReport BuildExplainTodoReport(
@@ -7265,9 +7319,9 @@ static CliOptions? ParseArgs(string[] args)
         }
     }
 
-    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "verify-ts-project" && mode != "doctor" && mode != "explain-todo" && mode != "smoke-plan" && mode != "runtime-classify" && mode != "migration-board" && mode != "profile-match" && mode != "config-schema" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "helper-inventory" && mode != "orchestrate" && mode != "scaffold" && mode != "bootstrap-project")
+    if (mode != "analyze" && mode != "dump-ir" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "verify-ts-project" && mode != "doctor" && mode != "explain-todo" && mode != "smoke-plan" && mode != "runtime-classify" && mode != "migration-board" && mode != "profile-match" && mode != "config-schema" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "helper-inventory" && mode != "orchestrate" && mode != "scaffold" && mode != "bootstrap-project")
     {
-        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-diff|guard|propose|discover-target|index-pom|helper-inventory|orchestrate|scaffold|bootstrap-project");
+        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|dump-ir|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-diff|guard|propose|discover-target|index-pom|helper-inventory|orchestrate|scaffold|bootstrap-project");
         return null;
     }
 
@@ -7314,6 +7368,7 @@ static CliOptions? ParseArgs(string[] args)
         outDir = mode switch
         {
             "analyze" => "analysis",
+            "dump-ir" => "ir-dump",
             "migrate" => "generated-tests",
             "verify" => "verify",
             "verify-project" => "verify-project",
@@ -7424,6 +7479,8 @@ Usage: Migrator.Cli --mode <mode> --input <path> [options]
 Modes:
   analyze         Parse and analyze Selenium tests without generating output files.
                     Produces reports and draft adapter-config.
+  dump-ir         Dump the current legacy parser/adapter IR as ir-dump.json/md.
+                    This is a golden-baseline aid for refactors and does not modify source files.
   migrate         Parse, adapt, and generate Playwright C# files. Produces reports.
   verify          Validate generated code quality. Runs Roslyn syntax check,
                     TODO/placeholder detection, config validation, scope matching,
@@ -7513,7 +7570,7 @@ Modes:
 
 Options:
     --mode <mode>                 Operation mode (required)
-                                    analyze|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-diff|guard|propose|discover-target|index-pom|helper-inventory|orchestrate|scaffold|bootstrap-project
+                                    analyze|dump-ir|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-diff|guard|propose|discover-target|index-pom|helper-inventory|orchestrate|scaffold|bootstrap-project
     --input <file-or-directory>   Input .cs file or directory (required).
                                     For propose/explain-todo/migration-board: directory with report files.
                                     For runtime-classify: runtime log file or directory with logs/reports.
@@ -7558,6 +7615,7 @@ Exit codes:
 
 Examples:
   Migrator.Cli --mode analyze --input ./OldTests --out analysis --format both
+  Migrator.Cli --mode dump-ir --input ./OldTests --config ./adapter-config.json --out ir-dump --format both
   Migrator.Cli --mode migrate --input ./OldTests --out generated --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json
   Migrator.Cli --mode verify-project --input ./OldTests --out verify-project --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json
   Migrator.Cli --mode doctor --input ./OldTests --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json --out doctor
