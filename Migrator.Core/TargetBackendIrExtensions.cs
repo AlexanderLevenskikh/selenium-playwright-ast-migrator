@@ -15,6 +15,6 @@ public static class TargetBackendIrExtensions
         if (document == null)
             throw new ArgumentNullException(nameof(document));
 
-        return backend.Render(LegacyIrBridge.ToLegacyTestFile(document));
+        return backend.Render(Migrator.Core.Models.Ir.LegacyIrBridge.ToLegacyTestFile(document));
     }
 }

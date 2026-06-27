@@ -32,7 +32,7 @@ public class TestFileParserSourceFrontend : ISourceFrontend
             ? _parser.ParseDirectory(request.InputPath).ToArray()
             : new[] { _parser.Parse(request.InputPath) };
 
-        var documents = models.Select(m => LegacyIrBridge.ToDocument(m, Source, request.Target)).ToArray();
+        var documents = models.Select(m => Migrator.Core.Models.Ir.LegacyIrBridge.ToDocument(m, Source, request.Target)).ToArray();
         var diagnostics = documents.SelectMany(d => d.Diagnostics).ToArray();
         return new SourceParseResult(documents, diagnostics);
     }

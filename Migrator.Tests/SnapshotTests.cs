@@ -4157,10 +4157,10 @@ public class NavigationOpenPageTests
                         new RawStatementAction(2, "page = pagef;")
                     })
             })
-            {
-                SuppressedMethodPatterns = new[] { "*Navigation.OpenPage*" },
-                SourceOnlyIdentifiers = new[] { "Urls" }
-            };
+        {
+            SuppressedMethodPatterns = new[] { "*Navigation.OpenPage*" },
+            SourceOnlyIdentifiers = new[] { "Urls" }
+        };
 
         var output = renderer.Render(model);
 
