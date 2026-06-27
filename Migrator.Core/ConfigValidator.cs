@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 
 namespace Migrator.Core;
@@ -204,7 +205,13 @@ public static class ConfigValidator
                 errors.Add($"{prefix} has missing SourceMethod. {section} mappings must use SourceMethod, not SourceExpression.");
             }
 
-            if (string.IsNullOrEmpty(m.TargetMethod) && (m.TargetStatements == null || m.TargetStatements.Length == 0))
+            var hasLegacyStatements = m.TargetStatements != null && m.TargetStatements.Length > 0;
+            var hasTargetStatements = HasAnyTargetStatements(m.Targets);
+
+            if (m.Targets != null)
+                ValidateTargetStatementMappings(m.Targets, $"{prefix}.Targets", errors);
+
+            if (string.IsNullOrEmpty(m.TargetMethod) && !hasLegacyStatements && !hasTargetStatements)
             {
                 if (string.IsNullOrEmpty(m.SourceMethod))
                 {
@@ -212,7 +219,7 @@ public static class ConfigValidator
                 }
                 else
                 {
-                    errors.Add($"{prefix} has no TargetMethod or TargetStatements.");
+                    errors.Add($"{prefix} has no TargetMethod, TargetStatements, or Targets.<target>.TargetStatements.");
                 }
             }
         }
@@ -228,14 +235,61 @@ public static class ConfigValidator
             if (string.IsNullOrEmpty(m.SourceMethodPattern))
                 errors.Add($"{prefix} has missing SourceMethodPattern.");
 
-            if (m.TargetStatements == null || m.TargetStatements.Length == 0)
+            var hasLegacyStatements = m.TargetStatements != null && m.TargetStatements.Length > 0;
+            var hasTargetStatements = HasAnyTargetStatements(m.Targets);
+
+            if (m.Targets != null)
+                ValidateTargetStatementMappings(m.Targets, $"{prefix}.Targets", errors);
+
+            if (!hasLegacyStatements && !hasTargetStatements)
             {
                 if (string.IsNullOrWhiteSpace(m.TargetExpression))
-                    errors.Add($"{prefix} has missing TargetStatements or TargetExpression.");
+                    errors.Add($"{prefix} has missing TargetStatements, TargetExpression, or Targets.<target>.TargetStatements.");
             }
             else if (!string.IsNullOrWhiteSpace(m.TargetExpression))
             {
-                errors.Add($"{prefix} has both TargetStatements and TargetExpression; they are mutually exclusive. Use one or the other.");
+                errors.Add($"{prefix} has both TargetStatements/Targets and TargetExpression; they are mutually exclusive. Use one or the other.");
+            }
+        }
+    }
+
+    private static bool HasAnyTargetStatements(Dictionary<string, TargetStatementMapping>? targets)
+    {
+        if (targets == null || targets.Count == 0)
+            return false;
+
+        return targets.Any(kvp => kvp.Value?.TargetStatements != null && kvp.Value.TargetStatements.Length > 0);
+    }
+
+    private static void ValidateTargetStatementMappings(Dictionary<string, TargetStatementMapping> targets, string section, List<string> errors)
+    {
+        foreach (var kvp in targets)
+        {
+            var targetId = kvp.Key;
+            var target = kvp.Value;
+            var prefix = $"{section}[\"{targetId}\"]";
+
+            if (string.IsNullOrWhiteSpace(targetId))
+            {
+                errors.Add($"{section} contains an empty target id. Use stable ids such as playwright-dotnet or playwright-typescript.");
+                continue;
+            }
+
+            if (target == null)
+            {
+                errors.Add($"{prefix} is null.");
+                continue;
+            }
+
+            if (target.TargetStatements == null || target.TargetStatements.Length == 0)
+                errors.Add($"{prefix} has missing TargetStatements.");
+            else
+            {
+                for (var i = 0; i < target.TargetStatements.Length; i++)
+                {
+                    if (string.IsNullOrWhiteSpace(target.TargetStatements[i]))
+                        errors.Add($"{prefix}.TargetStatements[{i}] is empty.");
+                }
             }
         }
     }

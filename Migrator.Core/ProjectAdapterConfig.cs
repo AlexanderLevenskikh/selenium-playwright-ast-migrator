@@ -489,22 +489,56 @@ public sealed class PageObjectMapping
     }
 }
 
+/// <summary>
+/// Target-specific statement/template override for a method mapping.
+/// Keyed from MethodMapping.Targets / ParameterizedMethodMapping.Targets by stable target backend id
+/// such as "playwright-dotnet" or "playwright-typescript".
+/// </summary>
+public sealed class TargetStatementMapping
+{
+    /// <summary>Target-side statements for this backend. These override legacy TargetStatements for that backend.</summary>
+    public string[]? TargetStatements { get; init; }
+
+    /// <summary>Optional per-target review flag. When null, the parent mapping's RequiresReview is used.</summary>
+    public bool? RequiresReview { get; init; }
+
+    /// <summary>Optional documentation string for humans/config diff reports.</summary>
+    public string? Description { get; init; }
+
+    public TargetStatementMapping() { }
+
+    public TargetStatementMapping(string[]? targetStatements, bool? requiresReview = null, string? description = null)
+    {
+        TargetStatements = targetStatements;
+        RequiresReview = requiresReview;
+        Description = description;
+    }
+}
+
 public sealed class MethodMapping
 {
     public string SourceMethod { get; init; } = null!;
     public string? TargetMethod { get; init; }
     public string? Description { get; init; }
     public string[]? TargetStatements { get; init; }
+
+    /// <summary>
+    /// Target-specific statement overrides. Legacy TargetStatements remain the fallback.
+    /// Example keys: "playwright-dotnet", "playwright-typescript".
+    /// </summary>
+    public Dictionary<string, TargetStatementMapping>? Targets { get; init; }
+
     public bool RequiresReview { get; init; }
 
     public MethodMapping() { }
-    public MethodMapping(string sourceMethod, string? targetMethod, string? description, string[]? targetStatements, bool requiresReview)
+    public MethodMapping(string sourceMethod, string? targetMethod, string? description, string[]? targetStatements, bool requiresReview, Dictionary<string, TargetStatementMapping>? targets = null)
     {
         SourceMethod = sourceMethod;
         TargetMethod = targetMethod;
         Description = description;
         TargetStatements = targetStatements;
         RequiresReview = requiresReview;
+        Targets = targets;
     }
 }
 
@@ -584,9 +618,16 @@ public sealed class ParameterizedMethodMapping
     public string SourceMethodPattern { get; init; } = null!;
 
     /// <summary>
-    /// Target statements with placeholders replaced by actual argument values.
+    /// Legacy target statements with placeholders replaced by actual argument values.
+    /// Used as fallback when no target-specific override exists.
     /// </summary>
     public string[]? TargetStatements { get; init; }
+
+    /// <summary>
+    /// Target-specific statement overrides. Legacy TargetStatements remain the fallback.
+    /// Example keys: "playwright-dotnet", "playwright-typescript".
+    /// </summary>
+    public Dictionary<string, TargetStatementMapping>? Targets { get; init; }
 
     /// <summary>
     /// Whether the mapping requires manual review after generation.
@@ -612,13 +653,14 @@ public sealed class ParameterizedMethodMapping
     public string? TargetExpression { get; init; }
 
     public ParameterizedMethodMapping() { }
-    public ParameterizedMethodMapping(string sourceMethodPattern, string[]? targetStatements, bool requiresReview, string? description = null, string? targetExpression = null)
+    public ParameterizedMethodMapping(string sourceMethodPattern, string[]? targetStatements, bool requiresReview, string? description = null, string? targetExpression = null, Dictionary<string, TargetStatementMapping>? targets = null)
     {
         SourceMethodPattern = sourceMethodPattern;
         TargetStatements = targetStatements;
         RequiresReview = requiresReview;
         Description = description;
         TargetExpression = targetExpression;
+        Targets = targets;
     }
 }
 

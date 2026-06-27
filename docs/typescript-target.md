@@ -48,18 +48,28 @@ It does not modify the TS project.
 For TS migrations, prefer a TS-specific project profile layer. Do not reuse .NET
 `TargetStatements` blindly if they contain C# Playwright code.
 
-Good TS-specific mapped statement:
+Good target-specific mapped statement:
 
 ```json
 {
   "SourceMethod": "WaitVisible",
   "TargetStatements": [
-    "await {TARGET}.toBeVisible();"
-  ]
+    "await Assertions.Expect({TARGET}).ToBeVisibleAsync();"
+  ],
+  "Targets": {
+    "playwright-typescript": {
+      "TargetStatements": [
+        "await expect({TARGET}).toBeVisible();"
+      ]
+    }
+  }
 }
 ```
 
-If a statement is not TS-safe, the renderer emits:
+`TargetStatements` remains the legacy/default fallback, usually for `playwright-dotnet`.
+When `Targets.playwright-typescript.TargetStatements` is present, the TS renderer uses it directly instead of trying to translate C# Playwright statements.
+
+If a legacy/default statement is not TS-safe and no TS override exists, the renderer emits:
 
 ```ts
 // TODO: ... [MIGRATOR:TS_MAPPING_REQUIRED]

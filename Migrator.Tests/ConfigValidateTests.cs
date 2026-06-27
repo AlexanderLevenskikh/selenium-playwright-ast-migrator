@@ -4,6 +4,7 @@ using Xunit;
 
 namespace Migrator.Tests;
 
+[Collection("CliProcess")]
 public class ConfigValidateTests
 {
     [Fact]
@@ -22,7 +23,7 @@ public class ConfigValidateTests
             var outDir = Path.Combine(temp, "out");
             var result = RunCli($"--mode config-validate --config \"{configPath}\" --out \"{outDir}\" --format both");
 
-            Assert.Equal(0, result.ExitCode);
+            AssertCliSuccess(result);
             var markdown = File.ReadAllText(Path.Combine(outDir, "config-validate-report.md"));
             Assert.Contains("REGEX_LIKE_SUPPRESSION_PATTERN", markdown);
             Assert.Contains("glob semantics", markdown);
@@ -50,7 +51,7 @@ public class ConfigValidateTests
             var outDir = Path.Combine(temp, "out");
             var result = RunCli($"--mode config-validate --config \"{configPath}\" --out \"{outDir}\" --format both");
 
-            Assert.Equal(0, result.ExitCode);
+            AssertCliSuccess(result);
             var markdown = File.ReadAllText(Path.Combine(outDir, "config-validate-report.md"));
             Assert.DoesNotContain("REGEX_LIKE_SUPPRESSION_PATTERN", markdown);
         }
@@ -82,7 +83,7 @@ public class ConfigValidateTests
             var outDir = Path.Combine(temp, "out");
             var result = RunCli($"--mode config-diff --before \"{beforePath}\" --after \"{afterPath}\" --out \"{outDir}\" --format both");
 
-            Assert.Equal(0, result.ExitCode);
+            AssertCliSuccess(result);
             var markdown = File.ReadAllText(Path.Combine(outDir, "config-diff-report.md"));
             Assert.Contains("REGEX_LIKE_SUPPRESSION_PATTERN_ADDED", markdown);
             Assert.Contains("helper-inventory", markdown);
@@ -91,6 +92,13 @@ public class ConfigValidateTests
         {
             TryDelete(temp);
         }
+    }
+
+    static void AssertCliSuccess(CliResult result)
+    {
+        Assert.True(
+            result.ExitCode == 0,
+            $"Expected CLI exit code 0, got {result.ExitCode}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
     }
 
     static CliResult RunCli(string arguments)

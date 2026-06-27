@@ -12,6 +12,7 @@ using Xunit;
 
 namespace Migrator.Tests;
 
+[Collection("CliProcess")]
 public class OrchestratorTests
 {
     readonly string _testFilesDir = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!, "TestFiles");

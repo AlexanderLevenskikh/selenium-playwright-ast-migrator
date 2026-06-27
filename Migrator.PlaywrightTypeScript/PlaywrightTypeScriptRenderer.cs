@@ -127,10 +127,11 @@ public sealed class PlaywrightTypeScriptRenderer : IRenderer
 
     void RenderMapped(StringBuilder sb, string pad, MappedMethodInvocationAction mapped)
     {
-        if (mapped.RequiresReview)
+        if (mapped.RequiresReviewForTarget("playwright-typescript"))
             RenderTodo(sb, pad, "MAPPED_REQUIRES_REVIEW", mapped.FullSourceText, "Mapping is marked RequiresReview.", "Review source truth and add a safe TS-specific mapping if appropriate.");
 
-        foreach (var originalStatement in mapped.TargetStatements)
+        var hasTypeScriptOverride = mapped.TargetStatementsByTarget.ContainsKey("playwright-typescript");
+        foreach (var originalStatement in mapped.GetTargetStatements("playwright-typescript"))
         {
             var statement = originalStatement;
             if (statement.Contains("{result}"))
@@ -146,7 +147,20 @@ public sealed class PlaywrightTypeScriptRenderer : IRenderer
                 }
             }
 
-            if (LooksLikeTypeScript(statement))
+            if (statement.Contains("{TARGET}"))
+            {
+                if (mapped.TargetExpr != null && IsResolved(mapped.TargetExpr))
+                {
+                    statement = statement.Replace("{TARGET}", RenderTarget(mapped.TargetExpr));
+                }
+                else
+                {
+                    RenderTodo(sb, pad, "UNRESOLVED_PLACEHOLDER", statement, "Mapped TargetStatement uses {TARGET}, but the source receiver has no resolved target mapping.", "Add a UiTarget/Table mapping for the source receiver or remove {TARGET} from the target-specific mapping.");
+                    continue;
+                }
+            }
+
+            if (hasTypeScriptOverride || LooksLikeTypeScript(statement))
             {
                 var code = EnsureSemicolon(statement.Trim());
                 sb.AppendLine($"{pad}{code}");

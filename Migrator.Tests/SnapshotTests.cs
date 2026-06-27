@@ -2710,7 +2710,7 @@ public class SnapshotTests
 
         var allErrors = string.Join(" ", ex.Errors);
         Assert.Contains("Methods[0]", allErrors);
-        Assert.Contains("no TargetMethod or TargetStatements", allErrors);
+        Assert.Contains("no TargetMethod, TargetStatements, or Targets.<target>.TargetStatements", ex.Message);
     }
 
     [Fact]

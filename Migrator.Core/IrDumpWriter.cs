@@ -203,7 +203,11 @@ public static class IrDumpWriter
             case MappedMethodInvocationAction a:
                 props["fullSourceText"] = a.FullSourceText;
                 props["targetStatements"] = a.TargetStatements.ToArray();
+                if (a.TargetStatementsByTarget.Count > 0)
+                    props["targetStatementsByTarget"] = a.TargetStatementsByTarget.ToDictionary(x => x.Key, x => x.Value.ToArray(), StringComparer.OrdinalIgnoreCase);
                 props["requiresReview"] = a.RequiresReview;
+                if (a.RequiresReviewByTarget.Count > 0)
+                    props["requiresReviewByTarget"] = a.RequiresReviewByTarget.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
                 props["targetExpr"] = a.TargetExpr != null ? DumpTarget(a.TargetExpr) : null;
                 props["sourceMethod"] = a.SourceMethod;
                 props["resultVariable"] = a.ResultVariable;

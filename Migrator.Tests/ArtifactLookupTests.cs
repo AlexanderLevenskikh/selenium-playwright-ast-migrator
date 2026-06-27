@@ -4,6 +4,7 @@ using Xunit;
 
 namespace Migrator.Tests;
 
+[Collection("CliProcess")]
 public class ArtifactLookupTests
 {
     [Fact]
@@ -66,7 +67,7 @@ public class ArtifactLookupTests
 
             var result = RunCli($"--mode explain-todo --input \"{temp}\" --out \"{outDir}\" --format both");
 
-            Assert.Equal(0, result.ExitCode);
+            AssertCliSuccess(result);
             var markdown = File.ReadAllText(Path.Combine(outDir, "explain-todo.md"));
             Assert.Contains("Artifact lookup", markdown);
             Assert.Contains("direct-only", markdown);
@@ -105,7 +106,7 @@ public class ArtifactLookupTests
 
             var result = RunCli($"--mode migration-board --input \"{temp}\" --out \"{outDir}\" --format both");
 
-            Assert.Equal(0, result.ExitCode);
+            AssertCliSuccess(result);
             var markdown = File.ReadAllText(Path.Combine(outDir, "migration-board.md"));
             Assert.Contains("## Quality gates", markdown);
             Assert.Contains("EMPTY_TEST_AFTER_SUPPRESSION", markdown);
@@ -137,7 +138,7 @@ public class ArtifactLookupTests
 
             var result = RunCli($"--mode explain-todo --input \"{temp}\" --out \"{outDir}\" --format both");
 
-            Assert.Equal(0, result.ExitCode);
+            AssertCliSuccess(result);
             var markdown = File.ReadAllText(Path.Combine(outDir, "agent-next-task.md"));
             Assert.Contains("## Run context", markdown);
             Assert.Contains("Artifact lookup", markdown);
@@ -177,7 +178,7 @@ public class ArtifactLookupTests
 
             var result = RunCli($"--mode explain-todo --input \"{temp}\" --out \"{outDir}\" --format both");
 
-            Assert.Equal(0, result.ExitCode);
+            AssertCliSuccess(result);
             var markdown = File.ReadAllText(Path.Combine(outDir, "agent-next-task.md"));
             Assert.Contains("P1_SUPPRESSION_SAFETY", markdown);
             Assert.Contains("DEPENDS_ON_SUPPRESSED_SIDE_EFFECT", markdown);
@@ -211,7 +212,7 @@ public class ArtifactLookupTests
 
             var result = RunCli($"--mode explain-todo --input \"{temp}\" --out \"{outDir}\" --format both");
 
-            Assert.Equal(0, result.ExitCode);
+            AssertCliSuccess(result);
             var markdown = File.ReadAllText(Path.Combine(outDir, "explain-todo.md"));
             Assert.Contains("## Top normalized root causes", markdown);
             Assert.Contains("Suppressed side-effect family `InputAndAccept`", markdown);
@@ -247,7 +248,7 @@ public class ArtifactLookupTests
 
             var result = RunCli($"--mode migration-board --input \"{temp}\" --out \"{outDir}\" --format both");
 
-            Assert.Equal(0, result.ExitCode);
+            AssertCliSuccess(result);
             var markdown = File.ReadAllText(Path.Combine(outDir, "migration-board.md"));
             Assert.Contains("## Top normalized root causes", markdown);
             Assert.Contains("method family `CreateDopCalc`", markdown);
@@ -263,6 +264,13 @@ public class ArtifactLookupTests
         {
             TryDelete(temp);
         }
+    }
+
+    static void AssertCliSuccess(CliResult result)
+    {
+        Assert.True(
+            result.ExitCode == 0,
+            $"Expected CLI exit code 0, got {result.ExitCode}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
     }
 
     static CliResult RunCli(string arguments)

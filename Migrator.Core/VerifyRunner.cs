@@ -164,7 +164,7 @@ public static class VerifyRunner
                 a is TextAssertionAction ta && ta.Target.Kind == TargetKind.Unresolved ||
                 a is VisibilityAssertionAction va && va.Target.Kind == TargetKind.Unresolved ||
                 a is WaitForAction wa && wa.Kind != WaitForKind.ActionabilityElided && wa.Target.Kind == TargetKind.Unresolved ||
-                a is MappedMethodInvocationAction mmi && mmi.TargetStatements.Any(s => s.Contains("RawExpression")));
+                a is MappedMethodInvocationAction mmi && EnumerateMappedTargetStatements(mmi).Any(s => s.Contains("RawExpression")));
             totalRawExpressions += rawExprCount;
 
             var fileStatus = fileIssues.Any(i => i.Severity == IssueSeverity.Error) ? "failed" : "passed";
@@ -332,30 +332,57 @@ public static class VerifyRunner
         List<VerifyIssue> issues)
     {
         var patternPlaceholders = ExtractPlaceholders(pm.SourceMethodPattern);
-        if (pm.TargetStatements == null)
-            return;
 
-        foreach (var stmt in pm.TargetStatements)
+        foreach (var (statement, statementPrefix) in EnumerateParameterizedTargetStatements(pm, prefix))
         {
-            var stmtPlaceholders = ExtractPlaceholders(stmt);
+            var stmtPlaceholders = ExtractPlaceholders(statement);
             foreach (var ph in stmtPlaceholders)
             {
                 if (!patternPlaceholders.Contains(ph) && !IsSpecialParameterizedPlaceholder(ph))
                 {
                     issues.Add(new VerifyIssue(
                         "Config", IssueSeverity.Warning,
-                        $"{prefix} '{pm.SourceMethodPattern}' uses unknown placeholder '{{{ph}}}' in TargetStatements",
+                        $"{statementPrefix} '{pm.SourceMethodPattern}' uses unknown placeholder '{{{ph}}}' in TargetStatements",
                         null, null));
                 }
             }
         }
     }
 
+    static IEnumerable<string> EnumerateMappedTargetStatements(MappedMethodInvocationAction action)
+    {
+        foreach (var statement in action.TargetStatements)
+            yield return statement;
+
+        foreach (var group in action.TargetStatementsByTarget.Values)
+        {
+            foreach (var statement in group)
+                yield return statement;
+        }
+    }
+
+    static IEnumerable<(string Statement, string Prefix)> EnumerateParameterizedTargetStatements(ParameterizedMethodMapping mapping, string prefix)
+    {
+        foreach (var statement in mapping.TargetStatements ?? Array.Empty<string>())
+            yield return (statement, prefix);
+
+        if (mapping.Targets == null)
+            yield break;
+
+        foreach (var (targetId, target) in mapping.Targets)
+        {
+            foreach (var statement in target.TargetStatements ?? Array.Empty<string>())
+                yield return (statement, $"{prefix} target '{targetId}'");
+        }
+    }
+
     static bool IsSpecialParameterizedPlaceholder(string placeholder)
     {
         // {result} is supplied by the parser for assignment-pattern method invocations:
-        // var page = Browser.GoToPage<Page>(...);
-        return string.Equals(placeholder, "result", StringComparison.Ordinal);
+        // var page = Browser.GoToPage<Page>(...).
+        // {TARGET} is supplied by renderers from the resolved receiver target.
+        return string.Equals(placeholder, "result", StringComparison.Ordinal)
+            || string.Equals(placeholder, "TARGET", StringComparison.Ordinal);
     }
 
     // --- Scope matching ---

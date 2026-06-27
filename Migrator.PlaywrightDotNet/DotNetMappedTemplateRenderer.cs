@@ -12,7 +12,7 @@ public partial class PlaywrightDotNetRenderer
         // element, e.g. "await click();\nvar {result} = await Navigation.GoToAsync<T>();".
         // Split before {result} substitution and deduplication so each C# statement is
         // processed independently for rendering, variable extraction, and symbol registration.
-        var originalStatements = action.TargetStatements
+        var originalStatements = action.GetTargetStatements("playwright-dotnet")
             .SelectMany(SplitMappedTargetStatements)
             .ToArray();
 
@@ -53,7 +53,7 @@ public partial class PlaywrightDotNetRenderer
                 RegisterTargetLocalsFromMappedActiveStatement(substituted, originalStatement, action);
             }
         }
-        if (action.RequiresReview)
+        if (action.RequiresReviewForTarget("playwright-dotnet"))
         {
             AppendSmartTodo(
                 sb,
