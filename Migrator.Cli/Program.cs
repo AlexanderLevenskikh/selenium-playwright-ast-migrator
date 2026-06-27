@@ -124,18 +124,6 @@ if (IsTypeScriptTarget(targetBackend) && mode == "orchestrate")
     return 2;
 }
 
-if (IsTypeScriptTarget(targetBackend) && mode == "migrate")
-{
-    var tsProjectCheck = ValidateTypeScriptPlaywrightProject(tsProjectPath);
-    if (!tsProjectCheck.IsValid)
-    {
-        Console.Error.WriteLine("TypeScript target requires a real Playwright TS project. Use --ts-project <path-to-project>.");
-        foreach (var message in tsProjectCheck.Messages)
-            Console.Error.WriteLine($"- {message}");
-        return 2;
-    }
-}
-
 // Handle doctor mode — validates environment/input/config/project context before migration.
 if (mode == "doctor")
 {
@@ -7410,14 +7398,6 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
-    if (IsTypeScriptTarget(parsedTargetBackend) &&
-        mode == "migrate" &&
-        string.IsNullOrWhiteSpace(tsProject))
-    {
-        Console.Error.WriteLine("--target ts/playwright-typescript requires --ts-project <path-to-existing-playwright-ts-project>.");
-        return null;
-    }
-
     if (string.IsNullOrEmpty(workspace))
     {
         Console.Error.WriteLine("--workspace must not be empty");
@@ -7460,12 +7440,6 @@ static CliOptions? ParseArgs(string[] args)
     if (format != "text" && format != "json" && format != "both")
     {
         Console.Error.WriteLine($"Invalid format: {format}. Use: text|json|both");
-        return null;
-    }
-
-    if (target != "dotnet" && target != "ts")
-    {
-        Console.Error.WriteLine($"Invalid target: {target}. Use: dotnet|ts");
         return null;
     }
 
@@ -7542,7 +7516,7 @@ Modes:
                     Produces reports and draft adapter-config.
   dump-ir         Dump the current legacy parser/adapter IR as ir-dump.json/md.
                     This is a golden-baseline aid for refactors and does not modify source files.
-  migrate         Parse, adapt, and generate Playwright C# files. Produces reports.
+  migrate         Parse, adapt, and generate Playwright target files. Produces reports.
   verify          Validate generated code quality. Runs Roslyn syntax check,
                     TODO/placeholder detection, config validation, scope matching,
                     and quality gate evaluation. Outputs verify-report.json and
@@ -7651,11 +7625,12 @@ Options:
                                   Use an absolute path to write outside workspace.
    --workspace <directory>        Migration artifacts root (default: migration).
                                   All relative --out paths are kept under this root.
-   --target <dotnet|ts>            Generation target for migrate/orchestrate (default: dotnet).
-                                  Also accepts stable backend ids: playwright-dotnet, playwright-typescript.
-                                  TypeScript targets require --ts-project.
-   --ts-project <directory>        Existing Playwright TypeScript project root for --target ts
-                                  and verify-ts-project. Must contain package.json,
+   --target <dotnet|ts|playwright-dotnet|playwright-typescript>
+                                  Generation target for migrate/orchestrate (default: dotnet).
+                                  TypeScript migration generation does not require --ts-project;
+                                  project-aware TypeScript verification does.
+   --ts-project <directory>        Existing Playwright TypeScript project root for verify-ts-project.
+                                  Must contain package.json,
                                   tsconfig.json and playwright.config.*.
    --config <adapter-config.json>  Adapter config layer. Can be repeated.
                                   Layers are merged left-to-right; later/project configs override base profiles.

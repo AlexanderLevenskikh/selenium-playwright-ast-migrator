@@ -1,10 +1,10 @@
 # Agent playbook: TypeScript Playwright target
 
-Use this playbook only when the user has an existing Playwright TypeScript project.
+Use this playbook for Playwright TypeScript output. Generation can run without a TS project; project-aware verification requires an existing Playwright TypeScript project.
 
 ## Rules
 
-- Do not use `--target ts` without `--ts-project`.
+- Use `--target ts` to generate `.spec.ts` files; reserve `--ts-project` for project-aware verification.
 - Do not edit generated `.spec.ts` manually.
 - Prefer TS-specific adapter/profile overrides.
 - Do not assume C# helper names exist in TS.
@@ -13,7 +13,7 @@ Use this playbook only when the user has an existing Playwright TypeScript proje
 ## Loop
 
 1. Run `doctor` for the Selenium source and config/profile layers.
-2. Run `migrate --target ts --ts-project <ts project>`.
+2. Run `migrate --target ts` to generate `.spec.ts` files.
 3. Run `verify-ts-project` against the migration output.
 4. Read `ts-project-verify-report.md` and `agent-ts-verify-next-task.md`.
 5. Fix only TS profile/config mappings.

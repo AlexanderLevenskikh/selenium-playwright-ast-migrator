@@ -21,15 +21,12 @@ public sealed class PlaywrightTypeScriptBackend : ITargetBackend
         _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
     }
 
-    public TargetSpec Target { get; } = new("playwright-typescript", "typescript", "playwright");
+    public TargetSpec Target { get; } = new(
+        PlaywrightTypeScriptTarget.Id,
+        PlaywrightTypeScriptTarget.Language,
+        PlaywrightTypeScriptTarget.Framework);
 
-    public IReadOnlyCollection<string> Aliases { get; } = new[]
-    {
-        "ts",
-        "typescript",
-        "pw-ts",
-        "playwright-ts"
-    };
+    public IReadOnlyCollection<string> Aliases { get; } = PlaywrightTypeScriptTarget.Aliases;
 
     public string Render(TestFileModel model) => _renderer.Render(model);
 

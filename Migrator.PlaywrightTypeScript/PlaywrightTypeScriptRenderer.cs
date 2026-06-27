@@ -127,11 +127,11 @@ public sealed class PlaywrightTypeScriptRenderer : IRenderer
 
     void RenderMapped(StringBuilder sb, string pad, MappedMethodInvocationAction mapped)
     {
-        if (mapped.RequiresReviewForTarget("playwright-typescript"))
+        if (mapped.RequiresReviewForTarget(PlaywrightTypeScriptTarget.Id))
             RenderTodo(sb, pad, "MAPPED_REQUIRES_REVIEW", mapped.FullSourceText, "Mapping is marked RequiresReview.", "Review source truth and add a safe TS-specific mapping if appropriate.");
 
-        var hasTypeScriptOverride = mapped.TargetStatementsByTarget.ContainsKey("playwright-typescript");
-        foreach (var originalStatement in mapped.GetTargetStatements("playwright-typescript"))
+        var hasTypeScriptOverride = mapped.TargetStatementsByTarget.ContainsKey(PlaywrightTypeScriptTarget.Id);
+        foreach (var originalStatement in mapped.GetTargetStatements(PlaywrightTypeScriptTarget.Id))
         {
             var statement = originalStatement;
             if (statement.Contains("{result}"))
