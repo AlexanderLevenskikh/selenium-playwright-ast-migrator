@@ -2,10 +2,10 @@
 
 Milestone 13 adds an experimental `Selenium C# -> Playwright TypeScript` target.
 
-This mode is intentionally allowed only when you have a real Playwright TS project.
-The migrator can generate `.spec.ts` files, but imports, fixtures, helpers,
-`tsconfig`, package dependencies and Playwright runtime conventions must come from
-an existing TS project.
+The migrator can generate `.spec.ts` files without a TypeScript project.
+A real Playwright TS project is required only for project-aware verification/runtime
+checks, because imports, fixtures, helpers, `tsconfig`, package dependencies and
+Playwright runtime conventions must come from that project.
 
 ## Migrate to TypeScript
 
@@ -13,7 +13,6 @@ an existing TS project.
 selenium-pw-migrator `
   --mode migrate `
   --target ts `
-  --ts-project "C:\path\to\playwright-ts-project" `
   --input "C:\path\to\selenium-csharp-tests" `
   --config "profiles\infrastructure-base.adapter.json" `
   --config "profiles\projects\discounts-ts.adapter.json" `
@@ -21,7 +20,7 @@ selenium-pw-migrator `
   --format both
 ```
 
-If `--target ts` is used without `--ts-project`, the command fails during preflight.
+`migrate --target ts` can generate files without a TS project. Use `verify-ts-project --ts-project <path>` when you want project-aware TypeScript verification.
 
 ## Verify generated TS inside the real TS project
 
@@ -48,18 +47,28 @@ It does not modify the TS project.
 For TS migrations, prefer a TS-specific project profile layer. Do not reuse .NET
 `TargetStatements` blindly if they contain C# Playwright code.
 
-Good TS-specific mapped statement:
+Good target-specific mapped statement:
 
 ```json
 {
   "SourceMethod": "WaitVisible",
   "TargetStatements": [
-    "await {TARGET}.toBeVisible();"
-  ]
+    "await Assertions.Expect({TARGET}).ToBeVisibleAsync();"
+  ],
+  "Targets": {
+    "playwright-typescript": {
+      "TargetStatements": [
+        "await expect({TARGET}).toBeVisible();"
+      ]
+    }
+  }
 }
 ```
 
-If a statement is not TS-safe, the renderer emits:
+`TargetStatements` remains the legacy/default fallback, usually for `playwright-dotnet`.
+When `Targets.playwright-typescript.TargetStatements` is present, the TS renderer uses it directly instead of trying to translate C# Playwright statements.
+
+If a legacy/default statement is not TS-safe and no TS override exists, the renderer emits:
 
 ```ts
 // TODO: ... [MIGRATOR:TS_MAPPING_REQUIRED]

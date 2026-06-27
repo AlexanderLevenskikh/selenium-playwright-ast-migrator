@@ -252,6 +252,13 @@
             "type": "string"
           }
         },
+        "Targets": {
+          "type": "object",
+          "description": "Target-specific statement overrides keyed by stable backend id such as playwright-dotnet or playwright-typescript.",
+          "additionalProperties": {
+            "$ref": "#/$defs/targetStatementMapping"
+          }
+        },
         "RequiresReview": {
           "type": "boolean"
         },
@@ -265,6 +272,24 @@
             "medium",
             "low"
           ]
+        }
+      }
+    },
+    "targetStatementMapping": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "TargetStatements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "RequiresReview": {
+          "type": "boolean"
+        },
+        "Description": {
+          "type": "string"
         }
       }
     },
@@ -283,6 +308,13 @@
           "type": "array",
           "items": {
             "type": "string"
+          }
+        },
+        "Targets": {
+          "type": "object",
+          "description": "Target-specific statement overrides keyed by stable backend id such as playwright-dotnet or playwright-typescript.",
+          "additionalProperties": {
+            "$ref": "#/$defs/targetStatementMapping"
           }
         },
         "RequiresReview": {

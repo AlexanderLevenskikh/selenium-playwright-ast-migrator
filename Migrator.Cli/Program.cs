@@ -69,9 +69,19 @@ if (mode == "discover-target" && !Directory.Exists(inputPath))
     return 2;
 }
 
-IRenderer renderer = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
-    ? new PlaywrightTypeScriptRenderer()
-    : new PlaywrightDotNetRenderer();
+ITargetBackend targetBackend;
+try
+{
+    targetBackend = CreateBuiltInTargetBackendRegistry().Resolve(target);
+}
+catch (InvalidOperationException ex)
+{
+    Console.Error.WriteLine(ex.Message);
+    return 2;
+}
+
+IRenderer renderer = new TargetBackendRendererAdapter(targetBackend);
+target = targetBackend.Target.Id;
 
 IProjectAdapter? adapter = null;
 
@@ -108,22 +118,10 @@ var parser = loadedConfig != null
     ? new RoslynTestFileParser(loadedConfig)
     : new RoslynTestFileParser();
 
-if (string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase) && mode == "orchestrate")
+if (IsTypeScriptTarget(targetBackend) && mode == "orchestrate")
 {
     Console.Error.WriteLine("--target ts is not supported in orchestrate yet. Use --mode migrate --target ts, then --mode verify-ts-project.");
     return 2;
-}
-
-if (string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase) && mode == "migrate")
-{
-    var tsProjectCheck = ValidateTypeScriptPlaywrightProject(tsProjectPath);
-    if (!tsProjectCheck.IsValid)
-    {
-        Console.Error.WriteLine("TypeScript target requires a real Playwright TS project. Use --ts-project <path-to-project>.");
-        foreach (var message in tsProjectCheck.Messages)
-            Console.Error.WriteLine($"- {message}");
-        return 2;
-    }
 }
 
 // Handle doctor mode — validates environment/input/config/project context before migration.
@@ -235,8 +233,16 @@ if (mode == "bootstrap-project")
 // Handle orchestrate mode — runs analyze → migrate → verify → propose pipeline
 if (mode == "orchestrate")
 {
-    var orchestrateExitCode = RunOrchestrate(inputPath, outPath, primaryConfigPath, format, parser, renderer, adapter, loadedConfig, target);
-    return orchestrateExitCode;
+    try
+    {
+        var orchestrateExitCode = RunOrchestrate(inputPath, outPath, primaryConfigPath, format, parser, renderer, adapter, loadedConfig, targetBackend);
+        return orchestrateExitCode;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Orchestrate failed before the normal report could be completed: {ex.Message}");
+        return WriteEmergencyOrchestrationReport(inputPath, outPath, primaryConfigPath, ex);
+    }
 }
 
 var pipeline = new MigrationPipeline(parser, renderer, adapter);
@@ -273,8 +279,11 @@ switch (mode)
     case "analyze":
         RunAnalyze(summary, outPath, format, loadedConfig, resultsList, allUnmapped);
         break;
+    case "dump-ir":
+        RunDumpIr(outPath, format, resultsList);
+        break;
     case "migrate":
-        RunMigrate(summary, outPath, format, loadedConfig, resultsList, allUnmapped, target);
+        RunMigrate(summary, outPath, format, loadedConfig, resultsList, allUnmapped, targetBackend);
         break;
     case "verify":
         {
@@ -322,6 +331,28 @@ static int ApplyQualityGate(MigrationSummaryReport summary, bool failOnUnsupport
 
 // --- Mode implementations ---
 
+static void RunDumpIr(string outPath, string format, List<PipelineResult> results)
+{
+    Directory.CreateDirectory(outPath);
+
+    var document = IrDumpWriter.Build(results);
+
+    if (format == "json" || format == "both")
+        File.WriteAllText(Path.Combine(outPath, "ir-dump.json"), IrDumpWriter.ToJson(document));
+
+    if (format == "text" || format == "both")
+        File.WriteAllText(Path.Combine(outPath, "ir-dump.md"), IrDumpWriter.ToMarkdown(document));
+
+    Console.WriteLine("=== Legacy IR Dump ===");
+    Console.WriteLine($"Files: {document.Summary.Files}");
+    Console.WriteLine($"Source tests: {document.Summary.SourceTests}");
+    Console.WriteLine($"Target tests: {document.Summary.TargetTests}");
+    Console.WriteLine($"Target actions: {document.Summary.TargetActions}");
+    Console.WriteLine($"Unsupported actions: {document.Summary.TargetUnsupportedActions}");
+    Console.WriteLine($"Unresolved targets: {document.Summary.TargetUnresolvedTargets}");
+    Console.WriteLine($"IR dump written to: {Path.GetFullPath(outPath)}");
+}
+
 static void RunAnalyze(MigrationSummaryReport summary, string outPath, string format, ProjectAdapterConfig? config, List<PipelineResult> results, IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped)
 {
     Directory.CreateDirectory(outPath);
@@ -335,7 +366,7 @@ static void RunAnalyze(MigrationSummaryReport summary, string outPath, string fo
     Console.WriteLine($"Analysis written to: {Path.GetFullPath(outPath)}");
 }
 
-static void RunMigrate(MigrationSummaryReport summary, string outPath, string format, ProjectAdapterConfig? config, List<PipelineResult> results, IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped, string target = "dotnet")
+static void RunMigrate(MigrationSummaryReport summary, string outPath, string format, ProjectAdapterConfig? config, List<PipelineResult> results, IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped, ITargetBackend targetBackend)
 {
     Directory.CreateDirectory(outPath);
 
@@ -344,9 +375,7 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
 
     foreach (var result in results)
     {
-        string baseName = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
-            ? $"{ToKebabCase(result.SourceModel.ClassName)}.spec.ts"
-            : $"{result.SourceModel.ClassName}Playwright.cs";
+        string baseName = targetBackend.GetDefaultFileName(result.SourceModel);
         string outName = ResolveFileName(outPath, baseName, writtenNames);
         var fullOut = Path.Combine(outPath, outName);
         File.WriteAllText(fullOut, result.GeneratedOutput);
@@ -364,6 +393,19 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
 
     PrintSummary(summaryWithGenerated);
     Console.WriteLine($"Migration written to: {Path.GetFullPath(outPath)} ({generated} files generated)");
+}
+
+static TargetBackendRegistry CreateBuiltInTargetBackendRegistry()
+{
+    return new TargetBackendRegistry()
+        .Register(new PlaywrightDotNetBackend())
+        .Register(new PlaywrightTypeScriptBackend());
+}
+
+static bool IsTypeScriptTarget(ITargetBackend targetBackend)
+{
+    return string.Equals(targetBackend.Target.Id, "playwright-typescript", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(targetBackend.Target.Language, "typescript", StringComparison.OrdinalIgnoreCase);
 }
 
 static string ResolveFileName(string dir, string baseName, ISet<string> usedNames)
@@ -1739,8 +1781,37 @@ static void WriteExplainTodoReport(TodoExplanationReport report, string outPath,
     if (format == "text" || format == "both")
     {
         File.WriteAllText(Path.Combine(outPath, "explain-todo.md"), WriteExplainTodoMarkdown(report));
-        File.WriteAllText(Path.Combine(outPath, "agent-next-task.md"), WriteAgentNextTaskMarkdown(report));
+
+        // agent-next-task is a convenience handoff artifact. Keep explain-todo itself
+        // robust even if a newly-added handoff section has a formatting bug: the main
+        // explain-todo.md/json artifacts should still be emitted for diagnosis.
+        try
+        {
+            File.WriteAllText(Path.Combine(outPath, "agent-next-task.md"), WriteAgentNextTaskMarkdown(report));
+        }
+        catch (Exception ex)
+        {
+            File.WriteAllText(
+                Path.Combine(outPath, "agent-next-task.md"),
+                WriteAgentNextTaskFallbackMarkdown(report, ex));
+        }
     }
+}
+
+static string WriteAgentNextTaskFallbackMarkdown(TodoExplanationReport report, Exception ex)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Agent Next Task");
+    sb.AppendLine();
+    sb.AppendLine("agent-next-task.md could not be rendered completely, but explain-todo.md/json were written.");
+    sb.AppendLine();
+    sb.AppendLine($"- Artifact root: `{PathRedaction.Redact(report.ArtifactRoot)}`");
+    sb.AppendLine($"- TODO: `{report.TodoComments}`");
+    sb.AppendLine($"- Insights: `{report.Insights.Length}`");
+    sb.AppendLine($"- Error: `{EscapeMd(ex.GetType().Name)}: {EscapeMd(ex.Message)}`");
+    sb.AppendLine();
+    sb.AppendLine("Open explain-todo.md and fix the report-rendering bug before relying on this handoff file.");
+    return sb.ToString();
 }
 
 static TodoExplanationReport BuildExplainTodoReport(
@@ -5240,7 +5311,53 @@ static string BuildBootstrapProjectReport(BootstrapProjectReport report)
 
 // --- Orchestrate mode ---
 
-static int RunOrchestrate(string inputPath, string outPath, string? configPath, string format, ITestFileParser parser, IRenderer renderer, IProjectAdapter? adapter, ProjectAdapterConfig? config, string target = "dotnet")
+static int WriteEmergencyOrchestrationReport(string inputPath, string outPath, string? configPath, Exception exception)
+{
+    try
+    {
+        Directory.CreateDirectory(outPath);
+
+        var report = new OrchestrationReport(
+            Status: OrchestrationStageStatus.Failed,
+            InputPath: PathSanitizer.MakeSafePath(inputPath),
+            ConfigPath: configPath != null ? PathSanitizer.MakeSafePath(configPath) : null,
+            OutputPath: PathSanitizer.MakeSafePath(outPath),
+            Stages: new[]
+            {
+                new OrchestrationStage(
+                    "orchestrate",
+                    OrchestrationStageStatus.Failed,
+                    1,
+                    exception.Message,
+                    null)
+            },
+            Metrics: new OrchestrationMetrics(
+                FilesProcessed: 0,
+                TestsFound: 0,
+                GeneratedFiles: 0,
+                SyntaxErrors: 0,
+                TodoComments: 0,
+                PageTodoCalls: 0,
+                Proposals: 0),
+            Issues: new[] { $"Orchestrate failed before report finalization: {exception.Message}" },
+            TopProposals: Array.Empty<string>(),
+            RecommendedNextActions: new[] { "Inspect the CLI stderr/stdout and fix the earliest orchestrate failure." },
+            Warnings: new[] { exception.GetType().FullName ?? exception.GetType().Name });
+
+        File.WriteAllText(
+            Path.Combine(outPath, "orchestration-report.json"),
+            System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(Path.Combine(outPath, "orchestration-report.md"), ToOrchestrationReportMarkdown(report));
+    }
+    catch (Exception reportException)
+    {
+        Console.Error.WriteLine($"Could not write emergency orchestration report: {reportException.Message}");
+    }
+
+    return 1;
+}
+
+static int RunOrchestrate(string inputPath, string outPath, string? configPath, string format, ITestFileParser parser, IRenderer renderer, IProjectAdapter? adapter, ProjectAdapterConfig? config, ITargetBackend targetBackend)
 {
     Console.WriteLine("=== Orchestrator Dry-Run ===");
     Console.WriteLine();
@@ -5326,9 +5443,7 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
 
                 foreach (var result in resultsList)
                 {
-                    string baseName = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
-            ? $"{ToKebabCase(result.SourceModel.ClassName)}.spec.ts"
-            : $"{result.SourceModel.ClassName}Playwright.cs";
+                    string baseName = targetBackend.GetDefaultFileName(result.SourceModel);
                     string outName = ResolveFileName(generatedDir, baseName, writtenNames);
                     File.WriteAllText(Path.Combine(generatedDir, outName), result.GeneratedOutput);
                     generated++;
@@ -5565,7 +5680,9 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
         Warnings: warnings
     );
 
-    // Write orchestration reports
+    // Write orchestration reports. Re-create the root in case a previous stage cleaned
+    // or moved files unexpectedly; the orchestrator report is the contract artifact.
+    Directory.CreateDirectory(outPath);
     var reportJsonPath = Path.Combine(outPath, "orchestration-report.json");
     File.WriteAllText(reportJsonPath, System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
 
@@ -7100,24 +7217,6 @@ static string BuildAgentTypeScriptVerifyNextTask(TypeScriptVerifyReport report)
     return sb.ToString();
 }
 
-static string ToKebabCase(string value)
-{
-    if (string.IsNullOrWhiteSpace(value))
-        return "generated-test";
-    var sb = new StringBuilder();
-    for (int i = 0; i < value.Length; i++)
-    {
-        var ch = value[i];
-        if (char.IsUpper(ch) && i > 0 && (char.IsLower(value[i - 1]) || (i + 1 < value.Length && char.IsLower(value[i + 1]))))
-            sb.Append('-');
-        if (char.IsLetterOrDigit(ch))
-            sb.Append(char.ToLowerInvariant(ch));
-        else if (sb.Length > 0 && sb[^1] != '-')
-            sb.Append('-');
-    }
-    return sb.ToString().Trim('-');
-}
-
 static string QuoteForShell(string value) => value.Contains(' ') ? $"\"{value}\"" : value;
 
 static CliOptions? ParseArgs(string[] args)
@@ -7212,7 +7311,7 @@ static CliOptions? ParseArgs(string[] args)
                     target = args[++i];
                 else
                 {
-                    Console.Error.WriteLine("--target requires a value: dotnet|ts");
+                    Console.Error.WriteLine("--target requires a value: dotnet|playwright-dotnet|ts|playwright-typescript");
                     return null;
                 }
                 break;
@@ -7265,9 +7364,9 @@ static CliOptions? ParseArgs(string[] args)
         }
     }
 
-    if (mode != "analyze" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "verify-ts-project" && mode != "doctor" && mode != "explain-todo" && mode != "smoke-plan" && mode != "runtime-classify" && mode != "migration-board" && mode != "profile-match" && mode != "config-schema" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "helper-inventory" && mode != "orchestrate" && mode != "scaffold" && mode != "bootstrap-project")
+    if (mode != "analyze" && mode != "dump-ir" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "verify-ts-project" && mode != "doctor" && mode != "explain-todo" && mode != "smoke-plan" && mode != "runtime-classify" && mode != "migration-board" && mode != "profile-match" && mode != "config-schema" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "helper-inventory" && mode != "orchestrate" && mode != "scaffold" && mode != "bootstrap-project")
     {
-        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-diff|guard|propose|discover-target|index-pom|helper-inventory|orchestrate|scaffold|bootstrap-project");
+        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|dump-ir|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-diff|guard|propose|discover-target|index-pom|helper-inventory|orchestrate|scaffold|bootstrap-project");
         return null;
     }
 
@@ -7288,18 +7387,14 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
-    if (!string.Equals(target, "dotnet", StringComparison.OrdinalIgnoreCase) &&
-        !string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase))
+    ITargetBackend parsedTargetBackend;
+    try
     {
-        Console.Error.WriteLine($"Invalid --target: {target}. Use: dotnet|ts");
-        return null;
+        parsedTargetBackend = CreateBuiltInTargetBackendRegistry().Resolve(target);
     }
-
-    if (string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase) &&
-        mode == "migrate" &&
-        string.IsNullOrWhiteSpace(tsProject))
+    catch (InvalidOperationException ex)
     {
-        Console.Error.WriteLine("--target ts requires --ts-project <path-to-existing-playwright-ts-project>.");
+        Console.Error.WriteLine(ex.Message);
         return null;
     }
 
@@ -7314,6 +7409,7 @@ static CliOptions? ParseArgs(string[] args)
         outDir = mode switch
         {
             "analyze" => "analysis",
+            "dump-ir" => "ir-dump",
             "migrate" => "generated-tests",
             "verify" => "verify",
             "verify-project" => "verify-project",
@@ -7344,12 +7440,6 @@ static CliOptions? ParseArgs(string[] args)
     if (format != "text" && format != "json" && format != "both")
     {
         Console.Error.WriteLine($"Invalid format: {format}. Use: text|json|both");
-        return null;
-    }
-
-    if (target != "dotnet" && target != "ts")
-    {
-        Console.Error.WriteLine($"Invalid target: {target}. Use: dotnet|ts");
         return null;
     }
 
@@ -7424,7 +7514,9 @@ Usage: Migrator.Cli --mode <mode> --input <path> [options]
 Modes:
   analyze         Parse and analyze Selenium tests without generating output files.
                     Produces reports and draft adapter-config.
-  migrate         Parse, adapt, and generate Playwright C# files. Produces reports.
+  dump-ir         Dump the current legacy parser/adapter IR as ir-dump.json/md.
+                    This is a golden-baseline aid for refactors and does not modify source files.
+  migrate         Parse, adapt, and generate Playwright target files. Produces reports.
   verify          Validate generated code quality. Runs Roslyn syntax check,
                     TODO/placeholder detection, config validation, scope matching,
                     and quality gate evaluation. Outputs verify-report.json and
@@ -7513,7 +7605,7 @@ Modes:
 
 Options:
     --mode <mode>                 Operation mode (required)
-                                    analyze|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-diff|guard|propose|discover-target|index-pom|helper-inventory|orchestrate|scaffold|bootstrap-project
+                                    analyze|dump-ir|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-diff|guard|propose|discover-target|index-pom|helper-inventory|orchestrate|scaffold|bootstrap-project
     --input <file-or-directory>   Input .cs file or directory (required).
                                     For propose/explain-todo/migration-board: directory with report files.
                                     For runtime-classify: runtime log file or directory with logs/reports.
@@ -7533,10 +7625,12 @@ Options:
                                   Use an absolute path to write outside workspace.
    --workspace <directory>        Migration artifacts root (default: migration).
                                   All relative --out paths are kept under this root.
-   --target <dotnet|ts>            Generation target for migrate/orchestrate (default: dotnet).
-                                  --target ts requires --ts-project.
-   --ts-project <directory>        Existing Playwright TypeScript project root for --target ts
-                                  and verify-ts-project. Must contain package.json,
+   --target <dotnet|ts|playwright-dotnet|playwright-typescript>
+                                  Generation target for migrate/orchestrate (default: dotnet).
+                                  TypeScript migration generation does not require --ts-project;
+                                  project-aware TypeScript verification does.
+   --ts-project <directory>        Existing Playwright TypeScript project root for verify-ts-project.
+                                  Must contain package.json,
                                   tsconfig.json and playwright.config.*.
    --config <adapter-config.json>  Adapter config layer. Can be repeated.
                                   Layers are merged left-to-right; later/project configs override base profiles.
@@ -7558,6 +7652,7 @@ Exit codes:
 
 Examples:
   Migrator.Cli --mode analyze --input ./OldTests --out analysis --format both
+  Migrator.Cli --mode dump-ir --input ./OldTests --config ./adapter-config.json --out ir-dump --format both
   Migrator.Cli --mode migrate --input ./OldTests --out generated --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json
   Migrator.Cli --mode verify-project --input ./OldTests --out verify-project --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json
   Migrator.Cli --mode doctor --input ./OldTests --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json --out doctor

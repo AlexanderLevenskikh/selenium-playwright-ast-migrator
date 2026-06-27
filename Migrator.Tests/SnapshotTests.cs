@@ -2710,7 +2710,7 @@ public class SnapshotTests
 
         var allErrors = string.Join(" ", ex.Errors);
         Assert.Contains("Methods[0]", allErrors);
-        Assert.Contains("no TargetMethod or TargetStatements", allErrors);
+        Assert.Contains("no TargetMethod, TargetStatements, or Targets.<target>.TargetStatements", allErrors);
     }
 
     [Fact]
@@ -4157,10 +4157,10 @@ public class NavigationOpenPageTests
                         new RawStatementAction(2, "page = pagef;")
                     })
             })
-            {
-                SuppressedMethodPatterns = new[] { "*Navigation.OpenPage*" },
-                SourceOnlyIdentifiers = new[] { "Urls" }
-            };
+        {
+            SuppressedMethodPatterns = new[] { "*Navigation.OpenPage*" },
+            SourceOnlyIdentifiers = new[] { "Urls" }
+        };
 
         var output = renderer.Render(model);
 
@@ -5084,7 +5084,7 @@ public class TargetExpressionTests
 
             var output = new PlaywrightDotNetRenderer().Render(adapted);
 
-            Assert.Contains("var productChoosingPage= await Navigation.GoToPageAsync<DiscountsProductChoosingPage>(DiscountsProductChoosingPage.Uri);", output);
+            Assert.Contains("var productChoosingPage = await Navigation.GoToPageAsync<DiscountsProductChoosingPage>(DiscountsProductChoosingPage.Uri);", output);
             Assert.DoesNotContain("Browser.GoToPage", output);
         }
         finally

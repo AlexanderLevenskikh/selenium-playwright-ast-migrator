@@ -244,8 +244,10 @@ public class DefaultProjectAdapter : IProjectAdapter
         {
             if (m.TargetMethod != null)
                 resolved._methodMap[m.SourceMethod] = m.TargetMethod;
-            if (m.TargetStatements != null && m.TargetStatements.Length > 0)
-                resolved._methodStatementsMap[m.SourceMethod] = (m.TargetStatements, m.RequiresReview);
+
+            var methodStatements = ResolveMethodStatements(m);
+            if (methodStatements.HasAnyStatements)
+                resolved._methodStatementsMap[m.SourceMethod] = methodStatements;
         }
 
         resolved._parameterizedMethods = paramMethods;
@@ -277,6 +279,82 @@ public class DefaultProjectAdapter : IProjectAdapter
             result[s.SourceMethod] = s;
 
         return result.Values.ToArray();
+    }
+
+    static ResolvedMethodStatements ResolveMethodStatements(MethodMapping mapping)
+    {
+        var targetStatementsByTarget = ResolveExactTargetStatementOverrides(mapping.Targets, mapping.RequiresReview, out var requiresReviewByTarget);
+        return new ResolvedMethodStatements(
+            mapping.TargetStatements ?? Array.Empty<string>(),
+            mapping.RequiresReview,
+            targetStatementsByTarget,
+            requiresReviewByTarget);
+    }
+
+    ResolvedMethodStatements ResolveParameterizedStatements(ParameterizedMethodMapping mapping, Dictionary<string, PlaceholderValue> placeholders)
+    {
+        var legacyStatements = mapping.TargetStatements == null
+            ? Array.Empty<string>()
+            : mapping.TargetStatements.Select(stmt => SubstitutePlaceholders(stmt, placeholders)).ToArray();
+
+        var targetStatementsByTarget = ResolveParameterizedTargetStatementOverrides(mapping.Targets, mapping.RequiresReview, placeholders, out var requiresReviewByTarget);
+        return new ResolvedMethodStatements(
+            legacyStatements,
+            mapping.RequiresReview,
+            targetStatementsByTarget,
+            requiresReviewByTarget);
+    }
+
+    static IReadOnlyDictionary<string, IReadOnlyList<string>> ResolveExactTargetStatementOverrides(
+        Dictionary<string, TargetStatementMapping>? targets,
+        bool parentRequiresReview,
+        out IReadOnlyDictionary<string, bool> requiresReviewByTarget)
+    {
+        var statementsByTarget = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        var reviewByTarget = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+        if (targets != null)
+        {
+            foreach (var (targetId, target) in targets)
+            {
+                if (string.IsNullOrWhiteSpace(targetId) || target?.TargetStatements == null || target.TargetStatements.Length == 0)
+                    continue;
+
+                var normalizedTargetId = targetId.Trim();
+                statementsByTarget[normalizedTargetId] = target.TargetStatements;
+                reviewByTarget[normalizedTargetId] = target.RequiresReview ?? parentRequiresReview;
+            }
+        }
+
+        requiresReviewByTarget = reviewByTarget;
+        return statementsByTarget;
+    }
+
+    IReadOnlyDictionary<string, IReadOnlyList<string>> ResolveParameterizedTargetStatementOverrides(
+        Dictionary<string, TargetStatementMapping>? targets,
+        bool parentRequiresReview,
+        Dictionary<string, PlaceholderValue> placeholders,
+        out IReadOnlyDictionary<string, bool> requiresReviewByTarget)
+    {
+        var statementsByTarget = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        var reviewByTarget = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+        if (targets != null)
+        {
+            foreach (var (targetId, target) in targets)
+            {
+                if (string.IsNullOrWhiteSpace(targetId) || target?.TargetStatements == null || target.TargetStatements.Length == 0)
+                    continue;
+
+                statementsByTarget[targetId.Trim()] = target.TargetStatements
+                    .Select(stmt => SubstitutePlaceholders(stmt, placeholders))
+                    .ToArray();
+                reviewByTarget[targetId.Trim()] = target.RequiresReview ?? parentRequiresReview;
+            }
+        }
+
+        requiresReviewByTarget = reviewByTarget;
+        return statementsByTarget;
     }
 
     static IReadOnlyList<string> MergeStrings(IEnumerable<string>? global, IEnumerable<string>? scope)
@@ -909,16 +987,17 @@ public class DefaultProjectAdapter : IProjectAdapter
                         adapterTarget,
                         mapping.SourceMethodPattern) };
                 }
-                var resolvedStatements = mapping.TargetStatements?.Select(stmt => SubstitutePlaceholders(stmt, placeholders)).ToArray()
-                    ?? Array.Empty<string>();
+                var resolvedStatements = ResolveParameterizedStatements(mapping, placeholders);
                 return new[] { new MappedMethodInvocationAction(
                     ta.SourceLine,
                     ta.FullSourceText,
-                    resolvedStatements,
-                    mapping.RequiresReview,
+                    resolvedStatements.Statements,
+                    resolvedStatements.RequiresReview,
                     adapterTarget,
                     mapping.SourceMethodPattern,
-                    resultVariable: null) };
+                    resultVariable: null,
+                    targetStatementsByTarget: resolvedStatements.TargetStatementsByTarget,
+                    requiresReviewByTarget: resolvedStatements.RequiresReviewByTarget) };
             }
         }
         return new[] { new TextAssertionAction(
@@ -947,7 +1026,9 @@ public class DefaultProjectAdapter : IProjectAdapter
                     mapping.RequiresReview,
                     resolvedTarget,
                     fullText,
-                    mi.ResultVariable)
+                    mi.ResultVariable,
+                    mapping.TargetStatementsByTarget,
+                    mapping.RequiresReviewByTarget)
             };
         }
 
@@ -992,7 +1073,9 @@ public class DefaultProjectAdapter : IProjectAdapter
                     methodMapping.RequiresReview,
                     resolvedTarget,
                     mi.MethodName,
-                    mi.ResultVariable)
+                    mi.ResultVariable,
+                    methodMapping.TargetStatementsByTarget,
+                    methodMapping.RequiresReviewByTarget)
             };
         }
 
@@ -1028,6 +1111,10 @@ public class DefaultProjectAdapter : IProjectAdapter
             var statements = kvp.Value.Statements
                 .Select(stmt => RewriteGenericReceiverStatement(stmt, configuredReceiver))
                 .ToArray();
+            var statementsByTarget = kvp.Value.TargetStatementsByTarget.ToDictionary(
+                x => x.Key,
+                x => (IReadOnlyList<string>)x.Value.Select(stmt => RewriteGenericReceiverStatement(stmt, configuredReceiver)).ToArray(),
+                StringComparer.OrdinalIgnoreCase);
 
             return new MappedMethodInvocationAction(
                 mi.SourceLine,
@@ -1036,7 +1123,9 @@ public class DefaultProjectAdapter : IProjectAdapter
                 kvp.Value.RequiresReview,
                 resolvedTarget,
                 kvp.Key,
-                mi.ResultVariable);
+                mi.ResultVariable,
+                statementsByTarget,
+                kvp.Value.RequiresReviewByTarget);
         }
 
         return null;
@@ -1116,26 +1205,18 @@ public class DefaultProjectAdapter : IProjectAdapter
                         mapping.SourceMethodPattern);
                 }
 
-                string[] resolvedStatements;
-                if (mapping.TargetStatements != null && mapping.TargetStatements.Length > 0)
-                {
-                    resolvedStatements = mapping.TargetStatements
-                        .Select(stmt => SubstitutePlaceholders(stmt, placeholders))
-                        .ToArray();
-                }
-                else
-                {
-                    resolvedStatements = Array.Empty<string>();
-                }
+                var resolvedStatements = ResolveParameterizedStatements(mapping, placeholders);
 
                 return new MappedMethodInvocationAction(
                     mi.SourceLine,
                     mi.FullSourceText,
-                    resolvedStatements,
-                    mapping.RequiresReview,
+                    resolvedStatements.Statements,
+                    resolvedStatements.RequiresReview,
                     resolvedTarget,
                     mapping.SourceMethodPattern,
-                    mi.ResultVariable);
+                    mi.ResultVariable,
+                    resolvedStatements.TargetStatementsByTarget,
+                    resolvedStatements.RequiresReviewByTarget);
             }
         }
 
@@ -1756,7 +1837,9 @@ public class DefaultProjectAdapter : IProjectAdapter
                         mapping.RequiresReview,
                         targetExpr: null,
                         sourceMethod: null,
-                        resultVariable: resultVariable)
+                        resultVariable: resultVariable,
+                        targetStatementsByTarget: mapping.TargetStatementsByTarget,
+                        requiresReviewByTarget: mapping.RequiresReviewByTarget)
                 };
             }
         }
@@ -1783,7 +1866,9 @@ public class DefaultProjectAdapter : IProjectAdapter
                         reassignMapping.RequiresReview,
                         targetExpr: null,
                         sourceMethod: null,
-                        resultVariable: reassignmentVar)
+                        resultVariable: reassignmentVar,
+                        targetStatementsByTarget: reassignMapping.TargetStatementsByTarget,
+                        requiresReviewByTarget: reassignMapping.RequiresReviewByTarget)
                 };
             }
         }
@@ -1802,7 +1887,9 @@ public class DefaultProjectAdapter : IProjectAdapter
                     stmtMapping.Statements,
                     stmtMapping.RequiresReview,
                     targetExpr: null,
-                    sourceMethod: null)
+                    sourceMethod: null,
+                    targetStatementsByTarget: stmtMapping.TargetStatementsByTarget,
+                    requiresReviewByTarget: stmtMapping.RequiresReviewByTarget)
             };
         }
 
@@ -1833,7 +1920,9 @@ public class DefaultProjectAdapter : IProjectAdapter
                         mapping.RequiresReview,
                         targetExpr: null,
                         sourceMethod: null,
-                        resultVariable: lds.VariableName)
+                        resultVariable: lds.VariableName,
+                        targetStatementsByTarget: mapping.TargetStatementsByTarget,
+                        requiresReviewByTarget: mapping.RequiresReviewByTarget)
                 };
             }
         }
@@ -2141,7 +2230,7 @@ public class DefaultProjectAdapter : IProjectAdapter
         internal readonly Dictionary<string, MappedTarget> _targetMap = new();
         internal readonly Dictionary<string, string> _pageObjectMap = new();
         internal readonly Dictionary<string, string> _methodMap = new();
-        internal readonly Dictionary<string, (string[] Statements, bool RequiresReview)> _methodStatementsMap = new();
+        internal readonly Dictionary<string, ResolvedMethodStatements> _methodStatementsMap = new();
         internal IList<ParameterizedMethodMapping> _parameterizedMethods = Array.Empty<ParameterizedMethodMapping>();
         internal IReadOnlyList<string> _sourceOnlyIdentifiers = Array.Empty<string>();
         internal IReadOnlyList<string> _targetKnownTypes = Array.Empty<string>();
@@ -2365,6 +2454,15 @@ public class DefaultProjectAdapter : IProjectAdapter
 
             return standardResult;
         }
+    }
+
+    readonly record struct ResolvedMethodStatements(
+        string[] Statements,
+        bool RequiresReview,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> TargetStatementsByTarget,
+        IReadOnlyDictionary<string, bool> RequiresReviewByTarget)
+    {
+        public bool HasAnyStatements => Statements.Length > 0 || TargetStatementsByTarget.Count > 0;
     }
 
     static readonly ResolvedFileConfig EmptyConfig = new(
