@@ -69,9 +69,19 @@ if (mode == "discover-target" && !Directory.Exists(inputPath))
     return 2;
 }
 
-IRenderer renderer = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
-    ? new PlaywrightTypeScriptRenderer()
-    : new PlaywrightDotNetRenderer();
+ITargetBackend targetBackend;
+try
+{
+    targetBackend = CreateBuiltInTargetBackendRegistry().Resolve(target);
+}
+catch (InvalidOperationException ex)
+{
+    Console.Error.WriteLine(ex.Message);
+    return 2;
+}
+
+IRenderer renderer = new TargetBackendRendererAdapter(targetBackend);
+target = targetBackend.Target.Id;
 
 IProjectAdapter? adapter = null;
 
@@ -108,13 +118,13 @@ var parser = loadedConfig != null
     ? new RoslynTestFileParser(loadedConfig)
     : new RoslynTestFileParser();
 
-if (string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase) && mode == "orchestrate")
+if (IsTypeScriptTarget(targetBackend) && mode == "orchestrate")
 {
     Console.Error.WriteLine("--target ts is not supported in orchestrate yet. Use --mode migrate --target ts, then --mode verify-ts-project.");
     return 2;
 }
 
-if (string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase) && mode == "migrate")
+if (IsTypeScriptTarget(targetBackend) && mode == "migrate")
 {
     var tsProjectCheck = ValidateTypeScriptPlaywrightProject(tsProjectPath);
     if (!tsProjectCheck.IsValid)
@@ -237,7 +247,7 @@ if (mode == "orchestrate")
 {
     try
     {
-        var orchestrateExitCode = RunOrchestrate(inputPath, outPath, primaryConfigPath, format, parser, renderer, adapter, loadedConfig, target);
+        var orchestrateExitCode = RunOrchestrate(inputPath, outPath, primaryConfigPath, format, parser, renderer, adapter, loadedConfig, targetBackend);
         return orchestrateExitCode;
     }
     catch (Exception ex)
@@ -285,7 +295,7 @@ switch (mode)
         RunDumpIr(outPath, format, resultsList);
         break;
     case "migrate":
-        RunMigrate(summary, outPath, format, loadedConfig, resultsList, allUnmapped, target);
+        RunMigrate(summary, outPath, format, loadedConfig, resultsList, allUnmapped, targetBackend);
         break;
     case "verify":
         {
@@ -368,7 +378,7 @@ static void RunAnalyze(MigrationSummaryReport summary, string outPath, string fo
     Console.WriteLine($"Analysis written to: {Path.GetFullPath(outPath)}");
 }
 
-static void RunMigrate(MigrationSummaryReport summary, string outPath, string format, ProjectAdapterConfig? config, List<PipelineResult> results, IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped, string target = "dotnet")
+static void RunMigrate(MigrationSummaryReport summary, string outPath, string format, ProjectAdapterConfig? config, List<PipelineResult> results, IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped, ITargetBackend targetBackend)
 {
     Directory.CreateDirectory(outPath);
 
@@ -377,9 +387,7 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
 
     foreach (var result in results)
     {
-        string baseName = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
-            ? $"{ToKebabCase(result.SourceModel.ClassName)}.spec.ts"
-            : $"{result.SourceModel.ClassName}Playwright.cs";
+        string baseName = targetBackend.GetDefaultFileName(result.SourceModel);
         string outName = ResolveFileName(outPath, baseName, writtenNames);
         var fullOut = Path.Combine(outPath, outName);
         File.WriteAllText(fullOut, result.GeneratedOutput);
@@ -397,6 +405,19 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
 
     PrintSummary(summaryWithGenerated);
     Console.WriteLine($"Migration written to: {Path.GetFullPath(outPath)} ({generated} files generated)");
+}
+
+static TargetBackendRegistry CreateBuiltInTargetBackendRegistry()
+{
+    return new TargetBackendRegistry()
+        .Register(new PlaywrightDotNetBackend())
+        .Register(new PlaywrightTypeScriptBackend());
+}
+
+static bool IsTypeScriptTarget(ITargetBackend targetBackend)
+{
+    return string.Equals(targetBackend.Target.Id, "playwright-typescript", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(targetBackend.Target.Language, "typescript", StringComparison.OrdinalIgnoreCase);
 }
 
 static string ResolveFileName(string dir, string baseName, ISet<string> usedNames)
@@ -5348,7 +5369,7 @@ static int WriteEmergencyOrchestrationReport(string inputPath, string outPath, s
     return 1;
 }
 
-static int RunOrchestrate(string inputPath, string outPath, string? configPath, string format, ITestFileParser parser, IRenderer renderer, IProjectAdapter? adapter, ProjectAdapterConfig? config, string target = "dotnet")
+static int RunOrchestrate(string inputPath, string outPath, string? configPath, string format, ITestFileParser parser, IRenderer renderer, IProjectAdapter? adapter, ProjectAdapterConfig? config, ITargetBackend targetBackend)
 {
     Console.WriteLine("=== Orchestrator Dry-Run ===");
     Console.WriteLine();
@@ -5434,9 +5455,7 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
 
                 foreach (var result in resultsList)
                 {
-                    string baseName = string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase)
-            ? $"{ToKebabCase(result.SourceModel.ClassName)}.spec.ts"
-            : $"{result.SourceModel.ClassName}Playwright.cs";
+                    string baseName = targetBackend.GetDefaultFileName(result.SourceModel);
                     string outName = ResolveFileName(generatedDir, baseName, writtenNames);
                     File.WriteAllText(Path.Combine(generatedDir, outName), result.GeneratedOutput);
                     generated++;
@@ -7210,24 +7229,6 @@ static string BuildAgentTypeScriptVerifyNextTask(TypeScriptVerifyReport report)
     return sb.ToString();
 }
 
-static string ToKebabCase(string value)
-{
-    if (string.IsNullOrWhiteSpace(value))
-        return "generated-test";
-    var sb = new StringBuilder();
-    for (int i = 0; i < value.Length; i++)
-    {
-        var ch = value[i];
-        if (char.IsUpper(ch) && i > 0 && (char.IsLower(value[i - 1]) || (i + 1 < value.Length && char.IsLower(value[i + 1]))))
-            sb.Append('-');
-        if (char.IsLetterOrDigit(ch))
-            sb.Append(char.ToLowerInvariant(ch));
-        else if (sb.Length > 0 && sb[^1] != '-')
-            sb.Append('-');
-    }
-    return sb.ToString().Trim('-');
-}
-
 static string QuoteForShell(string value) => value.Contains(' ') ? $"\"{value}\"" : value;
 
 static CliOptions? ParseArgs(string[] args)
@@ -7322,7 +7323,7 @@ static CliOptions? ParseArgs(string[] args)
                     target = args[++i];
                 else
                 {
-                    Console.Error.WriteLine("--target requires a value: dotnet|ts");
+                    Console.Error.WriteLine("--target requires a value: dotnet|playwright-dotnet|ts|playwright-typescript");
                     return null;
                 }
                 break;
@@ -7398,18 +7399,22 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
-    if (!string.Equals(target, "dotnet", StringComparison.OrdinalIgnoreCase) &&
-        !string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase))
+    ITargetBackend parsedTargetBackend;
+    try
     {
-        Console.Error.WriteLine($"Invalid --target: {target}. Use: dotnet|ts");
+        parsedTargetBackend = CreateBuiltInTargetBackendRegistry().Resolve(target);
+    }
+    catch (InvalidOperationException ex)
+    {
+        Console.Error.WriteLine(ex.Message);
         return null;
     }
 
-    if (string.Equals(target, "ts", StringComparison.OrdinalIgnoreCase) &&
+    if (IsTypeScriptTarget(parsedTargetBackend) &&
         mode == "migrate" &&
         string.IsNullOrWhiteSpace(tsProject))
     {
-        Console.Error.WriteLine("--target ts requires --ts-project <path-to-existing-playwright-ts-project>.");
+        Console.Error.WriteLine("--target ts/playwright-typescript requires --ts-project <path-to-existing-playwright-ts-project>.");
         return null;
     }
 
@@ -7647,7 +7652,8 @@ Options:
    --workspace <directory>        Migration artifacts root (default: migration).
                                   All relative --out paths are kept under this root.
    --target <dotnet|ts>            Generation target for migrate/orchestrate (default: dotnet).
-                                  --target ts requires --ts-project.
+                                  Also accepts stable backend ids: playwright-dotnet, playwright-typescript.
+                                  TypeScript targets require --ts-project.
    --ts-project <directory>        Existing Playwright TypeScript project root for --target ts
                                   and verify-ts-project. Must contain package.json,
                                   tsconfig.json and playwright.config.*.

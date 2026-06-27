@@ -21,6 +21,13 @@ public class MigrationPipeline
         _adapter = adapter;
     }
 
+    public MigrationPipeline(ITestFileParser parser, ITargetBackend targetBackend, IProjectAdapter? adapter = null)
+    {
+        _parser = parser;
+        _renderer = new TargetBackendRendererAdapter(targetBackend ?? throw new ArgumentNullException(nameof(targetBackend)));
+        _adapter = adapter;
+    }
+
     /// <summary>
     /// Run the full pipeline for a single source file.
     /// Returns the generated C# output and a structured report.
