@@ -48,6 +48,17 @@ public static class ConfigValidator
             throw new ConfigValidationError(errors);
     }
 
+
+    /// <summary>
+    /// Returns non-fatal migration warnings for adapter-config v1 profiles.
+    /// Use this before moving a profile to source/target split.
+    /// </summary>
+    public static IReadOnlyList<Migrator.Core.Profiles.ConfigMigrationWarning> GetMigrationWarnings(ProjectAdapterConfig config, TargetSpec? target = null)
+    {
+        var normalized = Profiles.ProjectAdapterConfigNormalizer.Normalize(config, target: target);
+        return normalized.Warnings;
+    }
+
     /// <summary>
     /// Validates the raw JSON string, deserializing and then running structural validation.
     /// Also detects common user errors like using SourceExpression instead of SourceMethod in Methods.
