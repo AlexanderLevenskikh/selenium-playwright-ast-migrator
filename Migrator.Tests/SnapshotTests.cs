@@ -5084,7 +5084,7 @@ public class TargetExpressionTests
 
             var output = new PlaywrightDotNetRenderer().Render(adapted);
 
-            Assert.Contains("var productChoosingPage= await Navigation.GoToPageAsync<DiscountsProductChoosingPage>(DiscountsProductChoosingPage.Uri);", output);
+            Assert.Contains("var productChoosingPage = await Navigation.GoToPageAsync<DiscountsProductChoosingPage>(DiscountsProductChoosingPage.Uri);", output);
             Assert.DoesNotContain("Browser.GoToPage", output);
         }
         finally

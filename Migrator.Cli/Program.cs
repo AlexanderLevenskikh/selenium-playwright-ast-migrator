@@ -235,8 +235,16 @@ if (mode == "bootstrap-project")
 // Handle orchestrate mode — runs analyze → migrate → verify → propose pipeline
 if (mode == "orchestrate")
 {
-    var orchestrateExitCode = RunOrchestrate(inputPath, outPath, primaryConfigPath, format, parser, renderer, adapter, loadedConfig, target);
-    return orchestrateExitCode;
+    try
+    {
+        var orchestrateExitCode = RunOrchestrate(inputPath, outPath, primaryConfigPath, format, parser, renderer, adapter, loadedConfig, target);
+        return orchestrateExitCode;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Orchestrate failed before the normal report could be completed: {ex.Message}");
+        return WriteEmergencyOrchestrationReport(inputPath, outPath, primaryConfigPath, ex);
+    }
 }
 
 var pipeline = new MigrationPipeline(parser, renderer, adapter);
@@ -5294,6 +5302,52 @@ static string BuildBootstrapProjectReport(BootstrapProjectReport report)
 
 // --- Orchestrate mode ---
 
+static int WriteEmergencyOrchestrationReport(string inputPath, string outPath, string? configPath, Exception exception)
+{
+    try
+    {
+        Directory.CreateDirectory(outPath);
+
+        var report = new OrchestrationReport(
+            Status: OrchestrationStageStatus.Failed,
+            InputPath: PathSanitizer.MakeSafePath(inputPath),
+            ConfigPath: configPath != null ? PathSanitizer.MakeSafePath(configPath) : null,
+            OutputPath: PathSanitizer.MakeSafePath(outPath),
+            Stages: new[]
+            {
+                new OrchestrationStage(
+                    "orchestrate",
+                    OrchestrationStageStatus.Failed,
+                    1,
+                    exception.Message,
+                    null)
+            },
+            Metrics: new OrchestrationMetrics(
+                FilesProcessed: 0,
+                TestsFound: 0,
+                GeneratedFiles: 0,
+                SyntaxErrors: 0,
+                TodoComments: 0,
+                PageTodoCalls: 0,
+                Proposals: 0),
+            Issues: new[] { $"Orchestrate failed before report finalization: {exception.Message}" },
+            TopProposals: Array.Empty<string>(),
+            RecommendedNextActions: new[] { "Inspect the CLI stderr/stdout and fix the earliest orchestrate failure." },
+            Warnings: new[] { exception.GetType().FullName ?? exception.GetType().Name });
+
+        File.WriteAllText(
+            Path.Combine(outPath, "orchestration-report.json"),
+            System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(Path.Combine(outPath, "orchestration-report.md"), ToOrchestrationReportMarkdown(report));
+    }
+    catch (Exception reportException)
+    {
+        Console.Error.WriteLine($"Could not write emergency orchestration report: {reportException.Message}");
+    }
+
+    return 1;
+}
+
 static int RunOrchestrate(string inputPath, string outPath, string? configPath, string format, ITestFileParser parser, IRenderer renderer, IProjectAdapter? adapter, ProjectAdapterConfig? config, string target = "dotnet")
 {
     Console.WriteLine("=== Orchestrator Dry-Run ===");
@@ -5619,7 +5673,9 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
         Warnings: warnings
     );
 
-    // Write orchestration reports
+    // Write orchestration reports. Re-create the root in case a previous stage cleaned
+    // or moved files unexpectedly; the orchestrator report is the contract artifact.
+    Directory.CreateDirectory(outPath);
     var reportJsonPath = Path.Combine(outPath, "orchestration-report.json");
     File.WriteAllText(reportJsonPath, System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
 
