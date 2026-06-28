@@ -23,13 +23,16 @@ public sealed class PythonSeleniumTestFileParser : ITestFileParser
     static readonly Regex LegacyClearRegex = new("""\.find_element_by_(?<by>id|name|class_name|css_selector|xpath|link_text|partial_link_text)\s*\(\s*(?<selector>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*\.clear\s*\(\s*\)""", RegexOptions.Compiled);
     static readonly Regex DirectDisplayedRegex = new("""assert\s+(?<negation>not\s+)?[^#\n]*?\.find_element\s*\(\s*(?<by>By\.[A-Z_]+|["'][^"']+["'])\s*,\s*(?<selector>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*\.is_displayed\s*\(\s*\)""", RegexOptions.Compiled);
     static readonly Regex LegacyDirectDisplayedRegex = new("""assert\s+(?<negation>not\s+)?[^#\n]*?\.find_element_by_(?<by>id|name|class_name|css_selector|xpath|link_text|partial_link_text)\s*\(\s*(?<selector>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*\.is_displayed\s*\(\s*\)""", RegexOptions.Compiled);
-    static readonly Regex DirectTextEqualsRegex = new("""assert\s+[^#\n]*?\.find_element\s*\(\s*(?<by>By\.[A-Z_]+|["'][^"']+["'])\s*,\s*(?<selector>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*\.text\s*==\s*(?<expected>.+)$""", RegexOptions.Compiled);
-    static readonly Regex LegacyDirectTextEqualsRegex = new("""assert\s+[^#\n]*?\.find_element_by_(?<by>id|name|class_name|css_selector|xpath|link_text|partial_link_text)\s*\(\s*(?<selector>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*\.text\s*==\s*(?<expected>.+)$""", RegexOptions.Compiled);
-    static readonly Regex DirectTextContainsRegex = new("""assert\s+(?<expected>.+?)\s+in\s+[^#\n]*?\.find_element\s*\(\s*(?<by>By\.[A-Z_]+|["'][^"']+["'])\s*,\s*(?<selector>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*\.text\s*$""", RegexOptions.Compiled);
-    static readonly Regex LegacyDirectTextContainsRegex = new("""assert\s+(?<expected>.+?)\s+in\s+[^#\n]*?\.find_element_by_(?<by>id|name|class_name|css_selector|xpath|link_text|partial_link_text)\s*\(\s*(?<selector>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*\.text\s*$""", RegexOptions.Compiled);
+    static readonly Regex DirectTextEqualsRegex = new("""assert\s+[^#\n]*?\.find_element\s*\(\s*(?<by>By\.[A-Z_]+|["'][^"']+["'])\s*,\s*(?<selector>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*\.text\s*(?<operator>==|!=)\s*(?<expected>.+)$""", RegexOptions.Compiled);
+    static readonly Regex LegacyDirectTextEqualsRegex = new("""assert\s+[^#\n]*?\.find_element_by_(?<by>id|name|class_name|css_selector|xpath|link_text|partial_link_text)\s*\(\s*(?<selector>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*\.text\s*(?<operator>==|!=)\s*(?<expected>.+)$""", RegexOptions.Compiled);
+    static readonly Regex DirectTextContainsRegex = new("""assert\s+(?<expected>.+?)\s+(?<negation>not\s+in|in)\s+[^#\n]*?\.find_element\s*\(\s*(?<by>By\.[A-Z_]+|["'][^"']+["'])\s*,\s*(?<selector>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*\.text\s*$""", RegexOptions.Compiled);
+    static readonly Regex LegacyDirectTextContainsRegex = new("""assert\s+(?<expected>.+?)\s+(?<negation>not\s+in|in)\s+[^#\n]*?\.find_element_by_(?<by>id|name|class_name|css_selector|xpath|link_text|partial_link_text)\s*\(\s*(?<selector>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*\.text\s*$""", RegexOptions.Compiled);
     static readonly Regex DriverGetRegex = new("""\b(?:driver|self\.driver|cls\.driver|browser|page_driver)\s*\.\s*get\s*\(\s*(?<url>[^)]*)\s*\)\s*$""", RegexOptions.Compiled);
-    static readonly Regex WaitLocatedRegex = new("""(?:WebDriverWait\s*\([^)]*\)|(?:(?:self|cls)\.)?[A-Za-z_]\w*)\s*\.until\s*\(\s*(?:(?:EC|expected_conditions)\.)?(?<condition>visibility_of_element_located|invisibility_of_element_located|presence_of_element_located|element_to_be_clickable)\s*\(\s*\(\s*(?<by>By\.[A-Z_]+|["'][^"']+["'])\s*,\s*(?<selector>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*\)\s*\)\s*$""", RegexOptions.Compiled);
-    static readonly Regex WaitElementRegex = new("""(?:WebDriverWait\s*\([^)]*\)|(?:(?:self|cls)\.)?[A-Za-z_]\w*)\s*\.until\s*\(\s*(?:(?:EC|expected_conditions)\.)?(?<condition>visibility_of|invisibility_of|element_to_be_clickable)\s*\(\s*(?<variable>(?:(?:self|cls)\.)?[A-Za-z_]\w*)\s*\)\s*\)\s*$""", RegexOptions.Compiled);
+    static readonly Regex WaitLocatedRegex = new("""(?:WebDriverWait\s*\([^)]*\)|(?:(?:self|cls)\.)?[A-Za-z_]\w*)\s*\.(?<mode>until|until_not)\s*\(\s*(?:(?:EC|expected_conditions)\.)?(?<condition>visibility_of_element_located|invisibility_of_element_located|presence_of_element_located|presence_of_all_elements_located|element_to_be_clickable)\s*\(\s*\(\s*(?<by>By\.[A-Z_]+|["'][^"']+["'])\s*,\s*(?<selector>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*\)\s*\)\s*$""", RegexOptions.Compiled);
+    static readonly Regex WaitElementRegex = new("""(?:WebDriverWait\s*\([^)]*\)|(?:(?:self|cls)\.)?[A-Za-z_]\w*)\s*\.(?<mode>until|until_not)\s*\(\s*(?:(?:EC|expected_conditions)\.)?(?<condition>visibility_of|invisibility_of|staleness_of|element_to_be_clickable)\s*\(\s*(?<variable>(?:(?:self|cls)\.)?[A-Za-z_]\w*)\s*\)\s*\)\s*$""", RegexOptions.Compiled);
+    static readonly Regex WaitDirectElementRegex = new("""(?:WebDriverWait\s*\([^)]*\)|(?:(?:self|cls)\.)?[A-Za-z_]\w*)\s*\.(?<mode>until|until_not)\s*\(\s*(?:(?:EC|expected_conditions)\.)?(?<condition>visibility_of|invisibility_of|element_to_be_clickable)\s*\(\s*[^#\n]*?\.find_element\s*\(\s*(?<by>By\.[A-Z_]+|["'][^"']+["'])\s*,\s*(?<selector>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*\)\s*\)\s*$""", RegexOptions.Compiled);
+    static readonly Regex LegacyWaitDirectElementRegex = new("""(?:WebDriverWait\s*\([^)]*\)|(?:(?:self|cls)\.)?[A-Za-z_]\w*)\s*\.(?<mode>until|until_not)\s*\(\s*(?:(?:EC|expected_conditions)\.)?(?<condition>visibility_of|invisibility_of|element_to_be_clickable)\s*\(\s*[^#\n]*?\.find_element_by_(?<by>id|name|class_name|css_selector|xpath|link_text|partial_link_text)\s*\(\s*(?<selector>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*\)\s*\)\s*$""", RegexOptions.Compiled);
+    static readonly Regex WaitTextLocatedRegex = new("""(?:WebDriverWait\s*\([^)]*\)|(?:(?:self|cls)\.)?[A-Za-z_]\w*)\s*\.(?<mode>until|until_not)\s*\(\s*(?:(?:EC|expected_conditions)\.)?(?<condition>text_to_be_present_in_element|text_to_be_present_in_element_value)\s*\(\s*\(\s*(?<by>By\.[A-Z_]+|["'][^"']+["'])\s*,\s*(?<selector>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*,\s*(?<expected>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*\)\s*$""", RegexOptions.Compiled);
     static readonly Regex WaitDeclarationRegex = new("""^(?<name>(?:(?:self|cls)\.)?[A-Za-z_]\w*)\s*=\s*WebDriverWait\s*\([^)]*\)\s*$""", RegexOptions.Compiled);
     static readonly Regex DriverAssignmentRegex = new("""^(?:(?:self|cls)\.)?driver\s*=\s*(?:driver|browser|page_driver|webdriver\.[A-Za-z_]\w*\s*\([^)]*\))\s*$""", RegexOptions.Compiled);
     static readonly Regex SuperSetupRegex = new("""^super\s*\(\s*\)\s*\.\s*setUp\s*\(\s*\)\s*$""", RegexOptions.Compiled);
@@ -37,8 +40,13 @@ public sealed class PythonSeleniumTestFileParser : ITestFileParser
     static readonly Regex VariableSendKeysRegex = new("""^(?<variable>(?:(?:self|cls)\.)?[A-Za-z_]\w*)\.send_keys\s*\(\s*(?<value>[^)]*)\s*\)\s*$""", RegexOptions.Compiled);
     static readonly Regex VariableClearRegex = new("""^(?<variable>(?:(?:self|cls)\.)?[A-Za-z_]\w*)\.clear\s*\(\s*\)\s*$""", RegexOptions.Compiled);
     static readonly Regex VariableDisplayedRegex = new("""assert\s+(?<negation>not\s+)?(?<variable>(?:(?:self|cls)\.)?[A-Za-z_]\w*)\.is_displayed\s*\(\s*\)\s*$""", RegexOptions.Compiled);
-    static readonly Regex VariableTextEqualsRegex = new("""assert\s+(?<variable>(?:(?:self|cls)\.)?[A-Za-z_]\w*)\.text\s*==\s*(?<expected>.+)$""", RegexOptions.Compiled);
-    static readonly Regex VariableTextContainsRegex = new("""assert\s+(?<expected>.+?)\s+in\s+(?<variable>(?:(?:self|cls)\.)?[A-Za-z_]\w*)\.text\s*$""", RegexOptions.Compiled);
+    static readonly Regex VariableTextEqualsRegex = new("""assert\s+(?<variable>(?:(?:self|cls)\.)?[A-Za-z_]\w*)\.text\s*(?<operator>==|!=)\s*(?<expected>.+)$""", RegexOptions.Compiled);
+    static readonly Regex VariableTextContainsRegex = new("""assert\s+(?<expected>.+?)\s+(?<negation>not\s+in|in)\s+(?<variable>(?:(?:self|cls)\.)?[A-Za-z_]\w*)\.text\s*$""", RegexOptions.Compiled);
+    static readonly Regex UnittestAssertEqualVariableTextRegex = new("""(?:(?:self|cls)\.)?assertEqual\s*\(\s*(?:(?<expected>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*,\s*(?<variable>(?:(?:self|cls)\.)?[A-Za-z_]\w*)\.text|(?<variableActual>(?:(?:self|cls)\.)?[A-Za-z_]\w*)\.text\s*,\s*(?<expectedActual>"(?:\\.|[^"])*"|'(?:\\.|[^'])*'))\s*\)\s*$""", RegexOptions.Compiled);
+    static readonly Regex UnittestAssertInVariableTextRegex = new("""(?:(?:self|cls)\.)?assert(?<negation>Not)?In\s*\(\s*(?<expected>.+?)\s*,\s*(?<variable>(?:(?:self|cls)\.)?[A-Za-z_]\w*)\.text\s*\)\s*$""", RegexOptions.Compiled);
+    static readonly Regex UnittestAssertDisplayedVariableRegex = new("""(?:(?:self|cls)\.)?assert(?<kind>True|False)\s*\(\s*(?<variable>(?:(?:self|cls)\.)?[A-Za-z_]\w*)\.is_displayed\s*\(\s*\)\s*\)\s*$""", RegexOptions.Compiled);
+    static readonly Regex UnittestAssertEqualDirectTextRegex = new("""(?:(?:self|cls)\.)?assertEqual\s*\(\s*(?:(?<expected>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*,\s*[^#\n]*?\.find_element\s*\(\s*(?<by>By\.[A-Z_]+|["'][^"']+["'])\s*,\s*(?<selector>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*\.text|[^#\n]*?\.find_element\s*\(\s*(?<byActual>By\.[A-Z_]+|["'][^"']+["'])\s*,\s*(?<selectorActual>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*\.text\s*,\s*(?<expectedActual>"(?:\\.|[^"])*"|'(?:\\.|[^'])*'))\s*\)\s*$""", RegexOptions.Compiled);
+    static readonly Regex UnittestAssertDisplayedDirectRegex = new("""(?:(?:self|cls)\.)?assert(?<kind>True|False)\s*\(\s*[^#\n]*?\.find_element\s*\(\s*(?<by>By\.[A-Z_]+|["'][^"']+["'])\s*,\s*(?<selector>"(?:\\.|[^"])*"|'(?:\\.|[^'])*')\s*\)\s*\.is_displayed\s*\(\s*\)\s*\)\s*$""", RegexOptions.Compiled);
 
     public TestFileModel Parse(string filePath)
     {
@@ -119,7 +127,7 @@ public sealed class PythonSeleniumTestFileParser : ITestFileParser
                 RecognitionConfidence.SyntaxFallback,
                 sourceMethod: $"EC.{waitElement.Groups["condition"].Value}",
                 fullSourceText: text,
-                kind: ToWaitKind(waitElement.Groups["condition"].Value));
+                kind: ToWaitKind(waitElement.Groups["condition"].Value, IsUntilNot(waitElement)));
             yield break;
         }
 
@@ -155,14 +163,45 @@ public sealed class PythonSeleniumTestFileParser : ITestFileParser
         var variableTextEquals = VariableTextEqualsRegex.Match(text);
         if (variableTextEquals.Success && setupLocatorVariables.TryGetValue(VariableKey(variableTextEquals.Groups["variable"].Value), out var textEqualsTarget))
         {
-            yield return new TextAssertionAction(unsupported.SourceLine, textEqualsTarget, TextAssertionKind.TextEquals, variableTextEquals.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text);
+            yield return new TextAssertionAction(unsupported.SourceLine, textEqualsTarget, ToTextEqualsKind(variableTextEquals.Groups["operator"].Value), variableTextEquals.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text);
             yield break;
         }
 
         var variableTextContains = VariableTextContainsRegex.Match(text);
         if (variableTextContains.Success && setupLocatorVariables.TryGetValue(VariableKey(variableTextContains.Groups["variable"].Value), out var textContainsTarget))
         {
-            yield return new TextAssertionAction(unsupported.SourceLine, textContainsTarget, TextAssertionKind.TextContains, variableTextContains.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text);
+            yield return new TextAssertionAction(unsupported.SourceLine, textContainsTarget, ToTextContainsKind(variableTextContains.Groups["negation"].Value), variableTextContains.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text);
+            yield break;
+        }
+
+        var unittestDisplayedVariable = UnittestAssertDisplayedVariableRegex.Match(text);
+        if (unittestDisplayedVariable.Success && setupLocatorVariables.TryGetValue(VariableKey(unittestDisplayedVariable.Groups["variable"].Value), out var unittestDisplayTarget))
+        {
+            yield return new VisibilityAssertionAction(unsupported.SourceLine, unittestDisplayTarget, ToVisibilityKindForAssert(unittestDisplayedVariable.Groups["kind"].Value), RecognitionConfidence.SyntaxFallback);
+            yield break;
+        }
+
+        var unittestEqualVariableText = UnittestAssertEqualVariableTextRegex.Match(text);
+        if (unittestEqualVariableText.Success)
+        {
+            var variable = unittestEqualVariableText.Groups["variable"].Success
+                ? unittestEqualVariableText.Groups["variable"].Value
+                : unittestEqualVariableText.Groups["variableActual"].Value;
+            var expected = unittestEqualVariableText.Groups["expected"].Success
+                ? unittestEqualVariableText.Groups["expected"].Value
+                : unittestEqualVariableText.Groups["expectedActual"].Value;
+
+            if (setupLocatorVariables.TryGetValue(VariableKey(variable), out var unittestTextTarget))
+            {
+                yield return new TextAssertionAction(unsupported.SourceLine, unittestTextTarget, TextAssertionKind.TextEquals, expected.Trim(), RecognitionConfidence.SyntaxFallback, text);
+                yield break;
+            }
+        }
+
+        var unittestInVariableText = UnittestAssertInVariableTextRegex.Match(text);
+        if (unittestInVariableText.Success && setupLocatorVariables.TryGetValue(VariableKey(unittestInVariableText.Groups["variable"].Value), out var unittestContainsTarget))
+        {
+            yield return new TextAssertionAction(unsupported.SourceLine, unittestContainsTarget, ToTextContainsKind(unittestInVariableText.Groups["negation"].Success ? "not in" : "in"), unittestInVariableText.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text);
             yield break;
         }
 
@@ -287,7 +326,35 @@ public sealed class PythonSeleniumTestFileParser : ITestFileParser
                     RecognitionConfidence.SyntaxFallback,
                     sourceMethod: $"EC.{waitLocated.Groups["condition"].Value}",
                     fullSourceText: text,
-                    kind: ToWaitKind(waitLocated.Groups["condition"].Value));
+                    kind: ToWaitKind(waitLocated.Groups["condition"].Value, IsUntilNot(waitLocated)));
+                continue;
+            }
+
+            var waitTextLocated = WaitTextLocatedRegex.Match(text);
+            if (waitTextLocated.Success)
+            {
+                yield return new WaitForAction(
+                    lineNumber,
+                    ToTarget(waitTextLocated.Groups["by"].Value, waitTextLocated.Groups["selector"].Value),
+                    RecognitionConfidence.SyntaxFallback,
+                    sourceMethod: $"EC.{waitTextLocated.Groups["condition"].Value}",
+                    fullSourceText: text,
+                    kind: ToWaitKind(waitTextLocated.Groups["condition"].Value, IsUntilNot(waitTextLocated)));
+                continue;
+            }
+
+            var waitDirectElement = WaitDirectElementRegex.Match(text);
+            if (!waitDirectElement.Success)
+                waitDirectElement = LegacyWaitDirectElementRegex.Match(text);
+            if (waitDirectElement.Success)
+            {
+                yield return new WaitForAction(
+                    lineNumber,
+                    ToTarget(waitDirectElement.Groups["by"].Value, waitDirectElement.Groups["selector"].Value),
+                    RecognitionConfidence.SyntaxFallback,
+                    sourceMethod: $"EC.{waitDirectElement.Groups["condition"].Value}",
+                    fullSourceText: text,
+                    kind: ToWaitKind(waitDirectElement.Groups["condition"].Value, IsUntilNot(waitDirectElement)));
                 continue;
             }
 
@@ -300,7 +367,7 @@ public sealed class PythonSeleniumTestFileParser : ITestFileParser
                     RecognitionConfidence.SyntaxFallback,
                     sourceMethod: $"EC.{waitElement.Groups["condition"].Value}",
                     fullSourceText: text,
-                    kind: ToWaitKind(waitElement.Groups["condition"].Value));
+                    kind: ToWaitKind(waitElement.Groups["condition"].Value, IsUntilNot(waitElement)));
                 continue;
             }
 
@@ -336,14 +403,45 @@ public sealed class PythonSeleniumTestFileParser : ITestFileParser
             var variableTextEquals = VariableTextEqualsRegex.Match(text);
             if (variableTextEquals.Success && locatorVariables.TryGetValue(VariableKey(variableTextEquals.Groups["variable"].Value), out var textEqualsTarget))
             {
-                yield return new TextAssertionAction(lineNumber, textEqualsTarget, TextAssertionKind.TextEquals, variableTextEquals.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text);
+                yield return new TextAssertionAction(lineNumber, textEqualsTarget, ToTextEqualsKind(variableTextEquals.Groups["operator"].Value), variableTextEquals.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text);
                 continue;
             }
 
             var variableTextContains = VariableTextContainsRegex.Match(text);
             if (variableTextContains.Success && locatorVariables.TryGetValue(VariableKey(variableTextContains.Groups["variable"].Value), out var textContainsTarget))
             {
-                yield return new TextAssertionAction(lineNumber, textContainsTarget, TextAssertionKind.TextContains, variableTextContains.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text);
+                yield return new TextAssertionAction(lineNumber, textContainsTarget, ToTextContainsKind(variableTextContains.Groups["negation"].Value), variableTextContains.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text);
+                continue;
+            }
+
+            var unittestDisplayedVariable = UnittestAssertDisplayedVariableRegex.Match(text);
+            if (unittestDisplayedVariable.Success && locatorVariables.TryGetValue(VariableKey(unittestDisplayedVariable.Groups["variable"].Value), out var unittestDisplayTarget))
+            {
+                yield return new VisibilityAssertionAction(lineNumber, unittestDisplayTarget, ToVisibilityKindForAssert(unittestDisplayedVariable.Groups["kind"].Value), RecognitionConfidence.SyntaxFallback);
+                continue;
+            }
+
+            var unittestEqualVariableText = UnittestAssertEqualVariableTextRegex.Match(text);
+            if (unittestEqualVariableText.Success)
+            {
+                var variable = unittestEqualVariableText.Groups["variable"].Success
+                    ? unittestEqualVariableText.Groups["variable"].Value
+                    : unittestEqualVariableText.Groups["variableActual"].Value;
+                var expected = unittestEqualVariableText.Groups["expected"].Success
+                    ? unittestEqualVariableText.Groups["expected"].Value
+                    : unittestEqualVariableText.Groups["expectedActual"].Value;
+
+                if (locatorVariables.TryGetValue(VariableKey(variable), out var unittestTextTarget))
+                {
+                    yield return new TextAssertionAction(lineNumber, unittestTextTarget, TextAssertionKind.TextEquals, expected.Trim(), RecognitionConfidence.SyntaxFallback, text);
+                    continue;
+                }
+            }
+
+            var unittestInVariableText = UnittestAssertInVariableTextRegex.Match(text);
+            if (unittestInVariableText.Success && locatorVariables.TryGetValue(VariableKey(unittestInVariableText.Groups["variable"].Value), out var unittestContainsTarget))
+            {
+                yield return new TextAssertionAction(lineNumber, unittestContainsTarget, ToTextContainsKind(unittestInVariableText.Groups["negation"].Success ? "not in" : "in"), unittestInVariableText.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text);
                 continue;
             }
 
@@ -389,7 +487,7 @@ public sealed class PythonSeleniumTestFileParser : ITestFileParser
                 directTextEquals = LegacyDirectTextEqualsRegex.Match(text);
             if (directTextEquals.Success)
             {
-                yield return new TextAssertionAction(lineNumber, ToTarget(directTextEquals.Groups["by"].Value, directTextEquals.Groups["selector"].Value), TextAssertionKind.TextEquals, directTextEquals.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text);
+                yield return new TextAssertionAction(lineNumber, ToTarget(directTextEquals.Groups["by"].Value, directTextEquals.Groups["selector"].Value), ToTextEqualsKind(directTextEquals.Groups["operator"].Value), directTextEquals.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text);
                 continue;
             }
 
@@ -398,7 +496,31 @@ public sealed class PythonSeleniumTestFileParser : ITestFileParser
                 directTextContains = LegacyDirectTextContainsRegex.Match(text);
             if (directTextContains.Success)
             {
-                yield return new TextAssertionAction(lineNumber, ToTarget(directTextContains.Groups["by"].Value, directTextContains.Groups["selector"].Value), TextAssertionKind.TextContains, directTextContains.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text);
+                yield return new TextAssertionAction(lineNumber, ToTarget(directTextContains.Groups["by"].Value, directTextContains.Groups["selector"].Value), ToTextContainsKind(directTextContains.Groups["negation"].Value), directTextContains.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text);
+                continue;
+            }
+
+            var unittestDisplayedDirect = UnittestAssertDisplayedDirectRegex.Match(text);
+            if (unittestDisplayedDirect.Success)
+            {
+                yield return new VisibilityAssertionAction(lineNumber, ToTarget(unittestDisplayedDirect.Groups["by"].Value, unittestDisplayedDirect.Groups["selector"].Value), ToVisibilityKindForAssert(unittestDisplayedDirect.Groups["kind"].Value), RecognitionConfidence.SyntaxFallback);
+                continue;
+            }
+
+            var unittestEqualDirectText = UnittestAssertEqualDirectTextRegex.Match(text);
+            if (unittestEqualDirectText.Success)
+            {
+                var by = unittestEqualDirectText.Groups["by"].Success
+                    ? unittestEqualDirectText.Groups["by"].Value
+                    : unittestEqualDirectText.Groups["byActual"].Value;
+                var selector = unittestEqualDirectText.Groups["selector"].Success
+                    ? unittestEqualDirectText.Groups["selector"].Value
+                    : unittestEqualDirectText.Groups["selectorActual"].Value;
+                var expected = unittestEqualDirectText.Groups["expected"].Success
+                    ? unittestEqualDirectText.Groups["expected"].Value
+                    : unittestEqualDirectText.Groups["expectedActual"].Value;
+
+                yield return new TextAssertionAction(lineNumber, ToTarget(by, selector), TextAssertionKind.TextEquals, expected.Trim(), RecognitionConfidence.SyntaxFallback, text);
                 continue;
             }
 
@@ -456,15 +578,41 @@ public sealed class PythonSeleniumTestFileParser : ITestFileParser
         return value.Replace("-", "_", StringComparison.Ordinal);
     }
 
-    static WaitForKind ToWaitKind(string condition) => condition switch
+    static WaitForKind ToWaitKind(string condition, bool untilNot = false)
     {
-        "visibility_of_element_located" or "visibility_of" or "element_to_be_clickable" => WaitForKind.ProductStateVisible,
-        "invisibility_of_element_located" or "invisibility_of" => WaitForKind.ProductStateHidden,
-        "presence_of_element_located" => WaitForKind.ProductStateLoaded,
-        _ => WaitForKind.ReviewRequired
-    };
+        var kind = condition switch
+        {
+            "visibility_of_element_located" or "visibility_of" or "element_to_be_clickable" => WaitForKind.ProductStateVisible,
+            "invisibility_of_element_located" or "invisibility_of" or "staleness_of" => WaitForKind.ProductStateHidden,
+            "presence_of_element_located" or "presence_of_all_elements_located" or "text_to_be_present_in_element" or "text_to_be_present_in_element_value" => WaitForKind.ProductStateLoaded,
+            _ => WaitForKind.ReviewRequired
+        };
+
+        if (!untilNot)
+            return kind;
+
+        return kind switch
+        {
+            WaitForKind.ProductStateVisible => WaitForKind.ProductStateHidden,
+            WaitForKind.ProductStateHidden => WaitForKind.ProductStateVisible,
+            WaitForKind.ProductStateLoaded => WaitForKind.ProductStateHidden,
+            _ => kind
+        };
+    }
+
+    static bool IsUntilNot(Match match) =>
+        match.Groups["mode"].Success && string.Equals(match.Groups["mode"].Value, "until_not", StringComparison.Ordinal);
 
     static VisibilityKind ToVisibilityKind(bool negated) => negated ? VisibilityKind.Hidden : VisibilityKind.Visible;
+
+    static VisibilityKind ToVisibilityKindForAssert(string assertKind) =>
+        string.Equals(assertKind, "False", StringComparison.Ordinal) ? VisibilityKind.Hidden : VisibilityKind.Visible;
+
+    static TextAssertionKind ToTextEqualsKind(string operatorText) =>
+        string.Equals(operatorText, "!=", StringComparison.Ordinal) ? TextAssertionKind.TextNotEquals : TextAssertionKind.TextEquals;
+
+    static TextAssertionKind ToTextContainsKind(string operatorText) =>
+        operatorText.Contains("not", StringComparison.OrdinalIgnoreCase) ? TextAssertionKind.TextNotEquals : TextAssertionKind.TextContains;
 
     static bool LooksLikeEnterKey(string valueExpression)
     {
