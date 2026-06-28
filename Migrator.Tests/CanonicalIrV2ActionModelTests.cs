@@ -53,7 +53,7 @@ public class CanonicalIrV2ActionModelTests
         var model = CreateCanonicalModel();
         var document = LegacyIrBridge.ToDocument(model, target: new TargetSpec("playwright-dotnet", "csharp", "playwright"));
         var lowered = LegacyIrBridge.ToLegacyTestFile(document);
-        var actions = lowered.Tests.Single().BodyActions;
+        var actions = lowered.Tests.Single().BodyActions.ToList();
 
         Assert.IsType<ClickAction>(actions[0]);
         Assert.IsType<SendKeysAction>(actions[1]);

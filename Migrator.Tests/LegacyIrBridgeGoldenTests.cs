@@ -1,5 +1,7 @@
 using System.Reflection;
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Migrator.Core;
 using Migrator.Core.Models;
 using Migrator.Core.Models.Ir;
@@ -15,7 +17,9 @@ public class LegacyIrBridgeGoldenTests
 {
     static readonly JsonSerializerOptions SnapshotJsonOptions = new()
     {
-        WriteIndented = true
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
     readonly string _goldenMasterDir = Path.Combine(
@@ -271,16 +275,16 @@ public class LegacyIrBridgeGoldenTests
 
     static object DescribeAssertion(AssertionIntent intent) => intent switch
     {
-        TextAssertionIntent text => new { kind = "Text", text.Kind, Target = DescribeLocator(text.Target), Expected = text.Expected == null ? null : DescribeValue(text.Expected) },
-        VisibilityAssertionIntent visibility => new { kind = "Visibility", visibility.Kind, Target = DescribeLocator(visibility.Target) },
-        UrlAssertionIntent url => new { kind = "Url", url.Kind, Expected = DescribeValue(url.Expected) },
+        TextAssertionIntent text => new { kind = "Text", assertionKind = text.Kind, target = DescribeLocator(text.Target), expected = text.Expected == null ? null : DescribeValue(text.Expected) },
+        VisibilityAssertionIntent visibility => new { kind = "Visibility", assertionKind = visibility.Kind, target = DescribeLocator(visibility.Target) },
+        UrlAssertionIntent url => new { kind = "Url", assertionKind = url.Kind, expected = DescribeValue(url.Expected) },
         RawAssertionIntent raw => new { kind = "Raw", raw.SourceText, raw.Reason },
         _ => new { kind = intent.GetType().Name }
     };
 
     static object DescribeWait(WaitIntent intent) => intent switch
     {
-        LocatorWaitIntent wait => new { kind = "Locator", wait.Kind, wait.SourceMethod, Target = DescribeLocator(wait.Target) },
+        LocatorWaitIntent wait => new { kind = "Locator", waitKind = wait.Kind, sourceMethod = wait.SourceMethod, target = DescribeLocator(wait.Target) },
         RawWaitIntent raw => new { kind = "Raw", raw.SourceText, raw.Reason },
         _ => new { kind = intent.GetType().Name }
     };

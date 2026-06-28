@@ -119,7 +119,7 @@ public class ArchitectureDependencyTests
         return doc.Descendants("ProjectReference")
             .Select(e => e.Attribute("Include")?.Value)
             .Where(v => !string.IsNullOrWhiteSpace(v))
-            .Select(NormalizeProjectReferenceName)
+            .Select(v => NormalizeProjectReferenceName(v!))
             .ToArray();
     }
 

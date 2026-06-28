@@ -41,6 +41,8 @@ public static class V2IrDumpWriter
 
         return new V2IrDumpDocument(
             SchemaVersion: SchemaVersion,
+            Source: files.FirstOrDefault()?.Source.Source ?? DumpSource(sourceSpec),
+            Target: files.FirstOrDefault()?.Target.Target ?? (target == null ? null : DumpTarget(target)),
             Summary: new V2IrDumpSummary(
                 Files: files.Length,
                 SourceTests: files.Sum(x => x.Source.Suite.Tests.Count),
@@ -436,6 +438,8 @@ public static class V2IrDumpWriter
 
 public sealed record V2IrDumpDocument(
     string SchemaVersion,
+    V2SourceSpecDump Source,
+    V2TargetSpecDump? Target,
     V2IrDumpSummary Summary,
     IReadOnlyList<V2IrDumpFile> Files);
 

@@ -72,6 +72,15 @@ public sealed class PlaywrightTypeScriptRenderer : IRenderer
             case MappedMethodInvocationAction mapped:
                 RenderMapped(sb, pad, mapped);
                 break;
+            case TextAssertionAction textAssertion:
+                RenderTextAssertion(sb, pad, textAssertion);
+                break;
+            case VisibilityAssertionAction visibilityAssertion:
+                RenderVisibilityAssertion(sb, pad, visibilityAssertion);
+                break;
+            case UrlAssertionAction urlAssertion:
+                RenderUrlAssertion(sb, pad, urlAssertion);
+                break;
             case RawStatementAction raw:
                 RenderTodo(sb, pad, "RAW_STATEMENT", raw.SourceText, "Raw Selenium/C# statement is not target-safe TypeScript.", "Add a TS-specific mapping/profile rule or leave it for manual migration.");
                 break;
@@ -123,6 +132,37 @@ public sealed class PlaywrightTypeScriptRenderer : IRenderer
                 RenderTodo(sb, pad, "UNSUPPORTED_ACTION", action.GetType().Name, "Action has no TypeScript renderer yet.", "Add TS renderer support or keep as manual TODO.");
                 break;
         }
+    }
+
+    void RenderTextAssertion(StringBuilder sb, string pad, TextAssertionAction assertion)
+    {
+        if (!IsResolved(assertion.Target))
+        {
+            RenderMissingTarget(sb, pad, assertion.Target.SourceExpression);
+            return;
+        }
+
+        var matcher = assertion.Kind == TextAssertionKind.TextContains ? "toContainText" : "toHaveText";
+        var expected = string.IsNullOrWhiteSpace(assertion.ExpectedValue) ? "''" : ConvertExpression(assertion.ExpectedValue!);
+        sb.AppendLine($"{pad}await expect({RenderTarget(assertion.Target)}).{matcher}({expected});");
+    }
+
+    void RenderVisibilityAssertion(StringBuilder sb, string pad, VisibilityAssertionAction assertion)
+    {
+        if (!IsResolved(assertion.Target))
+        {
+            RenderMissingTarget(sb, pad, assertion.Target.SourceExpression);
+            return;
+        }
+
+        var matcher = assertion.Kind == VisibilityKind.Hidden ? "toBeHidden" : "toBeVisible";
+        sb.AppendLine($"{pad}await expect({RenderTarget(assertion.Target)}).{matcher}();");
+    }
+
+    void RenderUrlAssertion(StringBuilder sb, string pad, UrlAssertionAction assertion)
+    {
+        var matcher = assertion.Kind == UrlAssertionKind.UrlContains ? "toContain" : "toBe";
+        sb.AppendLine($"{pad}expect(page.url()).{matcher}({ConvertExpression(assertion.ExpectedValue)});");
     }
 
     void RenderMapped(StringBuilder sb, string pad, MappedMethodInvocationAction mapped)
@@ -285,6 +325,10 @@ public sealed class PlaywrightTypeScriptRenderer : IRenderer
     static string ConvertLocatorExpression(string expression)
     {
         var result = expression.Trim();
+        if (LooksLikeCssSelector(result))
+            return $"page.locator({Quote(result)})";
+        if (LooksLikeXPathSelector(result))
+            return $"page.locator({Quote(result)})";
         result = Regex.Replace(result, "\\bPage\\.", "page.");
         result = result.Replace("GetByTestId", "getByTestId", StringComparison.Ordinal);
         result = result.Replace("GetByText", "getByText", StringComparison.Ordinal);
@@ -295,6 +339,22 @@ public sealed class PlaywrightTypeScriptRenderer : IRenderer
         result = result.Replace("Async()", "()", StringComparison.Ordinal);
         return result;
     }
+
+
+    static bool LooksLikeCssSelector(string expression)
+    {
+        if (string.IsNullOrWhiteSpace(expression))
+            return false;
+        return expression.StartsWith("#", StringComparison.Ordinal)
+            || expression.StartsWith(".", StringComparison.Ordinal)
+            || expression.StartsWith("[", StringComparison.Ordinal)
+            || expression.StartsWith(":", StringComparison.Ordinal);
+    }
+
+    static bool LooksLikeXPathSelector(string expression) =>
+        expression.StartsWith("//", StringComparison.Ordinal)
+        || expression.StartsWith("./", StringComparison.Ordinal)
+        || expression.StartsWith("(//", StringComparison.Ordinal);
 
     static string ConvertExpression(string expression)
     {

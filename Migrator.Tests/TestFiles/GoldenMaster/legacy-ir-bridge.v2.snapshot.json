@@ -12,13 +12,11 @@
         "line": 5,
         "intent": {
           "kind": "Locator",
-          "Kind": "ProductStateHidden",
-          "SourceMethod": "WaitHidden",
-          "Target": {
+          "waitKind": "ProductStateHidden",
+          "sourceMethod": "WaitHidden",
+          "target": {
             "kind": "ByCss",
-            "Selector": ".loader",
-            "Match": null,
-            "NthIndex": null
+            "Selector": ".loader"
           }
         }
       }
@@ -40,8 +38,7 @@
               "kind": "ByTestId",
               "Value": "save-button",
               "Attribute": "data-tid",
-              "Match": "First",
-              "NthIndex": null
+              "Match": "First"
             }
           },
           {
@@ -49,9 +46,7 @@
             "line": 11,
             "target": {
               "kind": "ByCss",
-              "Selector": "#name",
-              "Match": null,
-              "NthIndex": null
+              "Selector": "#name"
             },
             "value": {
               "kind": "Raw",
@@ -64,14 +59,12 @@
             "line": 12,
             "intent": {
               "kind": "Text",
-              "Kind": "TextContains",
-              "Target": {
+              "assertionKind": "TextContains",
+              "target": {
                 "kind": "ByText",
-                "Text": "Saved",
-                "Match": null,
-                "NthIndex": null
+                "Text": "Saved"
               },
-              "Expected": {
+              "expected": {
                 "kind": "Literal",
                 "Value": "\"Saved\""
               }
@@ -82,8 +75,8 @@
             "line": 13,
             "intent": {
               "kind": "Visibility",
-              "Kind": "Hidden",
-              "Target": {
+              "assertionKind": "Hidden",
+              "target": {
                 "kind": "PageObject",
                 "Expression": "page.Loader"
               }
@@ -94,8 +87,8 @@
             "line": 14,
             "intent": {
               "kind": "Url",
-              "Kind": "UrlContains",
-              "Expected": {
+              "assertionKind": "UrlContains",
+              "expected": {
                 "kind": "Literal",
                 "Value": "\"/catalog\""
               }
