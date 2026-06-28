@@ -1,0 +1,130 @@
+{
+  "sourceId": "selenium-csharp",
+  "targetId": "playwright-dotnet",
+  "sourceFilePath": "/repo/SampleTests.cs",
+  "suite": {
+    "namespace": "Prod.Ready.Tests",
+    "className": "SampleTests",
+    "baseClassName": "BaseUiTest",
+    "setup": [
+      {
+        "kind": "Wait",
+        "line": 5,
+        "intent": {
+          "kind": "Locator",
+          "Kind": "ProductStateHidden",
+          "SourceMethod": "WaitHidden",
+          "Target": {
+            "kind": "ByCss",
+            "Selector": ".loader",
+            "Match": null,
+            "NthIndex": null
+          }
+        }
+      }
+    ],
+    "tests": [
+      {
+        "name": "ClickFillAssertAndFallback",
+        "attributes": [
+          {
+            "Name": "Test",
+            "Arguments": []
+          }
+        ],
+        "body": [
+          {
+            "kind": "Click",
+            "line": 10,
+            "target": {
+              "kind": "ByTestId",
+              "Value": "save-button",
+              "Attribute": "data-tid",
+              "Match": "First",
+              "NthIndex": null
+            }
+          },
+          {
+            "kind": "Fill",
+            "line": 11,
+            "target": {
+              "kind": "ByCss",
+              "Selector": "#name",
+              "Match": null,
+              "NthIndex": null
+            },
+            "value": {
+              "kind": "Raw",
+              "Expression": "userName",
+              "Language": "csharp"
+            }
+          },
+          {
+            "kind": "Assertion",
+            "line": 12,
+            "intent": {
+              "kind": "Text",
+              "Kind": "TextContains",
+              "Target": {
+                "kind": "ByText",
+                "Text": "Saved",
+                "Match": null,
+                "NthIndex": null
+              },
+              "Expected": {
+                "kind": "Literal",
+                "Value": "\"Saved\""
+              }
+            }
+          },
+          {
+            "kind": "Assertion",
+            "line": 13,
+            "intent": {
+              "kind": "Visibility",
+              "Kind": "Hidden",
+              "Target": {
+                "kind": "PageObject",
+                "Expression": "page.Loader"
+              }
+            }
+          },
+          {
+            "kind": "Assertion",
+            "line": 14,
+            "intent": {
+              "kind": "Url",
+              "Kind": "UrlContains",
+              "Expected": {
+                "kind": "Literal",
+                "Value": "\"/catalog\""
+              }
+            }
+          },
+          {
+            "kind": "Raw",
+            "line": 15,
+            "Text": "var total = page.Total.Text;",
+            "Language": "csharp",
+            "Safety": "Unknown"
+          },
+          {
+            "kind": "Unsupported",
+            "line": 16,
+            "Text": "driver.SwitchTo().Alert().Accept();",
+            "Reason": "Alerts require manual migration."
+          }
+        ]
+      }
+    ],
+    "classMembers": []
+  },
+  "diagnostics": [
+    {
+      "Code": "IR_LEGACY_UNSUPPORTED_ACTION",
+      "Message": "Alerts require manual migration.",
+      "Severity": "Warning",
+      "line": 16
+    }
+  ]
+}

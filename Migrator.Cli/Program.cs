@@ -5,6 +5,8 @@ using System.Diagnostics;
 using System.Text;
 using System.Xml.Linq;
 using Migrator.Core;
+using Migrator.Core.Profiles;
+using Migrator.Core.SourceFrontends;
 using Migrator.Core.Models;
 using Migrator.PlaywrightDotNet;
 using Migrator.PlaywrightTypeScript;
@@ -24,6 +26,8 @@ string inputPath = opts.Input;
 string outPath = opts.Out;
 string? configPath = opts.Config;
 string[] configPaths = opts.Configs;
+if (opts.Mode == "config-normalize" && configPaths.Length == 0 && !string.IsNullOrWhiteSpace(opts.Input))
+    configPaths = new[] { opts.Input };
 string? primaryConfigPath = configPaths.Length > 0 ? configPaths[^1] : null;
 ProjectAdapterConfig? loadedConfig = null;
 string format = opts.Format;
@@ -32,8 +36,11 @@ bool failOnTodo = opts.FailOnTodo;
 string? beforePath = opts.Before;
 string? afterPath = opts.After;
 string target = opts.Target;
+string source = opts.Source;
 string? tsProjectPath = opts.TsProject;
 bool recursiveArtifacts = opts.RecursiveArtifacts;
+string irVersion = opts.IrVersion;
+string renderIr = opts.RenderIr;
 
 // Agent-safety modes operate on config/report artifacts and do not process source files.
 if (mode == "config-validate")
@@ -57,7 +64,7 @@ if (mode == "guard")
     return guardExitCode;
 }
 
-if (mode != "discover-target" && mode != "helper-inventory" && mode != "scaffold" && mode != "bootstrap-project" && mode != "config-schema" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && !File.Exists(inputPath) && !Directory.Exists(inputPath))
+if (mode != "discover-target" && mode != "helper-inventory" && mode != "scaffold" && mode != "bootstrap-project" && mode != "config-schema" && mode != "config-validate" && mode != "config-normalize" && mode != "config-diff" && mode != "guard" && !File.Exists(inputPath) && !Directory.Exists(inputPath))
 {
     Console.Error.WriteLine($"Input not found: {inputPath}");
     return 1;
@@ -114,9 +121,41 @@ if (configPaths.Length > 0)
         : $"Loaded adapter config layers: {string.Join(" -> ", configPaths)}");
 }
 
-var parser = loadedConfig != null
-    ? new RoslynTestFileParser(loadedConfig)
-    : new RoslynTestFileParser();
+var sourceRegistry = CreateBuiltInSourceFrontendRegistry(loadedConfig);
+ISourceFrontend sourceFrontend;
+try
+{
+    sourceFrontend = sourceRegistry.Resolve(source);
+}
+catch (InvalidOperationException ex)
+{
+    Console.Error.WriteLine(ex.Message);
+    return 2;
+}
+source = sourceFrontend.Source.Id;
+
+if (mode == "config-normalize")
+{
+    if (loadedConfig == null)
+    {
+        Console.Error.WriteLine("--config or --input is required for config-normalize");
+        return 1;
+    }
+
+    var normalizeExitCode = RunConfigNormalize(loadedConfig, configPaths, outPath, format, sourceFrontend.Source, targetBackend.Target);
+    return normalizeExitCode;
+}
+
+ITestFileParser parser;
+try
+{
+    parser = ResolveLegacyParser(sourceFrontend);
+}
+catch (NotSupportedException ex)
+{
+    Console.Error.WriteLine(ex.Message);
+    return 2;
+}
 
 if (IsTypeScriptTarget(targetBackend) && mode == "orchestrate")
 {
@@ -245,7 +284,7 @@ if (mode == "orchestrate")
     }
 }
 
-var pipeline = new MigrationPipeline(parser, renderer, adapter);
+var pipeline = CreateMigrationPipeline(parser, renderer, adapter, targetBackend, renderIr, sourceFrontend.Source);
 
 IEnumerable<PipelineResult> results;
 
@@ -280,7 +319,7 @@ switch (mode)
         RunAnalyze(summary, outPath, format, loadedConfig, resultsList, allUnmapped);
         break;
     case "dump-ir":
-        RunDumpIr(outPath, format, resultsList);
+        RunDumpIr(outPath, format, resultsList, sourceFrontend.Source, targetBackend.Target, irVersion);
         break;
     case "migrate":
         RunMigrate(summary, outPath, format, loadedConfig, resultsList, allUnmapped, targetBackend);
@@ -331,25 +370,105 @@ static int ApplyQualityGate(MigrationSummaryReport summary, bool failOnUnsupport
 
 // --- Mode implementations ---
 
-static void RunDumpIr(string outPath, string format, List<PipelineResult> results)
+static int RunConfigNormalize(ProjectAdapterConfig config, string[] configPaths, string outPath, string format, SourceSpec source, TargetSpec target)
 {
     Directory.CreateDirectory(outPath);
 
-    var document = IrDumpWriter.Build(results);
+    var result = ProjectAdapterConfigNormalizer.Normalize(
+        config,
+        source: source,
+        target: target);
+
+    const bool includeLegacyConfig = true;
+    var profileJson = MigrationProfileWriter.ToJson(result.Profile, includeLegacyConfig);
+    File.WriteAllText(Path.Combine(outPath, "migration-profile.v2.json"), profileJson);
+
+    var report = MigrationProfileWriter.BuildReport(result, configPaths, includeLegacyConfig);
 
     if (format == "json" || format == "both")
-        File.WriteAllText(Path.Combine(outPath, "ir-dump.json"), IrDumpWriter.ToJson(document));
+        File.WriteAllText(Path.Combine(outPath, "config-normalize-report.json"), MigrationProfileWriter.ReportToJson(report));
 
     if (format == "text" || format == "both")
-        File.WriteAllText(Path.Combine(outPath, "ir-dump.md"), IrDumpWriter.ToMarkdown(document));
+        File.WriteAllText(Path.Combine(outPath, "config-normalize-report.md"), MigrationProfileWriter.ReportToMarkdown(report));
 
-    Console.WriteLine("=== Legacy IR Dump ===");
-    Console.WriteLine($"Files: {document.Summary.Files}");
-    Console.WriteLine($"Source tests: {document.Summary.SourceTests}");
-    Console.WriteLine($"Target tests: {document.Summary.TargetTests}");
-    Console.WriteLine($"Target actions: {document.Summary.TargetActions}");
-    Console.WriteLine($"Unsupported actions: {document.Summary.TargetUnsupportedActions}");
-    Console.WriteLine($"Unresolved targets: {document.Summary.TargetUnresolvedTargets}");
+    Console.WriteLine("=== Config Normalize ===");
+    Console.WriteLine($"Source: {report.Source.Id} ({report.Source.Language}/{report.Source.Framework})");
+    Console.WriteLine($"Target: {report.Target.Id} ({report.Target.Language}/{report.Target.Framework})");
+    Console.WriteLine($"Methods: {report.Summary.Methods}");
+    Console.WriteLine($"Parameterized methods: {report.Summary.ParameterizedMethods}");
+    Console.WriteLine($"Warnings: {report.Summary.Warnings}");
+    Console.WriteLine($"Normalized profile written to: {Path.GetFullPath(Path.Combine(outPath, "migration-profile.v2.json"))}");
+    return 0;
+}
+
+static void RunDumpIr(string outPath, string format, List<PipelineResult> results, SourceSpec source, TargetSpec target, string irVersion)
+{
+    Directory.CreateDirectory(outPath);
+
+    var writeJson = format == "json" || format == "both";
+    var writeMarkdown = format == "text" || format == "both";
+    var writeLegacy = irVersion == "legacy" || irVersion == "both";
+    var writeV2 = irVersion == "v2" || irVersion == "both";
+
+    LegacyIrDumpDocument? legacyDocument = null;
+    V2IrDumpDocument? v2Document = null;
+
+    if (writeLegacy)
+    {
+        legacyDocument = IrDumpWriter.Build(results);
+
+        var jsonName = irVersion == "both" ? "ir-dump.legacy.json" : "ir-dump.json";
+        var markdownName = irVersion == "both" ? "ir-dump.legacy.md" : "ir-dump.md";
+
+        if (writeJson)
+            File.WriteAllText(Path.Combine(outPath, jsonName), IrDumpWriter.ToJson(legacyDocument));
+
+        if (writeMarkdown)
+            File.WriteAllText(Path.Combine(outPath, markdownName), IrDumpWriter.ToMarkdown(legacyDocument));
+    }
+
+    if (writeV2)
+    {
+        v2Document = V2IrDumpWriter.Build(results, target, source);
+
+        var jsonName = irVersion == "both" ? "ir-dump.v2.json" : "ir-dump.json";
+        var markdownName = irVersion == "both" ? "ir-dump.v2.md" : "ir-dump.md";
+
+        if (writeJson)
+            File.WriteAllText(Path.Combine(outPath, jsonName), V2IrDumpWriter.ToJson(v2Document));
+
+        if (writeMarkdown)
+            File.WriteAllText(Path.Combine(outPath, markdownName), V2IrDumpWriter.ToMarkdown(v2Document));
+    }
+
+    if (v2Document != null && legacyDocument == null)
+    {
+        Console.WriteLine("=== IR V2 Dump ===");
+        Console.WriteLine($"Files: {v2Document.Summary.Files}");
+        Console.WriteLine($"Source tests: {v2Document.Summary.SourceTests}");
+        Console.WriteLine($"Target tests: {v2Document.Summary.TargetTests}");
+        Console.WriteLine($"Target statements: {v2Document.Summary.TargetStatements}");
+        Console.WriteLine($"Unsupported statements: {v2Document.Summary.TargetUnsupportedStatements}");
+        Console.WriteLine($"Diagnostics: {v2Document.Summary.TargetDiagnostics}");
+    }
+    else if (legacyDocument != null)
+    {
+        Console.WriteLine("=== Legacy IR Dump ===");
+        Console.WriteLine($"Files: {legacyDocument.Summary.Files}");
+        Console.WriteLine($"Source tests: {legacyDocument.Summary.SourceTests}");
+        Console.WriteLine($"Target tests: {legacyDocument.Summary.TargetTests}");
+        Console.WriteLine($"Target actions: {legacyDocument.Summary.TargetActions}");
+        Console.WriteLine($"Unsupported actions: {legacyDocument.Summary.TargetUnsupportedActions}");
+        Console.WriteLine($"Unresolved targets: {legacyDocument.Summary.TargetUnresolvedTargets}");
+        if (v2Document != null)
+        {
+            Console.WriteLine("=== IR V2 Dump ===");
+            Console.WriteLine($"Target statements: {v2Document.Summary.TargetStatements}");
+            Console.WriteLine($"Unsupported statements: {v2Document.Summary.TargetUnsupportedStatements}");
+            Console.WriteLine($"Diagnostics: {v2Document.Summary.TargetDiagnostics}");
+        }
+    }
+
     Console.WriteLine($"IR dump written to: {Path.GetFullPath(outPath)}");
 }
 
@@ -400,6 +519,33 @@ static TargetBackendRegistry CreateBuiltInTargetBackendRegistry()
     return new TargetBackendRegistry()
         .Register(new PlaywrightDotNetBackend())
         .Register(new PlaywrightTypeScriptBackend());
+}
+
+static SourceFrontendRegistry CreateBuiltInSourceFrontendRegistry(ProjectAdapterConfig? config)
+{
+    return new SourceFrontendRegistry()
+        .Register(new CSharpSeleniumFrontend(config))
+        .Register(new JavaSeleniumFrontend())
+        .Register(new PythonSeleniumFrontend());
+}
+
+static ITestFileParser ResolveLegacyParser(ISourceFrontend sourceFrontend)
+{
+    if (sourceFrontend is TestFileParserSourceFrontend legacyFrontend)
+        return legacyFrontend.Parser;
+
+    if (sourceFrontend is UnsupportedSourceFrontend unsupportedFrontend)
+        throw unsupportedFrontend.CreateNotSupportedException();
+
+    throw new NotSupportedException($"Source frontend '{sourceFrontend.Source.Id}' cannot be used by the legacy pipeline yet.");
+}
+
+static MigrationPipeline CreateMigrationPipeline(ITestFileParser parser, IRenderer renderer, IProjectAdapter? adapter, ITargetBackend targetBackend, string renderIr, SourceSpec source)
+{
+    if (string.Equals(renderIr, "v2", StringComparison.OrdinalIgnoreCase))
+        return new MigrationPipeline(parser, targetBackend, adapter, MigrationPipelineRenderMode.IrV2, source);
+
+    return new MigrationPipeline(parser, renderer, adapter, sourceSpec: source);
 }
 
 static bool IsTypeScriptTarget(ITargetBackend targetBackend)
@@ -7233,8 +7379,11 @@ static CliOptions? ParseArgs(string[] args)
     string? before = null;
     string? after = null;
     string target = "dotnet";
+    string source = "csharp-selenium";
     string? tsProject = null;
     bool recursiveArtifacts = false;
+    string irVersion = "legacy";
+    string renderIr = "legacy";
 
     for (int i = 0; i < args.Length; i++)
     {
@@ -7315,6 +7464,15 @@ static CliOptions? ParseArgs(string[] args)
                     return null;
                 }
                 break;
+            case "--source":
+                if (i + 1 < args.Length)
+                    source = args[++i];
+                else
+                {
+                    Console.Error.WriteLine("--source requires a value: csharp-selenium|java-selenium|python-selenium");
+                    return null;
+                }
+                break;
             case "--ts-project":
                 if (i + 1 < args.Length)
                     tsProject = args[++i];
@@ -7330,6 +7488,24 @@ static CliOptions? ParseArgs(string[] args)
                 else
                 {
                     Console.Error.WriteLine("--format requires a value: text|json|both");
+                    return null;
+                }
+                break;
+            case "--ir-version":
+                if (i + 1 < args.Length)
+                    irVersion = args[++i].Trim().ToLowerInvariant();
+                else
+                {
+                    Console.Error.WriteLine("--ir-version requires a value: legacy|v2|both");
+                    return null;
+                }
+                break;
+            case "--render-ir":
+                if (i + 1 < args.Length)
+                    renderIr = args[++i].Trim().ToLowerInvariant();
+                else
+                {
+                    Console.Error.WriteLine("--render-ir requires a value: legacy|v2");
                     return null;
                 }
                 break;
@@ -7364,13 +7540,13 @@ static CliOptions? ParseArgs(string[] args)
         }
     }
 
-    if (mode != "analyze" && mode != "dump-ir" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "verify-ts-project" && mode != "doctor" && mode != "explain-todo" && mode != "smoke-plan" && mode != "runtime-classify" && mode != "migration-board" && mode != "profile-match" && mode != "config-schema" && mode != "config-validate" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "helper-inventory" && mode != "orchestrate" && mode != "scaffold" && mode != "bootstrap-project")
+    if (mode != "analyze" && mode != "dump-ir" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "verify-ts-project" && mode != "doctor" && mode != "explain-todo" && mode != "smoke-plan" && mode != "runtime-classify" && mode != "migration-board" && mode != "profile-match" && mode != "config-schema" && mode != "config-validate" && mode != "config-normalize" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "helper-inventory" && mode != "orchestrate" && mode != "scaffold" && mode != "bootstrap-project")
     {
-        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|dump-ir|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-diff|guard|propose|discover-target|index-pom|helper-inventory|orchestrate|scaffold|bootstrap-project");
+        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|dump-ir|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-normalize|config-diff|guard|propose|discover-target|index-pom|helper-inventory|orchestrate|scaffold|bootstrap-project");
         return null;
     }
 
-    if (mode == "config-validate" && string.IsNullOrEmpty(input) && configs.Count > 0)
+    if ((mode == "config-validate" || mode == "config-normalize") && string.IsNullOrEmpty(input) && configs.Count > 0)
         input = configs[^1];
 
     if ((mode == "config-diff" || mode == "guard") && (string.IsNullOrEmpty(before) || string.IsNullOrEmpty(after)))
@@ -7382,7 +7558,7 @@ static CliOptions? ParseArgs(string[] args)
 
     if (mode != "scaffold" && mode != "bootstrap-project" && mode != "config-schema" && mode != "config-diff" && mode != "guard" && string.IsNullOrEmpty(input))
     {
-        Console.Error.WriteLine(mode == "config-validate" ? "--config or --input is required" : "--input is required");
+        Console.Error.WriteLine((mode == "config-validate" || mode == "config-normalize") ? "--config or --input is required" : "--input is required");
         PrintHelp();
         return null;
     }
@@ -7391,6 +7567,16 @@ static CliOptions? ParseArgs(string[] args)
     try
     {
         parsedTargetBackend = CreateBuiltInTargetBackendRegistry().Resolve(target);
+    }
+    catch (InvalidOperationException ex)
+    {
+        Console.Error.WriteLine(ex.Message);
+        return null;
+    }
+
+    try
+    {
+        _ = CreateBuiltInSourceFrontendRegistry(null).Resolve(source);
     }
     catch (InvalidOperationException ex)
     {
@@ -7422,6 +7608,7 @@ static CliOptions? ParseArgs(string[] args)
             "profile-match" => "profile-match",
             "config-schema" => "config-schema",
             "config-validate" => "config-validate",
+            "config-normalize" => "config-normalize",
             "config-diff" => "config-diff",
             "guard" => "guard",
             "propose" => "mapping-proposals",
@@ -7443,7 +7630,25 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
-    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, tsProject, recursiveArtifacts);
+    if (irVersion != "legacy" && irVersion != "v2" && irVersion != "both")
+    {
+        Console.Error.WriteLine($"Invalid IR version: {irVersion}. Use: legacy|v2|both");
+        return null;
+    }
+
+    if (renderIr != "legacy" && renderIr != "v2")
+    {
+        Console.Error.WriteLine($"Invalid render IR mode: {renderIr}. Use: legacy|v2");
+        return null;
+    }
+
+    if (renderIr == "v2" && mode == "orchestrate")
+    {
+        Console.Error.WriteLine("--render-ir v2 is experimental and not supported with orchestrate yet. Use --mode migrate or verify first.");
+        return null;
+    }
+
+    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, source, tsProject, recursiveArtifacts, irVersion, renderIr);
 }
 
 static string ResolveOutputDirectory(string outDir, string workspace)
@@ -7514,7 +7719,8 @@ Usage: Migrator.Cli --mode <mode> --input <path> [options]
 Modes:
   analyze         Parse and analyze Selenium tests without generating output files.
                     Produces reports and draft adapter-config.
-  dump-ir         Dump the current legacy parser/adapter IR as ir-dump.json/md.
+  dump-ir         Dump parser/adapter IR as ir-dump.json/md.
+                    Defaults to legacy IR. Use --ir-version v2 or both to inspect MigrationDocument IR V2.
                     This is a golden-baseline aid for refactors and does not modify source files.
   migrate         Parse, adapt, and generate Playwright target files. Produces reports.
   verify          Validate generated code quality. Runs Roslyn syntax check,
@@ -7569,6 +7775,10 @@ Modes:
                     and agent-profile-reuse-task.md. Does NOT modify config/source.
   config-validate Validate adapter-config structure and agent-safety rules. Outputs
                     config-validate-report.md/json. Fails on dangerous config.
+  config-normalize
+                  Convert legacy adapter-config v1 layers into migration-profile v2 shape.
+                    Outputs migration-profile.v2.json and config-normalize-report.md/json.
+                    Does NOT modify the source config and remains compatibility-only.
   config-diff     Compare two adapter-config files and highlight risky agent changes.
                     Requires --before and --after. Outputs config-diff-report.md/json.
   guard           Compare two migration artifact directories and fail on regressions
@@ -7605,7 +7815,7 @@ Modes:
 
 Options:
     --mode <mode>                 Operation mode (required)
-                                    analyze|dump-ir|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-diff|guard|propose|discover-target|index-pom|helper-inventory|orchestrate|scaffold|bootstrap-project
+                                    analyze|dump-ir|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-normalize|config-diff|guard|propose|discover-target|index-pom|helper-inventory|orchestrate|scaffold|bootstrap-project
     --input <file-or-directory>   Input .cs file or directory (required).
                                     For propose/explain-todo/migration-board: directory with report files.
                                     For runtime-classify: runtime log file or directory with logs/reports.
@@ -7629,6 +7839,10 @@ Options:
                                   Generation target for migrate/orchestrate (default: dotnet).
                                   TypeScript migration generation does not require --ts-project;
                                   project-aware TypeScript verification does.
+   --source <csharp-selenium|java-selenium|python-selenium>
+                                  Source frontend for migrate/analyze/dump-ir/verify
+                                  (default: csharp-selenium). java-selenium and
+                                  python-selenium are experimental MVP/spike frontends.
    --ts-project <directory>        Existing Playwright TypeScript project root for verify-ts-project.
                                   Must contain package.json,
                                   tsconfig.json and playwright.config.*.
@@ -7637,6 +7851,11 @@ Options:
    --before <path>                Previous config/artifact path for config-diff/guard
    --after <path>                 New config/artifact path for config-diff/guard
    --format <text|json|both>     Report format (default: both)
+   --ir-version <legacy|v2|both> IR dump schema for dump-ir (default: legacy).
+                                  With both, writes ir-dump.legacy.* and ir-dump.v2.*.
+   --render-ir <legacy|v2>       Experimental render input model for migrate/analyze/verify
+                                  (default: legacy). Use v2 to route generation through
+                                  MigrationDocument and TargetBackend.RenderDocument.
    --recursive-artifacts         Allow nested artifact lookup for explain-todo/smoke-plan/migration-board.
                                   If multiple candidates are found, the command fails and lists them.
    --fail-on-unsupported         Exit code 2 if unsupported actions exist
@@ -7653,7 +7872,10 @@ Exit codes:
 Examples:
   Migrator.Cli --mode analyze --input ./OldTests --out analysis --format both
   Migrator.Cli --mode dump-ir --input ./OldTests --config ./adapter-config.json --out ir-dump --format both
+  Migrator.Cli --mode dump-ir --input ./OldTests --config ./adapter-config.json --out ir-dump --ir-version both --format both
   Migrator.Cli --mode migrate --input ./OldTests --out generated --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json
+  Migrator.Cli --mode migrate --input ./OldTests --out generated-v2 --render-ir v2 --config ./adapter-config.json
+  Migrator.Cli --mode migrate --source java-selenium --input ./JavaTests --target ts --out generated-java-ts
   Migrator.Cli --mode verify-project --input ./OldTests --out verify-project --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json
   Migrator.Cli --mode doctor --input ./OldTests --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json --out doctor
   Migrator.Cli --mode explain-todo --input migration/verify-project --out explain-todo --format both

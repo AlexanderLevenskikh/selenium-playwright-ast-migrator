@@ -1,5 +1,6 @@
 using Migrator.Core;
 using Migrator.Core.Models;
+using Migrator.Core.Models.Ir;
 
 namespace Migrator.PlaywrightDotNet;
 
@@ -32,6 +33,8 @@ public sealed class PlaywrightDotNetBackend : ITargetBackend
     };
 
     public string Render(TestFileModel model) => _renderer.Render(model);
+
+    public string RenderDocument(MigrationDocument document) => this.RenderDocumentViaLegacyBridge(document);
 
     public string GetDefaultFileName(TestFileModel model) => $"{model.ClassName}Playwright.cs";
 }

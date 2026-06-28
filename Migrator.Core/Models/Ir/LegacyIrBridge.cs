@@ -80,10 +80,27 @@ public static class LegacyIrBridge
             UrlAssertionAction url => new AssertionStatementIr(new UrlAssertionIntent(url.Kind.ToString(), ToValue(url.ExpectedValue)), span),
             WaitForAction wait => new WaitStatementIr(new LocatorWaitIntent(ToLocator(wait.Target), wait.Kind.ToString(), wait.SourceMethod), span),
             NavigationAction nav => new NavigationStatementIr(new UrlNavigationIntent(ToValue(nav.UrlExpression), nav.PageVariableName, nav.TargetStatement), span),
+            PressAction press => new PressStatementIr(ToLocator(press.Target), press.KeyName, span),
+            LocalDeclarationAction local => new DeclarationStatementIr(local.VariableName, local.VariableType, ToValue(local.InitializationValue), span),
+            LocatorDeclarationAction locator => new LocatorDeclarationStatementIr(locator.VariableName, ToLocator(TargetExpression.Mapped(locator.LocatorExpression, locator.LocatorExpression, TargetKind.RawExpression)), locator.SourceText, span),
+            PageObjectFieldAction field => new PageObjectFieldStatementIr(field.FieldName, field.FieldType, field.InitializationValue == null ? null : ToValue(field.InitializationValue), field.FullDeclaration, field.RequiresSemicolon, span),
+            MethodInvocationAction method => new MethodInvocationStatementIr(method.ReceiverExpression, method.MethodName, method.ArgumentTexts.Select(ToValue).ToArray(), method.FullSourceText, method.ResultVariable, span),
+            MappedMethodInvocationAction mapped => new MappedMethodStatementIr(mapped.FullSourceText, mapped.TargetStatements, mapped.TargetStatementsByTarget, mapped.RequiresReview, mapped.RequiresReviewByTarget, mapped.TargetExpr == null ? null : ToLocator(mapped.TargetExpr), mapped.SourceMethod, mapped.ResultVariable, span),
+            MappedExpressionAssertionAction mappedAssertion => new MappedExpressionAssertionStatementIr(mappedAssertion.FullSourceText, mappedAssertion.TargetExpressionTemplate, mappedAssertion.RequiresReview, mappedAssertion.TargetExpr == null ? null : ToLocator(mappedAssertion.TargetExpr), mappedAssertion.SourceMethod, span),
+            AssertAreEqualAction areEqual => new AssertAreEqualStatementIr(ToValue(areEqual.ExpectedExpression), ToValue(areEqual.ActualExpression), span),
+            AssertThatAction assertThat => new AssertThatStatementIr(ToValue(assertThat.ActualExpression), ToValue(assertThat.ConstraintExpression), span),
+            AssertMultipleAction assertMultiple => new AssertMultipleStatementIr(assertMultiple.FullSourceText, assertMultiple.Actions.Select(a => ToStatement(a, filePath, diagnostics)).ToArray(), span),
+            TableCountAssertionAction tableCount => new TableCountAssertionStatementIr(ToLocator(tableCount.Target), tableCount.Kind.ToString(), tableCount.ExpectedCount == null ? null : ToValue(tableCount.ExpectedCount), tableCount.SourceText, span),
+            TableRowAccessAction tableRow => new TableRowAccessStatementIr(ToLocator(tableRow.Target), ToValue(tableRow.IndexExpression), tableRow.SourceText, span),
+            TableRowTextAccessAction tableRowText => new TableRowTextAccessStatementIr(ToLocator(tableRowText.Target), ToValue(tableRowText.IndexExpression), tableRowText.SourceText, span),
+            ConditionalBlockAction conditional => new ConditionalBlockStatementIr(
+                ToValue(conditional.ConditionExpression),
+                conditional.IfActions.Select(a => ToStatement(a, filePath, diagnostics)).ToArray(),
+                conditional.ElseIfActions.Select(branch => new ConditionalBranchIr(ToValue(branch.Condition), branch.Actions.Select(a => ToStatement(a, filePath, diagnostics)).ToArray())).ToArray(),
+                conditional.ElseActions.Select(a => ToStatement(a, filePath, diagnostics)).ToArray(),
+                span),
             RawStatementAction raw => new RawStatementIr(raw.SourceText, "csharp", RawStatementSafety.Unknown, span),
-            MappedMethodInvocationAction mapped => new RawStatementIr(mapped.FullSourceText, "csharp", RawStatementSafety.TargetSafe, span),
             UnsupportedAction unsupported => Unsupported(unsupported.SourceText, unsupported.Reason, span, diagnostics),
-            PageObjectFieldAction field => new RawStatementIr(field.FullDeclaration, "csharp", RawStatementSafety.Unknown, span),
             _ => Unsupported(action.ToString() ?? action.GetType().Name, $"Legacy action {action.GetType().Name} has no IR V2 mapping yet.", span, diagnostics)
         };
     }
@@ -135,8 +152,28 @@ public static class LegacyIrBridge
             FillStatementIr fill => new SendKeysAction(line, ToLegacyTarget(fill.Target), ToLegacyValue(fill.Value)),
             AssertionStatementIr { Intent: TextAssertionIntent text } => new TextAssertionAction(line, ToLegacyTarget(text.Target), ParseTextKind(text.Kind), text.Expected == null ? null : ToLegacyValue(text.Expected)),
             AssertionStatementIr { Intent: VisibilityAssertionIntent visibility } => new VisibilityAssertionAction(line, ToLegacyTarget(visibility.Target), ParseVisibilityKind(visibility.Kind)),
+            AssertionStatementIr { Intent: UrlAssertionIntent url } => new UrlAssertionAction(line, ParseUrlKind(url.Kind), ToLegacyValue(url.Expected)),
             WaitStatementIr { Intent: LocatorWaitIntent wait } => new WaitForAction(line, ToLegacyTarget(wait.Target), sourceMethod: wait.SourceMethod, kind: ParseWaitKind(wait.Kind)),
             NavigationStatementIr { Intent: UrlNavigationIntent nav } => new NavigationAction(line, ToLegacyValue(nav.Url), nav.ResultVariable, ToLegacyValue(nav.Url), targetStatement: nav.TargetStatement),
+            PressStatementIr press => new PressAction(line, ToLegacyTarget(press.Target), press.KeyName),
+            DeclarationStatementIr declaration => new LocalDeclarationAction(line, declaration.VariableName, declaration.VariableType, ToLegacyValue(declaration.Initializer)),
+            LocatorDeclarationStatementIr locator => new LocatorDeclarationAction(line, locator.VariableName, ToLegacyLocatorExpression(locator.Locator), locator.SourceText),
+            PageObjectFieldStatementIr field => new PageObjectFieldAction(line, field.FieldName, field.FieldType, field.Initializer == null ? null : ToLegacyValue(field.Initializer), field.FullDeclaration, field.RequiresSemicolon),
+            MethodInvocationStatementIr method => new MethodInvocationAction(line, method.ReceiverExpression, method.MethodName, method.SourceText, method.Arguments.Select(ToLegacyValue).ToArray(), method.ResultVariable),
+            MappedMethodStatementIr mapped => new MappedMethodInvocationAction(line, mapped.SourceText, mapped.TargetStatements, mapped.RequiresReview, mapped.Target == null ? null : ToLegacyTarget(mapped.Target), mapped.SourceMethod, mapped.ResultVariable, mapped.TargetStatementsByTarget, mapped.RequiresReviewByTarget),
+            MappedExpressionAssertionStatementIr mappedAssertion => new MappedExpressionAssertionAction(line, mappedAssertion.SourceText, mappedAssertion.TargetExpressionTemplate, mappedAssertion.RequiresReview, mappedAssertion.Target == null ? null : ToLegacyTarget(mappedAssertion.Target), mappedAssertion.SourceMethod),
+            AssertAreEqualStatementIr areEqual => new AssertAreEqualAction(line, ToLegacyValue(areEqual.Expected), ToLegacyValue(areEqual.Actual)),
+            AssertThatStatementIr assertThat => new AssertThatAction(line, ToLegacyValue(assertThat.Actual), ToLegacyValue(assertThat.Constraint)),
+            AssertMultipleStatementIr assertMultiple => new AssertMultipleAction(line, assertMultiple.SourceText, assertMultiple.Statements.Select(ToLegacyAction).ToArray()),
+            TableCountAssertionStatementIr tableCount => new TableCountAssertionAction(line, ToLegacyTarget(tableCount.Target), ParseTableCountKind(tableCount.Kind), tableCount.ExpectedCount == null ? null : ToLegacyValue(tableCount.ExpectedCount), tableCount.SourceText),
+            TableRowAccessStatementIr tableRow => new TableRowAccessAction(line, ToLegacyTarget(tableRow.Target), ToLegacyValue(tableRow.Index), tableRow.SourceText),
+            TableRowTextAccessStatementIr tableRowText => new TableRowTextAccessAction(line, ToLegacyTarget(tableRowText.Target), ToLegacyValue(tableRowText.Index), tableRowText.SourceText),
+            ConditionalBlockStatementIr conditional => new ConditionalBlockAction(
+                line,
+                ToLegacyValue(conditional.Condition),
+                conditional.IfStatements.Select(ToLegacyAction).ToArray(),
+                conditional.ElseIfBranches.Select(branch => (ToLegacyValue(branch.Condition), (IReadOnlyList<TestAction>)branch.Statements.Select(ToLegacyAction).ToArray())).ToArray(),
+                conditional.ElseStatements.Select(ToLegacyAction).ToArray()),
             RawStatementIr raw => new RawStatementAction(line, raw.Text),
             UnsupportedStatementIr unsupported => new UnsupportedAction(line, unsupported.Text, unsupported.Reason),
             _ => new UnsupportedAction(line, statement.ToString() ?? statement.GetType().Name, $"IR V2 statement {statement.GetType().Name} cannot be lowered to legacy model yet.")
@@ -166,7 +203,21 @@ public static class LegacyIrBridge
         _ => value.ToString() ?? string.Empty
     };
 
+    static string ToLegacyLocatorExpression(LocatorRef locator) => locator switch
+    {
+        ByCss css => css.Selector,
+        ByXpath xpath => xpath.Selector,
+        ByText text => text.Text,
+        ByTestId testId => testId.Value,
+        PageObjectLocator pageObject => pageObject.Expression,
+        RawLocatorExpression raw => raw.Expression,
+        UnresolvedLocator unresolved => unresolved.SourceExpression,
+        _ => locator.ToString() ?? string.Empty
+    };
+
     static TextAssertionKind ParseTextKind(string kind) => Enum.TryParse<TextAssertionKind>(kind, ignoreCase: true, out var value) ? value : TextAssertionKind.TextEquals;
     static VisibilityKind ParseVisibilityKind(string kind) => Enum.TryParse<VisibilityKind>(kind, ignoreCase: true, out var value) ? value : VisibilityKind.Visible;
+    static UrlAssertionKind ParseUrlKind(string kind) => Enum.TryParse<UrlAssertionKind>(kind, ignoreCase: true, out var value) ? value : UrlAssertionKind.UrlEquals;
     static WaitForKind ParseWaitKind(string kind) => Enum.TryParse<WaitForKind>(kind, ignoreCase: true, out var value) ? value : WaitForKind.ProductStateLoaded;
+    static TableCountKind ParseTableCountKind(string kind) => Enum.TryParse<TableCountKind>(kind, ignoreCase: true, out var value) ? value : TableCountKind.CountEquals;
 }

@@ -7,6 +7,7 @@
   "additionalProperties": true,
   "required": ["Source", "Target", "Project"],
   "properties": {
+    "SchemaVersion": { "type": "string", "const": "migration-profile/v2" },
     "SourceProjectName": { "type": "string" },
     "Source": {
       "type": "object",
@@ -35,7 +36,8 @@
         "TargetKnownTypes": { "type": "array", "items": { "type": "string" } },
         "TargetKnownIdentifiers": { "type": "array", "items": { "type": "string" } },
         "TestHost": { "type": "object" },
-        "LocatorSettings": { "type": "object" }
+        "LocatorSettings": { "type": "object" },
+        "TargetStatementDefaults": { "type": "object" }
       }
     },
     "Project": {
@@ -49,7 +51,9 @@
         "Tables": { "type": "array", "items": { "type": "object" } },
         "Pagination": { "type": "array", "items": { "type": "object" } },
         "NavigationUrls": { "type": "object", "additionalProperties": { "type": "string" } },
-        "Scopes": { "type": "array", "items": { "type": "object" } }
+        "Scopes": { "type": "array", "items": { "type": "object" } },
+        "QualityGates": { "type": "object" },
+        "Verification": { "type": "object" }
       }
     },
     "LegacyConfig": {

@@ -24,8 +24,12 @@ public sealed class CSharpSeleniumFrontend : TestFileParserSourceFrontend
     static readonly string[] AliasesList =
     {
         "csharp-selenium",
+        "selenium-csharp",
         "selenium-cs",
         "selenium-dotnet",
-        "cs-selenium"
+        "dotnet-selenium",
+        "cs-selenium",
+        "csharp",
+        "cs"
     };
 }

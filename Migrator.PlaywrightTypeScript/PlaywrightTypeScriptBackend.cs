@@ -1,6 +1,7 @@
 using System.Text;
 using Migrator.Core;
 using Migrator.Core.Models;
+using Migrator.Core.Models.Ir;
 
 namespace Migrator.PlaywrightTypeScript;
 
@@ -10,6 +11,7 @@ namespace Migrator.PlaywrightTypeScript;
 public sealed class PlaywrightTypeScriptBackend : ITargetBackend
 {
     readonly PlaywrightTypeScriptRenderer _renderer;
+    readonly PlaywrightTypeScriptIrV2Renderer _irV2Renderer;
 
     public PlaywrightTypeScriptBackend()
         : this(new PlaywrightTypeScriptRenderer())
@@ -17,8 +19,14 @@ public sealed class PlaywrightTypeScriptBackend : ITargetBackend
     }
 
     public PlaywrightTypeScriptBackend(PlaywrightTypeScriptRenderer renderer)
+        : this(renderer, new PlaywrightTypeScriptIrV2Renderer())
+    {
+    }
+
+    public PlaywrightTypeScriptBackend(PlaywrightTypeScriptRenderer renderer, PlaywrightTypeScriptIrV2Renderer irV2Renderer)
     {
         _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
+        _irV2Renderer = irV2Renderer ?? throw new ArgumentNullException(nameof(irV2Renderer));
     }
 
     public TargetSpec Target { get; } = new(
@@ -29,6 +37,8 @@ public sealed class PlaywrightTypeScriptBackend : ITargetBackend
     public IReadOnlyCollection<string> Aliases { get; } = PlaywrightTypeScriptTarget.Aliases;
 
     public string Render(TestFileModel model) => _renderer.Render(model);
+
+    public string RenderDocument(MigrationDocument document) => _irV2Renderer.Render(document);
 
     public string GetDefaultFileName(TestFileModel model) => $"{ToKebabCase(model.ClassName)}.spec.ts";
 

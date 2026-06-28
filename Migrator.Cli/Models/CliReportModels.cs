@@ -165,4 +165,4 @@ record DoctorReport(DateTimeOffset GeneratedAtUtc, string Status, string InputPa
 record DoctorCheck(string Status, string Code, string Message, string? Location, string SuggestedAction);
 record SimpleProcessResult(int ExitCode, string StdOut, string StdErr);
 
-record CliOptions(string Mode, string Input, string Out, string? Config, string[] Configs, string Format, bool FailOnUnsupported, bool FailOnTodo, string Workspace, string? Before, string? After, string Target, string? TsProject, bool RecursiveArtifacts);
+record CliOptions(string Mode, string Input, string Out, string? Config, string[] Configs, string Format, bool FailOnUnsupported, bool FailOnTodo, string Workspace, string? Before, string? After, string Target, string Source, string? TsProject, bool RecursiveArtifacts, string IrVersion, string RenderIr);

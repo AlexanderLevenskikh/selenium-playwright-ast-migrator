@@ -1,0 +1,241 @@
+using System.Diagnostics;
+using System.Reflection;
+using System.Text.Json;
+using Xunit;
+
+namespace Migrator.Tests;
+
+[Collection("CliProcess")]
+public class SourceFrontendCliTests
+{
+    [Fact]
+    public void Migrate_SourceJavaSelenium_TargetTypeScript_GeneratesSpecFile()
+    {
+        var temp = CreateTempDir();
+        try
+        {
+            var inputDir = Path.Combine(temp, "java-input");
+            var outputDir = Path.Combine(temp, "generated");
+            Directory.CreateDirectory(inputDir);
+
+            File.WriteAllText(Path.Combine(inputDir, "LoginTests.java"), """
+            package sample.tests;
+
+            import org.junit.jupiter.api.Test;
+            import static org.junit.jupiter.api.Assertions.assertEquals;
+            import org.openqa.selenium.By;
+            import org.openqa.selenium.WebDriver;
+
+            public class LoginTests {
+                private WebDriver driver;
+
+                @Test
+                public void savesName() {
+                    driver.findElement(By.id("save")).click();
+                    driver.findElement(By.cssSelector(".name")).sendKeys("Alex");
+                    assertEquals("Saved", driver.findElement(By.cssSelector(".status")).getText());
+                }
+            }
+            """);
+
+            var result = RunCli($"--mode migrate --source java-selenium --input \"{inputDir}\" --out \"{outputDir}\" --target ts --format both");
+
+            AssertCliSuccess(result);
+            var generatedFiles = Directory.GetFiles(outputDir, "*.spec.ts");
+            Assert.Single(generatedFiles);
+
+            var generated = File.ReadAllText(generatedFiles[0]);
+            Assert.Contains("test('savesName'", generated);
+            Assert.Contains("page.locator('#save')", generated);
+            Assert.Contains("page.locator('.name')", generated);
+            Assert.Contains("toHaveText", generated);
+        }
+        finally
+        {
+            TryDelete(temp);
+        }
+    }
+
+    [Fact]
+    public void DumpIr_SourceJavaSelenium_V2_RecordsJavaSourceSpec()
+    {
+        var temp = CreateTempDir();
+        try
+        {
+            var inputDir = Path.Combine(temp, "java-input");
+            var outputDir = Path.Combine(temp, "ir-dump");
+            Directory.CreateDirectory(inputDir);
+
+            File.WriteAllText(Path.Combine(inputDir, "SmokeTests.java"), """
+            package sample.tests;
+
+            import org.junit.jupiter.api.Test;
+            import org.openqa.selenium.By;
+            import org.openqa.selenium.WebDriver;
+
+            public class SmokeTests {
+                private WebDriver driver;
+
+                @Test
+                public void clicksSave() {
+                    driver.findElement(By.id("save")).click();
+                }
+            }
+            """);
+
+            var result = RunCli($"--mode dump-ir --source java-selenium --input \"{inputDir}\" --out \"{outputDir}\" --target ts --ir-version v2 --format json");
+
+            AssertCliSuccess(result);
+            var dumpPath = Path.Combine(outputDir, "ir-dump.json");
+            Assert.True(File.Exists(dumpPath), "Expected ir-dump.json to be written.");
+
+            using var json = JsonDocument.Parse(File.ReadAllText(dumpPath));
+            var root = json.RootElement;
+            Assert.Equal("test-ir/v2", root.GetProperty("SchemaVersion").GetString());
+            Assert.Equal("selenium-java", root.GetProperty("Source").GetProperty("Id").GetString());
+            Assert.Equal("java", root.GetProperty("Source").GetProperty("Language").GetString());
+            Assert.Equal("playwright-typescript", root.GetProperty("Target").GetProperty("Id").GetString());
+        }
+        finally
+        {
+            TryDelete(temp);
+        }
+    }
+
+    [Fact]
+    public void ConfigNormalize_SourceJavaSelenium_WritesJavaSourceSpec()
+    {
+        var temp = CreateTempDir();
+        try
+        {
+            var configPath = Path.Combine(temp, "adapter-config.json");
+            var outputDir = Path.Combine(temp, "normalized");
+            File.WriteAllText(configPath, """
+            {
+              "SourceProjectName": "JavaSample",
+              "Methods": []
+            }
+            """);
+
+            var result = RunCli($"--mode config-normalize --source java-selenium --config \"{configPath}\" --out \"{outputDir}\" --target playwright-typescript --format json");
+
+            AssertCliSuccess(result);
+            using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputDir, "migration-profile.v2.json")));
+            var source = json.RootElement.GetProperty("Source");
+            Assert.Equal("selenium-java", source.GetProperty("Id").GetString());
+            Assert.Equal("java", source.GetProperty("Language").GetString());
+            Assert.Equal("selenium", source.GetProperty("Framework").GetString());
+        }
+        finally
+        {
+            TryDelete(temp);
+        }
+    }
+
+    [Fact]
+    public void Migrate_SourcePythonSelenium_TargetTypeScript_GeneratesSpecFile()
+    {
+        var temp = CreateTempDir();
+        try
+        {
+            var inputDir = Path.Combine(temp, "python-input");
+            var outputDir = Path.Combine(temp, "generated");
+            Directory.CreateDirectory(inputDir);
+            File.WriteAllText(Path.Combine(inputDir, "test_smoke.py"), """
+            from selenium.webdriver.common.by import By
+
+            def test_smoke(driver):
+                driver.get("/login")
+                save = driver.find_element(By.ID, "save")
+                save.click()
+                driver.find_element(By.CSS_SELECTOR, ".name").send_keys("Alex")
+                assert driver.find_element(By.CSS_SELECTOR, ".status").text == "Saved"
+            """);
+
+            var result = RunCli($"--mode migrate --source python-selenium --input \"{inputDir}\" --out \"{outputDir}\" --target ts --format json");
+
+            AssertCliSuccess(result);
+            var generatedFiles = Directory.GetFiles(outputDir, "*.spec.ts");
+            Assert.Single(generatedFiles);
+
+            var generated = File.ReadAllText(generatedFiles[0]);
+            Assert.Contains("test('test_smoke'", generated);
+            Assert.Contains("page.locator('#save')", generated);
+            Assert.Contains("page.locator('.name')", generated);
+            Assert.Contains("toHaveText", generated);
+        }
+        finally
+        {
+            TryDelete(temp);
+        }
+    }
+
+    static void AssertCliSuccess(CliResult result)
+    {
+        Assert.True(
+            result.ExitCode == 0,
+            $"Expected CLI exit code 0, got {result.ExitCode}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
+    }
+
+    static CliResult RunCli(string arguments)
+    {
+        var repoRoot = GetRepoRoot();
+        if (repoRoot == null)
+            throw new InvalidOperationException("Could not find repo root (Migrator.sln not found)");
+
+        var cliProject = Path.Combine(repoRoot, "Migrator.Cli", "Migrator.Cli.csproj");
+        var psi = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            Arguments = $"run --project \"{cliProject}\" -- {arguments}",
+            WorkingDirectory = repoRoot,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = Process.Start(psi)!;
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        return new CliResult(process.ExitCode, stdout, stderr);
+    }
+
+    static string? GetRepoRoot()
+    {
+        var dir = new DirectoryInfo(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!);
+        for (var i = 0; i < 10; i++)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Migrator.sln")))
+                return dir.FullName;
+            dir = dir.Parent;
+            if (dir == null)
+                break;
+        }
+
+        return null;
+    }
+
+    static string CreateTempDir()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "migrator-source-frontend-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(path);
+        return path;
+    }
+
+    static void TryDelete(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, recursive: true);
+        }
+        catch
+        {
+            // Best-effort cleanup only.
+        }
+    }
+
+    sealed record CliResult(int ExitCode, string StdOut, string StdErr);
+}
