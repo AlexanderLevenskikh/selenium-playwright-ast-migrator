@@ -17,38 +17,68 @@ public sealed class JavaSeleniumTestFileParser : ITestFileParser
 
     static readonly Regex LocatorDeclarationRegex = new("""(?:WebElement|var)\s+(?<name>[A-Za-z_]\w*)\s*=\s*(?<driver>[^;]*?)\.findElement\s*\(\s*By\.(?<by>id|cssSelector|xpath|name|className|linkText|partialLinkText)\s*\(\s*(?<selector>"(?:\\.|[^"])*")\s*\)\s*\)\s*;?""", RegexOptions.Compiled);
     static readonly Regex ByDeclarationRegex = new("""(?:private|protected|public|static|final|transient|volatile|\s)*\bBy\s+(?<name>[A-Za-z_]\w*)\s*=\s*By\.(?<by>id|cssSelector|xpath|name|className|linkText|partialLinkText)\s*\(\s*(?<selector>"(?:\\.|[^"])*")\s*\)\s*;?""", RegexOptions.Compiled);
-    static readonly Regex LocatorDeclarationByVariableRegex = new("""(?:WebElement|var)\s+(?<name>[A-Za-z_]\w*)\s*=\s*(?<driver>[^;]*?)\.findElement\s*\(\s*(?<locator>[A-Za-z_]\w*)\s*\)\s*;?""", RegexOptions.Compiled);
+    static readonly Regex FindByFieldRegex = new("""@FindBy\s*\(\s*(?<args>[^)]*)\)\s*(?:private|protected|public|static|final|transient|volatile|\s)*\bWebElement\s+(?<name>[A-Za-z_]\w*)\s*;""", RegexOptions.Compiled | RegexOptions.Singleline);
+    static readonly Regex LocatorDeclarationByVariableRegex = new("""(?:WebElement|var)\s+(?<name>[A-Za-z_]\w*)\s*=\s*(?<driver>[^;]*?)\.findElement\s*\(\s*(?:this\.)?(?<locator>[A-Za-z_]\w*)\s*\)\s*;?""", RegexOptions.Compiled);
     static readonly Regex ClickRegex = new("""\.findElement\s*\(\s*By\.(?<by>id|cssSelector|xpath|name|className|linkText|partialLinkText)\s*\(\s*(?<selector>"(?:\\.|[^"])*")\s*\)\s*\)\s*\.click\s*\(\s*\)""", RegexOptions.Compiled);
     static readonly Regex SendKeysRegex = new("""\.findElement\s*\(\s*By\.(?<by>id|cssSelector|xpath|name|className)\s*\(\s*(?<selector>"(?:\\.|[^"])*")\s*\)\s*\)\s*\.sendKeys\s*\(\s*(?<value>[^)]*)\s*\)""", RegexOptions.Compiled);
     static readonly Regex ClearRegex = new("""\.findElement\s*\(\s*By\.(?<by>id|cssSelector|xpath|name|className)\s*\(\s*(?<selector>"(?:\\.|[^"])*")\s*\)\s*\)\s*\.clear\s*\(\s*\)""", RegexOptions.Compiled);
-    static readonly Regex ClickByVariableRegex = new("""\.findElement\s*\(\s*(?<locator>[A-Za-z_]\w*)\s*\)\s*\.click\s*\(\s*\)""", RegexOptions.Compiled);
-    static readonly Regex SendKeysByVariableRegex = new("""\.findElement\s*\(\s*(?<locator>[A-Za-z_]\w*)\s*\)\s*\.sendKeys\s*\(\s*(?<value>[^)]*)\s*\)""", RegexOptions.Compiled);
-    static readonly Regex ClearByVariableRegex = new("""\.findElement\s*\(\s*(?<locator>[A-Za-z_]\w*)\s*\)\s*\.clear\s*\(\s*\)""", RegexOptions.Compiled);
-    static readonly Regex AssertEqualsTextRegex = new("""assertEquals\s*\(\s*(?<expected>[^,]+)\s*,\s*[^;]*?\.findElement\s*\(\s*By\.(?<by>id|cssSelector|xpath|name|className)\s*\(\s*(?<selector>"(?:\\.|[^"])*")\s*\)\s*\)\s*\.getText\s*\(\s*\)\s*\)""", RegexOptions.Compiled);
-    static readonly Regex AssertTextContainsRegex = new("""assertTrue\s*\(\s*[^;]*?\.findElement\s*\(\s*By\.(?<by>id|cssSelector|xpath|name|className)\s*\(\s*(?<selector>"(?:\\.|[^"])*")\s*\)\s*\)\s*\.getText\s*\(\s*\)\s*\.contains\s*\(\s*(?<expected>[^)]*)\s*\)\s*\)""", RegexOptions.Compiled);
-    static readonly Regex AssertDisplayedRegex = new("""assert(?<assertion>True|False)\s*\(\s*[^;]*?\.findElement\s*\(\s*By\.(?<by>id|cssSelector|xpath|name|className)\s*\(\s*(?<selector>"(?:\\.|[^"])*")\s*\)\s*\)\s*\.isDisplayed\s*\(\s*\)\s*\)""", RegexOptions.Compiled);
-    static readonly Regex AssertEqualsTextByVariableRegex = new("""assertEquals\s*\(\s*(?<expected>[^,]+)\s*,\s*[^;]*?\.findElement\s*\(\s*(?<locator>[A-Za-z_]\w*)\s*\)\s*\.getText\s*\(\s*\)\s*\)""", RegexOptions.Compiled);
-    static readonly Regex AssertTextContainsByVariableRegex = new("""assertTrue\s*\(\s*[^;]*?\.findElement\s*\(\s*(?<locator>[A-Za-z_]\w*)\s*\)\s*\.getText\s*\(\s*\)\s*\.contains\s*\(\s*(?<expected>[^)]*)\s*\)\s*\)""", RegexOptions.Compiled);
-    static readonly Regex AssertDisplayedByVariableRegex = new("""assert(?<assertion>True|False)\s*\(\s*[^;]*?\.findElement\s*\(\s*(?<locator>[A-Za-z_]\w*)\s*\)\s*\.isDisplayed\s*\(\s*\)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex ClickByVariableRegex = new("""\.findElement\s*\(\s*(?:this\.)?(?<locator>[A-Za-z_]\w*)\s*\)\s*\.click\s*\(\s*\)""", RegexOptions.Compiled);
+    static readonly Regex SendKeysByVariableRegex = new("""\.findElement\s*\(\s*(?:this\.)?(?<locator>[A-Za-z_]\w*)\s*\)\s*\.sendKeys\s*\(\s*(?<value>[^)]*)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex ClearByVariableRegex = new("""\.findElement\s*\(\s*(?:this\.)?(?<locator>[A-Za-z_]\w*)\s*\)\s*\.clear\s*\(\s*\)""", RegexOptions.Compiled);
+    static readonly Regex AssertEqualsTextRegex = new("""(?:Assertions\.|Assert\.)?assertEquals\s*\(\s*(?:(?<message>"(?:\\.|[^"])*")\s*,\s*)?(?<expected>[^,]+)\s*,\s*[^;]*?\.findElement\s*\(\s*By\.(?<by>id|cssSelector|xpath|name|className|linkText|partialLinkText)\s*\(\s*(?<selector>"(?:\\.|[^"])*")\s*\)\s*\)\s*\.getText\s*\(\s*\)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex AssertTextContainsRegex = new("""(?:Assertions\.|Assert\.)?assertTrue\s*\(\s*(?:(?<message>"(?:\\.|[^"])*")\s*,\s*)?[^;]*?\.findElement\s*\(\s*By\.(?<by>id|cssSelector|xpath|name|className|linkText|partialLinkText)\s*\(\s*(?<selector>"(?:\\.|[^"])*")\s*\)\s*\)\s*\.getText\s*\(\s*\)\s*\.contains\s*\(\s*(?<expected>[^)]*)\s*\)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex AssertDisplayedRegex = new("""(?:Assertions\.|Assert\.)?assert(?<assertion>True|False)\s*\(\s*(?:(?<message>"(?:\\.|[^"])*")\s*,\s*)?[^;]*?\.findElement\s*\(\s*By\.(?<by>id|cssSelector|xpath|name|className|linkText|partialLinkText)\s*\(\s*(?<selector>"(?:\\.|[^"])*")\s*\)\s*\)\s*\.isDisplayed\s*\(\s*\)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex AssertEqualsTextByVariableRegex = new("""(?:Assertions\.|Assert\.)?assertEquals\s*\(\s*(?:(?<message>"(?:\\.|[^"])*")\s*,\s*)?(?<expected>[^,]+)\s*,\s*[^;]*?\.findElement\s*\(\s*(?:this\.)?(?<locator>[A-Za-z_]\w*)\s*\)\s*\.getText\s*\(\s*\)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex AssertTextContainsByVariableRegex = new("""(?:Assertions\.|Assert\.)?assertTrue\s*\(\s*(?:(?<message>"(?:\\.|[^"])*")\s*,\s*)?[^;]*?\.findElement\s*\(\s*(?:this\.)?(?<locator>[A-Za-z_]\w*)\s*\)\s*\.getText\s*\(\s*\)\s*\.contains\s*\(\s*(?<expected>[^)]*)\s*\)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex AssertDisplayedByVariableRegex = new("""(?:Assertions\.|Assert\.)?assert(?<assertion>True|False)\s*\(\s*(?:(?<message>"(?:\\.|[^"])*")\s*,\s*)?[^;]*?\.findElement\s*\(\s*(?:this\.)?(?<locator>[A-Za-z_]\w*)\s*\)\s*\.isDisplayed\s*\(\s*\)\s*\)""", RegexOptions.Compiled);
     static readonly Regex DriverGetRegex = new("""\b(?:driver|webDriver|browser)\s*\.\s*(?:get|navigate\s*\(\s*\)\s*\.\s*to)\s*\(\s*(?<url>[^)]*)\s*\)\s*;?""", RegexOptions.Compiled);
-    static readonly Regex WaitLocatedRegex = new("""(?:wait\.until|new\s+WebDriverWait\s*\(.*?\)\s*\.until)\s*\(\s*ExpectedConditions\.(?<condition>visibilityOfElementLocated|invisibilityOfElementLocated|presenceOfElementLocated|elementToBeClickable)\s*\(\s*By\.(?<by>id|cssSelector|xpath|name|className)\s*\(\s*(?<selector>"(?:\\.|[^"])*")\s*\)\s*\)\s*\)\s*;?""", RegexOptions.Compiled);
-    static readonly Regex WaitLocatedByVariableRegex = new("""(?:wait\.until|new\s+WebDriverWait\s*\(.*?\)\s*\.until)\s*\(\s*ExpectedConditions\.(?<condition>visibilityOfElementLocated|invisibilityOfElementLocated|presenceOfElementLocated|elementToBeClickable)\s*\(\s*(?<locator>[A-Za-z_]\w*)\s*\)\s*\)\s*;?""", RegexOptions.Compiled);
-    static readonly Regex WaitElementRegex = new("""(?:wait\.until|new\s+WebDriverWait\s*\(.*?\)\s*\.until)\s*\(\s*ExpectedConditions\.(?<condition>visibilityOf|invisibilityOf|elementToBeClickable)\s*\(\s*(?<variable>[A-Za-z_]\w*)\s*\)\s*\)\s*;?""", RegexOptions.Compiled);
-    static readonly Regex VariableClickRegex = new("""^(?<variable>[A-Za-z_]\w*)\s*\.click\s*\(\s*\)\s*;?$""", RegexOptions.Compiled);
-    static readonly Regex VariableSendKeysRegex = new("""^(?<variable>[A-Za-z_]\w*)\s*\.sendKeys\s*\(\s*(?<value>[^)]*)\s*\)\s*;?$""", RegexOptions.Compiled);
-    static readonly Regex VariableClearRegex = new("""^(?<variable>[A-Za-z_]\w*)\s*\.clear\s*\(\s*\)\s*;?$""", RegexOptions.Compiled);
-    static readonly Regex VariableDisplayedRegex = new("""assert(?<assertion>True|False)\s*\(\s*(?<variable>[A-Za-z_]\w*)\s*\.isDisplayed\s*\(\s*\)\s*\)""", RegexOptions.Compiled);
-    static readonly Regex VariableAssertEqualsTextRegex = new("""assertEquals\s*\(\s*(?<expected>[^,]+)\s*,\s*(?<variable>[A-Za-z_]\w*)\s*\.getText\s*\(\s*\)\s*\)""", RegexOptions.Compiled);
-    static readonly Regex VariableAssertContainsTextRegex = new("""assertTrue\s*\(\s*(?<variable>[A-Za-z_]\w*)\s*\.getText\s*\(\s*\)\s*\.contains\s*\(\s*(?<expected>[^)]*)\s*\)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex WaitLocatedRegex = new("""(?:[A-Za-z_]\w*\.until|new\s+WebDriverWait\s*\(.*?\)\s*\.until)\s*\(\s*(?:ExpectedConditions\.)?(?<condition>visibilityOfElementLocated|invisibilityOfElementLocated|presenceOfElementLocated|elementToBeClickable)\s*\(\s*By\.(?<by>id|cssSelector|xpath|name|className|linkText|partialLinkText)\s*\(\s*(?<selector>"(?:\\.|[^"])*")\s*\)\s*\)\s*\)\s*;?""", RegexOptions.Compiled);
+    static readonly Regex WaitLocatedByVariableRegex = new("""(?:[A-Za-z_]\w*\.until|new\s+WebDriverWait\s*\(.*?\)\s*\.until)\s*\(\s*(?:ExpectedConditions\.)?(?<condition>visibilityOfElementLocated|invisibilityOfElementLocated|presenceOfElementLocated|elementToBeClickable)\s*\(\s*(?:this\.)?(?<locator>[A-Za-z_]\w*)\s*\)\s*\)\s*;?""", RegexOptions.Compiled);
+    static readonly Regex WaitElementRegex = new("""(?:[A-Za-z_]\w*\.until|new\s+WebDriverWait\s*\(.*?\)\s*\.until)\s*\(\s*(?:ExpectedConditions\.)?(?<condition>visibilityOf|invisibilityOf|elementToBeClickable)\s*\(\s*(?:this\.)?(?<variable>[A-Za-z_]\w*)\s*\)\s*\)\s*;?""", RegexOptions.Compiled);
+    static readonly Regex WaitFindElementRegex = new("""(?:[A-Za-z_]\w*\.until|new\s+WebDriverWait\s*\(.*?\)\s*\.until)\s*\(\s*(?:ExpectedConditions\.)?(?<condition>visibilityOf|invisibilityOf|elementToBeClickable)\s*\(\s*[^;]*?\.findElement\s*\(\s*By\.(?<by>id|cssSelector|xpath|name|className|linkText|partialLinkText)\s*\(\s*(?<selector>"(?:\\.|[^"])*")\s*\)\s*\)\s*\)\s*\)\s*;?""", RegexOptions.Compiled);
+    static readonly Regex WaitDeclarationRegex = new("""(?:WebDriverWait|var)\s+[A-Za-z_]\w*\s*=\s*new\s+WebDriverWait\s*\([^;]*\)\s*;?""", RegexOptions.Compiled);
+    static readonly Regex AssertEqualsTextActualFirstRegex = new("""(?:Assertions\.|Assert\.)?assertEquals\s*\(\s*[^;]*?\.findElement\s*\(\s*By\.(?<by>id|cssSelector|xpath|name|className|linkText|partialLinkText)\s*\(\s*(?<selector>"(?:\\.|[^"])*")\s*\)\s*\)\s*\.getText\s*\(\s*\)\s*,\s*(?<expected>.+?)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex AssertEqualsTextByVariableActualFirstRegex = new("""(?:Assertions\.|Assert\.)?assertEquals\s*\(\s*[^;]*?\.findElement\s*\(\s*(?:this\.)?(?<locator>[A-Za-z_]\w*)\s*\)\s*\.getText\s*\(\s*\)\s*,\s*(?<expected>.+?)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex VariableAssertEqualsTextActualFirstRegex = new("""(?:Assertions\.|Assert\.)?assertEquals\s*\(\s*(?:this\.)?(?<variable>[A-Za-z_]\w*)\s*\.getText\s*\(\s*\)\s*,\s*(?<expected>.+?)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex AssertThatTextRegex = new("""assertThat\s*\(\s*(?:(?<message>"(?:\\.|[^"])*")\s*,\s*)?[^;]*?\.findElement\s*\(\s*By\.(?<by>id|cssSelector|xpath|name|className|linkText|partialLinkText)\s*\(\s*(?<selector>"(?:\\.|[^"])*")\s*\)\s*\)\s*\.getText\s*\(\s*\)\s*,\s*(?<matcher>is|equalTo|containsString)\s*\(\s*(?<expected>.+?)\s*\)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex AssertThatTextByVariableRegex = new("""assertThat\s*\(\s*(?:(?<message>"(?:\\.|[^"])*")\s*,\s*)?[^;]*?\.findElement\s*\(\s*(?:this\.)?(?<locator>[A-Za-z_]\w*)\s*\)\s*\.getText\s*\(\s*\)\s*,\s*(?<matcher>is|equalTo|containsString)\s*\(\s*(?<expected>.+?)\s*\)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex VariableAssertThatTextRegex = new("""assertThat\s*\(\s*(?:(?<message>"(?:\\.|[^"])*")\s*,\s*)?(?:this\.)?(?<variable>[A-Za-z_]\w*)\s*\.getText\s*\(\s*\)\s*,\s*(?<matcher>is|equalTo|containsString)\s*\(\s*(?<expected>.+?)\s*\)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex AssertThatDisplayedRegex = new("""assertThat\s*\(\s*(?:(?<message>"(?:\\.|[^"])*")\s*,\s*)?[^;]*?\.findElement\s*\(\s*By\.(?<by>id|cssSelector|xpath|name|className|linkText|partialLinkText)\s*\(\s*(?<selector>"(?:\\.|[^"])*")\s*\)\s*\)\s*\.isDisplayed\s*\(\s*\)\s*,\s*(?:is|equalTo)\s*\(\s*(?<expected>true|false)\s*\)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex AssertThatDisplayedByVariableRegex = new("""assertThat\s*\(\s*(?:(?<message>"(?:\\.|[^"])*")\s*,\s*)?[^;]*?\.findElement\s*\(\s*(?:this\.)?(?<locator>[A-Za-z_]\w*)\s*\)\s*\.isDisplayed\s*\(\s*\)\s*,\s*(?:is|equalTo)\s*\(\s*(?<expected>true|false)\s*\)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex VariableAssertThatDisplayedRegex = new("""assertThat\s*\(\s*(?:(?<message>"(?:\\.|[^"])*")\s*,\s*)?(?:this\.)?(?<variable>[A-Za-z_]\w*)\s*\.isDisplayed\s*\(\s*\)\s*,\s*(?:is|equalTo)\s*\(\s*(?<expected>true|false)\s*\)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex AssertJTextRegex = new("""assertThat\s*\(\s*[^;]*?\.findElement\s*\(\s*By\.(?<by>id|cssSelector|xpath|name|className|linkText|partialLinkText)\s*\(\s*(?<selector>"(?:\\.|[^"])*")\s*\)\s*\)\s*\.getText\s*\(\s*\)\s*\)\s*\.\s*(?<matcher>isEqualTo|contains)\s*\(\s*(?<expected>.+?)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex AssertJTextByVariableRegex = new("""assertThat\s*\(\s*[^;]*?\.findElement\s*\(\s*(?:this\.)?(?<locator>[A-Za-z_]\w*)\s*\)\s*\.getText\s*\(\s*\)\s*\)\s*\.\s*(?<matcher>isEqualTo|contains)\s*\(\s*(?<expected>.+?)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex VariableAssertJTextRegex = new("""assertThat\s*\(\s*(?:this\.)?(?<variable>[A-Za-z_]\w*)\s*\.getText\s*\(\s*\)\s*\)\s*\.\s*(?<matcher>isEqualTo|contains)\s*\(\s*(?<expected>.+?)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex AssertJDisplayedRegex = new("""assertThat\s*\(\s*[^;]*?\.findElement\s*\(\s*By\.(?<by>id|cssSelector|xpath|name|className|linkText|partialLinkText)\s*\(\s*(?<selector>"(?:\\.|[^"])*")\s*\)\s*\)\s*\.isDisplayed\s*\(\s*\)\s*\)\s*\.\s*(?<matcher>isTrue|isFalse)\s*\(\s*\)""", RegexOptions.Compiled);
+    static readonly Regex AssertJDisplayedByVariableRegex = new("""assertThat\s*\(\s*[^;]*?\.findElement\s*\(\s*(?:this\.)?(?<locator>[A-Za-z_]\w*)\s*\)\s*\.isDisplayed\s*\(\s*\)\s*\)\s*\.\s*(?<matcher>isTrue|isFalse)\s*\(\s*\)""", RegexOptions.Compiled);
+    static readonly Regex VariableAssertJDisplayedRegex = new("""assertThat\s*\(\s*(?:this\.)?(?<variable>[A-Za-z_]\w*)\s*\.isDisplayed\s*\(\s*\)\s*\)\s*\.\s*(?<matcher>isTrue|isFalse)\s*\(\s*\)""", RegexOptions.Compiled);
+    static readonly Regex VariableClickRegex = new("""^(?:this\.)?(?<variable>[A-Za-z_]\w*)\s*\.click\s*\(\s*\)\s*;?$""", RegexOptions.Compiled);
+    static readonly Regex VariableSendKeysRegex = new("""^(?:this\.)?(?<variable>[A-Za-z_]\w*)\s*\.sendKeys\s*\(\s*(?<value>[^)]*)\s*\)\s*;?$""", RegexOptions.Compiled);
+    static readonly Regex VariableClearRegex = new("""^(?:this\.)?(?<variable>[A-Za-z_]\w*)\s*\.clear\s*\(\s*\)\s*;?$""", RegexOptions.Compiled);
+    static readonly Regex VariableDisplayedRegex = new("""(?:Assertions\.|Assert\.)?assert(?<assertion>True|False)\s*\(\s*(?:(?<message>"(?:\\.|[^"])*")\s*,\s*)?(?:this\.)?(?<variable>[A-Za-z_]\w*)\s*\.isDisplayed\s*\(\s*\)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex VariableAssertEqualsTextRegex = new("""(?:Assertions\.|Assert\.)?assertEquals\s*\(\s*(?:(?<message>"(?:\\.|[^"])*")\s*,\s*)?(?<expected>[^,]+)\s*,\s*(?:this\.)?(?<variable>[A-Za-z_]\w*)\s*\.getText\s*\(\s*\)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex VariableAssertContainsTextRegex = new("""(?:Assertions\.|Assert\.)?assertTrue\s*\(\s*(?:(?<message>"(?:\\.|[^"])*")\s*,\s*)?(?:this\.)?(?<variable>[A-Za-z_]\w*)\s*\.getText\s*\(\s*\)\s*\.contains\s*\(\s*(?<expected>[^)]*)\s*\)\s*\)""", RegexOptions.Compiled);
+    static readonly Regex PageObjectFieldRegex = new("""(?:private|protected|public|static|final|transient|volatile|\s)*\b(?<type>[A-Z][A-Za-z0-9_]*(?:Page|PageObject))\s+(?<name>[A-Za-z_]\w*)\s*;""", RegexOptions.Compiled);
+    static readonly Regex PageObjectDeclarationRegex = new("""(?:private|protected|public|static|final|transient|volatile|\s)*(?:var|(?<type>[A-Z][A-Za-z0-9_]*(?:Page|PageObject)))\s+(?<name>[A-Za-z_]\w*)\s*=\s*new\s+(?<ctor>[A-Z][A-Za-z0-9_]*(?:Page|PageObject))\s*\([^;]*\)\s*;?""", RegexOptions.Compiled);
+    static readonly Regex PageObjectAssignmentRegex = new("""^(?<name>[A-Za-z_]\w*)\s*=\s*new\s+(?<ctor>[A-Z][A-Za-z0-9_]*(?:Page|PageObject))\s*\([^;]*\)\s*;?$""", RegexOptions.Compiled);
+    static readonly Regex PageObjectMethodCallRegex = new("""^(?<variable>[A-Za-z_]\w*)\s*\.\s*(?<method>[A-Za-z_]\w*)\s*\([^;]*\)\s*;?$""", RegexOptions.Compiled);
+    static readonly Regex PageFactoryInitRegex = new("""\bPageFactory\s*\.\s*initElements\s*\(""", RegexOptions.Compiled);
 
     public TestFileModel Parse(string filePath)
     {
         var source = File.ReadAllText(filePath);
+        var pomIndex = CollectJavaPageObjects(new[] { (FilePath: filePath, Source: source) });
+        return Parse(filePath, source, pomIndex);
+    }
+
+    TestFileModel Parse(string filePath, string source, JavaPageObjectIndex pomIndex)
+    {
         var ns = PackageRegex.Match(source) is { Success: true } packageMatch ? packageMatch.Groups[1].Value : string.Empty;
         var className = ClassRegex.Match(source) is { Success: true } classMatch ? classMatch.Groups[1].Value : Path.GetFileNameWithoutExtension(filePath);
-        var byLocatorFields = CollectByLocators(source);
-        var setUpActions = ParseAnnotatedMethods(source, JavaMethodRole.Setup, byLocatorFields).SelectMany(m => m.Actions).ToArray();
-        var tests = ParseAnnotatedMethods(source, JavaMethodRole.Test, byLocatorFields)
+        var locatorFields = CollectLocatorFields(source);
+        var pageObjectFields = CollectPageObjectFields(source, pomIndex);
+        var setUpActions = ParseAnnotatedMethods(source, JavaMethodRole.Setup, locatorFields, pomIndex, pageObjectFields).SelectMany(m => m.Actions).ToArray();
+        var tests = ParseAnnotatedMethods(source, JavaMethodRole.Test, locatorFields, pomIndex, pageObjectFields)
             .Select(m => new TestModel(
                 m.Name,
                 Category: null,
@@ -68,15 +98,25 @@ public sealed class JavaSeleniumTestFileParser : ITestFileParser
 
     public IEnumerable<TestFileModel> ParseDirectory(string directoryPath)
     {
-        foreach (var file in Directory.GetFiles(directoryPath, "*.java", SearchOption.AllDirectories))
+        var files = Directory.GetFiles(directoryPath, "*.java", SearchOption.AllDirectories)
+            .Select(file => (FilePath: file, Source: File.ReadAllText(file)))
+            .ToArray();
+        var pomIndex = CollectJavaPageObjects(files);
+
+        foreach (var (file, source) in files)
         {
-            var model = Parse(file);
+            var model = Parse(file, source, pomIndex);
             if (model.Tests.Any() || model.SetUpActions.Any())
                 yield return model;
         }
     }
 
-    static IEnumerable<ParsedJavaMethod> ParseAnnotatedMethods(string source, JavaMethodRole role, IReadOnlyDictionary<string, TargetExpression> byLocatorFields)
+    static IEnumerable<ParsedJavaMethod> ParseAnnotatedMethods(
+        string source,
+        JavaMethodRole role,
+        IReadOnlyDictionary<string, TargetExpression> locatorFields,
+        JavaPageObjectIndex pomIndex,
+        IReadOnlyDictionary<string, string> pageObjectFields)
     {
         var lines = SplitLines(source);
         for (var i = 0; i < lines.Length; i++)
@@ -93,7 +133,7 @@ public sealed class JavaSeleniumTestFileParser : ITestFileParser
                 continue;
 
             var (body, endLine) = ReadMethodBody(lines, methodLine);
-            var actions = ParseActions(NormalizeStatements(body), byLocatorFields).ToArray();
+            var actions = ParseActions(NormalizeStatements(body), locatorFields, pomIndex, pageObjectFields).ToArray();
             yield return new ParsedJavaMethod(methodMatch.Groups[1].Value, actions);
 
             i = Math.Max(i, endLine);
@@ -136,6 +176,21 @@ public sealed class JavaSeleniumTestFileParser : ITestFileParser
         for (var i = methodLine; i < lines.Length; i++)
         {
             var line = lines[i];
+
+            if (i == methodLine)
+            {
+                var openingBrace = line.IndexOf('{');
+                if (openingBrace >= 0 && openingBrace + 1 < line.Length)
+                {
+                    var sameLineBody = line[(openingBrace + 1)..].Trim();
+                    var closingBrace = sameLineBody.LastIndexOf('}');
+                    if (closingBrace >= 0)
+                        sameLineBody = sameLineBody[..closingBrace].Trim();
+                    if (!string.IsNullOrWhiteSpace(sameLineBody))
+                        body.Add((i + 1, sameLineBody));
+                }
+            }
+
             foreach (var ch in line)
             {
                 if (ch == '{') { depth++; entered = true; }
@@ -183,18 +238,62 @@ public sealed class JavaSeleniumTestFileParser : ITestFileParser
         return statements;
     }
 
-    static IEnumerable<TestAction> ParseActions(IEnumerable<(int LineNumber, string Text)> lines, IReadOnlyDictionary<string, TargetExpression>? byLocatorFields = null)
+    static IEnumerable<TestAction> ParseActions(
+        IEnumerable<(int LineNumber, string Text)> lines,
+        IReadOnlyDictionary<string, TargetExpression>? locatorFields = null,
+        JavaPageObjectIndex? pomIndex = null,
+        IReadOnlyDictionary<string, string>? pageObjectFields = null)
     {
-        var locatorVariables = byLocatorFields is { Count: > 0 }
-            ? new Dictionary<string, TargetExpression>(byLocatorFields, StringComparer.Ordinal)
+        var locatorVariables = locatorFields is { Count: > 0 }
+            ? new Dictionary<string, TargetExpression>(locatorFields, StringComparer.Ordinal)
             : new Dictionary<string, TargetExpression>(StringComparer.Ordinal);
+        var pageObjectVariables = pageObjectFields is { Count: > 0 }
+            ? new Dictionary<string, string>(pageObjectFields, StringComparer.Ordinal)
+            : new Dictionary<string, string>(StringComparer.Ordinal);
 
         foreach (var (lineNumber, text) in lines)
         {
+            if (PageFactoryInitRegex.IsMatch(text))
+            {
+                yield return new UnsupportedAction(lineNumber, text.TrimEnd(';'), "JAVA_PAGEFACTORY_LIMITED_EXPERIMENTAL");
+                continue;
+            }
+
             var byDeclaration = ByDeclarationRegex.Match(text);
             if (byDeclaration.Success)
             {
                 locatorVariables[byDeclaration.Groups["name"].Value] = ToTarget(byDeclaration.Groups["by"].Value, byDeclaration.Groups["selector"].Value);
+                continue;
+            }
+
+            var pageObjectDeclaration = PageObjectDeclarationRegex.Match(text);
+            if (pageObjectDeclaration.Success)
+            {
+                var pageObjectTypeLocal = pageObjectDeclaration.Groups["ctor"].Value;
+                pageObjectVariables[pageObjectDeclaration.Groups["name"].Value] = pageObjectTypeLocal;
+                if (pomIndex is { } && pomIndex.UsesPageFactory(pageObjectTypeLocal))
+                    yield return new UnsupportedAction(lineNumber, text.TrimEnd(';'), "JAVA_PAGEFACTORY_LIMITED_EXPERIMENTAL");
+                continue;
+            }
+
+            var pageObjectAssignment = PageObjectAssignmentRegex.Match(text);
+            if (pageObjectAssignment.Success)
+            {
+                var pageObjectTypeLocal = pageObjectAssignment.Groups["ctor"].Value;
+                pageObjectVariables[pageObjectAssignment.Groups["name"].Value] = pageObjectTypeLocal;
+                if (pomIndex is { } && pomIndex.UsesPageFactory(pageObjectTypeLocal))
+                    yield return new UnsupportedAction(lineNumber, text.TrimEnd(';'), "JAVA_PAGEFACTORY_LIMITED_EXPERIMENTAL");
+                continue;
+            }
+
+            var pageObjectMethodCall = PageObjectMethodCallRegex.Match(text);
+            if (pageObjectMethodCall.Success
+                && pomIndex != null
+                && pageObjectVariables.TryGetValue(pageObjectMethodCall.Groups["variable"].Value, out var pageObjectType)
+                && pomIndex.TryGetActions(pageObjectType, pageObjectMethodCall.Groups["method"].Value, out var pageObjectActions))
+            {
+                foreach (var action in pageObjectActions)
+                    yield return action;
                 continue;
             }
 
@@ -224,6 +323,9 @@ public sealed class JavaSeleniumTestFileParser : ITestFileParser
                 continue;
             }
 
+            if (WaitDeclarationRegex.IsMatch(text))
+                continue;
+
             var waitLocated = WaitLocatedRegex.Match(text);
             if (waitLocated.Success)
             {
@@ -247,6 +349,19 @@ public sealed class JavaSeleniumTestFileParser : ITestFileParser
                     sourceMethod: $"ExpectedConditions.{waitLocatedByVariable.Groups["condition"].Value}",
                     fullSourceText: text.TrimEnd(';'),
                     kind: ToWaitKind(waitLocatedByVariable.Groups["condition"].Value));
+                continue;
+            }
+
+            var waitFindElement = WaitFindElementRegex.Match(text);
+            if (waitFindElement.Success)
+            {
+                yield return new WaitForAction(
+                    lineNumber,
+                    ToTarget(waitFindElement.Groups["by"].Value, waitFindElement.Groups["selector"].Value),
+                    RecognitionConfidence.SyntaxFallback,
+                    sourceMethod: $"ExpectedConditions.{waitFindElement.Groups["condition"].Value}",
+                    fullSourceText: text.TrimEnd(';'),
+                    kind: ToWaitKind(waitFindElement.Groups["condition"].Value));
                 continue;
             }
 
@@ -292,6 +407,13 @@ public sealed class JavaSeleniumTestFileParser : ITestFileParser
                 continue;
             }
 
+            var variableEqualsActualFirst = VariableAssertEqualsTextActualFirstRegex.Match(text);
+            if (variableEqualsActualFirst.Success && locatorVariables.TryGetValue(variableEqualsActualFirst.Groups["variable"].Value, out var variableEqualsActualFirstTarget))
+            {
+                yield return new TextAssertionAction(lineNumber, variableEqualsActualFirstTarget, TextAssertionKind.TextEquals, variableEqualsActualFirst.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text.TrimEnd(';'));
+                continue;
+            }
+
             var variableContains = VariableAssertContainsTextRegex.Match(text);
             if (variableContains.Success && locatorVariables.TryGetValue(variableContains.Groups["variable"].Value, out var variableContainsTarget))
             {
@@ -303,6 +425,34 @@ public sealed class JavaSeleniumTestFileParser : ITestFileParser
             if (variableDisplayed.Success && locatorVariables.TryGetValue(variableDisplayed.Groups["variable"].Value, out var displayTarget))
             {
                 yield return new VisibilityAssertionAction(lineNumber, displayTarget, ToVisibilityKind(variableDisplayed.Groups["assertion"].Value), RecognitionConfidence.SyntaxFallback);
+                continue;
+            }
+
+            var variableAssertThatText = VariableAssertThatTextRegex.Match(text);
+            if (variableAssertThatText.Success && locatorVariables.TryGetValue(variableAssertThatText.Groups["variable"].Value, out var variableAssertThatTextTarget))
+            {
+                yield return new TextAssertionAction(lineNumber, variableAssertThatTextTarget, ToTextAssertionKindFromMatcher(variableAssertThatText.Groups["matcher"].Value), variableAssertThatText.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text.TrimEnd(';'));
+                continue;
+            }
+
+            var variableAssertThatDisplayed = VariableAssertThatDisplayedRegex.Match(text);
+            if (variableAssertThatDisplayed.Success && locatorVariables.TryGetValue(variableAssertThatDisplayed.Groups["variable"].Value, out var variableAssertThatDisplayedTarget))
+            {
+                yield return new VisibilityAssertionAction(lineNumber, variableAssertThatDisplayedTarget, ToVisibilityKindFromBoolean(variableAssertThatDisplayed.Groups["expected"].Value), RecognitionConfidence.SyntaxFallback);
+                continue;
+            }
+
+            var variableAssertJText = VariableAssertJTextRegex.Match(text);
+            if (variableAssertJText.Success && locatorVariables.TryGetValue(variableAssertJText.Groups["variable"].Value, out var variableAssertJTextTarget))
+            {
+                yield return new TextAssertionAction(lineNumber, variableAssertJTextTarget, ToTextAssertionKindFromMatcher(variableAssertJText.Groups["matcher"].Value), variableAssertJText.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text.TrimEnd(';'));
+                continue;
+            }
+
+            var variableAssertJDisplayed = VariableAssertJDisplayedRegex.Match(text);
+            if (variableAssertJDisplayed.Success && locatorVariables.TryGetValue(variableAssertJDisplayed.Groups["variable"].Value, out var variableAssertJDisplayedTarget))
+            {
+                yield return new VisibilityAssertionAction(lineNumber, variableAssertJDisplayedTarget, ToVisibilityKindFromAssertJMatcher(variableAssertJDisplayed.Groups["matcher"].Value), RecognitionConfidence.SyntaxFallback);
                 continue;
             }
 
@@ -335,6 +485,13 @@ public sealed class JavaSeleniumTestFileParser : ITestFileParser
                 continue;
             }
 
+            var assertEqualsByVariableActualFirst = AssertEqualsTextByVariableActualFirstRegex.Match(text);
+            if (assertEqualsByVariableActualFirst.Success && locatorVariables.TryGetValue(assertEqualsByVariableActualFirst.Groups["locator"].Value, out var assertEqualsByVariableActualFirstTarget))
+            {
+                yield return new TextAssertionAction(lineNumber, assertEqualsByVariableActualFirstTarget, TextAssertionKind.TextEquals, assertEqualsByVariableActualFirst.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text.TrimEnd(';'));
+                continue;
+            }
+
             var assertTextContainsByVariable = AssertTextContainsByVariableRegex.Match(text);
             if (assertTextContainsByVariable.Success && locatorVariables.TryGetValue(assertTextContainsByVariable.Groups["locator"].Value, out var assertTextContainsByVariableTarget))
             {
@@ -346,6 +503,34 @@ public sealed class JavaSeleniumTestFileParser : ITestFileParser
             if (assertDisplayedByVariable.Success && locatorVariables.TryGetValue(assertDisplayedByVariable.Groups["locator"].Value, out var assertDisplayedByVariableTarget))
             {
                 yield return new VisibilityAssertionAction(lineNumber, assertDisplayedByVariableTarget, ToVisibilityKind(assertDisplayedByVariable.Groups["assertion"].Value), RecognitionConfidence.SyntaxFallback);
+                continue;
+            }
+
+            var assertThatTextByVariable = AssertThatTextByVariableRegex.Match(text);
+            if (assertThatTextByVariable.Success && locatorVariables.TryGetValue(assertThatTextByVariable.Groups["locator"].Value, out var assertThatTextByVariableTarget))
+            {
+                yield return new TextAssertionAction(lineNumber, assertThatTextByVariableTarget, ToTextAssertionKindFromMatcher(assertThatTextByVariable.Groups["matcher"].Value), assertThatTextByVariable.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text.TrimEnd(';'));
+                continue;
+            }
+
+            var assertThatDisplayedByVariable = AssertThatDisplayedByVariableRegex.Match(text);
+            if (assertThatDisplayedByVariable.Success && locatorVariables.TryGetValue(assertThatDisplayedByVariable.Groups["locator"].Value, out var assertThatDisplayedByVariableTarget))
+            {
+                yield return new VisibilityAssertionAction(lineNumber, assertThatDisplayedByVariableTarget, ToVisibilityKindFromBoolean(assertThatDisplayedByVariable.Groups["expected"].Value), RecognitionConfidence.SyntaxFallback);
+                continue;
+            }
+
+            var assertJTextByVariable = AssertJTextByVariableRegex.Match(text);
+            if (assertJTextByVariable.Success && locatorVariables.TryGetValue(assertJTextByVariable.Groups["locator"].Value, out var assertJTextByVariableTarget))
+            {
+                yield return new TextAssertionAction(lineNumber, assertJTextByVariableTarget, ToTextAssertionKindFromMatcher(assertJTextByVariable.Groups["matcher"].Value), assertJTextByVariable.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text.TrimEnd(';'));
+                continue;
+            }
+
+            var assertJDisplayedByVariable = AssertJDisplayedByVariableRegex.Match(text);
+            if (assertJDisplayedByVariable.Success && locatorVariables.TryGetValue(assertJDisplayedByVariable.Groups["locator"].Value, out var assertJDisplayedByVariableTarget))
+            {
+                yield return new VisibilityAssertionAction(lineNumber, assertJDisplayedByVariableTarget, ToVisibilityKindFromAssertJMatcher(assertJDisplayedByVariable.Groups["matcher"].Value), RecognitionConfidence.SyntaxFallback);
                 continue;
             }
 
@@ -378,6 +563,13 @@ public sealed class JavaSeleniumTestFileParser : ITestFileParser
                 continue;
             }
 
+            var assertEqualsActualFirst = AssertEqualsTextActualFirstRegex.Match(text);
+            if (assertEqualsActualFirst.Success)
+            {
+                yield return new TextAssertionAction(lineNumber, ToTarget(assertEqualsActualFirst.Groups["by"].Value, assertEqualsActualFirst.Groups["selector"].Value), TextAssertionKind.TextEquals, assertEqualsActualFirst.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text.TrimEnd(';'));
+                continue;
+            }
+
             var assertTextContains = AssertTextContainsRegex.Match(text);
             if (assertTextContains.Success)
             {
@@ -392,13 +584,65 @@ public sealed class JavaSeleniumTestFileParser : ITestFileParser
                 continue;
             }
 
+            var assertThatText = AssertThatTextRegex.Match(text);
+            if (assertThatText.Success)
+            {
+                yield return new TextAssertionAction(lineNumber, ToTarget(assertThatText.Groups["by"].Value, assertThatText.Groups["selector"].Value), ToTextAssertionKindFromMatcher(assertThatText.Groups["matcher"].Value), assertThatText.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text.TrimEnd(';'));
+                continue;
+            }
+
+            var assertThatDisplayed = AssertThatDisplayedRegex.Match(text);
+            if (assertThatDisplayed.Success)
+            {
+                yield return new VisibilityAssertionAction(lineNumber, ToTarget(assertThatDisplayed.Groups["by"].Value, assertThatDisplayed.Groups["selector"].Value), ToVisibilityKindFromBoolean(assertThatDisplayed.Groups["expected"].Value), RecognitionConfidence.SyntaxFallback);
+                continue;
+            }
+
+            var assertJText = AssertJTextRegex.Match(text);
+            if (assertJText.Success)
+            {
+                yield return new TextAssertionAction(lineNumber, ToTarget(assertJText.Groups["by"].Value, assertJText.Groups["selector"].Value), ToTextAssertionKindFromMatcher(assertJText.Groups["matcher"].Value), assertJText.Groups["expected"].Value.Trim(), RecognitionConfidence.SyntaxFallback, text.TrimEnd(';'));
+                continue;
+            }
+
+            var assertJDisplayed = AssertJDisplayedRegex.Match(text);
+            if (assertJDisplayed.Success)
+            {
+                yield return new VisibilityAssertionAction(lineNumber, ToTarget(assertJDisplayed.Groups["by"].Value, assertJDisplayed.Groups["selector"].Value), ToVisibilityKindFromAssertJMatcher(assertJDisplayed.Groups["matcher"].Value), RecognitionConfidence.SyntaxFallback);
+                continue;
+            }
+
             if (text.EndsWith(";", StringComparison.Ordinal))
                 yield return new UnsupportedAction(lineNumber, text.TrimEnd(';'), "JAVA_SELENIUM_MVP_UNRECOGNIZED_STATEMENT");
         }
     }
 
+    static JavaPageObjectIndex CollectJavaPageObjects(IReadOnlyList<(string FilePath, string Source)> files)
+    {
+        var classes = new Dictionary<string, JavaPageObjectClass>(StringComparer.Ordinal);
 
-    static IReadOnlyDictionary<string, TargetExpression> CollectByLocators(string source)
+        foreach (var (_, source) in files)
+        {
+            var classMatch = ClassRegex.Match(source);
+            if (!classMatch.Success)
+                continue;
+
+            var className = classMatch.Groups[1].Value;
+            var locatorFields = CollectLocatorFields(source);
+            var methods = ParseAllMethods(source, locatorFields)
+                .Where(method => method.Actions.Count > 0)
+                .ToDictionary(method => method.Name, method => method.Actions, StringComparer.Ordinal);
+
+            if (locatorFields.Count == 0 && methods.Count == 0 && !PageFactoryInitRegex.IsMatch(source))
+                continue;
+
+            classes[className] = new JavaPageObjectClass(className, locatorFields, methods, UsesPageFactory: PageFactoryInitRegex.IsMatch(source));
+        }
+
+        return new JavaPageObjectIndex(classes);
+    }
+
+    static IReadOnlyDictionary<string, TargetExpression> CollectLocatorFields(string source)
     {
         var locators = new Dictionary<string, TargetExpression>(StringComparer.Ordinal);
         foreach (Match match in ByDeclarationRegex.Matches(source))
@@ -409,8 +653,86 @@ public sealed class JavaSeleniumTestFileParser : ITestFileParser
             locators[match.Groups["name"].Value] = ToTarget(match.Groups["by"].Value, match.Groups["selector"].Value);
         }
 
+        foreach (Match match in FindByFieldRegex.Matches(source))
+        {
+            if (!match.Success)
+                continue;
+
+            var target = TryFindByTarget(match.Groups["args"].Value);
+            if (target != null)
+                locators[match.Groups["name"].Value] = target;
+        }
+
         return locators;
     }
+
+    static IReadOnlyDictionary<string, string> CollectPageObjectFields(string source, JavaPageObjectIndex pomIndex)
+    {
+        var fields = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (Match match in PageObjectFieldRegex.Matches(source))
+        {
+            if (!match.Success)
+                continue;
+
+            var type = match.Groups["type"].Value;
+            if (pomIndex.Contains(type))
+                fields[match.Groups["name"].Value] = type;
+        }
+
+        return fields;
+    }
+
+    static IEnumerable<ParsedJavaMethod> ParseAllMethods(string source, IReadOnlyDictionary<string, TargetExpression> locatorFields)
+    {
+        var lines = SplitLines(source);
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var methodMatch = MethodRegex.Match(lines[i]);
+            if (!methodMatch.Success)
+                continue;
+
+            var (body, endLine) = ReadMethodBody(lines, i);
+            var actions = ParseActions(NormalizeStatements(body), locatorFields, JavaPageObjectIndex.Empty, pageObjectFields: null).ToArray();
+            yield return new ParsedJavaMethod(methodMatch.Groups[1].Value, actions);
+
+            i = Math.Max(i, endLine);
+        }
+    }
+
+    static TargetExpression? TryFindByTarget(string args)
+    {
+        var direct = Regex.Match(args, """(?<by>id|name|className|css|cssSelector|xpath|linkText|partialLinkText)\s*=\s*(?<selector>"(?:\\.|[^"])*")""");
+        if (direct.Success)
+            return ToTarget(NormalizeFindByKind(direct.Groups["by"].Value), direct.Groups["selector"].Value);
+
+        var howUsing = Regex.Match(args, """how\s*=\s*How\.(?<how>[A-Za-z_]+)\s*,\s*using\s*=\s*(?<selector>"(?:\\.|[^"])*")""");
+        if (howUsing.Success)
+            return ToTarget(NormalizeFindByHow(howUsing.Groups["how"].Value), howUsing.Groups["selector"].Value);
+
+        var usingHow = Regex.Match(args, """using\s*=\s*(?<selector>"(?:\\.|[^"])*")\s*,\s*how\s*=\s*How\.(?<how>[A-Za-z_]+)""");
+        if (usingHow.Success)
+            return ToTarget(NormalizeFindByHow(usingHow.Groups["how"].Value), usingHow.Groups["selector"].Value);
+
+        return null;
+    }
+
+    static string NormalizeFindByKind(string by) => by switch
+    {
+        "css" => "cssSelector",
+        _ => by
+    };
+
+    static string NormalizeFindByHow(string how) => how switch
+    {
+        "ID" => "id",
+        "NAME" => "name",
+        "CLASS_NAME" => "className",
+        "CSS" => "cssSelector",
+        "XPATH" => "xpath",
+        "LINK_TEXT" => "linkText",
+        "PARTIAL_LINK_TEXT" => "partialLinkText",
+        _ => how
+    };
 
     static IEnumerable<TestAction> ToInputAction(int lineNumber, TargetExpression target, string valueExpression, RecognitionConfidence confidence)
     {
@@ -450,6 +772,18 @@ public sealed class JavaSeleniumTestFileParser : ITestFileParser
     static VisibilityKind ToVisibilityKind(string assertion) =>
         string.Equals(assertion, "False", StringComparison.Ordinal) ? VisibilityKind.Hidden : VisibilityKind.Visible;
 
+    static VisibilityKind ToVisibilityKindFromBoolean(string value) =>
+        string.Equals(value.Trim(), "false", StringComparison.OrdinalIgnoreCase) ? VisibilityKind.Hidden : VisibilityKind.Visible;
+
+    static VisibilityKind ToVisibilityKindFromAssertJMatcher(string matcher) =>
+        string.Equals(matcher, "isFalse", StringComparison.Ordinal) ? VisibilityKind.Hidden : VisibilityKind.Visible;
+
+    static TextAssertionKind ToTextAssertionKindFromMatcher(string matcher) => matcher switch
+    {
+        "contains" or "containsString" => TextAssertionKind.TextContains,
+        _ => TextAssertionKind.TextEquals
+    };
+
     static bool LooksLikeEnterKey(string valueExpression)
     {
         var normalized = valueExpression.Replace(" ", string.Empty, StringComparison.Ordinal);
@@ -480,4 +814,39 @@ public sealed class JavaSeleniumTestFileParser : ITestFileParser
     }
 
     sealed record ParsedJavaMethod(string Name, IReadOnlyList<TestAction> Actions);
+
+    sealed record JavaPageObjectClass(
+        string Name,
+        IReadOnlyDictionary<string, TargetExpression> LocatorFields,
+        IReadOnlyDictionary<string, IReadOnlyList<TestAction>> Methods,
+        bool UsesPageFactory);
+
+    sealed class JavaPageObjectIndex
+    {
+        readonly IReadOnlyDictionary<string, JavaPageObjectClass> _classes;
+
+        public static JavaPageObjectIndex Empty { get; } = new(new Dictionary<string, JavaPageObjectClass>(StringComparer.Ordinal));
+
+        public JavaPageObjectIndex(IReadOnlyDictionary<string, JavaPageObjectClass> classes)
+        {
+            _classes = classes;
+        }
+
+        public bool Contains(string className) => _classes.ContainsKey(className);
+
+        public bool UsesPageFactory(string className) =>
+            _classes.TryGetValue(className, out var pageObject) && pageObject.UsesPageFactory;
+
+        public bool TryGetActions(string className, string methodName, out IReadOnlyList<TestAction> actions)
+        {
+            if (_classes.TryGetValue(className, out var pageObject)
+                && pageObject.Methods.TryGetValue(methodName, out actions!))
+            {
+                return true;
+            }
+
+            actions = Array.Empty<TestAction>();
+            return false;
+        }
+    }
 }

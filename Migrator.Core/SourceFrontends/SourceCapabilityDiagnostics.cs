@@ -83,15 +83,15 @@ public static class SourceCapabilityCatalog
             Basic("test-frameworks", "Basic JUnit/TestNG test and setup annotations are recognized.", "@Test", "@Before", "@BeforeEach", "@BeforeMethod"),
             Basic("selenium-actions", "Common findElement action chains and local WebElement variables are recognized.", "click", "sendKeys", "clear", "Keys.ENTER"),
             Basic("locators", "Common By.* locators are recognized.", "By.id", "By.cssSelector", "By.xpath", "By.linkText"),
-            Basic("waits", "Basic WebDriverWait/ExpectedConditions patterns are recognized.", "visibilityOfElementLocated", "invisibilityOfElementLocated", "elementToBeClickable"),
-            Basic("assertions", "Basic JUnit/TestNG assertion shapes are recognized.", "assertEquals", "assertTrue", "assertFalse"),
-            Limited("page-objects", "Only simple Java POM patterns should be considered experimental; PageFactory is not production-ready yet.", "local By fields", "simple helper methods"),
+            Basic("waits", "WebDriverWait/ExpectedConditions matrix covers located elements, WebElement variables, direct findElement waits and static-import condition calls.", "visibilityOfElementLocated", "invisibilityOfElementLocated", "visibilityOf", "invisibilityOf", "elementToBeClickable"),
+            Basic("assertions", "JUnit/TestNG text and visibility assertion matrix covers expected-first, TestNG actual-first, optional JUnit messages and common Hamcrest/AssertJ assertThat forms.", "assertEquals", "assertTrue", "assertFalse", "assertThat(..., containsString(...))", "assertThat(...).isFalse()"),
+            Limited("page-objects", "Simple Java POM patterns are recognized experimentally: By fields, @FindBy WebElement fields, basic page object variables and simple method inlining. PageFactory is surfaced as a limited diagnostic, not production-ready support.", "By saveButton = By.id(...) ", "@FindBy(id = ...) WebElement", "loginPage.save()", "PageFactory.initElements TODO"),
             Limited("target-config", "Target-specific mappings can be applied after Java source lowering, but Java helper semantics are not deeply inferred yet.", "Targets.playwright-typescript", "unsupported helper TODOs")
         },
         Limitations: new[]
         {
             "No Java semantic model or symbol resolution yet.",
-            "Complex helper methods, inheritance-heavy POMs and PageFactory require manual review.",
+            "Complex helper methods, parameter substitution, inheritance-heavy POMs and PageFactory require manual review.",
             "Java source support should be treated as experimental until fixture coverage is expanded."
         },
         RecommendedValidation: new[]
@@ -109,18 +109,18 @@ public static class SourceCapabilityCatalog
         Capabilities: new[]
         {
             None("semantic-model", "No Python semantic/type model is used; recognition is text/AST-light heuristic based."),
-            Basic("test-frameworks", "Basic pytest function tests and unittest setup shapes are recognized.", "def test_*", "class Test*", "setUp", "setup_method"),
-            Basic("selenium-actions", "Common find_element action flows are recognized.", "click", "send_keys", "clear"),
-            Basic("locators", "Common By.* tuple-style locators are recognized.", "By.ID", "By.CSS_SELECTOR", "By.XPATH", "By.LINK_TEXT"),
-            Basic("waits", "Basic WebDriverWait + expected_conditions patterns are recognized.", "visibility_of_element_located", "invisibility_of_element_located", "element_to_be_clickable"),
+            Basic("test-frameworks", "Basic pytest function/class tests and pytest/unittest setup shapes are recognized and lowered into SetupActions.", "def test_*", "class Test*", "unittest.TestCase", "setUp", "setup_method", "setup_class"),
+            Basic("selenium-actions", "Common find_element and legacy find_element_by_* action flows are recognized.", "click", "send_keys", "clear", "find_element_by_id"),
+            Basic("locators", "Common By.* tuple-style locators and legacy find_element_by_* selectors are recognized.", "By.ID", "By.CSS_SELECTOR", "By.XPATH", "By.LINK_TEXT", "find_element_by_css_selector"),
+            Basic("waits", "Basic WebDriverWait + expected_conditions patterns are recognized, including wait variables and element-variable waits.", "visibility_of_element_located", "invisibility_of_element_located", "visibility_of(element)", "element_to_be_clickable"),
             Basic("assertions", "Basic Python assert styles are recognized.", "assert el.text == value", "assert value in el.text", "assert el.is_displayed()", "assert not el.is_displayed()"),
-            Limited("page-objects", "Python POM support is not production-ready; simple element variables are supported.", "local element variables"),
+            Limited("page-objects", "Python POM support is not production-ready; simple local/self/cls element variables are supported, including setup-backed self/cls locators used inside tests.", "local element variables", "self.element variables", "cls.element in setup_class"),
             Limited("target-config", "Target-specific mappings can be applied after Python source lowering, but Python helper semantics are not deeply inferred yet.", "Targets.playwright-typescript", "unsupported helper TODOs")
         },
         Limitations: new[]
         {
             "Dynamic Python helper flows can be misclassified or left as TODO.",
-            "No import graph, fixture graph or type inference yet.",
+            "No import graph, full fixture graph or type inference yet; setup support is limited to common setup_method/setup_class/setUp shapes.",
             "Python source support is a spike and should be used for diagnostics/prototyping first."
         },
         RecommendedValidation: new[]
