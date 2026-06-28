@@ -102,6 +102,90 @@ public class SourceFrontendCliTests
         }
     }
 
+
+    [Fact]
+    public void Migrate_WithoutSource_AutoDetectsJavaSelenium_AndWritesReport()
+    {
+        var temp = CreateTempDir();
+        try
+        {
+            var inputDir = Path.Combine(temp, "java-auto-input");
+            var outputDir = Path.Combine(temp, "generated");
+            Directory.CreateDirectory(inputDir);
+
+            File.WriteAllText(Path.Combine(inputDir, "AutoDetectedJavaTests.java"), """
+            package sample.tests;
+
+            import org.junit.jupiter.api.Test;
+            import org.openqa.selenium.By;
+            import org.openqa.selenium.WebDriver;
+
+            public class AutoDetectedJavaTests {
+                private WebDriver driver;
+
+                @Test
+                public void clicksSave() {
+                    driver.findElement(By.id("save")).click();
+                }
+            }
+            """);
+
+            var result = RunCli($"--mode migrate --input \"{inputDir}\" --out \"{outputDir}\" --target ts --format both");
+
+            AssertCliSuccess(result);
+            Assert.Contains("Detected source frontend: selenium-java", result.StdOut);
+            Assert.Single(Directory.GetFiles(outputDir, "*.spec.ts"));
+
+            var reportPath = Path.Combine(outputDir, "source-detection-report.json");
+            Assert.True(File.Exists(reportPath), "Expected source-detection-report.json to be written.");
+            using var json = JsonDocument.Parse(File.ReadAllText(reportPath));
+            var root = json.RootElement;
+            Assert.Equal("source-detection/v1", root.GetProperty("SchemaVersion").GetString());
+            Assert.Equal("selenium-java", root.GetProperty("SelectedSource").GetString());
+            Assert.Equal("selenium-java", root.GetProperty("DetectedSourceId").GetString());
+            Assert.Equal("high", root.GetProperty("Confidence").GetString());
+        }
+        finally
+        {
+            TryDelete(temp);
+        }
+    }
+
+    [Fact]
+    public void DumpIr_SourceAuto_DetectsPythonSelenium_V2_RecordsPythonSourceSpec()
+    {
+        var temp = CreateTempDir();
+        try
+        {
+            var inputDir = Path.Combine(temp, "python-auto-input");
+            var outputDir = Path.Combine(temp, "ir-dump");
+            Directory.CreateDirectory(inputDir);
+
+            File.WriteAllText(Path.Combine(inputDir, "test_auto.py"), """
+            from selenium.webdriver.common.by import By
+
+            def test_auto(driver):
+                driver.find_element(By.ID, "save").click()
+            """);
+
+            var result = RunCli($"--mode dump-ir --source auto --input \"{inputDir}\" --out \"{outputDir}\" --target ts --ir-version v2 --format both");
+
+            AssertCliSuccess(result);
+            Assert.Contains("Detected source frontend: selenium-python", result.StdOut);
+
+            using var dump = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputDir, "ir-dump.json")));
+            Assert.Equal("selenium-python", dump.RootElement.GetProperty("Source").GetProperty("Id").GetString());
+
+            using var report = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputDir, "source-detection-report.json")));
+            Assert.Equal("selenium-python", report.RootElement.GetProperty("SelectedSource").GetString());
+            Assert.True(report.RootElement.GetProperty("FilesScanned").GetInt32() >= 1);
+        }
+        finally
+        {
+            TryDelete(temp);
+        }
+    }
+
     [Fact]
     public void ConfigNormalize_SourceJavaSelenium_WritesJavaSourceSpec()
     {

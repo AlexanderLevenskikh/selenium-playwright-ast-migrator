@@ -14,7 +14,12 @@ public sealed class PlaywrightTypeScriptBackend : ITargetBackend
     readonly PlaywrightTypeScriptIrV2Renderer _irV2Renderer;
 
     public PlaywrightTypeScriptBackend()
-        : this(new PlaywrightTypeScriptRenderer())
+        : this(PlaywrightTypeScriptRenderOptions.Default)
+    {
+    }
+
+    public PlaywrightTypeScriptBackend(PlaywrightTypeScriptRenderOptions options)
+        : this(new PlaywrightTypeScriptRenderer(options), new PlaywrightTypeScriptIrV2Renderer(options))
     {
     }
 

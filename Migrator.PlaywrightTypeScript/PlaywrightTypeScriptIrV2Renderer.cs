@@ -13,6 +13,17 @@ namespace Migrator.PlaywrightTypeScript;
 public sealed class PlaywrightTypeScriptIrV2Renderer
 {
     readonly HashSet<string> _targetLocals = new(StringComparer.Ordinal);
+    readonly PlaywrightTypeScriptTestHostRenderer _testHost;
+
+    public PlaywrightTypeScriptIrV2Renderer()
+        : this(PlaywrightTypeScriptRenderOptions.Default)
+    {
+    }
+
+    public PlaywrightTypeScriptIrV2Renderer(PlaywrightTypeScriptRenderOptions options)
+    {
+        _testHost = new PlaywrightTypeScriptTestHostRenderer(options);
+    }
 
     public string Render(MigrationDocument document)
     {
@@ -20,24 +31,25 @@ public sealed class PlaywrightTypeScriptIrV2Renderer
             throw new ArgumentNullException(nameof(document));
 
         var sb = new StringBuilder();
-        sb.AppendLine("import { test, expect } from '@playwright/test';");
-        sb.AppendLine();
-        sb.AppendLine($"// Generated from Selenium C# source: {EscapeComment(document.SourceFilePath)}");
-        sb.AppendLine("// Target: Playwright TypeScript (experimental). Validate inside a real TS Playwright project.");
-        sb.AppendLine();
+        _testHost.RenderPreamble(
+            sb,
+            document.SourceFilePath,
+            "Playwright TypeScript (experimental). Validate inside a real TS Playwright project.");
+
+        var suiteIndent = _testHost.BeginSuite(sb, document.Suite.ClassName);
 
         foreach (var test in document.Suite.Tests)
         {
             _targetLocals.Clear();
-            sb.AppendLine($"test('{EscapeString(test.Name)}', async ({{ page }}) => {{");
+            var statementIndent = _testHost.BeginTest(sb, test.Name, suiteIndent);
             foreach (var statement in document.Suite.SetUp)
-                RenderStatement(sb, statement, 1);
+                RenderStatement(sb, statement, statementIndent);
             foreach (var statement in test.Body)
-                RenderStatement(sb, statement, 1);
-            sb.AppendLine("});");
-            sb.AppendLine();
+                RenderStatement(sb, statement, statementIndent);
+            _testHost.EndTest(sb, suiteIndent);
         }
 
+        _testHost.EndSuite(sb);
         return sb.ToString();
     }
 
@@ -75,11 +87,19 @@ public sealed class PlaywrightTypeScriptIrV2Renderer
             case MappedMethodStatementIr mapped:
                 RenderMapped(sb, pad, mapped);
                 break;
+            case MethodInvocationStatementIr methodInvocation:
+                RenderTodo(sb, pad, "UNSUPPORTED_ACTION", $"MethodInvocationAction: {methodInvocation.SourceText}", "Method invocation has no TypeScript renderer yet.", "Add a TS-specific mapping/profile rule or keep it as manual TODO.");
+                break;
             case AssertAreEqualStatementIr eq:
                 sb.AppendLine($"{pad}expect({RenderValue(eq.Actual)}).toEqual({RenderValue(eq.Expected)});");
                 break;
             case AssertThatStatementIr assertThat:
                 RenderTodo(sb, pad, "ASSERTION_CONSTRAINT", $"Assert.That({RenderValue(assertThat.Actual)}, {RenderValue(assertThat.Constraint)})", "NUnit/FluentAssertions constraint needs TS-specific assertion mapping.", "Add ParameterizedMethodMapping or migrate assertion manually.");
+                break;
+            case AssertMultipleStatementIr multiple:
+                sb.AppendLine($"{pad}// Assert.Multiple source wrapper flattened by migrator.");
+                foreach (var inner in multiple.Statements)
+                    RenderStatement(sb, inner, indent);
                 break;
             case TableRowAccessStatementIr row:
                 if (IsResolved(row.Target))
@@ -103,7 +123,7 @@ public sealed class PlaywrightTypeScriptIrV2Renderer
                 sb.AppendLine($"{pad}}}");
                 break;
             case RawStatementIr raw:
-                RenderTodo(sb, pad, "RAW_STATEMENT", raw.Text, $"Raw {raw.Language} statement is not target-safe TypeScript.", "Add a TS-specific mapping/profile rule or leave it for manual migration.");
+                RenderTodo(sb, pad, "RAW_STATEMENT", raw.Text, FormatRawStatementReason(raw.Language), "Add a TS-specific mapping/profile rule or leave it for manual migration.");
                 break;
             case UnsupportedStatementIr unsupported:
                 RenderTodo(sb, pad, "UNSUPPORTED_ACTION", unsupported.Text, unsupported.Reason, "Add TS renderer support or keep as manual TODO.");
@@ -196,11 +216,7 @@ public sealed class PlaywrightTypeScriptIrV2Renderer
         switch (intent)
         {
             case TextAssertionIntent text when IsResolved(text.Target):
-                var expected = text.Expected == null ? "" : RenderValue(text.Expected);
-                if (string.Equals(text.Kind, "TextContains", StringComparison.OrdinalIgnoreCase))
-                    sb.AppendLine($"{pad}await expect({RenderLocator(text.Target)}).toContainText({expected});");
-                else
-                    sb.AppendLine($"{pad}await expect({RenderLocator(text.Target)}).toHaveText({expected});");
+                RenderTextAssertion(sb, pad, text);
                 break;
             case TextAssertionIntent text:
                 RenderMissingTarget(sb, pad, GetSourceExpression(text.Target));
@@ -225,35 +241,71 @@ public sealed class PlaywrightTypeScriptIrV2Renderer
         }
     }
 
+    void RenderTextAssertion(StringBuilder sb, string pad, TextAssertionIntent text)
+    {
+        var locator = RenderLocator(text.Target);
+        var expected = text.Expected == null ? "''" : RenderValue(text.Expected);
+        if (string.Equals(text.Kind, "TextContains", StringComparison.OrdinalIgnoreCase))
+            sb.AppendLine($"{pad}await expect({locator}).toContainText({expected});");
+        else if (string.Equals(text.Kind, "TextNotEquals", StringComparison.OrdinalIgnoreCase))
+            sb.AppendLine($"{pad}await expect({locator}).not.toHaveText({expected});");
+        else if (string.Equals(text.Kind, "TextEmpty", StringComparison.OrdinalIgnoreCase))
+            sb.AppendLine($"{pad}await expect({locator}).toHaveText('');");
+        else if (string.Equals(text.Kind, "TextNotEmpty", StringComparison.OrdinalIgnoreCase))
+            sb.AppendLine($"{pad}await expect({locator}).not.toHaveText('');");
+        else
+            sb.AppendLine($"{pad}await expect({locator}).toHaveText({expected});");
+    }
+
     void RenderMapped(StringBuilder sb, string pad, MappedMethodStatementIr mapped)
     {
-        if (RequiresReviewForTarget(mapped))
-            RenderTodo(sb, pad, "MAPPED_REQUIRES_REVIEW", mapped.SourceText, "Mapping is marked RequiresReview.", "Review source truth and add a safe TS-specific mapping if appropriate.");
-
-        var hasTypeScriptOverride = mapped.TargetStatementsByTarget.ContainsKey(PlaywrightTypeScriptTarget.Id);
-        foreach (var originalStatement in GetTargetStatements(mapped))
+        var requiresReview = PlaywrightTypeScriptMappedStatementSupport.RequiresReviewForTarget(
+            mapped.RequiresReview,
+            mapped.RequiresReviewByTarget);
+        if (requiresReview)
         {
-            var statement = originalStatement;
-            if (statement.Contains("{result}", StringComparison.Ordinal))
-            {
-                if (!string.IsNullOrWhiteSpace(mapped.ResultVariable))
-                    statement = statement.Replace("{result}", mapped.ResultVariable, StringComparison.Ordinal);
-                else
-                {
-                    RenderTodo(sb, pad, "UNRESOLVED_PLACEHOLDER", statement, "Mapped TargetStatement uses {result}, but the source action has no assigned result variable.", "Use {result} only for assignment-pattern mappings such as var page = Browser.GoToPage<T>(...). ");
-                    continue;
-                }
-            }
+            RenderTodo(
+                sb,
+                pad,
+                "MAPPED_REQUIRES_REVIEW",
+                mapped.SourceText,
+                "Mapping is marked RequiresReview and must not be emitted as active TypeScript.",
+                "Review source truth and add a safe TS-specific mapping with RequiresReview=false when appropriate.");
+        }
 
-            if (statement.Contains("{TARGET}", StringComparison.Ordinal))
+        var statements = PlaywrightTypeScriptMappedStatementSupport.SelectTargetStatements(
+            mapped.TargetStatements,
+            mapped.TargetStatementsByTarget,
+            out var hasTypeScriptOverride);
+        if (statements.Count == 0)
+        {
+            RenderTodo(
+                sb,
+                pad,
+                "TS_MAPPING_REQUIRED",
+                mapped.SourceText,
+                "Mapped helper has no TypeScript target statements.",
+                "Add Targets.playwright-typescript.TargetStatements or keep this helper as manual TODO.");
+            return;
+        }
+
+        foreach (var originalStatement in statements)
+        {
+            if (!TryPrepareMappedStatement(
+                    sb,
+                    pad,
+                    originalStatement,
+                    mapped.Target,
+                    mapped.ResultVariable,
+                    mapped.SourceText,
+                    out var statement))
+                continue;
+
+            if (requiresReview)
             {
-                if (mapped.Target != null && IsResolved(mapped.Target))
-                    statement = statement.Replace("{TARGET}", RenderLocator(mapped.Target), StringComparison.Ordinal);
-                else
-                {
-                    RenderTodo(sb, pad, "UNRESOLVED_PLACEHOLDER", statement, "Mapped TargetStatement uses {TARGET}, but the source receiver has no resolved target mapping.", "Add a UiTarget/Table mapping for the source receiver or remove {TARGET} from the target-specific mapping.");
-                    continue;
-                }
+                foreach (var line in PlaywrightTypeScriptMappedStatementSupport.CommentOutStatement(EnsureSemicolon(statement.Trim())))
+                    sb.AppendLine($"{pad}{line}");
+                continue;
             }
 
             if (hasTypeScriptOverride || LooksLikeTypeScript(statement))
@@ -278,6 +330,54 @@ public sealed class PlaywrightTypeScriptIrV2Renderer
         }
     }
 
+    bool TryPrepareMappedStatement(
+        StringBuilder sb,
+        string pad,
+        string originalStatement,
+        LocatorRef? target,
+        string? resultVariable,
+        string sourceText,
+        out string statement)
+    {
+        statement = originalStatement;
+        if (statement.Contains("{result}", StringComparison.Ordinal))
+        {
+            if (!string.IsNullOrWhiteSpace(resultVariable))
+                statement = statement.Replace("{result}", resultVariable, StringComparison.Ordinal);
+            else
+            {
+                RenderTodo(sb, pad, "UNRESOLVED_PLACEHOLDER", sourceText, "Mapped TargetStatement uses {result}, but the source action has no assigned result variable.", "Use {result} only for assignment-pattern mappings such as var page = Browser.GoToPage<T>(...). ");
+                return false;
+            }
+        }
+
+        if (statement.Contains("{TARGET}", StringComparison.Ordinal))
+        {
+            if (target != null && IsResolved(target))
+                statement = statement.Replace("{TARGET}", RenderLocator(target), StringComparison.Ordinal);
+            else
+            {
+                RenderTodo(sb, pad, "UNRESOLVED_PLACEHOLDER", sourceText, "Mapped TargetStatement uses {TARGET}, but the source receiver has no resolved target mapping.", "Add a UiTarget/Table mapping for the source receiver or remove {TARGET} from the target-specific mapping.");
+                return false;
+            }
+        }
+
+        var remainingPlaceholders = PlaywrightTypeScriptMappedStatementSupport.FindRemainingPlaceholders(statement);
+        if (remainingPlaceholders.Count > 0)
+        {
+            RenderTodo(
+                sb,
+                pad,
+                "UNRESOLVED_PLACEHOLDER",
+                sourceText,
+                $"Mapped TargetStatement still contains unresolved placeholder(s): {string.Join(", ", remainingPlaceholders.Select(p => "{" + p + "}"))}.",
+                "Use a ParameterizedMethod mapping that substitutes these placeholders before rendering, or remove them from the TS target statement.");
+            return false;
+        }
+
+        return true;
+    }
+
     void RenderTableCountAssertion(StringBuilder sb, string pad, TableCountAssertionStatementIr count)
     {
         if (!IsResolved(count.Target))
@@ -291,6 +391,7 @@ public sealed class PlaywrightTypeScriptIrV2Renderer
         var matcher = count.Kind switch
         {
             "CountGreaterThanZero" => "toBeGreaterThan(0)",
+            "CountGreaterThan" => $"toBeGreaterThan({expected})",
             "CountLessThanOne" => "toBeLessThan(1)",
             "CountGreaterThanOrEqualTo" => $"toBeGreaterThanOrEqual({expected})",
             "CountLessThan" => $"toBeLessThan({expected})",
@@ -310,7 +411,9 @@ public sealed class PlaywrightTypeScriptIrV2Renderer
         ByXpath xpath => xpath.Selector,
         ByText text => text.Text,
         ByTestId testId => testId.Value,
+        ByClassNamePrefix className => className.Prefix,
         PageObjectLocator pageObject => pageObject.Expression,
+        PlaywrightLocatorRef playwright => playwright.Expression,
         RawLocatorExpression raw => raw.Expression,
         UnresolvedLocator unresolved => unresolved.SourceExpression,
         _ => target.ToString() ?? string.Empty
@@ -323,8 +426,14 @@ public sealed class PlaywrightTypeScriptIrV2Renderer
             ByCss css => $"page.locator({Quote(css.Selector)})",
             ByXpath xpath => $"page.locator({Quote(xpath.Selector)})",
             ByText text => $"page.getByText({Quote(text.Text)})",
-            ByTestId testId => $"page.locator({Quote($"[data-testid^='{testId.Value}']")})",
+            ByTestId testId => string.IsNullOrWhiteSpace(testId.Attribute)
+                ? $"page.locator({Quote($"[data-testid^='{testId.Value}']")})"
+                : $"page.locator({Quote($"[{testId.Attribute}^='{testId.Value}']")})",
+            ByClassNamePrefix className => $"page.locator({Quote($"[class^='{className.Prefix}']")})",
             PageObjectLocator pageObject => $"page.getByTestId({Quote(pageObject.Expression)})",
+            PlaywrightLocatorRef playwright => string.IsNullOrWhiteSpace(playwright.TestIdAttribute)
+                ? ConvertLocatorExpression(playwright.Expression)
+                : $"page.locator({Quote($"[{playwright.TestIdAttribute}='{playwright.Expression}']")})",
             RawLocatorExpression raw => ConvertLocatorExpression(raw.Expression),
             UnresolvedLocator unresolved => ConvertLocatorExpression(unresolved.SourceExpression),
             _ => ConvertLocatorExpression(target.ToString() ?? string.Empty)
@@ -335,6 +444,10 @@ public sealed class PlaywrightTypeScriptIrV2Renderer
             ByCss css => css.Match,
             ByText text => text.Match,
             ByTestId testId => testId.Match,
+            ByXpath xpath => xpath.Match,
+            ByClassNamePrefix className => className.Match,
+            PlaywrightLocatorRef playwright => playwright.Match,
+            RawLocatorExpression raw => raw.Match,
             _ => null
         };
         var nthIndex = target switch
@@ -342,13 +455,31 @@ public sealed class PlaywrightTypeScriptIrV2Renderer
             ByCss css => css.NthIndex,
             ByText text => text.NthIndex,
             ByTestId testId => testId.NthIndex,
+            ByXpath xpath => xpath.NthIndex,
+            ByClassNamePrefix className => className.NthIndex,
+            PlaywrightLocatorRef playwright => playwright.NthIndex,
+            RawLocatorExpression raw => raw.NthIndex,
+            _ => null
+        };
+
+        var nthIndexExpression = target switch
+        {
+            ByCss css => css.NthIndexExpression,
+            ByText text => text.NthIndexExpression,
+            ByTestId testId => testId.NthIndexExpression,
+            ByXpath xpath => xpath.NthIndexExpression,
+            ByClassNamePrefix className => className.NthIndexExpression,
+            PlaywrightLocatorRef playwright => playwright.NthIndexExpression,
+            RawLocatorExpression raw => raw.NthIndexExpression,
             _ => null
         };
 
         if (string.Equals(match, "First", StringComparison.OrdinalIgnoreCase))
             result += ".first()";
         else if (string.Equals(match, "Nth", StringComparison.OrdinalIgnoreCase))
-            result += $".nth({nthIndex ?? 0})";
+            result += !string.IsNullOrWhiteSpace(nthIndexExpression)
+                ? $".nth({nthIndexExpression})"
+                : $".nth({nthIndex ?? 0})";
 
         return result;
     }
@@ -376,6 +507,8 @@ public sealed class PlaywrightTypeScriptIrV2Renderer
     static string ConvertLocatorExpression(string expression)
     {
         var result = expression.Trim();
+        if (LooksLikeCssSelector(result) || LooksLikeXPathSelector(result))
+            return $"page.locator({Quote(result)})";
         result = Regex.Replace(result, "\\bPage\\.", "page.");
         result = result.Replace("GetByTestId", "getByTestId", StringComparison.Ordinal);
         result = result.Replace("GetByText", "getByText", StringComparison.Ordinal);
@@ -386,6 +519,21 @@ public sealed class PlaywrightTypeScriptIrV2Renderer
         result = result.Replace("Async()", "()", StringComparison.Ordinal);
         return result;
     }
+
+    static bool LooksLikeCssSelector(string expression)
+    {
+        if (string.IsNullOrWhiteSpace(expression))
+            return false;
+        return expression.StartsWith("#", StringComparison.Ordinal)
+            || expression.StartsWith(".", StringComparison.Ordinal)
+            || expression.StartsWith("[", StringComparison.Ordinal)
+            || expression.StartsWith(":", StringComparison.Ordinal);
+    }
+
+    static bool LooksLikeXPathSelector(string expression) =>
+        expression.StartsWith("//", StringComparison.Ordinal)
+        || expression.StartsWith("./", StringComparison.Ordinal)
+        || expression.StartsWith("(//", StringComparison.Ordinal);
 
     static string ConvertExpression(string expression)
     {
@@ -439,6 +587,11 @@ public sealed class PlaywrightTypeScriptIrV2Renderer
         if (match.Success)
             _targetLocals.Add(match.Groups[1].Value);
     }
+
+    static string FormatRawStatementReason(string language) =>
+        string.Equals(language, "csharp", StringComparison.OrdinalIgnoreCase)
+            ? "Raw Selenium/C# statement is not target-safe TypeScript."
+            : $"Raw {language} statement is not target-safe TypeScript.";
 
     static string EnsureSemicolon(string code) => code.TrimEnd().EndsWith(";", StringComparison.Ordinal) ? code.TrimEnd() : code.TrimEnd() + ";";
     static string Quote(string text) => $"'{EscapeString(text)}'";

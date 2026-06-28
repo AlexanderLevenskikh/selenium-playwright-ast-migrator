@@ -254,13 +254,15 @@ public class LegacyIrBridgeGoldenTests
 
     static object DescribeLocator(LocatorRef locator) => locator switch
     {
-        ByTestId testId => new { kind = "ByTestId", testId.Value, testId.Attribute, testId.Match, testId.NthIndex },
-        ByCss css => new { kind = "ByCss", css.Selector, css.Match, css.NthIndex },
-        ByXpath xpath => new { kind = "ByXpath", xpath.Selector, xpath.Match, xpath.NthIndex },
-        ByText text => new { kind = "ByText", text.Text, text.Match, text.NthIndex },
-        ByRole role => new { kind = "ByRole", role.Role, role.Name, role.Match, role.NthIndex },
+        ByTestId testId => new { kind = "ByTestId", testId.Value, testId.Attribute, testId.Match, testId.NthIndex, testId.NthIndexExpression },
+        ByCss css => new { kind = "ByCss", css.Selector, css.Match, css.NthIndex, css.NthIndexExpression },
+        ByXpath xpath => new { kind = "ByXpath", xpath.Selector, xpath.Match, xpath.NthIndex, xpath.NthIndexExpression },
+        ByText text => new { kind = "ByText", text.Text, text.Match, text.NthIndex, text.NthIndexExpression },
+        ByRole role => new { kind = "ByRole", role.Role, role.Name, role.Match, role.NthIndex, role.NthIndexExpression },
+        ByClassNamePrefix className => new { kind = "ByClassNamePrefix", className.Prefix, className.Match, className.NthIndex, className.NthIndexExpression },
         PageObjectLocator pageObject => new { kind = "PageObject", pageObject.Expression },
-        RawLocatorExpression raw => new { kind = "Raw", raw.Expression, raw.Language },
+        PlaywrightLocatorRef playwright => new { kind = "PlaywrightLocator", playwright.Expression, playwright.TestIdAttribute, playwright.Match, playwright.NthIndex, playwright.NthIndexExpression },
+        RawLocatorExpression raw => new { kind = "Raw", raw.Expression, raw.Language, raw.Match, raw.NthIndex, raw.NthIndexExpression },
         UnresolvedLocator unresolved => new { kind = "Unresolved", unresolved.SourceExpression },
         _ => new { kind = locator.GetType().Name }
     };
@@ -291,7 +293,7 @@ public class LegacyIrBridgeGoldenTests
 
     static object DescribeNavigation(NavigationIntent intent) => intent switch
     {
-        UrlNavigationIntent url => new { kind = "Url", Url = DescribeValue(url.Url), url.ResultVariable, url.TargetStatement },
+        UrlNavigationIntent url => new { kind = "Url", Url = DescribeValue(url.Url), url.ResultVariable, url.TargetStatement, url.SourceText },
         RawNavigationIntent raw => new { kind = "Raw", raw.SourceText, raw.Reason },
         _ => new { kind = intent.GetType().Name }
     };

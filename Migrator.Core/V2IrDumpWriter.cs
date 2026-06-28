@@ -294,41 +294,64 @@ public static class V2IrDumpWriter
             ["value"] = testId.Value,
             ["attribute"] = testId.Attribute,
             ["match"] = testId.Match,
-            ["nthIndex"] = testId.NthIndex
+            ["nthIndex"] = testId.NthIndex,
+            ["nthIndexExpression"] = testId.NthIndexExpression
         }),
         ByCss css => new("ByCss", new Dictionary<string, object?>
         {
             ["selector"] = css.Selector,
             ["match"] = css.Match,
-            ["nthIndex"] = css.NthIndex
+            ["nthIndex"] = css.NthIndex,
+            ["nthIndexExpression"] = css.NthIndexExpression
         }),
         ByXpath xpath => new("ByXpath", new Dictionary<string, object?>
         {
             ["selector"] = xpath.Selector,
             ["match"] = xpath.Match,
-            ["nthIndex"] = xpath.NthIndex
+            ["nthIndex"] = xpath.NthIndex,
+            ["nthIndexExpression"] = xpath.NthIndexExpression
         }),
         ByText text => new("ByText", new Dictionary<string, object?>
         {
             ["text"] = text.Text,
             ["match"] = text.Match,
-            ["nthIndex"] = text.NthIndex
+            ["nthIndex"] = text.NthIndex,
+            ["nthIndexExpression"] = text.NthIndexExpression
         }),
         ByRole role => new("ByRole", new Dictionary<string, object?>
         {
             ["role"] = role.Role,
             ["name"] = role.Name,
             ["match"] = role.Match,
-            ["nthIndex"] = role.NthIndex
+            ["nthIndex"] = role.NthIndex,
+            ["nthIndexExpression"] = role.NthIndexExpression
+        }),
+        ByClassNamePrefix className => new("ByClassNamePrefix", new Dictionary<string, object?>
+        {
+            ["prefix"] = className.Prefix,
+            ["match"] = className.Match,
+            ["nthIndex"] = className.NthIndex,
+            ["nthIndexExpression"] = className.NthIndexExpression
         }),
         PageObjectLocator pageObject => new("PageObjectLocator", new Dictionary<string, object?>
         {
             ["expression"] = pageObject.Expression
         }),
+        PlaywrightLocatorRef playwright => new("PlaywrightLocatorRef", new Dictionary<string, object?>
+        {
+            ["expression"] = playwright.Expression,
+            ["testIdAttribute"] = playwright.TestIdAttribute,
+            ["match"] = playwright.Match,
+            ["nthIndex"] = playwright.NthIndex,
+            ["nthIndexExpression"] = playwright.NthIndexExpression
+        }),
         RawLocatorExpression raw => new("RawLocatorExpression", new Dictionary<string, object?>
         {
             ["expression"] = raw.Expression,
-            ["language"] = raw.Language
+            ["language"] = raw.Language,
+            ["match"] = raw.Match,
+            ["nthIndex"] = raw.NthIndex,
+            ["nthIndexExpression"] = raw.NthIndexExpression
         }),
         UnresolvedLocator unresolved => new("UnresolvedLocator", new Dictionary<string, object?>
         {
@@ -406,7 +429,8 @@ public static class V2IrDumpWriter
         {
             ["url"] = DumpValue(nav.Url),
             ["resultVariable"] = nav.ResultVariable,
-            ["targetStatement"] = nav.TargetStatement
+            ["targetStatement"] = nav.TargetStatement,
+            ["sourceText"] = nav.SourceText
         }),
         RawNavigationIntent raw => new("Raw", new Dictionary<string, object?>
         {

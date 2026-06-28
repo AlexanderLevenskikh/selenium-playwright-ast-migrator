@@ -94,6 +94,151 @@ public class ConfigValidateTests
         }
     }
 
+
+    [Fact]
+    public void ConfigValidate_StrictMode_WarnsForLegacyTargetStatementsWithoutTargetOverride()
+    {
+        var temp = CreateTempDir();
+        try
+        {
+            var configPath = Path.Combine(temp, "adapter-config.json");
+            File.WriteAllText(configPath, """
+            {
+              "Verification": {},
+              "Methods": [
+                {
+                  "SourceMethod": "page.Save.WaitVisible()",
+                  "TargetStatements": [
+                    "await Assertions.Expect({TARGET}).ToBeVisibleAsync();"
+                  ]
+                }
+              ]
+            }
+            """);
+
+            var outDir = Path.Combine(temp, "out");
+            var result = RunCli($"--mode config-validate --config \"{configPath}\" --target playwright-typescript --validation-mode strict --out \"{outDir}\" --format both");
+
+            AssertCliSuccess(result);
+            var markdown = File.ReadAllText(Path.Combine(outDir, "config-validate-report.md"));
+            Assert.Contains("Validation mode: `strict`", markdown);
+            Assert.Contains("TARGET_SPECIFIC_STATEMENTS_MISSING", markdown);
+            Assert.Contains("playwright-typescript", markdown);
+        }
+        finally
+        {
+            TryDelete(temp);
+        }
+    }
+
+    [Fact]
+    public void ConfigValidate_ProductionMode_FailsForTypeScriptLegacyTargetStatementsWithoutOverride()
+    {
+        var temp = CreateTempDir();
+        try
+        {
+            var configPath = Path.Combine(temp, "adapter-config.json");
+            File.WriteAllText(configPath, """
+            {
+              "Verification": {},
+              "Methods": [
+                {
+                  "SourceMethod": "page.Save.WaitVisible()",
+                  "TargetStatements": [
+                    "await Assertions.Expect({TARGET}).ToBeVisibleAsync();"
+                  ]
+                }
+              ]
+            }
+            """);
+
+            var outDir = Path.Combine(temp, "out");
+            var result = RunCli($"--mode config-validate --config \"{configPath}\" --target playwright-typescript --validation-mode production --out \"{outDir}\" --format both");
+
+            Assert.Equal(2, result.ExitCode);
+            var markdown = File.ReadAllText(Path.Combine(outDir, "config-validate-report.md"));
+            Assert.Contains("Validation mode: `production`", markdown);
+            Assert.Contains("TS_TARGET_STATEMENTS_REQUIRED", markdown);
+        }
+        finally
+        {
+            TryDelete(temp);
+        }
+    }
+
+    [Fact]
+    public void ConfigValidate_ProductionMode_PassesForTypeScriptTargetSpecificStatements()
+    {
+        var temp = CreateTempDir();
+        try
+        {
+            var configPath = Path.Combine(temp, "adapter-config.json");
+            File.WriteAllText(configPath, """
+            {
+              "Verification": {},
+              "Methods": [
+                {
+                  "SourceMethod": "page.Save.WaitVisible()",
+                  "Targets": {
+                    "playwright-typescript": {
+                      "TargetStatements": [
+                        "await expect({TARGET}).toBeVisible();"
+                      ]
+                    }
+                  }
+                }
+              ],
+              "ParameterizedMethods": [
+                {
+                  "SourceMethodPattern": "page.Name.Set({value})",
+                  "Targets": {
+                    "ts": {
+                      "TargetStatements": [
+                        "await {TARGET}.fill({value});"
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+            """);
+
+            var outDir = Path.Combine(temp, "out");
+            var result = RunCli($"--mode config-validate --config \"{configPath}\" --target playwright-typescript --validation-mode production --out \"{outDir}\" --format both");
+
+            AssertCliSuccess(result);
+            var markdown = File.ReadAllText(Path.Combine(outDir, "config-validate-report.md"));
+            Assert.Contains("Validation mode: `production`", markdown);
+            Assert.DoesNotContain("TS_TARGET_STATEMENTS_REQUIRED", markdown);
+            Assert.DoesNotContain("MAPPED_METHOD_REQUIRES_REVIEW", markdown);
+        }
+        finally
+        {
+            TryDelete(temp);
+        }
+    }
+
+    [Fact]
+    public void ConfigValidate_InvalidValidationMode_FailsFast()
+    {
+        var temp = CreateTempDir();
+        try
+        {
+            var configPath = Path.Combine(temp, "adapter-config.json");
+            File.WriteAllText(configPath, "{}");
+            var outDir = Path.Combine(temp, "out");
+
+            var result = RunCli($"--mode config-validate --config \"{configPath}\" --validation-mode max --out \"{outDir}\" --format json");
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("Invalid validation mode", result.StdErr);
+        }
+        finally
+        {
+            TryDelete(temp);
+        }
+    }
+
     static void AssertCliSuccess(CliResult result)
     {
         Assert.True(

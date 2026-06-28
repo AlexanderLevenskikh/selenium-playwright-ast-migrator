@@ -14,28 +14,40 @@ namespace Migrator.PlaywrightTypeScript;
 public sealed class PlaywrightTypeScriptRenderer : IRenderer
 {
     readonly HashSet<string> _targetLocals = new(StringComparer.Ordinal);
+    readonly PlaywrightTypeScriptTestHostRenderer _testHost;
+
+    public PlaywrightTypeScriptRenderer()
+        : this(PlaywrightTypeScriptRenderOptions.Default)
+    {
+    }
+
+    public PlaywrightTypeScriptRenderer(PlaywrightTypeScriptRenderOptions options)
+    {
+        _testHost = new PlaywrightTypeScriptTestHostRenderer(options);
+    }
 
     public string Render(TestFileModel model)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("import { test, expect } from '@playwright/test';");
-        sb.AppendLine();
-        sb.AppendLine($"// Generated from Selenium C# source: {EscapeComment(model.FilePath)}");
-        sb.AppendLine("// Target: Playwright TypeScript (experimental). Validate inside a real TS Playwright project.");
-        sb.AppendLine();
+        _testHost.RenderPreamble(
+            sb,
+            model.FilePath,
+            "Playwright TypeScript (experimental). Validate inside a real TS Playwright project.");
+
+        var suiteIndent = _testHost.BeginSuite(sb, model.ClassName);
 
         foreach (var test in model.Tests)
         {
             _targetLocals.Clear();
-            sb.AppendLine($"test('{EscapeString(test.Name)}', async ({{ page }}) => {{");
+            var actionIndent = _testHost.BeginTest(sb, test.Name, suiteIndent);
             foreach (var action in model.SetUpActions)
-                RenderAction(sb, action, 1);
+                RenderAction(sb, action, actionIndent);
             foreach (var action in test.BodyActions)
-                RenderAction(sb, action, 1);
-            sb.AppendLine("});");
-            sb.AppendLine();
+                RenderAction(sb, action, actionIndent);
+            _testHost.EndTest(sb, suiteIndent);
         }
 
+        _testHost.EndSuite(sb);
         return sb.ToString();
     }
 
@@ -84,11 +96,19 @@ public sealed class PlaywrightTypeScriptRenderer : IRenderer
             case RawStatementAction raw:
                 RenderTodo(sb, pad, "RAW_STATEMENT", raw.SourceText, "Raw Selenium/C# statement is not target-safe TypeScript.", "Add a TS-specific mapping/profile rule or leave it for manual migration.");
                 break;
+            case UnsupportedAction unsupported:
+                RenderTodo(sb, pad, "UNSUPPORTED_ACTION", unsupported.SourceText, unsupported.Reason, "Add TS renderer support or keep as manual TODO.");
+                break;
             case AssertAreEqualAction eq:
                 sb.AppendLine($"{pad}expect({ConvertExpression(eq.ActualExpression)}).toEqual({ConvertExpression(eq.ExpectedExpression)});");
                 break;
             case AssertThatAction assertThat:
                 RenderTodo(sb, pad, "ASSERTION_CONSTRAINT", $"Assert.That({assertThat.ActualExpression}, {assertThat.ConstraintExpression})", "NUnit/FluentAssertions constraint needs TS-specific assertion mapping.", "Add ParameterizedMethodMapping or migrate assertion manually.");
+                break;
+            case AssertMultipleAction multiple:
+                sb.AppendLine($"{pad}// Assert.Multiple source wrapper flattened by migrator.");
+                foreach (var inner in multiple.Actions)
+                    RenderAction(sb, inner, (pad.Length / 2));
                 break;
             case TableRowAccessAction row:
                 if (IsResolved(row.Target))
@@ -110,6 +130,7 @@ public sealed class PlaywrightTypeScriptRenderer : IRenderer
                     var matcher = count.Kind switch
                     {
                         TableCountKind.CountGreaterThanZero => $"toBeGreaterThan(0)",
+                        TableCountKind.CountGreaterThan => $"toBeGreaterThan({expected})",
                         TableCountKind.CountLessThanOne => $"toBeLessThan(1)",
                         TableCountKind.CountGreaterThanOrEqualTo => $"toBeGreaterThanOrEqual({expected})",
                         TableCountKind.CountLessThan => $"toBeLessThan({expected})",
@@ -142,9 +163,26 @@ public sealed class PlaywrightTypeScriptRenderer : IRenderer
             return;
         }
 
-        var matcher = assertion.Kind == TextAssertionKind.TextContains ? "toContainText" : "toHaveText";
+        var locator = RenderTarget(assertion.Target);
         var expected = string.IsNullOrWhiteSpace(assertion.ExpectedValue) ? "''" : ConvertExpression(assertion.ExpectedValue!);
-        sb.AppendLine($"{pad}await expect({RenderTarget(assertion.Target)}).{matcher}({expected});");
+        switch (assertion.Kind)
+        {
+            case TextAssertionKind.TextContains:
+                sb.AppendLine($"{pad}await expect({locator}).toContainText({expected});");
+                break;
+            case TextAssertionKind.TextNotEquals:
+                sb.AppendLine($"{pad}await expect({locator}).not.toHaveText({expected});");
+                break;
+            case TextAssertionKind.TextEmpty:
+                sb.AppendLine($"{pad}await expect({locator}).toHaveText('');");
+                break;
+            case TextAssertionKind.TextNotEmpty:
+                sb.AppendLine($"{pad}await expect({locator}).not.toHaveText('');");
+                break;
+            default:
+                sb.AppendLine($"{pad}await expect({locator}).toHaveText({expected});");
+                break;
+        }
     }
 
     void RenderVisibilityAssertion(StringBuilder sb, string pad, VisibilityAssertionAction assertion)
@@ -167,37 +205,53 @@ public sealed class PlaywrightTypeScriptRenderer : IRenderer
 
     void RenderMapped(StringBuilder sb, string pad, MappedMethodInvocationAction mapped)
     {
-        if (mapped.RequiresReviewForTarget(PlaywrightTypeScriptTarget.Id))
-            RenderTodo(sb, pad, "MAPPED_REQUIRES_REVIEW", mapped.FullSourceText, "Mapping is marked RequiresReview.", "Review source truth and add a safe TS-specific mapping if appropriate.");
-
-        var hasTypeScriptOverride = mapped.TargetStatementsByTarget.ContainsKey(PlaywrightTypeScriptTarget.Id);
-        foreach (var originalStatement in mapped.GetTargetStatements(PlaywrightTypeScriptTarget.Id))
+        var requiresReview = PlaywrightTypeScriptMappedStatementSupport.RequiresReviewForTarget(
+            mapped.RequiresReview,
+            mapped.RequiresReviewByTarget);
+        if (requiresReview)
         {
-            var statement = originalStatement;
-            if (statement.Contains("{result}"))
-            {
-                if (!string.IsNullOrWhiteSpace(mapped.ResultVariable))
-                {
-                    statement = statement.Replace("{result}", mapped.ResultVariable);
-                }
-                else
-                {
-                    RenderTodo(sb, pad, "UNRESOLVED_PLACEHOLDER", statement, "Mapped TargetStatement uses {result}, but the source action has no assigned result variable.", "Use {result} only for assignment-pattern mappings such as var page = Browser.GoToPage<T>(...). ");
-                    continue;
-                }
-            }
+            RenderTodo(
+                sb,
+                pad,
+                "MAPPED_REQUIRES_REVIEW",
+                mapped.FullSourceText,
+                "Mapping is marked RequiresReview and must not be emitted as active TypeScript.",
+                "Review source truth and add a safe TS-specific mapping with RequiresReview=false when appropriate.");
+        }
 
-            if (statement.Contains("{TARGET}"))
+        var statements = PlaywrightTypeScriptMappedStatementSupport.SelectTargetStatements(
+            mapped.TargetStatements,
+            mapped.TargetStatementsByTarget,
+            out var hasTypeScriptOverride);
+        if (statements.Count == 0)
+        {
+            RenderTodo(
+                sb,
+                pad,
+                "TS_MAPPING_REQUIRED",
+                mapped.FullSourceText,
+                "Mapped helper has no TypeScript target statements.",
+                "Add Targets.playwright-typescript.TargetStatements or keep this helper as manual TODO.");
+            return;
+        }
+
+        foreach (var originalStatement in statements)
+        {
+            if (!TryPrepareMappedStatement(
+                    sb,
+                    pad,
+                    originalStatement,
+                    mapped.TargetExpr,
+                    mapped.ResultVariable,
+                    mapped.FullSourceText,
+                    out var statement))
+                continue;
+
+            if (requiresReview)
             {
-                if (mapped.TargetExpr != null && IsResolved(mapped.TargetExpr))
-                {
-                    statement = statement.Replace("{TARGET}", RenderTarget(mapped.TargetExpr));
-                }
-                else
-                {
-                    RenderTodo(sb, pad, "UNRESOLVED_PLACEHOLDER", statement, "Mapped TargetStatement uses {TARGET}, but the source receiver has no resolved target mapping.", "Add a UiTarget/Table mapping for the source receiver or remove {TARGET} from the target-specific mapping.");
-                    continue;
-                }
+                foreach (var line in PlaywrightTypeScriptMappedStatementSupport.CommentOutStatement(EnsureSemicolon(statement.Trim())))
+                    sb.AppendLine($"{pad}{line}");
+                continue;
             }
 
             if (hasTypeScriptOverride || LooksLikeTypeScript(statement))
@@ -220,6 +274,54 @@ public sealed class PlaywrightTypeScriptRenderer : IRenderer
                 }
             }
         }
+    }
+
+    bool TryPrepareMappedStatement(
+        StringBuilder sb,
+        string pad,
+        string originalStatement,
+        TargetExpression? target,
+        string? resultVariable,
+        string sourceText,
+        out string statement)
+    {
+        statement = originalStatement;
+        if (statement.Contains("{result}", StringComparison.Ordinal))
+        {
+            if (!string.IsNullOrWhiteSpace(resultVariable))
+                statement = statement.Replace("{result}", resultVariable, StringComparison.Ordinal);
+            else
+            {
+                RenderTodo(sb, pad, "UNRESOLVED_PLACEHOLDER", sourceText, "Mapped TargetStatement uses {result}, but the source action has no assigned result variable.", "Use {result} only for assignment-pattern mappings such as var page = Browser.GoToPage<T>(...). ");
+                return false;
+            }
+        }
+
+        if (statement.Contains("{TARGET}", StringComparison.Ordinal))
+        {
+            if (target != null && IsResolved(target))
+                statement = statement.Replace("{TARGET}", RenderTarget(target), StringComparison.Ordinal);
+            else
+            {
+                RenderTodo(sb, pad, "UNRESOLVED_PLACEHOLDER", sourceText, "Mapped TargetStatement uses {TARGET}, but the source receiver has no resolved target mapping.", "Add a UiTarget/Table mapping for the source receiver or remove {TARGET} from the target-specific mapping.");
+                return false;
+            }
+        }
+
+        var remainingPlaceholders = PlaywrightTypeScriptMappedStatementSupport.FindRemainingPlaceholders(statement);
+        if (remainingPlaceholders.Count > 0)
+        {
+            RenderTodo(
+                sb,
+                pad,
+                "UNRESOLVED_PLACEHOLDER",
+                sourceText,
+                $"Mapped TargetStatement still contains unresolved placeholder(s): {string.Join(", ", remainingPlaceholders.Select(p => "{" + p + "}"))}.",
+                "Use a ParameterizedMethod mapping that substitutes these placeholders before rendering, or remove them from the TS target statement.");
+            return false;
+        }
+
+        return true;
     }
 
     void RenderLocatorAction(StringBuilder sb, string pad, TargetExpression target, string actionSuffix, int sourceLine, string reason)

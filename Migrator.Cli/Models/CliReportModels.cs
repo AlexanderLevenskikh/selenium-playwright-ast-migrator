@@ -153,11 +153,12 @@ record RuntimeFailureGroup(string Category, int Count, string Severity, string L
 record RuntimeFailureObservation(string Category, string File, int Line, string? TestName, string Message, string Snippet);
 record ConfigSchemaReport(DateTimeOffset GeneratedAtUtc, string SchemaPath, string SchemaName, string[] SuggestedUsage);
 
-record ConfigSafetyReport(DateTimeOffset GeneratedAtUtc, string ConfigPath, string Status, ConfigSafetyIssue[] Issues, ConfigMetric[] Metrics);
+record ConfigSafetyReport(DateTimeOffset GeneratedAtUtc, string ConfigPath, string ValidationMode, string Status, ConfigSafetyIssue[] Issues, ConfigMetric[] Metrics);
 record ConfigSafetyIssue(string Severity, string Code, string Message, string? Location, string SuggestedAction);
 record ConfigMetric(string Name, int Value);
 record ConfigDiffReport(DateTimeOffset GeneratedAtUtc, string BeforePath, string AfterPath, ConfigDiffChange[] Changes, ConfigSafetyIssue[] Risks, string[] Summary);
 record ConfigDiffChange(string Section, string ChangeType, string Key);
+record ConfigDiffInput(string Path, string Kind, ProjectAdapterConfig Config);
 record GuardReport(DateTimeOffset GeneratedAtUtc, string BeforePath, string AfterPath, string Status, GuardCheck[] Checks, string[] Summary);
 record GuardCheck(string Name, string Status, string Message, int? Before, int? After);
 
@@ -165,4 +166,4 @@ record DoctorReport(DateTimeOffset GeneratedAtUtc, string Status, string InputPa
 record DoctorCheck(string Status, string Code, string Message, string? Location, string SuggestedAction);
 record SimpleProcessResult(int ExitCode, string StdOut, string StdErr);
 
-record CliOptions(string Mode, string Input, string Out, string? Config, string[] Configs, string Format, bool FailOnUnsupported, bool FailOnTodo, string Workspace, string? Before, string? After, string Target, string Source, string? TsProject, bool RecursiveArtifacts, string IrVersion, string RenderIr);
+record CliOptions(string Mode, string Input, string Out, string? Config, string[] Configs, string Format, bool FailOnUnsupported, bool FailOnTodo, string Workspace, string? Before, string? After, string Target, string Source, bool SourceExplicit, string? TsProject, bool RecursiveArtifacts, string IrVersion, string RenderIr, string ValidationMode);

@@ -51,7 +51,13 @@ public static class LegacyIrBridge
             ClassName: document.Suite.ClassName,
             BaseClassName: document.Suite.BaseClassName,
             SetUpActions: document.Suite.SetUp.Select(ToLegacyAction).ToArray(),
-            Tests: tests);
+            Tests: tests)
+        {
+            ClassFields = document.Suite.ClassMembers
+                .Select(ToLegacyAction)
+                .OfType<PageObjectFieldAction>()
+                .ToArray()
+        };
     }
 
     static TestCaseIr ToTestCase(TestModel test, string filePath, List<IrDiagnostic> diagnostics)
@@ -79,7 +85,7 @@ public static class LegacyIrBridge
             VisibilityAssertionAction visibility => new AssertionStatementIr(new VisibilityAssertionIntent(ToLocator(visibility.Target), visibility.Kind.ToString()), span),
             UrlAssertionAction url => new AssertionStatementIr(new UrlAssertionIntent(url.Kind.ToString(), ToValue(url.ExpectedValue)), span),
             WaitForAction wait => new WaitStatementIr(new LocatorWaitIntent(ToLocator(wait.Target), wait.Kind.ToString(), wait.SourceMethod), span),
-            NavigationAction nav => new NavigationStatementIr(new UrlNavigationIntent(ToValue(nav.UrlExpression), nav.PageVariableName, nav.TargetStatement), span),
+            NavigationAction nav => new NavigationStatementIr(new UrlNavigationIntent(ToValue(nav.UrlExpression), nav.PageVariableName, nav.TargetStatement, nav.SourceText), span),
             PressAction press => new PressStatementIr(ToLocator(press.Target), press.KeyName, span),
             LocalDeclarationAction local => new DeclarationStatementIr(local.VariableName, local.VariableType, ToValue(local.InitializationValue), span),
             LocatorDeclarationAction locator => new LocatorDeclarationStatementIr(locator.VariableName, ToLocator(TargetExpression.Mapped(locator.LocatorExpression, locator.LocatorExpression, TargetKind.RawExpression)), locator.SourceText, span),
@@ -115,13 +121,14 @@ public static class LegacyIrBridge
     {
         return target switch
         {
-            MappedTarget mapped when mapped.Kind == TargetKind.CssSelector => new ByCss(mapped.TargetExpression, mapped.Match, mapped.NthIndex),
-            MappedTarget mapped when mapped.Kind == TargetKind.Text => new ByText(mapped.TargetExpression, mapped.Match, mapped.NthIndex),
-            MappedTarget mapped when mapped.Kind == TargetKind.TestIdBeginning => new ByTestId(mapped.TargetExpression, mapped.TestIdAttribute, mapped.Match, mapped.NthIndex),
+            MappedTarget mapped when mapped.Kind == TargetKind.CssSelector => new ByCss(mapped.TargetExpression, mapped.Match, mapped.NthIndex, mapped.NthIndexExpression),
+            MappedTarget mapped when mapped.Kind == TargetKind.Text => new ByText(mapped.TargetExpression, mapped.Match, mapped.NthIndex, mapped.NthIndexExpression),
+            MappedTarget mapped when mapped.Kind == TargetKind.TestIdBeginning => new ByTestId(mapped.TargetExpression, mapped.TestIdAttribute, mapped.Match, mapped.NthIndex, mapped.NthIndexExpression),
+            MappedTarget mapped when mapped.Kind == TargetKind.ClassNameBeginning => new ByClassNamePrefix(mapped.TargetExpression, mapped.Match, mapped.NthIndex, mapped.NthIndexExpression),
             MappedTarget mapped when mapped.Kind == TargetKind.PageObjectProperty => new PageObjectLocator(mapped.TargetExpression),
-            MappedTarget mapped when mapped.Kind == TargetKind.RawExpression => new RawLocatorExpression(mapped.TargetExpression, "csharp"),
-            MappedTarget mapped when mapped.Kind == TargetKind.PlaywrightLocator => new RawLocatorExpression(mapped.TargetExpression, "csharp"),
-            MappedTarget mapped => new RawLocatorExpression(mapped.TargetExpression, mapped.Kind.ToString()),
+            MappedTarget mapped when mapped.Kind == TargetKind.RawExpression => new RawLocatorExpression(mapped.TargetExpression, "csharp", mapped.Match, mapped.NthIndex, mapped.NthIndexExpression),
+            MappedTarget mapped when mapped.Kind == TargetKind.PlaywrightLocator => new PlaywrightLocatorRef(mapped.TargetExpression, mapped.TestIdAttribute, mapped.Match, mapped.NthIndex, mapped.NthIndexExpression),
+            MappedTarget mapped => new RawLocatorExpression(mapped.TargetExpression, mapped.Kind.ToString(), mapped.Match, mapped.NthIndex, mapped.NthIndexExpression),
             UnresolvedTarget unresolved => new UnresolvedLocator(unresolved.SourceExpression),
             _ => new UnresolvedLocator(target.SourceExpression)
         };
@@ -154,7 +161,7 @@ public static class LegacyIrBridge
             AssertionStatementIr { Intent: VisibilityAssertionIntent visibility } => new VisibilityAssertionAction(line, ToLegacyTarget(visibility.Target), ParseVisibilityKind(visibility.Kind)),
             AssertionStatementIr { Intent: UrlAssertionIntent url } => new UrlAssertionAction(line, ParseUrlKind(url.Kind), ToLegacyValue(url.Expected)),
             WaitStatementIr { Intent: LocatorWaitIntent wait } => new WaitForAction(line, ToLegacyTarget(wait.Target), sourceMethod: wait.SourceMethod, kind: ParseWaitKind(wait.Kind)),
-            NavigationStatementIr { Intent: UrlNavigationIntent nav } => new NavigationAction(line, ToLegacyValue(nav.Url), nav.ResultVariable, ToLegacyValue(nav.Url), targetStatement: nav.TargetStatement),
+            NavigationStatementIr { Intent: UrlNavigationIntent nav } => new NavigationAction(line, ToLegacyValue(nav.Url), nav.ResultVariable, nav.SourceText ?? ToLegacyValue(nav.Url), targetStatement: nav.TargetStatement),
             PressStatementIr press => new PressAction(line, ToLegacyTarget(press.Target), press.KeyName),
             DeclarationStatementIr declaration => new LocalDeclarationAction(line, declaration.VariableName, declaration.VariableType, ToLegacyValue(declaration.Initializer)),
             LocatorDeclarationStatementIr locator => new LocatorDeclarationAction(line, locator.VariableName, ToLegacyLocatorExpression(locator.Locator), locator.SourceText),
@@ -184,15 +191,26 @@ public static class LegacyIrBridge
     {
         return locator switch
         {
-            ByCss css => TargetExpression.Mapped(css.Selector, css.Selector, TargetKind.CssSelector, null, css.Match, css.NthIndex),
-            ByText text => TargetExpression.Mapped(text.Text, text.Text, TargetKind.Text, null, text.Match, text.NthIndex),
-            ByXpath xpath => TargetExpression.Mapped(xpath.Selector, xpath.Selector, TargetKind.RawExpression),
-            ByTestId testId => TargetExpression.Mapped(testId.Value, testId.Value, TargetKind.TestIdBeginning, testId.Attribute, testId.Match, testId.NthIndex),
+            ByCss css => ToMappedTarget(css.Selector, TargetKind.CssSelector, null, css.Match, css.NthIndex, css.NthIndexExpression),
+            ByText text => ToMappedTarget(text.Text, TargetKind.Text, null, text.Match, text.NthIndex, text.NthIndexExpression),
+            ByXpath xpath => ToMappedTarget(xpath.Selector, TargetKind.RawExpression, null, xpath.Match, xpath.NthIndex, xpath.NthIndexExpression),
+            ByTestId testId => ToMappedTarget(testId.Value, TargetKind.TestIdBeginning, testId.Attribute, testId.Match, testId.NthIndex, testId.NthIndexExpression),
+            ByClassNamePrefix className => ToMappedTarget(className.Prefix, TargetKind.ClassNameBeginning, null, className.Match, className.NthIndex, className.NthIndexExpression),
             PageObjectLocator pageObject => TargetExpression.Mapped(pageObject.Expression, pageObject.Expression, TargetKind.PageObjectProperty),
-            RawLocatorExpression raw => TargetExpression.Mapped(raw.Expression, raw.Expression, TargetKind.RawExpression),
+            PlaywrightLocatorRef playwright => ToMappedTarget(playwright.Expression, TargetKind.PlaywrightLocator, playwright.TestIdAttribute, playwright.Match, playwright.NthIndex, playwright.NthIndexExpression),
+            RawLocatorExpression raw => ToMappedTarget(raw.Expression, TargetKind.RawExpression, null, raw.Match, raw.NthIndex, raw.NthIndexExpression),
             UnresolvedLocator unresolved => TargetExpression.Unresolved(unresolved.SourceExpression),
             _ => TargetExpression.Unresolved(locator.ToString() ?? "unknown")
         };
+    }
+
+
+    static TargetExpression ToMappedTarget(string expression, TargetKind kind, string? testIdAttribute, string? match, int? nthIndex, string? nthIndexExpression)
+    {
+        if (!string.IsNullOrWhiteSpace(nthIndexExpression))
+            return TargetExpression.MappedWithIndexExpression(expression, expression, kind, testIdAttribute, match, nthIndexExpression!);
+
+        return TargetExpression.Mapped(expression, expression, kind, testIdAttribute, match, nthIndex);
     }
 
     static string ToLegacyValue(ValueExpr value) => value switch
@@ -209,7 +227,9 @@ public static class LegacyIrBridge
         ByXpath xpath => xpath.Selector,
         ByText text => text.Text,
         ByTestId testId => testId.Value,
+        ByClassNamePrefix className => className.Prefix,
         PageObjectLocator pageObject => pageObject.Expression,
+        PlaywrightLocatorRef playwright => playwright.Expression,
         RawLocatorExpression raw => raw.Expression,
         UnresolvedLocator unresolved => unresolved.SourceExpression,
         _ => locator.ToString() ?? string.Empty

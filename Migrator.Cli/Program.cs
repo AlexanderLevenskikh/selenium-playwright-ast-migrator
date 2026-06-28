@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 using System.Xml.Linq;
 using Migrator.Core;
 using Migrator.Core.Profiles;
@@ -37,10 +38,12 @@ string? beforePath = opts.Before;
 string? afterPath = opts.After;
 string target = opts.Target;
 string source = opts.Source;
+bool sourceExplicit = opts.SourceExplicit;
 string? tsProjectPath = opts.TsProject;
 bool recursiveArtifacts = opts.RecursiveArtifacts;
 string irVersion = opts.IrVersion;
 string renderIr = opts.RenderIr;
+string validationMode = opts.ValidationMode;
 
 // Agent-safety modes operate on config/report artifacts and do not process source files.
 if (mode == "config-validate")
@@ -48,7 +51,8 @@ if (mode == "config-validate")
     var validateInputs = configPaths.Length > 0
         ? configPaths
         : (!string.IsNullOrWhiteSpace(inputPath) ? new[] { inputPath } : Array.Empty<string>());
-    var validateExitCode = RunConfigValidate(validateInputs, outPath, format);
+    var validateTarget = CreateBuiltInTargetBackendRegistry().Resolve(opts.Target).Target;
+    var validateExitCode = RunConfigValidate(validateInputs, outPath, format, validationMode, validateTarget);
     return validateExitCode;
 }
 
@@ -122,6 +126,22 @@ if (configPaths.Length > 0)
 }
 
 var sourceRegistry = CreateBuiltInSourceFrontendRegistry(loadedConfig);
+SourceDetectionReport? sourceDetection = null;
+if (ShouldAutoDetectSource(mode, source, sourceExplicit, inputPath))
+{
+    sourceDetection = SourceAutoDetector.Detect(inputPath);
+    source = sourceDetection.DetectedSourceId;
+    Console.WriteLine($"Detected source frontend: {source} ({sourceDetection.Confidence} confidence)");
+    foreach (var reason in sourceDetection.Reasons.Take(3))
+        Console.WriteLine($"  - {reason}");
+
+    WriteSourceDetectionReport(sourceDetection, outPath, format, selectedSource: source, explicitSource: false);
+}
+else if (string.Equals(source, "auto", StringComparison.OrdinalIgnoreCase))
+{
+    source = "csharp-selenium";
+}
+
 ISourceFrontend sourceFrontend;
 try
 {
@@ -527,6 +547,93 @@ static SourceFrontendRegistry CreateBuiltInSourceFrontendRegistry(ProjectAdapter
         .Register(new CSharpSeleniumFrontend(config))
         .Register(new JavaSeleniumFrontend())
         .Register(new PythonSeleniumFrontend());
+}
+
+static bool ShouldAutoDetectSource(string mode, string source, bool sourceExplicit, string inputPath)
+{
+    if (sourceExplicit && !string.Equals(source, "auto", StringComparison.OrdinalIgnoreCase))
+        return false;
+
+    if (!string.Equals(source, "auto", StringComparison.OrdinalIgnoreCase) && sourceExplicit)
+        return false;
+
+    if (string.IsNullOrWhiteSpace(inputPath) || (!File.Exists(inputPath) && !Directory.Exists(inputPath)))
+        return false;
+
+    return mode is "analyze" or "dump-ir" or "migrate" or "verify" or "verify-project" or "doctor" or "orchestrate";
+}
+
+static void WriteSourceDetectionReport(SourceDetectionReport report, string outPath, string format, string selectedSource, bool explicitSource)
+{
+    try
+    {
+        Directory.CreateDirectory(outPath);
+        var reportObject = new
+        {
+            SchemaVersion = "source-detection/v1",
+            GeneratedAtUtc = DateTimeOffset.UtcNow,
+            ExplicitSource = explicitSource,
+            SelectedSource = selectedSource,
+            report.InputPath,
+            report.DetectedSourceId,
+            report.Confidence,
+            report.FilesScanned,
+            report.Reasons,
+            Candidates = report.Candidates.Select(c => new
+            {
+                c.SourceId,
+                c.Language,
+                c.Framework,
+                c.Score,
+                c.Confidence,
+                c.MatchingFiles,
+                c.Reasons,
+                SampleFiles = c.SampleFiles.Select(PathRedaction.Redact).ToArray()
+            }).ToArray()
+        };
+
+        if (format == "json" || format == "both")
+        {
+            File.WriteAllText(Path.Combine(outPath, "source-detection-report.json"),
+                JsonSerializer.Serialize(reportObject, new JsonSerializerOptions { WriteIndented = true }));
+        }
+
+        if (format == "text" || format == "both")
+        {
+            File.WriteAllText(Path.Combine(outPath, "source-detection-report.md"), BuildSourceDetectionMarkdown(report, selectedSource, explicitSource));
+        }
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+    {
+        Console.Error.WriteLine($"Warning: could not write source detection report: {ex.Message}");
+    }
+}
+
+static string BuildSourceDetectionMarkdown(SourceDetectionReport report, string selectedSource, bool explicitSource)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Source Detection Report");
+    sb.AppendLine();
+    sb.AppendLine($"- Selected source: `{selectedSource}`");
+    sb.AppendLine($"- Detected source: `{report.DetectedSourceId}`");
+    sb.AppendLine($"- Confidence: `{report.Confidence}`");
+    sb.AppendLine($"- Explicit source: `{explicitSource}`");
+    sb.AppendLine($"- Files scanned: {report.FilesScanned}");
+    sb.AppendLine($"- Input: `{PathRedaction.Redact(report.InputPath)}`");
+    sb.AppendLine();
+    sb.AppendLine("## Reasons");
+    foreach (var reason in report.Reasons)
+        sb.AppendLine($"- {EscapeMd(reason)}");
+    sb.AppendLine();
+    sb.AppendLine("## Candidates");
+    sb.AppendLine("| Source | Language | Score | Confidence | Matching files | Reasons |");
+    sb.AppendLine("|---|---|---:|---|---:|---|");
+    foreach (var candidate in report.Candidates)
+    {
+        var reasons = candidate.Reasons.Count == 0 ? "" : string.Join("; ", candidate.Reasons.Select(EscapeMd));
+        sb.AppendLine($"| `{candidate.SourceId}` | `{candidate.Language}` | {candidate.Score} | `{candidate.Confidence}` | {candidate.MatchingFiles} | {reasons} |");
+    }
+    return sb.ToString();
 }
 
 static ITestFileParser ResolveLegacyParser(ISourceFrontend sourceFrontend)
@@ -6439,7 +6546,7 @@ static int DoctorStatusRank(string status) => status.ToLowerInvariant() switch
     _ => 4
 };
 
-static int RunConfigValidate(string[] configPaths, string outPath, string format)
+static int RunConfigValidate(string[] configPaths, string outPath, string format, string validationMode, TargetSpec target)
 {
     if (configPaths.Length == 0)
     {
@@ -6477,12 +6584,16 @@ static int RunConfigValidate(string[] configPaths, string outPath, string format
     }
 
     if (config != null)
+    {
         issues.AddRange(AnalyzeConfigSafety(config));
+        issues.AddRange(AnalyzeConfigValidationMode(config, validationMode, target));
+    }
 
     var configPathLabel = string.Join(" -> ", configPaths.Select(Path.GetFullPath));
     var report = new ConfigSafetyReport(
         GeneratedAtUtc: DateTimeOffset.UtcNow,
         ConfigPath: configPathLabel,
+        ValidationMode: validationMode,
         Status: issues.Any(i => i.Severity.Equals("error", StringComparison.OrdinalIgnoreCase)) ? "failed" : "passed",
         Issues: issues.OrderBy(i => SeverityRank(i.Severity)).ThenBy(i => i.Code, StringComparer.OrdinalIgnoreCase).ThenBy(i => i.Location, StringComparer.OrdinalIgnoreCase).ToArray(),
         Metrics: config != null ? BuildConfigMetrics(config) : Array.Empty<ConfigMetric>());
@@ -6496,6 +6607,7 @@ static int RunConfigValidate(string[] configPaths, string outPath, string format
 
     Console.WriteLine("=== Config Validate ===");
     Console.WriteLine(configPaths.Length == 1 ? $"Config: {configPaths[0]}" : $"Config layers: {string.Join(" -> ", configPaths)}");
+    Console.WriteLine($"Validation mode: {validationMode}");
     Console.WriteLine($"Status: {report.Status.ToUpperInvariant()}");
     Console.WriteLine($"Issues: {report.Issues.Length} ({report.Issues.Count(i => i.Severity == "error")} error, {report.Issues.Count(i => i.Severity == "warning")} warning)");
     foreach (var issue in report.Issues.Take(30))
@@ -6513,7 +6625,7 @@ static int RunConfigDiff(string? beforePath, string? afterPath, string outPath, 
 {
     if (string.IsNullOrWhiteSpace(beforePath) || string.IsNullOrWhiteSpace(afterPath))
     {
-        Console.Error.WriteLine("config-diff requires --before <old-adapter-config.json> --after <new-adapter-config.json>.");
+        Console.Error.WriteLine("config-diff requires --before <old-adapter-config-or-profile.json> --after <new-adapter-config-or-profile.json>.");
         return 2;
     }
 
@@ -6524,11 +6636,32 @@ static int RunConfigDiff(string? beforePath, string? afterPath, string outPath, 
     }
 
     Directory.CreateDirectory(outPath);
-    var before = ConfigValidator.ValidateJson(File.ReadAllText(beforePath), beforePath);
-    var after = ConfigValidator.ValidateJson(File.ReadAllText(afterPath), afterPath);
 
+    ConfigDiffInput beforeInput;
+    ConfigDiffInput afterInput;
+    try
+    {
+        beforeInput = ReadConfigDiffInput(beforePath);
+        afterInput = ReadConfigDiffInput(afterPath);
+    }
+    catch (ConfigValidationError ex)
+    {
+        Console.Error.WriteLine("Config error:");
+        foreach (var err in ex.Errors)
+            Console.Error.WriteLine(err);
+        return 2;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Config diff read error: {ex.Message}");
+        return 2;
+    }
+
+    var before = beforeInput.Config;
+    var after = afterInput.Config;
     var changes = BuildConfigChanges(before, after).ToArray();
     var risks = BuildConfigDiffRisks(before, after).ToArray();
+    var semanticParity = changes.Length == 0 && risks.Length == 0;
     var report = new ConfigDiffReport(
         GeneratedAtUtc: DateTimeOffset.UtcNow,
         BeforePath: Path.GetFullPath(beforePath),
@@ -6537,9 +6670,15 @@ static int RunConfigDiff(string? beforePath, string? afterPath, string outPath, 
         Risks: risks,
         Summary: new[]
         {
+            $"InputKinds: {beforeInput.Kind} → {afterInput.Kind}",
+            $"SemanticParity: {(semanticParity ? "passed" : "changed")}",
             $"UiTargets: {before.UiTargets.Length} → {after.UiTargets.Length}",
+            $"PageObjects: {before.PageObjects.Length} → {after.PageObjects.Length}",
             $"Methods: {before.Methods.Length} → {after.Methods.Length}",
             $"ParameterizedMethods: {before.ParameterizedMethods.Length} → {after.ParameterizedMethods.Length}",
+            $"Tables: {before.Tables.Length} → {after.Tables.Length}",
+            $"Pagination: {before.Pagination.Length} → {after.Pagination.Length}",
+            $"Scopes: {before.Scopes.Length} → {after.Scopes.Length}",
             $"SourceOnlyIdentifiers: {before.SourceOnlyIdentifiers.Length} → {after.SourceOnlyIdentifiers.Length}",
             $"TargetKnownTypes: {before.TargetKnownTypes.Length} → {after.TargetKnownTypes.Length}",
             $"TargetKnownIdentifiers: {before.TargetKnownIdentifiers.Length} → {after.TargetKnownIdentifiers.Length}"
@@ -6548,12 +6687,92 @@ static int RunConfigDiff(string? beforePath, string? afterPath, string outPath, 
     WriteConfigDiffReport(report, outPath, format);
 
     Console.WriteLine("=== Config Diff ===");
+    Console.WriteLine($"Input kinds: {beforeInput.Kind} -> {afterInput.Kind}");
+    Console.WriteLine($"Semantic parity: {(semanticParity ? "PASSED" : "CHANGED")}");
     Console.WriteLine($"Changes: {report.Changes.Length}");
     Console.WriteLine($"Risks: {report.Risks.Length}");
     foreach (var risk in report.Risks.Take(20))
         Console.WriteLine($"[RISK] {risk.Code}: {risk.Message}" + (string.IsNullOrWhiteSpace(risk.Location) ? "" : $" ({risk.Location})"));
     Console.WriteLine($"Reports written to: {Path.GetFullPath(outPath)}");
     return risks.Any(r => r.Severity.Equals("error", StringComparison.OrdinalIgnoreCase)) ? 2 : 0;
+}
+
+static JsonSerializerOptions CreateConfigDiffJsonOptions() => new()
+{
+    PropertyNameCaseInsensitive = true
+};
+
+static ConfigDiffInput ReadConfigDiffInput(string path)
+{
+    var json = File.ReadAllText(path);
+    using var document = JsonDocument.Parse(json);
+    var root = document.RootElement;
+    var schemaVersion = TryGetString(root, "SchemaVersion") ?? TryGetString(root, "schemaVersion");
+    if (string.Equals(schemaVersion, "migration-profile/v2", StringComparison.OrdinalIgnoreCase))
+        return new ConfigDiffInput(path, "migration-profile/v2", ExtractAdapterConfigFromMigrationProfileV2(root, path));
+
+    return new ConfigDiffInput(path, "adapter-config/v1", ConfigValidator.ValidateJson(json, path));
+}
+
+static ProjectAdapterConfig ExtractAdapterConfigFromMigrationProfileV2(JsonElement root, string path)
+{
+    if (root.TryGetProperty("LegacyConfig", out var legacyConfig) && legacyConfig.ValueKind is not JsonValueKind.Null and not JsonValueKind.Undefined)
+    {
+        var config = legacyConfig.Deserialize<ProjectAdapterConfig>(CreateConfigDiffJsonOptions());
+        if (config == null)
+            throw new InvalidOperationException($"Could not deserialize LegacyConfig from migration-profile v2: {path}");
+        return config;
+    }
+
+    if (!root.TryGetProperty("Project", out var project))
+        throw new InvalidOperationException($"migration-profile/v2 is missing Project section: {path}");
+
+    root.TryGetProperty("Source", out var source);
+    root.TryGetProperty("Target", out var target);
+
+    return new ProjectAdapterConfig
+    {
+        SourceProjectName = TryGetString(root, "SourceProjectName") ?? "",
+        UiTargets = ReadProfileSection<UiTargetMapping[]>(project, "UiTargets") ?? Array.Empty<UiTargetMapping>(),
+        PageObjects = ReadProfileSection<PageObjectMapping[]>(project, "PageObjects") ?? Array.Empty<PageObjectMapping>(),
+        Methods = ReadProfileSection<MethodMapping[]>(project, "Methods") ?? Array.Empty<MethodMapping>(),
+        ParameterizedMethods = ReadProfileSection<ParameterizedMethodMapping[]>(project, "ParameterizedMethods") ?? Array.Empty<ParameterizedMethodMapping>(),
+        Tables = ReadProfileSection<TableConfig[]>(project, "Tables") ?? Array.Empty<TableConfig>(),
+        Pagination = ReadProfileSection<PaginationConfig[]>(project, "Pagination") ?? Array.Empty<PaginationConfig>(),
+        NavigationUrls = ReadProfileSection<Dictionary<string, string>>(project, "NavigationUrls") ?? new Dictionary<string, string>(StringComparer.Ordinal),
+        NavigationTargetStatement = TryGetString(project, "NavigationTargetStatement"),
+        Scopes = ReadProfileSection<ProfileScope[]>(project, "Scopes") ?? Array.Empty<ProfileScope>(),
+        QualityGates = ReadProfileSection<QualityGatesConfig>(project, "QualityGates"),
+        Verification = ReadProfileSection<VerificationConfig>(project, "Verification"),
+        SourceOnlyIdentifiers = ReadProfileSection<string[]>(source, "SourceOnlyIdentifiers") ?? Array.Empty<string>(),
+        SuppressedMethods = ReadProfileSection<string[]>(source, "SuppressedMethods") ?? Array.Empty<string>(),
+        SuppressedMethodPatterns = ReadProfileSection<string[]>(source, "SuppressedMethodPatterns") ?? Array.Empty<string>(),
+        RecognizerAliases = ReadProfileSection<RecognizerAliasOptions>(source, "RecognizerAliases") ?? new RecognizerAliasOptions(),
+        GenericResultMethods = ReadProfileSection<string[]>(source, "GenericResultMethods") ?? Array.Empty<string>(),
+        WaitPolicies = ReadProfileSection<WaitPolicyMapping[]>(source, "WaitPolicies") ?? Array.Empty<WaitPolicyMapping>(),
+        TargetKnownTypes = ReadProfileSection<string[]>(target, "TargetKnownTypes") ?? Array.Empty<string>(),
+        TargetKnownIdentifiers = ReadProfileSection<string[]>(target, "TargetKnownIdentifiers") ?? Array.Empty<string>(),
+        TestHost = ReadProfileSection<TestHostConfig>(target, "TestHost"),
+        LocatorSettings = ReadProfileSection<LocatorSettings>(target, "LocatorSettings")
+    };
+}
+
+static T? ReadProfileSection<T>(JsonElement parent, string propertyName)
+{
+    if (parent.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+        return default;
+    if (!parent.TryGetProperty(propertyName, out var value) || value.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+        return default;
+    return value.Deserialize<T>(CreateConfigDiffJsonOptions());
+}
+
+static string? TryGetString(JsonElement parent, string propertyName)
+{
+    if (parent.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+        return null;
+    return parent.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
+        ? value.GetString()
+        : null;
 }
 
 static int RunGuard(string? beforePath, string? afterPath, string outPath, string format)
@@ -6717,6 +6936,161 @@ static IEnumerable<ConfigSafetyIssue> AnalyzeConfigSafety(ProjectAdapterConfig c
     }
 
     return issues;
+}
+
+
+static IEnumerable<ConfigSafetyIssue> AnalyzeConfigValidationMode(ProjectAdapterConfig config, string validationMode, TargetSpec target)
+{
+    if (string.Equals(validationMode, "warn", StringComparison.OrdinalIgnoreCase))
+        return Array.Empty<ConfigSafetyIssue>();
+
+    var issues = new List<ConfigSafetyIssue>();
+    var production = string.Equals(validationMode, "production", StringComparison.OrdinalIgnoreCase);
+    var isTypeScriptTarget = string.Equals(target.Language, "typescript", StringComparison.OrdinalIgnoreCase)
+        || target.Id.Contains("typescript", StringComparison.OrdinalIgnoreCase)
+        || target.Id.Equals("ts", StringComparison.OrdinalIgnoreCase);
+
+    foreach (var item in EnumerateMethodMappings(config))
+    {
+        var hasLegacyStatements = item.Mapping.TargetStatements is { Length: > 0 };
+        var hasTargetStatements = HasTargetSpecificStatementsForTarget(item.Mapping.Targets, target);
+        if (hasLegacyStatements && !hasTargetStatements)
+        {
+            var severity = production && isTypeScriptTarget ? "error" : "warning";
+            var code = production && isTypeScriptTarget
+                ? "TS_TARGET_STATEMENTS_REQUIRED"
+                : "TARGET_SPECIFIC_STATEMENTS_MISSING";
+            issues.Add(new ConfigSafetyIssue(severity, code,
+                $"Method mapping '{item.Mapping.SourceMethod}' uses legacy TargetStatements without a target-specific override for '{target.Id}'.",
+                item.Location,
+                "Move target code into Targets.<target>.TargetStatements. For TypeScript, add Targets.playwright-typescript.TargetStatements before production migration."));
+        }
+
+        if (IsReviewRequiredForTarget(item.Mapping.RequiresReview, item.Mapping.Targets, target))
+        {
+            issues.Add(new ConfigSafetyIssue(production ? "error" : "warning", production ? "MAPPED_METHOD_REQUIRES_REVIEW" : "MAPPED_METHOD_REVIEW_REQUIRED",
+                $"Method mapping '{item.Mapping.SourceMethod}' is marked RequiresReview for '{target.Id}'.",
+                item.Location,
+                "Review the mapping and set RequiresReview=false only when the target-specific statement is safe and verified."));
+        }
+    }
+
+    foreach (var item in EnumerateParameterizedMappings(config))
+    {
+        var hasLegacyStatements = item.Mapping.TargetStatements is { Length: > 0 };
+        var hasTargetStatements = HasTargetSpecificStatementsForTarget(item.Mapping.Targets, target);
+        if (hasLegacyStatements && !hasTargetStatements)
+        {
+            var severity = production && isTypeScriptTarget ? "error" : "warning";
+            var code = production && isTypeScriptTarget
+                ? "TS_TARGET_STATEMENTS_REQUIRED"
+                : "TARGET_SPECIFIC_STATEMENTS_MISSING";
+            issues.Add(new ConfigSafetyIssue(severity, code,
+                $"Parameterized mapping '{item.Mapping.SourceMethodPattern}' uses legacy TargetStatements without a target-specific override for '{target.Id}'.",
+                item.Location,
+                "Move target code into Targets.<target>.TargetStatements. For TypeScript, add Targets.playwright-typescript.TargetStatements before production migration."));
+        }
+
+        if (IsReviewRequiredForTarget(item.Mapping.RequiresReview, item.Mapping.Targets, target))
+        {
+            issues.Add(new ConfigSafetyIssue(production ? "error" : "warning", production ? "MAPPED_METHOD_REQUIRES_REVIEW" : "MAPPED_METHOD_REVIEW_REQUIRED",
+                $"Parameterized mapping '{item.Mapping.SourceMethodPattern}' is marked RequiresReview for '{target.Id}'.",
+                item.Location,
+                "Review the mapping and set RequiresReview=false only when the target-specific statement is safe and verified."));
+        }
+    }
+
+    if (production && config.Verification == null)
+    {
+        issues.Add(new ConfigSafetyIssue("error", "PROJECT_VERIFICATION_REQUIRED",
+            "Verification section is required in production validation mode.", "Verification",
+            "Add Verification.ProjectReferences/PackageReferences or enable nearest project auto-discovery so generated code is checked in project context."));
+    }
+
+    return issues;
+}
+
+static bool HasTargetSpecificStatementsForTarget(Dictionary<string, TargetStatementMapping>? targets, TargetSpec target)
+{
+    return FindTargetStatementMapping(targets, target)?.TargetStatements is { Length: > 0 };
+}
+
+static bool IsReviewRequiredForTarget(bool parentRequiresReview, Dictionary<string, TargetStatementMapping>? targets, TargetSpec target)
+{
+    return FindTargetStatementMapping(targets, target)?.RequiresReview ?? parentRequiresReview;
+}
+
+static TargetStatementMapping? FindTargetStatementMapping(Dictionary<string, TargetStatementMapping>? targets, TargetSpec target)
+{
+    if (targets == null || targets.Count == 0)
+        return null;
+
+    foreach (var key in GetTargetLookupKeys(target))
+    {
+        if (targets.TryGetValue(key, out var mapping))
+            return mapping;
+    }
+
+    foreach (var kvp in targets)
+    {
+        if (GetTargetLookupKeys(target).Any(key => string.Equals(kvp.Key, key, StringComparison.OrdinalIgnoreCase)))
+            return kvp.Value;
+    }
+
+    return null;
+}
+
+static IEnumerable<string> GetTargetLookupKeys(TargetSpec target)
+{
+    yield return target.Id;
+    if (!string.IsNullOrWhiteSpace(target.Language))
+        yield return target.Language;
+
+    if (target.Id.Contains("typescript", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(target.Language, "typescript", StringComparison.OrdinalIgnoreCase))
+    {
+        yield return "ts";
+        yield return "typescript";
+        yield return "pw-ts";
+        yield return "playwright-ts";
+        yield return "playwright-typescript";
+    }
+
+    if (target.Id.Contains("dotnet", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(target.Language, "csharp", StringComparison.OrdinalIgnoreCase))
+    {
+        yield return "dotnet";
+        yield return "csharp";
+        yield return "playwright-dotnet";
+    }
+}
+
+static IEnumerable<(MethodMapping Mapping, string Location)> EnumerateMethodMappings(ProjectAdapterConfig config)
+{
+    for (var i = 0; i < config.Methods.Length; i++)
+        yield return (config.Methods[i], $"Methods[{i}]");
+
+    for (var si = 0; si < config.Scopes.Length; si++)
+    {
+        var scope = config.Scopes[si];
+        var scopeName = string.IsNullOrWhiteSpace(scope.Name) ? si.ToString() : scope.Name;
+        for (var mi = 0; mi < scope.Methods.Length; mi++)
+            yield return (scope.Methods[mi], $"Scopes[{scopeName}].Methods[{mi}]");
+    }
+}
+
+static IEnumerable<(ParameterizedMethodMapping Mapping, string Location)> EnumerateParameterizedMappings(ProjectAdapterConfig config)
+{
+    for (var i = 0; i < config.ParameterizedMethods.Length; i++)
+        yield return (config.ParameterizedMethods[i], $"ParameterizedMethods[{i}]");
+
+    for (var si = 0; si < config.Scopes.Length; si++)
+    {
+        var scope = config.Scopes[si];
+        var scopeName = string.IsNullOrWhiteSpace(scope.Name) ? si.ToString() : scope.Name;
+        for (var mi = 0; mi < scope.ParameterizedMethods.Length; mi++)
+            yield return (scope.ParameterizedMethods[mi], $"Scopes[{scopeName}].ParameterizedMethods[{mi}]");
+    }
 }
 
 static bool ContainsRiskyGeneratedCode(string statement)
@@ -7003,6 +7377,7 @@ static string WriteConfigSafetyMarkdown(ConfigSafetyReport report)
     sb.AppendLine("# Config Validate Report");
     sb.AppendLine();
     sb.AppendLine($"Status: **{report.Status}**");
+    sb.AppendLine($"Validation mode: `{report.ValidationMode}`");
     sb.AppendLine($"Config: `{report.ConfigPath}`");
     sb.AppendLine();
     sb.AppendLine("## Metrics");
@@ -7379,11 +7754,13 @@ static CliOptions? ParseArgs(string[] args)
     string? before = null;
     string? after = null;
     string target = "dotnet";
-    string source = "csharp-selenium";
+    string source = "auto";
+    bool sourceExplicit = false;
     string? tsProject = null;
     bool recursiveArtifacts = false;
     string irVersion = "legacy";
     string renderIr = "legacy";
+    string validationMode = "warn";
 
     for (int i = 0; i < args.Length; i++)
     {
@@ -7466,10 +7843,13 @@ static CliOptions? ParseArgs(string[] args)
                 break;
             case "--source":
                 if (i + 1 < args.Length)
+                {
                     source = args[++i];
+                    sourceExplicit = true;
+                }
                 else
                 {
-                    Console.Error.WriteLine("--source requires a value: csharp-selenium|java-selenium|python-selenium");
+                    Console.Error.WriteLine("--source requires a value: auto|csharp-selenium|java-selenium|python-selenium");
                     return null;
                 }
                 break;
@@ -7506,6 +7886,15 @@ static CliOptions? ParseArgs(string[] args)
                 else
                 {
                     Console.Error.WriteLine("--render-ir requires a value: legacy|v2");
+                    return null;
+                }
+                break;
+            case "--validation-mode":
+                if (i + 1 < args.Length)
+                    validationMode = args[++i].Trim().ToLowerInvariant();
+                else
+                {
+                    Console.Error.WriteLine("--validation-mode requires a value: warn|strict|production");
                     return null;
                 }
                 break;
@@ -7574,14 +7963,17 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
-    try
+    if (!string.Equals(source, "auto", StringComparison.OrdinalIgnoreCase))
     {
-        _ = CreateBuiltInSourceFrontendRegistry(null).Resolve(source);
-    }
-    catch (InvalidOperationException ex)
-    {
-        Console.Error.WriteLine(ex.Message);
-        return null;
+        try
+        {
+            _ = CreateBuiltInSourceFrontendRegistry(null).Resolve(source);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return null;
+        }
     }
 
     if (string.IsNullOrEmpty(workspace))
@@ -7642,13 +8034,19 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
+    if (validationMode != "warn" && validationMode != "strict" && validationMode != "production")
+    {
+        Console.Error.WriteLine($"Invalid validation mode: {validationMode}. Use: warn|strict|production");
+        return null;
+    }
+
     if (renderIr == "v2" && mode == "orchestrate")
     {
         Console.Error.WriteLine("--render-ir v2 is experimental and not supported with orchestrate yet. Use --mode migrate or verify first.");
         return null;
     }
 
-    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, source, tsProject, recursiveArtifacts, irVersion, renderIr);
+    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, source, sourceExplicit, tsProject, recursiveArtifacts, irVersion, renderIr, validationMode);
 }
 
 static string ResolveOutputDirectory(string outDir, string workspace)
@@ -7779,8 +8177,9 @@ Modes:
                   Convert legacy adapter-config v1 layers into migration-profile v2 shape.
                     Outputs migration-profile.v2.json and config-normalize-report.md/json.
                     Does NOT modify the source config and remains compatibility-only.
-  config-diff     Compare two adapter-config files and highlight risky agent changes.
-                    Requires --before and --after. Outputs config-diff-report.md/json.
+  config-diff     Compare adapter-config v1 and/or migration-profile v2 documents and
+                    highlight risky agent changes. Requires --before and --after.
+                    Outputs config-diff-report.md/json.
   guard           Compare two migration artifact directories and fail on regressions
                     such as increased TODO/syntax errors. Requires --before and --after.
   propose         Analyze migration artifacts (reports, generated output) and
@@ -7839,9 +8238,10 @@ Options:
                                   Generation target for migrate/orchestrate (default: dotnet).
                                   TypeScript migration generation does not require --ts-project;
                                   project-aware TypeScript verification does.
-   --source <csharp-selenium|java-selenium|python-selenium>
+   --source <auto|csharp-selenium|java-selenium|python-selenium>
                                   Source frontend for migrate/analyze/dump-ir/verify
-                                  (default: csharp-selenium). java-selenium and
+                                  (default: auto). auto writes source-detection-report.* and
+                                  picks csharp/java/python Selenium heuristically. java-selenium and
                                   python-selenium are experimental MVP/spike frontends.
    --ts-project <directory>        Existing Playwright TypeScript project root for verify-ts-project.
                                   Must contain package.json,
@@ -7856,6 +8256,11 @@ Options:
    --render-ir <legacy|v2>       Experimental render input model for migrate/analyze/verify
                                   (default: legacy). Use v2 to route generation through
                                   MigrationDocument and TargetBackend.RenderDocument.
+   --validation-mode <warn|strict|production>
+                                  Config validation strictness for config-validate
+                                  (default: warn). strict surfaces target-specific
+                                  config migration gaps as warnings; production fails
+                                  unsafe target-specific gaps.
    --recursive-artifacts         Allow nested artifact lookup for explain-todo/smoke-plan/migration-board.
                                   If multiple candidates are found, the command fails and lists them.
    --fail-on-unsupported         Exit code 2 if unsupported actions exist
@@ -7874,6 +8279,7 @@ Examples:
   Migrator.Cli --mode dump-ir --input ./OldTests --config ./adapter-config.json --out ir-dump --format both
   Migrator.Cli --mode dump-ir --input ./OldTests --config ./adapter-config.json --out ir-dump --ir-version both --format both
   Migrator.Cli --mode migrate --input ./OldTests --out generated --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json
+  Migrator.Cli --mode migrate --input ./JavaTests --target ts --out generated-auto-ts  # auto-detects Java/Python/C# Selenium
   Migrator.Cli --mode migrate --input ./OldTests --out generated-v2 --render-ir v2 --config ./adapter-config.json
   Migrator.Cli --mode migrate --source java-selenium --input ./JavaTests --target ts --out generated-java-ts
   Migrator.Cli --mode verify-project --input ./OldTests --out verify-project --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json
@@ -7885,7 +8291,9 @@ Examples:
   Migrator.Cli --mode profile-match --input ./OldTests --config ./profiles/infrastructure-base.adapter.json --out profile-match
   Migrator.Cli --mode config-schema --out schema
   Migrator.Cli --mode config-validate --config ./adapter-config.json --out config-validate
+  Migrator.Cli --mode config-validate --config ./adapter-config.json --target ts --validation-mode production --out config-validate-prod
   Migrator.Cli --mode config-diff --before adapter.old.json --after adapter-config.json --out config-diff
+  Migrator.Cli --mode config-diff --before adapter-config.json --after migration-profile.v2.json --out config-diff-v2
   Migrator.Cli --mode guard --before migration/baseline --after migration/current --out guard
   Migrator.Cli --mode propose --input migration/generated --config ./adapter-config.json --format both
    Migrator.Cli --mode discover-target --input ./team-playwright-tests --out target-discovery

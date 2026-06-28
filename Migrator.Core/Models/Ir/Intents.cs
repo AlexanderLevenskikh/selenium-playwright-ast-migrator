@@ -11,5 +11,5 @@ public sealed record LocatorWaitIntent(LocatorRef Target, string Kind, string So
 public sealed record RawWaitIntent(string SourceText, string Reason) : WaitIntent;
 
 public abstract record NavigationIntent;
-public sealed record UrlNavigationIntent(ValueExpr Url, string? ResultVariable = null, string? TargetStatement = null) : NavigationIntent;
+public sealed record UrlNavigationIntent(ValueExpr Url, string? ResultVariable = null, string? TargetStatement = null, string? SourceText = null) : NavigationIntent;
 public sealed record RawNavigationIntent(string SourceText, string Reason) : NavigationIntent;
