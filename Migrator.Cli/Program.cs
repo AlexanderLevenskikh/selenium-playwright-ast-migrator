@@ -153,6 +153,11 @@ catch (InvalidOperationException ex)
     return 2;
 }
 source = sourceFrontend.Source.Id;
+if (ShouldWriteSourceCapabilityReport(mode))
+{
+    Console.WriteLine($"Source capability profile: {sourceFrontend.Source.Id} ({sourceFrontend.Capabilities.Status})");
+    WriteSourceCapabilityReport(sourceFrontend.Capabilities, outPath, format);
+}
 
 if (mode == "config-normalize")
 {
@@ -633,6 +638,88 @@ static string BuildSourceDetectionMarkdown(SourceDetectionReport report, string 
         var reasons = candidate.Reasons.Count == 0 ? "" : string.Join("; ", candidate.Reasons.Select(EscapeMd));
         sb.AppendLine($"| `{candidate.SourceId}` | `{candidate.Language}` | {candidate.Score} | `{candidate.Confidence}` | {candidate.MatchingFiles} | {reasons} |");
     }
+    return sb.ToString();
+}
+
+static bool ShouldWriteSourceCapabilityReport(string mode) =>
+    mode is "analyze" or "dump-ir" or "migrate" or "verify" or "verify-project" or "doctor" or "orchestrate" or "config-normalize";
+
+static void WriteSourceCapabilityReport(SourceCapabilityReport report, string outPath, string format)
+{
+    try
+    {
+        Directory.CreateDirectory(outPath);
+        var reportObject = new
+        {
+            report.SchemaVersion,
+            GeneratedAtUtc = DateTimeOffset.UtcNow,
+            Source = new
+            {
+                report.Source.Id,
+                report.Source.Language,
+                report.Source.Framework
+            },
+            report.Status,
+            report.Summary,
+            report.Capabilities,
+            report.Limitations,
+            report.RecommendedValidation
+        };
+
+        if (format == "json" || format == "both")
+        {
+            File.WriteAllText(Path.Combine(outPath, "source-capabilities-report.json"),
+                JsonSerializer.Serialize(reportObject, new JsonSerializerOptions { WriteIndented = true }));
+        }
+
+        if (format == "text" || format == "both")
+        {
+            File.WriteAllText(Path.Combine(outPath, "source-capabilities-report.md"), BuildSourceCapabilityMarkdown(report));
+        }
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+    {
+        Console.Error.WriteLine($"Warning: could not write source capability report: {ex.Message}");
+    }
+}
+
+static string BuildSourceCapabilityMarkdown(SourceCapabilityReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Source Capability Report");
+    sb.AppendLine();
+    sb.AppendLine($"- Source: `{report.Source.Id}`");
+    sb.AppendLine($"- Language: `{report.Source.Language}`");
+    sb.AppendLine($"- Framework: `{report.Source.Framework}`");
+    sb.AppendLine($"- Status: `{report.Status}`");
+    sb.AppendLine();
+    sb.AppendLine(report.Summary);
+    sb.AppendLine();
+    sb.AppendLine("## Capability matrix");
+    sb.AppendLine("| Area | Support | Details | Examples |");
+    sb.AppendLine("|---|---|---|---|");
+    foreach (var capability in report.Capabilities)
+    {
+        var examples = capability.Examples.Count == 0 ? "" : string.Join("; ", capability.Examples.Select(EscapeMd));
+        sb.AppendLine($"| `{capability.Area}` | `{capability.Support}` | {EscapeMd(capability.Details)} | {examples} |");
+    }
+
+    if (report.Limitations.Count > 0)
+    {
+        sb.AppendLine();
+        sb.AppendLine("## Limitations");
+        foreach (var limitation in report.Limitations)
+            sb.AppendLine($"- {EscapeMd(limitation)}");
+    }
+
+    if (report.RecommendedValidation.Count > 0)
+    {
+        sb.AppendLine();
+        sb.AppendLine("## Recommended validation");
+        foreach (var validation in report.RecommendedValidation)
+            sb.AppendLine($"- {EscapeMd(validation)}");
+    }
+
     return sb.ToString();
 }
 
@@ -8241,8 +8328,9 @@ Options:
    --source <auto|csharp-selenium|java-selenium|python-selenium>
                                   Source frontend for migrate/analyze/dump-ir/verify
                                   (default: auto). auto writes source-detection-report.* and
-                                  picks csharp/java/python Selenium heuristically. java-selenium and
-                                  python-selenium are experimental MVP/spike frontends.
+                                  source-processing modes write source-capabilities-report.*.
+                                  auto picks csharp/java/python Selenium heuristically.
+                                  java-selenium and python-selenium are experimental MVP/spike frontends.
    --ts-project <directory>        Existing Playwright TypeScript project root for verify-ts-project.
                                   Must contain package.json,
                                   tsconfig.json and playwright.config.*.

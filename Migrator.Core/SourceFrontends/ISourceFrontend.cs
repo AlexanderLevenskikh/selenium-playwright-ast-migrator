@@ -10,6 +10,7 @@ public interface ISourceFrontend
 {
     SourceSpec Source { get; }
     IReadOnlyCollection<string> Aliases { get; }
+    SourceCapabilityReport Capabilities { get; }
     bool CanParse(MigrationRequest request);
     SourceParseResult Parse(MigrationRequest request);
 }

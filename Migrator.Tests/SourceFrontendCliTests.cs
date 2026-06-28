@@ -187,6 +187,54 @@ public class SourceFrontendCliTests
     }
 
     [Fact]
+    public void Migrate_AutoDetectedJava_WritesSourceCapabilityReport()
+    {
+        var temp = CreateTempDir();
+        try
+        {
+            var inputDir = Path.Combine(temp, "java-capability-input");
+            var outputDir = Path.Combine(temp, "generated");
+            Directory.CreateDirectory(inputDir);
+
+            File.WriteAllText(Path.Combine(inputDir, "CapabilityJavaTests.java"), """
+            import org.junit.jupiter.api.Test;
+            import org.openqa.selenium.By;
+            import org.openqa.selenium.WebDriver;
+
+            public class CapabilityJavaTests {
+                private WebDriver driver;
+                @Test public void clicksSave() {
+                    driver.findElement(By.id("save")).click();
+                }
+            }
+            """);
+
+            var result = RunCli($"--mode migrate --input \"{inputDir}\" --out \"{outputDir}\" --target ts --format both");
+
+            AssertCliSuccess(result);
+            Assert.Contains("Source capability profile: selenium-java (experimental-mvp)", result.StdOut);
+
+            var jsonPath = Path.Combine(outputDir, "source-capabilities-report.json");
+            var mdPath = Path.Combine(outputDir, "source-capabilities-report.md");
+            Assert.True(File.Exists(jsonPath), "Expected source-capabilities-report.json to be written.");
+            Assert.True(File.Exists(mdPath), "Expected source-capabilities-report.md to be written.");
+
+            using var json = JsonDocument.Parse(File.ReadAllText(jsonPath));
+            var root = json.RootElement;
+            Assert.Equal("source-capabilities/v1", root.GetProperty("SchemaVersion").GetString());
+            Assert.Equal("selenium-java", root.GetProperty("Source").GetProperty("Id").GetString());
+            Assert.Equal("experimental-mvp", root.GetProperty("Status").GetString());
+            Assert.Contains(root.GetProperty("Capabilities").EnumerateArray(), c =>
+                c.GetProperty("Area").GetString() == "semantic-model"
+                && c.GetProperty("Support").GetString() == "none");
+        }
+        finally
+        {
+            TryDelete(temp);
+        }
+    }
+
+    [Fact]
     public void ConfigNormalize_SourceJavaSelenium_WritesJavaSourceSpec()
     {
         var temp = CreateTempDir();

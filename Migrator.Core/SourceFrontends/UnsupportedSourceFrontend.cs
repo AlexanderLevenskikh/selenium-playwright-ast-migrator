@@ -16,10 +16,12 @@ public sealed class UnsupportedSourceFrontend : ISourceFrontend
             ? $"Source frontend '{source.Id}' is not implemented yet."
             : message;
         Aliases = aliases ?? Array.Empty<string>();
+        Capabilities = SourceCapabilityCatalog.ForSource(Source);
     }
 
     public SourceSpec Source { get; }
     public IReadOnlyCollection<string> Aliases { get; }
+    public SourceCapabilityReport Capabilities { get; }
 
     public bool CanParse(MigrationRequest request) => false;
 

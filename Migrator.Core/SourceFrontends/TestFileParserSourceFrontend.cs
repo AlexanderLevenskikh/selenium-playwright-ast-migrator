@@ -8,15 +8,17 @@ namespace Migrator.Core.SourceFrontends;
 /// </summary>
 public class TestFileParserSourceFrontend : ISourceFrontend
 {
-    public TestFileParserSourceFrontend(SourceSpec source, ITestFileParser parser, IReadOnlyCollection<string>? aliases = null)
+    public TestFileParserSourceFrontend(SourceSpec source, ITestFileParser parser, IReadOnlyCollection<string>? aliases = null, SourceCapabilityReport? capabilities = null)
     {
         Source = source ?? throw new ArgumentNullException(nameof(source));
         Parser = parser ?? throw new ArgumentNullException(nameof(parser));
         Aliases = aliases ?? Array.Empty<string>();
+        Capabilities = capabilities ?? SourceCapabilityCatalog.ForSource(Source);
     }
 
     public SourceSpec Source { get; }
     public IReadOnlyCollection<string> Aliases { get; }
+    public SourceCapabilityReport Capabilities { get; }
     public ITestFileParser Parser { get; }
 
     public bool CanParse(MigrationRequest request) =>
