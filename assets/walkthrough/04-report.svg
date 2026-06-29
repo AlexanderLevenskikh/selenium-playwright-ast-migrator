@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="420" role="img" aria-label="Migration report screenshot">
+  <rect width="980" height="420" rx="16" fill="#111827"/>
+  <rect x="0" y="0" width="980" height="42" rx="16" fill="#1f2937"/>
+  <circle cx="24" cy="21" r="7" fill="#ef4444"/><circle cx="48" cy="21" r="7" fill="#f59e0b"/><circle cx="72" cy="21" r="7" fill="#10b981"/>
+  <text x="26" y="82" font-family="Consolas, monospace" font-size="21" fill="#e5e7eb">Migration quality dashboard</text>
+  <text x="26" y="130" font-family="Consolas, monospace" font-size="18" fill="#a7f3d0">Mapping coverage: 100%</text>
+  <text x="26" y="166" font-family="Consolas, monospace" font-size="18" fill="#a7f3d0">Unmapped targets/test: 0.00</text>
+  <text x="26" y="202" font-family="Consolas, monospace" font-size="18" fill="#fde68a">Top TODO: navigation/setup mapping</text>
+  <text x="26" y="238" font-family="Consolas, monospace" font-size="18" fill="#93c5fd">Next action: add MethodSemantics or target PageObject setup.</text>
+  <text x="26" y="296" font-family="Consolas, monospace" font-size="18" fill="#d1d5db">Review uncertainty. Improve profile. Regenerate. Verify.</text>
+</svg>

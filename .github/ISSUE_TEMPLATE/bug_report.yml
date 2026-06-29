@@ -1,0 +1,58 @@
+name: Bug report
+description: Report a CLI crash, incorrect report, packaging problem, or documentation bug.
+title: "Bug: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Selenium Playwright AST Migrator. Please avoid sharing private source code, secrets, or proprietary selectors unless they are safe to publish.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Tool version or commit SHA.
+      placeholder: 0.6.0-preview.1
+    validations:
+      required: true
+  - type: dropdown
+    id: command
+    attributes:
+      label: Command or area
+      options:
+        - doctor
+        - analyze
+        - migrate
+        - verify
+        - verify-project
+        - config/profile
+        - packaging/install
+        - documentation
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: Provide the smallest public-safe input/config/command that reproduces the problem.
+      placeholder: |
+        Command:
+        selenium-pw-migrator --mode ...
+
+        Input/config summary:
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include logs or report snippets when safe.
+    validations:
+      required: true

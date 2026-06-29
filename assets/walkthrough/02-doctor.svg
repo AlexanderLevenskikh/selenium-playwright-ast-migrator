@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="420" role="img" aria-label="Doctor command screenshot">
+  <rect width="980" height="420" rx="16" fill="#111827"/>
+  <rect x="0" y="0" width="980" height="42" rx="16" fill="#1f2937"/>
+  <circle cx="24" cy="21" r="7" fill="#ef4444"/><circle cx="48" cy="21" r="7" fill="#f59e0b"/><circle cx="72" cy="21" r="7" fill="#10b981"/>
+  <text x="26" y="82" font-family="Consolas, monospace" font-size="20" fill="#d1d5db">$ selenium-pw-migrator --mode doctor --input examples/public-launch-demo/selenium-tests</text>
+  <text x="26" y="128" font-family="Consolas, monospace" font-size="18" fill="#a7f3d0">✓ input directory exists</text>
+  <text x="26" y="164" font-family="Consolas, monospace" font-size="18" fill="#a7f3d0">✓ adapter-config/v1 parsed</text>
+  <text x="26" y="200" font-family="Consolas, monospace" font-size="18" fill="#a7f3d0">✓ source frontend: Selenium C# / NUnit</text>
+  <text x="26" y="236" font-family="Consolas, monospace" font-size="18" fill="#a7f3d0">✓ target backend: Playwright .NET</text>
+  <text x="26" y="292" font-family="Consolas, monospace" font-size="18" fill="#93c5fd">Next: run --mode migrate against the same pilot folder.</text>
+</svg>

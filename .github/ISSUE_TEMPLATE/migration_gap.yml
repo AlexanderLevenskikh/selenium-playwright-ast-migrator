@@ -1,0 +1,52 @@
+name: Migration gap
+description: Report a Selenium pattern that is unsupported, unmapped, or produces too many TODOs.
+title: "Migration gap: "
+labels: ["migration-gap", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for missing recognizers, unsupported actions, repeated TODO categories, helper patterns, waits, assertions, PageObject patterns, or target rendering gaps.
+  - type: dropdown
+    id: source
+    attributes:
+      label: Source frontend
+      options:
+        - Selenium C# / NUnit
+        - Selenium Java
+        - Selenium Python
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: target
+    attributes:
+      label: Target backend
+      options:
+        - Playwright .NET
+        - Playwright TypeScript
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: selenium_pattern
+    attributes:
+      label: Selenium pattern
+      description: Share a minimized public-safe snippet. Replace private names with neutral names.
+      render: csharp
+    validations:
+      required: true
+  - type: textarea
+    id: desired_output
+    attributes:
+      label: Desired Playwright output
+      description: What should the generated code look like?
+    validations:
+      required: true
+  - type: textarea
+    id: report_evidence
+    attributes:
+      label: Report evidence
+      description: Paste relevant `unsupported-actions`, `unmapped-targets`, TODO, or quality-dashboard snippets.
+    validations:
+      required: false

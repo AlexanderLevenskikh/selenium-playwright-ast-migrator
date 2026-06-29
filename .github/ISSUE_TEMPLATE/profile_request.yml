@@ -1,0 +1,34 @@
+name: Profile/config request
+description: Ask for help modeling project-specific selectors, helpers, waits, or PageObjects.
+title: "Profile request: "
+labels: ["profile-request", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Profiles should be based on real source evidence. Please minimize and anonymize snippets before posting.
+  - type: textarea
+    id: source_truth
+    attributes:
+      label: Source-truth evidence
+      description: Selenium PageObject/helper snippets, data-testid conventions, existing Playwright POMs, or report excerpts.
+      placeholder: |
+        Example Selenium POM:
+        public Control Username => CreateControlByTid("login-username");
+    validations:
+      required: true
+  - type: textarea
+    id: current_config
+    attributes:
+      label: Current adapter config
+      description: Paste the relevant part of adapter-config.json if you already have one.
+      render: json
+    validations:
+      required: false
+  - type: textarea
+    id: goal
+    attributes:
+      label: Desired migration behavior
+      description: Explain what generated Playwright code you want and what should remain as TODO.
+    validations:
+      required: true

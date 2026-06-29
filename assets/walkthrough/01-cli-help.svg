@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="420" role="img" aria-label="CLI help screenshot">
+  <rect width="980" height="420" rx="16" fill="#111827"/>
+  <rect x="0" y="0" width="980" height="42" rx="16" fill="#1f2937"/>
+  <circle cx="24" cy="21" r="7" fill="#ef4444"/><circle cx="48" cy="21" r="7" fill="#f59e0b"/><circle cx="72" cy="21" r="7" fill="#10b981"/>
+  <text x="26" y="82" font-family="Consolas, monospace" font-size="22" fill="#d1d5db">$ selenium-pw-migrator --help</text>
+  <text x="26" y="126" font-family="Consolas, monospace" font-size="19" fill="#e5e7eb">Selenium → Playwright AST Migrator</text>
+  <text x="26" y="166" font-family="Consolas, monospace" font-size="17" fill="#9ca3af">Stable commands: doctor, analyze, migrate, verify, verify-project, capabilities</text>
+  <text x="26" y="204" font-family="Consolas, monospace" font-size="17" fill="#9ca3af">Experimental commands: orchestrate, verify-ts-project, explain-todo, smoke-plan</text>
+  <text x="26" y="252" font-family="Consolas, monospace" font-size="17" fill="#93c5fd">Example:</text>
+  <text x="26" y="288" font-family="Consolas, monospace" font-size="17" fill="#d1d5db">selenium-pw-migrator --mode migrate --input ./SeleniumTests --config ./adapter-config.json</text>
+  <text x="26" y="346" font-family="Consolas, monospace" font-size="17" fill="#a7f3d0">Tip: start with --mode doctor before generating code.</text>
+</svg>

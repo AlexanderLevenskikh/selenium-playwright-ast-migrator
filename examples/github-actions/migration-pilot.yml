@@ -1,0 +1,53 @@
+name: Selenium to Playwright migration pilot
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  migration-pilot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install migrator tool
+        run: dotnet tool install --global SeleniumPlaywrightAstMigrator --prerelease
+
+      - name: Doctor
+        run: |
+          selenium-pw-migrator --mode doctor \
+            --input ./tests/Selenium \
+            --config ./migration/adapter-config.json \
+            --out ci-doctor
+
+      - name: Migrate pilot suite
+        run: |
+          selenium-pw-migrator --mode migrate \
+            --input ./tests/Selenium/Pilot \
+            --config ./migration/adapter-config.json \
+            --out ci-pilot \
+            --format both
+
+      - name: Verify generated output
+        run: |
+          selenium-pw-migrator --mode verify \
+            --input ./tests/Selenium/Pilot \
+            --config ./migration/adapter-config.json \
+            --out ci-pilot-verify \
+            --format both
+
+      - name: Upload migration artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: selenium-playwright-migration-pilot
+          path: |
+            migration/ci-doctor
+            migration/ci-pilot
+            migration/ci-pilot-verify

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/tree/main/docs
+    about: Start with quick start, limitations, troubleshooting, and config/profile guides.
