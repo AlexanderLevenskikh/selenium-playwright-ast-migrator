@@ -242,6 +242,30 @@ $readmeLines = @(
 )
 Set-Content -Path $readmeAgent -Value $readmeLines -Encoding UTF8
 
+function Get-RelativePath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BasePath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$TargetPath
+    )
+
+    $base = (Resolve-Path $BasePath).Path.TrimEnd('\','/')
+    $target = (Resolve-Path $TargetPath).Path
+
+    if ($target.StartsWith($base, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $target.Substring($base.Length).TrimStart('\','/').Replace('\','/')
+    }
+
+    $baseUri = New-Object System.Uri(($base + [System.IO.Path]::DirectorySeparatorChar))
+    $targetUri = New-Object System.Uri($target)
+
+    return [System.Uri]::UnescapeDataString(
+        $baseUri.MakeRelativeUri($targetUri).ToString()
+    ).Replace('\','/').Replace('/','/')
+}
+
 Write-Host "Generating bundle manifest and checksums..."
 $manifestShaPath = Join-Path $bundleDir "MANIFEST.sha256"
 $manifestJsonPath = Join-Path $bundleDir "manifest.json"
@@ -253,7 +277,10 @@ $bundleFiles = Get-ChildItem $bundleDir -File -Recurse |
 $shaLines = New-Object System.Collections.Generic.List[string]
 $jsonFiles = @()
 foreach ($file in $bundleFiles) {
-    $relative = [System.IO.Path]::GetRelativePath($bundleDir, $file.FullName).Replace('\', '/')
+    $relative = Get-RelativePath `
+        -BasePath $bundleDir `
+        -TargetPath $file.FullName
+        
     $hash = (Get-FileHash -Algorithm SHA256 -Path $file.FullName).Hash.ToLowerInvariant()
     $shaLines.Add("$hash  $relative")
     $jsonFiles += [pscustomobject]@{
