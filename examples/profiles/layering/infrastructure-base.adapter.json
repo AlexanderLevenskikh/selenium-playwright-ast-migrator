@@ -1,5 +1,6 @@
 {
   "$schema": "../../../schemas/adapter-config.schema.json",
+  "SchemaVersion": "adapter-config/v1",
   "SourceProjectName": "Infrastructure Selenium POM Base",
   "LocatorSettings": {
     "DefaultTestIdAttribute": "data-tid",

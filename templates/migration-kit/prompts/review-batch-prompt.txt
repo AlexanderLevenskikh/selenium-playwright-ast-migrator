@@ -1,11 +1,16 @@
+SECONDARY REVIEW WRAPPER.
+This prompt reviews a bounded batch under the primary `.agent-loops/kickoff-prompt.txt` contract.
+
 Review the last Selenium → Playwright migration loop batch.
 
 Read:
+- `.agent-loops/15-stop-policy-checklist.md`
 - `{{WORKSPACE}}/agent-state.md`
 - `{{WORKSPACE}}/current-ticket.md`
 - `{{WORKSPACE}}/state/run-ledger.md`
 - `{{WORKSPACE}}/state/decision-log.md`
 - `{{WORKSPACE}}/state/handoff.md`
+- `{{WORKSPACE}}/state/stop-policy-checklist.md`
 - latest run output under `{{WORKSPACE}}/runs/`
 - git diff / changed files
 
@@ -23,10 +28,17 @@ Confirm whether the batch preserved these rules:
 - no false-green tests;
 - no silent assertion suppression;
 - no generated-file-only fixes;
-- no broad source-symbol hiding.
+- no migrator source-code edits in migration-artifact mode;
+- no compiled-tool-only source discovery;
+- no broad source-symbol hiding;
+- no invented selectors.
 
 ## Metrics before/after
 
+## Stop-policy checklist
+
+Confirm whether `.agent-loops/15-stop-policy-checklist.md` supports the verdict.
+
 ## Required follow-up
 
-If accepted, update `{{WORKSPACE}}/state/handoff.md` with the next action.
+If accepted, update `{{WORKSPACE}}/state/handoff.md` with one concrete next action. Do not ask whether to continue when the next status is `CONTINUE_AUTONOMOUSLY`.

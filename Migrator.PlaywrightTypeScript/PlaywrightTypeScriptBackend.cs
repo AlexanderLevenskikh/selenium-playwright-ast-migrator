@@ -41,6 +41,8 @@ public sealed class PlaywrightTypeScriptBackend : ITargetBackend
 
     public IReadOnlyCollection<string> Aliases { get; } = PlaywrightTypeScriptTarget.Aliases;
 
+    public TargetCapabilityReport Capabilities => TargetCapabilityCatalog.ForTarget(Target);
+
     public string Render(TestFileModel model) => _renderer.Render(model);
 
     public string RenderDocument(MigrationDocument document) => _irV2Renderer.Render(document);

@@ -155,5 +155,6 @@ profiles/**/*.local.json
 !**/Snapshots/**
 !**/Expected/**
 # Migration agent workspace / generated artifacts
+.agent-state/
 migration/
 .migration/

@@ -73,7 +73,8 @@ Use it in config/profile files:
 
 ```json
 {
-  "$schema": "./schemas/adapter-config.schema.json"
+  "$schema": "./schemas/adapter-config.schema.json",
+  "SchemaVersion": "adapter-config/v1"
 }
 ```
 
@@ -96,12 +97,13 @@ selenium-pw-migrator --mode config-validate --config adapter-config.json --out c
         return """
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.local/selenium-playwright-ast-migrator/adapter-config.schema.json",
+  "$id": "https://raw.githubusercontent.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/main/schemas/adapter-config.schema.json",
   "title": "Selenium Playwright AST Migrator adapter-config",
   "type": "object",
   "additionalProperties": true,
   "properties": {
     "$schema": { "type": "string" },
+    "SchemaVersion": { "type": "string", "const": "adapter-config/v1", "default": "adapter-config/v1" },
     "SourceProjectName": { "type": "string" },
     "SourceOnlyIdentifiers": { "type": "array", "items": { "type": "string" } },
     "TargetKnownTypes": { "type": "array", "items": { "type": "string" } },

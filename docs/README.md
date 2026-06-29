@@ -1,39 +1,80 @@
 # Documentation index
 
-This package is cleaned for **Autopilot Loop** testing.
-
-The old human-checkpoint agent workflow was removed from this archive to avoid conflicting instructions.
+Public documentation is organized by the path a new user usually follows: install, run a small pilot, improve the profile, verify generated output, and then scale with or without an agent.
 
 ## Start here
 
-- [`../AGENTS.md`](../AGENTS.md) — repository-level agent rules.
-- [`../.agent-loops/README.md`](../.agent-loops/README.md) — local loop package.
-- [`autopilot-loop.md`](autopilot-loop.md) — how to run the new workflow.
+- [Quick start](quick-start.md) — first successful local run.
+- [End-to-end simple example](examples/end-to-end-simple.md) — real input, config, command, and expected generated output from `examples/simple/`.
+- [Public launch demo](../examples/public-launch-demo/README.md) — copyable launch demo with before/after output and report.
+- [Screenshot walkthrough](public-launch/walkthrough.md) — install → doctor → migrate → verify → inspect report.
+- [Tool installation](tool-installation.md) — install from a packed dotnet tool or run from source.
+- [Troubleshooting](troubleshooting.md) — common setup, config, packaging, and verification problems.
 
-## Core technical docs
+## User guide
 
-- [`architecture.md`](architecture.md) — project architecture.
-- [`project-verification.md`](project-verification.md) — verifying generated code against real projects.
-- [`explain-todo.md`](explain-todo.md) — TODO explanation reports.
-- [`migration-board.md`](migration-board.md) — dashboard for migration artifacts.
-- [`pom-indexing.md`](pom-indexing.md) — PageObject indexing.
-- [`pom-recovery-policy.md`](pom-recovery-policy.md) — selector/source-truth recovery.
-- [`wait-policy.md`](wait-policy.md) — wait classification.
-- [`typescript-target.md`](typescript-target.md) — experimental Playwright TypeScript target.
-- [`config-layering.md`](config-layering.md) — layered config/profile model.
-- [`config-schema-workflow.md`](config-schema-workflow.md) — JSON schema workflow.
-- [`runtime-readiness.md`](runtime-readiness.md) — smoke candidate scoring.
-- [`runtime-failure-classifier.md`](runtime-failure-classifier.md) — runtime failure classification.
-- [`tool-installation.md`](tool-installation.md) — local tool installation.
-- [`packaging-and-distribution.md`](packaging-and-distribution.md) — packaging and distribution.
-- [`migration-kit-mvp.md`](migration-kit-mvp.md) — MVP-1 installable workspace, safe updates, and MVP-2 stateful loop.
-- [`migration-kit-mvp3.md`](migration-kit-mvp3.md) — optional Codex handoff, OpenCode team files, and loop library.
-- [`migration-kit-mvp4.md`](migration-kit-mvp4.md) — cross-platform `migrator kit init/update/doctor/next-ticket` commands.
+- [User guide overview](user-guide/README.md)
+- [Migration workflow](user-guide/migration-workflow.md)
+- [Reports and quality gates](user-guide/reports-and-quality-gates.md)
+- [Common recipes](user-guide/common-recipes.md)
+- [No-infra scaffold](user-guide/no-infra-scaffold.md)
+- [Limitations](user-guide/limitations.md)
 
-## Autopilot principle
+## Config and profile guide
 
-If the agent status is `CONTINUE_AUTONOMOUSLY`, the agent must continue without asking the user.
+- [Config and profile guide](config-profile-guide.md)
+- [Profile cookbook](user-guide/project-profile-cookbook.md)
+- [Locator matching](profile/locator-matching.md)
+- [Method mappings](profile/method-mappings.md)
+- [Parameterized method mappings](profile/parameterized-method-mappings.md)
+- [Profile scoping](profile/profile-scoping.md)
+- [Config schema workflow](config-schema-workflow.md)
+- [Config layering](config-layering.md)
 
-- [`navigation-url-mapping.md`](navigation-url-mapping.md) — config-driven mapping for `Navigation.OpenPage<T>(Urls...)`.
+## Agent and autopilot guide
 
-- [Helper body inventory](helper-body-inventory.md) — scan Selenium helper/POM method bodies and infer MethodSemantics candidates.
+- [Agent/autopilot guide](agent-autopilot-guide.md)
+- [Autopilot loop](autopilot-loop.md)
+- [Agent loop hardening](agent-loop-hardening.md)
+- [Agent command set](agent-command-set.md)
+- [Agent config guidelines](agent-config-guidelines.md)
+- [Agent safety](agent-safety.md)
+- [Agent playbooks](agent-playbooks/README.md)
+
+## Extensibility and public API
+
+- [Extensibility overview](extensibility.md)
+- [Source frontend contract](source-frontend-contract.md)
+- [Target backend contract](target-backend-contract.md)
+- [Adapter-config versioning](adapter-config-versioning.md)
+
+## CLI, verification, and reports
+
+- [CLI productization](cli-productization.md)
+- [Project verification](project-verification.md)
+- [Explain TODO](explain-todo.md)
+- [Migration board](migration-board.md)
+- [Migration quality program](migration-quality-program.md)
+- [Runtime readiness](runtime-readiness.md)
+- [Runtime failure classifier](runtime-failure-classifier.md)
+- [POM indexing](pom-indexing.md)
+- [POM recovery policy](pom-recovery-policy.md)
+- [Helper body inventory](helper-body-inventory.md)
+- [Wait policy](wait-policy.md)
+- [Playwright TypeScript target](typescript-target.md)
+
+## Packaging and releases
+
+- [Packaging and distribution](packaging-and-distribution.md)
+- [Release process](release-process.md)
+- [Public launch pack](public-launch/README.md)
+- [Public roadmap](public-roadmap.md)
+- [Preview release notes](release-notes/v0.6.0-preview.1.md)
+
+## Maintainer and implementation notes
+
+The following folders are useful for maintainers and migration authors, but they are not required for a first user run:
+
+- `docs/migrator-tickets/` — implementation ticket history and cross-language roadmap notes.
+- `docs/pilot/` — pilot migration evidence and experiment summaries.
+- `templates/` — bundled migration-kit, Codex, OpenCode, and loop-library templates.

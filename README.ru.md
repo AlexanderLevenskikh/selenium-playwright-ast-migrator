@@ -1,245 +1,150 @@
 # Selenium → Playwright AST Migrator
 
-**Инструмент для перевода больших Selenium C# / NUnit наборов тестов в Playwright без ручного переписывания каждого теста.**
+**.NET 8 CLI-инструмент для измеримой и проверяемой миграции Selenium-тестов в Playwright.**
 
-Архив подготовлен для тестирования нового режима **Autopilot Loop**. Старые human-checkpoint инструкции из этой версии намеренно удалены, чтобы агент не получал конфликтующие правила о ручном подтверждении каждого шага.
+Migrator парсит Selenium-тесты, строит промежуточную модель действий, применяет project-specific profile/config mappings и генерирует Playwright-тесты вместе с отчётами. Он полезен, когда нужно переносить большой E2E-набор не вручную по одному тесту, а через контролируемый цикл: source truth → config/profile → generated code → verification → следующий паттерн.
+
+Основной production-путь: **Selenium C# / NUnit → Playwright .NET**. Остальные source/target варианты помечены как preview/experimental.
 
 ## Что делает инструмент
 
-- Парсит Selenium C# тесты через Roslyn.
-- Строит промежуточную модель действий.
-- Применяет project-specific profile/config mappings.
-- Генерирует Playwright .NET тесты.
-- Поддерживает режим `scaffold` для создания минимального compile-ready Playwright .NET проекта, если инфраструктуры ещё нет.
-- Пишет отчёты, TODO diagnostics, migration board и verify artifacts.
-- Позволяет агенту работать в closed loop: исправить → проверить → продолжить.
+- Анализирует Selenium-тесты и показывает unmapped targets, unsupported actions и повторяющиеся migration-паттерны.
+- Маппит PageObjects, helper methods, table/list patterns, waits и project conventions через reviewable JSON profiles.
+- Генерирует Playwright .NET тесты; экспериментально может генерировать Playwright TypeScript specs через `--target ts`.
+- Проверяет generated output: syntax checks, project-aware compile checks, TypeScript type checks, quality gates, migration dashboards и quality-backlog с root cause / next-action tickets.
+- Помогает человеку или агенту безопасно улучшать миграцию маленькими итерациями.
 
-## Быстрый старт для Autopilot Loop
+Идея не в “магической конвертации”, а в том, чтобы вся неопределённость была видимой и проверяемой.
 
-Дай агенту такой prompt из корня репозитория:
+## Поддерживаемые source и target
 
-```text
-Read all files in .agent-loops/.
-Also read AGENTS.md, docs/autopilot-loop.md, and .agent-loops/12-pom-helper-recovery-policy.md.
+| Source frontend | Target backend | Статус | Примечание |
+|---|---|---|---|
+| Selenium C# / NUnit | Playwright .NET | Stable public path | Полный workflow analyze/migrate/verify на Roslyn. |
+| Selenium C# / NUnit | Playwright TypeScript | Experimental preview | Используй `--target ts`; project-aware verify требует `--ts-project`. |
+| Selenium Java | Playwright .NET / TypeScript | Experimental MVP | Для простых Java Selenium fixtures; без Java semantic model. |
+| Selenium Python | Playwright .NET / TypeScript | Experimental spike | Для простых pytest/unittest Selenium diagnostics; не production-ready. |
 
-Start Migrator Autopilot Loop.
+## Установка или локальный запуск
 
-You are allowed and expected to make engineering decisions yourself.
-Do not ask me to choose between implementation options.
-Do not stop after partial progress.
-Continue until the selected migration block is fixed and verified, or until the stop policy requires a real stop.
-
-Migration scope:
-- Source Selenium project: <ПУТЬ_К_SOURCE_SELENIUM_PROJECT>
-- Target/generated Playwright project: <ПУТЬ_К_TARGET_PROJECT_OR_OUTPUT>
-- Migrator config/profile: <ПУТЬ_К_CONFIG_OR_PROFILE>
-- Compiled migrator tool, если режим compiled-tool-only: <ПУТЬ_К_COMPILED_TOOL_ИЛИ_ПУСТО>
-- Existing Playwright POM examples: <ПУТЬ_К_ALLOWED_TARGET_POM_EXAMPLES_ИЛИ_ПУСТО>
-- Verify/orchestrate output directory: <ПУТЬ_К_OUTPUT_DIR>
-- Latest migration board: <ПУТЬ_ИЛИ_ПУСТО>
-- Latest project verify report: <ПУТЬ_ИЛИ_ПУСТО>
-
-Current task:
-<ВСТАВЬ ТЕКУЩИЙ БЛОК / ОШИБКУ / ЛОГ / TODO-КАТЕГОРИЮ>
-
-Use repository code, existing tests, snapshots, docs, CLI reports, migration board, source Selenium tests, target project conventions, and command output as the source of truth.
-```
-
-Главные документы:
-
-- [`.agent-loops/README.md`](.agent-loops/README.md)
-- [`docs/autopilot-loop.md`](docs/autopilot-loop.md)
-- [`AGENTS.md`](AGENTS.md)
-
-## Простой гид: как устроена система и как получить максимум пользы
-
-Migrator состоит из двух частей:
-
-1. **Сам инструмент**. Он читает старые Selenium-тесты, применяет правила из config/profile и пишет Playwright-тесты.
-2. **Agent Loop**. Это инструкция для агента, чтобы он не останавливался после каждого маленького шага, а работал циклом: посмотрел отчёт → выбрал маленькую задачу → сделал безопасную правку → запустил проверку → прочитал результат → продолжил.
-
-Главная идея простая: агент не должен переписывать все тесты руками. Он должен улучшать правила миграции так, чтобы один найденный паттерн исправлял сразу много похожих мест.
-
-### Как выглядит правильный цикл
-
-Хороший loop всегда отвечает на 5 вопросов:
-
-- **Цель**: что именно улучшаем сейчас, например `page.Pagination.Forward` или `EMPTY_TEST_AFTER_SUPPRESSION`.
-- **Лимит**: сколько итераций можно сделать, например 5 или 12.
-- **Проверка**: какую команду запускать после каждого шага.
-- **Условие выхода**: по какому отчёту понятно, что batch готов.
-- **Границы**: какие пути можно читать и куда можно писать.
-
-Если этих пунктов нет, агент начинает “творить”: спрашивает лишнее, чинит не тот код, ищет файлы не там или останавливается после частичного успеха.
-
-### Главный режим: migration-artifact
-
-По умолчанию агент должен работать в режиме `migration-artifact`.
-
-В этом режиме можно менять:
-
-- `adapter-config.json`;
-- migration profile;
-- файлы в migration/output папке;
-- generated POM candidates;
-- отчёты и handoff state;
-- промежуточные артефакты `index-pom`, `helper-inventory`, `explain-todo`, `migration-board`.
-
-В этом режиме нельзя чинить исходный код migrator-а. Если агент видит, что нужен engine fix, он должен записать finding или ticket candidate, а не лезть в `Migrator.Cli`, `Migrator.Core`, renderer или parser.
-
-### Отдельный режим: migrator-code
-
-Этот режим нужен только для разработки самого инструмента.
-
-Включай его явно:
-
-```text
-Mode: migrator-code
-Repository source edits are allowed.
-```
-
-Тогда агент может править C# код migrator-а, но обязан:
-
-- добавить или обновить regression tests;
-- запустить `dotnet build`;
-- запустить `dotnet test Migrator.Tests/Migrator.Tests.csproj`;
-- объяснить, почему это engine bug, а не просто config gap.
-
-### Пример 1: уменьшить TODO по одному паттерну
-
-```text
-Mode: migration-artifact
-
-Goal: reduce top normalized root cause page.Pagination.Forward.
-Max iterations: 5.
-Check command: run migrate, explain-todo, migration-board.
-Exit condition: page.Pagination.Forward is mapped or classified with source/POM evidence, and no dangerous suppressions were added.
-
-Allowed input paths:
-- C:\path\to\selenium-tests
-- C:\path\to\latest-migration-run
-
-Allowed write paths:
-- C:\path\to\migration-workspace
-```
-
-Ожидаемое поведение агента: найти source truth, проверить POM/helper evidence, добавить config/profile mapping или оставить честный TODO. Не править migrator source.
-
-### Пример 2: разобраться с пустыми тестами
-
-```text
-Mode: migration-artifact
-
-Goal: classify EMPTY_TEST_AFTER_SUPPRESSION.
-Max iterations: 4.
-Check command: run explain-todo and migration-board.
-Exit condition: representative empty tests are classified as safe wait-only, accidental suppression, setup-only, or missing upstream mapping.
-```
-
-Ожидаемое поведение агента: открыть несколько примеров, трассировать их до Selenium source, не добавлять новые broad suppressions.
-
-### Пример 3: настоящий баг migrator-а
-
-```text
-Mode: migrator-code
-Repository source edits are allowed.
-
-Goal: receiverless helper calls should become HELPER_METHOD_REQUIRES_MAPPING instead of generic unsupported actions.
-Max iterations: 6.
-Check command: dotnet build; dotnet test Migrator.Tests/Migrator.Tests.csproj.
-Exit condition: focused regression test passes and generated TODO is specific.
-```
-
-Ожидаемое поведение агента: написать минимальный regression test, исправить parser/adapter/renderer, прогнать build/test.
-
-### Когда использовать несколько агентов
-
-Несколько агентов полезны, когда задачи независимы.
-
-Хорошее разделение:
-
-- **Coordinator**: держит общий план, state, финальную проверку.
-- **Migration agent A**: разбирает один TODO/root-cause паттерн.
-- **Migration agent B**: собирает POM/helper evidence.
-- **Verifier**: проверяет diff, отчёты и команды.
-- **Migrator-code agent**: только если явно разрешён engine fix.
-
-Плохое разделение:
-
-- два агента одновременно редактируют один `adapter-config.json`;
-- один агент меняет migrator source, а другой запускает старый compiled tool;
-- несколько агентов “просто улучшают всё”;
-- кто-то вручную правит generated tests как финальное решение.
-
-Для multi-agent режима используй [`.agent-loops/14-multi-agent-loop.md`](.agent-loops/14-multi-agent-loop.md).
-
-### Как добиться максимального эффекта
-
-- Давай агенту конкретный latest `migration-board.md` или `agent-next-task.md`.
-- Всегда указывай allowed input/write paths.
-- Задавай один измеримый goal на batch.
-- Проси не “уменьшить все TODO”, а “разобрать top normalized root cause”.
-- Перед helper/POM решениями требуй `index-pom` и `helper-inventory`.
-- Не разрешай broad suppressions без safety rationale.
-- Не считай green build финалом, если board всё ещё показывает actionable категории.
-- Разделяй migration-artifact и migrator-code режимы.
-- После каждого batch сохраняй state/handoff, чтобы следующий агент не начинал с нуля.
-
-## POM/helper recovery
-
-Низкое покрытие существующими Playwright POM не является автоматическим blocker-ом. Перед `TICKET_NEEDED` агент должен запустить или изучить `index-pom` для selector evidence из Selenium POM и `helper-inventory` для helper/POM wrapper semantics.
-
-Если Selenium POM содержит доказанные selectors (`ByTId("value")`, `CreateControlByTid(...)`, явный `data-tid`, CSS, XPath, resolved constants), порядок такой: существующий target POM member → generated POM scaffold в migration/output → raw Playwright locator из доказанного selector-а → explicit TODO. Нельзя придумывать selectors по именам PageObject/property.
-
-## Основные команды
+Из исходников:
 
 ```bash
 dotnet restore
-dotnet build
-dotnet test Migrator.Tests/Migrator.Tests.csproj
+dotnet run --project Migrator.Cli -- --help
 ```
 
-Пример запуска миграции:
+Как локальный dotnet tool package:
 
 ```bash
-dotnet run --project Migrator.Cli -- \
-  --mode orchestrate \
+./scripts/pack-tool.sh
+./scripts/install-local-tool.ps1 -PackageSource ./artifacts/nuget
+selenium-pw-migrator --help
+```
+
+Подробнее: [Tool installation](docs/tool-installation.md) и [Packaging and distribution](docs/packaging-and-distribution.md).
+
+## Быстрый старт
+
+Начинай с маленького pilot-набора, а не со всей тестовой базы:
+
+```bash
+selenium-pw-migrator --mode doctor \
   --input ./SeleniumTests \
   --config ./adapter-config.json \
-  --out orchestration-1 \
+  --out doctor
+
+selenium-pw-migrator --mode orchestrate \
+  --input ./SeleniumTests \
+  --config ./adapter-config.json \
+  --out run-001 \
   --format both
 ```
 
-## Если Playwright-инфраструктуры ещё нет
+По умолчанию относительный `--out` пишется внутрь workspace `migration/`, например `migration/run-001`.
 
-Можно сгенерировать минимальный проект через режим `scaffold`:
+Типичные outputs:
 
-```bash
-dotnet run --project Migrator.Cli -- --mode scaffold --out ./generated-scaffold
+```text
+migration/run-001/
+  analyze/
+  generated/
+  verify/
+  propose/
+  orchestration-report.md
+  orchestration-report.json
 ```
 
-Этот режим создаёт стартовый compile-ready scaffold. Он не гарантирует runtime-прохождение тестов: auth, routes, окружение и project-specific поведение нужно настроить под конкретный проект.
+Пошагово:
 
-## Правило режима Autopilot
+- [Quick start](docs/quick-start.md)
+- [End-to-end simple example](docs/examples/end-to-end-simple.md)
+- [Public launch demo](examples/public-launch-demo/README.md)
+- [Screenshot walkthrough](docs/public-launch/walkthrough.md)
+- [Migration workflow](docs/user-guide/migration-workflow.md)
+- [Extensibility and public API](docs/extensibility.md)
 
-Если статус агента `CONTINUE_AUTONOMOUSLY`, агент должен продолжать без вопроса пользователю.
+## Основные CLI modes
 
-Пользователь отвечает за финальную приёмку, а не за выбор между техническими вариантами реализации.
+| Mode | Статус | Назначение |
+|---|---|---|
+| `doctor` | Stable | Preflight checks для input, config layers, project files и workspace hygiene. |
+| `analyze` | Stable | Парсинг Selenium-файлов и отчёты без генерации target files. |
+| `migrate` | Stable | Генерация Playwright target files. |
+| `verify` | Stable | Лёгкая проверка generated code. |
+| `verify-project` | Stable | Компиляция generated Playwright .NET тестов в project-aware harness. |
+| `config-validate` | Stable | Проверка profile structure и safety rules. |
+| `config-diff` | Stable | Сравнение profile changes и risky edits. |
+| `guard` | Stable | Сравнение before/after migration metrics. |
+| `index-pom` | Stable | Поиск selector evidence в Selenium PageObjects. |
+| `helper-inventory` | Stable | Анализ helper/POM method bodies и MethodSemantics candidates. |
+| `discover-target` | Stable | Сканирование существующего Playwright .NET проекта и target inventory. |
+| `scaffold` | Stable | Минимальный compile-ready Playwright .NET scaffold. |
+| `capabilities` | Stable | Показывает capability reports для source frontends и target backends. |
+| `verify-ts-project` | Experimental | Type-check generated Playwright TS specs внутри существующего TS проекта. |
+| `orchestrate` | Experimental | Dry-run analyze → migrate → verify → propose. |
+| `explain-todo` / `smoke-plan` / `runtime-classify` / `migration-board` | Experimental | Приоритизация следующих migration fixes по artifacts/logs. |
 
-## Troubleshooting: Rider/ReSharper test runner
-
-Если Rider/ReSharper показывает ошибку вида `dotnet.exe exited with code '0': Not available`, не считай это источником истины для Autopilot Loop. Проверь результат из терминала:
+Command-specific help:
 
 ```bash
-dotnet build
-dotnet test Migrator.Tests/Migrator.Tests.csproj -v normal
+selenium-pw-migrator --mode migrate --help
 ```
 
-Если CLI-команды проходят, агент должен продолжать loop.
+## Safety rules
 
+- Не придумывать selectors.
+- Source truth важнее догадок: Selenium PageObject code, verified HTML attributes, existing target POM/tests или project-owned helper semantics.
+- TODO в generated code — это reviewable evidence, а не мусор, который надо спрятать.
+- Не чинить generated files как финальное решение; лучше исправить profile/source-truth mapping или поведение migrator.
+- Перед suppress/manual rewrite повторяющихся PageObject/helper patterns используй `index-pom` и `helper-inventory`.
 
-## Checkpoint — не финал
+Если Selenium POM содержит доказанные selectors (`ByTId("value")`, `CreateControlByTid(...)`, явный `data-tid`, CSS, XPath, resolved constants), порядок такой: existing target POM member → generated POM scaffold → raw Playwright locator из доказанного selector → explicit TODO.
 
-В Autopilot Loop зелёный build/project verify — это безопасный checkpoint, но не обязательно конец миграции.
+## Карта документации
 
-Если в migration board ещё есть actionable TODO, missing mappings, unsupported actions, empty tests или runtime candidates, агент должен продолжать следующий маленький безопасный batch.
+- [Documentation index](docs/README.md)
+- [Quick start](docs/quick-start.md)
+- [User guide](docs/user-guide/README.md)
+- [Config and profile guide](docs/config-profile-guide.md)
+- [Agent/autopilot guide](docs/agent-autopilot-guide.md)
+- [Agent loop hardening](docs/agent-loop-hardening.md)
+- [Limitations](docs/user-guide/limitations.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Migration quality program](docs/migration-quality-program.md)
+- [Public launch pack](docs/public-launch/README.md)
+- [Public roadmap](docs/public-roadmap.md)
+- [Release process](docs/release-process.md)
+
+## Разработка
+
+```bash
+dotnet restore
+dotnet test --no-restore
+```
+
+Тесты покрывают parser behavior, adapter mappings, snapshots, compile-smoke checks, orchestration, TypeScript target basics, safety guards, packaging guardrails и regression cases для частых migration blockers.
+
+## Public release status
+
+Проект готовится как public preview. Stable commands рассчитаны на внешних пользователей; experimental commands могут меняться между preview-релизами. См. [CHANGELOG.md](CHANGELOG.md), [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md).

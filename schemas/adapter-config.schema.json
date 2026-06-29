@@ -1,14 +1,20 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.local/selenium-playwright-ast-migrator/adapter-config.schema.json",
+  "$id": "https://raw.githubusercontent.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/main/schemas/adapter-config.schema.json",
   "title": "Selenium Playwright AST Migrator adapter-config",
-  "description": "Config/profile schema for Selenium C# -> Playwright .NET AST Migrator. Project-specific migration knowledge belongs here; renderer code should stay generic.",
+  "description": "Config/profile schema for Selenium-to-Playwright AST Migrator. Project-specific migration knowledge belongs here; renderer code should stay generic.",
   "type": "object",
   "additionalProperties": true,
   "properties": {
     "$schema": {
       "type": "string",
       "description": "Optional editor schema hint. Use ./schemas/adapter-config.schema.json in local repos."
+    },
+    "SchemaVersion": {
+      "type": "string",
+      "const": "adapter-config/v1",
+      "default": "adapter-config/v1",
+      "description": "Explicit adapter-config schema version. Existing configs without this field are treated as adapter-config/v1."
     },
     "SourceProjectName": {
       "type": "string",
@@ -85,7 +91,9 @@
     },
     "NavigationUrls": {
       "type": "object",
-      "additionalProperties": { "type": "string" },
+      "additionalProperties": {
+        "type": "string"
+      },
       "description": "Maps source-only navigation URL expressions such as Urls.BaseUrlPartners to target URL values. Plain values are rendered as C# string literals."
     },
     "NavigationTargetStatement": {
@@ -606,7 +614,9 @@
         },
         "NavigationUrls": {
           "type": "object",
-          "additionalProperties": { "type": "string" },
+          "additionalProperties": {
+            "type": "string"
+          },
           "default": {}
         },
         "NavigationTargetStatement": {
@@ -663,22 +673,30 @@
       "properties": {
         "InputMethods": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": []
         },
         "SelectMethods": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": []
         },
         "NavigationMethods": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": []
         },
         "FluentAssertionMethods": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": []
         }
       }

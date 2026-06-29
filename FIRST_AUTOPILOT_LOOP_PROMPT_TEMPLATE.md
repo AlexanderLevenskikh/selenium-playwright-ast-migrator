@@ -1,3 +1,5 @@
+LEGACY COMPATIBILITY PROMPT. Use `.agent-loops/kickoff-prompt.txt` for new autopilot runs; this file is retained for compatibility and must not override the primary loop contract.
+
 Read all files in .agent-loops/.
 Also read AGENTS.md, docs/autopilot-loop.md, .agent-loops/11-strict-ticket-boundaries.md, and .agent-loops/12-pom-helper-recovery-policy.md.
 

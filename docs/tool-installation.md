@@ -9,7 +9,7 @@ dotnet new tool-manifest
 
 dotnet tool install SeleniumPlaywrightAstMigrator `
   --version 0.6.0-preview.1 `
-  --add-source company-nuget
+
 ```
 
 Запуск:
@@ -37,7 +37,7 @@ dotnet tool run selenium-pw-migrator -- `
 ```powershell
 dotnet tool install --global SeleniumPlaywrightAstMigrator `
   --version 0.6.0-preview.1 `
-  --add-source company-nuget
+
 ```
 
 Запуск:
@@ -53,7 +53,7 @@ Local tool:
 ```powershell
 dotnet tool update SeleniumPlaywrightAstMigrator `
   --version 0.6.0-preview.2 `
-  --add-source company-nuget
+
 ```
 
 Global tool:
@@ -61,7 +61,7 @@ Global tool:
 ```powershell
 dotnet tool update --global SeleniumPlaywrightAstMigrator `
   --version 0.6.0-preview.2 `
-  --add-source company-nuget
+
 ```
 
 ## В CI
@@ -75,4 +75,20 @@ dotnet tool run selenium-pw-migrator -- `
   --config "profiles/projects/discounts.adapter.json"
 ```
 
-Если внутренний feed требует `NuGet.config`, положите его в корень репозитория или укажите source явно в CI.
+Если используется приватный preview-feed, положите `NuGet.config` в корень репозитория или укажите source явно в CI.
+
+## Проверка локального пакета перед публикацией
+
+Для релизной проверки используйте smoke из временного local tool manifest:
+
+```powershell
+./scripts/smoke-local-tool-package.ps1 -Version 0.6.0-preview.1
+```
+
+Linux/macOS:
+
+```bash
+scripts/smoke-local-tool-package.sh 0.6.0-preview.1
+```
+
+Это проверяет не source-run, а именно установленный `.nupkg`: `--help`, `--mode doctor` и запись `doctor-report.md`.

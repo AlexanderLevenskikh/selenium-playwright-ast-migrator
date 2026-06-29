@@ -12,6 +12,9 @@
 | `report.txt` | Text | Человекочитаемое резюме всех проанализированных файлов |
 | `unmapped-targets.json` | JSON | Source-выражения без маппинга, сгруппированы по частоте |
 | `unsupported-actions.json` | JSON | Действия, которые инструмент не может конвертировать |
+| `migration-quality-dashboard.json` | JSON | Метрики качества, категории TODO, guardrails и рекомендуемые tickets |
+| `migration-quality-dashboard.md` | Markdown | Человекочитаемый migration-quality dashboard |
+| `migration-quality-tickets.md` | Markdown | Сфокусированные tickets для следующего quality-improvement batch |
 
 ### Отчёты migrate
 
@@ -19,6 +22,15 @@
 |---|---|---|
 | `report.json` | JSON | Аналогичен analyze, с `GeneratedFiles` count |
 | `report.txt` | Text | Человекочитаемое резюме |
+| `migration-quality-dashboard.json` | JSON | Метрики качества, категории TODO, guardrails и рекомендуемые tickets |
+| `migration-quality-dashboard.md` | Markdown | Человекочитаемый migration-quality dashboard |
+| `migration-quality-tickets.md` | Markdown | Сфокусированные tickets для следующего quality-improvement batch |
+
+### Migration quality dashboard
+
+`migration-quality-dashboard.*` связывает raw reports с implementation work: группирует TODO по `[MIGRATOR:<CODE>]`, объясняет root cause, показывает next safe action и генерирует ticket-sized follow-up work. `migration-quality-tickets.md` можно копировать в issue tracker или отдавать агенту.
+
+Подробнее: [Migration Quality Program](../migration-quality-program.md).
 
 ### Отчёт verify
 

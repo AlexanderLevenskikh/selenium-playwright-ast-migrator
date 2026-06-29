@@ -1,3 +1,5 @@
+SECONDARY CONTINUATION PROMPT. Use only after a compile-fix checkpoint; for new runs use `.agent-loops/kickoff-prompt.txt`.
+
 Good. Treat the previous result as completion of the compile-fix batch, not the whole migration.
 
 Status for previous batch:
@@ -8,6 +10,7 @@ CONTINUE_AUTONOMOUSLY.
 
 Read:
 - .agent-loops/08-continuation-rule.md
+- .agent-loops/15-stop-policy-checklist.md
 - latest migration board
 - latest project verify report
 - latest generated reports/TODO diagnostics

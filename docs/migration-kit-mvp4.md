@@ -38,7 +38,7 @@ migration/
   .migration-kit/version.json
 ```
 
-The command also copies `.agent-loops` and `.agent-state` into the project root when those files are available in the installed tool/bundle.
+The command also copies `.agent-loops` into the project root when those files are available in the installed tool/bundle. Local `.agent-state/` is runtime state and is not copied from the packaged tool.
 
 ## Safe update
 

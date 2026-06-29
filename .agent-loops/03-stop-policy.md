@@ -1,6 +1,6 @@
 # Migrator Stop Policy
 
-The agent must continue autonomously unless one of the hard stop conditions is met.
+The agent must continue autonomously unless one of the hard stop conditions is met. Before any stop/handoff/blocker report, apply `15-stop-policy-checklist.md`.
 
 ## Continue autonomously
 
@@ -63,7 +63,7 @@ Do not stop with:
 
 Instead, choose the safest approach and continue.
 
-When a hard stop is reached, do not ask “continue?”. Produce the required stop output with one concrete next action.
+When a hard stop is reached, do not ask “continue?”. Produce the required stop output with one concrete next action. If the checklist does not prove a hard stop, continue the loop.
 
 ## Stop output
 
@@ -77,3 +77,17 @@ When stopping, always provide:
 - recommended next step.
 
 For `TICKET_NEEDED`, also provide a ticket-ready summary using `07-ticket-needed-template.md`.
+
+
+## Pre-stop checklist gate
+
+Before returning any final status except internal `CONTINUE_AUTONOMOUSLY`, fill the gate in `15-stop-policy-checklist.md`:
+
+1. identify the current mode and path contract;
+2. state the selected batch goal;
+3. list evidence, changed files, and commands;
+4. choose exactly one allowed final status;
+5. verify no forbidden stop reason applies;
+6. provide exactly one concrete next action.
+
+If any item cannot be answered and another safe inspection or verification step remains, do that step instead of stopping.

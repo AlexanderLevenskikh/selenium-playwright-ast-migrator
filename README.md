@@ -1,142 +1,140 @@
 # Selenium → Playwright AST Migrator
 
-**Move large Selenium C# / NUnit suites to Playwright without turning the migration into a hand-written rewrite project.**
+**A .NET 8 CLI toolkit for turning Selenium test suites into measurable, reviewable Playwright migrations.**
 
-This repository contains a .NET 8 CLI migration toolkit that parses Selenium C# tests with Roslyn, builds an intermediate representation, applies project-specific profile mappings, and generates Playwright tests. The main target is **Playwright .NET**; an experimental **Playwright TypeScript** target is available when you already have a real TS Playwright project to plug into.
+The Migrator parses Selenium tests, builds an intermediate representation, applies project-specific profile mappings, and renders Playwright tests plus reports. It is designed for teams that want to migrate large E2E suites without pretending that every selector, helper, wait, and PageObject can be guessed safely.
 
-This archive is prepared for **Autopilot Loop** testing: the old human-checkpoint agent workflow was removed to avoid conflicting instructions.
+The main production path is **Selenium C# / NUnit → Playwright .NET**. Other source/target combinations are available as preview features and are clearly labeled below.
 
-## Why teams use it
+## What it does
 
-Migrating E2E suites usually fails for boring reasons: thousands of repeated locators, custom PageObjects, fragile waits, and hidden business synchronization. This tool turns that chaos into a measurable workflow:
+- Analyzes Selenium tests and reports unmapped targets, unsupported actions, and repeated migration patterns.
+- Maps PageObjects, helper methods, table/list patterns, waits, and project conventions through reviewable JSON profiles.
+- Generates Playwright .NET tests, or experimental Playwright TypeScript specs when a TS target is selected.
+- Verifies generated output with syntax checks, project-aware compile checks, TypeScript type checks, quality gates, migration dashboards, and a migration-quality backlog with root cause / next-action tickets.
+- Helps humans or coding agents iterate safely: source truth → profile/config → generated code → verification → next pattern.
 
-- **Analyze** Selenium tests and identify repeated migration patterns.
-- **Map** PageObject expressions to Playwright locators through reviewable JSON profiles.
-- **Generate** compile-ready Playwright scaffolding with smart TODO comments for unsafe areas.
-- **Verify** generated .NET or TypeScript code inside real projects.
-- **Prioritize** next fixes with reports, smoke plans, runtime failure classification, and migration boards.
-- **Iterate through Autopilot Loop**: test, fix, verify, and continue until a real stop condition is reached.
+The goal is not magic conversion. The goal is to make migration uncertainty visible and fixable.
 
-The goal is not magic conversion. The goal is to replace manual rewriting with a controlled migration loop: **source truth → profile/config → generated code → verification → next pattern**.
+## Supported sources and targets
 
-## Autopilot quick start
-
-Give your coding agent this prompt from the repository root:
-
-```text
-Read all files in .agent-loops/.
-Also read AGENTS.md, docs/autopilot-loop.md, and .agent-loops/12-pom-helper-recovery-policy.md.
-
-Start Migrator Autopilot Loop.
-
-You are allowed and expected to make engineering decisions yourself.
-Do not ask me to choose between implementation options.
-Do not stop after partial progress.
-Continue until the selected migration block is fixed and verified, or until the stop policy requires a real stop.
-
-Migration scope:
-- Source Selenium project: <SOURCE_SELENIUM_PROJECT_PATH>
-- Target/generated Playwright project: <TARGET_PROJECT_OR_OUTPUT_PATH>
-- Migrator config/profile: <CONFIG_OR_PROFILE_PATH>
-- Compiled migrator tool, if compiled-tool-only mode: <COMPILED_TOOL_PATH_OR_EMPTY>
-- Existing Playwright POM examples: <TARGET_POM_EXAMPLES_PATH_OR_EMPTY>
-- Verify/orchestrate output directory: <OUTPUT_DIR>
-- Latest migration board: <PATH_OR_EMPTY>
-- Latest project verify report: <PATH_OR_EMPTY>
-
-Current task:
-<PASTE CURRENT BLOCK / ERROR / LOG / TODO CATEGORY HERE>
-
-Use repository code, existing tests, snapshots, docs, CLI reports, migration board, source Selenium tests, target project conventions, and command output as the source of truth.
-```
-
-Core loop docs:
-
-- [`.agent-loops/README.md`](.agent-loops/README.md)
-- [`docs/autopilot-loop.md`](docs/autopilot-loop.md)
-- [`AGENTS.md`](AGENTS.md)
-
-## Supported targets
-
-| Source | Target | Status | Notes |
+| Source frontend | Target backend | Status | Notes |
 |---|---|---|---|
-| Selenium C# / NUnit | Playwright .NET | Primary | Full CLI workflow: analyze, migrate, verify, orchestrate, reports. |
-| Selenium C# / NUnit | Playwright TypeScript | Experimental | Requires `--ts-project` pointing to an existing Playwright TS project. No standalone TS generation in vacuum. |
+| Selenium C# / NUnit | Playwright .NET | Stable public path | Full analyze/migrate/verify workflow with Roslyn-based recognition. |
+| Selenium C# / NUnit | Playwright TypeScript | Experimental preview | Use `--target ts`; project-aware verification requires `--ts-project`. |
+| Selenium Java | Playwright .NET / TypeScript | Experimental MVP | Useful for simple Java Selenium fixtures; no Java semantic model. |
+| Selenium Python | Playwright .NET / TypeScript | Experimental spike | Useful for simple pytest/unittest Selenium diagnostics; not production-ready. |
 
-## Core workflow
+## Install or run locally
 
-```mermaid
-flowchart LR
-    A[Selenium C# tests] --> B[Roslyn parser]
-    B --> C[IR actions]
-    C --> D[Project adapter / JSON profiles]
-    D --> E[Playwright renderer]
-    E --> F[Generated tests]
-    F --> G[Verify / reports / board]
-    G --> D
-```
-
-## CLI quick start
+From source:
 
 ```bash
 dotnet restore
+dotnet run --project Migrator.Cli -- --help
+```
 
-dotnet run --project Migrator.Cli -- \
-  --mode orchestrate \
+As a local dotnet tool package:
+
+```bash
+./scripts/pack-tool.sh
+./scripts/install-local-tool.ps1 -PackageSource ./artifacts/nuget
+selenium-pw-migrator --help
+```
+
+See [Tool installation](docs/tool-installation.md) and [Packaging and distribution](docs/packaging-and-distribution.md).
+
+## Quick start
+
+Start with a small pilot directory, not the whole suite:
+
+```bash
+selenium-pw-migrator --mode doctor \
   --input ./SeleniumTests \
   --config ./adapter-config.json \
-  --out orchestration-1 \
+  --out doctor
+
+selenium-pw-migrator --mode orchestrate \
+  --input ./SeleniumTests \
+  --config ./adapter-config.json \
+  --out run-001 \
   --format both
 ```
 
-Outputs are written under `migration/` by default, for example:
+By default, relative `--out` values are written under the `migration/` workspace, for example `migration/run-001`.
+
+Typical outputs:
 
 ```text
-migration/orchestration-1/
+migration/run-001/
+  analyze/
   generated/
-  report.md / report.json
-  explain-todo.md / explain-todo.json
-  migration-board.html
-  smoke-plan.md
+  verify/
+  propose/
+  orchestration-report.md
+  orchestration-report.json
 ```
+
+For a file-by-file walkthrough, see:
+
+- [Quick start](docs/quick-start.md)
+- [End-to-end simple example](docs/examples/end-to-end-simple.md)
+- [Public launch demo](examples/public-launch-demo/README.md)
+- [Screenshot walkthrough](docs/public-launch/walkthrough.md)
+- [Migration workflow](docs/user-guide/migration-workflow.md)
+- [Extensibility and public API](docs/extensibility.md)
 
 ## Main CLI modes
 
-| Mode | Purpose |
-|---|---|
-| `doctor` | Preflight checks: input, config, project files, tooling, source truth hints. |
-| `analyze` | Parse Selenium files and produce migration reports without generating final code. |
-| `migrate` | Generate Playwright .NET or TS tests. |
-| `verify` | Lightweight generated-code verification. |
-| `verify-project` | Compile generated Playwright .NET tests against a real project/harness. |
-| `verify-ts-project` | Type-check generated Playwright TS tests inside an existing TS project. |
-| `orchestrate` | Run analyze → migrate → verify → reports for Playwright .NET. |
-| `index-pom` | Mine Selenium PageObjects and helper selectors. |
-| `profile-match` | Estimate whether existing profiles can be reused for a new project. |
-| `config-validate` | Validate profile safety and common mistakes. |
-| `config-diff` | Review config changes. |
-| `guard` | Compare before/after migration metrics and catch regressions. |
-| `explain-todo` | Turn TODO markers into prioritized root-cause insights. |
-| `smoke-plan` | Rank generated tests by runtime readiness. |
-| `runtime-classify` | Classify Playwright runtime failures after smoke runs. |
-| `migration-board` | Generate an HTML dashboard from migration artifacts. |
-| `config-schema` | Export JSON Schema for adapter config. |
+| Mode | Status | Purpose |
+|---|---|---|
+| `doctor` | Stable | Preflight checks for inputs, config layers, project files, and workspace hygiene. |
+| `analyze` | Stable | Parse Selenium files and produce reports without generating target files. |
+| `migrate` | Stable | Generate Playwright target files. |
+| `verify` | Stable | Run lightweight generated-code verification. |
+| `verify-project` | Stable | Compile generated Playwright .NET tests against a real project-aware harness. |
+| `config-validate` | Stable | Validate profile structure and safety rules. |
+| `config-diff` | Stable | Compare profile changes and highlight risky edits. |
+| `guard` | Stable | Compare before/after migration metrics and catch regressions. |
+| `index-pom` | Stable | Mine Selenium PageObjects and selector evidence. |
+| `helper-inventory` | Stable | Inspect helper/POM method bodies and infer MethodSemantics candidates. |
+| `discover-target` | Stable | Scan an existing Playwright .NET project and create a reviewable target inventory. |
+| `scaffold` | Stable | Generate a minimal compile-ready Playwright .NET project scaffold. |
+| `capabilities` | Stable | List built-in source frontend / target backend capability reports. |
+| `verify-ts-project` | Experimental | Type-check generated Playwright TS specs inside an existing TS project. |
+| `orchestrate` | Experimental | Run analyze → migrate → verify → propose as one dry-run workflow. |
+| `explain-todo` / `smoke-plan` / `runtime-classify` / `migration-board` | Experimental | Prioritize follow-up work from migration artifacts and runtime logs. |
 
-## Important safety rules
+Run command-specific help with:
+
+```bash
+selenium-pw-migrator --mode migrate --help
+```
+
+## Safety rules
 
 - Never invent selectors.
-- Never promote Selenium PageObject variables (`page`, `pagef`, `modal`, `lightbox`, `WebDriver`) to target-known identifiers unless they really exist in target code.
-- Do not edit generated `.cs` as the final solution; fix source truth/profile mappings or migrator logic instead.
-- Treat `SOURCE_ONLY_IDENTIFIER(page)` as a symptom. Group TODO by full source expression and pattern, not by root variable.
-- Elide Selenium actionability waits, but preserve product-state waits such as loader/table/modal synchronization.
-- Prefer Roslyn semantic model over text/regex parsing.
-- Generated Playwright code should compile whenever possible.
+- Prefer source truth: Selenium PageObject code, verified HTML attributes, existing target POM/tests, or project-owned helper semantics.
+- Treat generated TODO comments as reviewable evidence, not as failure to hide.
+- Do not manually patch generated files as the final fix; improve the profile, source-truth mapping, or migrator behavior.
+- Use `index-pom` and `helper-inventory` before suppressing or manually rewriting repeated PageObject/helper patterns.
 
-## POM/helper recovery
+If Selenium POMs contain proven selectors such as `ByTId("value")`, `CreateControlByTid(...)`, explicit `data-tid`, CSS, XPath, or resolved constants, prefer this order: existing target POM member → generated POM scaffold → raw Playwright locator from proven selector → explicit TODO.
 
-Low existing Playwright POM coverage is not automatically a blocker. Before declaring `TICKET_NEEDED`, run or inspect `index-pom` for Selenium PageObject selector evidence and `helper-inventory` for helper/POM wrapper semantics.
+## Documentation map
 
-If Selenium POM contains proven selectors such as `ByTId("value")`, `CreateControlByTid(...)`, explicit `data-tid`, CSS, XPath, or resolved constants, prefer: existing target POM member → generated POM scaffold in migration output → raw Playwright locator from proven selector → explicit TODO. Never invent selectors from PageObject/property names.
+- [Documentation index](docs/README.md)
+- [Quick start](docs/quick-start.md)
+- [User guide](docs/user-guide/README.md)
+- [Config and profile guide](docs/config-profile-guide.md)
+- [Agent/autopilot guide](docs/agent-autopilot-guide.md)
+- [Agent loop hardening](docs/agent-loop-hardening.md)
+- [Limitations](docs/user-guide/limitations.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Migration quality program](docs/migration-quality-program.md)
+- [Public launch pack](docs/public-launch/README.md)
+- [Public roadmap](docs/public-roadmap.md)
+- [Release process](docs/release-process.md)
 
 ## Development
 
@@ -145,25 +143,8 @@ dotnet restore
 dotnet test --no-restore
 ```
 
-The test suite covers parser behavior, adapter mappings, snapshots, compile-smoke checks, orchestration, TS target basics, safety guards, and regression cases for common migration blockers.
+The test suite covers parser behavior, adapter mappings, snapshots, compile-smoke checks, orchestration, TypeScript target basics, safety guards, packaging guardrails, and regression cases for common migration blockers.
 
-## Packaging as a dotnet tool
+## Public release status
 
-```bash
-./scripts/pack-tool.sh
-```
-
-See [`docs/packaging-and-distribution.md`](docs/packaging-and-distribution.md) and [`docs/tool-installation.md`](docs/tool-installation.md).
-
-## Philosophy
-
-The best migration is not the one that hides uncertainty. It is the one that makes uncertainty reviewable.
-
-In Autopilot mode, the agent is not allowed to declare victory by words alone. It must use build/test/verify/report feedback and continue until the selected block is actually done or genuinely blocked.
-
-
-## Checkpoint is not completion
-
-In Autopilot Loop, a green build/project verify is a safe checkpoint, not necessarily final migration completion.
-
-If the migration board still has actionable TODOs, missing mappings, unsupported actions, empty tests, or runtime candidates, the agent should continue with the next small safe batch.
+This project is currently prepared as a public preview. Stable commands are intended for external users; experimental commands may change between preview releases. See [CHANGELOG.md](CHANGELOG.md), [SECURITY.md](SECURITY.md), and [CONTRIBUTING.md](CONTRIBUTING.md).

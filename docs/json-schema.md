@@ -13,6 +13,7 @@ Use it at the top of config/profile files:
 ```json
 {
   "$schema": "./schemas/adapter-config.schema.json",
+  "SchemaVersion": "adapter-config/v1",
   "SourceProjectName": "My Selenium project"
 }
 ```
@@ -21,7 +22,8 @@ For project-local profile files, use a relative path from that profile to the sc
 
 ```json
 {
-  "$schema": "../../schemas/adapter-config.schema.json"
+  "$schema": "../../schemas/adapter-config.schema.json",
+  "SchemaVersion": "adapter-config/v1"
 }
 ```
 
@@ -50,7 +52,7 @@ These metadata fields are intentionally allowed as extra properties. The migrato
 
 ## Policy
 
-The schema is an editor/DX aid, not a replacement for runtime safety checks.
+The schema is an editor/DX aid, not a replacement for runtime safety checks. The stable public profile version is `adapter-config/v1`; see [Adapter-config versioning](adapter-config-versioning.md).
 
 Always still run:
 

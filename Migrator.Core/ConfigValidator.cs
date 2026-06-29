@@ -30,6 +30,7 @@ public static class ConfigValidator
     {
         var errors = new List<string>();
 
+        ValidateSchemaVersion(config.SchemaVersion, errors);
         ValidateUiTargets(config.UiTargets, "UiTargets", errors);
         ValidateMethods(config.Methods, "Methods", errors);
         ValidateParameterizedMethods(config.ParameterizedMethods, "ParameterizedMethods", errors);
@@ -48,6 +49,15 @@ public static class ConfigValidator
             throw new ConfigValidationError(errors);
     }
 
+
+    static void ValidateSchemaVersion(string? schemaVersion, List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(schemaVersion))
+            return;
+
+        if (!string.Equals(schemaVersion, ProjectAdapterConfig.CurrentSchemaVersion, StringComparison.OrdinalIgnoreCase))
+            errors.Add($"Unsupported adapter config SchemaVersion '{schemaVersion}'. Supported version: {ProjectAdapterConfig.CurrentSchemaVersion}.");
+    }
 
     /// <summary>
     /// Returns non-fatal migration warnings for adapter-config v1 profiles.

@@ -12,6 +12,9 @@ How to read Migrator reports and configure quality gates.
 | `report.txt` | Text | Human-readable summary of all analyzed files |
 | `unmapped-targets.json` | JSON | Source expressions that have no config mapping, grouped by frequency |
 | `unsupported-actions.json` | JSON | Actions the tool cannot convert, grouped by type |
+| `migration-quality-dashboard.json` | JSON | Quality metrics, TODO categories, guardrails, and recommended tickets |
+| `migration-quality-dashboard.md` | Markdown | Human-readable migration-quality dashboard |
+| `migration-quality-tickets.md` | Markdown | Focused tickets for the next quality-improvement batch |
 
 ### Migrate reports
 
@@ -19,6 +22,9 @@ How to read Migrator reports and configure quality gates.
 |---|---|---|
 | `report.json` | JSON | Same as analyze report, with `GeneratedFiles` count |
 | `report.txt` | Text | Human-readable summary |
+| `migration-quality-dashboard.json` | JSON | Quality metrics, TODO categories, guardrails, and recommended tickets |
+| `migration-quality-dashboard.md` | Markdown | Human-readable migration-quality dashboard |
+| `migration-quality-tickets.md` | Markdown | Focused tickets for the next quality-improvement batch |
 
 ### Verify report
 
@@ -60,6 +66,12 @@ How to read Migrator reports and configure quality gates.
   ]
 }
 ```
+
+### Migration quality dashboard
+
+`migration-quality-dashboard.*` is the bridge between raw reports and implementation work. It groups TODO comments by `[MIGRATOR:<CODE>]`, explains the likely root cause, lists the next safe action, and generates ticket-sized follow-up work. The companion `migration-quality-tickets.md` file is designed to be copied into an issue tracker or handed to an agent.
+
+See [Migration Quality Program](../migration-quality-program.md).
 
 ### Propose reports
 

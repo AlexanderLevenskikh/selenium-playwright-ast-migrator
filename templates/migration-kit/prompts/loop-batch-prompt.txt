@@ -1,20 +1,34 @@
-Read `.agent-loops/README.md` and every file in `.agent-loops/`.
-Read `{{WORKSPACE}}/agent-state.md`, `{{WORKSPACE}}/current-ticket.md`, and the MVP-2 state files under `{{WORKSPACE}}/state/`.
+SECONDARY LOOP-BATCH WRAPPER.
+This prompt runs one bounded batch under the primary `.agent-loops/kickoff-prompt.txt` contract.
+
+Read `.agent-loops/README.md` and every file in `.agent-loops/`, especially `.agent-loops/13-loop-contract.md`, `.agent-loops/11-strict-ticket-boundaries.md`, and `.agent-loops/15-stop-policy-checklist.md`.
+Read `{{WORKSPACE}}/agent-state.md`, `{{WORKSPACE}}/current-ticket.md`, and the state files under `{{WORKSPACE}}/state/`.
 
 Run exactly one Selenium → Playwright migration loop batch.
+
+Mode: migration-artifact
+
+Allowed write paths:
+- {{WORKSPACE}}
+
+Forbidden paths:
+- parent directories outside the allowed scope;
+- migrator repository source code unless Mode is migrator-code and repository source is explicitly listed as an allowed write path;
+- production source/target project files unless explicitly listed as allowed write paths.
 
 Batch protocol:
 1. Reconcile the last safe checkpoint from `{{WORKSPACE}}/state/handoff.md` and `{{WORKSPACE}}/state/run-ledger.md`.
 2. Identify the current ticket from `{{WORKSPACE}}/current-ticket.md`.
-3. Make the smallest safe change for that ticket.
+3. Make the smallest safe change for that ticket inside allowed write paths.
 4. Run the cheapest relevant verification first, then the broader verify/project verify if the cheap check passes.
 5. Update all state files listed below.
-6. Stop with one of these statuses only:
-   - CONTINUE_AUTONOMOUSLY
+6. If status is `CONTINUE_AUTONOMOUSLY`, continue without asking the user whether to continue.
+7. Stop with one of these statuses only when `.agent-loops/15-stop-policy-checklist.md` allows it:
    - READY_FOR_ACCEPTANCE
    - TICKET_NEEDED
    - BLOCKED_BY_ENVIRONMENT
    - BLOCKED_BY_MISSING_INPUT
+   - MAX_ITERATIONS_REACHED
    - UNSAFE_REVERTED
 
 Required state updates after the batch:
@@ -23,14 +37,16 @@ Required state updates after the batch:
 - `{{WORKSPACE}}/state/run-ledger.md`
 - `{{WORKSPACE}}/state/decision-log.md`
 - `{{WORKSPACE}}/state/handoff.md`
+- `{{WORKSPACE}}/state/stop-policy-checklist.md`
 
 Safety gates:
 - Do not make tests falsely green.
 - Do not silently suppress assertions or business checks.
 - Do not edit generated files as the final fix.
+- Do not edit migrator source code in migration-artifact mode.
+- Do not search for migrator source code in compiled-tool-only mode.
 - Do not add broad `TargetKnownIdentifiers` only to hide unresolved source-side symbols.
 - If the change is unsafe or makes metrics worse without clear justification, revert it and mark `UNSAFE_REVERTED`.
-
 
 Helper/POM evidence rule:
 - If the current ticket involves suppressions, `MethodSemantics`, unknown helpers, or project/POM wrapper methods, run or request `--mode helper-inventory` before adding suppressions or mappings. Do not guess helper semantics from method names alone.

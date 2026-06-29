@@ -1,4 +1,7 @@
+SECONDARY STRICT-TICKET PROMPT. This prompt is a bounded variant of the primary `.agent-loops/kickoff-prompt.txt` loop.
+
 Read `.agent-loops/11-strict-ticket-boundaries.md` first.
+Read `.agent-loops/15-stop-policy-checklist.md` before any stop/handoff.
 Then read only the other instruction files that are inside the allowed input paths for this task.
 
 You are working in STRICT TICKET MODE.
@@ -31,6 +34,7 @@ Hard rules:
 6. Do not fix unrelated problems found during investigation.
 7. Do not ask “continue?” after partial progress.
 8. Continue until the ticket is completed, blocked, or validation is impossible.
+9. Do not ask the user whether to continue when status is CONTINUE_AUTONOMOUSLY.
 
 If you believe source changes are required:
 - do not make them;
@@ -64,5 +68,8 @@ Artifact names, logs, command outputs, DLL metadata, or report snippets.
 # Validation
 Commands run, results, or exact reason validation was impossible.
 
+# Stop-policy checklist
+Confirm `.agent-loops/15-stop-policy-checklist.md` would allow this stop.
+
 # Next action
-One concrete next action only.
+One concrete next action only, not an open-ended continuation question.

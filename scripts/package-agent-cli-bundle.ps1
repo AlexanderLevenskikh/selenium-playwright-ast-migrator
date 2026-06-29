@@ -10,7 +10,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
-$project = Join-Path $root "Migrator.Cli\Migrator.Cli.csproj"
+$project = Join-Path (Join-Path $root "Migrator.Cli") "Migrator.Cli.csproj"
 $outputRoot = if ([System.IO.Path]::IsPathRooted($Output)) { $Output } else { Join-Path $root $Output }
 $publishDir = Join-Path $outputRoot "publish"
 $bundleDir = Join-Path $outputRoot "tool"
@@ -64,18 +64,29 @@ Write-Host "Copying full publish output..."
 Copy-Item -Path (Join-Path $publishDir "*") -Destination $bundleDir -Recurse -Force
 
 $publishedExe = Join-Path $bundleDir "Migrator.Cli.exe"
+$publishedAppHost = Join-Path $bundleDir "Migrator.Cli"
 $targetExe = Join-Path $bundleDir "$ToolName.exe"
+$targetAppHost = Join-Path $bundleDir $ToolName
+$displayExecutable = $targetExe
 
 if (Test-Path $publishedExe) {
     Copy-Item $publishedExe $targetExe -Force
+    $displayExecutable = $targetExe
+}
+elseif (Test-Path $publishedAppHost) {
+    Copy-Item $publishedAppHost $targetAppHost -Force
+    $displayExecutable = $targetAppHost
 }
 elseif (-not $NoSelfContained) {
-    throw "Published executable was not found: $publishedExe"
+    throw "Published executable was not found: $publishedExe or $publishedAppHost"
+}
+else {
+    $displayExecutable = Join-Path $bundleDir "Migrator.Cli.dll"
 }
 
 Write-Host "Copying docs/schema/templates..."
 
-$schema = Join-Path $root "schemas\adapter-config.schema.json"
+$schema = Join-Path (Join-Path $root "schemas") "adapter-config.schema.json"
 if (Test-Path $schema) {
     Copy-Item $schema (Join-Path $schemasDir "adapter-config.schema.json") -Force
 }
@@ -108,12 +119,12 @@ if (Test-Path $templatesSource) {
     Copy-Item -Path (Join-Path $templatesSource "*") -Destination $templatesDir -Recurse -Force
 }
 
-$installMigrationKit = Join-Path $root "scripts\install-migration-kit.ps1"
+$installMigrationKit = Join-Path (Join-Path $root "scripts") "install-migration-kit.ps1"
 if (Test-Path $installMigrationKit) {
     Copy-Item $installMigrationKit (Join-Path $scriptsDir "install-migration-kit.ps1") -Force
 }
 
-$installMigrationKitSh = Join-Path $root "scripts\install-migration-kit.sh"
+$installMigrationKitSh = Join-Path (Join-Path $root "scripts") "install-migration-kit.sh"
 if (Test-Path $installMigrationKitSh) {
     Copy-Item $installMigrationKitSh (Join-Path $scriptsDir "install-migration-kit.sh") -Force
 }
@@ -172,11 +183,12 @@ $readmeLines = @(
     '  The agent must not search for or edit migrator C# source code.',
     '',
     'Run:',
-    '  .\migrator.exe --help',
-    '  .\Migrator.Cli.exe --help',
+    '  Windows self-contained: .\migrator.exe --help',
+    '  Linux/macOS self-contained: ./migrator --help',
+    '  Framework-dependent bundle: dotnet Migrator.Cli.dll --help',
     '',
-    'Do not move migrator.exe out of this folder.',
-    'The executable depends on the DLL files published next to it.',
+    'Do not move the executable or Migrator.Cli.dll out of this folder.',
+    'The CLI depends on the DLL files published next to it.',
     '',
     'Allowed agent work:',
     '  edit migration/profiles/*.adapter.json',
@@ -195,6 +207,8 @@ $readmeLines = @(
     '',
     'Quick install into a migration project:',
     '  .\migrator.exe kit init --workspace migration --source <selenium-tests> --config migration/profiles/adapter-config.json',
+    '  ./migrator kit init --workspace migration --source <selenium-tests> --config migration/profiles/adapter-config.json',
+    '  dotnet Migrator.Cli.dll kit init --workspace migration --source <selenium-tests> --config migration/profiles/adapter-config.json',
     '  scripts/install-migration-kit.ps1 -Workspace migration -Source <selenium-tests> -Config migration/profiles/adapter-config.json',
     '  scripts/install-migration-kit.sh --workspace migration --source <selenium-tests> --config migration/profiles/adapter-config.json',
     '',
@@ -228,11 +242,44 @@ $readmeLines = @(
 )
 Set-Content -Path $readmeAgent -Value $readmeLines -Encoding UTF8
 
+Write-Host "Generating bundle manifest and checksums..."
+$manifestShaPath = Join-Path $bundleDir "MANIFEST.sha256"
+$manifestJsonPath = Join-Path $bundleDir "manifest.json"
+
+$bundleFiles = Get-ChildItem $bundleDir -File -Recurse |
+    Where-Object { $_.FullName -ne $manifestShaPath -and $_.FullName -ne $manifestJsonPath } |
+    Sort-Object FullName
+
+$shaLines = New-Object System.Collections.Generic.List[string]
+$jsonFiles = @()
+foreach ($file in $bundleFiles) {
+    $relative = [System.IO.Path]::GetRelativePath($bundleDir, $file.FullName).Replace('\', '/')
+    $hash = (Get-FileHash -Algorithm SHA256 -Path $file.FullName).Hash.ToLowerInvariant()
+    $shaLines.Add("$hash  $relative")
+    $jsonFiles += [pscustomobject]@{
+        path = $relative
+        sizeBytes = $file.Length
+        sha256 = $hash
+    }
+}
+
+Set-Content -Path $manifestShaPath -Value $shaLines -Encoding UTF8
+$manifest = [pscustomobject]@{
+    schemaVersion = 1
+    generatedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+    runtime = $Runtime
+    configuration = $Configuration
+    toolName = $ToolName
+    selfContained = (-not $NoSelfContained)
+    files = $jsonFiles
+}
+$manifest | ConvertTo-Json -Depth 6 | Set-Content -Path $manifestJsonPath -Encoding UTF8
+
 Remove-Item -Recurse -Force $publishDir -ErrorAction SilentlyContinue
 
 Write-Host ""
 Write-Host "Agent CLI bundle created: $bundleDir"
-Write-Host "Executable: $targetExe"
+Write-Host "Executable: $displayExecutable"
 Write-Host ""
 Write-Host "IMPORTANT:"
 Write-Host "  Give the agent the whole 'tool' folder, not just $ToolName.exe."

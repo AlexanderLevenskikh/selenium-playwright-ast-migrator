@@ -18,13 +18,13 @@ The agent should not stop after partial progress and should not ask the user to 
 
 ## Startup
 
-Use the prompt in `.agent-loops/kickoff-prompt.txt`.
+Use `.agent-loops/kickoff-prompt.txt` as the **single primary loop prompt**. Resume/strict-ticket prompts are secondary wrappers and must defer to the same loop contract.
 
 Recommended prompt:
 
 ```text
 Read all files in .agent-loops/.
-Also read AGENTS.md, docs/autopilot-loop.md, and .agent-loops/12-pom-helper-recovery-policy.md.
+Also read AGENTS.md, docs/autopilot-loop.md, .agent-loops/12-pom-helper-recovery-policy.md, and .agent-loops/15-stop-policy-checklist.md.
 
 Start Migrator Autopilot Loop.
 
@@ -71,7 +71,8 @@ The source of truth for the loop is `.agent-loops/`:
 - `05-verifier-loop.md`
 - `06-report-format.md`
 - `07-ticket-needed-template.md`
-- `kickoff-prompt.txt`
+- `kickoff-prompt.txt` — primary prompt for new runs
+- `15-stop-policy-checklist.md`
 
 ## POM/helper recovery requirement
 
@@ -110,7 +111,7 @@ or the project-specific command that best matches the current task.
 
 ## Stop conditions
 
-Stop only according to `.agent-loops/03-stop-policy.md`.
+Stop only according to `.agent-loops/03-stop-policy.md` and after applying `.agent-loops/15-stop-policy-checklist.md`.
 
 Typical valid stop statuses:
 
@@ -123,7 +124,7 @@ Typical valid stop statuses:
 Forbidden stop reasons:
 
 - asking which implementation option the user prefers;
-- asking whether to continue;
+- asking whether to continue, including when status is `CONTINUE_AUTONOMOUSLY`;
 - stopping after partial progress;
 - stopping because there are multiple reasonable designs.
 
@@ -167,3 +168,10 @@ The correct behavior is to choose a small safe reversible batch, for example:
 - run one runtime smoke candidate.
 
 Stop only when the trade-off requires product/business semantics, unavailable source truth, destructive action, or another hard stop condition.
+
+
+## One primary prompt
+
+The canonical new-run prompt is `.agent-loops/kickoff-prompt.txt`. Older examples and kit prompts should either point to that prompt or act as bounded wrappers for resume/review/ticket workflows. They must not reintroduce human checkpoint language such as “Should I continue?” or allow migrator source edits in `migration-artifact` mode.
+
+Before any final stop or handoff, the agent should apply `.agent-loops/15-stop-policy-checklist.md`. If the checklist does not prove a hard stop and status is `CONTINUE_AUTONOMOUSLY`, the agent continues.

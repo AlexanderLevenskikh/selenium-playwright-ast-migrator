@@ -1,119 +1,117 @@
 # Limitations
 
-What the Migrator can and cannot do.
+The Migrator is a migration accelerator, not a fully automatic replacement for engineering review. This page lists the boundaries that matter for public preview users.
 
 ## Not 100% automatic
 
-The Migrator generates scaffolding, not production-ready tests. Project-specific semantics (helper methods, navigation logic, table interactions) require configuration in the adapter profile. The quality of output depends on the quality of the profile config.
+The tool generates scaffolding and reports. Project-specific semantics still require reviewable profile/config mappings: helper methods, navigation, auth setup, table interactions, product-state waits, and assertion helpers.
 
-## Profile config is required for good results
+Good output depends on good source truth.
 
-Without an `adapter-config.json`, the tool generates `TODO` locators for all page elements:
+## Profile config is required for production-quality output
+
+Without a trusted `adapter-config.json`, many page elements remain unresolved and generated code contains TODO locators:
 
 ```csharp
 await Page.Locator("TODO: page.User").ClickAsync();
 ```
 
-This is useful for estimating migration scope, but not for production. Good output requires source-truth mappings for your project's PageObjects and helpers.
+This is useful for estimating migration scope, but it is not production-ready. Add mappings from verified PageObject selectors, target Playwright tests/POMs, actual HTML attributes, or reviewed helper semantics.
 
 ## Runtime pass requires environment, auth, and test data
 
-The tool generates code. It cannot:
-- Set up test environments
-- Configure authentication or authorization
-- Create or manage test data
-- Run browser tests
+The tool can generate code and perform static/project-aware verification. It does not magically provide:
 
-Runtime verification is the responsibility of the development team.
+- test environments;
+- authentication and authorization setup;
+- required test data;
+- backend state or mocks;
+- browser-runtime proof for your product.
+
+Runtime verification remains the responsibility of the development team.
+
+## Stable and preview paths differ
+
+| Capability | Status | Limitation |
+|---|---|---|
+| Selenium C# / NUnit → Playwright .NET | Stable public path | Best-covered path; still requires project profiles. |
+| Selenium C# / NUnit → Playwright TypeScript | Experimental preview | Generated `.spec.ts` files may require TS-specific profile overrides. Project-aware verification requires `--ts-project`. |
+| Selenium Java source | Experimental MVP | Handles common Java Selenium fixtures without Java semantic analysis. |
+| Selenium Python source | Experimental spike | Handles simple pytest/unittest Selenium patterns; not production-ready. |
+
+The TypeScript target is supported as an experimental target, not as the primary stable path. Use `migrate --target ts` and `verify-ts-project --ts-project <path>` for TypeScript verification.
 
 ## Scaffold output is compile-only, not runtime-ready
 
-`scaffold` mode generates a minimal Playwright .NET project structure with stub authentication and placeholder routes. This scaffold:
+`scaffold` mode generates a minimal Playwright .NET project structure with stub authentication and placeholder routes. The scaffold:
 
-- **Compiles cleanly** — the generated code is compile-ready
-- **Does NOT guarantee runtime pass** — no environment, auth, or test data is configured
-- **Uses placeholder routes** — `<test-login>` and `<ROUTE_SOURCE_TRUTH_REQUIRED>` must be replaced
-- **Requires manual configuration** — you must implement `LoginAsync`, set `E2E_BASE_URL`, and fill in `adapter-config.draft.json`
+- compiles as a starting point;
+- does not guarantee runtime pass;
+- uses placeholder routes such as `<test-login>` and `<ROUTE_SOURCE_TRUTH_REQUIRED>`;
+- requires you to implement `LoginAsync`, set `E2E_BASE_URL`, and review `adapter-config.draft.json`.
 
-The scaffold is a starting point for teams without existing Playwright infrastructure. Runtime verification is the responsibility of the development team.
+## Discovery and proposals require review
 
-## Discovery output requires review
+`discover-target` and `propose` produce draft artifacts. They do not prove source truth.
 
-`discover-target` mode scans an existing Playwright project and produces a draft config. This draft contains:
-- `<REVIEW_REQUIRED>` — values that need manual verification
-- `<SOURCE_TRUTH_REQUIRED>` — selectors that must be verified against source code
-- `<redacted-host>` — redacted URLs and credentials
+Draft markers such as `<REVIEW_REQUIRED>`, `<SOURCE_TRUTH_REQUIRED>`, and `<redacted-host>` must be reviewed before the output is used in production profiles.
 
-The draft is a starting point, not a final config.
+## Complex table, list, and pagination flows may need manual migration
 
-## Propose mode does not know source truth
+The tool handles some common row access patterns and table/list mappings. Manual migration or deeper profile work may still be required for:
 
-`propose` mode analyzes migration artifacts and suggests config improvements. However, it cannot verify selectors against your PageObject source. Proposed UiTarget mappings use `<SOURCE_TRUTH_REQUIRED>` placeholders that you must fill in.
-
-## Complex table and pagination flows may need manual migration
-
-The tool handles simple row access patterns (`.ElementAt(N)`) via `RowTarget` mappings. Complex patterns like:
-- Pagination across multiple pages
-- Sorting, filtering, or searching within tables
-- Nested tables or hierarchical data
-- Drag-and-drop or row reordering
-
-...may require manual migration or extensive body-level edits.
+- pagination across multiple pages;
+- sorting, filtering, or searching within tables;
+- nested or hierarchical tables;
+- drag-and-drop or row reordering;
+- dynamic row identity that cannot be expressed as a stable locator.
 
 ## Some generated tests need body-level edits
 
-The Migrator translates individual actions but may not preserve test-level logic perfectly. Cases requiring manual edits:
-- Conditional logic that depends on page state
-- Complex assertions spanning multiple elements
-- Data-driven tests with dynamic parameters
-- Tests that use project-specific assertion helpers
+The Migrator translates many individual actions, but it may not preserve complex test-level logic perfectly. Manual edits may be needed for:
 
-## Playwright TypeScript is not supported
+- conditional logic that depends on runtime page state;
+- multi-element assertions;
+- data-driven tests with project-specific dynamic parameters;
+- custom assertion helpers;
+- direct JavaScript execution;
+- iframe switching with dynamic frame locators;
+- file upload/download flows with custom handling.
 
-The tool generates C# code for Playwright .NET only. It does not support:
-- Playwright for TypeScript/JavaScript
-- Playwright for Java
-- Playwright for Python
+## Unsupported actions are preserved as TODOs
 
-## Selenium patterns not covered
+Some Selenium patterns are recognized but intentionally left as TODO comments:
 
-Some Selenium patterns are recognized as `Unsupported` and left as TODO comments:
-- Custom WebDriver extensions not in standard Selenium API
-- Project-specific page object frameworks with unconventional patterns
-- Non-standard assertion libraries beyond FluentAssertions
-- Direct JavaScript execution (`IJavaScriptExecutor.ExecuteScript`)
-- File uploads/downloads with custom handling
-- iframe switching with dynamic frame locators
+- custom WebDriver extensions outside standard Selenium API;
+- project-specific PageObject frameworks with unconventional patterns;
+- assertion libraries beyond the covered NUnit/FluentAssertions subset;
+- helpers whose body or semantics cannot be proven safely.
 
-## No runtime execution or auto-apply
+The generated TODO keeps the source expression and line information whenever possible. Losing behavior silently is worse than preserving an explicit TODO.
 
-The tool:
-- Does not run tests in a browser
-- Does not modify `adapter-config.json` automatically
-- Does not auto-apply proposals to your config
-- Does not call external AI services
+## Verification levels are different
 
-All decisions require human review and approval.
+- `verify` checks generated output quality without compiling a full target project.
+- `verify-project` compiles generated Playwright .NET tests in a project-aware harness.
+- `verify-ts-project` type-checks generated TypeScript specs against an existing Playwright TS project.
+- None of these replace a real browser runtime smoke run against your product.
 
 ## Scope limitations
 
-- Scoping is per-file, not per-test or per-method
-- Multiple scopes matching one file use first-match-wins (with a warning)
-- No inheritance between scopes
-- No complex glob patterns in `SourcePathPatterns` (only exact filename and suffix match)
+- Scoping is per file, not per test/method.
+- Multiple scopes matching one file use first-match-wins with a warning.
+- There is no inheritance between scopes.
+- Source path matching is intentionally simple and conservative.
 
-## Semantic vs Syntax fallback
+## Semantic vs syntax fallback
 
-The tool uses two recognition strategies:
-- **Semantic**: full Roslyn type information (more accurate)
-- **Syntax fallback**: AST-based recognition without SemanticModel (less accurate)
+For Selenium C#, the tool prefers Roslyn semantic information. Files that cannot be resolved with proper references may fall back to syntax-only recognition, which is less precise. Reports include confidence information so users can prioritize review.
 
-Files without proper references may fall back to syntax-only recognition, producing less precise results.
 
-## This is an MVP
+## Extensibility is in-process in public preview
 
-The current release covers the core pipeline and common patterns. Future improvements may address:
-- Template method mappings for deferred helpers
-- More sophisticated table/list strategies
-- Automated selector verification
-- Integration with CI/CD pipelines
+`ISourceFrontend` and `ITargetBackend` are public extension contracts, but dynamic plugin loading from arbitrary external assemblies is not supported yet. New frontends/backends should currently be contributed as built-in implementations or hosted by an embedding application. Use `--mode capabilities` to inspect the built-in support matrix.
+
+## Public preview caveat
+
+Stable commands are intended for external users. Experimental commands may change between preview releases. Review generated code, reports, and profile diffs before using output as production test code.

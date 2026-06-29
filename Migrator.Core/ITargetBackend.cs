@@ -16,6 +16,9 @@ public interface ITargetBackend
     /// <summary>User-facing aliases accepted by registries/CLI, for example dotnet or ts.</summary>
     IReadOnlyCollection<string> Aliases { get; }
 
+    /// <summary>Public diagnostic capability profile for this backend.</summary>
+    TargetCapabilityReport Capabilities { get; }
+
     /// <summary>Render the target test source for one migrated legacy test model.</summary>
     string Render(TestFileModel model);
 

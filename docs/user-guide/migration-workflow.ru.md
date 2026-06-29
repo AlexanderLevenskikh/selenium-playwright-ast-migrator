@@ -49,8 +49,9 @@ dotnet run --project Migrator.Cli -- --mode analyze --input "./SeleniumTests" --
 - `analysis/unmapped-targets.json` — какие элементы нуждаются в маппингах профиля
 - `analysis/unsupported-actions.json` — какие действия требуют ручной миграции или method mappings
 - `analysis/report.txt` — общую картину покрытия
+- `analysis/migration-quality-dashboard.md` — root causes, guardrails и следующие безопасные quality tickets
 
-Определите самые частые unmapped-targets. Они дают наибольшую отдачу от усилий по конфигу.
+Определите самые частые unmapped-targets и первый P0/P1 пункт в `migration-quality-tickets.md`. Они дают наибольшую отдачу от усилий по конфигу или recognizer-логике.
 
 ## Шаг 3. Добавьте mappings из source truth
 

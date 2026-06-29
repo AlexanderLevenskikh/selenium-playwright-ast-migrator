@@ -30,4 +30,4 @@
 
 ## Stop condition
 
-Stop only if the batch is verified, unsafe, or blocked by missing source truth/environment.
+Stop only if the batch is verified, unsafe, or blocked by missing source truth/environment. Apply `state/stop-policy-checklist.md` before stopping. Do not ask whether to continue when status is `CONTINUE_AUTONOMOUSLY`.

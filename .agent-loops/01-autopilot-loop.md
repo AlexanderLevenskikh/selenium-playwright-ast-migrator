@@ -141,9 +141,11 @@ At the end of each iteration, assign exactly one status:
 - `BLOCKED_BY_MISSING_INPUT`
 - `MAX_ITERATIONS_REACHED`
 
-If status is `CONTINUE_AUTONOMOUSLY`, continue without asking the user.
+If status is `CONTINUE_AUTONOMOUSLY`, continue without asking the user. Do not surface an open-ended continuation question.
 
-If status is `READY_FOR_ACCEPTANCE`, summarize the result.
+Before returning `READY_FOR_ACCEPTANCE`, `TICKET_NEEDED`, `BLOCKED_BY_ENVIRONMENT`, `BLOCKED_BY_MISSING_INPUT`, or `MAX_ITERATIONS_REACHED`, apply `.agent-loops/15-stop-policy-checklist.md` and include the evidence required there.
+
+If status is `READY_FOR_ACCEPTANCE`, summarize the selected batch result and state whether the overall migration loop still has actionable work.
 
 If status is `TICKET_NEEDED`, produce a ticket-ready explanation.
 
@@ -151,7 +153,7 @@ If status is `TICKET_NEEDED`, produce a ticket-ready explanation.
 
 Use a maximum of 12 implementation iterations for one user-provided block unless the user explicitly gives a different limit.
 
-If max iterations are reached, stop with `MAX_ITERATIONS_REACHED` and provide a useful partial report.
+If max iterations are reached, stop with `MAX_ITERATIONS_REACHED` only after applying `.agent-loops/15-stop-policy-checklist.md` and provide a useful partial report.
 
 ## Phase continuation and safe checkpoints
 

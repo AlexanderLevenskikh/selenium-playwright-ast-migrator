@@ -23,7 +23,13 @@ public class PackagingTests
         Assert.True(File.Exists(FindRepositoryFile("scripts/pack-tool.ps1")));
         Assert.True(File.Exists(FindRepositoryFile("scripts/push-tool.ps1")));
         Assert.True(File.Exists(FindRepositoryFile("scripts/install-local-tool.ps1")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/smoke-local-tool-package.ps1")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/smoke-local-tool-package.sh")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/verify-nupkg-contents.ps1")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/verify-nupkg-contents.sh")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/verify-agent-cli-bundle.ps1")));
         Assert.True(File.Exists(FindRepositoryFile("docs/packaging-and-distribution.md")));
+        Assert.True(File.Exists(FindRepositoryFile("docs/release-process.md")));
         Assert.True(File.Exists(FindRepositoryFile("docs/tool-installation.md")));
         Assert.True(File.Exists(FindRepositoryFile("scripts/install-migration-kit.ps1")));
         Assert.True(File.Exists(FindRepositoryFile("scripts/install-migration-kit.sh")));
@@ -31,6 +37,7 @@ public class PackagingTests
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/prompts/kickoff-prompt.txt")));
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/prompts/loop-batch-prompt.txt")));
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/state/handoff.md")));
+        Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/state/stop-policy-checklist.md")));
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/state/run-ledger.md")));
         Assert.True(File.Exists(FindRepositoryFile("templates/codex/CODEX.md")));
         Assert.True(File.Exists(FindRepositoryFile("templates/codex/prompts/ticket-fix-prompt.txt")));
@@ -43,9 +50,129 @@ public class PackagingTests
         Assert.True(File.Exists(FindRepositoryFile("docs/helper-body-inventory.md")));
     }
 
+
+
+    [Fact]
+    public void Ci_PacksAndSmokesDotnetToolPackage()
+    {
+        var ciPath = FindRepositoryFile(".github/workflows/ci.yml");
+        var ci = File.ReadAllText(ciPath);
+
+        Assert.Contains("Pack and smoke dotnet tool", ci);
+        Assert.Contains("scripts/pack-tool.sh", ci);
+        Assert.Contains("scripts/verify-nupkg-contents.sh", ci);
+        Assert.Contains("scripts/smoke-local-tool-package.sh", ci);
+        Assert.Contains("actions/upload-artifact@v4", ci);
+    }
+
+    [Fact]
+    public void Ci_BuildsAndSmokesAgentBundle()
+    {
+        var ciPath = FindRepositoryFile(".github/workflows/ci.yml");
+        var ci = File.ReadAllText(ciPath);
+
+        Assert.Contains("Build and smoke agent bundle", ci);
+        Assert.Contains("package-agent-cli-bundle.ps1", ci);
+        Assert.Contains("verify-agent-cli-bundle.ps1", ci);
+        Assert.Contains("MANIFEST.sha256", ci);
+        Assert.Contains("manifest.json", ci);
+    }
+
+    [Fact]
+    public void AgentBundleScript_GeneratesManifestAndChecksums()
+    {
+        var scriptPath = FindRepositoryFile("scripts/package-agent-cli-bundle.ps1");
+        var script = File.ReadAllText(scriptPath);
+
+        Assert.Contains("MANIFEST.sha256", script);
+        Assert.Contains("manifest.json", script);
+        Assert.Contains("Get-FileHash -Algorithm SHA256", script);
+        Assert.Contains("schemaVersion = 1", script);
+    }
+
+    [Fact]
+    public void CliProject_HasPublicNuGetMetadata()
+    {
+        var projectPath = FindRepositoryFile("Migrator.Cli/Migrator.Cli.csproj");
+        var doc = XDocument.Load(projectPath);
+
+        Assert.Equal("Selenium Playwright AST Migrator Contributors", ElementValue(doc, "Company"));
+        Assert.Equal("MIT", ElementValue(doc, "PackageLicenseExpression"));
+        Assert.Equal("assets/icon.png", ElementValue(doc, "PackageIcon"));
+        Assert.Equal("https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator", ElementValue(doc, "PackageProjectUrl"));
+        Assert.Equal("https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator", ElementValue(doc, "RepositoryUrl"));
+        Assert.False(string.IsNullOrWhiteSpace(ElementValue(doc, "PackageReleaseNotes")));
+
+        var publicMetadata = string.Join("\n", new[]
+        {
+            ElementValue(doc, "Authors"),
+            ElementValue(doc, "Company"),
+            ElementValue(doc, "Description"),
+            ElementValue(doc, "PackageProjectUrl"),
+            ElementValue(doc, "RepositoryUrl"),
+            ElementValue(doc, "PackageReleaseNotes"),
+        });
+
+        Assert.DoesNotContain("Internal", publicMetadata, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("company-nuget", publicMetadata, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("corp", publicMetadata, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PublicReleaseDocuments_ArePresentAndPacked()
+    {
+        Assert.True(File.Exists(FindRepositoryFile("LICENSE")));
+        Assert.True(File.Exists(FindRepositoryFile("SECURITY.md")));
+        Assert.True(File.Exists(FindRepositoryFile("CONTRIBUTING.md")));
+        Assert.True(File.Exists(FindRepositoryFile("CHANGELOG.md")));
+        Assert.True(File.Exists(FindRepositoryFile("assets/icon.png")));
+
+        var projectPath = FindRepositoryFile("Migrator.Cli/Migrator.Cli.csproj");
+        var doc = XDocument.Load(projectPath);
+        var packedIncludes = PackedNoneItems(doc)
+            .Select(e => e.Attribute("Include")?.Value ?? string.Empty)
+            .ToArray();
+
+        Assert.Contains("..\\LICENSE", packedIncludes);
+        Assert.Contains("..\\SECURITY.md", packedIncludes);
+        Assert.Contains("..\\CONTRIBUTING.md", packedIncludes);
+        Assert.Contains("..\\CHANGELOG.md", packedIncludes);
+        Assert.Contains("..\\assets\\icon.png", packedIncludes);
+    }
+
+    [Fact]
+    public void CliPackage_DoesNotPackLocalAgentStateOrArtifacts()
+    {
+        var projectPath = FindRepositoryFile("Migrator.Cli/Migrator.Cli.csproj");
+        var doc = XDocument.Load(projectPath);
+
+        var packedMetadata = string.Join("\n", PackedNoneItems(doc)
+            .SelectMany(e => new[]
+            {
+                e.Attribute("Include")?.Value,
+                e.Attribute("Link")?.Value,
+                e.Attribute("PackagePath")?.Value,
+            })
+            .Where(value => !string.IsNullOrWhiteSpace(value)));
+
+        Assert.DoesNotContain(".agent-state", packedMetadata, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("artifacts", packedMetadata, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(".migration", packedMetadata, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\\temp\\", packedMetadata, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("/temp/", packedMetadata, StringComparison.OrdinalIgnoreCase);
+    }
+
     static string ElementValue(XDocument doc, string name)
     {
         return doc.Descendants().FirstOrDefault(e => e.Name.LocalName == name)?.Value ?? string.Empty;
+    }
+
+
+    static IEnumerable<XElement> PackedNoneItems(XDocument doc)
+    {
+        return doc.Descendants()
+            .Where(e => e.Name.LocalName == "None")
+            .Where(e => string.Equals(e.Attribute("Pack")?.Value, "true", StringComparison.OrdinalIgnoreCase));
     }
 
     static string FindRepositoryFile(string relativePath)

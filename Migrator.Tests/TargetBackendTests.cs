@@ -66,6 +66,24 @@ public class TargetBackendTests
         Assert.Equal("playwright", backend.Target.Framework);
     }
 
+
+    [Fact]
+    public void BuiltInBackends_ExposeCapabilityReports()
+    {
+        var dotnet = new PlaywrightDotNetBackend();
+        var typescript = new PlaywrightTypeScriptBackend();
+
+        Assert.Equal("target-capabilities/v1", dotnet.Capabilities.SchemaVersion);
+        Assert.Equal("stable", dotnet.Capabilities.Status);
+        Assert.Contains(dotnet.Capabilities.Capabilities, c => c.Area == "project-verification" && c.Support == "strong");
+        Assert.True(dotnet.Capabilities.IsProductionReady);
+
+        Assert.Equal("target-capabilities/v1", typescript.Capabilities.SchemaVersion);
+        Assert.Equal("experimental-preview", typescript.Capabilities.Status);
+        Assert.Contains(typescript.Capabilities.Capabilities, c => c.Area == "project-verification" && c.Support == "basic");
+        Assert.False(typescript.Capabilities.IsProductionReady);
+    }
+
     [Fact]
     public void MigrationPipeline_CanUseTargetBackendDirectly()
     {

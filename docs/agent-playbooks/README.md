@@ -9,7 +9,7 @@ Each playbook describes a specific task: what input you need, step-by-step actio
 
 - Use [Strict Mode](../agent-modes.md#strict-mode) for safe config-only iterations, final review, and MR preparation.
 - Use [Creative Mode](../agent-modes.md#creative-mode) for pattern mining, TypeScript drafts, and blocker discovery.
-- Start prompts live in `examples/agent-first/start-strict.md` and `examples/agent-first/start-creative.md`.
+- Use `.agent-loops/kickoff-prompt.txt` as the primary prompt for new runs. Legacy examples remain in `examples/agent-first/start-strict.md` and `examples/agent-first/start-creative.md`.
 
 ## Available playbooks
 

@@ -1,8 +1,13 @@
-Read `.agent-loops/README.md` and every file in `.agent-loops/`.
+PRIMARY MIGRATION-KIT WRAPPER PROMPT.
+This prompt delegates to the primary loop contract in `.agent-loops/kickoff-prompt.txt`; do not use older checkpoint prompts for new runs.
+
+Read `.agent-loops/README.md` and every file in `.agent-loops/`, especially `.agent-loops/kickoff-prompt.txt`, `.agent-loops/13-loop-contract.md`, `.agent-loops/11-strict-ticket-boundaries.md`, `.agent-loops/12-pom-helper-recovery-policy.md`, and `.agent-loops/15-stop-policy-checklist.md`.
 Read `AGENTS.md` if it exists.
 Read `{{WORKSPACE}}/README.md`, `{{WORKSPACE}}/agent-state.md`, `{{WORKSPACE}}/current-ticket.md`, and all files under `{{WORKSPACE}}/state/`.
 
 Start Selenium → Playwright Migrator Autopilot Loop.
+
+Mode: migration-artifact
 
 Scope:
 - Source Selenium project: {{SOURCE}}
@@ -13,16 +18,28 @@ Scope:
 - Workspace: {{WORKSPACE}}
 - First output directory: {{OUTPUT}}
 
+Allowed write paths:
+- {{WORKSPACE}}
+
+Forbidden paths:
+- parent directories outside the allowed scope;
+- migrator repository source code unless Mode is migrator-code and repository source is explicitly listed as an allowed write path;
+- production source/target project files unless explicitly listed as allowed write paths.
+
 Expected first commands:
 1. Run doctor/config validation for the scope.
 2. Run the smallest useful migrate/verify/orchestrate command.
 3. Build a migration board / explain TODO report if available.
 4. Choose the next root-cause ticket from evidence, not from memory.
-5. Update `{{WORKSPACE}}/agent-state.md`, `{{WORKSPACE}}/current-ticket.md`, `{{WORKSPACE}}/state/run-ledger.md`, `{{WORKSPACE}}/state/decision-log.md`, and `{{WORKSPACE}}/state/handoff.md`.
+5. Update `{{WORKSPACE}}/agent-state.md`, `{{WORKSPACE}}/current-ticket.md`, `{{WORKSPACE}}/state/run-ledger.md`, `{{WORKSPACE}}/state/decision-log.md`, `{{WORKSPACE}}/state/handoff.md`, and `{{WORKSPACE}}/state/stop-policy-checklist.md`.
 
 Rules:
+- If status is `CONTINUE_AUTONOMOUSLY`, continue without asking the user whether to continue.
 - Do not stop at compile-green if the board still has actionable migration quality work.
+- Do not edit migrator source code in migration-artifact mode.
+- If compiled migrator tool is provided, run that tool directly and do not search for `Migrator.Cli`, `.sln`, `.csproj`, or migrator source code.
 - Do not add broad suppressions that hide assertions or business checks.
 - Prefer config fixes for project-specific selectors/helper mappings.
-- Use engine fixes only for generic migrator limitations and add regression tests.
+- Use engine fixes only in migrator-code mode for generic migrator limitations and add regression tests.
+- Before stopping or handing off, apply `.agent-loops/15-stop-policy-checklist.md` and update `{{WORKSPACE}}/state/stop-policy-checklist.md`.
 - If interrupted, the next agent must be able to resume from workspace files.

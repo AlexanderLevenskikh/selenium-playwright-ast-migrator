@@ -17,6 +17,16 @@ using Migrator.SeleniumCSharp;
 if (args.Length > 0 && string.Equals(args[0], "kit", StringComparison.OrdinalIgnoreCase))
     return KitCommand.Run(args.Skip(1).ToArray());
 
+if (IsHelpRequest(args))
+{
+    var helpMode = FindOptionValue(args, "--mode");
+    if (!string.IsNullOrWhiteSpace(helpMode))
+        CliCommandCatalog.WriteCommandHelp(helpMode);
+    else
+        CliCommandCatalog.WriteGlobalHelp();
+    return 0;
+}
+
 var opts = ParseArgs(args);
 
 if (opts == null)
@@ -68,7 +78,7 @@ if (mode == "guard")
     return guardExitCode;
 }
 
-if (mode != "discover-target" && mode != "helper-inventory" && mode != "scaffold" && mode != "bootstrap-project" && mode != "config-schema" && mode != "config-validate" && mode != "config-normalize" && mode != "config-diff" && mode != "guard" && !File.Exists(inputPath) && !Directory.Exists(inputPath))
+if (CliCommandCatalog.ShouldPreflightInputExists(mode) && !File.Exists(inputPath) && !Directory.Exists(inputPath))
 {
     Console.Error.WriteLine($"Input not found: {inputPath}");
     return 1;
@@ -126,6 +136,12 @@ if (configPaths.Length > 0)
 }
 
 var sourceRegistry = CreateBuiltInSourceFrontendRegistry(loadedConfig);
+if (mode == "capabilities")
+{
+    var capabilitiesExitCode = RunCapabilities(sourceRegistry, CreateBuiltInTargetBackendRegistry(), outPath, format);
+    return capabilitiesExitCode;
+}
+
 SourceDetectionReport? sourceDetection = null;
 if (ShouldAutoDetectSource(mode, source, sourceExplicit, inputPath))
 {
@@ -157,6 +173,12 @@ if (ShouldWriteSourceCapabilityReport(mode))
 {
     Console.WriteLine($"Source capability profile: {sourceFrontend.Source.Id} ({sourceFrontend.Capabilities.Status})");
     WriteSourceCapabilityReport(sourceFrontend.Capabilities, outPath, format);
+}
+
+if (ShouldWriteTargetCapabilityReport(mode))
+{
+    Console.WriteLine($"Target capability profile: {targetBackend.Target.Id} ({targetBackend.Capabilities.Status})");
+    WriteTargetCapabilityReport(targetBackend.Capabilities, outPath, format);
 }
 
 if (mode == "config-normalize")
@@ -720,6 +742,162 @@ static string BuildSourceCapabilityMarkdown(SourceCapabilityReport report)
             sb.AppendLine($"- {EscapeMd(validation)}");
     }
 
+    return sb.ToString();
+}
+
+
+static bool ShouldWriteTargetCapabilityReport(string mode) =>
+    mode is "analyze" or "dump-ir" or "migrate" or "verify" or "verify-project" or "doctor" or "orchestrate" or "config-normalize";
+
+static void WriteTargetCapabilityReport(TargetCapabilityReport report, string outPath, string format)
+{
+    try
+    {
+        Directory.CreateDirectory(outPath);
+        var reportObject = new
+        {
+            report.SchemaVersion,
+            GeneratedAtUtc = DateTimeOffset.UtcNow,
+            Target = new
+            {
+                report.Target.Id,
+                report.Target.Language,
+                report.Target.Framework
+            },
+            report.Status,
+            report.Summary,
+            report.Capabilities,
+            report.Limitations,
+            report.RecommendedValidation
+        };
+
+        if (format == "json" || format == "both")
+        {
+            File.WriteAllText(Path.Combine(outPath, "target-capabilities-report.json"),
+                JsonSerializer.Serialize(reportObject, new JsonSerializerOptions { WriteIndented = true }));
+        }
+
+        if (format == "text" || format == "both")
+        {
+            File.WriteAllText(Path.Combine(outPath, "target-capabilities-report.md"), BuildTargetCapabilityMarkdown(report));
+        }
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+    {
+        Console.Error.WriteLine($"Warning: could not write target capability report: {ex.Message}");
+    }
+}
+
+static string BuildTargetCapabilityMarkdown(TargetCapabilityReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Target Capability Report");
+    sb.AppendLine();
+    sb.AppendLine($"- Target: `{report.Target.Id}`");
+    sb.AppendLine($"- Language: `{report.Target.Language}`");
+    sb.AppendLine($"- Framework: `{report.Target.Framework}`");
+    sb.AppendLine($"- Status: `{report.Status}`");
+    sb.AppendLine();
+    sb.AppendLine(report.Summary);
+    sb.AppendLine();
+    sb.AppendLine("## Capability matrix");
+    sb.AppendLine("| Area | Support | Details | Examples |");
+    sb.AppendLine("|---|---|---|---|");
+    foreach (var capability in report.Capabilities)
+    {
+        var examples = capability.Examples.Count == 0 ? "" : string.Join("; ", capability.Examples.Select(EscapeMd));
+        sb.AppendLine($"| `{capability.Area}` | `{capability.Support}` | {EscapeMd(capability.Details)} | {examples} |");
+    }
+
+    if (report.Limitations.Count > 0)
+    {
+        sb.AppendLine();
+        sb.AppendLine("## Limitations");
+        foreach (var limitation in report.Limitations)
+            sb.AppendLine($"- {EscapeMd(limitation)}");
+    }
+
+    if (report.RecommendedValidation.Count > 0)
+    {
+        sb.AppendLine();
+        sb.AppendLine("## Recommended validation");
+        foreach (var validation in report.RecommendedValidation)
+            sb.AppendLine($"- {EscapeMd(validation)}");
+    }
+
+    return sb.ToString();
+}
+
+static int RunCapabilities(SourceFrontendRegistry sourceRegistry, TargetBackendRegistry targetRegistry, string outPath, string format)
+{
+    Directory.CreateDirectory(outPath);
+    var sourceReports = sourceRegistry.Frontends.Select(f => f.Capabilities).ToArray();
+    var targetReports = targetRegistry.Backends.Select(b => b.Capabilities).ToArray();
+    var reportObject = new
+    {
+        SchemaVersion = "migrator-capabilities/v1",
+        GeneratedAtUtc = DateTimeOffset.UtcNow,
+        Sources = sourceReports.Select(r => new
+        {
+            r.SchemaVersion,
+            Source = new { r.Source.Id, r.Source.Language, r.Source.Framework },
+            r.Status,
+            r.Summary,
+            r.Capabilities,
+            r.Limitations,
+            r.RecommendedValidation
+        }),
+        Targets = targetReports.Select(r => new
+        {
+            r.SchemaVersion,
+            Target = new { r.Target.Id, r.Target.Language, r.Target.Framework },
+            r.Status,
+            r.Summary,
+            r.Capabilities,
+            r.Limitations,
+            r.RecommendedValidation
+        })
+    };
+
+    if (format == "json" || format == "both")
+    {
+        File.WriteAllText(Path.Combine(outPath, "capabilities-report.json"),
+            JsonSerializer.Serialize(reportObject, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    if (format == "text" || format == "both")
+    {
+        File.WriteAllText(Path.Combine(outPath, "capabilities-report.md"), BuildCapabilitiesMarkdown(sourceReports, targetReports));
+    }
+
+    Console.WriteLine($"Capability report written to: {Path.GetFullPath(outPath)}");
+    return 0;
+}
+
+static string BuildCapabilitiesMarkdown(IReadOnlyList<SourceCapabilityReport> sourceReports, IReadOnlyList<TargetCapabilityReport> targetReports)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Migrator Capability Report");
+    sb.AppendLine();
+    sb.AppendLine("This report lists built-in source frontends and target backends. Stable entries are intended for public use; experimental entries require extra verification.");
+    sb.AppendLine();
+    sb.AppendLine("## Source frontends");
+    sb.AppendLine("| Source | Language | Framework | Status | Summary |");
+    sb.AppendLine("|---|---|---|---|---|");
+    foreach (var report in sourceReports.OrderBy(r => r.Source.Id, StringComparer.OrdinalIgnoreCase))
+        sb.AppendLine($"| `{report.Source.Id}` | `{report.Source.Language}` | `{report.Source.Framework}` | `{report.Status}` | {EscapeMd(report.Summary)} |");
+
+    sb.AppendLine();
+    sb.AppendLine("## Target backends");
+    sb.AppendLine("| Target | Language | Framework | Status | Summary |");
+    sb.AppendLine("|---|---|---|---|---|");
+    foreach (var report in targetReports.OrderBy(r => r.Target.Id, StringComparer.OrdinalIgnoreCase))
+        sb.AppendLine($"| `{report.Target.Id}` | `{report.Target.Language}` | `{report.Target.Framework}` | `{report.Status}` | {EscapeMd(report.Summary)} |");
+
+    sb.AppendLine();
+    sb.AppendLine("## Validation rule of thumb");
+    sb.AppendLine("- Stable source/target pairs can be used for normal preview migrations with project verification.");
+    sb.AppendLine("- Experimental source or target entries should be treated as MVP/spike output until their capability reports and generated TODOs are reviewed.");
     return sb.ToString();
 }
 
@@ -1732,6 +1910,20 @@ static void WriteReports(MigrationSummaryReport summary, string outPath, string 
     if (format == "json" || format == "both")
     {
         File.WriteAllText(Path.Combine(outPath, "report.json"), ReportWriter.ToJson(summary));
+    }
+
+    var qualityReport = MigrationQualityAnalyzer.Analyze(summary);
+    if (format == "json" || format == "both")
+    {
+        File.WriteAllText(Path.Combine(outPath, "migration-quality-dashboard.json"),
+            ReportWriter.MigrationQualityToJson(qualityReport));
+    }
+    if (format == "text" || format == "both")
+    {
+        File.WriteAllText(Path.Combine(outPath, "migration-quality-dashboard.md"),
+            ReportWriter.MigrationQualityToMarkdown(qualityReport));
+        File.WriteAllText(Path.Combine(outPath, "migration-quality-tickets.md"),
+            ReportWriter.MigrationQualityTicketsToMarkdown(qualityReport));
     }
 
     if (allUnmapped.Count > 0)
@@ -2870,6 +3062,9 @@ static IReadOnlyList<MigrationReport> ReadGeneratedFileReports(string artifactDi
 static string[] ArtifactLookupFileNames() => new[]
 {
     "report.json", "unmapped-targets.json", "unsupported-actions.json", "verify-report.json", "project-verify-report.json",
+    "migration-quality-dashboard.json", "migration-quality-dashboard.md", "migration-quality-tickets.md",
+    "source-capabilities-report.json", "source-capabilities-report.md", "target-capabilities-report.json", "target-capabilities-report.md",
+    "capabilities-report.json", "capabilities-report.md",
     "explain-todo.json", "explain-todo.md", "agent-next-task.md", "smoke-plan.json", "smoke-plan.md",
     "runtime-checklist.md", "agent-runtime-next-task.md", "migration-board.json", "migration-board.md", "migration-board.html",
     "config-validate-report.json", "config-validate-report.md"
@@ -4333,7 +4528,9 @@ static IEnumerable<string> FindBoardArtifacts(string artifactDir, bool recursive
     var names = new[]
     {
         "report.json", "verify-report.json", "project-verify-report.json", "explain-todo.md", "explain-todo.json",
-        "agent-next-task.md", "smoke-plan.md", "smoke-plan.json", "runtime-checklist.md", "agent-runtime-next-task.md",
+        "agent-next-task.md", "migration-quality-dashboard.md", "migration-quality-dashboard.json", "migration-quality-tickets.md",
+        "source-capabilities-report.md", "source-capabilities-report.json", "target-capabilities-report.md", "target-capabilities-report.json",
+        "smoke-plan.md", "smoke-plan.json", "runtime-checklist.md", "agent-runtime-next-task.md",
         "unmapped-targets.json", "unsupported-actions.json", "pom-index.generated.json", "doctor-report.md", "guard-report.md", "config-validate-report.md", "config-validate-report.json"
     };
 
@@ -6330,7 +6527,7 @@ static int RunDoctor(string inputPath, string outPath, string format, string[] c
     AddDoctorCheck(checks, nugetConfig != null ? "passed" : "warning", "NUGET_CONFIG",
         nugetConfig != null ? $"NuGet.config found: {nugetConfig}" : "No NuGet.config found near inferred repo root.",
         repoRoot,
-        nugetConfig != null ? "BuildWorkingDirectory should point at repo root so internal feeds are visible." : "If project uses internal packages, set Verification.BuildWorkingDirectory to repo root with NuGet.config.");
+        nugetConfig != null ? "BuildWorkingDirectory should point at repo root so private package feeds are visible." : "If project uses private packages, set Verification.BuildWorkingDirectory to repo root with NuGet.config.");
 
     var buildFiles = new[] { "Directory.Build.props", "Directory.Build.targets", "Directory.Packages.props" }
         .Select(name => FindNearestFileFromDirectory(repoRoot, name))
@@ -7858,7 +8055,7 @@ static CliOptions? ParseArgs(string[] args)
                     mode = args[++i];
                 else
                 {
-                    Console.Error.WriteLine("--mode requires a value: analyze|migrate|verify|verify-project|propose");
+                    Console.Error.WriteLine($"--mode requires a value: {CliCommandCatalog.FormatModeList()}");
                     return null;
                 }
                 break;
@@ -7987,7 +8184,7 @@ static CliOptions? ParseArgs(string[] args)
                 break;
             case "--help":
             case "-h":
-                PrintHelp();
+                CliCommandCatalog.WriteGlobalHelp();
                 return null;
             case "--fail-on-unsupported":
                 failOnUnsupported = true;
@@ -8016,9 +8213,9 @@ static CliOptions? ParseArgs(string[] args)
         }
     }
 
-    if (mode != "analyze" && mode != "dump-ir" && mode != "migrate" && mode != "verify" && mode != "verify-project" && mode != "verify-ts-project" && mode != "doctor" && mode != "explain-todo" && mode != "smoke-plan" && mode != "runtime-classify" && mode != "migration-board" && mode != "profile-match" && mode != "config-schema" && mode != "config-validate" && mode != "config-normalize" && mode != "config-diff" && mode != "guard" && mode != "propose" && mode != "discover-target" && mode != "index-pom" && mode != "helper-inventory" && mode != "orchestrate" && mode != "scaffold" && mode != "bootstrap-project")
+    if (!CliCommandCatalog.IsValidMode(mode))
     {
-        Console.Error.WriteLine($"Invalid mode: {mode}. Use: analyze|dump-ir|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-normalize|config-diff|guard|propose|discover-target|index-pom|helper-inventory|orchestrate|scaffold|bootstrap-project");
+        Console.Error.WriteLine($"Invalid mode: {mode}. Use: {CliCommandCatalog.FormatModeList()}");
         return null;
     }
 
@@ -8032,10 +8229,17 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
-    if (mode != "scaffold" && mode != "bootstrap-project" && mode != "config-schema" && mode != "config-diff" && mode != "guard" && string.IsNullOrEmpty(input))
+    if (CliCommandCatalog.RequiresInput(mode) && string.IsNullOrEmpty(input))
     {
-        Console.Error.WriteLine((mode == "config-validate" || mode == "config-normalize") ? "--config or --input is required" : "--input is required");
-        PrintHelp();
+        Console.Error.WriteLine("--input is required");
+        CliCommandCatalog.WriteCommandHelp(mode);
+        return null;
+    }
+
+    if ((mode == "config-validate" || mode == "config-normalize") && string.IsNullOrEmpty(input) && configs.Count == 0)
+    {
+        Console.Error.WriteLine("--config or --input is required");
+        CliCommandCatalog.WriteCommandHelp(mode);
         return null;
     }
 
@@ -8070,36 +8274,7 @@ static CliOptions? ParseArgs(string[] args)
     }
 
     if (string.IsNullOrEmpty(outDir))
-    {
-        outDir = mode switch
-        {
-            "analyze" => "analysis",
-            "dump-ir" => "ir-dump",
-            "migrate" => "generated-tests",
-            "verify" => "verify",
-            "verify-project" => "verify-project",
-            "verify-ts-project" => "verify-ts-project",
-            "doctor" => "doctor",
-            "explain-todo" => "explain-todo",
-            "smoke-plan" => "smoke-plan",
-            "runtime-classify" => "runtime-classify",
-            "migration-board" => "migration-board",
-            "profile-match" => "profile-match",
-            "config-schema" => "config-schema",
-            "config-validate" => "config-validate",
-            "config-normalize" => "config-normalize",
-            "config-diff" => "config-diff",
-            "guard" => "guard",
-            "propose" => "mapping-proposals",
-            "discover-target" => "target-discovery",
-            "index-pom" => "pom-index",
-            "helper-inventory" => "helper-inventory",
-            "orchestrate" => "orchestration",
-            "scaffold" => "generated-scaffold",
-            "bootstrap-project" => "project-bootstrap",
-            _ => "output"
-        };
-    }
+        outDir = CliCommandCatalog.Get(mode).DefaultOut;
 
     outDir = ResolveOutputDirectory(outDir, workspace);
 
@@ -8198,204 +8373,22 @@ static bool LooksLikeWindowsRootedPath(string path)
 
 static void PrintHelp()
 {
-    Console.WriteLine(@"
-Usage: Migrator.Cli --mode <mode> --input <path> [options]
-
-Modes:
-  analyze         Parse and analyze Selenium tests without generating output files.
-                    Produces reports and draft adapter-config.
-  dump-ir         Dump parser/adapter IR as ir-dump.json/md.
-                    Defaults to legacy IR. Use --ir-version v2 or both to inspect MigrationDocument IR V2.
-                    This is a golden-baseline aid for refactors and does not modify source files.
-  migrate         Parse, adapt, and generate Playwright target files. Produces reports.
-  verify          Validate generated code quality. Runs Roslyn syntax check,
-                    TODO/placeholder detection, config validation, scope matching,
-                    and quality gate evaluation. Outputs verify-report.json and
-                    verify-report.txt.
-  verify-project  Project-aware verification. Generates files into --out/generated,
-                    creates a temporary verification .csproj, adds project/package
-                    references from adapter-config Verification, auto-discovers nearest
-                    .csproj/transitive ProjectReference/build props when enabled,
-                    runs dotnet build, and classifies build diagnostics.
-                    Does NOT modify source project files.
-  verify-ts-project
-                  TypeScript project-aware verification for generated .spec.ts files.
-                    Requires --ts-project pointing to a real Playwright TS project with
-                    package.json, tsconfig.json and playwright.config.*. Copies generated
-                    files into workspace, creates tsconfig.migrator.json, and runs
-                    npx tsc --noEmit. Does NOT modify the TS project.
-  doctor          Preflight diagnostics for agent/user workflows. Checks input scope,
-                    adapter-config layers, config safety, nearest .csproj/.sln,
-                    verification references, NuGet/build files, POM/source-truth
-                    availability, dotnet availability, and workspace hygiene.
-                    Does NOT modify config or source project files.
-  explain-todo    Explain remaining TODO/root causes from existing migration artifacts.
-                    Reads report.json, unmapped-targets.json, unsupported-actions.json,
-                    verify-report.json, project-verify-report.json when present in the
-                    provided run directory. Recursive artifact lookup is disabled by
-                    default to avoid mixing stale runs; use --recursive-artifacts only
-                    when you intentionally want nested lookup. Outputs explain-todo.md/json
-                    and agent-next-task.md. Does NOT modify config.
-  smoke-plan      Rank generated tests by runtime readiness. Reads generated .cs files,
-                    report.json, explain-todo.json, and project-verify-report.json when
-                    present. Outputs smoke-plan.md/json, runtime-checklist.md, and
-                    agent-runtime-next-task.md. Does NOT run tests.
-  runtime-classify
-                  Classify Playwright/NUnit runtime failure logs after a smoke run.
-                    Reads a log file or directory with .log/.txt/.md/.json artifacts and
-                    groups failures as locator-not-found, timeout-wait, assertion-mismatch,
-                    navigation-failed, setup/auth/environment, etc. Outputs
-                    runtime-failure-report.md/json and agent-runtime-failure-next-task.md.
-  config-schema   Write/copy adapter-config JSON Schema into the workspace for editor
-                    integration and agent workflows. Does not validate project code.
-  migration-board Build an HTML dashboard from existing migration artifacts. Reads
-                    report.json, explain-todo.json, smoke-plan.json, verify-report.json,
-                    project-verify-report.json, generated files, and related artifacts
-                    from the provided run directory. Recursive artifact lookup is disabled
-                    by default to avoid mixing stale runs; use --recursive-artifacts only
-                    when you intentionally want nested lookup. Outputs migration-board.html/json.
-                    Does NOT modify config/source.
-  profile-match   Compare a source test project with one or more adapter-config/profile
-                    layers and estimate reuse potential. Outputs profile-match.md/json
-                    and agent-profile-reuse-task.md. Does NOT modify config/source.
-  config-validate Validate adapter-config structure and agent-safety rules. Outputs
-                    config-validate-report.md/json. Fails on dangerous config.
-  config-normalize
-                  Convert legacy adapter-config v1 layers into migration-profile v2 shape.
-                    Outputs migration-profile.v2.json and config-normalize-report.md/json.
-                    Does NOT modify the source config and remains compatibility-only.
-  config-diff     Compare adapter-config v1 and/or migration-profile v2 documents and
-                    highlight risky agent changes. Requires --before and --after.
-                    Outputs config-diff-report.md/json.
-  guard           Compare two migration artifact directories and fail on regressions
-                    such as increased TODO/syntax errors. Requires --before and --after.
-  propose         Analyze migration artifacts (reports, generated output) and
-                    generate mapping proposals. Reads report.json, unmapped-targets.json,
-                    unsupported-actions.json, verify-report.json. Outputs
-                    mapping-proposals.md and mapping-proposals.json. Does NOT modify config.
-  discover-target Scan a target Playwright .NET project and collect infrastructure
-                    facts. Outputs target-inventory.json, target-style-notes.md,
-                    adapter-config.draft.json, and discovery-warnings.txt.
-                    Does NOT modify config. Collects facts only.
-  index-pom      Scan Selenium PageObjects/source files and collect source-truth facts.
-                    Outputs pom-index.generated.json/md, inferred-pom-candidates.json,
-                    and adapter-config.pom-draft.json. Does NOT modify config.
-                    Missing POMs are emitted as inferred candidates requiring review.
-  helper-inventory
-                  Scan helper/POM method bodies and infer MethodSemantics candidates.
-                    Outputs helper-inventory.md/json, method-semantics.candidates.json,
-                    and agent-helper-semantics-task.md. Does NOT modify config/source.
-  orchestrate     Dry-run orchestration mode. Runs analyze → migrate → verify → propose
-                     in sequence, writes stage artifacts into subdirectories, and produces
-                     orchestration-report.md and orchestration-report.json. Does NOT modify
-                     adapter config, does NOT auto-apply proposals, does NOT run runtime tests.
-  scaffold        Generate a minimal, compile-ready Playwright .NET test project scaffold
-                     with draft adapter config. Creates .csproj, GeneratedTestBase,
-                     TestSettings, ExampleSmokeTest, adapter-config.draft.json, README,
-                     and .gitignore. Does NOT require --input. Outputs scaffold-report.
-  bootstrap-project
-                  Create reusable migration profile skeletons for a new project:
-                     profiles/infrastructure-base.adapter.json,
-                     profiles/projects/<project>.adapter.json, migration-profile-plan.md,
-                     and agent-next-task.md. Does NOT modify source project files.
-
-Options:
-    --mode <mode>                 Operation mode (required)
-                                    analyze|dump-ir|migrate|verify|verify-project|verify-ts-project|doctor|explain-todo|smoke-plan|runtime-classify|migration-board|profile-match|config-schema|config-validate|config-normalize|config-diff|guard|propose|discover-target|index-pom|helper-inventory|orchestrate|scaffold|bootstrap-project
-    --input <file-or-directory>   Input .cs file or directory (required).
-                                    For propose/explain-todo/migration-board: directory with report files.
-                                    For runtime-classify: runtime log file or directory with logs/reports.
-                                    For doctor/profile-match: source tests/project directory to validate/compare before migration.
-                                    For discover-target: target Playwright project root.
-                                    For index-pom: Selenium project/PageObject directory.
-                                    For helper-inventory: Selenium helper/POM/source directory.
-                                    For orchestrate: source Selenium tests directory.
-                                    For verify-project: source Selenium tests directory;
-                                      project refs come from adapter-config Verification,
-                                      nearest .csproj auto-discovery, and transitive
-                                      ProjectReference discovery when enabled.
-                                    For verify-ts-project: generated TS migration folder or .spec.ts file.
-                                    For scaffold/bootstrap-project/config-schema: not required.
-   --out <output-directory>      Output directory inside --workspace by default.
-                                  Relative paths like orchestration-7 become migration/orchestration-7.
-                                  Use an absolute path to write outside workspace.
-   --workspace <directory>        Migration artifacts root (default: migration).
-                                  All relative --out paths are kept under this root.
-   --target <dotnet|ts|playwright-dotnet|playwright-typescript>
-                                  Generation target for migrate/orchestrate (default: dotnet).
-                                  TypeScript migration generation does not require --ts-project;
-                                  project-aware TypeScript verification does.
-   --source <auto|csharp-selenium|java-selenium|python-selenium>
-                                  Source frontend for migrate/analyze/dump-ir/verify
-                                  (default: auto). auto writes source-detection-report.* and
-                                  source-processing modes write source-capabilities-report.*.
-                                  auto picks csharp/java/python Selenium heuristically.
-                                  java-selenium and python-selenium are experimental MVP/spike frontends.
-   --ts-project <directory>        Existing Playwright TypeScript project root for verify-ts-project.
-                                  Must contain package.json,
-                                  tsconfig.json and playwright.config.*.
-   --config <adapter-config.json>  Adapter config layer. Can be repeated.
-                                  Layers are merged left-to-right; later/project configs override base profiles.
-   --before <path>                Previous config/artifact path for config-diff/guard
-   --after <path>                 New config/artifact path for config-diff/guard
-   --format <text|json|both>     Report format (default: both)
-   --ir-version <legacy|v2|both> IR dump schema for dump-ir (default: legacy).
-                                  With both, writes ir-dump.legacy.* and ir-dump.v2.*.
-   --render-ir <legacy|v2>       Experimental render input model for migrate/analyze/verify
-                                  (default: legacy). Use v2 to route generation through
-                                  MigrationDocument and TargetBackend.RenderDocument.
-   --validation-mode <warn|strict|production>
-                                  Config validation strictness for config-validate
-                                  (default: warn). strict surfaces target-specific
-                                  config migration gaps as warnings; production fails
-                                  unsafe target-specific gaps.
-   --recursive-artifacts         Allow nested artifact lookup for explain-todo/smoke-plan/migration-board.
-                                  If multiple candidates are found, the command fails and lists them.
-   --fail-on-unsupported         Exit code 2 if unsupported actions exist
-   --fail-on-todo                Exit code 3 if TODO comments exist
-   --help, -h                    Show this help
-
-Exit codes:
-  0  Success (all stages passed, verify passed)
-  1  Orchestration completed but verify/quality gates failed
-  2  --fail-on-unsupported triggered / invalid config / input not found
-  3  analyze/migrate stage failed / --fail-on-todo triggered
-  4  Generated syntax errors detected
-
-Examples:
-  Migrator.Cli --mode analyze --input ./OldTests --out analysis --format both
-  Migrator.Cli --mode dump-ir --input ./OldTests --config ./adapter-config.json --out ir-dump --format both
-  Migrator.Cli --mode dump-ir --input ./OldTests --config ./adapter-config.json --out ir-dump --ir-version both --format both
-  Migrator.Cli --mode migrate --input ./OldTests --out generated --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json
-  Migrator.Cli --mode migrate --input ./JavaTests --target ts --out generated-auto-ts  # auto-detects Java/Python/C# Selenium
-  Migrator.Cli --mode migrate --input ./OldTests --out generated-v2 --render-ir v2 --config ./adapter-config.json
-  Migrator.Cli --mode migrate --source java-selenium --input ./JavaTests --target ts --out generated-java-ts
-  Migrator.Cli --mode verify-project --input ./OldTests --out verify-project --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json
-  Migrator.Cli --mode doctor --input ./OldTests --config ./profiles/infrastructure-base.adapter.json --config ./profiles/projects/oldtests.adapter.json --out doctor
-  Migrator.Cli --mode explain-todo --input migration/verify-project --out explain-todo --format both
-  Migrator.Cli --mode smoke-plan --input migration/verify-project --out smoke-plan --format both
-  Migrator.Cli --mode runtime-classify --input migration/runtime-logs --out runtime-failure-classification --format both
-  Migrator.Cli --mode migration-board --input migration/verify-project --out board --format both
-  Migrator.Cli --mode profile-match --input ./OldTests --config ./profiles/infrastructure-base.adapter.json --out profile-match
-  Migrator.Cli --mode config-schema --out schema
-  Migrator.Cli --mode config-validate --config ./adapter-config.json --out config-validate
-  Migrator.Cli --mode config-validate --config ./adapter-config.json --target ts --validation-mode production --out config-validate-prod
-  Migrator.Cli --mode config-diff --before adapter.old.json --after adapter-config.json --out config-diff
-  Migrator.Cli --mode config-diff --before adapter-config.json --after migration-profile.v2.json --out config-diff-v2
-  Migrator.Cli --mode guard --before migration/baseline --after migration/current --out guard
-  Migrator.Cli --mode propose --input migration/generated --config ./adapter-config.json --format both
-   Migrator.Cli --mode discover-target --input ./team-playwright-tests --out target-discovery
-   Migrator.Cli --mode index-pom --input ./OldTests --out pom-index --format both
-   Migrator.Cli --mode orchestrate --input ./OldTests --config ./adapter-config.json --out orchestration --format both
-   Migrator.Cli --mode scaffold --out generated-scaffold
-   Migrator.Cli --mode bootstrap-project --input ./OldTests --out bootstrap-oldtests
-
-Output workspace examples:
-  --out orchestration-7            writes to migration/orchestration-7
-  --out migration/custom-run       writes to migration/custom-run
-  --out C:\temp\migration-run     writes to absolute path C:\temp\migration-run
-");
+    CliCommandCatalog.WriteGlobalHelp();
 }
+
+static bool IsHelpRequest(string[] args) => args.Any(arg => arg is "--help" or "-h" or "help");
+
+static string? FindOptionValue(string[] args, string optionName)
+{
+    for (var i = 0; i < args.Length - 1; i++)
+    {
+        if (string.Equals(args[i], optionName, StringComparison.OrdinalIgnoreCase))
+            return args[i + 1];
+    }
+
+    return null;
+}
+
 
 sealed class NormalizedTodoGroupBuilder
 {

@@ -1,5 +1,8 @@
+PRIMARY LOOP PROMPT for Migrator Autopilot Loop.
+Use this file as the single source prompt for new autopilot runs; secondary prompts must defer to it and must not redefine conflicting loop rules.
+
 Read all files in .agent-loops/.
-Also read AGENTS.md, docs/autopilot-loop.md, .agent-loops/13-loop-contract.md, .agent-loops/11-strict-ticket-boundaries.md, and .agent-loops/12-pom-helper-recovery-policy.md.
+Also read AGENTS.md, docs/autopilot-loop.md, .agent-loops/13-loop-contract.md, .agent-loops/11-strict-ticket-boundaries.md, .agent-loops/12-pom-helper-recovery-policy.md, and .agent-loops/15-stop-policy-checklist.md.
 
 Start Migrator Autopilot Loop.
 
@@ -7,7 +10,7 @@ Mode: migration-artifact
 
 You are allowed and expected to make engineering decisions yourself.
 Do not ask me to choose between implementation options.
-Do not ask “continue?” after partial progress.
+Do not ask “continue?” after partial progress or whenever status is CONTINUE_AUTONOMOUSLY.
 Do not stop after partial progress.
 Continue until the selected migration block is fixed and verified, or until the stop policy requires a real stop.
 
@@ -57,6 +60,7 @@ State/resume:
 Command/path rule:
 - If compiled migrator tool is provided, run that tool directly and do not search for `Migrator.Cli`, `.sln`, `.csproj`, or migrator source code.
 - If migrator engine work appears necessary in migration-artifact mode, record a source-change ticket candidate instead of editing repository code.
+- Repository source edits are forbidden unless Mode is exactly migrator-code and the repository source tree is listed under allowed write paths.
 
 POM/helper recovery rules:
 - Run or inspect `index-pom` before large PageObject/config mapping work.
@@ -74,5 +78,7 @@ Important continuation rule:
 - A green build/project verify is a checkpoint, not final migration completion, unless the task is explicitly compile-only.
 - If a batch is READY_FOR_ACCEPTANCE but the migration board still has actionable work, overall status is CONTINUE_AUTONOMOUSLY.
 - Migration-quality trade-offs are not a stop reason by themselves. Choose the smallest safe reversible batch.
+
+Before any stop, fill/check .agent-loops/15-stop-policy-checklist.md. If no hard stop condition is satisfied and status is CONTINUE_AUTONOMOUSLY, continue without asking the user.
 
 Use only allowed repository code, existing tests, snapshots, docs, CLI reports, migration board, source Selenium tests, target project conventions, generated output, and command output as the source of truth.

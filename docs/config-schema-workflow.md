@@ -23,11 +23,12 @@ At the top of `adapter-config.json` or a profile layer:
 
 ```json
 {
-  "$schema": "./schemas/adapter-config.schema.json"
+  "$schema": "./schemas/adapter-config.schema.json",
+  "SchemaVersion": "adapter-config/v1"
 }
 ```
 
-For nested profile files, use a relative path from the profile file to the schema.
+For nested profile files, use a relative path from the profile file to the schema. See [Adapter-config versioning](adapter-config-versioning.md) for the `adapter-config/v1` compatibility policy.
 
 ## Important
 

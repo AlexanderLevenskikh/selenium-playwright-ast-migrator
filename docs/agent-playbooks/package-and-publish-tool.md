@@ -38,7 +38,7 @@ dotnet tool run selenium-pw-migrator -- --help
 Публикуй только после подтверждения пользователя:
 
 ```powershell
-.\scripts\push-tool.ps1 -Version 0.6.0-preview.1 -Source company-nuget -ApiKey $env:NUGET_API_KEY
+.\scripts\push-tool.ps1 -Version 0.6.0-preview.1 -Source https://api.nuget.org/v3/index.json -ApiKey $env:NUGET_API_KEY
 ```
 
 ## Финальный отчёт

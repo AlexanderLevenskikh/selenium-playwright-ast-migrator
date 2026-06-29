@@ -21,7 +21,7 @@ Strict Mode rules:
 - run the safety loop after every change;
 - stop on generic migrator blockers and create a ticket.
 
-Recommended prompt: [`examples/agent-first/start-strict.md`](../examples/agent-first/start-strict.md).
+Primary prompt: `.agent-loops/kickoff-prompt.txt`. Legacy example: [`examples/agent-first/start-strict.md`](../examples/agent-first/start-strict.md).
 
 ## Creative Mode
 
@@ -41,7 +41,7 @@ Creative Mode can propose hypotheses and run small experiments, but it is still 
 - readiness must not be overstated;
 - generated/compile-ready/runtime-proven are different states.
 
-Recommended prompt: [`examples/agent-first/start-creative.md`](../examples/agent-first/start-creative.md).
+Primary prompt: `.agent-loops/kickoff-prompt.txt`. Legacy example: [`examples/agent-first/start-creative.md`](../examples/agent-first/start-creative.md).
 
 ## Required project inputs
 

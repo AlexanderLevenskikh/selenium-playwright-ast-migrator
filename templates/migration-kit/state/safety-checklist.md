@@ -20,3 +20,10 @@ Use this checklist before keeping a batch.
 - [ ] SOURCE_TRUTH_MANUAL
 - [ ] NEED_MORE_EVIDENCE
 - [ ] UNSAFE_REVERTED
+
+
+## Stop-policy gate
+
+- [ ] `state/stop-policy-checklist.md` was updated before stop/handoff.
+- [ ] If status is `CONTINUE_AUTONOMOUSLY`, the agent continued without asking the user whether to continue.
+- [ ] In `migration-artifact` mode, no migrator repository source code was edited.

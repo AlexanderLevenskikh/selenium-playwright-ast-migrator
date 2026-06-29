@@ -1,6 +1,15 @@
+SECONDARY NEXT-TICKET PROMPT.
+This prompt prepares one bounded ticket; it does not replace the primary `.agent-loops/kickoff-prompt.txt` loop.
+
 Use the latest migration board and verify output under `{{WORKSPACE}}`.
 
 Prepare the next actionable ticket. Do not implement yet.
+
+Rules:
+- Do not ask whether to continue.
+- Do not propose migrator source edits as executable work unless the next run will explicitly use `Mode: migrator-code`.
+- In migration-artifact mode, source changes must be written as ticket candidates.
+- If compiled migrator tool is provided, do not search for migrator source code.
 
 Return exactly these sections:
 
@@ -32,6 +41,9 @@ Include:
 
 Do not propose adding target-known identifiers merely to hide unresolved source-side symbols.
 
+## Stop-policy checklist
+
+State why this prompt is producing a ticket rather than asking the user to choose or continue.
 
 ## Helper/POM evidence rule
 

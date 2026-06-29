@@ -1,6 +1,6 @@
 # Упаковка и распространение мигратора
 
-Milestone 6 добавляет официальный способ распространять CLI как внутренний `dotnet tool`.
+Документ описывает официальный способ распространять CLI как `dotnet tool`.
 
 ## Зачем это нужно
 
@@ -42,10 +42,10 @@ Migrator.Cli/Migrator.Cli.csproj
 
 `ToolCommandName` — имя команды после установки.
 
-`PackageId` можно переопределить при pack, если внутренний NuGet требует корпоративный namespace:
+`PackageId` можно переопределить при pack, если форк или приватный preview-feed требует другой namespace:
 
 ```powershell
-/p:PackageId=Company.SeleniumPlaywrightMigrator
+/p:PackageId=Acme.SeleniumPlaywrightMigrator
 ```
 
 ## Локальная упаковка
@@ -89,14 +89,14 @@ dotnet tool run selenium-pw-migrator -- --help
 .\scripts\install-local-tool.ps1 -Version 0.6.0-preview.1
 ```
 
-## Публикация во внутренний NuGet
+## Публикация в NuGet/feed
 
 Если source уже есть в `NuGet.config`:
 
 ```powershell
 .\scripts\push-tool.ps1 `
   -Version 0.6.0-preview.1 `
-  -Source company-nuget `
+  -Source https://api.nuget.org/v3/index.json `
   -ApiKey $env:NUGET_API_KEY
 ```
 
@@ -104,20 +104,20 @@ dotnet tool run selenium-pw-migrator -- --help
 
 ```powershell
 dotnet nuget push .\artifacts\nuget\SeleniumPlaywrightAstMigrator.0.6.0-preview.1.nupkg `
-  --source company-nuget `
+  --source https://api.nuget.org/v3/index.json `
   --api-key $env:NUGET_API_KEY
 ```
 
-В некоторых корпоративных NuGet API key может быть фиктивным, а авторизация идёт через credential provider. Тогда используйте правила вашего внутреннего feed.
+Для приватных preview-feed используйте правила вашего repository manager или credential provider.
 
-## Установка из внутреннего NuGet
+## Установка из NuGet/feed
 
 Глобально:
 
 ```powershell
 dotnet tool install --global SeleniumPlaywrightAstMigrator `
   --version 0.6.0-preview.1 `
-  --add-source company-nuget
+
 ```
 
 В репозитории проекта лучше использовать local tool manifest:
@@ -127,7 +127,7 @@ dotnet new tool-manifest
 
 dotnet tool install SeleniumPlaywrightAstMigrator `
   --version 0.6.0-preview.1 `
-  --add-source company-nuget
+
 ```
 
 После этого в репозитории появится:
@@ -313,3 +313,71 @@ pwsh -ExecutionPolicy Bypass -File .\scripts\package-agent-cli-bundle.ps1 `
 ```
 
 Не рекомендуется глобально включать `Unrestricted`, если вы точно не понимаете, зачем это нужно. Для запуска этого скрипта достаточно временного `Bypass` на уровне текущего процесса.
+
+## CI packaging gates
+
+GitHub Actions now has separate release-safety jobs in `.github/workflows/ci.yml`:
+
+- `Build and test` — normal restore/build/test gate.
+- `Pack and smoke dotnet tool` — runs `dotnet pack`, verifies `.nupkg` contents, installs the package into a temporary local tool manifest, then runs `--help` and `--mode doctor` from the installed tool.
+- `Build and smoke agent bundle` — publishes the standalone bundle, verifies required docs/templates/schema files, validates `MANIFEST.sha256`, and runs help smoke from the published output.
+
+These gates are intentionally separate from normal tests so package failures are visible as release/distribution failures, not just generic unit-test failures.
+
+## Проверка содержимого `.nupkg`
+
+Перед публикацией пакет проверяется отдельным скриптом:
+
+```powershell
+./scripts/verify-nupkg-contents.ps1 `
+  -PackagePath artifacts/nuget/SeleniumPlaywrightAstMigrator.0.6.0-preview.1.nupkg
+```
+
+Linux/macOS вариант:
+
+```bash
+scripts/verify-nupkg-contents.sh artifacts/nuget/SeleniumPlaywrightAstMigrator.0.6.0-preview.1.nupkg
+```
+
+Проверка падает, если пакет не содержит публичные обязательные файлы или содержит локальные/private artifacts вроде `.agent-state`, `.migration`, `artifacts`, `bin`, `obj`, `.env`, `.local.json`.
+
+## Smoke локальной установки
+
+После pack пакет нужно установить именно как tool, а не запускать из source tree:
+
+```powershell
+./scripts/smoke-local-tool-package.ps1 -Version 0.6.0-preview.1
+```
+
+Linux/macOS вариант:
+
+```bash
+scripts/smoke-local-tool-package.sh 0.6.0-preview.1
+```
+
+Smoke создает временный `dotnet-tools.json`, ставит пакет из `artifacts/nuget`, запускает `--help`, запускает `--mode doctor` на тестовых fixtures и проверяет, что появился `doctor-report.md`.
+
+## Bundle manifest и checksums
+
+`package-agent-cli-bundle.ps1` теперь пишет два файла в корень bundle:
+
+```text
+MANIFEST.sha256
+manifest.json
+```
+
+`MANIFEST.sha256` нужен для быстрой проверки целостности архива. `manifest.json` удобен для автоматической проверки в CI и для release artifacts.
+
+Проверка bundle:
+
+```powershell
+./scripts/verify-agent-cli-bundle.ps1 `
+  -BundleDirectory artifacts/agent-cli-bundle/tool `
+  -RunHelp
+```
+
+`-RunHelp` дополнительно запускает CLI из published output и проверяет, что help доступен без repository source.
+
+## Release process
+
+Полный чеклист preview/stable release, публикации и rollback описан в [`docs/release-process.md`](release-process.md).

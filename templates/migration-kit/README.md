@@ -25,6 +25,7 @@ migration/
     decision-log.md
     handoff.md
     safety-checklist.md
+    stop-policy-checklist.md
   tickets/
   evidence/
   runs/
@@ -62,17 +63,21 @@ Update rules:
 
 ## MVP-2 stateful loop
 
+Use `prompts/kickoff-prompt.txt` as the primary wrapper for new runs.
 Use `prompts/loop-batch-prompt.txt` for one bounded batch.
 Use `prompts/review-batch-prompt.txt` to review the last batch.
 A new agent should start from `state/handoff.md`, not from chat memory.
 
 ## Safety rules
 
+- Do not ask “continue?” when status is `CONTINUE_AUTONOMOUSLY`.
 - Do not edit generated files as the final solution.
+- Do not edit migrator source code in `migration-artifact` mode.
 - Prefer config fixes over engine fixes when project-specific knowledge is needed.
 - Never suppress assertions silently.
 - Compile-green is a checkpoint, not the end of migration quality work.
 - Keep source truth in source tests, POM/helper code, config, or existing target Playwright code.
+- Fill `state/stop-policy-checklist.md` before stopping, handing off, or reporting a blocker.
 
 ## Optional MVP-3 helpers
 

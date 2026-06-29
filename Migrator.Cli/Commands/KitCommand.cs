@@ -8,7 +8,7 @@ using System.Text.Json;
 
 internal static class KitCommand
 {
-    const string KitVersion = "0.4.0";
+    const string KitVersion = "0.5.0";
 
     public static int Run(string[] args)
     {
@@ -134,7 +134,6 @@ internal static class KitCommand
         if (!options.NoRootAgentFiles)
         {
             CopyRootAgentDirectory(Path.Combine(kitRoot, ".agent-loops"), Path.Combine(projectRoot, ".agent-loops"), workspacePath, options);
-            CopyRootAgentDirectory(Path.Combine(kitRoot, ".agent-state"), Path.Combine(projectRoot, ".agent-state"), workspacePath, options);
         }
 
         WriteQuickStart(workspacePath, options);
@@ -162,6 +161,7 @@ internal static class KitCommand
         AddCheck(checks, "kickoff-prompt", File.Exists(Path.Combine(workspacePath, "prompts", "kickoff-prompt.txt")), Path.Combine(workspacePath, "prompts", "kickoff-prompt.txt"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "loop-batch-prompt", File.Exists(Path.Combine(workspacePath, "prompts", "loop-batch-prompt.txt")), Path.Combine(workspacePath, "prompts", "loop-batch-prompt.txt"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "state-handoff", File.Exists(Path.Combine(workspacePath, "state", "handoff.md")), Path.Combine(workspacePath, "state", "handoff.md"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "stop-policy-checklist", File.Exists(Path.Combine(workspacePath, "state", "stop-policy-checklist.md")), Path.Combine(workspacePath, "state", "stop-policy-checklist.md"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "schema", File.Exists(Path.Combine(workspacePath, "schemas", "adapter-config.schema.json")), Path.Combine(workspacePath, "schemas", "adapter-config.schema.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "codex-files", File.Exists(Path.Combine(workspacePath, "codex", "CODEX.md")), Path.Combine(workspacePath, "codex", "CODEX.md"), "Run `migrator kit update --backup` without --no-codex-files.");
 
@@ -225,6 +225,8 @@ internal static class KitCommand
             f.Equals("verify-report.json", StringComparison.OrdinalIgnoreCase) ||
             f.Equals("project-verify-report.json", StringComparison.OrdinalIgnoreCase) ||
             f.Equals("explain-todo.json", StringComparison.OrdinalIgnoreCase) ||
+            f.Equals("migration-quality-dashboard.json", StringComparison.OrdinalIgnoreCase) ||
+            f.Equals("migration-quality-tickets.md", StringComparison.OrdinalIgnoreCase) ||
             f.Equals("smoke-plan.json", StringComparison.OrdinalIgnoreCase) ||
             f.Equals("migration-board.md", StringComparison.OrdinalIgnoreCase) ||
             f.Equals("migration-board.html", StringComparison.OrdinalIgnoreCase)).ToArray();
@@ -252,7 +254,7 @@ Known artifact files detected:
 
 Do not write code yet. Analyze the latest migration artifacts and produce one bounded next ticket.
 
-Prefer a root-cause ticket over many downstream TODO edits. Do not hide errors by adding broad `TargetKnownIdentifiers` or broad suppressions.
+Prefer a root-cause ticket over many downstream TODO edits. Do not hide errors by adding broad `TargetKnownIdentifiers` or broad suppressions. Do not ask the user whether to continue; produce one bounded ticket or a stop-policy-backed blocker.
 
 ## Required output
 
@@ -282,6 +284,7 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
 - `migration/state/handoff.md`
 - `migration/state/decision-log.md`
 - `migration/state/run-ledger.md`
+- `migration/state/stop-policy-checklist.md`
 """;
     }
 
@@ -455,6 +458,12 @@ One bounded loop batch:
 {{Path.Combine(options.Workspace, "prompts", "loop-batch-prompt.txt")}}
 ```
 
+Stop-policy checklist before any stop/handoff:
+
+```text
+{{Path.Combine(options.Workspace, "state", "stop-policy-checklist.md")}}
+```
+
 Codex bounded ticket:
 
 ```text
@@ -566,7 +575,8 @@ Fix only the current ticket.
             || normalized.StartsWith("logs/", StringComparison.Ordinal)
             || normalized.StartsWith("state/run-ledger.md", StringComparison.Ordinal)
             || normalized.StartsWith("state/decision-log.md", StringComparison.Ordinal)
-            || normalized.StartsWith("state/handoff.md", StringComparison.Ordinal);
+            || normalized.StartsWith("state/handoff.md", StringComparison.Ordinal)
+            || normalized.StartsWith("state/stop-policy-checklist.md", StringComparison.Ordinal);
     }
 
     static string SafeRelativePath(string basePath, string path)
@@ -648,7 +658,7 @@ Common options:
   --with-team               Install optional OpenCode team templates.
   --with-loop-library       Install optional reusable loop library.
   --no-codex-files          Do not install migration/codex files.
-  --no-root-agent-files     Do not copy .agent-loops/.agent-state into project root.
+  --no-root-agent-files     Do not copy .agent-loops into project root.
   --input <path>            Artifact directory for kit next-ticket.
 
 Examples:

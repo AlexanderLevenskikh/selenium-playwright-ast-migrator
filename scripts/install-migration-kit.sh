@@ -31,7 +31,7 @@ Options:
   --with-team               Install optional OpenCode team templates.
   --with-loop-library       Install optional reusable loop library.
   --no-codex-files          Do not install migration/codex files.
-  --no-root-agent-files     Do not copy .agent-loops/.agent-state into project root.
+  --no-root-agent-files     Do not copy .agent-loops into project root.
   -h, --help                Show help.
 USAGE
 }

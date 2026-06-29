@@ -1,18 +1,32 @@
 {
+  "SchemaVersion": "adapter-config/v1",
   "SourceProjectName": "Example.E2ETests",
   "LocatorSettings": {
     "DefaultTestIdAttribute": "data-test-id",
-    "KnownTestIdAttributes": ["data-testid", "data-test-id", "data-tid", "data-test"]
+    "KnownTestIdAttributes": [
+      "data-testid",
+      "data-test-id",
+      "data-tid",
+      "data-test"
+    ]
   },
   "Scopes": [
     {
       "Name": "CatalogPrincipals",
-      "SourcePathPatterns": ["**/CatalogPrincipalsFilter.cs"],
+      "SourcePathPatterns": [
+        "**/CatalogPrincipalsFilter.cs"
+      ],
       "TestHost": {
         "Namespace": "Example.E2ETests.Tests",
         "BaseClass": "TestBase",
-        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
-        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "ClassAttributes": [
+          "TestFixture",
+          "Parallelizable(ParallelScope.Self)"
+        ],
+        "Usings": [
+          "NUnit.Framework",
+          "Example.E2ETests.Infrastructure"
+        ],
         "SetUpStatements": [
           "await Page.GotoAsync(\"<test-login>\");",
           "await Page.GotoAsync(\"/catalogs?activeTab=principals\");"
@@ -21,12 +35,20 @@
     },
     {
       "Name": "CatalogAwardTemplate",
-      "SourcePathPatterns": ["**/CatalogAwardTemplateFilter.cs"],
+      "SourcePathPatterns": [
+        "**/CatalogAwardTemplateFilter.cs"
+      ],
       "TestHost": {
         "Namespace": "Example.E2ETests.Tests",
         "BaseClass": "TestBase",
-        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
-        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "ClassAttributes": [
+          "TestFixture",
+          "Parallelizable(ParallelScope.Self)"
+        ],
+        "Usings": [
+          "NUnit.Framework",
+          "Example.E2ETests.Infrastructure"
+        ],
         "SetUpStatements": [
           "await Page.GotoAsync(\"<test-login>\");",
           "await Page.GotoAsync(\"/catalogs?activeTab=awardTemplates\");"
@@ -35,12 +57,20 @@
     },
     {
       "Name": "CatalogBudgetItems",
-      "SourcePathPatterns": ["**/CatalogBudgetItemsFilter.cs"],
+      "SourcePathPatterns": [
+        "**/CatalogBudgetItemsFilter.cs"
+      ],
       "TestHost": {
         "Namespace": "Example.E2ETests.Tests",
         "BaseClass": "TestBase",
-        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
-        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "ClassAttributes": [
+          "TestFixture",
+          "Parallelizable(ParallelScope.Self)"
+        ],
+        "Usings": [
+          "NUnit.Framework",
+          "Example.E2ETests.Infrastructure"
+        ],
         "SetUpStatements": [
           "await Page.GotoAsync(\"<test-login>\");",
           "await Page.GotoAsync(\"/catalogs?activeTab=budgetItems\");"
@@ -49,12 +79,20 @@
     },
     {
       "Name": "CatalogProjects",
-      "SourcePathPatterns": ["**/CatalogProjectsFilter.cs"],
+      "SourcePathPatterns": [
+        "**/CatalogProjectsFilter.cs"
+      ],
       "TestHost": {
         "Namespace": "Example.E2ETests.Tests",
         "BaseClass": "TestBase",
-        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
-        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "ClassAttributes": [
+          "TestFixture",
+          "Parallelizable(ParallelScope.Self)"
+        ],
+        "Usings": [
+          "NUnit.Framework",
+          "Example.E2ETests.Infrastructure"
+        ],
         "SetUpStatements": [
           "await Page.GotoAsync(\"<test-login>\");",
           "await Page.GotoAsync(\"/catalogs?activeTab=projects\");"
@@ -63,12 +101,20 @@
     },
     {
       "Name": "CatalogRegions",
-      "SourcePathPatterns": ["**/CatalogRegionFilter.cs"],
+      "SourcePathPatterns": [
+        "**/CatalogRegionFilter.cs"
+      ],
       "TestHost": {
         "Namespace": "Example.E2ETests.Tests",
         "BaseClass": "TestBase",
-        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
-        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "ClassAttributes": [
+          "TestFixture",
+          "Parallelizable(ParallelScope.Self)"
+        ],
+        "Usings": [
+          "NUnit.Framework",
+          "Example.E2ETests.Infrastructure"
+        ],
         "SetUpStatements": [
           "await Page.GotoAsync(\"<test-login>\");",
           "await Page.GotoAsync(\"/catalogs?activeTab=regions\");"
@@ -77,12 +123,20 @@
     },
     {
       "Name": "CatalogStopReasons",
-      "SourcePathPatterns": ["**/CatalogStopReasonsFilter.cs"],
+      "SourcePathPatterns": [
+        "**/CatalogStopReasonsFilter.cs"
+      ],
       "TestHost": {
         "Namespace": "Example.E2ETests.Tests",
         "BaseClass": "TestBase",
-        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
-        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "ClassAttributes": [
+          "TestFixture",
+          "Parallelizable(ParallelScope.Self)"
+        ],
+        "Usings": [
+          "NUnit.Framework",
+          "Example.E2ETests.Infrastructure"
+        ],
         "SetUpStatements": [
           "await Page.GotoAsync(\"<test-login>\");",
           "await Page.GotoAsync(\"/catalogs?activeTab=stopReasons\");"
@@ -91,12 +145,20 @@
     },
     {
       "Name": "CatalogPartners",
-      "SourcePathPatterns": ["**/Partners/**/CatalogPartners*.cs"],
+      "SourcePathPatterns": [
+        "**/Partners/**/CatalogPartners*.cs"
+      ],
       "TestHost": {
         "Namespace": "Example.E2ETests.Tests",
         "BaseClass": "TestBase",
-        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
-        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "ClassAttributes": [
+          "TestFixture",
+          "Parallelizable(ParallelScope.Self)"
+        ],
+        "Usings": [
+          "NUnit.Framework",
+          "Example.E2ETests.Infrastructure"
+        ],
         "SetUpStatements": [
           "await Page.GotoAsync(\"<test-login>\");",
           "await Page.GotoAsync(\"/catalogs?activeTab=partners&type=simple\");"
@@ -105,12 +167,20 @@
     },
     {
       "Name": "Widget",
-      "SourcePathPatterns": ["**/Widget.cs"],
+      "SourcePathPatterns": [
+        "**/Widget.cs"
+      ],
       "TestHost": {
         "Namespace": "Example.E2ETests.Tests",
         "BaseClass": "TestBase",
-        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
-        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "ClassAttributes": [
+          "TestFixture",
+          "Parallelizable(ParallelScope.Self)"
+        ],
+        "Usings": [
+          "NUnit.Framework",
+          "Example.E2ETests.Infrastructure"
+        ],
         "SetUpStatements": [
           "await Page.GotoAsync(\"<test-login>\");",
           "await Page.GotoAsync(\"/search/bills\");"
@@ -119,12 +189,20 @@
     },
     {
       "Name": "ButtonTests",
-      "SourcePathPatterns": ["**/ButtonTests.cs"],
+      "SourcePathPatterns": [
+        "**/ButtonTests.cs"
+      ],
       "TestHost": {
         "Namespace": "Example.E2ETests.Tests",
         "BaseClass": "TestBase",
-        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
-        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "ClassAttributes": [
+          "TestFixture",
+          "Parallelizable(ParallelScope.Self)"
+        ],
+        "Usings": [
+          "NUnit.Framework",
+          "Example.E2ETests.Infrastructure"
+        ],
         "SetUpStatements": [
           "await Page.GotoAsync(\"<test-login>\");",
           "await Page.GotoAsync(\"/agentReports/\");"
@@ -133,12 +211,22 @@
     },
     {
       "Name": "Functional",
-      "SourcePathPatterns": ["**/Functional/AwardSettings.cs", "**/Functional/StopReasons.cs", "**/Functional/DeleteLightBox.cs"],
+      "SourcePathPatterns": [
+        "**/Functional/AwardSettings.cs",
+        "**/Functional/StopReasons.cs",
+        "**/Functional/DeleteLightBox.cs"
+      ],
       "TestHost": {
         "Namespace": "Example.E2ETests.Tests",
         "BaseClass": "TestBase",
-        "ClassAttributes": ["TestFixture", "Parallelizable(ParallelScope.Self)"],
-        "Usings": ["NUnit.Framework", "Example.E2ETests.Infrastructure"],
+        "ClassAttributes": [
+          "TestFixture",
+          "Parallelizable(ParallelScope.Self)"
+        ],
+        "Usings": [
+          "NUnit.Framework",
+          "Example.E2ETests.Infrastructure"
+        ],
         "SetUpStatements": [
           "await Page.GotoAsync(\"<test-login>\");"
         ]

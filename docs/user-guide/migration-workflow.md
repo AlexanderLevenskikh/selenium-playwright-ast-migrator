@@ -49,8 +49,9 @@ Review:
 - `analysis/unmapped-targets.json` — which elements need profile mappings
 - `analysis/unsupported-actions.json` — which actions need manual migration or method mappings
 - `analysis/report.txt` — overall coverage
+- `analysis/migration-quality-dashboard.md` — root causes, guardrails, and next safe quality tickets
 
-Identify the most frequently occurring unmapped targets. These give the highest return on config effort.
+Identify the most frequently occurring unmapped targets and the first P0/P1 item in `migration-quality-tickets.md`. These give the highest return on config or recognizer effort.
 
 ## Step 3. Add source-truth mappings
 

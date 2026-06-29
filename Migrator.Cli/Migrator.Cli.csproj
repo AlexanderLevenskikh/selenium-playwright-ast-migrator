@@ -6,20 +6,24 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
-    <!-- Milestone 6: package the CLI as an internal dotnet tool.
-         Override PackageId/Version at pack time if your internal feed uses another naming convention:
-         dotnet pack ./Migrator.Cli/Migrator.Cli.csproj -c Release -o ./artifacts/nuget /p:PackageId=Company.SeleniumPlaywrightMigrator /p:Version=0.6.0-preview.1
+    <!-- Package the CLI as a public dotnet tool.
+         PackageId/Version/RepositoryUrl can still be overridden at pack time for forks or private previews.
     -->
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>selenium-pw-migrator</ToolCommandName>
     <PackageId>SeleniumPlaywrightAstMigrator</PackageId>
     <Version>0.6.0-preview.1</Version>
-    <Authors>Migration Toolkit Team</Authors>
-    <Company>Internal</Company>
-    <Description>Agent-assisted Selenium C# to Playwright .NET AST migration toolkit.</Description>
-    <PackageTags>selenium;playwright;migration;testing;dotnet-tool</PackageTags>
+    <Authors>Selenium Playwright AST Migrator Contributors</Authors>
+    <Company>Selenium Playwright AST Migrator Contributors</Company>
+    <Description>Agent-assisted AST migration toolkit for moving Selenium tests toward Playwright.</Description>
+    <PackageTags>selenium;playwright;migration;testing;dotnet-tool;ast</PackageTags>
     <PackageReadmeFile>README_TOOL.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator</PackageProjectUrl>
     <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator</RepositoryUrl>
+    <PackageIcon>assets/icon.png</PackageIcon>
+    <PackageReleaseNotes>Public preview: stable Selenium C# to Playwright .NET path, migration quality reports, public launch demo, package guardrails, and agent-assisted migration-kit assets.</PackageReleaseNotes>
     <IsPackable>true</IsPackable>
   </PropertyGroup>
 
@@ -35,12 +39,16 @@
 
   <ItemGroup>
     <None Include="README_TOOL.md" Pack="true" PackagePath="\" />
+    <None Include="..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\SECURITY.md" Pack="true" PackagePath="\" />
+    <None Include="..\CONTRIBUTING.md" Pack="true" PackagePath="\" />
+    <None Include="..\CHANGELOG.md" Pack="true" PackagePath="\" />
+    <None Include="..\assets\icon.png" Link="assets\icon.png" Pack="true" PackagePath="assets\" />
     <None Include="..\schemas\adapter-config.schema.json" Link="schemas\adapter-config.schema.json" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="schemas\" />
     <None Include="..\templates\**\*" Link="templates\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="templates\%(RecursiveDir)" />
     <None Include="..\scripts\install-migration-kit.ps1" Link="scripts\install-migration-kit.ps1" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="scripts\" />
     <None Include="..\scripts\install-migration-kit.sh" Link="scripts\install-migration-kit.sh" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="scripts\" Condition="Exists('..\scripts\install-migration-kit.sh')" />
     <None Include="..\.agent-loops\**\*" Link=".agent-loops\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath=".agent-loops\%(RecursiveDir)" Condition="Exists('..\.agent-loops')" />
-    <None Include="..\.agent-state\**\*" Link=".agent-state\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath=".agent-state\%(RecursiveDir)" Condition="Exists('..\.agent-state')" />
   </ItemGroup>
 
   <!-- Dotnet tool packages do not run from the source tree.

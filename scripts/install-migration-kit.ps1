@@ -225,7 +225,6 @@ $configPath = Convert-ToAbsolutePath $Config $projectRoot
 $outputPath = Convert-ToAbsolutePath $Output $projectRoot
 $templateRoot = Join-Path $kitRoot "templates/migration-kit"
 $agentLoopsSource = Join-Path $kitRoot ".agent-loops"
-$agentStateSource = Join-Path $kitRoot ".agent-state"
 $codexTemplateSource = Join-Path $kitRoot "templates/codex"
 $teamTemplateSource = Join-Path $kitRoot "templates/opencode-team"
 $loopLibrarySource = Join-Path $kitRoot "templates/loops-library"
@@ -294,9 +293,6 @@ if (-not $NoRootAgentFiles) {
         Copy-RootAgentDirectorySafe -SourceDirectory $agentLoopsSource -DestinationDirectory (Join-Path $projectRoot ".agent-loops") -ForceCopy:$Force -UpdateMode:$Update
     }
 
-    if (Test-Path $agentStateSource) {
-        Copy-RootAgentDirectorySafe -SourceDirectory $agentStateSource -DestinationDirectory (Join-Path $projectRoot ".agent-state") -ForceCopy:$Force -UpdateMode:$Update
-    }
 }
 
 if (-not $NoToolManifest) {

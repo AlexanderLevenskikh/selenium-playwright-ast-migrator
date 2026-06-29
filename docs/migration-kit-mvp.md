@@ -40,7 +40,7 @@ migration/
     backups/
 ```
 
-It also copies root-level `.agent-loops/` and `.agent-state/` unless `-NoRootAgentFiles` is used.
+It also copies root-level `.agent-loops/` unless `-NoRootAgentFiles` is used. Local `.agent-state/` is treated as runtime state and is not copied from the packaged tool.
 
 ## Install from the migrator repository
 

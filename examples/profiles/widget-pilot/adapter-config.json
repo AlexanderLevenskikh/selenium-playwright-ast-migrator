@@ -1,4 +1,5 @@
 {
+  "SchemaVersion": "adapter-config/v1",
   "SourceProjectName": "Example.E2ETests",
   "LocatorSettings": {
     "DefaultTestIdAttribute": "data-test-id",

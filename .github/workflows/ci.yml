@@ -5,6 +5,9 @@ on:
     branches: [ main, master ]
   pull_request:
 
+env:
+  PACKAGE_VERSION: 0.6.0-preview.${{ github.run_number }}
+
 jobs:
   dotnet:
     name: Build and test
@@ -27,3 +30,74 @@ jobs:
 
       - name: Test
         run: dotnet test Migrator.sln --no-build --configuration Release --verbosity normal
+
+  package:
+    name: Pack and smoke dotnet tool
+    runs-on: ubuntu-latest
+    needs: dotnet
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore Migrator.sln
+
+      - name: Pack dotnet tool
+        run: scripts/pack-tool.sh "$PACKAGE_VERSION"
+
+      - name: Verify nupkg contents
+        run: scripts/verify-nupkg-contents.sh "artifacts/nuget/SeleniumPlaywrightAstMigrator.$PACKAGE_VERSION.nupkg"
+
+      - name: Smoke local tool install
+        run: scripts/smoke-local-tool-package.sh "$PACKAGE_VERSION"
+
+      - name: Upload NuGet package
+        uses: actions/upload-artifact@v4
+        with:
+          name: selenium-playwright-ast-migrator-nupkg
+          path: artifacts/nuget/*.nupkg
+          if-no-files-found: error
+
+  agent-bundle:
+    name: Build and smoke agent bundle
+    runs-on: ubuntu-latest
+    needs: dotnet
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore Migrator.sln
+
+      - name: Package agent CLI bundle
+        shell: pwsh
+        run: ./scripts/package-agent-cli-bundle.ps1 -Runtime linux-x64 -Output artifacts/agent-cli-bundle -NoSelfContained
+
+      - name: Verify agent CLI bundle
+        shell: pwsh
+        run: ./scripts/verify-agent-cli-bundle.ps1 -BundleDirectory artifacts/agent-cli-bundle/tool -RunHelp
+
+      - name: Create agent bundle archive
+        run: tar -czf artifacts/agent-cli-bundle-linux-x64.tar.gz -C artifacts/agent-cli-bundle tool
+
+      - name: Upload agent bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: selenium-playwright-ast-migrator-agent-bundle-linux-x64
+          path: |
+            artifacts/agent-cli-bundle-linux-x64.tar.gz
+            artifacts/agent-cli-bundle/tool/MANIFEST.sha256
+            artifacts/agent-cli-bundle/tool/manifest.json
+          if-no-files-found: error

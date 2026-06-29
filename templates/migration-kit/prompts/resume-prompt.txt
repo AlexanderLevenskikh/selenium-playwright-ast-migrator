@@ -1,7 +1,12 @@
-Read `.agent-loops/README.md` and every file in `.agent-loops/`.
+SECONDARY RESUME WRAPPER.
+This prompt resumes the primary `.agent-loops/kickoff-prompt.txt` loop and must not redefine conflicting rules.
+
+Read `.agent-loops/README.md` and every file in `.agent-loops/`, especially `.agent-loops/13-loop-contract.md`, `.agent-loops/11-strict-ticket-boundaries.md`, and `.agent-loops/15-stop-policy-checklist.md`.
 Read `{{WORKSPACE}}/agent-state.md`, `{{WORKSPACE}}/current-ticket.md`, and all files under `{{WORKSPACE}}/state/`.
 
 Resume Selenium → Playwright Migrator Autopilot Loop.
+
+Mode: migration-artifact
 
 Do not trust the previous summary blindly. Reconcile it with:
 - git status / git diff;
@@ -18,5 +23,10 @@ Then classify the last batch:
 
 Continue only from the last safe checkpoint.
 
+Rules:
+- Do not ask the user whether to continue when status is `CONTINUE_AUTONOMOUSLY`.
+- Do not edit migrator repository source code unless Mode is migrator-code and repository source is explicitly listed as an allowed write path.
+- If compiled migrator tool is provided, do not search for `Migrator.Cli`, `.sln`, `.csproj`, or migrator source code.
+- Before stopping or handing off, apply `.agent-loops/15-stop-policy-checklist.md` and update `{{WORKSPACE}}/state/stop-policy-checklist.md`.
 
 Before continuing, rewrite `{{WORKSPACE}}/state/handoff.md` if it is stale or contradicts the latest run artifacts.

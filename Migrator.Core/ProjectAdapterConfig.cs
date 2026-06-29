@@ -10,6 +10,14 @@ namespace Migrator.Core;
 /// </summary>
 public sealed class ProjectAdapterConfig
 {
+    public const string CurrentSchemaVersion = "adapter-config/v1";
+
+    /// <summary>
+    /// Explicit adapter-config schema version. Existing configs without this field are treated as adapter-config/v1.
+    /// </summary>
+    [JsonPropertyName("SchemaVersion")]
+    public string SchemaVersion { get; init; } = CurrentSchemaVersion;
+
     public string SourceProjectName { get; init; } = null!;
     public UiTargetMapping[] UiTargets { get; init; } = Array.Empty<UiTargetMapping>();
     public PageObjectMapping[] PageObjects { get; init; } = Array.Empty<PageObjectMapping>();
@@ -172,8 +180,10 @@ public sealed class ProjectAdapterConfig
         string[]? SuppressedMethods = null,
         string[]? SuppressedMethodPatterns = null,
         Dictionary<string, string>? NavigationUrls = null,
-        string? NavigationTargetStatement = null)
+        string? NavigationTargetStatement = null,
+        string? SchemaVersion = null)
     {
+        this.SchemaVersion = string.IsNullOrWhiteSpace(SchemaVersion) ? CurrentSchemaVersion : SchemaVersion;
         this.SourceProjectName = SourceProjectName;
         this.UiTargets = UiTargets;
         this.PageObjects = PageObjects;

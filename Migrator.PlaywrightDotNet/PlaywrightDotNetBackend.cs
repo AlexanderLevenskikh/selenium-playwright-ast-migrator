@@ -32,6 +32,8 @@ public sealed class PlaywrightDotNetBackend : ITargetBackend
         "playwright-csharp"
     };
 
+    public TargetCapabilityReport Capabilities => TargetCapabilityCatalog.ForTarget(Target);
+
     public string Render(TestFileModel model) => _renderer.Render(model);
 
     public string RenderDocument(MigrationDocument document) => this.RenderDocumentViaLegacyBridge(document);

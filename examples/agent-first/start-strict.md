@@ -1,3 +1,7 @@
+# LEGACY / COMPATIBILITY PROMPT
+
+Use `.agent-loops/kickoff-prompt.txt` for new autopilot runs. This example is kept only for older agent-first docs and must not override the primary loop contract, `migration-artifact` source-edit boundary, or `CONTINUE_AUTONOMOUSLY` continuation rule.
+
 # Start prompt — Strict Mode
 
 Use this prompt when you want safe, conservative migration progress.

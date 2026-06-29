@@ -29,12 +29,17 @@ stop policy is reached.
 The user should not be asked to choose between implementation options.
 The user is responsible for final acceptance, not for ordinary engineering decisions.
 
+## Primary loop prompt
+
+The single primary loop prompt is `.agent-loops/kickoff-prompt.txt`. Use that file for new autopilot runs. Other prompt files are secondary wrappers for resume, strict-ticket, or historical compatibility; they must point back to this primary contract and must not redefine a conflicting loop.
+
 ## Recommended kickoff prompt
 
 ```text
 Read all files in .agent-loops/.
 Read .agent-loops/13-loop-contract.md especially carefully.
 Read .agent-loops/11-strict-ticket-boundaries.md especially carefully.
+Read .agent-loops/15-stop-policy-checklist.md before any stop/handoff.
 
 Start Migrator Autopilot Loop.
 
@@ -71,8 +76,10 @@ Current task:
 
 If POMs/helpers are involved: run or inspect `index-pom` and `helper-inventory`; missing target POMs are not automatic blockers; generate POM scaffolds only in migration output or use raw locators from proven selectors; never invent selectors.
 
-Do not ask “continue?”. Continue within the current ticket until it is completed, blocked, or validation is impossible.
-Do not search outside allowed paths. Do not edit source files unless the repository source tree is listed as an allowed write path.
+Do not ask “continue?”. If status is CONTINUE_AUTONOMOUSLY, continue without asking the user. Continue within the current ticket until it is completed, blocked, or validation is impossible.
+Do not search outside allowed paths. Do not edit source files unless the repository source tree is listed as an allowed write path. Do not edit migrator repository source code in migration-artifact mode.
+
+Before stopping, apply .agent-loops/15-stop-policy-checklist.md and report one concrete next action.
 
 Use only allowed repository code, existing tests, snapshots, docs, CLI reports, migration board, source Selenium tests, target project conventions, and command output as the source of truth.
 ```
@@ -93,6 +100,7 @@ Use only allowed repository code, existing tests, snapshots, docs, CLI reports, 
 - `12-pom-helper-recovery-policy.md` — POM/helper source-truth, generated POM, helper-inventory, and raw locator fallback rules.
 - `13-loop-contract.md` — explicit loop contract: mode, goal, max iterations, check command, exit condition.
 - `14-multi-agent-loop.md` — coordinator / migration agent / verifier / migrator-code agent rules.
+- `15-stop-policy-checklist.md` — mandatory checklist before stop/handoff/blocker reports.
 - `11-strict-ticket-boundaries.md` — hard path/ticket boundary rules for restricted workspaces and DLL/artifact tasks.
 - `strict-ticket-prompt.txt` — copy-paste prompt for restricted ticket mode.
 - `resume-prompt.txt` — restart prompt after interruption.

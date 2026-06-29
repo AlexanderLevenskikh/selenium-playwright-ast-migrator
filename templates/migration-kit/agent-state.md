@@ -78,6 +78,7 @@ Decision:
 - Run ledger: `{{WORKSPACE}}/state/run-ledger.md`
 - Decision log: `{{WORKSPACE}}/state/decision-log.md`
 - Safety checklist: `{{WORKSPACE}}/state/safety-checklist.md`
+- Stop-policy checklist: `{{WORKSPACE}}/state/stop-policy-checklist.md`
 
 ## Remaining work
 
