@@ -35,9 +35,14 @@ public sealed class SourceFrontendRegistry
             return false;
         }
 
-        var found = _byKey.TryGetValue(source.Trim(), out var resolved);
-        frontend = found ? resolved : null!;
-        return found;
+        if (_byKey.TryGetValue(source.Trim(), out var resolved))
+        {
+            frontend = resolved;
+            return true;
+        }
+
+        frontend = null!;
+        return false;
     }
 
     public ISourceFrontend Resolve(string source)

@@ -61,10 +61,43 @@ Common concepts in this codebase may include:
 
 Names may differ in the actual repository. Use actual code as source of truth.
 
+## Loop modes
+
+There are two different workflows. Do not mix them.
+
+### Default: migration-artifact loop
+
+This is the normal loop for project migrations.
+
+The agent may work with:
+
+- migration reports and boards;
+- generated output directories;
+- adapter config/profile files;
+- POM/helper inventory artifacts;
+- source Selenium tests and target Playwright examples inside allowed paths;
+- verify/project-verify/smoke-plan artifacts.
+
+The agent must not edit migrator repository source code in this mode.
+
+If the migrator engine appears to need a code fix, create a bounded finding or
+ticket candidate and continue with migration-safe work if possible.
+
+### Explicit: migrator-code loop
+
+Use this mode only when the prompt explicitly says repository source edits are
+allowed.
+
+In this mode the agent may edit migrator source code and must add/update focused
+regression tests.
+
 ## Core engineering principle
 
 Prefer deterministic migration logic.
 
-The migrator itself must not depend on an LLM, external agent, or non-deterministic runtime behavior.
+The migrator itself must not depend on an LLM, external agent, or
+non-deterministic runtime behavior.
 
-Agent loops are only for developing and improving the migrator source code.
+Agent loops drive migration work and, when explicitly allowed, deterministic
+migrator-code improvements. They are not a license to ignore path boundaries or
+switch modes silently.

@@ -157,13 +157,15 @@ public static class SourceAutoDetector
         if (!Path.GetExtension(file).Equals(".cs", StringComparison.OrdinalIgnoreCase))
             return FileScore.Empty;
 
-        var score = 2;
-        var reasons = new List<string> { "found .cs file" };
+        var score = 0;
+        var reasons = new List<string>();
         AddIf(text.Contains("OpenQA.Selenium", StringComparison.Ordinal), 45, "found OpenQA.Selenium reference");
         AddIf(Regex.IsMatch(text, @"\bIWebDriver\b|\bIWebElement\b"), 20, "found Selenium WebDriver/WebElement type");
         AddIf(text.Contains("FindElement", StringComparison.Ordinal) || text.Contains("FindElements", StringComparison.Ordinal), 15, "found FindElement/FindElements call");
         AddIf(Regex.IsMatch(text, @"\[(Test|SetUp|OneTimeSetUp|Fact|Theory)\b"), 8, "found C# test attribute");
         AddIf(text.Contains("By.", StringComparison.Ordinal), 6, "found Selenium By locator usage");
+        if (score > 0)
+            reasons.Insert(0, "found .cs file");
         return new FileScore(score, reasons);
 
         void AddIf(bool condition, int value, string reason)
@@ -179,14 +181,16 @@ public static class SourceAutoDetector
         if (!Path.GetExtension(file).Equals(".java", StringComparison.OrdinalIgnoreCase))
             return FileScore.Empty;
 
-        var score = 2;
-        var reasons = new List<string> { "found .java file" };
+        var score = 0;
+        var reasons = new List<string>();
         AddIf(text.Contains("org.openqa.selenium", StringComparison.Ordinal), 45, "found org.openqa.selenium import/reference");
         AddIf(Regex.IsMatch(text, @"\bWebDriver\b|\bWebElement\b"), 20, "found Selenium WebDriver/WebElement type");
         AddIf(text.Contains("findElement", StringComparison.Ordinal) || text.Contains("findElements", StringComparison.Ordinal), 15, "found findElement/findElements call");
         AddIf(text.Contains("ExpectedConditions", StringComparison.Ordinal) || text.Contains("WebDriverWait", StringComparison.Ordinal), 12, "found Selenium wait API");
         AddIf(Regex.IsMatch(text, @"@(org\.junit\.)?Test\b|org\.testng|org\.junit"), 8, "found JUnit/TestNG test signal");
         AddIf(text.Contains("By.", StringComparison.Ordinal), 6, "found Selenium By locator usage");
+        if (score > 0)
+            reasons.Insert(0, "found .java file");
         return new FileScore(score, reasons);
 
         void AddIf(bool condition, int value, string reason)
@@ -202,13 +206,15 @@ public static class SourceAutoDetector
         if (!Path.GetExtension(file).Equals(".py", StringComparison.OrdinalIgnoreCase))
             return FileScore.Empty;
 
-        var score = 2;
-        var reasons = new List<string> { "found .py file" };
+        var score = 0;
+        var reasons = new List<string>();
         AddIf(text.Contains("selenium.webdriver", StringComparison.Ordinal) || text.Contains("from selenium", StringComparison.Ordinal), 45, "found selenium.webdriver import/reference");
         AddIf(text.Contains("find_element", StringComparison.Ordinal) || text.Contains("find_elements", StringComparison.Ordinal), 18, "found find_element/find_elements call");
         AddIf(text.Contains("WebDriverWait", StringComparison.Ordinal) || text.Contains("expected_conditions", StringComparison.Ordinal) || text.Contains("EC.", StringComparison.Ordinal), 12, "found Selenium wait API");
         AddIf(Regex.IsMatch(text, @"\bdef\s+test_\w+|\bclass\s+Test\w+|unittest\.TestCase"), 8, "found pytest/unittest test signal");
         AddIf(text.Contains("By.", StringComparison.Ordinal), 6, "found Selenium By locator usage");
+        if (score > 0)
+            reasons.Insert(0, "found .py file");
         return new FileScore(score, reasons);
 
         void AddIf(bool condition, int value, string reason)

@@ -4,20 +4,39 @@ When the user provides a specific task, prioritize that task.
 
 When the task contains multiple possible migration gaps, choose work in this order.
 
+First identify the current mode from `.agent-loops/13-loop-contract.md`.
+
+In default `migration-artifact` mode, skip migrator source-code items and treat
+them as ticket candidates. In explicit `migrator-code` mode, use the full queue.
+
 ## Priority order
+
+### Default migration-artifact mode
+
+1. Missing or stale project verification evidence.
+2. Compile errors in generated Playwright output.
+3. Dangerous config/suppression findings.
+4. `EMPTY_TEST_AFTER_SUPPRESSION` and suppressed side-effect risks.
+5. High-frequency source-backed missing mappings.
+6. High-frequency `UnsupportedAction` categories that can be solved by config,
+   helper evidence, POM evidence, or target-specific profile mappings.
+7. Unresolved target expressions.
+8. TODOs that block compilation.
+9. TODOs that preserve compilation but reduce migration quality.
+10. POM/helper evidence collection and generated POM/raw locator fallback.
+11. Runtime smoke candidate selection after project verify is green.
+12. Handoff/report quality improvements.
+
+### Explicit migrator-code mode
 
 1. Build errors in the migrator itself.
 2. Failing `Migrator.Tests` tests.
-3. Compile errors in generated Playwright output.
-4. High-frequency `UnsupportedAction` categories.
-5. Unresolved target expressions.
-6. TODOs that block compilation.
-7. TODOs that preserve compilation but reduce migration quality.
-8. Page object field/property transfer gaps.
-9. Renderer/snapshot mismatches.
-10. Adapter config improvements.
-11. Report/diagnostic improvements.
-12. Cleanup and refactoring.
+3. Deterministic parser/adapter/renderer/report bugs proven by artifacts.
+4. Compile errors in generated Playwright output caused by generic engine bugs.
+5. Missing regression coverage for known migration tickets.
+6. Renderer/snapshot mismatches.
+7. Report/diagnostic improvements.
+8. Cleanup and refactoring tied to the selected bug.
 
 ## Batch selection
 

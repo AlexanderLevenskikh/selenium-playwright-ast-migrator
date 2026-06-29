@@ -1,7 +1,9 @@
 Read all files in .agent-loops/.
-Also read AGENTS.md, docs/autopilot-loop.md, .agent-loops/11-strict-ticket-boundaries.md, and .agent-loops/12-pom-helper-recovery-policy.md.
+Also read AGENTS.md, docs/autopilot-loop.md, .agent-loops/13-loop-contract.md, .agent-loops/11-strict-ticket-boundaries.md, and .agent-loops/12-pom-helper-recovery-policy.md.
 
 Start Migrator Autopilot Loop.
+
+Mode: migration-artifact
 
 You are allowed and expected to make engineering decisions yourself.
 Do not ask me to choose between implementation options.
@@ -31,6 +33,14 @@ Allowed write paths:
 Forbidden paths:
 - parent directories outside allowed input/write roots
 - repository source folders unless explicitly listed as allowed write paths
+- migrator repository source code unless Mode is migrator-code
+
+Loop contract:
+- Goal: <ONE_CONCRETE_BATCH_GOAL>
+- Max iterations: <N>
+- Check command: <COMMAND>
+- Exit condition: <OBJECTIVE_REPORT_OR_COMMAND_CONDITION>
+- State file: .agent-state/migrator-progress.md
 
 Strict path rules:
 - Do not search parent directories.
@@ -46,6 +56,7 @@ State/resume:
 
 Command/path rule:
 - If compiled migrator tool is provided, run that tool directly and do not search for `Migrator.Cli`, `.sln`, `.csproj`, or migrator source code.
+- If migrator engine work appears necessary in migration-artifact mode, record a source-change ticket candidate instead of editing repository code.
 
 POM/helper recovery rules:
 - Run or inspect `index-pom` before large PageObject/config mapping work.

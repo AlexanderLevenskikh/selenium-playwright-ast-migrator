@@ -51,6 +51,140 @@ Use repository code, existing tests, snapshots, docs, CLI reports, migration boa
 - [`docs/autopilot-loop.md`](docs/autopilot-loop.md)
 - [`AGENTS.md`](AGENTS.md)
 
+## Простой гид: как устроена система и как получить максимум пользы
+
+Migrator состоит из двух частей:
+
+1. **Сам инструмент**. Он читает старые Selenium-тесты, применяет правила из config/profile и пишет Playwright-тесты.
+2. **Agent Loop**. Это инструкция для агента, чтобы он не останавливался после каждого маленького шага, а работал циклом: посмотрел отчёт → выбрал маленькую задачу → сделал безопасную правку → запустил проверку → прочитал результат → продолжил.
+
+Главная идея простая: агент не должен переписывать все тесты руками. Он должен улучшать правила миграции так, чтобы один найденный паттерн исправлял сразу много похожих мест.
+
+### Как выглядит правильный цикл
+
+Хороший loop всегда отвечает на 5 вопросов:
+
+- **Цель**: что именно улучшаем сейчас, например `page.Pagination.Forward` или `EMPTY_TEST_AFTER_SUPPRESSION`.
+- **Лимит**: сколько итераций можно сделать, например 5 или 12.
+- **Проверка**: какую команду запускать после каждого шага.
+- **Условие выхода**: по какому отчёту понятно, что batch готов.
+- **Границы**: какие пути можно читать и куда можно писать.
+
+Если этих пунктов нет, агент начинает “творить”: спрашивает лишнее, чинит не тот код, ищет файлы не там или останавливается после частичного успеха.
+
+### Главный режим: migration-artifact
+
+По умолчанию агент должен работать в режиме `migration-artifact`.
+
+В этом режиме можно менять:
+
+- `adapter-config.json`;
+- migration profile;
+- файлы в migration/output папке;
+- generated POM candidates;
+- отчёты и handoff state;
+- промежуточные артефакты `index-pom`, `helper-inventory`, `explain-todo`, `migration-board`.
+
+В этом режиме нельзя чинить исходный код migrator-а. Если агент видит, что нужен engine fix, он должен записать finding или ticket candidate, а не лезть в `Migrator.Cli`, `Migrator.Core`, renderer или parser.
+
+### Отдельный режим: migrator-code
+
+Этот режим нужен только для разработки самого инструмента.
+
+Включай его явно:
+
+```text
+Mode: migrator-code
+Repository source edits are allowed.
+```
+
+Тогда агент может править C# код migrator-а, но обязан:
+
+- добавить или обновить regression tests;
+- запустить `dotnet build`;
+- запустить `dotnet test Migrator.Tests/Migrator.Tests.csproj`;
+- объяснить, почему это engine bug, а не просто config gap.
+
+### Пример 1: уменьшить TODO по одному паттерну
+
+```text
+Mode: migration-artifact
+
+Goal: reduce top normalized root cause page.Pagination.Forward.
+Max iterations: 5.
+Check command: run migrate, explain-todo, migration-board.
+Exit condition: page.Pagination.Forward is mapped or classified with source/POM evidence, and no dangerous suppressions were added.
+
+Allowed input paths:
+- C:\path\to\selenium-tests
+- C:\path\to\latest-migration-run
+
+Allowed write paths:
+- C:\path\to\migration-workspace
+```
+
+Ожидаемое поведение агента: найти source truth, проверить POM/helper evidence, добавить config/profile mapping или оставить честный TODO. Не править migrator source.
+
+### Пример 2: разобраться с пустыми тестами
+
+```text
+Mode: migration-artifact
+
+Goal: classify EMPTY_TEST_AFTER_SUPPRESSION.
+Max iterations: 4.
+Check command: run explain-todo and migration-board.
+Exit condition: representative empty tests are classified as safe wait-only, accidental suppression, setup-only, or missing upstream mapping.
+```
+
+Ожидаемое поведение агента: открыть несколько примеров, трассировать их до Selenium source, не добавлять новые broad suppressions.
+
+### Пример 3: настоящий баг migrator-а
+
+```text
+Mode: migrator-code
+Repository source edits are allowed.
+
+Goal: receiverless helper calls should become HELPER_METHOD_REQUIRES_MAPPING instead of generic unsupported actions.
+Max iterations: 6.
+Check command: dotnet build; dotnet test Migrator.Tests/Migrator.Tests.csproj.
+Exit condition: focused regression test passes and generated TODO is specific.
+```
+
+Ожидаемое поведение агента: написать минимальный regression test, исправить parser/adapter/renderer, прогнать build/test.
+
+### Когда использовать несколько агентов
+
+Несколько агентов полезны, когда задачи независимы.
+
+Хорошее разделение:
+
+- **Coordinator**: держит общий план, state, финальную проверку.
+- **Migration agent A**: разбирает один TODO/root-cause паттерн.
+- **Migration agent B**: собирает POM/helper evidence.
+- **Verifier**: проверяет diff, отчёты и команды.
+- **Migrator-code agent**: только если явно разрешён engine fix.
+
+Плохое разделение:
+
+- два агента одновременно редактируют один `adapter-config.json`;
+- один агент меняет migrator source, а другой запускает старый compiled tool;
+- несколько агентов “просто улучшают всё”;
+- кто-то вручную правит generated tests как финальное решение.
+
+Для multi-agent режима используй [`.agent-loops/14-multi-agent-loop.md`](.agent-loops/14-multi-agent-loop.md).
+
+### Как добиться максимального эффекта
+
+- Давай агенту конкретный latest `migration-board.md` или `agent-next-task.md`.
+- Всегда указывай allowed input/write paths.
+- Задавай один измеримый goal на batch.
+- Проси не “уменьшить все TODO”, а “разобрать top normalized root cause”.
+- Перед helper/POM решениями требуй `index-pom` и `helper-inventory`.
+- Не разрешай broad suppressions без safety rationale.
+- Не считай green build финалом, если board всё ещё показывает actionable категории.
+- Разделяй migration-artifact и migrator-code режимы.
+- После каждого batch сохраняй state/handoff, чтобы следующий агент не начинал с нуля.
+
 ## POM/helper recovery
 
 Низкое покрытие существующими Playwright POM не является автоматическим blocker-ом. Перед `TICKET_NEEDED` агент должен запустить или изучить `index-pom` для selector evidence из Selenium POM и `helper-inventory` для helper/POM wrapper semantics.

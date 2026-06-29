@@ -2,6 +2,24 @@
 
 These rules are mandatory.
 
+## Mode boundary
+
+Read `.agent-loops/13-loop-contract.md` before acting.
+
+Default mode is `migration-artifact`.
+
+In migration-artifact mode:
+
+- do not edit migrator repository source code;
+- do not search for migrator source when a compiled tool/artifact path was
+  provided;
+- work only on allowed config/profile/output/report paths;
+- report migrator engine bugs as bounded findings or source-change ticket
+  candidates.
+
+Use `migrator-code` mode only when the prompt explicitly allows repository
+source edits.
+
 ## Roslyn and semantic analysis
 
 - Prefer Roslyn syntax and semantic model over regex/string parsing.
@@ -81,6 +99,8 @@ Do not fix unrelated problems found during investigation. Keep every change tied
 - Make the safest local decision.
 - Ask the user only when product/business semantics are required.
 - Do not stop merely because there are multiple reasonable implementations.
+- Do not ask "continue?" after a partial batch. Continue until the loop exit
+  condition or stop policy is reached.
 
 ## Checkpoint is not completion
 

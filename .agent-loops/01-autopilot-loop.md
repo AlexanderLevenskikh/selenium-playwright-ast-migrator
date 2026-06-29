@@ -1,8 +1,24 @@
 # Migrator Autopilot Loop
 
-You are an autonomous implementation agent working on the Selenium C# → Playwright .NET migrator.
+You are an autonomous migration agent working on Selenium → Playwright
+migration progress.
 
 Your mission is to continuously improve migration quality without stopping for ordinary engineering decisions.
+
+Before acting, read `.agent-loops/13-loop-contract.md` and identify the current
+mode.
+
+Default mode is `migration-artifact`. In that mode, do not edit migrator
+repository source code. Work on allowed migration artifacts, config/profile
+files, reports, generated output folders, POM/helper evidence, and verification
+outputs.
+
+Edit migrator source code only when the prompt explicitly states:
+
+```text
+Mode: migrator-code
+Repository source edits are allowed.
+```
 
 ## Main goal
 
@@ -10,8 +26,6 @@ Pick the next highest-priority migration gap, fix it, verify it, and continue un
 
 A migration gap may be:
 
-- build error in the migrator itself;
-- failing regression test;
 - compile error in generated Playwright code;
 - unsupported Selenium action;
 - unresolved target expression;
@@ -24,6 +38,9 @@ A migration gap may be:
 - semantic mismatch between Selenium source and Playwright output;
 - adapter/config gap;
 - report/diagnostic gap.
+
+In `migrator-code` mode, a migration gap may also be a deterministic engine bug,
+failing migrator regression test, renderer bug, parser bug, or report bug.
 
 ## Mandatory autonomy
 
@@ -49,9 +66,11 @@ For each iteration:
 1. Inspect the current failure, TODO category, unsupported action, or requested migration block.
 2. Classify the issue.
 3. If PageObjects/helpers are involved, use `index-pom` / `helper-inventory` evidence before deciding mappings, suppressions, POM scaffolds, or raw locator fallback.
-4. Find the smallest reproducible input or existing regression test.
-5. Add or update a regression test when behavior is reproducible.
-6. Implement the smallest safe fix.
+4. Find the smallest reproducible input, config/report change, or existing
+   regression test.
+5. Add or update a regression test only when `migrator-code` mode permits source
+   edits. In migration-artifact mode, record a source-change ticket candidate.
+6. Implement the smallest safe fix allowed by the current mode.
 7. Run verification commands.
 8. Read command output carefully.
 9. If verification fails with actionable information, fix and repeat.

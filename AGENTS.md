@@ -8,6 +8,12 @@ Pipeline: **parse → recognize → IR → adapt/configure → render → report
 
 This repository is configured for **Autopilot Loop** work: an agent should continue through small verified iterations until the selected migration block is done or a real stop condition is reached.
 
+Important mode boundary:
+
+- Default project-migration work is `migration-artifact` mode. In that mode, do not edit migrator repository source code; work only with allowed migration inputs, config/profile files, generated outputs, reports, boards, and verification artifacts.
+- Migrator source-code edits are allowed only when the prompt explicitly says `Mode: migrator-code` and the repository is listed as an allowed write path.
+- Read `.agent-loops/13-loop-contract.md` before starting any loop.
+
 ## Autopilot-first rule
 
 For development of the migrator itself, the primary workflow is now:

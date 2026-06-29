@@ -45,6 +45,8 @@ public sealed class TypeScriptRendererParityBaselineTests
     [MemberData(nameof(SupportedTargetLocators))]
     public void SupportedTargetLocators_RenderConsistently_InLegacyAndIrV2Paths(string name, TargetExpression target, string expectedFragment)
     {
+        Assert.False(string.IsNullOrWhiteSpace(name));
+
         var action = new ClickAction(10, target);
         var (legacy, irV2) = RenderBoth(new TestAction[] { action });
 

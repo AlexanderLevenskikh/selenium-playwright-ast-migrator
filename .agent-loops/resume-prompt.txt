@@ -1,8 +1,11 @@
 Read all files in .agent-loops/.
+Read .agent-loops/13-loop-contract.md.
 Read .agent-loops/11-strict-ticket-boundaries.md.
 Read .agent-state/migrator-progress.md if it exists.
 
 Resume Migrator Autopilot Loop.
+
+Mode: migration-artifact
 
 Allowed input paths:
 - <ALLOWED_INPUT_PATH_1>
@@ -16,6 +19,7 @@ Forbidden paths:
 - repository source folders unless explicitly listed as allowed write paths
 
 Do not search outside allowed paths. Do not edit source files unless explicitly allowed. Do not ask “continue?”.
+Do not edit migrator repository source code unless Mode is migrator-code and the repository is an allowed write path.
 
 Do not assume the previous agent's claims are true.
 First reconcile saved state with actual repository state.
@@ -35,6 +39,10 @@ Resume steps:
    - environment blocked.
 8. Do not start a new batch until the current batch is classified.
 9. Continue from the last safe checkpoint.
+
+If the previous run drifted into migrator source-code repair while Mode is
+migration-artifact, stop that line of work, record a source-change ticket
+candidate, and resume the allowed migration-artifact batch.
 
 If the last batch was compile-fix and project verify is green:
 - treat that batch as READY_FOR_ACCEPTANCE;

@@ -35,9 +35,14 @@ public sealed class TargetBackendRegistry
             return false;
         }
 
-        var found = _byKey.TryGetValue(target.Trim(), out var resolved);
-        backend = found ? resolved : null!;
-        return found;
+        if (_byKey.TryGetValue(target.Trim(), out var resolved))
+        {
+            backend = resolved;
+            return true;
+        }
+
+        backend = null!;
+        return false;
     }
 
     public ITargetBackend Resolve(string target)

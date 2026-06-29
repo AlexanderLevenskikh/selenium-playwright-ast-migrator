@@ -112,6 +112,48 @@ public class SourceAutoDetectorTests
         }
     }
 
+    [Fact]
+    public void Detect_ManyPlainCSharpFiles_DoNotOutscoreJavaSelenium()
+    {
+        var temp = CreateTempDir();
+        try
+        {
+            for (var i = 0; i < 80; i++)
+            {
+                File.WriteAllText(Path.Combine(temp, $"Plain{i}.cs"), $$"""
+                namespace Product.Code;
+
+                public class Plain{{i}}
+                {
+                    public string Name => "{{i}}";
+                }
+                """);
+            }
+
+            File.WriteAllText(Path.Combine(temp, "LoginTests.java"), """
+            import org.junit.jupiter.api.Test;
+            import org.openqa.selenium.By;
+            import org.openqa.selenium.WebDriver;
+
+            public class LoginTests {
+                private WebDriver driver;
+                @Test public void saves() {
+                    driver.findElement(By.id("save")).click();
+                }
+            }
+            """);
+
+            var report = SourceAutoDetector.Detect(temp);
+
+            Assert.Equal("selenium-java", report.DetectedSourceId);
+            Assert.Contains(report.Candidates, c => c.SourceId == "selenium-csharp" && c.Score == 0);
+        }
+        finally
+        {
+            TryDelete(temp);
+        }
+    }
+
     static string CreateTempDir()
     {
         var path = Path.Combine(Path.GetTempPath(), "migrator-source-detect-" + Guid.NewGuid().ToString("N"));

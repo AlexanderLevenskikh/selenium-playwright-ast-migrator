@@ -6,10 +6,25 @@ The goal is to make the agent work autonomously:
 
 - pick the next migration gap;
 - make a safe technical decision;
-- add/update tests;
-- fix the migrator;
+- update allowed migration config/profile/output artifacts;
 - run verification;
 - continue until the selected block is done or a real stop condition is reached.
+
+Default loop mode is **migration-artifact**. In this mode the agent must not edit
+migrator repository source code. It works with allowed migration inputs,
+generated output, config/profile files, reports, migration board, POM/helper
+evidence, and verify artifacts.
+
+Use migrator source-code editing only when the prompt explicitly says:
+
+```text
+Mode: migrator-code
+Repository source edits are allowed.
+```
+
+The loop shape follows `13-loop-contract.md`: goal, max iterations, check
+command, exit condition, state update, and repeat until the exit condition or
+stop policy is reached.
 
 The user should not be asked to choose between implementation options.
 The user is responsible for final acceptance, not for ordinary engineering decisions.
@@ -18,9 +33,12 @@ The user is responsible for final acceptance, not for ordinary engineering decis
 
 ```text
 Read all files in .agent-loops/.
+Read .agent-loops/13-loop-contract.md especially carefully.
 Read .agent-loops/11-strict-ticket-boundaries.md especially carefully.
 
 Start Migrator Autopilot Loop.
+
+Mode: migration-artifact
 
 You are allowed and expected to make engineering decisions yourself.
 Do not ask me to choose between implementation options.
@@ -46,6 +64,7 @@ Allowed write paths:
 
 Forbidden paths:
 - <FORBIDDEN_OR_PARENT_PATHS>
+- migrator repository source code unless Mode is migrator-code
 
 Current task:
 <PASTE CURRENT BLOCK / ERROR / LOG / TODO CATEGORY HERE>
@@ -72,6 +91,8 @@ Use only allowed repository code, existing tests, snapshots, docs, CLI reports, 
 - `09-continue-after-compile-fix-prompt.txt` — prompt for continuing after compile-fix milestone.
 - `10-state-and-resume.md` — state files and resume protocol for long-running loops.
 - `12-pom-helper-recovery-policy.md` — POM/helper source-truth, generated POM, helper-inventory, and raw locator fallback rules.
+- `13-loop-contract.md` — explicit loop contract: mode, goal, max iterations, check command, exit condition.
+- `14-multi-agent-loop.md` — coordinator / migration agent / verifier / migrator-code agent rules.
 - `11-strict-ticket-boundaries.md` — hard path/ticket boundary rules for restricted workspaces and DLL/artifact tasks.
 - `strict-ticket-prompt.txt` — copy-paste prompt for restricted ticket mode.
 - `resume-prompt.txt` — restart prompt after interruption.
