@@ -64,6 +64,35 @@ public class RuntimeTraceClassifyProductTests
     }
 
     [Fact]
+    public void RuntimeFeedbackLoop_ReportsRootCausesSuggestedFixesSmokeRerunPlanAndReadinessScore()
+    {
+        var source = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/RuntimeFailureClassifierCommand.cs"));
+        var models = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Models/CliReportModels.cs"));
+        var docs = File.ReadAllText(FindRepositoryFile("docs/runtime-failure-classifier.md"));
+
+        Assert.Contains("BuildRuntimeRootCauseGroups", source);
+        Assert.Contains("BuildRuntimeSuggestedFixes", source);
+        Assert.Contains("BuildRuntimeSmokeRerunPlan", source);
+        Assert.Contains("BuildRuntimeReadinessScore", source);
+        Assert.Contains("runtime-feedback-loop.md", source);
+        Assert.Contains("runtime-feedback-loop.json", source);
+        Assert.Contains("Runtime readiness score", source);
+        Assert.Contains("Suggested config/profile/runtime fixes", source);
+        Assert.Contains("Smoke rerun plan", source);
+
+        Assert.Contains("RuntimeRootCauseGroup", models);
+        Assert.Contains("RuntimeSuggestedFix", models);
+        Assert.Contains("RuntimeSmokeRerunPlan", models);
+        Assert.Contains("RuntimeReadinessScore", models);
+        Assert.Contains("SuggestedConfigOrProfileFixes", models);
+
+        Assert.Contains("runtime feedback loop", docs);
+        Assert.Contains("Runtime readiness score", docs);
+        Assert.Contains("Suggested config/profile/runtime fixes", docs);
+        Assert.Contains("Smoke rerun plan", docs);
+    }
+
+    [Fact]
     public void ReportServe_RuntimeFailureReaderUnderstandsLikelyOwner()
     {
         var program = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Program.cs"));

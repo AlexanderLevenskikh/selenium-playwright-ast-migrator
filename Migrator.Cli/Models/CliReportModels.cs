@@ -161,11 +161,15 @@ record RunbookCommandStep(int Order, string Name, string Command, string Why);
 record RunbookRisk(string Area, string Severity, string Signal, string Mitigation);
 record RunbookArtifact(string Name, string Path, string Purpose);
 
-record RuntimeFailureReport(DateTimeOffset GeneratedAtUtc, string Source, int FilesScanned, int Observations, RuntimeTraceArtifact[] TraceArtifacts, RuntimeContextLink[] ContextLinks, RuntimeFailureGroup[] Groups, string[] RecommendedNextActions);
+record RuntimeFailureReport(DateTimeOffset GeneratedAtUtc, string Source, int FilesScanned, int Observations, RuntimeTraceArtifact[] TraceArtifacts, RuntimeContextLink[] ContextLinks, RuntimeFailureGroup[] Groups, RuntimeRootCauseGroup[] RootCauseGroups, RuntimeSuggestedFix[] SuggestedConfigOrProfileFixes, RuntimeSmokeRerunPlan SmokeRerunPlan, RuntimeReadinessScore RuntimeReadinessScore, string[] RecommendedNextActions);
 record RuntimeTraceArtifact(string Path, string Kind, long SizeBytes, string Notes);
 record RuntimeContextLink(string? TestName, string? GeneratedFile, int? GeneratedLine, string? SourceFile, int? SourceLine, string Evidence);
 record RuntimeFailureGroup(string Category, int Count, string Severity, string LikelyOwner, string LikelyCause, string SuggestedAction, RuntimeFailureObservation[] Examples);
 record RuntimeFailureObservation(string Category, string File, int Line, string? TestName, string Message, string Snippet);
+record RuntimeRootCauseGroup(string RootCause, int Count, string Severity, string LikelyOwner, string Explanation, string SuggestedNextAction, string[] Categories);
+record RuntimeSuggestedFix(string Id, string Category, string Scope, string Safety, string Title, string Explanation, string SuggestedConfigArea, string Evidence, bool RequiresManualReview);
+record RuntimeSmokeRerunPlan(string Scope, string Command, string TraceMode, string[] Steps, string[] SuccessCriteria);
+record RuntimeReadinessScore(int Score, string Level, string Summary, string[] PositiveSignals, string[] BlockingIssues);
 record ConfigSchemaReport(DateTimeOffset GeneratedAtUtc, string SchemaPath, string SchemaName, string[] SuggestedUsage);
 
 record ConfigSafetyReport(DateTimeOffset GeneratedAtUtc, string ConfigPath, string ValidationMode, string Status, ConfigSafetyIssue[] Issues, ConfigMetric[] Metrics);

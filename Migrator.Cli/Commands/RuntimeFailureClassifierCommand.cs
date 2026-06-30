@@ -27,6 +27,9 @@ internal static class RuntimeFailureClassifierCommand
         Console.WriteLine($"Files scanned: {report.FilesScanned}");
         Console.WriteLine($"Trace/media artifacts: {report.TraceArtifacts.Length}");
         Console.WriteLine($"Failure groups: {report.Groups.Length}");
+        Console.WriteLine($"Root cause groups: {report.RootCauseGroups.Length}");
+        Console.WriteLine($"Runtime readiness: {report.RuntimeReadinessScore.Score}/100 ({report.RuntimeReadinessScore.Level})");
+        Console.WriteLine($"Suggested fixes: {report.SuggestedConfigOrProfileFixes.Length}");
         Console.WriteLine($"Top category: {(report.Groups.Length > 0 ? report.Groups[0].Category : "none")}");
         Console.WriteLine($"Artifacts written to: {Path.GetFullPath(outPath)}");
         return 0;
@@ -65,7 +68,11 @@ internal static class RuntimeFailureClassifierCommand
             .ThenBy(g => g.Category, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var actions = BuildRuntimeFailureRecommendedActions(groups, traceArtifacts, contextLinks).ToArray();
+        var rootCauseGroups = BuildRuntimeRootCauseGroups(groups).ToArray();
+        var suggestedFixes = BuildRuntimeSuggestedFixes(groups, traceArtifacts, contextLinks).ToArray();
+        var smokeRerunPlan = BuildRuntimeSmokeRerunPlan(inputPath, groups, traceArtifacts, contextLinks);
+        var readinessScore = BuildRuntimeReadinessScore(groups, traceArtifacts, contextLinks);
+        var actions = BuildRuntimeFailureRecommendedActions(groups, traceArtifacts, contextLinks, rootCauseGroups, readinessScore, suggestedFixes, smokeRerunPlan).ToArray();
         return new RuntimeFailureReport(
             GeneratedAtUtc: DateTimeOffset.UtcNow,
             Source: Path.GetFullPath(inputPath),
@@ -74,6 +81,10 @@ internal static class RuntimeFailureClassifierCommand
             TraceArtifacts: traceArtifacts,
             ContextLinks: contextLinks,
             Groups: groups,
+            RootCauseGroups: rootCauseGroups,
+            SuggestedConfigOrProfileFixes: suggestedFixes,
+            SmokeRerunPlan: smokeRerunPlan,
+            RuntimeReadinessScore: readinessScore,
             RecommendedNextActions: actions);
     }
 
@@ -610,10 +621,340 @@ internal static class RuntimeFailureClassifierCommand
         _ => "Add this log to escalation report with source test, generated test, trace/screenshot, and runtime command."
     };
 
+    public static IEnumerable<RuntimeRootCauseGroup> BuildRuntimeRootCauseGroups(RuntimeFailureGroup[] groups)
+    {
+        var buckets = groups
+            .GroupBy(g => RuntimeRootCauseKey(g.Category), StringComparer.OrdinalIgnoreCase)
+            .Select(g =>
+            {
+                var ordered = g
+                    .OrderByDescending(x => RuntimeFailureSeverityWeight(x.Severity))
+                    .ThenByDescending(x => x.Count)
+                    .ToArray();
+                var count = ordered.Sum(x => x.Count);
+                var top = ordered[0];
+                return new RuntimeRootCauseGroup(
+                    RootCause: g.Key,
+                    Count: count,
+                    Severity: top.Severity,
+                    LikelyOwner: RuntimeRootCauseLikelyOwner(g.Key, top.LikelyOwner),
+                    Explanation: RuntimeRootCauseExplanation(g.Key),
+                    SuggestedNextAction: RuntimeRootCauseSuggestedAction(g.Key),
+                    Categories: ordered.Select(x => x.Category).Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+            })
+            .OrderByDescending(g => RuntimeFailureSeverityWeight(g.Severity))
+            .ThenByDescending(g => g.Count);
+
+        foreach (var bucket in buckets)
+            yield return bucket;
+    }
+
+    static string RuntimeRootCauseKey(string category) => category switch
+    {
+        "locator-not-found" => "selector-evidence-gap",
+        "strict-mode-violation" => "selector-evidence-gap",
+        "frame/shadow-dom" => "selector-context-gap",
+        "timeout-wait-state" => "wait-or-product-state-gap",
+        "navigation-route-missing" => "navigation-or-route-gap",
+        "assertion-mismatch" => "assertion-semantics-gap",
+        "auth/session-not-ready" => "environment-auth-gap",
+        "environment/flaky-infra" => "environment-auth-gap",
+        "test-data-missing" => "test-data-setup-gap",
+        "modal/dialog-state" => "modal-dialog-state-gap",
+        _ => "unclassified-runtime-gap"
+    };
+
+    static string RuntimeRootCauseLikelyOwner(string rootCause, string fallbackOwner) => rootCause switch
+    {
+        "selector-evidence-gap" => "config/profile",
+        "selector-context-gap" => "config/profile",
+        "wait-or-product-state-gap" => "config/profile or product semantics",
+        "navigation-or-route-gap" => "target infra or product routing",
+        "assertion-semantics-gap" => "source truth or product semantics",
+        "environment-auth-gap" => "target infra",
+        "test-data-setup-gap" => "test data",
+        "modal-dialog-state-gap" => "config/profile or product semantics",
+        _ => fallbackOwner
+    };
+
+    static string RuntimeRootCauseExplanation(string rootCause) => rootCause switch
+    {
+        "selector-evidence-gap" => "The generated locator either found no element or matched too broadly. Treat this as a selector evidence problem until trace/POM/source truth proves otherwise.",
+        "selector-context-gap" => "The target may live inside a frame, iframe, or shadow root. A plain page-level locator is unlikely to be sufficient.",
+        "wait-or-product-state-gap" => "The generated test reached a point where the expected UI state was not ready. The fix may be a missing wait, wrong precondition, or a real product/runtime state issue.",
+        "navigation-or-route-gap" => "Navigation, route mapping, base URL, or auth redirect did not match the generated expectation.",
+        "assertion-semantics-gap" => "The generated assertion executed but observed a different state/value. Compare source assertion semantics before changing expected values.",
+        "environment-auth-gap" => "The failure points to auth, network, server, or browser lifecycle. Resolve this before changing migration mappings.",
+        "test-data-setup-gap" => "The failing test likely depends on setup/fixture/seed data that was not preserved or is unavailable in the target environment.",
+        "modal-dialog-state-gap" => "A dialog, popup, modal, or overlay likely changed the actionability state compared with Selenium.",
+        _ => "The runtime failure did not match a stable root cause. Keep the raw log and trace as evidence for manual triage."
+    };
+
+    static string RuntimeRootCauseSuggestedAction(string rootCause) => rootCause switch
+    {
+        "selector-evidence-gap" => "Open trace/screenshot, prove the source selector path, then add the smallest adapter-config/profile mapping that preserves that evidence.",
+        "selector-context-gap" => "Inspect trace DOM snapshots and introduce frame/shadow-aware mapping only when source truth proves that context.",
+        "wait-or-product-state-gap" => "Rerun one smoke with trace enabled, confirm which state is missing, then prefer targeted waits over broad timeout increases.",
+        "navigation-or-route-gap" => "Validate base URL, route helper mapping, storage state, and redirects before editing generated test code.",
+        "assertion-semantics-gap" => "Compare Selenium source assertion, generated assertion, and runtime evidence; only then change mapping or expected semantics.",
+        "environment-auth-gap" => "Stabilize environment/auth first; do not tune config/profile while CI infrastructure or credentials are failing.",
+        "test-data-setup-gap" => "Find the source setup/helper that created data and preserve it as an explicit target setup/mapping.",
+        "modal-dialog-state-gap" => "Use trace/video to prove dialog timing and add explicit popup/dialog handling when source behavior requires it.",
+        _ => "Create a manual triage ticket with raw log, trace, generated file, source test, and migration report."
+    };
+
+    public static IEnumerable<RuntimeSuggestedFix> BuildRuntimeSuggestedFixes(RuntimeFailureGroup[] groups, RuntimeTraceArtifact[] traceArtifacts, RuntimeContextLink[] contextLinks)
+    {
+        var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var group in groups)
+        {
+            var fix = RuntimeSuggestedFixForGroup(group, traceArtifacts, contextLinks);
+            if (fix == null)
+                continue;
+            if (emitted.Add(fix.Id))
+                yield return fix;
+        }
+
+        if (traceArtifacts.Length == 0 && groups.Length > 0 && emitted.Add("runtime-enable-trace"))
+        {
+            yield return new RuntimeSuggestedFix(
+                Id: "runtime-enable-trace",
+                Category: "runtime-evidence",
+                Scope: "runner/config",
+                Safety: "safe-recommendation",
+                Title: "Rerun failing smoke tests with trace/screenshot enabled",
+                Explanation: "Runtime feedback is much safer when trace/screenshot evidence exists before editing config/profile mappings.",
+                SuggestedConfigArea: "Playwright runtime configuration / CI command",
+                Evidence: "No trace/screenshot/video artifacts were detected.",
+                RequiresManualReview: false);
+        }
+    }
+
+    static RuntimeSuggestedFix? RuntimeSuggestedFixForGroup(RuntimeFailureGroup group, RuntimeTraceArtifact[] traceArtifacts, RuntimeContextLink[] contextLinks)
+    {
+        var evidence = BuildSuggestedFixEvidence(group, traceArtifacts, contextLinks);
+        return group.Category switch
+        {
+            "locator-not-found" => new RuntimeSuggestedFix(
+                Id: "fix-selector-evidence",
+                Category: group.Category,
+                Scope: "adapter-config/profile",
+                Safety: "manual-review-required",
+                Title: "Add or correct selector mapping from source truth",
+                Explanation: "The generated locator did not find an element. Update UiTargets, ParameterizedMethods, or profile mappings only after proving the selector from POM/source/trace evidence.",
+                SuggestedConfigArea: "UiTargets / ParameterizedMethods / profile layer",
+                Evidence: evidence,
+                RequiresManualReview: true),
+            "strict-mode-violation" => new RuntimeSuggestedFix(
+                Id: "fix-selector-specificity",
+                Category: group.Category,
+                Scope: "adapter-config/profile",
+                Safety: "manual-review-required",
+                Title: "Narrow ambiguous locator mapping",
+                Explanation: "Playwright strict mode found multiple matches. Prefer source-backed data-testid/data-tid, row context, filter, or explicit nth only when Selenium source truth proves it.",
+                SuggestedConfigArea: "UiTargets Match/Nth/TargetExpression or scoped profile mapping",
+                Evidence: evidence,
+                RequiresManualReview: true),
+            "timeout-wait-state" => new RuntimeSuggestedFix(
+                Id: "fix-wait-policy-or-state",
+                Category: group.Category,
+                Scope: "adapter-config/profile or product precondition",
+                Safety: "manual-review-required",
+                Title: "Add targeted wait/state mapping after trace proof",
+                Explanation: "A broad timeout increase hides migration defects. Prefer mapping the source wait/helper or fixing missing setup/navigation first.",
+                SuggestedConfigArea: "WaitPolicies / helper mapping / setup mapping",
+                Evidence: evidence,
+                RequiresManualReview: true),
+            "navigation-route-missing" => new RuntimeSuggestedFix(
+                Id: "fix-navigation-route",
+                Category: group.Category,
+                Scope: "target infra/config",
+                Safety: "manual-review-required",
+                Title: "Verify base URL, route helper, and auth redirect mapping",
+                Explanation: "Navigation failures are often environment or route-contract problems. Check target project settings before changing assertions or locators.",
+                SuggestedConfigArea: "TestHost setup / navigation helper mappings / target project config",
+                Evidence: evidence,
+                RequiresManualReview: true),
+            "assertion-mismatch" => new RuntimeSuggestedFix(
+                Id: "fix-assertion-semantics",
+                Category: group.Category,
+                Scope: "source truth/profile",
+                Safety: "manual-review-required",
+                Title: "Compare Selenium assertion semantics with generated assertion",
+                Explanation: "Do not change expected values blindly. First confirm whether the converter changed assertion semantics or runtime data differs.",
+                SuggestedConfigArea: "Assertion/helper mappings / expected runtime data",
+                Evidence: evidence,
+                RequiresManualReview: true),
+            "auth/session-not-ready" => new RuntimeSuggestedFix(
+                Id: "fix-auth-storage-state",
+                Category: group.Category,
+                Scope: "target infra",
+                Safety: "manual-environment-fix",
+                Title: "Stabilize auth/session state before migration fixes",
+                Explanation: "Auth failures can invalidate every downstream runtime signal. Fix login helper, credentials, cookies, or storage state first.",
+                SuggestedConfigArea: "TestHost setup / CI secrets / storage state",
+                Evidence: evidence,
+                RequiresManualReview: true),
+            "test-data-missing" => new RuntimeSuggestedFix(
+                Id: "fix-test-data-setup",
+                Category: group.Category,
+                Scope: "target setup/profile",
+                Safety: "manual-review-required",
+                Title: "Preserve source data setup helper explicitly",
+                Explanation: "Find the Selenium setup/fixture/API seeding path and map or recreate it in target setup before rerunning.",
+                SuggestedConfigArea: "SetUpStatements / helper mappings / test data fixture",
+                Evidence: evidence,
+                RequiresManualReview: true),
+            "modal/dialog-state" => new RuntimeSuggestedFix(
+                Id: "fix-dialog-state",
+                Category: group.Category,
+                Scope: "adapter-config/profile",
+                Safety: "manual-review-required",
+                Title: "Add dialog/popup handling backed by trace evidence",
+                Explanation: "Selenium may have hidden dialog timing. Use trace/video to prove whether popup handling or precondition wait is required.",
+                SuggestedConfigArea: "Method mappings / wait policies / target setup",
+                Evidence: evidence,
+                RequiresManualReview: true),
+            "frame/shadow-dom" => new RuntimeSuggestedFix(
+                Id: "fix-frame-shadow-context",
+                Category: group.Category,
+                Scope: "adapter-config/profile",
+                Safety: "manual-review-required",
+                Title: "Introduce frame/shadow-aware locator context",
+                Explanation: "A page-level locator is unsafe when the element lives in a frame or shadow root. Add explicit context only with DOM/trace proof.",
+                SuggestedConfigArea: "UiTargets TargetExpression / helper mapping / profile scope",
+                Evidence: evidence,
+                RequiresManualReview: true),
+            "environment/flaky-infra" => new RuntimeSuggestedFix(
+                Id: "fix-runtime-infra",
+                Category: group.Category,
+                Scope: "target infra",
+                Safety: "manual-environment-fix",
+                Title: "Resolve infra/network/browser lifecycle before config edits",
+                Explanation: "Network/server/browser lifecycle failures are weak migration signals. Stabilize runtime environment and rerun the same smoke test.",
+                SuggestedConfigArea: "CI runner / environment / Playwright project config",
+                Evidence: evidence,
+                RequiresManualReview: false),
+            _ => null
+        };
+    }
+
+    static string BuildSuggestedFixEvidence(RuntimeFailureGroup group, RuntimeTraceArtifact[] traceArtifacts, RuntimeContextLink[] contextLinks)
+    {
+        var parts = new List<string> { $"{group.Count} observation(s) in {group.Category}" };
+        var example = group.Examples.FirstOrDefault();
+        if (example != null)
+            parts.Add($"example {Path.GetFileName(example.File)}:{example.Line}: {example.Message}");
+        if (traceArtifacts.Length > 0)
+            parts.Add($"trace/media artifacts: {traceArtifacts.Length}");
+        if (contextLinks.Length > 0)
+            parts.Add($"generated/source links: {contextLinks.Length}");
+        return string.Join("; ", parts);
+    }
+
+    public static RuntimeSmokeRerunPlan BuildRuntimeSmokeRerunPlan(string inputPath, RuntimeFailureGroup[] groups, RuntimeTraceArtifact[] traceArtifacts, RuntimeContextLink[] contextLinks)
+    {
+        var scope = contextLinks.FirstOrDefault(link => !string.IsNullOrWhiteSpace(link.GeneratedFile))?.GeneratedFile
+            ?? "the smallest failing generated test from the runtime log";
+        var traceMode = traceArtifacts.Length > 0 ? "reuse current trace, then rerun with trace on first retry if behavior changes" : "enable trace/screenshot/video on first retry";
+        var command = "dotnet test <target-playwright-project> --filter \"FullyQualifiedName~<failing-test-name>\" --logger \"trx;LogFileName=runtime-smoke.trx\"";
+
+        var steps = new List<string>
+        {
+            "Pick one representative failing test from the top runtime root cause group.",
+            "Attach or enable Playwright trace/screenshot/video for that single test.",
+            "Apply at most one config/profile/environment change backed by source truth and runtime evidence.",
+            "Rerun only that smoke test before widening scope.",
+            "Run runtime-classify again on the new log/artifacts and compare root cause counts."
+        };
+
+        if (groups.Any(g => g.Category == "auth/session-not-ready" || g.Category == "environment/flaky-infra"))
+            steps.Insert(0, "Fix auth/environment availability before changing adapter-config/profile mappings.");
+
+        var criteria = new List<string>
+        {
+            "The representative test no longer fails with the same root cause.",
+            "No new higher-severity runtime root cause appears.",
+            "Trace/screenshot evidence is attached to the run artifacts.",
+            "Any config/profile change is explained by source truth, not by guessed selectors."
+        };
+
+        return new RuntimeSmokeRerunPlan(
+            Scope: scope,
+            Command: command,
+            TraceMode: traceMode,
+            Steps: steps.ToArray(),
+            SuccessCriteria: criteria.ToArray());
+    }
+
+    public static RuntimeReadinessScore BuildRuntimeReadinessScore(RuntimeFailureGroup[] groups, RuntimeTraceArtifact[] traceArtifacts, RuntimeContextLink[] contextLinks)
+    {
+        var score = 100;
+        score -= groups.Sum(g => RuntimeFailureSeverityWeight(g.Severity) * Math.Min(g.Count, 10) * 4);
+        if (groups.Any(g => g.Category == "auth/session-not-ready" || g.Category == "environment/flaky-infra"))
+            score -= 25;
+        if (traceArtifacts.Length == 0 && groups.Length > 0)
+            score -= 15;
+        if (contextLinks.Length == 0 && groups.Length > 0)
+            score -= 5;
+        score = Math.Max(0, Math.Min(100, score));
+
+        var positives = new List<string>();
+        if (groups.Length == 0)
+            positives.Add("No classified runtime failure groups were found.");
+        if (traceArtifacts.Length > 0)
+            positives.Add($"Runtime evidence includes {traceArtifacts.Length} trace/media artifact(s).");
+        if (contextLinks.Length > 0)
+            positives.Add($"Runtime failures have {contextLinks.Length} generated/source context link(s).");
+
+        var blocking = new List<string>();
+        if (groups.Any(g => g.Category == "auth/session-not-ready" || g.Category == "environment/flaky-infra"))
+            blocking.Add("Environment/auth failures block trustworthy migration-quality feedback.");
+        if (groups.Any(g => g.Category == "locator-not-found" || g.Category == "strict-mode-violation"))
+            blocking.Add("Selector evidence gaps remain before broad runtime rollout.");
+        if (groups.Any(g => g.Category == "assertion-mismatch"))
+            blocking.Add("Assertion semantics need source-truth review before changing expected values.");
+        if (traceArtifacts.Length == 0 && groups.Length > 0)
+            blocking.Add("No trace/screenshot/video evidence was found for failing runtime groups.");
+
+        var level = score >= 85 ? "ready" : score >= 65 ? "nearly-ready" : score >= 40 ? "needs-targeted-fixes" : "blocked";
+        var summary = level switch
+        {
+            "ready" => "Runtime evidence looks clean enough to widen the smoke scope.",
+            "nearly-ready" => "Runtime feedback is mostly usable; fix the top root cause before expanding.",
+            "needs-targeted-fixes" => "Runtime feedback points to concrete config/profile/setup work before rollout.",
+            _ => "Runtime signal is blocked by high-severity or low-evidence failures."
+        };
+
+        return new RuntimeReadinessScore(
+            Score: score,
+            Level: level,
+            Summary: summary,
+            PositiveSignals: positives.ToArray(),
+            BlockingIssues: blocking.ToArray());
+    }
+
     public static IEnumerable<string> BuildRuntimeFailureRecommendedActions(RuntimeFailureGroup[] groups)
-        => BuildRuntimeFailureRecommendedActions(groups, Array.Empty<RuntimeTraceArtifact>(), Array.Empty<RuntimeContextLink>());
+    {
+        var traceArtifacts = Array.Empty<RuntimeTraceArtifact>();
+        var contextLinks = Array.Empty<RuntimeContextLink>();
+        var rootCauseGroups = BuildRuntimeRootCauseGroups(groups).ToArray();
+        var suggestedFixes = BuildRuntimeSuggestedFixes(groups, traceArtifacts, contextLinks).ToArray();
+        var smokeRerunPlan = BuildRuntimeSmokeRerunPlan(".", groups, traceArtifacts, contextLinks);
+        var readinessScore = BuildRuntimeReadinessScore(groups, traceArtifacts, contextLinks);
+        return BuildRuntimeFailureRecommendedActions(groups, traceArtifacts, contextLinks, rootCauseGroups, readinessScore, suggestedFixes, smokeRerunPlan);
+    }
 
     public static IEnumerable<string> BuildRuntimeFailureRecommendedActions(RuntimeFailureGroup[] groups, RuntimeTraceArtifact[] traceArtifacts, RuntimeContextLink[] contextLinks)
+    {
+        var rootCauseGroups = BuildRuntimeRootCauseGroups(groups).ToArray();
+        var suggestedFixes = BuildRuntimeSuggestedFixes(groups, traceArtifacts, contextLinks).ToArray();
+        var smokeRerunPlan = BuildRuntimeSmokeRerunPlan(".", groups, traceArtifacts, contextLinks);
+        var readinessScore = BuildRuntimeReadinessScore(groups, traceArtifacts, contextLinks);
+        return BuildRuntimeFailureRecommendedActions(groups, traceArtifacts, contextLinks, rootCauseGroups, readinessScore, suggestedFixes, smokeRerunPlan);
+    }
+
+    public static IEnumerable<string> BuildRuntimeFailureRecommendedActions(RuntimeFailureGroup[] groups, RuntimeTraceArtifact[] traceArtifacts, RuntimeContextLink[] contextLinks, RuntimeRootCauseGroup[] rootCauseGroups, RuntimeReadinessScore readinessScore, RuntimeSuggestedFix[] suggestedFixes, RuntimeSmokeRerunPlan smokeRerunPlan)
     {
         if (groups.Length == 0)
         {
@@ -623,6 +964,16 @@ internal static class RuntimeFailureClassifierCommand
                 yield return "Runtime logs contain no classified failures. If the run failed, attach the raw log and extend runtime-classify patterns.";
             yield break;
         }
+
+        yield return $"Runtime readiness score: {readinessScore.Score}/100 (`{readinessScore.Level}`). {readinessScore.Summary}";
+
+        if (rootCauseGroups.Length > 0)
+            yield return $"Top runtime root cause: `{rootCauseGroups[0].RootCause}` ({rootCauseGroups[0].Count} observations, owner: {rootCauseGroups[0].LikelyOwner}). {rootCauseGroups[0].SuggestedNextAction}";
+
+        if (suggestedFixes.Length > 0)
+            yield return $"Review {suggestedFixes.Length} suggested config/profile/runtime fix candidate(s); apply only one evidence-backed change before the next smoke rerun.";
+
+        yield return $"Smoke rerun scope: {smokeRerunPlan.Scope}. Trace mode: {smokeRerunPlan.TraceMode}.";
 
         var top = groups[0];
         yield return $"Start with `{top.Category}` ({top.Count} observations, likely owner: {top.LikelyOwner}): {top.SuggestedAction}";
@@ -654,6 +1005,7 @@ internal static class RuntimeFailureClassifierCommand
             var json = JsonSerializer.Serialize(report, jsonOptions);
             File.WriteAllText(Path.Combine(outPath, "runtime-failure-report.json"), json);
             File.WriteAllText(Path.Combine(outPath, "runtime-classification.json"), json);
+            File.WriteAllText(Path.Combine(outPath, "runtime-feedback-loop.json"), json);
         }
 
         if (format == "text" || format == "both")
@@ -661,6 +1013,7 @@ internal static class RuntimeFailureClassifierCommand
             var markdown = WriteRuntimeFailureMarkdown(report);
             File.WriteAllText(Path.Combine(outPath, "runtime-failure-report.md"), markdown);
             File.WriteAllText(Path.Combine(outPath, "runtime-classification.md"), markdown);
+            File.WriteAllText(Path.Combine(outPath, "runtime-feedback-loop.md"), markdown);
             File.WriteAllText(Path.Combine(outPath, "runtime-next-tickets.md"), WriteRuntimeNextTickets(report));
             File.WriteAllText(Path.Combine(outPath, "agent-runtime-failure-next-task.md"), WriteAgentRuntimeFailureNextTask(report));
         }
@@ -678,13 +1031,21 @@ internal static class RuntimeFailureClassifierCommand
         sb.AppendLine($"- **Context links**: `{report.ContextLinks.Length}`");
         sb.AppendLine($"- **Observations**: `{report.Observations}`");
         sb.AppendLine($"- **Groups**: `{report.Groups.Length}`");
+        sb.AppendLine($"- **Root cause groups**: `{report.RootCauseGroups.Length}`");
+        sb.AppendLine($"- **Runtime readiness**: `{report.RuntimeReadinessScore.Score}/100` (`{report.RuntimeReadinessScore.Level}`)");
+        sb.AppendLine($"- **Suggested fixes**: `{report.SuggestedConfigOrProfileFixes.Length}`");
         sb.AppendLine();
+
+        AppendRuntimeReadinessMarkdown(sb, report);
 
         sb.AppendLine("## Recommended next actions");
         foreach (var action in report.RecommendedNextActions)
             sb.AppendLine($"- {action}");
         sb.AppendLine();
 
+        AppendRuntimeRootCauseMarkdown(sb, report);
+        AppendRuntimeSuggestedFixesMarkdown(sb, report);
+        AppendRuntimeSmokeRerunMarkdown(sb, report);
         AppendRuntimeEvidenceMarkdown(sb, report);
         AppendRuntimeContextLinksMarkdown(sb, report);
 
@@ -718,6 +1079,84 @@ internal static class RuntimeFailureClassifierCommand
         }
 
         return sb.ToString();
+    }
+
+    static void AppendRuntimeReadinessMarkdown(StringBuilder sb, RuntimeFailureReport report)
+    {
+        sb.AppendLine("## Runtime readiness score");
+        sb.AppendLine();
+        sb.AppendLine($"**{report.RuntimeReadinessScore.Score}/100** — `{report.RuntimeReadinessScore.Level}`. {report.RuntimeReadinessScore.Summary}");
+        sb.AppendLine();
+
+        if (report.RuntimeReadinessScore.PositiveSignals.Length > 0)
+        {
+            sb.AppendLine("Positive signals:");
+            foreach (var signal in report.RuntimeReadinessScore.PositiveSignals)
+                sb.AppendLine($"- {signal}");
+            sb.AppendLine();
+        }
+
+        if (report.RuntimeReadinessScore.BlockingIssues.Length > 0)
+        {
+            sb.AppendLine("Blocking issues:");
+            foreach (var issue in report.RuntimeReadinessScore.BlockingIssues)
+                sb.AppendLine($"- {issue}");
+            sb.AppendLine();
+        }
+    }
+
+    static void AppendRuntimeRootCauseMarkdown(StringBuilder sb, RuntimeFailureReport report)
+    {
+        sb.AppendLine("## Runtime root causes");
+        if (report.RootCauseGroups.Length == 0)
+        {
+            sb.AppendLine("No runtime root causes were grouped.");
+            sb.AppendLine();
+            return;
+        }
+
+        sb.AppendLine("| Root cause | Count | Severity | Likely owner | Categories | Suggested next action |");
+        sb.AppendLine("|---|---:|---|---|---|---|");
+        foreach (var group in report.RootCauseGroups)
+            sb.AppendLine($"| `{EscapeMd(group.RootCause)}` | {group.Count} | `{EscapeMd(group.Severity)}` | {EscapeMd(group.LikelyOwner)} | `{EscapeMd(string.Join(", ", group.Categories))}` | {EscapeMd(group.SuggestedNextAction)} |");
+        sb.AppendLine();
+    }
+
+    static void AppendRuntimeSuggestedFixesMarkdown(StringBuilder sb, RuntimeFailureReport report)
+    {
+        sb.AppendLine("## Suggested config/profile/runtime fixes");
+        if (report.SuggestedConfigOrProfileFixes.Length == 0)
+        {
+            sb.AppendLine("No suggested fixes were generated. Keep the raw log and add classifier coverage if this repeats.");
+            sb.AppendLine();
+            return;
+        }
+
+        sb.AppendLine("These are **recommendations**, not applied patches. Apply at most one evidence-backed change before the next smoke rerun.");
+        sb.AppendLine();
+        sb.AppendLine("| Id | Scope | Safety | Suggested area | Title | Evidence |");
+        sb.AppendLine("|---|---|---|---|---|---|");
+        foreach (var fix in report.SuggestedConfigOrProfileFixes)
+            sb.AppendLine($"| `{EscapeMd(fix.Id)}` | `{EscapeMd(fix.Scope)}` | `{EscapeMd(fix.Safety)}` | `{EscapeMd(fix.SuggestedConfigArea)}` | {EscapeMd(fix.Title)} | {EscapeMd(fix.Evidence)} |");
+        sb.AppendLine();
+    }
+
+    static void AppendRuntimeSmokeRerunMarkdown(StringBuilder sb, RuntimeFailureReport report)
+    {
+        sb.AppendLine("## Smoke rerun plan");
+        sb.AppendLine();
+        sb.AppendLine($"- **Scope**: {EscapeMd(report.SmokeRerunPlan.Scope)}");
+        sb.AppendLine($"- **Trace mode**: {EscapeMd(report.SmokeRerunPlan.TraceMode)}");
+        sb.AppendLine($"- **Command template**: `{EscapeMd(report.SmokeRerunPlan.Command)}`");
+        sb.AppendLine();
+        sb.AppendLine("Steps:");
+        foreach (var step in report.SmokeRerunPlan.Steps)
+            sb.AppendLine($"- {step}");
+        sb.AppendLine();
+        sb.AppendLine("Success criteria:");
+        foreach (var criterion in report.SmokeRerunPlan.SuccessCriteria)
+            sb.AppendLine($"- {criterion}");
+        sb.AppendLine();
     }
 
     static void AppendRuntimeEvidenceMarkdown(StringBuilder sb, RuntimeFailureReport report)
@@ -771,9 +1210,26 @@ internal static class RuntimeFailureClassifierCommand
             return sb.ToString();
         }
 
+        sb.AppendLine($"Runtime readiness: `{report.RuntimeReadinessScore.Score}/100` (`{report.RuntimeReadinessScore.Level}`). {report.RuntimeReadinessScore.Summary}");
+        sb.AppendLine();
+
+        foreach (var rootCause in report.RootCauseGroups.Take(10))
+        {
+            sb.AppendLine($"## Root cause: {rootCause.RootCause}");
+            sb.AppendLine();
+            sb.AppendLine($"- **Likely owner**: `{rootCause.LikelyOwner}`");
+            sb.AppendLine($"- **Count**: `{rootCause.Count}`");
+            sb.AppendLine($"- **Categories**: `{string.Join(", ", rootCause.Categories)}`");
+            sb.AppendLine($"- **Next action**: {rootCause.SuggestedNextAction}");
+            var fix = report.SuggestedConfigOrProfileFixes.FirstOrDefault(x => rootCause.Categories.Contains(x.Category, StringComparer.OrdinalIgnoreCase));
+            if (fix != null)
+                sb.AppendLine($"- **Suggested fix candidate**: `{fix.Id}` — {fix.Title} ({fix.Safety})");
+            sb.AppendLine();
+        }
+
         foreach (var group in report.Groups.Take(10))
         {
-            sb.AppendLine($"## {group.Category}");
+            sb.AppendLine($"## Category: {group.Category}");
             sb.AppendLine();
             sb.AppendLine($"- **Likely owner**: `{group.LikelyOwner}`");
             sb.AppendLine($"- **Count**: `{group.Count}`");
@@ -806,10 +1262,33 @@ internal static class RuntimeFailureClassifierCommand
         sb.AppendLine("- Для environment/auth/network проблем сначала проверь окружение, а не config.");
         sb.AppendLine("- Для assertion mismatch сначала сравни Selenium source truth, generated assertion и runtime evidence.");
         sb.AppendLine();
+        sb.AppendLine("## Runtime readiness");
+        sb.AppendLine($"- Score: `{report.RuntimeReadinessScore.Score}/100` (`{report.RuntimeReadinessScore.Level}`): {report.RuntimeReadinessScore.Summary}");
+        foreach (var issue in report.RuntimeReadinessScore.BlockingIssues)
+            sb.AppendLine($"- Blocking issue: {issue}");
+        sb.AppendLine();
+
         sb.AppendLine("## Следующие действия");
         foreach (var action in report.RecommendedNextActions)
             sb.AppendLine($"- {action}");
         sb.AppendLine();
+
+        sb.AppendLine("## Root causes");
+        foreach (var rootCause in report.RootCauseGroups.Take(5))
+            sb.AppendLine($"- `{rootCause.RootCause}`: {rootCause.Count}. Owner: `{rootCause.LikelyOwner}`. {rootCause.SuggestedNextAction}");
+        sb.AppendLine();
+
+        sb.AppendLine("## Suggested fixes");
+        foreach (var fix in report.SuggestedConfigOrProfileFixes.Take(5))
+            sb.AppendLine($"- `{fix.Id}` ({fix.Scope}, {fix.Safety}): {fix.Title}. Area: `{fix.SuggestedConfigArea}`");
+        sb.AppendLine();
+
+        sb.AppendLine("## Smoke rerun plan");
+        sb.AppendLine($"- Scope: {report.SmokeRerunPlan.Scope}");
+        sb.AppendLine($"- Command: `{report.SmokeRerunPlan.Command}`");
+        sb.AppendLine($"- Trace: {report.SmokeRerunPlan.TraceMode}");
+        sb.AppendLine();
+
         sb.AppendLine("## Runtime evidence");
         if (report.TraceArtifacts.Length == 0)
             sb.AppendLine("- Trace/screenshot/video не найдены: лучше повторить smoke с trace on failure.");

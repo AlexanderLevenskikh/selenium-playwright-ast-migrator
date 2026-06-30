@@ -108,7 +108,7 @@ For a file-by-file walkthrough, see:
 | `capabilities` | Stable | List built-in source frontend / target backend capability reports. |
 | `verify-ts-project` | Experimental | Type-check generated Playwright TS specs inside an existing TS project. |
 | `orchestrate` | Experimental | Run analyze → migrate → verify → propose as one dry-run workflow. |
-| `explain-todo` / `smoke-plan` / `runtime-classify` / `migration-board` / `report-serve` | Experimental | Prioritize follow-up work from migration artifacts/runtime logs and export triage decisions. |
+| `explain-todo` / `smoke-plan` / `runtime-classify` / `migration-board` / `report-serve` | Experimental | Prioritize follow-up work from migration artifacts/runtime logs, classify runtime root causes, score readiness, and export triage decisions. |
 | `evidence pack` | Stable | Create a redacted shareable zip with reports, generated artifacts, manifest, and checksums. |
 | `profile list/search/inspect/install/diff` | Experimental | Use offline built-in profiles as reviewed config layers. |
 

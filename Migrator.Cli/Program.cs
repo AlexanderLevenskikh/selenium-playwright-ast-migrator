@@ -3496,7 +3496,7 @@ static string[] ArtifactLookupFileNames() => new[]
     "source-capabilities-report.json", "source-capabilities-report.md", "target-capabilities-report.json", "target-capabilities-report.md",
     "capabilities-report.json", "capabilities-report.md",
     "explain-todo.json", "explain-todo.md", "agent-next-task.md", "smoke-plan.json", "smoke-plan.md",
-    "runtime-checklist.md", "agent-runtime-next-task.md", "runtime-classification.json", "runtime-classification.md", "runtime-failure-report.json", "runtime-failure-report.md", "runtime-next-tickets.md", "agent-runtime-failure-next-task.md",
+    "runtime-checklist.md", "agent-runtime-next-task.md", "runtime-classification.json", "runtime-classification.md", "runtime-feedback-loop.json", "runtime-feedback-loop.md", "runtime-failure-report.json", "runtime-failure-report.md", "runtime-next-tickets.md", "agent-runtime-failure-next-task.md",
     "migration-board.json", "migration-board.md", "migration-board.html", "report-dashboard.json", "report-dashboard.md", "report-dashboard.html",
     "config-validate-report.json", "config-validate-report.md"
 };
@@ -4859,10 +4859,11 @@ static ReportServeDashboardReport BuildReportServeDashboardReport(string artifac
     var missing = RequiredReportServeArtifacts()
         .Where(name => FindFirstExisting(artifactDir, name, recursiveArtifacts) == null)
         .ToList();
-    if (FindFirstExisting(artifactDir, "runtime-classification.json", recursiveArtifacts) == null
+    if (FindFirstExisting(artifactDir, "runtime-feedback-loop.json", recursiveArtifacts) == null
+        && FindFirstExisting(artifactDir, "runtime-classification.json", recursiveArtifacts) == null
         && FindFirstExisting(artifactDir, "runtime-failure-report.json", recursiveArtifacts) == null)
     {
-        missing.Add("runtime-classification.json or runtime-failure-report.json");
+        missing.Add("runtime-feedback-loop.json, runtime-classification.json, or runtime-failure-report.json");
     }
     var missingArtifacts = missing.ToArray();
 
@@ -5218,7 +5219,8 @@ static string SlugifyForReportServe(string value)
 
 static RuntimeFailureGroup[] ReadRuntimeFailureGroups(string artifactDir, bool recursiveArtifacts)
 {
-    var path = FindFirstExisting(artifactDir, "runtime-classification.json", recursiveArtifacts)
+    var path = FindFirstExisting(artifactDir, "runtime-feedback-loop.json", recursiveArtifacts)
+        ?? FindFirstExisting(artifactDir, "runtime-classification.json", recursiveArtifacts)
         ?? FindFirstExisting(artifactDir, "runtime-failure-report.json", recursiveArtifacts);
     if (path == null)
         return Array.Empty<RuntimeFailureGroup>();
@@ -5610,7 +5612,7 @@ static void AppendReportServeRuntimeHtml(StringBuilder sb, ReportServeDashboardR
     sb.AppendLine("<h2 class=\"section\">Runtime failures</h2>");
     sb.AppendLine("<table><thead><tr><th>Category</th><th>Count</th><th>Severity</th><th>Likely owner</th><th>Likely cause</th><th>Suggested action</th></tr></thead><tbody>");
     if (report.RuntimeFailures.Length == 0)
-        sb.AppendLine("<tr><td colspan=\"6\" class=\"empty\">No runtime-classification.json/runtime-failure-report.json found or no runtime failures classified.</td></tr>");
+        sb.AppendLine("<tr><td colspan=\"6\" class=\"empty\">No runtime-feedback-loop.json/runtime-classification.json/runtime-failure-report.json found or no runtime failures classified.</td></tr>");
     foreach (var group in report.RuntimeFailures.Take(25))
     {
         var css = group.Severity.Equals("error", StringComparison.OrdinalIgnoreCase) || group.Severity.Equals("high", StringComparison.OrdinalIgnoreCase) ? "bad" : group.Severity.Equals("warning", StringComparison.OrdinalIgnoreCase) || group.Severity.Equals("medium", StringComparison.OrdinalIgnoreCase) ? "warn" : "";
@@ -6003,7 +6005,7 @@ static IEnumerable<string> FindBoardArtifacts(string artifactDir, bool recursive
         "agent-next-task.md", "migration-quality-dashboard.md", "migration-quality-dashboard.json", "migration-quality-tickets.md",
         "source-capabilities-report.md", "source-capabilities-report.json", "target-capabilities-report.md", "target-capabilities-report.json",
         "smoke-plan.md", "smoke-plan.json", "runtime-checklist.md", "agent-runtime-next-task.md",
-        "runtime-classification.md", "runtime-classification.json", "runtime-failure-report.md", "runtime-failure-report.json", "runtime-next-tickets.md", "agent-runtime-failure-next-task.md",
+        "runtime-classification.md", "runtime-classification.json", "runtime-feedback-loop.md", "runtime-feedback-loop.json", "runtime-failure-report.md", "runtime-failure-report.json", "runtime-next-tickets.md", "agent-runtime-failure-next-task.md",
         "report-dashboard.html", "report-dashboard.md", "report-dashboard.json",
         "unmapped-targets.json", "unsupported-actions.json", "pom-index.generated.json", "doctor-report.md", "guard-report.md", "config-validate-report.md", "config-validate-report.json"
     };
