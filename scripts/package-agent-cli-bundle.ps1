@@ -33,6 +33,9 @@ if (-not (Test-Path $project)) {
 if ($RunTests) {
     Write-Host "Running tests before packaging..."
     dotnet test (Join-Path $root "Migrator.sln") -c $Configuration --no-restore
+    if ($LASTEXITCODE -ne 0) {
+        throw "dotnet test failed with exit code $LASTEXITCODE"
+    }
 }
 
 Remove-Item -Recurse -Force $outputRoot -ErrorAction SilentlyContinue
@@ -59,6 +62,9 @@ dotnet publish $project `
     /p:DebugType=None `
     /p:DebugSymbols=false `
     -o $publishDir
+if ($LASTEXITCODE -ne 0) {
+    throw "dotnet publish failed with exit code $LASTEXITCODE"
+}
 
 Write-Host "Copying full publish output..."
 Copy-Item -Path (Join-Path $publishDir "*") -Destination $bundleDir -Recurse -Force

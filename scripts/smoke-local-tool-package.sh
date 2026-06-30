@@ -38,10 +38,10 @@ pushd "$TEMP_DIR" >/dev/null
 dotnet new tool-manifest
 dotnet tool install "$PACKAGE_ID" --version "$VERSION" --add-source "$SOURCE" --ignore-failed-sources
 
-dotnet tool run selenium-pw-migrator -- --help
+dotnet selenium-pw-migrator --help
 
 doctor_out="$TEMP_DIR/doctor"
-dotnet tool run selenium-pw-migrator -- --mode doctor --input "$INPUT_PATH" --out "$doctor_out" --format both
+dotnet selenium-pw-migrator --mode doctor --input "$INPUT_PATH" --out "$doctor_out" --format both
 
 if [[ ! -f "$doctor_out/doctor-report.md" ]]; then
   echo "Doctor smoke did not produce expected report: $doctor_out/doctor-report.md" >&2

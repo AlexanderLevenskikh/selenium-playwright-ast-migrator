@@ -72,15 +72,21 @@ if (-not $manifestJson.files -or $manifestJson.files.Count -eq 0) {
 if ($RunHelp) {
     if (Test-Path $dll) {
         dotnet $dll --help | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "Bundle CLI --help failed with exit code $LASTEXITCODE" }
         dotnet $dll kit --help | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "Bundle CLI kit --help failed with exit code $LASTEXITCODE" }
     }
     elseif (Test-Path $exe) {
         & $exe --help | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "Bundle CLI --help failed with exit code $LASTEXITCODE" }
         & $exe kit --help | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "Bundle CLI kit --help failed with exit code $LASTEXITCODE" }
     }
     else {
         & $apphost --help | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "Bundle CLI --help failed with exit code $LASTEXITCODE" }
         & $apphost kit --help | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "Bundle CLI kit --help failed with exit code $LASTEXITCODE" }
     }
 }
 

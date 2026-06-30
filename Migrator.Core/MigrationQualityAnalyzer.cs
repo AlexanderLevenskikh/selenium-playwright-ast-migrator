@@ -382,7 +382,7 @@ public static class MigrationQualityAnalyzer
     };
 
     static string Shorten(string value, int maxLength) =>
-        value.Length <= maxLength ? value : value[..Math.Max(0, maxLength - 1)] + "…";
+        value.Length <= maxLength ? value : value[..Math.Max(0, maxLength - 3)] + "...";
 
     sealed class TodoAccumulator
     {

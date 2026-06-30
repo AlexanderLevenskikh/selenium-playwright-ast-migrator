@@ -63,6 +63,7 @@ logs/
 *.bak
 *.swp
 *.orig
+*.crdownload
 
 # Generated migration output
 # Если generated output нужен только для ручной проверки — игнорируем.
@@ -115,6 +116,10 @@ scratch/
 *.zip
 *.7z
 *.rar
+
+# Downloaded installers from local/manual setup experiments
+dotnet-sdk-*-win-*.exe
+aspnetcore-runtime-*-win-*.exe
 
 # Playwright artifacts, если появятся в renderer/integration tests
 playwright-report/

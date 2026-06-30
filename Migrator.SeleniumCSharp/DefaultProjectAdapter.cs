@@ -948,6 +948,8 @@ public class DefaultProjectAdapter : IProjectAdapter
     IEnumerable<TestAction> TryResolveTextAssertionWithTarget(TextAssertionAction ta, ResolvedFileConfig resolved, TargetExpression resolvedTargetExpr)
     {
         var fullSource = (ta.FullSourceText ?? "").TrimEnd(';');
+        var fullSourceText = ta.FullSourceText ?? fullSource;
+        var expectedValue = ta.ExpectedValue ?? string.Empty;
         if (string.IsNullOrEmpty(fullSource))
         {
             return new[] { new TextAssertionAction(
@@ -964,8 +966,8 @@ public class DefaultProjectAdapter : IProjectAdapter
                 ta.SourceLine,
                 ta.Target.SourceExpression,
                 "Be",
-                ta.FullSourceText,
-                new[] { ta.ExpectedValue },
+                fullSourceText,
+                new[] { expectedValue },
                 ta.Confidence);
             var placeholders = TryMatchPattern(mapping.SourceMethodPattern, fullSource, mi.ArgumentTexts);
             if (placeholders != null)
@@ -981,7 +983,7 @@ public class DefaultProjectAdapter : IProjectAdapter
                     var resolvedExpr = SubstitutePlaceholders(mapping.TargetExpression, placeholders);
                     return new[] { new MappedExpressionAssertionAction(
                         ta.SourceLine,
-                        ta.FullSourceText,
+                        fullSourceText,
                         resolvedExpr,
                         mapping.RequiresReview,
                         adapterTarget,
@@ -990,7 +992,7 @@ public class DefaultProjectAdapter : IProjectAdapter
                 var resolvedStatements = ResolveParameterizedStatements(mapping, placeholders);
                 return new[] { new MappedMethodInvocationAction(
                     ta.SourceLine,
-                    ta.FullSourceText,
+                    fullSourceText,
                     resolvedStatements.Statements,
                     resolvedStatements.RequiresReview,
                     adapterTarget,

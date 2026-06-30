@@ -184,6 +184,9 @@ public sealed class ProposalGenerator
             if (isParameterized)
             {
                 var pattern = ExtractParameterizedPattern(uniqueSignatures);
+                if (string.IsNullOrWhiteSpace(pattern))
+                    continue;
+
                 var proposal = new MappingProposal
                 {
                     Id = $"PMT-{++idx}",

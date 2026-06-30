@@ -17,8 +17,15 @@ Write-Host "Packing $PackageId $Version..."
 dotnet pack $project `
     -c $Configuration `
     -o $outDir `
-    /p:PackageId=$PackageId `
     /p:Version=$Version
+if ($LASTEXITCODE -ne 0) {
+    throw "dotnet pack failed with exit code $LASTEXITCODE"
+}
 
 Write-Host "Package output: $outDir"
-Get-ChildItem $outDir -Filter "$PackageId.$Version.nupkg" | ForEach-Object { Write-Host $_.FullName }
+$package = Get-ChildItem $outDir -Filter "$PackageId.$Version.nupkg" | Select-Object -First 1
+if (-not $package) {
+    throw "Expected package was not created: $PackageId.$Version.nupkg"
+}
+
+Write-Host $package.FullName

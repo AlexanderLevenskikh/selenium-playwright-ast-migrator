@@ -65,7 +65,11 @@ try {
         '(^|/)\.env(\.|/|$)',
         '(^|/)NuGet\.config$',
         '\.local\.json$',
-        '\.(zip|7z|rar)$'
+        '\.(zip|7z|rar)$',
+        '^templates/migration-kit/migration-kit/',
+        '^templates/codex/codex/',
+        '^templates/loops-library/.*/loops-library/',
+        '^templates/opencode-team/.*/opencode-team/'
     )
 
     foreach ($entry in $entries) {

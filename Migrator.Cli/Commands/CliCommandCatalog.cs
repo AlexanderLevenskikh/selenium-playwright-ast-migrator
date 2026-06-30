@@ -133,7 +133,7 @@ internal static class CliCommandCatalog
             "Selenium helper/POM/source directory or file.",
             "selenium-pw-migrator --mode helper-inventory --input ./OldTests --out helper-inventory --format both"),
         ExperimentalCommand("orchestrate", "orchestration", true, true,
-            "Dry-run analyze → migrate → verify → propose orchestration.",
+            "Dry-run analyze -> migrate -> verify -> propose orchestration.",
             "Writes stage artifacts into subdirectories and an orchestration report. Does not auto-apply proposals or run runtime tests.",
             "Source Selenium tests directory.",
             "selenium-pw-migrator --mode orchestrate --input ./OldTests --config ./adapter-config.json --out orchestration --format both"),

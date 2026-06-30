@@ -1854,7 +1854,64 @@ static IEnumerable<Microsoft.CodeAnalysis.MetadataReference> GetGeneratedCodeRef
             AddFile(path);
     }
 
+    foreach (var packageAssembly in new[]
+    {
+        ("microsoft.playwright.nunit", "Microsoft.Playwright.NUnit.dll"),
+        ("microsoft.playwright", "Microsoft.Playwright.dll"),
+        ("nunit", "nunit.framework.dll"),
+        ("microsoft.bcl.asyncinterfaces", "Microsoft.Bcl.AsyncInterfaces.dll")
+    })
+    {
+        AddNuGetPackageAssembly(packageAssembly.Item1, packageAssembly.Item2);
+    }
+
     return refs.Values;
+
+    void AddNuGetPackageAssembly(string packageId, string assemblyFileName)
+    {
+        foreach (var root in GetNuGetPackageRoots())
+        {
+            var packageRoot = Path.Combine(root, packageId);
+            if (!Directory.Exists(packageRoot))
+                continue;
+
+            var assemblyPath = Directory.EnumerateFiles(packageRoot, assemblyFileName, SearchOption.AllDirectories)
+                .Where(path => path.Contains($"{Path.DirectorySeparatorChar}lib{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                            || path.Contains($"{Path.DirectorySeparatorChar}ref{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(path => path.Contains($"{Path.DirectorySeparatorChar}net8.0{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(path => path.Contains($"{Path.DirectorySeparatorChar}net6.0{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(path => path.Contains($"{Path.DirectorySeparatorChar}netstandard2.0{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault();
+
+            if (assemblyPath != null)
+            {
+                AddFile(assemblyPath);
+                return;
+            }
+        }
+    }
+
+    static IEnumerable<string> GetNuGetPackageRoots()
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void AddRoot(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+
+            var fullPath = Path.GetFullPath(Environment.ExpandEnvironmentVariables(path));
+            if (Directory.Exists(fullPath))
+                seen.Add(fullPath);
+        }
+
+        AddRoot(Environment.GetEnvironmentVariable("NUGET_PACKAGES"));
+        AddRoot(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages"));
+        AddRoot(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NuGet", "Cache"));
+
+        return seen;
+    }
 }
 
 static void PrintVerifyReport(VerifyReport report)

@@ -12,7 +12,7 @@ mkdir -p "$ROOT/$OUTPUT"
 dotnet pack "$ROOT/Migrator.Cli/Migrator.Cli.csproj" \
   -c "$CONFIGURATION" \
   -o "$ROOT/$OUTPUT" \
-  /p:PackageId="$PACKAGE_ID" \
   /p:Version="$VERSION"
 
 echo "Package output: $ROOT/$OUTPUT"
+test -f "$ROOT/$OUTPUT/$PACKAGE_ID.$VERSION.nupkg"

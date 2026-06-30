@@ -2,14 +2,24 @@ param(
     [string]$Version = "0.6.0-preview.1",
     [string]$PackageId = "SeleniumPlaywrightAstMigrator",
     [string]$PackageDirectory = "artifacts/nuget",
-    [string]$Input = "Migrator.Tests/TestFiles"
+    [Alias("Input")]
+    [string]$SmokeInput = "Migrator.Tests/TestFiles"
 )
 
 $ErrorActionPreference = "Stop"
 
+function Invoke-DotnetChecked {
+    param([Parameter(ValueFromRemainingArguments = $true)] [string[]]$DotnetArgs)
+
+    & dotnet @DotnetArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "dotnet $($DotnetArgs -join ' ') failed with exit code $LASTEXITCODE"
+    }
+}
+
 $root = Split-Path -Parent $PSScriptRoot
 $source = if ([System.IO.Path]::IsPathRooted($PackageDirectory)) { $PackageDirectory } else { Join-Path $root $PackageDirectory }
-$inputPath = if ([System.IO.Path]::IsPathRooted($Input)) { $Input } else { Join-Path $root $Input }
+$inputPath = if ([System.IO.Path]::IsPathRooted($SmokeInput)) { $SmokeInput } else { Join-Path $root $SmokeInput }
 
 if (-not (Test-Path $source)) {
     throw "Package source not found: $source. Run scripts/pack-tool.ps1 first."
@@ -25,13 +35,14 @@ New-Item -ItemType Directory -Force -Path $temp | Out-Null
 try {
     Push-Location $temp
     try {
-        dotnet new tool-manifest | Out-Host
-        dotnet tool install $PackageId --version $Version --add-source $source --ignore-failed-sources | Out-Host
+        Invoke-DotnetChecked new tool-manifest
 
-        dotnet tool run selenium-pw-migrator -- --help | Out-Host
+        Invoke-DotnetChecked tool install $PackageId --version $Version --add-source $source --ignore-failed-sources
+
+        Invoke-DotnetChecked selenium-pw-migrator --help
 
         $doctorOut = Join-Path $temp "doctor"
-        dotnet tool run selenium-pw-migrator -- --mode doctor --input $inputPath --out $doctorOut --format both | Out-Host
+        Invoke-DotnetChecked selenium-pw-migrator --mode doctor --input $inputPath --out $doctorOut --format both
 
         $doctorReport = Join-Path $doctorOut "doctor-report.md"
         if (-not (Test-Path $doctorReport)) {

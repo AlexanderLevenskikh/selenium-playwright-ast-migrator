@@ -270,10 +270,10 @@ public sealed class TargetDiscovery
         // Group by base class, rank by frequency
         var baseClassGroups = classInfo
             .Where(c => c.baseClass != null)
-            .GroupBy(c => c.baseClass)
+            .GroupBy(c => c.baseClass!)
             .ToList();
 
-        // Build a map of class name → its own attributes (for merging base class attrs)
+        // Build a map of class name to its own attributes (for merging base class attrs)
         var classAttrs = classInfo
             .Where(c => c.baseClass == null)
             .ToDictionary(c => c.className, c => (IReadOnlyList<string>)c.attributes);
