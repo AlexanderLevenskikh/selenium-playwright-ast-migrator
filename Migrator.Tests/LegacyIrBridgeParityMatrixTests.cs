@@ -353,8 +353,8 @@ public class LegacyIrBridgeParityMatrixTests
                 foreach (var nested in conditional.IfActions)
                     AssertNoUnexpectedUnsupported(nested);
                 foreach (var branch in conditional.ElseIfActions)
-                foreach (var nested in branch.Actions)
-                    AssertNoUnexpectedUnsupported(nested);
+                    foreach (var nested in branch.Actions)
+                        AssertNoUnexpectedUnsupported(nested);
                 foreach (var nested in conditional.ElseActions)
                     AssertNoUnexpectedUnsupported(nested);
                 break;
