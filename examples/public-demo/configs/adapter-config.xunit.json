@@ -1,0 +1,33 @@
+{
+  "$schema": "../../schemas/adapter-config.schema.json",
+  "SchemaVersion": "adapter-config/v1",
+  "SourceProjectName": "Migrator.PublicDemo.Selenium.Xunit",
+  "TestHost": {
+    "TargetTestFramework": "xunit",
+    "Namespace": "Migrator.PublicDemo.Playwright.Xunit"
+  },
+  "UiTargets": [
+    {
+      "SourceExpression": "page.Username",
+      "TargetExpression": "GetByTestId(\"login-username\")",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.Password",
+      "TargetExpression": "GetByTestId(\"login-password\")",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.SubmitButton",
+      "TargetExpression": "GetByTestId(\"login-submit\")",
+      "TargetKind": "TestId"
+    },
+    {
+      "SourceExpression": "page.Toast",
+      "TargetExpression": "GetByTestId(\"login-success-toast\")",
+      "TargetKind": "TestId"
+    }
+  ],
+  "Methods": [],
+  "PageObjects": []
+}

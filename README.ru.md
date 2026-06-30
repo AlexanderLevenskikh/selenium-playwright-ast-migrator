@@ -4,7 +4,7 @@
 
 Migrator парсит Selenium-тесты, строит промежуточную модель действий, применяет project-specific profile/config mappings и генерирует Playwright-тесты вместе с отчётами. Он полезен, когда нужно переносить большой E2E-набор не вручную по одному тесту, а через контролируемый цикл: source truth → config/profile → generated code → verification → следующий паттерн.
 
-Основной production-путь: **Selenium C# / NUnit → Playwright .NET**. Остальные source/target варианты помечены как preview/experimental.
+Основной production-путь: **Selenium C# → Playwright .NET** с NUnit по умолчанию и поддерживаемым xUnit target framework. Остальные source/target варианты помечены как preview/experimental.
 
 ## Что делает инструмент
 
@@ -20,7 +20,7 @@ Migrator парсит Selenium-тесты, строит промежуточну
 
 | Source frontend | Target backend | Статус | Примечание |
 |---|---|---|---|
-| Selenium C# / NUnit | Playwright .NET | Stable public path | Полный workflow analyze/migrate/verify на Roslyn. |
+| Selenium C# / NUnit или xUnit | Playwright .NET / NUnit или xUnit | Stable public path | Полный workflow analyze/migrate/verify на Roslyn; NUnit остаётся default target framework. |
 | Selenium C# / NUnit | Playwright TypeScript | Experimental preview | Используй `--target ts`; project-aware verify требует `--ts-project`. |
 | Selenium Java | Playwright .NET / TypeScript | Experimental MVP | Для простых Java Selenium fixtures; без Java semantic model. |
 | Selenium Python | Playwright .NET / TypeScript | Experimental spike | Для простых pytest/unittest Selenium diagnostics; не production-ready. |
@@ -79,6 +79,8 @@ migration/run-001/
 
 - [Quick start](docs/quick-start.md)
 - [End-to-end simple example](docs/examples/end-to-end-simple.md)
+- [Public demo and guided tutorial](docs/public-demo-tutorial.md)
+- [Public demo files](examples/public-demo/README.md)
 - [Public launch demo](examples/public-launch-demo/README.md)
 - [Screenshot walkthrough](docs/public-launch/walkthrough.md)
 - [Migration workflow](docs/user-guide/migration-workflow.md)
@@ -88,7 +90,7 @@ migration/run-001/
 
 | Mode | Статус | Назначение |
 |---|---|---|
-| `doctor` | Stable | Preflight checks для input, config layers, project files и workspace hygiene. |
+| `doctor` | Stable | Preflight checks и безопасные `--fix` repair plans для input, config layers, project files и workspace hygiene. |
 | `analyze` | Stable | Парсинг Selenium-файлов и отчёты без генерации target files. |
 | `migrate` | Stable | Генерация Playwright target files. |
 | `verify` | Stable | Лёгкая проверка generated code. |
@@ -99,11 +101,13 @@ migration/run-001/
 | `index-pom` | Stable | Поиск selector evidence в Selenium PageObjects. |
 | `helper-inventory` | Stable | Анализ helper/POM method bodies и MethodSemantics candidates. |
 | `discover-target` | Stable | Сканирование существующего Playwright .NET проекта и target inventory. |
-| `scaffold` | Stable | Минимальный compile-ready Playwright .NET scaffold. |
+| `scaffold` | Stable | Минимальный compile-ready Playwright .NET scaffold для NUnit/xUnit. |
 | `capabilities` | Stable | Показывает capability reports для source frontends и target backends. |
 | `verify-ts-project` | Experimental | Type-check generated Playwright TS specs внутри существующего TS проекта. |
 | `orchestrate` | Experimental | Dry-run analyze → migrate → verify → propose. |
-| `explain-todo` / `smoke-plan` / `runtime-classify` / `migration-board` / `report-serve` | Experimental | Приоритизация следующих migration fixes по artifacts/logs. |
+| `explain-todo` / `smoke-plan` / `runtime-classify` / `migration-board` / `report-serve` | Experimental | Приоритизация следующих migration fixes по artifacts/logs и dashboard по run artifacts. |
+| `evidence pack` | Stable | Redacted zip для issue/PR: reports, generated artifacts, manifest и checksums. |
+| `profile list/search/inspect/install/diff` | Experimental | Offline built-in profiles как reviewable config layers. |
 
 Command-specific help:
 

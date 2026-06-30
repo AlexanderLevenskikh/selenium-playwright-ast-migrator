@@ -300,6 +300,13 @@ if (mode == "report-serve")
     return reportServeExitCode;
 }
 
+// Handle evidence pack mode — creates a shareable redacted migration evidence archive.
+if (mode == "evidence-pack")
+{
+    var evidenceExitCode = EvidencePackCommand.RunEvidencePack(inputPath, outPath, format, opts.IncludeSourceFiles);
+    return evidenceExitCode;
+}
+
 // Handle profile marketplace commands — offline built-in profile catalog/install/inspect/diff.
 if (mode == "profile-list")
     return ProfileMarketplaceCommand.RunList(outPath, format);
@@ -9147,6 +9154,7 @@ static CliOptions? ParseArgs(string[] args)
     string mode = "migrate";
     string? input = null;
     string? outDir = null;
+    bool outExplicit = false;
     string? config = null;
     var configs = new List<string>();
     string format = "both";
@@ -9176,6 +9184,7 @@ static CliOptions? ParseArgs(string[] args)
     bool dryRun = false;
     int port = 0;
     bool staticOnly = false;
+    bool includeSourceFiles = false;
     var initModeRequested = IsInitModeRequest(args);
 
     for (int i = 0; i < args.Length; i++)
@@ -9202,7 +9211,10 @@ static CliOptions? ParseArgs(string[] args)
                 break;
             case "--out":
                 if (i + 1 < args.Length)
+                {
                     outDir = args[++i];
+                    outExplicit = true;
+                }
                 else
                 {
                     Console.Error.WriteLine("--out requires a value");
@@ -9290,6 +9302,10 @@ static CliOptions? ParseArgs(string[] args)
             case "--no-server":
                 staticOnly = true;
                 port = 0;
+                break;
+            case "--include-source":
+            case "--include-source-files":
+                includeSourceFiles = true;
                 break;
             case "--wizard":
                 wizard = true;
@@ -9516,7 +9532,8 @@ static CliOptions? ParseArgs(string[] args)
             ? workspace
             : CliCommandCatalog.Get(mode).DefaultOut;
 
-    outDir = ResolveOutputDirectory(outDir, workspace);
+    if (!(mode.Equals("evidence-pack", StringComparison.OrdinalIgnoreCase) && outExplicit))
+        outDir = ResolveOutputDirectory(outDir, workspace);
 
     if (format != "text" && format != "json" && format != "both")
     {
@@ -9566,7 +9583,13 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
-    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, source, sourceExplicit, tsProject, recursiveArtifacts, irVersion, renderIr, validationMode, targetTestFramework, wizard, installAgentKit, targetProjectExists, targetProjectPath, defaultTestIdAttribute, targetNamespace, targetBaseClass, fix, apply, dryRun, port, staticOnly);
+    if (includeSourceFiles && !mode.Equals("evidence-pack", StringComparison.OrdinalIgnoreCase))
+    {
+        Console.Error.WriteLine("--include-source is only supported for evidence pack / --mode evidence-pack.");
+        return null;
+    }
+
+    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, source, sourceExplicit, tsProject, recursiveArtifacts, irVersion, renderIr, validationMode, targetTestFramework, wizard, installAgentKit, targetProjectExists, targetProjectPath, defaultTestIdAttribute, targetNamespace, targetBaseClass, fix, apply, dryRun, port, staticOnly, includeSourceFiles);
 }
 
 static string[] NormalizeDirectCommand(string[] args)
@@ -9582,6 +9605,13 @@ static string[] NormalizeDirectCommand(string[] args)
         && string.Equals(args[1], "serve", StringComparison.OrdinalIgnoreCase))
     {
         return new[] { "--mode", "report-serve" }.Concat(args.Skip(2)).ToArray();
+    }
+
+    if (string.Equals(args[0], "evidence", StringComparison.OrdinalIgnoreCase)
+        && args.Length > 1
+        && string.Equals(args[1], "pack", StringComparison.OrdinalIgnoreCase))
+    {
+        return new[] { "--mode", "evidence-pack" }.Concat(args.Skip(2)).ToArray();
     }
 
     if (string.Equals(args[0], "profile", StringComparison.OrdinalIgnoreCase) && args.Length > 1)

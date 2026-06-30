@@ -80,6 +80,8 @@ For a file-by-file walkthrough, see:
 - [Quick start](docs/quick-start.md)
 - [Init wizard](docs/init-wizard.md)
 - [End-to-end simple example](docs/examples/end-to-end-simple.md)
+- [Public demo and guided tutorial](docs/public-demo-tutorial.md)
+- [Public demo files](examples/public-demo/README.md)
 - [Public launch demo](examples/public-launch-demo/README.md)
 - [Screenshot walkthrough](docs/public-launch/walkthrough.md)
 - [Migration workflow](docs/user-guide/migration-workflow.md)
@@ -105,6 +107,7 @@ For a file-by-file walkthrough, see:
 | `verify-ts-project` | Experimental | Type-check generated Playwright TS specs inside an existing TS project. |
 | `orchestrate` | Experimental | Run analyze → migrate → verify → propose as one dry-run workflow. |
 | `explain-todo` / `smoke-plan` / `runtime-classify` / `migration-board` / `report-serve` | Experimental | Prioritize follow-up work from migration artifacts and runtime logs. |
+| `evidence pack` | Stable | Create a redacted shareable zip with reports, generated artifacts, manifest, and checksums. |
 | `profile list/search/inspect/install/diff` | Experimental | Use offline built-in profiles as reviewed config layers. |
 
 Run command-specific help with:
@@ -132,6 +135,7 @@ If Selenium POMs contain proven selectors such as `ByTId("value")`, `CreateContr
 - [Doctor fix mode](docs/doctor-fix-mode.md)
 - [Report serve dashboard](docs/report-serve-dashboard.md)
 - [Profile marketplace](docs/profile-marketplace.md)
+- [Evidence pack workflow](docs/evidence-pack.md)
 - [User guide](docs/user-guide/README.md)
 - [Config and profile guide](docs/config-profile-guide.md)
 - [Agent/autopilot guide](docs/agent-autopilot-guide.md)

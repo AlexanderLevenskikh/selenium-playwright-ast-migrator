@@ -17,8 +17,15 @@ public class DocumentationPublicReadinessTests
             "docs/troubleshooting.md",
             "docs/migration-quality-program.md",
             "docs/report-serve-dashboard.md",
+            "docs/public-demo-tutorial.md",
             "docs/examples/end-to-end-simple.md",
             "examples/simple/README.md",
+            "examples/public-demo/README.md",
+            "examples/public-demo/selenium-csharp-nunit/LoginSmokeTest.cs",
+            "examples/public-demo/selenium-csharp-xunit/LoginSmokeFacts.cs",
+            "examples/public-demo/playwright-dotnet-nunit/LoginSmokeTestPlaywright.generated.cs",
+            "examples/public-demo/playwright-dotnet-xunit/LoginSmokeFactsPlaywright.generated.cs",
+            "examples/public-demo/dashboard/report-dashboard.html",
         };
 
         foreach (var path in required)
@@ -42,6 +49,8 @@ public class DocumentationPublicReadinessTests
             Assert.Contains("docs/troubleshooting.md", doc);
             Assert.Contains("docs/migration-quality-program.md", doc);
             Assert.Contains("docs/report-serve-dashboard.md", doc);
+            Assert.Contains("docs/public-demo-tutorial.md", doc);
+            Assert.Contains("examples/public-demo/README.md", doc);
         }
 
         Assert.Contains("quick-start.md", docsIndex);
@@ -52,6 +61,8 @@ public class DocumentationPublicReadinessTests
         Assert.Contains("troubleshooting.md", docsIndex);
         Assert.Contains("migration-quality-program.md", docsIndex);
         Assert.Contains("report-serve-dashboard.md", docsIndex);
+        Assert.Contains("public-demo-tutorial.md", docsIndex);
+        Assert.Contains("../examples/public-demo/README.md", docsIndex);
     }
 
     [Fact]
@@ -99,6 +110,41 @@ public class DocumentationPublicReadinessTests
         Assert.Contains("examples/simple/expected/SimplePlaywright.generated.cs", exampleDoc);
         Assert.Contains("selenium-pw-migrator --mode migrate", exampleDoc);
         Assert.Contains("docs/examples/end-to-end-simple.md", exampleReadme);
+    }
+
+
+    [Fact]
+    public void PublicDemo_CoversNUnitXUnitWizardDashboardAndEvidence()
+    {
+        var tutorial = File.ReadAllText(FindRepositoryFile("docs/public-demo-tutorial.md"));
+        var demoReadme = File.ReadAllText(FindRepositoryFile("examples/public-demo/README.md"));
+        var nunitOutput = File.ReadAllText(FindRepositoryFile("examples/public-demo/playwright-dotnet-nunit/LoginSmokeTestPlaywright.generated.cs"));
+        var xunitOutput = File.ReadAllText(FindRepositoryFile("examples/public-demo/playwright-dotnet-xunit/LoginSmokeFactsPlaywright.generated.cs"));
+        var dashboard = File.ReadAllText(FindRepositoryFile("examples/public-demo/dashboard/report-dashboard.md"));
+
+        Assert.Contains("selenium-pw-migrator init --wizard", tutorial);
+        Assert.Contains("--target-test-framework xunit", tutorial);
+        Assert.Contains("--target-test-framework nunit", tutorial);
+        Assert.Contains("selenium-pw-migrator report serve", tutorial);
+        Assert.Contains("selenium-pw-migrator evidence pack", tutorial);
+
+        Assert.Contains("selenium-csharp-nunit", demoReadme);
+        Assert.Contains("selenium-csharp-xunit", demoReadme);
+        Assert.Contains("playwright-dotnet-nunit", demoReadme);
+        Assert.Contains("playwright-dotnet-xunit", demoReadme);
+        Assert.Contains("what-good-looks-like.md", demoReadme);
+
+        Assert.Contains("Microsoft.Playwright.NUnit", nunitOutput);
+        Assert.Contains("NUnit.Framework", nunitOutput);
+        Assert.Contains("[Test]", nunitOutput);
+        Assert.Contains("Microsoft.Playwright.Extensions.Xunit", xunitOutput);
+        Assert.Contains("Xunit", xunitOutput);
+        Assert.Contains("IAsyncLifetime", xunitOutput);
+        Assert.Contains("[Fact", xunitOutput);
+
+        Assert.Contains("Quality trend", dashboard);
+        Assert.Contains("What good looks like", dashboard);
+        Assert.Contains("MIGRATOR:UNSUPPORTED_ACTION", dashboard);
     }
 
     static string FindRepositoryFile(string relativePath)

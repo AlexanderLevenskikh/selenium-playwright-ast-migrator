@@ -1,0 +1,38 @@
+{
+  "title": "Public demo migration dashboard",
+  "input": "migration/runs/public-demo-nunit",
+  "overview": {
+    "sourceFiles": 1,
+    "tests": 1,
+    "generatedFiles": 1,
+    "syntaxErrors": 0,
+    "todos": 2,
+    "unsupportedActions": 2,
+    "unmappedTargets": 0
+  },
+  "qualityTrend": [
+    {
+      "run": "public-demo-001",
+      "generatedFiles": 1,
+      "todos": 4,
+      "unsupportedActions": 4,
+      "unmappedTargets": 0
+    },
+    {
+      "run": "public-demo-002",
+      "generatedFiles": 1,
+      "todos": 2,
+      "unsupportedActions": 2,
+      "unmappedTargets": 0
+    }
+  ],
+  "todoExplorer": [
+    {
+      "code": "MIGRATOR:UNSUPPORTED_ACTION",
+      "count": 2,
+      "meaning": "Navigation/setup helper calls need project semantics.",
+      "nextAction": "Add method mapping or target setup fixture."
+    }
+  ],
+  "unmappedTargets": []
+}

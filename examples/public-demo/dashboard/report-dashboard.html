@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Public demo migration dashboard</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; line-height: 1.5; color: #172033; }
+    header { margin-bottom: 2rem; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; }
+    .card { border: 1px solid #d7deea; border-radius: 12px; padding: 1rem; background: #f8fafc; }
+    .value { font-size: 2rem; font-weight: 700; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0 2rem; }
+    th, td { border: 1px solid #d7deea; padding: .55rem .7rem; text-align: left; }
+    th { background: #eef3fb; }
+    code { background: #eef3fb; padding: .1rem .3rem; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Public demo migration dashboard</h1>
+    <p>Static sample generated from <code>examples/public-demo</code>. No project data leaves the machine.</p>
+  </header>
+
+  <section class="cards" aria-label="Overview metrics">
+    <div class="card"><div>Source files</div><div class="value">1</div></div>
+    <div class="card"><div>Tests</div><div class="value">1</div></div>
+    <div class="card"><div>Generated files</div><div class="value">1</div></div>
+    <div class="card"><div>TODOs</div><div class="value">2</div></div>
+    <div class="card"><div>Unsupported actions</div><div class="value">2</div></div>
+    <div class="card"><div>Unmapped targets</div><div class="value">0</div></div>
+  </section>
+
+  <h2>Quality trend</h2>
+  <table>
+    <thead><tr><th>Run</th><th>Generated files</th><th>TODOs</th><th>Unsupported actions</th><th>Unmapped targets</th></tr></thead>
+    <tbody>
+      <tr><td>public-demo-001</td><td>1</td><td>4</td><td>4</td><td>0</td></tr>
+      <tr><td>public-demo-002</td><td>1</td><td>2</td><td>2</td><td>0</td></tr>
+    </tbody>
+  </table>
+
+  <h2>TODO explorer</h2>
+  <table>
+    <thead><tr><th>Code</th><th>Count</th><th>Meaning</th><th>Next action</th></tr></thead>
+    <tbody>
+      <tr><td><code>MIGRATOR:UNSUPPORTED_ACTION</code></td><td>2</td><td>Navigation/setup helper calls need project semantics.</td><td>Add method mapping or target setup fixture.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>What good looks like</h2>
+  <p>A good first migration run is not magic. It should expose uncertainty cleanly: no invented selectors, config-backed locator mappings, isolated setup TODOs, and an obvious next ticket.</p>
+</body>
+</html>
