@@ -286,8 +286,8 @@ public sealed class VerificationConfig
     public string[] ProjectReferences { get; init; } = Array.Empty<string>();
 
     /// <summary>
-    /// Package references needed by generated tests. Microsoft.Playwright.NUnit and NUnit are added by default
-    /// unless DisableDefaultPackageReferences is true.
+    /// Package references needed by generated tests. Framework-specific Playwright/test packages are added by default
+    /// based on TestHost.TargetTestFramework; NUnit is the default unless DisableDefaultPackageReferences is true.
     /// </summary>
     public PackageReferenceConfig[] PackageReferences { get; init; } = Array.Empty<PackageReferenceConfig>();
 
@@ -297,7 +297,7 @@ public sealed class VerificationConfig
     public string[] AssemblyReferences { get; init; } = Array.Empty<string>();
 
     /// <summary>
-    /// If true, do not add default Playwright/NUnit packages to the temporary project.
+    /// If true, do not add default Playwright/test-framework packages to the temporary project.
     /// </summary>
     public bool? DisableDefaultPackageReferences { get; init; }
 

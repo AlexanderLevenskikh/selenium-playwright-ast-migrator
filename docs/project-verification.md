@@ -44,7 +44,7 @@ migrate_discounts_project_verify/
     ],
     "PackageReferences": [
       { "Include": "Microsoft.Playwright.NUnit", "Version": "1.52.0" },
-      { "Include": "NUnit", "Version": "3.14.0" }
+      { "Include": "NUnit", "Version": "4.2.2" }
     ],
     "AutoDiscoverNearestProject": true,
     "AutoDiscoverProjectReferences": true,
@@ -63,7 +63,7 @@ migrate_discounts_project_verify/
 - `BuildWorkingDirectory` — рабочая директория для `dotnet build`; полезно указывать корень repo, чтобы подхватился `NuGet.config` внутреннего фида.
 - `Solution` — опциональный `.sln` для discovery/report context. Source solution не меняется.
 - `ProjectReferences` — реальные `.csproj`, которые нужны generated code.
-- `PackageReferences` — дополнительные NuGet-пакеты. По умолчанию добавляются `Microsoft.Playwright.NUnit` и `NUnit`, если `DisableDefaultPackageReferences` не `true`.
+- `PackageReferences` — дополнительные NuGet-пакеты. По умолчанию добавляются framework-specific пакеты по `TestHost.TargetTestFramework`: NUnit (`Microsoft.Playwright.NUnit`, `NUnit`, `NUnit3TestAdapter`) или xUnit (`Microsoft.Playwright.Xunit`, `xunit`, `xunit.runner.visualstudio`), если `DisableDefaultPackageReferences` не `true`.
 - `AssemblyReferences` — fallback для прямых dll references, использовать только если нельзя через project/package references.
 - `AutoDiscoverNearestProject` — найти ближайший `.csproj` вверх от `--input` и подключить как `ProjectReference`. По умолчанию `true`.
 - `AutoDiscoverProjectReferences` — рекурсивно подключить `ProjectReference` из найденных/заданных `.csproj`. По умолчанию `true`.

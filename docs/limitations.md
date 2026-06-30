@@ -19,8 +19,8 @@ Syntax fallback работает без SemanticModel и может давать
 сгенерированный код:
 
 - Имеет корректный синтаксис C#
-- Корректно использует атрибуты (`[Test]`, `[Category]`, `[TestCase]`)
-- Разрешает типы из `Microsoft.Playwright.NUnit`, `NUnit.Framework`, `System.Threading.Tasks`
+- Корректно использует атрибуты выбранного target test framework (`[Test]`/`[Fact]`, категории/traits, test cases/theories)
+- Разрешает базовые типы Playwright .NET, NUnit/xUnit и `System.Threading.Tasks`
 
 **Compile-smoke НЕ:**
 - Запускает Playwright или браузер

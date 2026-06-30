@@ -4,7 +4,7 @@
 
 The Migrator parses Selenium tests, builds an intermediate representation, applies project-specific profile mappings, and renders Playwright tests plus reports. It is designed for teams that want to migrate large E2E suites without pretending that every selector, helper, wait, and PageObject can be guessed safely.
 
-The main production path is **Selenium C# / NUnit → Playwright .NET**. Other source/target combinations are available as preview features and are clearly labeled below.
+The main production path is **Selenium C# → Playwright .NET** with **NUnit as the default target framework** and **xUnit as a supported target framework**. Other source/target combinations are available as preview features and are clearly labeled below.
 
 ## What it does
 
@@ -20,7 +20,7 @@ The goal is not magic conversion. The goal is to make migration uncertainty visi
 
 | Source frontend | Target backend | Status | Notes |
 |---|---|---|---|
-| Selenium C# / NUnit | Playwright .NET | Stable public path | Full analyze/migrate/verify workflow with Roslyn-based recognition. |
+| Selenium C# / NUnit or xUnit | Playwright .NET / NUnit or xUnit | Stable public path | Full analyze/migrate/verify workflow with Roslyn-based recognition; NUnit remains the default target framework. |
 | Selenium C# / NUnit | Playwright TypeScript | Experimental preview | Use `--target ts`; project-aware verification requires `--ts-project`. |
 | Selenium Java | Playwright .NET / TypeScript | Experimental MVP | Useful for simple Java Selenium fixtures; no Java semantic model. |
 | Selenium Python | Playwright .NET / TypeScript | Experimental spike | Useful for simple pytest/unittest Selenium diagnostics; not production-ready. |
@@ -78,6 +78,7 @@ migration/run-001/
 For a file-by-file walkthrough, see:
 
 - [Quick start](docs/quick-start.md)
+- [Init wizard](docs/init-wizard.md)
 - [End-to-end simple example](docs/examples/end-to-end-simple.md)
 - [Public launch demo](examples/public-launch-demo/README.md)
 - [Screenshot walkthrough](docs/public-launch/walkthrough.md)
@@ -88,7 +89,7 @@ For a file-by-file walkthrough, see:
 
 | Mode | Status | Purpose |
 |---|---|---|
-| `doctor` | Stable | Preflight checks for inputs, config layers, project files, and workspace hygiene. |
+| `doctor` | Stable | Preflight checks plus safe `--fix` repair plans for inputs, config layers, project files, and workspace hygiene. |
 | `analyze` | Stable | Parse Selenium files and produce reports without generating target files. |
 | `migrate` | Stable | Generate Playwright target files. |
 | `verify` | Stable | Run lightweight generated-code verification. |
@@ -125,6 +126,9 @@ If Selenium POMs contain proven selectors such as `ByTId("value")`, `CreateContr
 
 - [Documentation index](docs/README.md)
 - [Quick start](docs/quick-start.md)
+- [Init wizard](docs/init-wizard.md)
+- [Framework matrix](docs/framework-matrix.md)
+- [Doctor fix mode](docs/doctor-fix-mode.md)
 - [User guide](docs/user-guide/README.md)
 - [Config and profile guide](docs/config-profile-guide.md)
 - [Agent/autopilot guide](docs/agent-autopilot-guide.md)

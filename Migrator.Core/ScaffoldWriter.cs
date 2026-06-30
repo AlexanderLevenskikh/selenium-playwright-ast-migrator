@@ -14,6 +14,17 @@ public sealed class ScaffoldWriter
     public ScaffoldResult Write()
     {
         var outPath = _options.OutPath;
+        var targetTestFramework = NormalizeTargetTestFramework(_options.TargetTestFramework);
+        if (targetTestFramework == null)
+        {
+            return new ScaffoldResult(
+                Status: "failed",
+                OutputPath: outPath,
+                CreatedFiles: Array.Empty<string>(),
+                SkippedFiles: Array.Empty<string>(),
+                Warnings: new[] { $"Unsupported target test framework '{_options.TargetTestFramework}'. Supported values: nunit, xunit." },
+                NextSteps: Array.Empty<string>());
+        }
 
         if (Directory.Exists(outPath) && Directory.EnumerateFileSystemEntries(outPath).Any())
         {
@@ -32,21 +43,21 @@ public sealed class ScaffoldWriter
         var ns = _options.Namespace;
         var projectName = _options.ProjectName;
 
-        WriteCsproj(outPath, projectName, createdFiles);
-        WriteTestBase(outPath, ns, createdFiles);
+        WriteCsproj(outPath, projectName, targetTestFramework, createdFiles);
+        WriteTestBase(outPath, ns, targetTestFramework, createdFiles);
         WriteTestSettings(outPath, ns, createdFiles);
-        WriteSmokeTest(outPath, ns, createdFiles);
-        WriteDraftConfig(outPath, ns, projectName, createdFiles);
-        WriteScaffoldReadme(outPath, projectName, createdFiles, warnings);
+        WriteSmokeTest(outPath, ns, targetTestFramework, createdFiles);
+        WriteDraftConfig(outPath, ns, projectName, targetTestFramework, createdFiles);
+        WriteScaffoldReadme(outPath, projectName, targetTestFramework, createdFiles, warnings);
         WriteGitignore(outPath, createdFiles);
 
         var nextSteps = new[]
         {
-            "Review GeneratedTestBase.cs and implement LoginAsync for your project.",
+            $"Review GeneratedTestBase.cs and implement LoginAsync for your project ({DisplayFrameworkName(targetTestFramework)} scaffold).",
             "Set the E2E_BASE_URL environment variable to your test environment URL.",
             "Replace TestSettings.DefaultRoute with a real route from your application.",
             "Review and fill in adapter-config.draft.json with source-truth selectors.",
-            "Run migrate with this config: --mode migrate --input <selenium> --config adapter-config.draft.json --out src",
+            $"Run migrate with this config: --mode migrate --target dotnet --target-test-framework {targetTestFramework} --input <selenium> --config adapter-config.draft.json --out src",
             "Run verify on generated code: --mode verify --input src --config adapter-config.draft.json --out verify",
             "Install Playwright browsers: pwsh bin/Debug/net8.0/playwright.ps1 install",
             "Run compile smoke: dotnet build",
@@ -62,9 +73,38 @@ public sealed class ScaffoldWriter
             NextSteps: nextSteps);
     }
 
-    void WriteCsproj(string dir, string projectName, List<string> created)
+    static string? NormalizeTargetTestFramework(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "nunit";
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "nunit" or "n-unit" => "nunit",
+            "xunit" or "x-unit" => "xunit",
+            _ => null
+        };
+    }
+
+    static string DisplayFrameworkName(string targetTestFramework) =>
+        targetTestFramework.Equals("xunit", StringComparison.OrdinalIgnoreCase) ? "xUnit" : "NUnit";
+
+    void WriteCsproj(string dir, string projectName, string targetTestFramework, List<string> created)
     {
         var path = Path.Combine(dir, $"{projectName}.csproj");
+        var packageReferences = targetTestFramework == "xunit"
+            ? @"    <PackageReference Include=""Microsoft.NET.Test.Sdk"" Version=""17.12.0"" />
+    <PackageReference Include=""Microsoft.Playwright.Xunit"" Version=""1.52.0"" />
+    <PackageReference Include=""xunit"" Version=""2.9.2"" />
+    <PackageReference Include=""xunit.runner.visualstudio"" Version=""2.8.2"" />
+    <PackageReference Include=""Microsoft.Playwright"" Version=""1.52.0"" />"
+            : @"    <PackageReference Include=""Microsoft.NET.Test.Sdk"" Version=""17.12.0"" />
+    <PackageReference Include=""Microsoft.Playwright.NUnit"" Version=""1.52.0"" />
+    <PackageReference Include=""NUnit"" Version=""4.2.2"" />
+    <PackageReference Include=""NUnit3TestAdapter"" Version=""4.6.0"" />
+    <PackageReference Include=""Microsoft.Playwright"" Version=""1.52.0"" />";
+
         var content = $@"<Project Sdk=""Microsoft.NET.Sdk"">
 
   <PropertyGroup>
@@ -76,11 +116,7 @@ public sealed class ScaffoldWriter
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include=""Microsoft.NET.Test.Sdk"" Version=""17.12.0"" />
-    <PackageReference Include=""Microsoft.Playwright.NUnit"" Version=""1.49.0"" />
-    <PackageReference Include=""NUnit"" Version=""4.2.2"" />
-    <PackageReference Include=""NUnit3TestAdapter"" Version=""4.6.0"" />
-    <PackageReference Include=""Microsoft.Playwright"" Version=""1.49.0"" />
+{packageReferences}
   </ItemGroup>
 
 </Project>
@@ -89,12 +125,15 @@ public sealed class ScaffoldWriter
         created.Add($"{projectName}.csproj");
     }
 
-    void WriteTestBase(string dir, string ns, List<string> created)
+    void WriteTestBase(string dir, string ns, string targetTestFramework, List<string> created)
     {
         var path = Path.Combine(dir, "GeneratedTestBase.cs");
+        var frameworkUsing = targetTestFramework == "xunit"
+            ? "using Microsoft.Playwright.Extensions.Xunit;"
+            : "using Microsoft.Playwright.NUnit;\nusing NUnit.Framework;";
+
         var content = $@"using Microsoft.Playwright;
-using Microsoft.Playwright.NUnit;
-using NUnit.Framework;
+{frameworkUsing}
 
 namespace {ns};
 
@@ -169,11 +208,19 @@ public static class TestSettings
         created.Add("TestSettings.cs");
     }
 
-    void WriteSmokeTest(string dir, string ns, List<string> created)
+    void WriteSmokeTest(string dir, string ns, string targetTestFramework, List<string> created)
     {
         var path = Path.Combine(dir, "ExampleSmokeTest.cs");
+        var frameworkUsing = targetTestFramework == "xunit" ? "using Xunit;" : "using NUnit.Framework;";
+        var classAttributes = targetTestFramework == "xunit"
+            ? string.Empty
+            : @"[TestFixture]
+[Parallelizable(ParallelScope.Self)]
+";
+        var methodAttribute = targetTestFramework == "xunit" ? "[Fact]" : "[Test]";
+
         var content = $@"using Microsoft.Playwright;
-using NUnit.Framework;
+{frameworkUsing}
 
 namespace {ns};
 
@@ -182,11 +229,9 @@ namespace {ns};
 /// This is NOT a real test — it will only pass once you configure
 /// BaseUrl, auth, routes, and test data for your project.
 /// </summary>
-[TestFixture]
-[Parallelizable(ParallelScope.Self)]
-public class ExampleSmokeTest : GeneratedTestBase
+{classAttributes}public class ExampleSmokeTest : GeneratedTestBase
 {{
-    [Test]
+    {methodAttribute}
     public async Task Smoke()
     {{
         await LoginAsync();
@@ -202,7 +247,7 @@ public class ExampleSmokeTest : GeneratedTestBase
         created.Add("ExampleSmokeTest.cs");
     }
 
-    void WriteDraftConfig(string dir, string ns, string projectName, List<string> created)
+    void WriteDraftConfig(string dir, string ns, string projectName, string targetTestFramework, List<string> created)
     {
         var path = Path.Combine(dir, "adapter-config.draft.json");
         var config = new
@@ -215,34 +260,60 @@ public class ExampleSmokeTest : GeneratedTestBase
                 DefaultTestIdAttribute = "data-testid",
                 KnownTestIdAttributes = new[] { "data-testid", "data-test-id", "data-test", "data-tid" }
             },
-            TestHost = new
-            {
-                Namespace = ns,
-                BaseClass = "GeneratedTestBase",
-                ClassAttributes = new[] { "TestFixture", "Parallelizable(ParallelScope.Self)" },
-                Usings = new[] { "NUnit.Framework", "Microsoft.Playwright" },
-                SetUpStatements = new[]
+            TestHost = targetTestFramework == "xunit"
+                ? new
                 {
-                    "await LoginAsync();",
-                    "await GoToAsync(TestSettings.DefaultRoute);",
-                    "await WaitForAppReadyAsync();"
+                    TargetTestFramework = targetTestFramework,
+                    Namespace = ns,
+                    BaseClass = "GeneratedTestBase",
+                    ClassAttributes = Array.Empty<string>(),
+                    Usings = new[] { "Microsoft.Playwright", "Microsoft.Playwright.Extensions.Xunit", "Xunit" },
+                    SetUpStatements = new[]
+                    {
+                        "await LoginAsync();",
+                        "await GoToAsync(TestSettings.DefaultRoute);",
+                        "await WaitForAppReadyAsync();"
+                    }
                 }
-            },
+                : new
+                {
+                    TargetTestFramework = targetTestFramework,
+                    Namespace = ns,
+                    BaseClass = "GeneratedTestBase",
+                    ClassAttributes = new[] { "TestFixture", "Parallelizable(ParallelScope.Self)" },
+                    Usings = new[] { "NUnit.Framework", "Microsoft.Playwright" },
+                    SetUpStatements = new[]
+                    {
+                        "await LoginAsync();",
+                        "await GoToAsync(TestSettings.DefaultRoute);",
+                        "await WaitForAppReadyAsync();"
+                    }
+                },
             UiTargets = Array.Empty<object>(),
             PageObjects = Array.Empty<object>(),
             Methods = Array.Empty<object>(),
-            ParameterizedMethods = Array.Empty<object>(),
-            Scopes = Array.Empty<object>(),
-            Tables = Array.Empty<object>(),
-            Pagination = Array.Empty<object>(),
+            Verification = new
+            {
+                AutoDiscoverNearestProject = false,
+                PackageReferences = targetTestFramework == "xunit"
+                    ? new[]
+                    {
+                        new { Include = "Microsoft.Playwright.Xunit", Version = "1.52.0" },
+                        new { Include = "xunit", Version = "2.9.2" },
+                        new { Include = "xunit.runner.visualstudio", Version = "2.8.2" }
+                    }
+                    : new[]
+                    {
+                        new { Include = "Microsoft.Playwright.NUnit", Version = "1.52.0" },
+                        new { Include = "NUnit", Version = "4.2.2" },
+                        new { Include = "NUnit3TestAdapter", Version = "4.6.0" }
+                    }
+            },
             QualityGates = new
             {
-                MaxUnsupportedActions = 0,
-                MaxUnmappedTargets = 0,
-                MaxRawExpressions = 0,
-                FailOnPageTodo = true,
-                FailOnInvalidGeneratedSyntax = true,
-                FailOnPlaceholderLeftovers = true
+                FailOnPlaceholderLeftovers = true,
+                FailOnUnmappedTargets = false,
+                FailOnUnsupportedActions = false
             }
         };
 
@@ -251,9 +322,10 @@ public class ExampleSmokeTest : GeneratedTestBase
         created.Add("adapter-config.draft.json");
     }
 
-    void WriteScaffoldReadme(string dir, string projectName, List<string> created, List<string> warnings)
+    void WriteScaffoldReadme(string dir, string projectName, string targetTestFramework, List<string> created, List<string> warnings)
     {
         var path = Path.Combine(dir, "README.md");
+        var frameworkName = DisplayFrameworkName(targetTestFramework);
         var content = $@"# {projectName} — Scaffolded Playwright .NET Project
 
 This is a **compile-oriented starter kit** generated by the Migrator.
@@ -261,7 +333,7 @@ It is **NOT** a runtime-ready test project.
 
 ## What this scaffold is
 
-- A minimal Playwright .NET + NUnit test project structure
+- A minimal Playwright .NET + {frameworkName} test project structure
 - A base class (`GeneratedTestBase`) with navigation and login hooks
 - Environment-variable-based configuration (`TestSettings`)
 - A draft adapter config for the Migrator (`adapter-config.draft.json`)
@@ -311,7 +383,7 @@ This draft config has `RequiresReview: true`. Fill in:
 ### 6. Run migration
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode migrate --input ""<selenium-tests>"" --config ""adapter-config.draft.json"" --out ""src"" --format both
+dotnet run --project Migrator.Cli -- --mode migrate --target dotnet --target-test-framework {targetTestFramework} --input ""<selenium-tests>"" --config ""adapter-config.draft.json"" --out ""src"" --format both
 ```
 
 ### 7. Verify and iterate
@@ -346,6 +418,7 @@ dotnet test
 ## Next steps
 
 See the [Migrator documentation](https://github.com/<repo>/tree/main/docs) for:
+- Framework matrix
 - Quick start guide
 - Profile cookbook (UiTargets, Methods, Scopes)
 - Migration workflow

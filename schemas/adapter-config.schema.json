@@ -370,7 +370,9 @@
             "nunit",
             "NUnit",
             "xunit",
-            "xUnit"
+            "xUnit",
+            "n-unit",
+            "x-unit"
           ]
         },
         "Namespace": {

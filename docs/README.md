@@ -5,10 +5,13 @@ Public documentation is organized by the path a new user usually follows: instal
 ## Start here
 
 - [Quick start](quick-start.md) — first successful local run.
+- [Init wizard](docs/init-wizard.md)
 - [End-to-end simple example](examples/end-to-end-simple.md) — real input, config, command, and expected generated output from `examples/simple/`.
 - [Public launch demo](../examples/public-launch-demo/README.md) — copyable launch demo with before/after output and report.
 - [Screenshot walkthrough](public-launch/walkthrough.md) — install → doctor → migrate → verify → inspect report.
 - [Tool installation](tool-installation.md) — install from a packed dotnet tool or run from source.
+- [Framework matrix](framework-matrix.md)
+- [Doctor fix mode](doctor-fix-mode.md) — explicit source/target framework support and selection rules.
 - [Troubleshooting](troubleshooting.md) — common setup, config, packaging, and verification problems.
 
 ## User guide

@@ -45,19 +45,21 @@ public static class TargetCapabilityCatalog
         SchemaVersion: "target-capabilities/v1",
         Target: target,
         Status: "stable",
-        Summary: "Primary production target backend for Playwright .NET/NUnit output.",
+        Summary: "Primary production target backend for Playwright .NET output with NUnit and xUnit target frameworks; NUnit remains the default.",
         Capabilities: new[]
         {
             Strong("legacy-ir-rendering", "Renders the mature legacy TestFileModel action model used by the production C# path.", "ClickAsync", "FillAsync", "Expect(...).ToBeVisibleAsync"),
             Strong("ir-v2-rendering", "IR V2 documents can be rendered through the compatibility bridge while the canonical renderer evolves.", "MigrationDocument", "legacy bridge"),
-            Strong("project-verification", "Generated C# can be compiled through verify-project with configured package/project references.", "temporary csproj", "NUnit", "Microsoft.Playwright.NUnit"),
+            Strong("project-verification", "Generated C# can be compiled through verify-project with framework-specific package/project references.", "temporary csproj", "NUnit", "xUnit", "Microsoft.Playwright.NUnit", "Microsoft.Playwright.Xunit"),
             Strong("config-driven-mappings", "UiTargets, method mappings, table/list, navigation and wait mappings are supported through adapter-config/profile files.", "UiTargets", "ParameterizedMethods", "Tables", "NavigationUrls"),
-            Strong("scaffold", "Can generate a minimal Playwright .NET scaffold for proof-of-compilation pilots.", "GeneratedTestBase", "TestSettings", "ExampleSmokeTest"),
+            Strong("scaffold", "Can generate minimal NUnit or xUnit Playwright .NET scaffolds for proof-of-compilation pilots.", "--target-test-framework nunit", "--target-test-framework xunit", "GeneratedTestBase", "ExampleSmokeTest"),
+            Strong("target-test-frameworks", "NUnit and xUnit are explicit target choices; MSTest target output is not supported yet.", "TestHost.TargetTestFramework=nunit", "TestHost.TargetTestFramework=xunit", "--target-test-framework xunit"),
             Basic("runtime-readiness", "The backend emits TODO/root-cause reports and smoke-plan artifacts, but it does not execute browser runtime tests itself.", "smoke-plan", "runtime-classify")
         },
         Limitations: new[]
         {
             "Generated runtime correctness still depends on source-backed selectors and target project helper availability.",
+            "MSTest target output is not supported yet; use NUnit or xUnit for Playwright .NET output.",
             "IR V2 direct rendering is intentionally conservative; parity with the legacy renderer is guarded by tests."
         },
         RecommendedValidation: new[]

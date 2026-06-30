@@ -6,7 +6,7 @@ This roadmap describes the path from public preview to a stable 1.0 release.
 
 Focus: safe public adoption by early users.
 
-- Keep the stable path focused on Selenium C# / NUnit → Playwright .NET.
+- Keep the stable path focused on Selenium C# → Playwright .NET, with NUnit as the default target framework and xUnit as a supported target framework.
 - Improve packaging, docs, demo assets, and issue triage.
 - Use `migration-quality-dashboard.*` to prioritize high-impact mapping work.
 - Collect migration gaps through GitHub issue templates.

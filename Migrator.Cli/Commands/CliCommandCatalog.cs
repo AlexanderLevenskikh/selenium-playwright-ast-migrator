@@ -22,6 +22,11 @@ internal static class CliCommandCatalog
 
     static readonly CliCommandInfo[] Commands =
     {
+        StableCommand("init", "migration", false, false,
+            "Create a safe starter migration workspace with the onboarding wizard.",
+            "Writes profiles/adapter-config.json, current-ticket.md, state/run-ledger.md, README.md, next-commands.md, and optional scaffold/agent-loop files. Use direct form `selenium-pw-migrator init --wizard` or mode form `--mode init --wizard`.",
+            "Optional source path via --source <path> for direct init or --input <path> for mode form.",
+            "selenium-pw-migrator init --wizard --source ./OldTests --target dotnet --target-test-framework xunit --workspace migration"),
         StableCommand("analyze", "analysis", true, true,
             "Parse and analyze Selenium tests without generating target files.",
             "Produces reports, unmapped target lists, unsupported action lists, and draft adapter-config hints.",
@@ -34,9 +39,9 @@ internal static class CliCommandCatalog
             "selenium-pw-migrator --mode dump-ir --input ./OldTests --config ./adapter-config.json --out ir-dump --ir-version both"),
         StableCommand("migrate", "generated-tests", true, true,
             "Parse, adapt, and generate Playwright target files.",
-            "Uses the selected source frontend and target backend. Does not modify the source project.",
+            "Uses the selected source frontend and target backend. Does not modify the source project. Use --target-test-framework nunit|xunit for Playwright .NET output.",
             "Source Selenium test file or directory.",
-            "selenium-pw-migrator --mode migrate --input ./OldTests --config ./adapter-config.json --out generated-tests"),
+            "selenium-pw-migrator --mode migrate --input ./OldTests --config ./adapter-config.json --target-test-framework xunit --out generated-tests"),
         StableCommand("verify", "verify", true, true,
             "Validate generated code quality with syntax/TODO/config checks.",
             "Runs renderer-level verification without creating a temporary project build.",
@@ -44,19 +49,21 @@ internal static class CliCommandCatalog
             "selenium-pw-migrator --mode verify --input ./OldTests --config ./adapter-config.json --out verify"),
         StableCommand("verify-project", "verify-project", true, true,
             "Project-aware verification for generated Playwright .NET code.",
-            "Creates a temporary verification project, adds configured references, runs dotnet build, and classifies diagnostics.",
+            "Creates a temporary verification project, adds configured references, runs dotnet build, and classifies diagnostics. Use --target-test-framework nunit|xunit to choose default test packages when config does not override them.",
             "Source Selenium test directory.",
-            "selenium-pw-migrator --mode verify-project --input ./OldTests --config ./adapter-config.json --out verify-project"),
+            "selenium-pw-migrator --mode verify-project --input ./OldTests --config ./adapter-config.json --target-test-framework xunit --out verify-project"),
         ExperimentalCommand("verify-ts-project", "verify-ts-project", true, true,
             "Project-aware verification for generated Playwright TypeScript specs.",
             "Copies generated specs into a workspace, creates tsconfig.migrator.json, and runs npx tsc --noEmit.",
             "Generated TS migration folder or .spec.ts file; pass --ts-project for the real Playwright TS project.",
             "selenium-pw-migrator --mode verify-ts-project --input migration/generated-ts --ts-project ./playwright-ts --out verify-ts-project"),
         StableCommand("doctor", "doctor", true, true,
-            "Preflight diagnostics for agent/user migration workflows.",
-            "Checks input scope, config layers, project references, dotnet availability, POM/source truth, and workspace hygiene.",
+            "Preflight diagnostics and safe setup repair planning for migration workflows.",
+            "Checks input scope, config layers, project references, dotnet availability, POM/source truth, and workspace hygiene. Add --fix for a reversible dry-run plan, or --fix --apply to create safe workspace files and .doctor.new config candidates without editing source tests.",
             "Source tests/project directory to validate before migration.",
-            "selenium-pw-migrator --mode doctor --input ./OldTests --config ./adapter-config.json --out doctor"),
+            "selenium-pw-migrator --mode doctor --input ./OldTests --config ./adapter-config.json --out doctor",
+            "selenium-pw-migrator --mode doctor --input ./OldTests --fix --dry-run --out doctor-fix",
+            "selenium-pw-migrator --mode doctor --input ./OldTests --config ./adapter-config.json --fix --apply --out doctor-fix"),
         ExperimentalCommand("explain-todo", "explain-todo", true, true,
             "Explain remaining TODO/root causes from existing migration artifacts.",
             "Reads report/verify/proposal artifacts and writes explain-todo plus agent-next-task outputs.",
@@ -139,9 +146,9 @@ internal static class CliCommandCatalog
             "selenium-pw-migrator --mode orchestrate --input ./OldTests --config ./adapter-config.json --out orchestration --format both"),
         StableCommand("scaffold", "generated-scaffold", false, false,
             "Generate a minimal compile-ready Playwright .NET test project scaffold.",
-            "Creates csproj, GeneratedTestBase, TestSettings, ExampleSmokeTest, adapter-config draft, README, and .gitignore.",
+            "Creates csproj, GeneratedTestBase, TestSettings, ExampleSmokeTest, adapter-config draft, README, and .gitignore. Supports --target-test-framework nunit|xunit.",
             "No input required.",
-            "selenium-pw-migrator --mode scaffold --out generated-scaffold"),
+            "selenium-pw-migrator --mode scaffold --target-test-framework xunit --out generated-scaffold"),
         StableCommand("bootstrap-project", "project-bootstrap", false, false,
             "Create reusable migration profile skeletons for a new project.",
             "Uses --input when provided to derive project naming and nearest .csproj; otherwise uses the current directory.",
@@ -261,6 +268,18 @@ internal static class CliCommandCatalog
         sb.AppendLine("  --workspace <directory>          Migration artifacts root (default: migration).");
         sb.AppendLine("  --target <dotnet|ts|playwright-dotnet|playwright-typescript>");
         sb.AppendLine("                                   Generation target for migrate/orchestrate.");
+        sb.AppendLine("  --target-test-framework <nunit|xunit>");
+        sb.AppendLine("                                   Test framework for Playwright .NET output/scaffold/verify defaults.");
+        sb.AppendLine("  --wizard                         Run init in guided/onboarding mode.");
+        sb.AppendLine("  --fix                           Add safe doctor repair plan artifacts.");
+        sb.AppendLine("  --dry-run                       Preview doctor fixes without writing project/config files.");
+        sb.AppendLine("  --apply                         Apply safe doctor fixes inside workspace or .doctor.new config files.");
+        sb.AppendLine("  --source <path>                  Source path for direct `init --wizard` form.");
+        sb.AppendLine("  --test-id-attribute <attr>       Default test id attribute for init config.");
+        sb.AppendLine("  --target-project <path>          Existing target project path for init/discover-target handoff.");
+        sb.AppendLine("  --target-namespace <namespace>   Target namespace for init-generated config/scaffold.");
+        sb.AppendLine("  --target-base-class <class>      Target base class for init-generated config.");
+        sb.AppendLine("  --install-kit|--no-install-kit   Include or skip lightweight agent loop files during init.");
         sb.AppendLine("  --source <auto|csharp-selenium|java-selenium|python-selenium>");
         sb.AppendLine("                                   Source frontend for source-processing modes.");
         sb.AppendLine("  --config <adapter-config.json>   Adapter config layer. Can be repeated.");

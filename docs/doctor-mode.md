@@ -75,3 +75,22 @@ agent-doctor-next-task.md
 3. если проблема вне его полномочий — сформировать escalation report;
 4. снова запустить `--mode doctor`.
 
+
+## Fix mode
+
+Use `--fix` when doctor found setup/config issues that have safe, reversible repairs.
+
+```powershell
+dotnet run --project .\Migrator.Cli -- `
+  --mode doctor `
+  --input "<Selenium tests or project directory>" `
+  --config "profiles/projects/my-project.adapter.json" `
+  --fix `
+  --dry-run `
+  --out "doctor-fix-my-project" `
+  --format both
+```
+
+Dry-run writes only report artifacts. To create safe files, use `--fix --apply`; existing config files are not overwritten, and config changes are written as `.doctor.new` candidates.
+
+See [Doctor fix mode](doctor-fix-mode.md) for the safety model and artifact list.

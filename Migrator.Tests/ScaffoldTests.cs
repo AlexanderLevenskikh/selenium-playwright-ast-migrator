@@ -281,6 +281,82 @@ public class ScaffoldTests : IDisposable
         Assert.True(File.Exists(Path.Combine(repoRoot, "docs/user-guide/no-infra-scaffold.ru.md")));
     }
 
+
+    [Fact]
+    public void Write_XUnitScaffoldUsesXunitPackagesAndAttributes()
+    {
+        var result = new ScaffoldWriter(new ScaffoldOptions { OutPath = _tmp, TargetTestFramework = "xunit" }).Write();
+
+        Assert.Equal("completed", result.Status);
+
+        var csproj = File.ReadAllText(Path.Combine(_tmp, "Example.E2ETests.Playwright.csproj"));
+        Assert.Contains("Microsoft.Playwright.Xunit", csproj);
+        Assert.Contains("xunit", csproj);
+        Assert.Contains("xunit.runner.visualstudio", csproj);
+        Assert.DoesNotContain("Microsoft.Playwright.NUnit", csproj);
+        Assert.DoesNotContain("NUnit3TestAdapter", csproj);
+
+        var baseContent = File.ReadAllText(Path.Combine(_tmp, "GeneratedTestBase.cs"));
+        Assert.Contains("using Microsoft.Playwright.Extensions.Xunit;", baseContent);
+        Assert.DoesNotContain("using Microsoft.Playwright.NUnit;", baseContent);
+        Assert.DoesNotContain("NUnit.Framework", baseContent);
+
+        var smoke = File.ReadAllText(Path.Combine(_tmp, "ExampleSmokeTest.cs"));
+        Assert.Contains("using Xunit;", smoke);
+        Assert.Contains("[Fact]", smoke);
+        Assert.DoesNotContain("[TestFixture]", smoke);
+        Assert.DoesNotContain("[Test]", smoke);
+    }
+
+    [Fact]
+    public void Write_XUnitDraftConfigPersistsTargetTestFramework()
+    {
+        new ScaffoldWriter(new ScaffoldOptions { OutPath = _tmp, TargetTestFramework = "xUnit" }).Write();
+
+        var content = File.ReadAllText(Path.Combine(_tmp, "adapter-config.draft.json"));
+        using var doc = System.Text.Json.JsonDocument.Parse(content);
+
+        Assert.Equal("xunit", doc.RootElement.GetProperty("TestHost").GetProperty("TargetTestFramework").GetString());
+
+        var config = System.Text.Json.JsonSerializer.Deserialize<ProjectAdapterConfig>(content);
+        ConfigValidator.Validate(config!);
+    }
+
+    [Fact]
+    public void Write_UnsupportedTargetTestFrameworkFailsWithoutWriting()
+    {
+        var result = new ScaffoldWriter(new ScaffoldOptions { OutPath = _tmp, TargetTestFramework = "mstest" }).Write();
+
+        Assert.Equal("failed", result.Status);
+        Assert.Contains(result.Warnings, warning => warning.Contains("Unsupported target test framework", StringComparison.OrdinalIgnoreCase));
+        Assert.False(Directory.Exists(_tmp));
+    }
+
+    [Fact]
+    public void ConfigValidate_RejectsUnsupportedTargetTestFramework()
+    {
+        var ex = Assert.Throws<ConfigValidationError>(() => ConfigValidator.Validate(new ProjectAdapterConfig
+        {
+            TestHost = new TestHostConfig { TargetTestFramework = "mstest" }
+        }));
+
+        Assert.Contains(ex.Errors, error => error.Contains("TestHost.TargetTestFramework", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void DocsMentionFrameworkMatrixAndTargetTestFrameworkFlag()
+    {
+        var repoRoot = GetRepoRoot();
+
+        var readme = File.ReadAllText(Path.Combine(repoRoot, "README.md"));
+        Assert.Contains("Framework matrix", readme);
+        Assert.Contains("xUnit", readme);
+
+        var matrix = File.ReadAllText(Path.Combine(repoRoot, "docs/framework-matrix.md"));
+        Assert.Contains("--target-test-framework xunit", matrix);
+        Assert.Contains("MSTest", matrix);
+    }
+
     static string GetRepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory.ToString());

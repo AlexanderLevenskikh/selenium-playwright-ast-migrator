@@ -34,8 +34,8 @@ Runtime verification remains the responsibility of the development team.
 
 | Capability | Status | Limitation |
 |---|---|---|
-| Selenium C# / NUnit → Playwright .NET | Stable public path | Best-covered path; still requires project profiles. |
-| Selenium C# / NUnit → Playwright TypeScript | Experimental preview | Generated `.spec.ts` files may require TS-specific profile overrides. Project-aware verification requires `--ts-project`. |
+| Selenium C# / NUnit or xUnit → Playwright .NET / NUnit or xUnit | Stable public path | Best-covered path; NUnit remains the default target framework; still requires project profiles. |
+| Selenium C# / NUnit or xUnit → Playwright TypeScript | Experimental preview | Generated `.spec.ts` files may require TS-specific profile overrides. Project-aware verification requires `--ts-project`. |
 | Selenium Java source | Experimental MVP | Handles common Java Selenium fixtures without Java semantic analysis. |
 | Selenium Python source | Experimental spike | Handles simple pytest/unittest Selenium patterns; not production-ready. |
 

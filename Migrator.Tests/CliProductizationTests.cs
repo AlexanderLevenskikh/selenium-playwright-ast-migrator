@@ -50,6 +50,7 @@ public class CliProductizationTests
         var catalog = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/CliCommandCatalog.cs"));
         var expectedModes = new[]
         {
+            "init",
             "analyze",
             "dump-ir",
             "migrate",
@@ -79,7 +80,7 @@ public class CliProductizationTests
 
         foreach (var mode in expectedModes)
         {
-            Assert.Matches($"(StableCommand|ExperimentalCommand|InternalCommand)\\(\\\"{Regex.Escape(mode)}\\\",\\s*\\\"[^\\\"]+\\\"", catalog);
+            Assert.Matches($@"(StableCommand|ExperimentalCommand|InternalCommand)\(""{Regex.Escape(mode)}"",\s*""[^""]+""", catalog);
         }
     }
 
@@ -90,10 +91,37 @@ public class CliProductizationTests
 
         Assert.Contains("BuildCommandHelp(CliCommandInfo command)", catalog);
         Assert.Contains("Use `selenium-pw-migrator --mode <mode> --help`", catalog);
+        Assert.Contains("selenium-pw-migrator init --wizard --source ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator --mode migrate --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator --mode doctor --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator --mode verify-project --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator --mode helper-inventory --input ./OldTests", catalog);
+        Assert.Contains("--target-test-framework <nunit|xunit>", catalog);
+        Assert.Contains("--fix", catalog);
+        Assert.Contains("--apply", catalog);
+        Assert.Contains("--dry-run", catalog);
+        Assert.Contains("selenium-pw-migrator --mode doctor --input ./OldTests --fix --dry-run", catalog);
+        Assert.Contains("selenium-pw-migrator --mode scaffold --target-test-framework xunit", catalog);
+    }
+
+
+    [Fact]
+    public void Program_WiresTargetTestFrameworkThroughCliConfigScaffoldAndVerifyProject()
+    {
+        var program = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Program.cs"));
+        var models = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Models/CliReportModels.cs"));
+
+        Assert.Contains("--target-test-framework", program);
+        Assert.Contains("NormalizeDirectCommand(args)", program);
+        Assert.Contains("RunInitWizard(opts, targetBackend)", program);
+        Assert.Contains("--test-id-attribute", program);
+        Assert.Contains("--fix", program);
+        Assert.Contains("DoctorFixPlanner", program);
+        Assert.Contains("ApplyTargetTestFrameworkOverride", program);
+        Assert.Contains("TargetTestFramework = targetTestFramework ?? \"nunit\"", program);
+        Assert.Contains("BuildPackageReferences(verification, projectReferences, config)", program);
+        Assert.Contains("Microsoft.Playwright.Xunit", program);
+        Assert.Contains("string? TargetTestFramework", models);
     }
 
     static string FindRepositoryFile(string relativePath)

@@ -52,7 +52,7 @@ public static class SourceCapabilityCatalog
         Capabilities: new[]
         {
             Strong("semantic-model", "Roslyn semantic model and syntax fallback are available.", "method symbol resolution", "IWebElement/IWebDriver typing", "source spans"),
-            Strong("test-frameworks", "NUnit/xUnit-style test and setup methods are recognized through the legacy C# parser.", "[Test]", "[SetUp]", "[Fact]", "[Theory]"),
+            Strong("test-frameworks", "NUnit and xUnit-style test and setup methods are recognized through the legacy C# parser; MSTest should be treated as detected/unsupported until mapped and verified.", "[Test]", "[SetUp]", "[Fact]", "[Theory]", "[TestMethod]"),
             Strong("selenium-actions", "Common Selenium actions are recognized and lowered into legacy/IR V2 actions.", "Click", "SendKeys", "Clear", "Submit-like helpers via mappings"),
             Strong("locators", "Selenium By locators, POM properties, table/list mappings, raw expressions and unresolved targets are represented with diagnostics.", "By.Id", "By.CssSelector", "By.XPath", "PageObjectProperty"),
             Strong("waits", "Explicit waits, project wait helpers and configured wait policies are supported.", "WaitVisible", "WaitHidden", "WebDriverWait", "MethodSemantics"),
@@ -80,7 +80,7 @@ public static class SourceCapabilityCatalog
         Capabilities: new[]
         {
             None("semantic-model", "No Java compiler/semantic model is used yet; recognition is syntax/regex heuristic based."),
-            Basic("test-frameworks", "Basic JUnit/TestNG test and setup annotations are recognized.", "@Test", "@Before", "@BeforeEach", "@BeforeMethod"),
+            Basic("test-frameworks", "Basic JUnit 4, JUnit 5 and TestNG test/setup annotations are recognized heuristically.", "org.junit.Test", "org.junit.jupiter.api.Test", "org.testng.annotations.Test", "@Before", "@BeforeEach", "@BeforeMethod"),
             Basic("selenium-actions", "Common findElement action chains and local WebElement variables are recognized.", "click", "sendKeys", "clear", "Keys.ENTER"),
             Basic("locators", "Common By.* locators are recognized.", "By.id", "By.cssSelector", "By.xpath", "By.linkText"),
             Basic("waits", "WebDriverWait/ExpectedConditions matrix covers located elements, WebElement variables, direct findElement waits and static-import condition calls.", "visibilityOfElementLocated", "invisibilityOfElementLocated", "visibilityOf", "invisibilityOf", "elementToBeClickable"),
@@ -109,7 +109,7 @@ public static class SourceCapabilityCatalog
         Capabilities: new[]
         {
             None("semantic-model", "No Python semantic/type model is used; recognition is text/AST-light heuristic based."),
-            Basic("test-frameworks", "Basic pytest function/class tests and pytest/unittest setup shapes are recognized and lowered into SetupActions.", "def test_*", "class Test*", "unittest.TestCase", "setUp", "setup_method", "setup_class"),
+            Basic("test-frameworks", "Basic pytest and unittest test/setup shapes are recognized and lowered into SetupActions.", "def test_*", "class Test*", "unittest.TestCase", "setUp", "setup_method", "setup_class"),
             Basic("selenium-actions", "Common find_element and legacy find_element_by_* action flows are recognized.", "click", "send_keys", "clear", "find_element_by_id"),
             Basic("locators", "Common By.* tuple-style locators and legacy find_element_by_* selectors are recognized.", "By.ID", "By.CSS_SELECTOR", "By.XPATH", "By.LINK_TEXT", "find_element_by_css_selector"),
             Basic("waits", "WebDriverWait + expected_conditions matrix covers located tuple locators, wait variables, element-variable waits, direct find_element waits, until_not and text-present waits.", "visibility_of_element_located", "invisibility_of_element_located", "presence_of_all_elements_located", "text_to_be_present_in_element", "until_not(EC.visibility_of(element))"),

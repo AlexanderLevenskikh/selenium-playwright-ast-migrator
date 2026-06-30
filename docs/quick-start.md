@@ -10,6 +10,14 @@ This path gets you from a small Selenium sample to generated Playwright output. 
 
 ## 1. Check the tool and your input
 
+For a new migration, start with the onboarding wizard:
+
+```bash
+selenium-pw-migrator init --wizard --source ./SeleniumTests --target dotnet --target-test-framework nunit --workspace migration
+```
+
+For an existing config/workspace, run the preflight checks directly:
+
 ```bash
 selenium-pw-migrator --help
 selenium-pw-migrator --mode doctor --input ./SeleniumTests --config ./adapter-config.json --out doctor

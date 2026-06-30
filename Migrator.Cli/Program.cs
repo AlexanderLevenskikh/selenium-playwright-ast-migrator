@@ -17,6 +17,8 @@ using Migrator.SeleniumCSharp;
 if (args.Length > 0 && string.Equals(args[0], "kit", StringComparison.OrdinalIgnoreCase))
     return KitCommand.Run(args.Skip(1).ToArray());
 
+args = NormalizeDirectCommand(args);
+
 if (IsHelpRequest(args))
 {
     var helpMode = FindOptionValue(args, "--mode");
@@ -54,6 +56,7 @@ bool recursiveArtifacts = opts.RecursiveArtifacts;
 string irVersion = opts.IrVersion;
 string renderIr = opts.RenderIr;
 string validationMode = opts.ValidationMode;
+string? targetTestFramework = opts.TargetTestFramework;
 
 // Agent-safety modes operate on config/report artifacts and do not process source files.
 if (mode == "config-validate")
@@ -104,6 +107,12 @@ catch (InvalidOperationException ex)
 IRenderer renderer = new TargetBackendRendererAdapter(targetBackend);
 target = targetBackend.Target.Id;
 
+if (mode == "init")
+{
+    var initExitCode = RunInitWizard(opts, targetBackend);
+    return initExitCode;
+}
+
 IProjectAdapter? adapter = null;
 
 if (configPaths.Length > 0)
@@ -120,6 +129,8 @@ if (configPaths.Length > 0)
     try
     {
         loadedConfig = ProjectAdapterConfigMerger.LoadAndMerge(configPaths);
+        if (!string.IsNullOrWhiteSpace(targetTestFramework))
+            loadedConfig = ApplyTargetTestFrameworkOverride(loadedConfig, targetTestFramework);
         adapter = new DefaultProjectAdapter(loadedConfig);
     }
     catch (ConfigValidationError cvex)
@@ -133,6 +144,12 @@ if (configPaths.Length > 0)
     Console.WriteLine(configPaths.Length == 1
         ? $"Loaded adapter config: {configPaths[0]}"
         : $"Loaded adapter config layers: {string.Join(" -> ", configPaths)}");
+}
+
+if (configPaths.Length == 0 && !string.IsNullOrWhiteSpace(targetTestFramework))
+{
+    loadedConfig = ApplyTargetTestFrameworkOverride(new ProjectAdapterConfig(), targetTestFramework);
+    adapter = new DefaultProjectAdapter(loadedConfig);
 }
 
 var sourceRegistry = CreateBuiltInSourceFrontendRegistry(loadedConfig);
@@ -213,7 +230,7 @@ if (IsTypeScriptTarget(targetBackend) && mode == "orchestrate")
 // Handle doctor mode — validates environment/input/config/project context before migration.
 if (mode == "doctor")
 {
-    var doctorExitCode = RunDoctor(inputPath, outPath, format, configPaths, loadedConfig);
+    var doctorExitCode = RunDoctor(inputPath, outPath, format, configPaths, loadedConfig, opts);
     return doctorExitCode;
 }
 
@@ -298,7 +315,7 @@ if (mode == "verify-ts-project")
 // Handle scaffold mode — generates a minimal, compile-ready Playwright .NET test project
 if (mode == "scaffold")
 {
-    var scaffoldResult = new ScaffoldWriter(new ScaffoldOptions { OutPath = outPath, Format = format }).Write();
+    var scaffoldResult = new ScaffoldWriter(new ScaffoldOptions { OutPath = outPath, Format = format, TargetTestFramework = targetTestFramework ?? "nunit" }).Write();
     if (scaffoldResult.Status == "failed")
     {
         foreach (var w in scaffoldResult.Warnings)
@@ -416,6 +433,203 @@ static int ApplyQualityGate(MigrationSummaryReport summary, bool failOnUnsupport
 }
 
 // --- Mode implementations ---
+
+static int RunInitWizard(CliOptions opts, ITargetBackend targetBackend)
+{
+    var interactive = opts.Wizard || string.IsNullOrWhiteSpace(opts.Input);
+    var sourcePath = opts.Input;
+    if (string.IsNullOrWhiteSpace(sourcePath))
+    {
+        sourcePath = PromptRequired("Source Selenium test path");
+        if (string.IsNullOrWhiteSpace(sourcePath))
+            return 2;
+    }
+
+    if (!File.Exists(sourcePath) && !Directory.Exists(sourcePath))
+    {
+        Console.Error.WriteLine($"Source path not found: {sourcePath}");
+        return 1;
+    }
+
+    var detection = SourceAutoDetector.Detect(sourcePath);
+    var sourceFramework = DetectSourceTestFramework(sourcePath, detection.DetectedSourceId);
+    var targetId = targetBackend.Target.Id;
+    var targetTestFrameworkValue = opts.TargetTestFramework ?? "nunit";
+
+    if (interactive && IsInteractiveConsole())
+    {
+        Console.WriteLine("=== Migrator Init Wizard ===");
+        Console.WriteLine($"Detected source: {detection.DetectedSourceId} ({detection.Confidence})");
+        Console.WriteLine($"Detected source test framework: {sourceFramework}");
+        targetId = PromptChoice("Target backend", new[] { "playwright-dotnet", "playwright-typescript" }, targetId);
+        if (targetId.Equals("playwright-dotnet", StringComparison.OrdinalIgnoreCase))
+            targetTestFrameworkValue = PromptChoice("Target test framework", new[] { "nunit", "xunit" }, targetTestFrameworkValue);
+    }
+
+    var targetExists = opts.TargetProjectExists ?? false;
+    if (interactive && IsInteractiveConsole() && opts.TargetProjectExists == null)
+        targetExists = PromptYesNo("Does a target Playwright project already exist?", defaultValue: false);
+
+    var targetProjectPath = opts.TargetProjectPath;
+    if (targetExists && string.IsNullOrWhiteSpace(targetProjectPath) && interactive && IsInteractiveConsole())
+        targetProjectPath = PromptOptional("Target Playwright project path for discover-target");
+
+    var testIdAttribute = string.IsNullOrWhiteSpace(opts.DefaultTestIdAttribute) ? "data-testid" : opts.DefaultTestIdAttribute!;
+    if (interactive && IsInteractiveConsole() && string.IsNullOrWhiteSpace(opts.DefaultTestIdAttribute))
+        testIdAttribute = PromptChoice("Default test id attribute", new[] { "data-testid", "data-test-id", "data-test", "data-tid", "custom" }, "data-testid");
+    if (testIdAttribute.Equals("custom", StringComparison.OrdinalIgnoreCase) && interactive && IsInteractiveConsole())
+        testIdAttribute = PromptRequired("Custom test id attribute");
+
+    var installKit = opts.InstallAgentKit ?? false;
+    if (interactive && IsInteractiveConsole() && opts.InstallAgentKit == null)
+        installKit = PromptYesNo("Install lightweight agent loop files?", defaultValue: true);
+
+    var options = new InitWizardOptions
+    {
+        WorkspacePath = opts.Out,
+        SourcePath = sourcePath,
+        SourceFrontendId = detection.DetectedSourceId,
+        SourceLanguage = ResolveSourceLanguage(detection.DetectedSourceId),
+        SourceTestFramework = sourceFramework,
+        TargetBackendId = targetId,
+        TargetTestFramework = targetTestFrameworkValue,
+        TargetProjectExists = targetExists,
+        TargetProjectPath = targetProjectPath,
+        DefaultTestIdAttribute = testIdAttribute,
+        InstallAgentKit = installKit,
+        TargetNamespace = opts.TargetNamespace,
+        TargetBaseClass = opts.TargetBaseClass
+    };
+
+    var result = new InitWizardWriter(options).Write();
+    if (result.Status.Equals("failed", StringComparison.OrdinalIgnoreCase))
+    {
+        foreach (var warning in result.Warnings)
+            Console.Error.WriteLine(warning);
+        return 1;
+    }
+
+    Console.WriteLine("=== Init Wizard ===");
+    Console.WriteLine($"Workspace: {result.WorkspacePath}");
+    Console.WriteLine($"Config: {result.ConfigPath}");
+    Console.WriteLine($"Created files: {result.CreatedFiles.Length}");
+    foreach (var warning in result.Warnings)
+        Console.WriteLine($"Warning: {warning}");
+    Console.WriteLine("Next steps:");
+    foreach (var step in result.NextSteps)
+        Console.WriteLine($"- {step}");
+    return 0;
+}
+
+static bool IsInteractiveConsole() => !Console.IsInputRedirected;
+
+static string PromptRequired(string label)
+{
+    Console.Write($"{label}: ");
+    return Console.ReadLine()?.Trim() ?? "";
+}
+
+static string? PromptOptional(string label)
+{
+    Console.Write($"{label} (empty to skip): ");
+    var value = Console.ReadLine()?.Trim();
+    return string.IsNullOrWhiteSpace(value) ? null : value;
+}
+
+static string PromptChoice(string label, IReadOnlyList<string> choices, string defaultValue)
+{
+    var normalizedDefault = choices.FirstOrDefault(x => x.Equals(defaultValue, StringComparison.OrdinalIgnoreCase)) ?? choices[0];
+    Console.Write($"{label} [{normalizedDefault}] ({string.Join("/", choices)}): ");
+    var value = Console.ReadLine()?.Trim();
+    if (string.IsNullOrWhiteSpace(value))
+        return normalizedDefault;
+    if (choices.Any(x => x.Equals(value, StringComparison.OrdinalIgnoreCase)))
+        return choices.First(x => x.Equals(value, StringComparison.OrdinalIgnoreCase));
+    Console.WriteLine($"Unsupported value '{value}', using {normalizedDefault}.");
+    return normalizedDefault;
+}
+
+static bool PromptYesNo(string label, bool defaultValue)
+{
+    Console.Write($"{label} [{(defaultValue ? "Y/n" : "y/N")}] ");
+    var value = Console.ReadLine()?.Trim();
+    if (string.IsNullOrWhiteSpace(value))
+        return defaultValue;
+    return value.Equals("y", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("yes", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("true", StringComparison.OrdinalIgnoreCase);
+}
+
+static string ResolveSourceLanguage(string sourceId)
+{
+    if (sourceId.Contains("java", StringComparison.OrdinalIgnoreCase)) return "java";
+    if (sourceId.Contains("python", StringComparison.OrdinalIgnoreCase)) return "python";
+    return "csharp";
+}
+
+static string DetectSourceTestFramework(string sourcePath, string sourceId)
+{
+    var files = EnumerateSourceSamples(sourcePath).Take(250).ToArray();
+    var samples = files.Select(ReadSmallText).ToArray();
+    if (sourceId.Contains("java", StringComparison.OrdinalIgnoreCase))
+    {
+        if (samples.Any(t => t.Contains("org.testng", StringComparison.Ordinal) || t.Contains("@Test", StringComparison.Ordinal) && t.Contains("testng", StringComparison.OrdinalIgnoreCase)))
+            return "testng";
+        if (samples.Any(t => t.Contains("org.junit.jupiter", StringComparison.Ordinal)))
+            return "junit5";
+        if (samples.Any(t => t.Contains("org.junit.Test", StringComparison.Ordinal) || t.Contains("org.junit.Assert", StringComparison.Ordinal)))
+            return "junit4";
+        return "unknown-java";
+    }
+
+    if (sourceId.Contains("python", StringComparison.OrdinalIgnoreCase))
+    {
+        if (samples.Any(t => t.Contains("unittest.TestCase", StringComparison.Ordinal) || t.Contains("import unittest", StringComparison.Ordinal)))
+            return "unittest";
+        if (samples.Any(t => t.Contains("pytest", StringComparison.OrdinalIgnoreCase) || System.Text.RegularExpressions.Regex.IsMatch(t, @"\bdef\s+test_")))
+            return "pytest";
+        return "unknown-python";
+    }
+
+    if (samples.Any(t => t.Contains("using Xunit", StringComparison.Ordinal) || t.Contains("[Fact", StringComparison.Ordinal) || t.Contains("[Theory", StringComparison.Ordinal)))
+        return "xunit";
+    if (samples.Any(t => t.Contains("using Microsoft.VisualStudio.TestTools.UnitTesting", StringComparison.Ordinal) || t.Contains("[TestMethod", StringComparison.Ordinal)))
+        return "mstest";
+    if (samples.Any(t => t.Contains("using NUnit.Framework", StringComparison.Ordinal) || t.Contains("[Test", StringComparison.Ordinal) || t.Contains("[TestCase", StringComparison.Ordinal)))
+        return "nunit";
+    return "unknown-csharp";
+}
+
+static IEnumerable<string> EnumerateSourceSamples(string sourcePath)
+{
+    if (File.Exists(sourcePath))
+        return new[] { sourcePath };
+    if (!Directory.Exists(sourcePath))
+        return Array.Empty<string>();
+
+    var ignored = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "bin", "obj", ".git", ".vs", ".idea", "node_modules", "dist", "build" };
+    return Directory.EnumerateFiles(sourcePath, "*.*", SearchOption.AllDirectories)
+        .Where(file => file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+            || file.EndsWith(".java", StringComparison.OrdinalIgnoreCase)
+            || file.EndsWith(".py", StringComparison.OrdinalIgnoreCase))
+        .Where(file => !file.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(part => ignored.Contains(part)));
+}
+
+static string ReadSmallText(string file)
+{
+    try
+    {
+        using var stream = File.OpenRead(file);
+        using var reader = new StreamReader(stream);
+        var buffer = new char[32 * 1024];
+        var read = reader.Read(buffer, 0, buffer.Length);
+        return new string(buffer, 0, read);
+    }
+    catch
+    {
+        return "";
+    }
+}
 
 static int RunConfigNormalize(ProjectAdapterConfig config, string[] configPaths, string outPath, string format, SourceSpec source, TargetSpec target)
 {
@@ -926,6 +1140,130 @@ static bool IsTypeScriptTarget(ITargetBackend targetBackend)
         || string.Equals(targetBackend.Target.Language, "typescript", StringComparison.OrdinalIgnoreCase);
 }
 
+static string? NormalizeTargetTestFramework(string? value)
+{
+    if (string.IsNullOrWhiteSpace(value))
+        return null;
+
+    var normalized = value.Trim().ToLowerInvariant();
+    return normalized switch
+    {
+        "nunit" or "n-unit" => "nunit",
+        "xunit" or "x-unit" => "xunit",
+        _ => null
+    };
+}
+
+static IEnumerable<PackageReferenceConfig> GetDefaultVerificationPackageReferences(IEnumerable<string> targetTestFrameworks)
+{
+    yield return new PackageReferenceConfig { Include = "Microsoft.NET.Test.Sdk", Version = "17.12.0" };
+
+    foreach (var targetTestFramework in targetTestFrameworks.Distinct(StringComparer.OrdinalIgnoreCase))
+    {
+        if (string.Equals(targetTestFramework, "xunit", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return new PackageReferenceConfig { Include = "Microsoft.Playwright.Xunit", Version = "1.52.0" };
+            yield return new PackageReferenceConfig { Include = "xunit", Version = "2.9.2" };
+            yield return new PackageReferenceConfig { Include = "xunit.runner.visualstudio", Version = "2.8.2" };
+            continue;
+        }
+
+        yield return new PackageReferenceConfig { Include = "Microsoft.Playwright.NUnit", Version = "1.52.0" };
+        yield return new PackageReferenceConfig { Include = "NUnit", Version = "4.2.2" };
+        yield return new PackageReferenceConfig { Include = "NUnit3TestAdapter", Version = "4.6.0" };
+    }
+}
+
+static IReadOnlyList<string> ResolveTargetTestFrameworksForVerification(ProjectAdapterConfig config)
+{
+    var frameworks = new List<string>();
+
+    var globalFramework = NormalizeTargetTestFramework(config.TestHost?.TargetTestFramework);
+    if (globalFramework != null)
+        frameworks.Add(globalFramework);
+
+    foreach (var scope in config.Scopes)
+    {
+        var scopeFramework = NormalizeTargetTestFramework(scope.TestHost?.TargetTestFramework);
+        if (scopeFramework != null)
+            frameworks.Add(scopeFramework);
+    }
+
+    if (frameworks.Count == 0)
+        frameworks.Add("nunit");
+
+    return frameworks.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+}
+
+static ProjectAdapterConfig ApplyTargetTestFrameworkOverride(ProjectAdapterConfig config, string targetTestFramework)
+{
+    var normalized = NormalizeTargetTestFramework(targetTestFramework)
+        ?? throw new ArgumentException($"Unsupported target test framework '{targetTestFramework}'.", nameof(targetTestFramework));
+
+    return new ProjectAdapterConfig
+    {
+        SchemaVersion = config.SchemaVersion,
+        SourceProjectName = config.SourceProjectName,
+        UiTargets = config.UiTargets,
+        PageObjects = config.PageObjects,
+        Methods = config.Methods,
+        TargetKnownTypes = config.TargetKnownTypes,
+        TargetKnownIdentifiers = config.TargetKnownIdentifiers,
+        SourceOnlyIdentifiers = config.SourceOnlyIdentifiers,
+        SuppressedMethods = config.SuppressedMethods,
+        SuppressedMethodPatterns = config.SuppressedMethodPatterns,
+        ParameterizedMethods = config.ParameterizedMethods,
+        NavigationUrls = config.NavigationUrls,
+        NavigationTargetStatement = config.NavigationTargetStatement,
+        LocatorSettings = config.LocatorSettings,
+        TestHost = ApplyTargetTestFrameworkToTestHost(config.TestHost, normalized),
+        Scopes = config.Scopes.Select(scope => ApplyTargetTestFrameworkToScope(scope, normalized)).ToArray(),
+        RecognizerAliases = config.RecognizerAliases,
+        GenericResultMethods = config.GenericResultMethods,
+        WaitPolicies = config.WaitPolicies,
+        Verification = config.Verification,
+        QualityGates = config.QualityGates,
+        Tables = config.Tables,
+        Pagination = config.Pagination
+    };
+}
+
+static TestHostConfig ApplyTargetTestFrameworkToTestHost(TestHostConfig? testHost, string targetTestFramework)
+{
+    return new TestHostConfig
+    {
+        TargetTestFramework = targetTestFramework,
+        Namespace = testHost?.Namespace,
+        BaseClass = testHost?.BaseClass,
+        ClassName = testHost?.ClassName,
+        ClassAttributes = testHost?.ClassAttributes,
+        Usings = testHost?.Usings,
+        SetUpStatements = testHost?.SetUpStatements,
+        TargetPageVariable = testHost?.TargetPageVariable
+    };
+}
+
+static ProfileScope ApplyTargetTestFrameworkToScope(ProfileScope scope, string targetTestFramework)
+{
+    return new ProfileScope
+    {
+        Name = scope.Name,
+        SourcePathPatterns = scope.SourcePathPatterns,
+        TestHost = scope.TestHost == null ? null : ApplyTargetTestFrameworkToTestHost(scope.TestHost, targetTestFramework),
+        UiTargets = scope.UiTargets,
+        Methods = scope.Methods,
+        ParameterizedMethods = scope.ParameterizedMethods,
+        NavigationUrls = scope.NavigationUrls,
+        NavigationTargetStatement = scope.NavigationTargetStatement,
+        TargetKnownTypes = scope.TargetKnownTypes,
+        TargetKnownIdentifiers = scope.TargetKnownIdentifiers,
+        SuppressedMethods = scope.SuppressedMethods,
+        SuppressedMethodPatterns = scope.SuppressedMethodPatterns,
+        Tables = scope.Tables,
+        Pagination = scope.Pagination
+    };
+}
+
 static string ResolveFileName(string dir, string baseName, ISet<string> usedNames)
 {
     if (!usedNames.Contains(baseName))
@@ -1009,7 +1347,7 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
     var assemblyReferences = ResolvePathList(verification.AssemblyReferences, baseDir).ToList();
     var discoveredBuildFiles = DiscoverBuildFiles(verification, baseDir, projectReferences).ToList();
     var targetFramework = ResolveVerificationTargetFramework(verification, projectReferences);
-    var packageReferences = BuildPackageReferences(verification, projectReferences).ToList();
+    var packageReferences = BuildPackageReferences(verification, projectReferences, config).ToList();
     var buildWorkingDirectory = ResolveBuildWorkingDirectory(verification, baseDir, solutionPath);
 
     var csprojPath = Path.Combine(harnessDir, "Generated.Playwright.Verify.csproj");
@@ -1343,13 +1681,13 @@ static IEnumerable<string> DiscoverBuildFiles(VerificationConfig verification, s
     }
 }
 
-static IEnumerable<PackageReferenceConfig> BuildPackageReferences(VerificationConfig verification, IReadOnlyList<string> projectReferences)
+static IEnumerable<PackageReferenceConfig> BuildPackageReferences(VerificationConfig verification, IReadOnlyList<string> projectReferences, ProjectAdapterConfig config)
 {
     var result = new List<PackageReferenceConfig>();
     if (verification.DisableDefaultPackageReferences != true)
     {
-        result.Add(new PackageReferenceConfig { Include = "Microsoft.Playwright.NUnit", Version = "1.52.0" });
-        result.Add(new PackageReferenceConfig { Include = "NUnit", Version = "3.14.0" });
+        var targetTestFrameworks = ResolveTargetTestFrameworksForVerification(config);
+        result.AddRange(GetDefaultVerificationPackageReferences(targetTestFrameworks));
     }
 
     if (verification.AutoDiscoverPackageReferences == true)
@@ -6492,7 +6830,7 @@ static string ToOrchestrationReportMarkdown(OrchestrationReport report)
 
 
 
-static int RunDoctor(string inputPath, string outPath, string format, string[] configPaths, ProjectAdapterConfig? config)
+static int RunDoctor(string inputPath, string outPath, string format, string[] configPaths, ProjectAdapterConfig? config, CliOptions opts)
 {
     Directory.CreateDirectory(outPath);
 
@@ -6665,6 +7003,21 @@ static int RunDoctor(string inputPath, string outPath, string format, string[] c
 
     WriteDoctorReport(report, outPath, format);
 
+    DoctorFixPlan? fixPlan = null;
+    if (opts.Fix)
+    {
+        fixPlan = new DoctorFixPlanner(new DoctorFixOptions
+        {
+            InputPath = inputPath,
+            WorkspacePath = outPath,
+            ConfigPaths = configPaths,
+            TargetTestFramework = opts.TargetTestFramework,
+            Apply = opts.Apply,
+            DryRun = opts.DryRun || !opts.Apply
+        }).BuildAndMaybeApply();
+        DoctorFixPlanner.WriteArtifacts(fixPlan, outPath, format);
+    }
+
     Console.WriteLine("=== Doctor ===");
     Console.WriteLine($"Status: {report.Status.ToUpperInvariant()}");
     Console.WriteLine($"Input: {report.InputPath}");
@@ -6672,6 +7025,11 @@ static int RunDoctor(string inputPath, string outPath, string format, string[] c
     Console.WriteLine($"Checks: {report.Checks.Length} ({report.Checks.Count(c => c.Status == "failed")} failed, {report.Checks.Count(c => c.Status == "warning")} warning)");
     foreach (var check in report.Checks.Where(c => c.Status != "passed" && c.Status != "info").Take(30))
         Console.WriteLine($"[{check.Status.ToUpperInvariant()}] {check.Code}: {check.Message}");
+    if (fixPlan != null)
+    {
+        Console.WriteLine($"Fix mode: {fixPlan.Status} ({(fixPlan.Apply ? "apply" : "dry-run")})");
+        Console.WriteLine($"Fix actions: {fixPlan.Actions.Length}; applied files: {fixPlan.AppliedFiles.Length}");
+    }
     Console.WriteLine($"Reports written to: {Path.GetFullPath(outPath)}");
 
     return report.Status == "failed" ? 2 : 0;
@@ -8102,6 +8460,18 @@ static CliOptions? ParseArgs(string[] args)
     string irVersion = "legacy";
     string renderIr = "legacy";
     string validationMode = "warn";
+    string? targetTestFramework = null;
+    bool wizard = false;
+    bool? installAgentKit = null;
+    bool? targetProjectExists = null;
+    string? targetProjectPath = null;
+    string? defaultTestIdAttribute = null;
+    string? targetNamespace = null;
+    string? targetBaseClass = null;
+    bool fix = false;
+    bool apply = false;
+    bool dryRun = false;
+    var initModeRequested = IsInitModeRequest(args);
 
     for (int i = 0; i < args.Length; i++)
     {
@@ -8182,15 +8552,100 @@ static CliOptions? ParseArgs(string[] args)
                     return null;
                 }
                 break;
-            case "--source":
+            case "--target-test-framework":
+                if (i + 1 < args.Length)
+                    targetTestFramework = args[++i];
+                else
+                {
+                    Console.Error.WriteLine("--target-test-framework requires a value: nunit|xunit");
+                    return null;
+                }
+                break;
+            case "--fix":
+                fix = true;
+                break;
+            case "--apply":
+                fix = true;
+                apply = true;
+                break;
+            case "--dry-run":
+                fix = true;
+                dryRun = true;
+                break;
+            case "--wizard":
+                wizard = true;
+                break;
+            case "--install-kit":
+                installAgentKit = true;
+                break;
+            case "--no-install-kit":
+                installAgentKit = false;
+                break;
+            case "--target-project-exists":
+            case "--existing-target":
+                targetProjectExists = true;
+                break;
+            case "--no-target-project":
+            case "--generate-scaffold":
+                targetProjectExists = false;
+                break;
+            case "--target-project":
                 if (i + 1 < args.Length)
                 {
-                    source = args[++i];
-                    sourceExplicit = true;
+                    targetProjectExists = true;
+                    targetProjectPath = args[++i];
                 }
                 else
                 {
-                    Console.Error.WriteLine("--source requires a value: auto|csharp-selenium|java-selenium|python-selenium");
+                    Console.Error.WriteLine("--target-project requires a value");
+                    return null;
+                }
+                break;
+            case "--test-id-attribute":
+                if (i + 1 < args.Length)
+                    defaultTestIdAttribute = args[++i];
+                else
+                {
+                    Console.Error.WriteLine("--test-id-attribute requires a value, e.g. data-testid or data-tid");
+                    return null;
+                }
+                break;
+            case "--target-namespace":
+                if (i + 1 < args.Length)
+                    targetNamespace = args[++i];
+                else
+                {
+                    Console.Error.WriteLine("--target-namespace requires a value");
+                    return null;
+                }
+                break;
+            case "--target-base-class":
+                if (i + 1 < args.Length)
+                    targetBaseClass = args[++i];
+                else
+                {
+                    Console.Error.WriteLine("--target-base-class requires a value");
+                    return null;
+                }
+                break;
+            case "--source":
+                if (i + 1 < args.Length)
+                {
+                    if (initModeRequested)
+                    {
+                        input = args[++i];
+                    }
+                    else
+                    {
+                        source = args[++i];
+                        sourceExplicit = true;
+                    }
+                }
+                else
+                {
+                    Console.Error.WriteLine(initModeRequested
+                        ? "--source requires a source path for init --wizard"
+                        : "--source requires a value: auto|csharp-selenium|java-selenium|python-selenium");
                     return null;
                 }
                 break;
@@ -8311,6 +8766,13 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
+    targetTestFramework = NormalizeTargetTestFramework(targetTestFramework);
+    if (targetTestFramework == null && args.Any(arg => string.Equals(arg, "--target-test-framework", StringComparison.OrdinalIgnoreCase)))
+    {
+        Console.Error.WriteLine("Invalid --target-test-framework. Use: nunit|xunit");
+        return null;
+    }
+
     if (!string.Equals(source, "auto", StringComparison.OrdinalIgnoreCase))
     {
         try
@@ -8331,7 +8793,9 @@ static CliOptions? ParseArgs(string[] args)
     }
 
     if (string.IsNullOrEmpty(outDir))
-        outDir = CliCommandCatalog.Get(mode).DefaultOut;
+        outDir = mode.Equals("init", StringComparison.OrdinalIgnoreCase)
+            ? workspace
+            : CliCommandCatalog.Get(mode).DefaultOut;
 
     outDir = ResolveOutputDirectory(outDir, workspace);
 
@@ -8365,7 +8829,42 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
-    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, source, sourceExplicit, tsProject, recursiveArtifacts, irVersion, renderIr, validationMode);
+    if (apply && dryRun)
+    {
+        Console.Error.WriteLine("Use either --apply or --dry-run with doctor --fix, not both.");
+        return null;
+    }
+
+    if (fix && !mode.Equals("doctor", StringComparison.OrdinalIgnoreCase))
+    {
+        Console.Error.WriteLine("--fix/--apply/--dry-run are only supported for --mode doctor.");
+        return null;
+    }
+
+    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, source, sourceExplicit, tsProject, recursiveArtifacts, irVersion, renderIr, validationMode, targetTestFramework, wizard, installAgentKit, targetProjectExists, targetProjectPath, defaultTestIdAttribute, targetNamespace, targetBaseClass, fix, apply, dryRun);
+}
+
+static string[] NormalizeDirectCommand(string[] args)
+{
+    if (args.Length == 0)
+        return args;
+
+    if (string.Equals(args[0], "init", StringComparison.OrdinalIgnoreCase))
+        return new[] { "--mode", "init" }.Concat(args.Skip(1)).ToArray();
+
+    return args;
+}
+
+static bool IsInitModeRequest(string[] args)
+{
+    for (var i = 0; i < args.Length - 1; i++)
+    {
+        if (string.Equals(args[i], "--mode", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(args[i + 1], "init", StringComparison.OrdinalIgnoreCase))
+            return true;
+    }
+
+    return false;
 }
 
 static string ResolveOutputDirectory(string outDir, string workspace)

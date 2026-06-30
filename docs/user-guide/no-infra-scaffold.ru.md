@@ -6,7 +6,7 @@
 
 Используйте `--mode scaffold`, когда:
 
-- У вашей команды есть Selenium C# / NUnit тесты, но нет Playwright .NET проекта
+- У вашей команды есть Selenium C# тесты, но нет Playwright .NET проекта
 - Нужна отправная точка для миграции без реверс-инжиниринга чужой инфраструктуры
 - Вы хотите консистентную структуру проекта, совместимую с Migrator
 
@@ -34,7 +34,7 @@
 
 | Файл | Назначение |
 |---|---|
-| `*.csproj` | Проект .NET 8 с пакетами Playwright + NUnit |
+| `*.csproj` | Проект .NET 8 с пакетами Playwright + NUnit или xUnit |
 | `GeneratedTestBase.cs` | Абстрактный base-класс с `LoginAsync`, `GoToAsync`, `WaitForAppReadyAsync` |
 | `TestSettings.cs` | Конфиг через переменные окружения (`E2E_BASE_URL`, `E2E_LOGIN_ROUTE`, `E2E_DEFAULT_ROUTE`) |
 | `ExampleSmokeTest.cs` | Пример теста, показывающий ожидаемый стиль |
@@ -53,7 +53,7 @@ dotnet run --project Migrator.Cli -- --mode scaffold --out "./new-playwright-tes
 ```
 
 Опциональные флаги:
-- `--format text|json|both` — какие файлы отчётов генерировать (по умолчанию: `both`)
+- `--target-test-framework nunit|xunit`, `--format text|json|both` — какие файлы отчётов генерировать (по умолчанию: `both`)
 
 Выходная директория не должна существовать или должна быть пустой. Если она существует и содержит файлы, scaffold безопасно завершается с ошибкой, не изменяя ничего.
 

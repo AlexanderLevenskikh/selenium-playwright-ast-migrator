@@ -76,6 +76,8 @@ public class TargetBackendTests
         Assert.Equal("target-capabilities/v1", dotnet.Capabilities.SchemaVersion);
         Assert.Equal("stable", dotnet.Capabilities.Status);
         Assert.Contains(dotnet.Capabilities.Capabilities, c => c.Area == "project-verification" && c.Support == "strong");
+        Assert.Contains(dotnet.Capabilities.Capabilities, c => c.Area == "target-test-frameworks" && c.Support == "strong");
+        Assert.Contains(dotnet.Capabilities.Limitations, x => x.Contains("MSTest", StringComparison.OrdinalIgnoreCase));
         Assert.True(dotnet.Capabilities.IsProductionReady);
 
         Assert.Equal("target-capabilities/v1", typescript.Capabilities.SchemaVersion);

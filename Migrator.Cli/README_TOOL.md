@@ -2,14 +2,14 @@
 
 Dotnet tool for agent-assisted and human-reviewed migration of Selenium tests toward Playwright.
 
-The stable public path is Selenium C# / NUnit to Playwright .NET. Playwright TypeScript, Java Selenium, and Python Selenium paths are available as experimental preview capabilities; check the repository documentation before using them for production migrations.
+The stable public path is Selenium C# to Playwright .NET with NUnit as the default target framework and xUnit as a supported target framework. Playwright TypeScript, Java Selenium, and Python Selenium paths are available as experimental preview capabilities; check the repository documentation before using them for production migrations.
 
 ## Basic usage
 
 ```bash
 selenium-pw-migrator --help
 selenium-pw-migrator --mode doctor --input ./OldTests --config ./profiles/base.adapter.json --out doctor
-selenium-pw-migrator --mode migrate --input ./OldTests --config ./profiles/base.adapter.json --out generated-tests --format both
+selenium-pw-migrator --mode migrate --input ./OldTests --config ./profiles/base.adapter.json --target-test-framework xunit --out generated-tests --format both
 selenium-pw-migrator --mode capabilities --out capabilities --format both
 ```
 

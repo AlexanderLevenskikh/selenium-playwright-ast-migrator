@@ -6,7 +6,7 @@ Generate a minimal, compile-ready Playwright .NET test project when your team ha
 
 Use `--mode scaffold` when:
 
-- Your team has Selenium C# / NUnit tests but no Playwright .NET project
+- Your team has Selenium C# tests but no Playwright .NET project
 - You need a starting point for migration without reverse-engineering someone else's infrastructure
 - You want a consistent, Migrator-aware project structure
 
@@ -34,7 +34,7 @@ Do not use `--mode scaffold` when:
 
 | File | Purpose |
 |---|---|
-| `*.csproj` | .NET 8 test project with Playwright + NUnit packages |
+| `*.csproj` | .NET 8 test project with Playwright + NUnit or xUnit packages |
 | `GeneratedTestBase.cs` | Abstract base class with `LoginAsync`, `GoToAsync`, `WaitForAppReadyAsync` |
 | `TestSettings.cs` | Environment-variable-based configuration (`E2E_BASE_URL`, `E2E_LOGIN_ROUTE`, `E2E_DEFAULT_ROUTE`) |
 | `ExampleSmokeTest.cs` | Example test showing the expected style |
@@ -53,6 +53,7 @@ dotnet run --project Migrator.Cli -- --mode scaffold --out "./new-playwright-tes
 ```
 
 Optional flags:
+- `--target-test-framework nunit|xunit` — selects the generated Playwright .NET test framework (default: `nunit`)
 - `--format text|json|both` — controls which report files are generated (default: `both`)
 
 The output directory must not exist or be empty. If it exists and contains files, the scaffold fails safely without modifying anything.

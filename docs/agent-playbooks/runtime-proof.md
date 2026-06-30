@@ -15,7 +15,7 @@ Verify that generated tests run correctly in a real browser environment.
 1. **Prepare a test host project:**
    - Create or use an existing Playwright .NET project
    - Copy generated `.cs` files into the project
-   - Ensure the project references `Microsoft.Playwright.NUnit` and `NUnit.Framework`
+   - Ensure the project references the selected target framework packages (`Microsoft.Playwright.NUnit`/`NUnit` or `Microsoft.Playwright.Xunit`/`xunit`)
 2. **Compile the project:**
    ```bash
    dotnet build

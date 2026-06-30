@@ -36,6 +36,7 @@ public static class ConfigValidator
         ValidateParameterizedMethods(config.ParameterizedMethods, "ParameterizedMethods", errors);
         ValidateNavigationUrls(config.NavigationUrls, "NavigationUrls", errors);
         ValidateNavigationTargetStatement(config.NavigationTargetStatement, "NavigationTargetStatement", errors);
+        ValidateTestHost(config.TestHost, "TestHost", errors);
         ValidateScopes(config.Scopes, errors);
         ValidateQualityGates(config.QualityGates, errors);
         ValidateVerification(config.Verification, errors);
@@ -339,6 +340,19 @@ public static class ConfigValidator
             errors.Add($"{section} must contain the {{url}} placeholder.");
     }
 
+    private static void ValidateTestHost(TestHostConfig? testHost, string section, List<string> errors)
+    {
+        if (testHost == null)
+            return;
+
+        if (string.IsNullOrWhiteSpace(testHost.TargetTestFramework))
+            return;
+
+        var normalized = testHost.TargetTestFramework.Trim().ToLowerInvariant();
+        if (normalized is not ("nunit" or "n-unit" or "xunit" or "x-unit"))
+            errors.Add($"{section}.TargetTestFramework = \"{testHost.TargetTestFramework}\" is not supported. Use nunit or xunit.");
+    }
+
     private static void ValidateScopes(ProfileScope[] scopes, List<string> errors)
     {
         for (int i = 0; i < scopes.Length; i++)
@@ -349,6 +363,8 @@ public static class ConfigValidator
 
             if (scope.SourcePathPatterns == null || scope.SourcePathPatterns.Length == 0)
                 errors.Add($"{prefix} has missing SourcePathPatterns.");
+
+            ValidateTestHost(scope.TestHost, $"{prefix}.TestHost", errors);
 
             if (scope.UiTargets.Length > 0)
                 ValidateUiTargets(scope.UiTargets, $"{prefix}.UiTargets", errors);

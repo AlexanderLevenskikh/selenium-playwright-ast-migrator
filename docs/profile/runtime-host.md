@@ -3,9 +3,9 @@
 ## What is TestHost
 
 `TestHost` is an optional section in `adapter-config.json` that controls how the generated
-Playwright test class wraps into a real test host project. Without `TestHost`, the renderer
-produces a standalone class that inherits `PageTest` (from `Microsoft.Playwright.NUnit`).
-With `TestHost`, it generates a project-ready class with configured base class, attributes,
+Playwright test class wraps into a real test host project. `TestHost.TargetTestFramework` selects
+NUnit or xUnit rendering; when it is absent, NUnit is used for backward compatibility. With
+`TestHost`, the renderer generates a project-ready class with configured base class, attributes,
 usings, namespace, and setup.
 
 ## Config Shape
@@ -13,6 +13,7 @@ usings, namespace, and setup.
 ```json
 {
   "TestHost": {
+    "TargetTestFramework": "nunit",
     "Namespace": "Example.E2ETests.Tests",
     "BaseClass": "TestBase",
     "ClassName": "CatalogPrincipalsFilterPlaywrightTests",
@@ -36,11 +37,12 @@ usings, namespace, and setup.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `TargetTestFramework` | string? | No | `nunit` or `xunit`. Default: `nunit`. |
 | `Namespace` | string? | No | Target namespace. Overrides source namespace. When absent, uses source namespace + `.Playwright`. |
 | `BaseClass` | string? | No | Base class for test class. Default: `PageTest`. |
 | `ClassName` | string? | No | Full class name. Default: `{SourceClassName}Playwright`. |
 | `ClassAttributes` | string[]? | No | C# attributes above the class declaration. |
-| `Usings` | string[]? | No | Using directives to prepend. Replaces default `Microsoft.Playwright.NUnit` + `NUnit.Framework` + `System.Threading.Tasks`. |
+| `Usings` | string[]? | No | Additional using directives to prepend. Framework defaults are selected from `TargetTestFramework`. |
 | `SetUpStatements` | string[]? | No | C# statements inside `[SetUp]` method. Replaces original mapped setup actions (preserved as comments). |
 
 ## Why TestHost belongs in the profile, not Core/Roslyn/Renderer
