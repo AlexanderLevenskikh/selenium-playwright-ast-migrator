@@ -104,6 +104,7 @@ For a file-by-file walkthrough, see:
 | `index-pom` | Stable | Mine Selenium PageObjects and selector evidence. |
 | `selector-evidence` | Experimental | Explain Selenium selector → config mapping → generated locator provenance with confidence and unsafe/inferred flags. |
 | `agent-contract` | Experimental | Generate a ticket-specific agent contract pack with allowed paths, stop policy, exact commands, and coordinator/migrator/verifier prompts. |
+| `pr-pack` | Experimental | Create a PR/review bundle with PR summary, changed/generated files list, before/after metrics, risk summary, reviewer checklist, evidence references, and suggested PR description. |
 | `helper-inventory` | Stable | Inspect helper/POM method bodies and infer MethodSemantics candidates. |
 | `discover-target` | Stable | Scan an existing Playwright .NET project and create a reviewable target inventory. |
 | `scaffold` | Stable | Generate a minimal compile-ready Playwright .NET project scaffold. |
@@ -143,6 +144,7 @@ If Selenium POMs contain proven selectors such as `ByTId("value")`, `CreateContr
 - [Report serve dashboard](docs/report-serve-dashboard.md)
 - [Profile marketplace](docs/profile-marketplace.md)
 - [Agent contract pack](docs/agent-contract-pack.md)
+- [Migration PR pack](docs/migration-pr-pack.md)
 - [Evidence pack workflow](docs/evidence-pack.md)
 - [User guide](docs/user-guide/README.md)
 - [Config and profile guide](docs/config-profile-guide.md)

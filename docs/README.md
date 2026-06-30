@@ -17,6 +17,7 @@ Public documentation is organized by the path a new user usually follows: instal
 - [Doctor fix mode](doctor-fix-mode.md) — safe repair planning and setup fixes.
 - [Report serve dashboard](report-serve-dashboard.md) — local triage dashboard, run comparison, decision export, and evidence zip workflow.
 - [Agent contract pack](agent-contract-pack.md) — ticket-specific allowed paths, stop policy, exact commands, and multi-agent prompts.
+- [Migration PR pack](migration-pr-pack.md) — PR summary, changed/generated files list, before/after metrics, risk summary, reviewer checklist, and suggested PR description.
 - [Profile marketplace](profile-marketplace.md) — offline built-in profile catalog, compatibility scoring, install, inspect, and diff workflow.
 - [Evidence pack workflow](evidence-pack.md) — shareable redacted zip with manifest and checksums.
 - [Troubleshooting](troubleshooting.md) — common setup, config, packaging, and verification problems.
@@ -68,6 +69,7 @@ Public documentation is organized by the path a new user usually follows: instal
 - [Migration board](migration-board.md)
 - [Report serve dashboard](report-serve-dashboard.md)
 - [Evidence pack workflow](evidence-pack.md)
+- [Migration PR pack](migration-pr-pack.md)
 - [Migration quality program](migration-quality-program.md)
 - [Runtime readiness](runtime-readiness.md)
 - [Runtime failure classifier](runtime-failure-classifier.md)

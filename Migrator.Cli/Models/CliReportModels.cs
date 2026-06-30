@@ -187,6 +187,13 @@ record SimpleProcessResult(int ExitCode, string StdOut, string StdErr);
 
 record CliOptions(string Mode, string Input, string Out, string? Config, string[] Configs, string Format, bool FailOnUnsupported, bool FailOnTodo, string Workspace, string? Before, string? After, string Target, string Source, bool SourceExplicit, string? TsProject, bool RecursiveArtifacts, string IrVersion, string RenderIr, string ValidationMode, string? TargetTestFramework, bool Wizard, bool? InstallAgentKit, bool? TargetProjectExists, string? TargetProjectPath, string? DefaultTestIdAttribute, string? TargetNamespace, string? TargetBaseClass, bool Fix, bool Apply, bool DryRun, int Port, bool StaticOnly, bool IncludeSourceFiles);
 
+record MigrationPrPackReport(string SchemaVersion, DateTimeOffset GeneratedAtUtc, string InputPath, string ArtifactRoot, string ReviewStatus, string Summary, MigrationPrPackMetrics BeforeAfterMetrics, MigrationPrPackChangedFile[] ChangedFiles, MigrationPrPackRisk[] RiskSummary, string[] ReviewerChecklist, MigrationPrPackEvidenceLink[] Evidence, string SuggestedPrDescription, string[] Warnings);
+record MigrationPrPackMetrics(MigrationPrPackMetric[] Before, MigrationPrPackMetric[] After, MigrationPrPackMetric[] Delta);
+record MigrationPrPackMetric(string Name, int Value);
+record MigrationPrPackChangedFile(string RelativePath, string Kind, string ReviewStatus, int ActiveLines, int TodoComments, int AssertionSignals, int LocatorSignals, string ReviewReason);
+record MigrationPrPackRisk(string Severity, string Code, string Summary, string RecommendedAction, string[] Evidence);
+record MigrationPrPackEvidenceLink(string Kind, string Path, string Description);
+record MigrationPrPackArtifact(string RelativePath, string Kind, string Summary, bool IncludeInReview);
 record AgentContractPackReport(string SchemaVersion, DateTimeOffset GeneratedAtUtc, string InputPath, string ArtifactRoot, AgentContractTicket Ticket, AgentContractArtifact[] SourceArtifacts, AgentContractAllowedPath[] AllowedPaths, string[] SourceEditBoundaries, AgentContractCommandStep[] ExactNextCommands, AgentContractStopRule[] StopPolicy, string[] ReportFormat, AgentContractRole[] Roles, string[] HandoffChecklist, string[] Warnings);
 record AgentContractTicket(string Title, string Objective, string[] AcceptanceCriteria);
 record AgentContractArtifact(string RelativePath, string Kind, string Summary, string SuggestedUse);

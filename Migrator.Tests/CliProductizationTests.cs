@@ -65,6 +65,7 @@ public class CliProductizationTests
             "selector-evidence",
             "migration-board",
             "report-serve",
+            "pr-pack",
             "profile-list",
             "profile-search",
             "profile-inspect",
@@ -104,6 +105,7 @@ public class CliProductizationTests
         Assert.Contains("selenium-pw-migrator --mode migrate --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator --mode doctor --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator report serve --input migration/runs/latest --port 5077", catalog);
+        Assert.Contains("selenium-pw-migrator pr pack --input migration/runs/run-042", catalog);
         Assert.Contains("selenium-pw-migrator selector evidence --input migration/runs/latest", catalog);
         Assert.Contains("selenium-pw-migrator profile list", catalog);
         Assert.Contains("selenium-pw-migrator profile inspect basic-csharp-xunit", catalog);

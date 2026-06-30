@@ -320,6 +320,13 @@ if (mode == "evidence-pack")
     return evidenceExitCode;
 }
 
+// Handle PR pack mode — creates a migration PR/review bundle from run artifacts.
+if (mode == "pr-pack")
+{
+    var prPackExitCode = MigrationPrPackCommand.RunPrPack(inputPath, outPath, format, configPaths);
+    return prPackExitCode;
+}
+
 // Handle agent contract mode — creates a ticket-specific prompt/contract pack for safe agent loops.
 if (mode == "agent-contract")
 {
@@ -10026,6 +10033,13 @@ static string[] NormalizeDirectCommand(string[] args)
         && string.Equals(args[1], "pack", StringComparison.OrdinalIgnoreCase))
     {
         return new[] { "--mode", "evidence-pack" }.Concat(args.Skip(2)).ToArray();
+    }
+
+    if (string.Equals(args[0], "pr", StringComparison.OrdinalIgnoreCase)
+        && args.Length > 1
+        && string.Equals(args[1], "pack", StringComparison.OrdinalIgnoreCase))
+    {
+        return new[] { "--mode", "pr-pack" }.Concat(args.Skip(2)).ToArray();
     }
 
     if (string.Equals(args[0], "agent", StringComparison.OrdinalIgnoreCase)

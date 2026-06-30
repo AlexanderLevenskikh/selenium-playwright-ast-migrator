@@ -47,6 +47,7 @@ Commands are grouped as stable public, experimental preview, and internal/mainta
 - `index-pom` — extract Selenium POM selector evidence.
 - `helper-inventory` — scan Selenium helper/POM method bodies and infer MethodSemantics candidates.
 - `explain-todo`, `smoke-plan`, `runtime-classify`, `selector-evidence`, `migration-board`, `report-serve` — prioritize follow-up work from migration artifacts/runtime logs, classify runtime root causes, score readiness, explain selector provenance, and export triage decisions.
+- `pr-pack` — create a PR/review bundle with before/after metrics, changed/generated files list, risk summary, reviewer checklist, evidence references, and suggested PR description.
 - `config-validate`, `config-diff`, `guard` — keep human and agent changes safe.
 - `capabilities` — list built-in source frontend and target backend support matrices.
 
@@ -81,3 +82,11 @@ selenium-pw-migrator agent contract --input migration/current-ticket.md --config
 ```
 
 The command writes `agent-contract.md/json`, allowed paths, stop policy, exact commands, report template, and `.agent-loops` role prompts.
+
+## Migration PR pack
+
+```bash
+selenium-pw-migrator pr pack --input migration/runs/latest --config ./adapter-config.json --out migration/pr-pack --format both
+```
+
+Writes `pr-summary.md`, `pr-pack.json`, `reviewer-checklist.md`, and `suggested-pr-description.md`.

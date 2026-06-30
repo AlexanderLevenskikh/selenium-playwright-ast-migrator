@@ -157,3 +157,5 @@ dotnet test --no-restore
 ## Public release status
 
 Проект готовится как public preview. Stable commands рассчитаны на внешних пользователей; experimental commands могут меняться между preview-релизами. См. [CHANGELOG.md](CHANGELOG.md), [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md).
+
+- [Migration PR pack](docs/migration-pr-pack.md) — PR summary, changed/generated files list, before/after metrics, risk summary, reviewer checklist и suggested PR description.
