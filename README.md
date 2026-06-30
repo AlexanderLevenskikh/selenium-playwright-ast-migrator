@@ -79,6 +79,7 @@ For a file-by-file walkthrough, see:
 
 - [Quick start](docs/quick-start.md)
 - [Init wizard](docs/init-wizard.md)
+- [Migration runbook](docs/migration-runbook.md)
 - [End-to-end simple example](docs/examples/end-to-end-simple.md)
 - [Public demo and guided tutorial](docs/public-demo-tutorial.md)
 - [Public demo files](examples/public-demo/README.md)
@@ -91,6 +92,7 @@ For a file-by-file walkthrough, see:
 
 | Mode | Status | Purpose |
 |---|---|---|
+| `runbook` | Stable | Generate a practical migration plan with pilot scope, command chain, risk map, artifacts, and acceptance checklist. |
 | `doctor` | Stable | Preflight checks plus safe `--fix` repair plans for inputs, config layers, project files, and workspace hygiene. |
 | `analyze` | Stable | Parse Selenium files and produce reports without generating target files. |
 | `migrate` | Stable | Generate Playwright target files. |
@@ -133,6 +135,7 @@ If Selenium POMs contain proven selectors such as `ByTId("value")`, `CreateContr
 - [Documentation index](docs/README.md)
 - [Quick start](docs/quick-start.md)
 - [Init wizard](docs/init-wizard.md)
+- [Migration runbook](docs/migration-runbook.md)
 - [Framework matrix](docs/framework-matrix.md)
 - [Doctor fix mode](docs/doctor-fix-mode.md)
 - [Report serve dashboard](docs/report-serve-dashboard.md)

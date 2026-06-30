@@ -51,6 +51,7 @@ public class CliProductizationTests
         var expectedModes = new[]
         {
             "init",
+            "runbook",
             "analyze",
             "dump-ir",
             "migrate",
@@ -98,6 +99,7 @@ public class CliProductizationTests
         Assert.Contains("BuildCommandHelp(CliCommandInfo command)", catalog);
         Assert.Contains("Use `selenium-pw-migrator --mode <mode> --help`", catalog);
         Assert.Contains("selenium-pw-migrator init --wizard --source-path ./OldTests", catalog);
+        Assert.Contains("selenium-pw-migrator runbook --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator --mode migrate --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator --mode doctor --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator report serve --input migration/runs/latest --port 5077", catalog);
@@ -127,6 +129,7 @@ public class CliProductizationTests
         Assert.Contains("--test-id-attribute", program);
         Assert.Contains("--fix", program);
         Assert.Contains("DoctorFixPlanner", program);
+        Assert.Contains("RunbookCommand.RunRunbook", program);
         Assert.Contains("RunReportServe(inputPath, outPath, format, recursiveArtifacts, opts.Port, opts.StaticOnly)", program);
         Assert.Contains("BuildReportServeDashboardReport", program);
         Assert.Contains("CreateReportServeEvidenceZip", program);

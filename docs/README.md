@@ -6,6 +6,7 @@ Public documentation is organized by the path a new user usually follows: instal
 
 - [Quick start](quick-start.md) — first successful local run.
 - [Init wizard](init-wizard.md)
+- [Migration runbook](migration-runbook.md) — production migration plan, pilot scope, risks, and command chain.
 - [End-to-end simple example](examples/end-to-end-simple.md) — real input, config, command, and expected generated output from `examples/simple/`.
 - [Public demo and guided tutorial](public-demo-tutorial.md) — 10-minute NUnit/xUnit walkthrough with dashboard sample.
 - [Public demo files](../examples/public-demo/README.md) — copyable demo inputs, configs, generated outputs, and dashboard.
@@ -59,6 +60,7 @@ Public documentation is organized by the path a new user usually follows: instal
 ## CLI, verification, and reports
 
 - [CLI productization](cli-productization.md)
+- [Migration runbook](migration-runbook.md)
 - [Project verification](project-verification.md)
 - [Explain TODO](explain-todo.md)
 - [Migration board](migration-board.md)

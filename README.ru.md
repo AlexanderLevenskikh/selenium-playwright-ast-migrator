@@ -78,6 +78,7 @@ migration/run-001/
 Пошагово:
 
 - [Quick start](docs/quick-start.md)
+- [Migration runbook](docs/migration-runbook.md)
 - [End-to-end simple example](docs/examples/end-to-end-simple.md)
 - [Public demo and guided tutorial](docs/public-demo-tutorial.md)
 - [Public demo files](examples/public-demo/README.md)
@@ -90,6 +91,7 @@ migration/run-001/
 
 | Mode | Статус | Назначение |
 |---|---|---|
+| `runbook` | Stable | Практический план миграции: pilot scope, command chain, risk map, artifacts и acceptance checklist. |
 | `doctor` | Stable | Preflight checks и безопасные `--fix` repair plans для input, config layers, project files и workspace hygiene. |
 | `analyze` | Stable | Парсинг Selenium-файлов и отчёты без генерации target files. |
 | `migrate` | Stable | Генерация Playwright target files. |

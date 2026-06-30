@@ -9,6 +9,7 @@ The stable public path is Selenium C# to Playwright .NET with NUnit as the defau
 ```bash
 selenium-pw-migrator --help
 selenium-pw-migrator --mode doctor --input ./OldTests --config ./profiles/base.adapter.json --out doctor
+selenium-pw-migrator --mode runbook --input ./OldTests --config ./profiles/base.adapter.json --out runbook --format both
 selenium-pw-migrator --mode migrate --input ./OldTests --config ./profiles/base.adapter.json --target-test-framework xunit --out generated-tests --format both
 selenium-pw-migrator --mode capabilities --out capabilities --format both
 ```
@@ -37,6 +38,7 @@ Commands are grouped as stable public, experimental preview, and internal/mainta
 ## Useful modes
 
 - `kit init/update/doctor/next-ticket` — install, update, check, and continue the migration workspace.
+- `runbook` — generate pilot scope, command chain, risk map, artifacts, and acceptance checklist before the first migration run.
 - `doctor` — preflight input, config, tooling, and source-truth hints.
 - `analyze` — inspect Selenium tests without generating target files.
 - `migrate` — generate Playwright target files.
@@ -55,6 +57,7 @@ Do not invent selectors. Use Selenium PageObject code, verified HTML attributes,
 ## Repository docs
 
 - `docs/quick-start.md`
+- `docs/migration-runbook.md`
 - `docs/examples/end-to-end-simple.md`
 - `examples/public-launch-demo/README.md`
 - `docs/public-launch/walkthrough.md`

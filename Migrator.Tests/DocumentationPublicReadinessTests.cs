@@ -54,6 +54,7 @@ public class DocumentationPublicReadinessTests
         }
 
         Assert.Contains("quick-start.md", docsIndex);
+        Assert.Contains("migration-runbook.md", docsIndex);
         Assert.Contains("user-guide/README.md", docsIndex);
         Assert.Contains("config-profile-guide.md", docsIndex);
         Assert.Contains("agent-autopilot-guide.md", docsIndex);

@@ -152,6 +152,13 @@ record PomUsageCandidate(string SourceExpression, string SuggestedTargetExpressi
 record TypeScriptVerifyReport(DateTimeOffset GeneratedAtUtc, string Status, string InputPath, string TsProjectPath, string[] GeneratedFiles, string VerifyDirectory, string TsConfigPath, string Command, int ExitCode, string StdOut, string StdErr, string[] Diagnostics, TypeScriptVerifyDiagnostic[] ClassifiedDiagnostics);
 record TypeScriptVerifyDiagnostic(string Raw, string Code, string Severity, string Category, string LikelyCause, string SuggestedAction);
 
+record MigrationRunbookReport(DateTimeOffset GeneratedAtUtc, string InputPath, string SourceFrontend, string SourceLanguage, string SourceFramework, string SourceConfidence, string TargetBackend, string TargetLanguage, string TargetFramework, string TargetTestFramework, string[] ConfigLayers, RunbookProjectSummary ProjectSummary, RunbookPilotCandidate[] RecommendedPilotScope, RunbookCommandStep[] FirstCommandChain, RunbookRisk[] RiskMap, RunbookArtifact[] ArtifactsToCollect, string[] AcceptanceChecklist, string[] RecommendedNextActions);
+record RunbookProjectSummary(int FilesScanned, int CandidateTestFiles, int PomLikeFiles, int HelperLikeFiles, int SeleniumLocatorSignals, int XPathSignals, int AssertionSignals, int WaitSignals, string SourceFramework, string[] DetectionReasons);
+record RunbookPilotCandidate(string File, int Score, string Complexity, string Reason, string[] Signals);
+record RunbookCommandStep(int Order, string Name, string Command, string Why);
+record RunbookRisk(string Area, string Severity, string Signal, string Mitigation);
+record RunbookArtifact(string Name, string Path, string Purpose);
+
 record RuntimeFailureReport(DateTimeOffset GeneratedAtUtc, string Source, int FilesScanned, int Observations, RuntimeTraceArtifact[] TraceArtifacts, RuntimeContextLink[] ContextLinks, RuntimeFailureGroup[] Groups, string[] RecommendedNextActions);
 record RuntimeTraceArtifact(string Path, string Kind, long SizeBytes, string Notes);
 record RuntimeContextLink(string? TestName, string? GeneratedFile, int? GeneratedLine, string? SourceFile, int? SourceLine, string Evidence);

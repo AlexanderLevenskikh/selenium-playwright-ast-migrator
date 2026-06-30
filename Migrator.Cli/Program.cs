@@ -213,6 +213,12 @@ if (mode == "config-normalize")
     return normalizeExitCode;
 }
 
+if (mode == "runbook")
+{
+    var runbookExitCode = RunbookCommand.RunRunbook(inputPath, outPath, format, configPaths, loadedConfig, sourceDetection, sourceFrontend, targetBackend, targetTestFramework);
+    return runbookExitCode;
+}
+
 ITestFileParser parser;
 try
 {
@@ -830,7 +836,7 @@ static bool ShouldAutoDetectSource(string mode, string source, bool sourceExplic
     if (string.IsNullOrWhiteSpace(inputPath) || (!File.Exists(inputPath) && !Directory.Exists(inputPath)))
         return false;
 
-    return mode is "analyze" or "dump-ir" or "migrate" or "verify" or "verify-project" or "doctor" or "orchestrate";
+    return mode is "analyze" or "dump-ir" or "migrate" or "verify" or "verify-project" or "doctor" or "runbook" or "orchestrate";
 }
 
 static void WriteSourceDetectionReport(SourceDetectionReport report, string outPath, string format, string selectedSource, bool explicitSource)
@@ -9616,6 +9622,9 @@ static string[] NormalizeDirectCommand(string[] args)
 
     if (string.Equals(args[0], "init", StringComparison.OrdinalIgnoreCase))
         return new[] { "--mode", "init" }.Concat(args.Skip(1)).ToArray();
+
+    if (string.Equals(args[0], "runbook", StringComparison.OrdinalIgnoreCase))
+        return new[] { "--mode", "runbook" }.Concat(args.Skip(1)).ToArray();
 
     if (string.Equals(args[0], "report", StringComparison.OrdinalIgnoreCase)
         && args.Length > 1
