@@ -16,7 +16,8 @@ Public documentation is organized by the path a new user usually follows: instal
 - [Framework matrix](framework-matrix.md)
 - [Doctor fix mode](doctor-fix-mode.md) — safe repair planning and setup fixes.
 - [Report serve dashboard](report-serve-dashboard.md) — local triage dashboard, run comparison, decision export, and evidence zip workflow.
-- [Profile marketplace](profile-marketplace.md) — offline built-in profile catalog, install, inspect, and diff workflow.
+- [Agent contract pack](agent-contract-pack.md) — ticket-specific allowed paths, stop policy, exact commands, and multi-agent prompts.
+- [Profile marketplace](profile-marketplace.md) — offline built-in profile catalog, compatibility scoring, install, inspect, and diff workflow.
 - [Evidence pack workflow](evidence-pack.md) — shareable redacted zip with manifest and checksums.
 - [Troubleshooting](troubleshooting.md) — common setup, config, packaging, and verification problems.
 
@@ -48,6 +49,7 @@ Public documentation is organized by the path a new user usually follows: instal
 - [Agent command set](agent-command-set.md)
 - [Agent config guidelines](agent-config-guidelines.md)
 - [Agent safety](agent-safety.md)
+- [Agent contract pack](agent-contract-pack.md)
 - [Agent playbooks](agent-playbooks/README.md)
 
 ## Extensibility and public API

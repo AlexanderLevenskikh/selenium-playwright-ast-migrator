@@ -1,0 +1,81 @@
+using Xunit;
+
+namespace Migrator.Tests;
+
+public class AgentContractPackTests
+{
+    [Fact]
+    public void AgentContractCommand_WritesContractAllowedPathsStopPolicyAndRolePrompts()
+    {
+        var command = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/AgentContractCommand.cs"));
+        var models = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Models/CliReportModels.cs"));
+        var catalog = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/CliCommandCatalog.cs"));
+
+        Assert.Contains("RunAgentContract", command);
+        Assert.Contains("agent-contract.md", command);
+        Assert.Contains("agent-contract.json", command);
+        Assert.Contains("allowed-paths.md", command);
+        Assert.Contains("stop-policy.md", command);
+        Assert.Contains("next-commands.md", command);
+        Assert.Contains("report-template.md", command);
+        Assert.Contains(".agent-loops", command);
+        Assert.Contains("coordinator.md", command);
+        Assert.Contains("migrator.md", command);
+        Assert.Contains("verifier.md", command);
+        Assert.Contains("AgentContractPackReport", models);
+        Assert.Contains("AgentContractAllowedPath", models);
+        Assert.Contains("AgentContractStopRule", models);
+        Assert.Contains("ExperimentalCommand(\"agent-contract\"", catalog);
+    }
+
+    [Fact]
+    public void AgentContractCommand_IsSourceSafeAndEvidenceDriven()
+    {
+        var command = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/AgentContractCommand.cs"));
+        var docs = File.ReadAllText(FindRepositoryFile("docs/agent-contract-pack.md"));
+
+        Assert.Contains("Do not edit Selenium source tests", command);
+        Assert.Contains("Do not invent selectors", command);
+        Assert.Contains("selector evidence", command);
+        Assert.Contains("broad-suppression", command);
+        Assert.Contains("missing-tooling", command);
+        Assert.DoesNotContain("File.Delete(inputPath", command);
+        Assert.DoesNotContain("File.WriteAllText(inputPath", command);
+
+        Assert.Contains("allowed paths", docs);
+        Assert.Contains("stop policy", docs);
+        Assert.Contains("coordinator", docs);
+        Assert.Contains("migrator", docs);
+        Assert.Contains("verifier", docs);
+    }
+
+    [Fact]
+    public void Program_NormalizesDirectAgentContractCommand()
+    {
+        var program = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Program.cs"));
+        var readme = File.ReadAllText(FindRepositoryFile("README.md"));
+        var docsIndex = File.ReadAllText(FindRepositoryFile("docs/README.md"));
+
+        Assert.Contains("string.Equals(args[0], \"agent\"", program);
+        Assert.Contains("string.Equals(args[1], \"contract\"", program);
+        Assert.Contains("--mode", program);
+        Assert.Contains("agent-contract", program);
+        Assert.Contains("AgentContractCommand.RunAgentContract", program);
+        Assert.Contains("docs/agent-contract-pack.md", readme);
+        Assert.Contains("Agent contract pack", docsIndex);
+    }
+
+    static string FindRepositoryFile(string relativePath)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine(dir.FullName, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(candidate))
+                return candidate;
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not find repository file: {relativePath}");
+    }
+}

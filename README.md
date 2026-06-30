@@ -103,6 +103,7 @@ For a file-by-file walkthrough, see:
 | `guard` | Stable | Compare before/after migration metrics and catch regressions. |
 | `index-pom` | Stable | Mine Selenium PageObjects and selector evidence. |
 | `selector-evidence` | Experimental | Explain Selenium selector → config mapping → generated locator provenance with confidence and unsafe/inferred flags. |
+| `agent-contract` | Experimental | Generate a ticket-specific agent contract pack with allowed paths, stop policy, exact commands, and coordinator/migrator/verifier prompts. |
 | `helper-inventory` | Stable | Inspect helper/POM method bodies and infer MethodSemantics candidates. |
 | `discover-target` | Stable | Scan an existing Playwright .NET project and create a reviewable target inventory. |
 | `scaffold` | Stable | Generate a minimal compile-ready Playwright .NET project scaffold. |
@@ -141,6 +142,7 @@ If Selenium POMs contain proven selectors such as `ByTId("value")`, `CreateContr
 - [Doctor fix mode](docs/doctor-fix-mode.md)
 - [Report serve dashboard](docs/report-serve-dashboard.md)
 - [Profile marketplace](docs/profile-marketplace.md)
+- [Agent contract pack](docs/agent-contract-pack.md)
 - [Evidence pack workflow](docs/evidence-pack.md)
 - [User guide](docs/user-guide/README.md)
 - [Config and profile guide](docs/config-profile-guide.md)

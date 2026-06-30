@@ -186,3 +186,11 @@ record DoctorCheck(string Status, string Code, string Message, string? Location,
 record SimpleProcessResult(int ExitCode, string StdOut, string StdErr);
 
 record CliOptions(string Mode, string Input, string Out, string? Config, string[] Configs, string Format, bool FailOnUnsupported, bool FailOnTodo, string Workspace, string? Before, string? After, string Target, string Source, bool SourceExplicit, string? TsProject, bool RecursiveArtifacts, string IrVersion, string RenderIr, string ValidationMode, string? TargetTestFramework, bool Wizard, bool? InstallAgentKit, bool? TargetProjectExists, string? TargetProjectPath, string? DefaultTestIdAttribute, string? TargetNamespace, string? TargetBaseClass, bool Fix, bool Apply, bool DryRun, int Port, bool StaticOnly, bool IncludeSourceFiles);
+
+record AgentContractPackReport(string SchemaVersion, DateTimeOffset GeneratedAtUtc, string InputPath, string ArtifactRoot, AgentContractTicket Ticket, AgentContractArtifact[] SourceArtifacts, AgentContractAllowedPath[] AllowedPaths, string[] SourceEditBoundaries, AgentContractCommandStep[] ExactNextCommands, AgentContractStopRule[] StopPolicy, string[] ReportFormat, AgentContractRole[] Roles, string[] HandoffChecklist, string[] Warnings);
+record AgentContractTicket(string Title, string Objective, string[] AcceptanceCriteria);
+record AgentContractArtifact(string RelativePath, string Kind, string Summary, string SuggestedUse);
+record AgentContractAllowedPath(string Path, string Access, string Reason);
+record AgentContractCommandStep(int Order, string Name, string Command, string Why);
+record AgentContractStopRule(string Code, string Condition, string RequiredAction);
+record AgentContractRole(string Name, string Mission, string[] Responsibilities);

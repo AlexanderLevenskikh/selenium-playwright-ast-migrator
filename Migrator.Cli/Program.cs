@@ -320,11 +320,20 @@ if (mode == "evidence-pack")
     return evidenceExitCode;
 }
 
+// Handle agent contract mode — creates a ticket-specific prompt/contract pack for safe agent loops.
+if (mode == "agent-contract")
+{
+    var agentContractExitCode = AgentContractCommand.RunAgentContract(inputPath, outPath, format, configPaths);
+    return agentContractExitCode;
+}
+
 // Handle profile marketplace commands — offline built-in profile catalog/install/inspect/diff.
 if (mode == "profile-list")
     return ProfileMarketplaceCommand.RunList(outPath, format);
 if (mode == "profile-search")
     return ProfileMarketplaceCommand.RunSearch(inputPath, outPath, format);
+if (mode == "profile-recommend")
+    return ProfileMarketplaceCommand.RunRecommend(inputPath, outPath, format, targetTestFramework, configPaths);
 if (mode == "profile-inspect")
     return ProfileMarketplaceCommand.RunInspect(inputPath, outPath, format);
 if (mode == "profile-install")
@@ -10019,6 +10028,13 @@ static string[] NormalizeDirectCommand(string[] args)
         return new[] { "--mode", "evidence-pack" }.Concat(args.Skip(2)).ToArray();
     }
 
+    if (string.Equals(args[0], "agent", StringComparison.OrdinalIgnoreCase)
+        && args.Length > 1
+        && string.Equals(args[1], "contract", StringComparison.OrdinalIgnoreCase))
+    {
+        return new[] { "--mode", "agent-contract" }.Concat(args.Skip(2)).ToArray();
+    }
+
     if (string.Equals(args[0], "profile", StringComparison.OrdinalIgnoreCase) && args.Length > 1)
     {
         var subcommand = args[1].Trim().ToLowerInvariant();
@@ -10026,6 +10042,7 @@ static string[] NormalizeDirectCommand(string[] args)
         {
             "list" => "profile-list",
             "search" => "profile-search",
+            "recommend" => "profile-recommend",
             "inspect" => "profile-inspect",
             "install" => "profile-install",
             "diff" => "profile-diff",

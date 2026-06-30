@@ -58,11 +58,49 @@ public class ProfileMarketplaceTests
         Assert.Contains("string.Equals(args[0], \"profile\"", program);
         Assert.Contains("\"list\" => \"profile-list\"", program);
         Assert.Contains("\"search\" => \"profile-search\"", program);
+        Assert.Contains("\"recommend\" => \"profile-recommend\"", program);
         Assert.Contains("\"inspect\" => \"profile-inspect\"", program);
         Assert.Contains("\"install\" => \"profile-install\"", program);
         Assert.Contains("\"diff\" => \"profile-diff\"", program);
         Assert.Contains("ExperimentalCommand(\"profile-list\"", catalog);
+        Assert.Contains("ExperimentalCommand(\"profile-recommend\"", catalog);
         Assert.Contains("ExperimentalCommand(\"profile-install\", \"profiles\"", catalog);
+    }
+
+
+    [Fact]
+    public void ProfileMarketplace2_RecommendsProfilesWithCompatibilityScoresTagsRisksAndQualityGates()
+    {
+        var command = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/ProfileMarketplaceCommand.cs"));
+        var docs = File.ReadAllText(FindRepositoryFile("docs/profile-marketplace.md"));
+
+        Assert.Contains("RunRecommend", command);
+        Assert.Contains("profile-recommendations/v2", command);
+        Assert.Contains("CompatibilityScore", command);
+        Assert.Contains("CompatibilityLevel", command);
+        Assert.Contains("ProfileProjectSignals", command);
+        Assert.Contains("PomHeavy", command);
+        Assert.Contains("HelperHeavy", command);
+        Assert.Contains("DataTidSignals", command);
+        Assert.Contains("RiskSummary", command);
+        Assert.Contains("RecommendedInstallOrder", command);
+        Assert.Contains("ProfileQualityGate", command);
+        Assert.Contains("profile-recommendations.md", command);
+        Assert.Contains("profile-recommendations.json", command);
+        Assert.Contains("profile recommend", docs);
+        Assert.Contains("compatibility score", docs);
+        Assert.Contains("profile quality gates", docs);
+    }
+
+    [Fact]
+    public void Program_NormalizesDirectProfileRecommendCommand()
+    {
+        var program = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Program.cs"));
+        var catalog = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/CliCommandCatalog.cs"));
+
+        Assert.Contains("\"recommend\" => \"profile-recommend\"", program);
+        Assert.Contains("ExperimentalCommand(\"profile-recommend\"", catalog);
+        Assert.Contains("Score built-in profiles against a source project", catalog);
     }
 
     [Fact]
@@ -73,6 +111,7 @@ public class ProfileMarketplaceTests
 
         Assert.Contains("selenium-pw-migrator profile list", docs);
         Assert.Contains("selenium-pw-migrator profile search selenium-nunit", docs);
+        Assert.Contains("selenium-pw-migrator profile recommend", docs);
         Assert.Contains("selenium-pw-migrator profile inspect basic-csharp-xunit", docs);
         Assert.Contains("selenium-pw-migrator profile install basic-csharp-nunit", docs);
         Assert.Contains("selenium-pw-migrator profile diff", docs);

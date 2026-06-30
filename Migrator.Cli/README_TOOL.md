@@ -71,3 +71,13 @@ Do not invent selectors. Use Selenium PageObject code, verified HTML attributes,
 - `docs/cli-productization.md`
 - `docs/extensibility.md`
 - `docs/public-roadmap.md`
+
+## Agent contract pack
+
+Generate a ticket-specific prompt and safety pack for agent loops:
+
+```bash
+selenium-pw-migrator agent contract --input migration/current-ticket.md --config ./adapter-config.json --out migration/agent-contract --format both
+```
+
+The command writes `agent-contract.md/json`, allowed paths, stop policy, exact commands, report template, and `.agent-loops` role prompts.

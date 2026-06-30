@@ -8,6 +8,7 @@ The first implementation is intentionally offline-only: it uses built-in profile
 ```bash
 selenium-pw-migrator profile list
 selenium-pw-migrator profile search selenium-nunit
+selenium-pw-migrator profile recommend --input ./OldTests --target-test-framework xunit --out profile-recommendations
 selenium-pw-migrator profile inspect basic-csharp-xunit
 selenium-pw-migrator profile install basic-csharp-nunit --out profiles
 selenium-pw-migrator profile diff --before adapter-config.json --after basic-csharp-xunit --out profile-diff
@@ -18,6 +19,7 @@ Mode-compatible forms are also available:
 ```bash
 selenium-pw-migrator --mode profile-list --out profile-marketplace
 selenium-pw-migrator --mode profile-search --input xunit --out profile-marketplace
+selenium-pw-migrator --mode profile-recommend --input ./OldTests --target-test-framework xunit --out profile-recommendations
 selenium-pw-migrator --mode profile-inspect --input basic-csharp-xunit --out profile-inspect
 selenium-pw-migrator --mode profile-install --input basic-csharp-nunit --out profiles
 selenium-pw-migrator --mode profile-diff --before adapter-config.json --after basic-csharp-xunit --out profile-diff
@@ -32,6 +34,36 @@ The bundled starter profiles are deliberately small:
 - `basic-csharp-nunit-data-tid` — NUnit starter layer with `data-tid` as the default test id attribute.
 
 They set safe host and verification defaults, but do not include project-specific selectors, PageObject mappings, source suppressions, or broad source-only identifiers.
+
+## Compatibility recommendations
+
+`profile recommend` is the Profile Marketplace 2.0 entry point. It scores built-in profiles against a source project before install:
+
+```bash
+selenium-pw-migrator profile recommend \
+  --input ./OldTests \
+  --target-test-framework xunit \
+  --out profile-recommendations \
+  --format both
+```
+
+Outputs:
+
+```text
+profile-recommendations/profile-recommendations.md
+profile-recommendations/profile-recommendations.json
+```
+
+The recommendation report includes:
+
+- compatibility score and level for every built-in profile;
+- tags such as `nunit`, `xunit`, `data-testid`, `data-tid`, `pom-neutral`, and `helper-neutral`;
+- risk summary for framework/test-id/POM/helper mismatches;
+- known limitations from the profile metadata;
+- recommended install order;
+- profile quality gates for production use.
+
+The command is read-only. It does not install profiles, edit config, or invent selector mappings.
 
 ## Safety model
 
@@ -48,6 +80,7 @@ Existing files are not silently overwritten. If the target config already exists
 Before using a profile in a real run:
 
 ```bash
+selenium-pw-migrator profile recommend --input ./OldTests --target-test-framework xunit --out profile-recommendations
 selenium-pw-migrator profile inspect basic-csharp-xunit --out profile-inspect
 selenium-pw-migrator profile install basic-csharp-xunit --out profiles
 selenium-pw-migrator --mode config-validate --config profiles/basic-csharp-xunit.adapter-config.json --validation-mode production --out config-validate

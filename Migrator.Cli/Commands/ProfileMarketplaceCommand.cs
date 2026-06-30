@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using Migrator.Core;
+using Migrator.Core.SourceFrontends;
 
 internal static class ProfileMarketplaceCommand
 {
@@ -43,6 +44,25 @@ internal static class ProfileMarketplaceCommand
                 "Does not contain project-specific selectors or POM mappings.",
                 "Does not suppress assertions or source helpers."
             },
+            Tags: new[] { "csharp", "selenium", "nunit", "dotnet", "playwright-dotnet", "data-testid", "starter", "pom-neutral", "helper-neutral" },
+            RiskSummary: new[]
+            {
+                "Low-risk starter layer: no suppressions and no project-specific mappings.",
+                "Requires selector evidence before adding UiTargets/PageObjects.",
+                "Framework mismatch is the main compatibility risk."
+            },
+            RecommendedInstallOrder: new[]
+            {
+                "Install this starter profile first.",
+                "Run discover-target to capture target host/package conventions.",
+                "Add POM/helper mappings as separate reviewed project layers."
+            },
+            QualityGates: new[]
+            {
+                "config-validate --validation-mode production passes.",
+                "No suppressions are introduced by the profile layer.",
+                "Target framework remains NUnit unless explicitly changed."
+            },
             Changelog: new[] { "1.0.0: Initial built-in public starter profile." },
             ConfigJson: BuildStarterConfigJson("nunit", "basic-csharp-nunit")),
         new(
@@ -72,6 +92,25 @@ internal static class ProfileMarketplaceCommand
                 "Does not contain project-specific selectors or POM mappings.",
                 "Does not suppress assertions or source helpers."
             },
+            Tags: new[] { "csharp", "selenium", "xunit", "dotnet", "playwright-dotnet", "data-testid", "starter", "pom-neutral", "helper-neutral" },
+            RiskSummary: new[]
+            {
+                "Low-risk starter layer: no suppressions and no project-specific mappings.",
+                "Requires selector evidence before adding UiTargets/PageObjects.",
+                "Generated setup uses xUnit async lifecycle conventions."
+            },
+            RecommendedInstallOrder: new[]
+            {
+                "Install this starter profile first for xUnit projects.",
+                "Run discover-target to capture target host/package conventions.",
+                "Add POM/helper mappings as separate reviewed project layers."
+            },
+            QualityGates: new[]
+            {
+                "config-validate --validation-mode production passes.",
+                "No suppressions are introduced by the profile layer.",
+                "Target framework remains xUnit unless explicitly changed."
+            },
             Changelog: new[] { "1.0.0: Initial built-in public starter profile." },
             ConfigJson: BuildStarterConfigJson("xunit", "basic-csharp-xunit")),
         new(
@@ -100,6 +139,25 @@ internal static class ProfileMarketplaceCommand
                 "Does not add actual selector mappings.",
                 "Does not suppress assertions or source helpers."
             },
+            Tags: new[] { "csharp", "selenium", "nunit", "dotnet", "playwright-dotnet", "data-tid", "starter", "pom-neutral", "helper-neutral" },
+            RiskSummary: new[]
+            {
+                "Low-risk starter layer with data-tid as the configured test id attribute.",
+                "Use only when source/POM or application markup proves data-tid values.",
+                "Framework mismatch is the main compatibility risk."
+            },
+            RecommendedInstallOrder: new[]
+            {
+                "Install only after confirming the project uses data-tid.",
+                "Run selector-evidence to prove migrated locator values.",
+                "Add project-specific UiTargets/PageObjects as separate reviewed layers."
+            },
+            QualityGates: new[]
+            {
+                "config-validate --validation-mode production passes.",
+                "selector-evidence reports no inferred data-tid selectors before broad rollout.",
+                "No suppressions are introduced by the profile layer."
+            },
             Changelog: new[] { "1.0.0: Initial built-in public data-tid starter profile." },
             ConfigJson: BuildStarterConfigJson("nunit", "basic-csharp-nunit-data-tid", "data-tid"))
     };
@@ -124,6 +182,36 @@ internal static class ProfileMarketplaceCommand
         var report = BuildCatalogReport(matches, query);
         WriteCatalogReport(report, outPath, format, "profile-search");
         PrintCatalog(report);
+        return 0;
+    }
+
+    public static int RunRecommend(string inputPath, string outPath, string format, string? targetTestFramework, string[] configPaths)
+    {
+        Directory.CreateDirectory(outPath);
+        var signals = DetectProjectSignals(inputPath, targetTestFramework, configPaths);
+        var recommendations = BuiltInProfiles
+            .Select(profile => BuildRecommendation(profile, signals))
+            .OrderByDescending(x => x.CompatibilityScore)
+            .ThenBy(x => x.Profile.Id, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var report = new ProfileRecommendationReport(
+            SchemaVersion: "profile-recommendations/v2",
+            GeneratedAtUtc: DateTimeOffset.UtcNow,
+            InputPath: string.IsNullOrWhiteSpace(inputPath) ? string.Empty : Path.GetFullPath(inputPath),
+            Signals: signals,
+            Recommendations: recommendations,
+            RecommendedInstallOrder: BuildGlobalInstallOrder(recommendations),
+            QualityGates: BuildGlobalQualityGates(signals));
+
+        WriteRecommendationReport(report, outPath, format);
+        Console.WriteLine("=== Profile Recommendations ===");
+        Console.WriteLine($"Input: {report.InputPath}");
+        Console.WriteLine($"Detected source: {signals.DetectedSourceId} ({signals.SourceConfidence})");
+        Console.WriteLine($"Profiles: {recommendations.Length}");
+        foreach (var recommendation in recommendations.Take(5))
+            Console.WriteLine($"  - {recommendation.Profile.Id}: {recommendation.CompatibilityScore}/100 {recommendation.CompatibilityLevel}");
+        Console.WriteLine($"Reports written to: {Path.GetFullPath(outPath)}");
         return 0;
     }
 
@@ -272,7 +360,7 @@ internal static class ProfileMarketplaceCommand
             profile.TargetBackend,
             profile.TargetFramework,
             profile.SafetyLevel
-        }.Concat(profile.SupportedPatterns).Concat(profile.KnownLimitations));
+        }.Concat(profile.SupportedPatterns).Concat(profile.KnownLimitations).Concat(profile.Tags).Concat(profile.RiskSummary));
         if (haystack.Contains(query, StringComparison.OrdinalIgnoreCase))
             return true;
 
@@ -348,6 +436,10 @@ internal static class ProfileMarketplaceCommand
         if (string.IsNullOrWhiteSpace(profile.CompatibilityRange)) errors.Add("Profile compatibility range is required.");
         if (profile.Changelog.Length == 0) errors.Add("Profile changelog is required.");
         if (profile.RequiredEvidence.Length == 0) errors.Add("Profile required evidence is required.");
+        if (profile.Tags.Length == 0) errors.Add("Profile tags are required for marketplace compatibility scoring.");
+        if (profile.RiskSummary.Length == 0) errors.Add("Profile risk summary is required.");
+        if (profile.RecommendedInstallOrder.Length == 0) errors.Add("Profile recommended install order is required.");
+        if (profile.QualityGates.Length == 0) errors.Add("Profile quality gates are required.");
         if (config.SourceOnlyIdentifiers.Length > 3)
             warnings.Add("Profile contains multiple SourceOnlyIdentifiers; inspect them before install.");
         if (config.SourceOnlyIdentifiers.Any(IsBroadIdentifier))
@@ -494,7 +586,11 @@ internal static class ProfileMarketplaceCommand
         profile.SafetyLevel,
         profile.CompatibilityRange,
         profile.Summary,
-        profile.KnownLimitations);
+        profile.KnownLimitations,
+        profile.Tags,
+        profile.RiskSummary,
+        profile.RecommendedInstallOrder,
+        profile.QualityGates);
 
     static ProfileMetadata ToProfileMetadata(BuiltInProfile profile) => new(
         profile.Id,
@@ -507,6 +603,10 @@ internal static class ProfileMarketplaceCommand
         profile.RequiredEvidence,
         profile.SafetyLevel,
         profile.KnownLimitations,
+        profile.Tags,
+        profile.RiskSummary,
+        profile.RecommendedInstallOrder,
+        profile.QualityGates,
         profile.Changelog,
         profile.CompatibilityRange,
         new[]
@@ -524,6 +624,324 @@ internal static class ProfileMarketplaceCommand
         "Run discover-target/profile-match before adding selector or POM mappings."
     };
 
+    static ProfileProjectSignals DetectProjectSignals(string inputPath, string? targetTestFramework, string[] configPaths)
+    {
+        var detection = SourceAutoDetector.Detect(inputPath);
+        var fullInput = string.IsNullOrWhiteSpace(inputPath) ? string.Empty : Path.GetFullPath(inputPath);
+        var files = EnumerateSourceFiles(fullInput).ToArray();
+        var frameworkScores = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["nunit"] = 0,
+            ["xunit"] = 0,
+            ["mstest"] = 0,
+            ["pytest"] = 0,
+            ["unittest"] = 0,
+            ["junit4"] = 0,
+            ["junit5"] = 0,
+            ["testng"] = 0
+        };
+        var reasons = new List<string>(detection.Reasons.Select(r => "source-detect: " + r));
+        var dataTestIdSignals = 0;
+        var dataTidSignals = 0;
+        var pomSignals = 0;
+        var helperSignals = 0;
+
+        foreach (var file in files)
+        {
+            var text = ReadSmallFile(file);
+            if (text.Length == 0)
+                continue;
+
+            AddFrameworkSignals(file, text, frameworkScores);
+            dataTestIdSignals += CountOccurrences(text, "data-testid") + CountOccurrences(text, "data-test-id");
+            dataTidSignals += CountOccurrences(text, "data-tid") + CountOccurrences(text, "ByTId") + CountOccurrences(text, "ByTestId");
+            if (LooksLikePom(file, text)) pomSignals++;
+            if (LooksLikeHelper(file, text)) helperSignals++;
+        }
+
+        var detectedFramework = frameworkScores
+            .Where(x => x.Value > 0)
+            .OrderByDescending(x => x.Value)
+            .ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(x => x.Key)
+            .FirstOrDefault() ?? "unknown";
+        var language = detection.Candidates.FirstOrDefault(c => string.Equals(c.SourceId, detection.DetectedSourceId, StringComparison.OrdinalIgnoreCase))?.Language
+            ?? InferLanguageFromSourceId(detection.DetectedSourceId);
+
+        if (frameworkScores.TryGetValue(detectedFramework, out var score) && score > 0)
+            reasons.Add($"framework-detect: {detectedFramework} signals={score}");
+        if (dataTidSignals > 0) reasons.Add($"locator-detect: data-tid signals={dataTidSignals}");
+        if (dataTestIdSignals > 0) reasons.Add($"locator-detect: data-testid/data-test-id signals={dataTestIdSignals}");
+        if (pomSignals > 0) reasons.Add($"shape-detect: POM-like files={pomSignals}");
+        if (helperSignals > 0) reasons.Add($"shape-detect: helper-like files={helperSignals}");
+        if (configPaths.Length > 0) reasons.Add($"config-context: {configPaths.Length} config/profile layer(s) provided for comparison context");
+
+        return new ProfileProjectSignals(
+            DetectedSourceId: detection.DetectedSourceId,
+            SourceLanguage: language,
+            SourceConfidence: detection.Confidence,
+            DetectedSourceFramework: detectedFramework,
+            RequestedTargetFramework: targetTestFramework?.Trim().ToLowerInvariant() ?? string.Empty,
+            FilesScanned: files.Length,
+            PomLikeFiles: pomSignals,
+            HelperLikeFiles: helperSignals,
+            PomHeavy: pomSignals >= 3,
+            HelperHeavy: helperSignals >= 3,
+            DataTestIdSignals: dataTestIdSignals,
+            DataTidSignals: dataTidSignals,
+            ConfigLayersProvided: configPaths.Length,
+            Reasons: reasons.Distinct(StringComparer.OrdinalIgnoreCase).Take(20).ToArray());
+    }
+
+    static ProfileRecommendation BuildRecommendation(BuiltInProfile profile, ProfileProjectSignals signals)
+    {
+        var score = 100;
+        var reasons = new List<string>();
+        var risks = new List<string>(profile.RiskSummary);
+        var gates = new List<ProfileQualityGate>();
+
+        if (string.Equals(profile.SourceLanguage, signals.SourceLanguage, StringComparison.OrdinalIgnoreCase))
+        {
+            reasons.Add($"Source language matches: {signals.SourceLanguage}.");
+        }
+        else
+        {
+            score -= 45;
+            risks.Add($"Source language mismatch: project looks like {signals.SourceLanguage}, profile expects {profile.SourceLanguage}.");
+            gates.Add(new ProfileQualityGate("error", "PROFILE_SOURCE_LANGUAGE_MISMATCH", "Profile source language must match the detected source project language.", "Choose a profile for the detected language or override only with a documented reason."));
+        }
+
+        if (signals.DetectedSourceFramework == "unknown")
+        {
+            score -= 8;
+            risks.Add("Source framework could not be proven; inspect test attributes/imports before installing.");
+            gates.Add(new ProfileQualityGate("warning", "PROFILE_FRAMEWORK_UNKNOWN", "Detected source framework is unknown.", "Run runbook/source detection and inspect test framework imports."));
+        }
+        else if (FrameworkMatches(profile.SourceFramework, signals.DetectedSourceFramework))
+        {
+            reasons.Add($"Source framework matches: {signals.DetectedSourceFramework}.");
+        }
+        else
+        {
+            score -= 30;
+            risks.Add($"Source framework mismatch: project looks like {signals.DetectedSourceFramework}, profile expects {profile.SourceFramework}.");
+            gates.Add(new ProfileQualityGate("error", "PROFILE_SOURCE_FRAMEWORK_MISMATCH", "Profile source framework does not match project evidence.", "Use a matching profile or create a project-specific compatibility layer."));
+        }
+
+        if (!string.IsNullOrWhiteSpace(signals.RequestedTargetFramework))
+        {
+            if (FrameworkMatches(profile.TargetFramework, signals.RequestedTargetFramework))
+                reasons.Add($"Requested target framework matches: {signals.RequestedTargetFramework}.");
+            else
+            {
+                score -= 20;
+                risks.Add($"Target framework mismatch: CLI requested {signals.RequestedTargetFramework}, profile targets {profile.TargetFramework}.");
+                gates.Add(new ProfileQualityGate("error", "PROFILE_TARGET_FRAMEWORK_MISMATCH", "Profile target framework must match --target-test-framework.", "Choose the profile matching the target framework."));
+            }
+        }
+
+        if (signals.DataTidSignals > signals.DataTestIdSignals && profile.Tags.Any(t => t.Equals("data-tid", StringComparison.OrdinalIgnoreCase)))
+        {
+            score += 8;
+            reasons.Add("Project has data-tid signals and profile is tagged data-tid.");
+        }
+        else if (signals.DataTidSignals > signals.DataTestIdSignals && !profile.Tags.Any(t => t.Equals("data-tid", StringComparison.OrdinalIgnoreCase)))
+        {
+            score -= 6;
+            risks.Add("Project has more data-tid evidence than data-testid; default locator attribute may need adjustment.");
+            gates.Add(new ProfileQualityGate("warning", "PROFILE_TEST_ID_ATTRIBUTE_REVIEW", "Default test id attribute may not match project evidence.", "Run selector-evidence and inspect LocatorSettings.DefaultTestIdAttribute."));
+        }
+
+        if (signals.DataTestIdSignals >= signals.DataTidSignals && profile.Tags.Any(t => t.Equals("data-tid", StringComparison.OrdinalIgnoreCase)))
+        {
+            score -= 10;
+            risks.Add("Profile defaults to data-tid, but project evidence does not clearly prefer data-tid.");
+        }
+
+        if (signals.PomHeavy)
+        {
+            score -= 8;
+            risks.Add("Project appears POM-heavy; starter profiles need follow-up PageObject/profile layers.");
+            gates.Add(new ProfileQualityGate("warning", "PROFILE_POM_HEAVY_PROJECT", "POM-heavy projects need selector/POM evidence before broad rollout.", "Run index-pom and selector-evidence after installing a starter layer."));
+        }
+
+        if (signals.HelperHeavy)
+        {
+            score -= 8;
+            risks.Add("Project appears helper-heavy; starter profiles need helper semantics mappings.");
+            gates.Add(new ProfileQualityGate("warning", "PROFILE_HELPER_HEAVY_PROJECT", "Helper-heavy projects need helper inventory before broad rollout.", "Run helper-inventory and map high-confidence helpers as reviewed config changes."));
+        }
+
+        if (signals.SourceConfidence is "none" or "low" or "ambiguous")
+        {
+            score -= 8;
+            risks.Add($"Source detection confidence is {signals.SourceConfidence}; review detected source before install.");
+        }
+
+        score = Math.Clamp(score, 0, 100);
+        var level = score >= 85 ? "strong" : score >= 65 ? "usable" : score >= 40 ? "review-required" : "poor";
+        if (reasons.Count == 0)
+            reasons.Add("No strong positive compatibility signals were found.");
+
+        foreach (var gate in profile.QualityGates)
+            gates.Add(new ProfileQualityGate("info", "PROFILE_BUILT_IN_QUALITY_GATE", gate, "Run this gate before using the profile in CI."));
+
+        return new ProfileRecommendation(
+            Profile: ToCatalogEntry(profile),
+            CompatibilityScore: score,
+            CompatibilityLevel: level,
+            ScoreReasons: reasons.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            RiskSummary: risks.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            RecommendedInstallOrder: profile.RecommendedInstallOrder,
+            KnownLimitations: profile.KnownLimitations,
+            QualityGates: gates.DistinctBy(g => g.Code + g.Description).ToArray());
+    }
+
+    static string[] BuildGlobalInstallOrder(ProfileRecommendation[] recommendations)
+    {
+        var top = recommendations.FirstOrDefault();
+        var order = new List<string>();
+        if (top != null)
+            order.Add($"Inspect top profile `{top.Profile.Id}` before install: selenium-pw-migrator profile inspect {top.Profile.Id}");
+        order.Add("Install only one starter framework profile first; do not stack NUnit and xUnit starters.");
+        order.Add("Run config-validate --validation-mode production on the installed layer.");
+        order.Add("Run discover-target, index-pom, helper-inventory and selector-evidence before adding project-specific mappings.");
+        order.Add("Use profile diff for every proposed config/profile layer before commit.");
+        return order.ToArray();
+    }
+
+    static ProfileQualityGate[] BuildGlobalQualityGates(ProfileProjectSignals signals)
+    {
+        var gates = new List<ProfileQualityGate>
+        {
+            new("info", "PROFILE_VALIDATE_PRODUCTION", "Every installed profile layer must pass production config validation.", "Run config-validate --validation-mode production."),
+            new("info", "PROFILE_DIFF_REQUIRED", "Every profile change should be reviewable as a config diff.", "Run profile diff or config-diff before merging."),
+            new("info", "PROFILE_NO_SILENT_SUPPRESSION", "Profiles must not silently suppress assertions/helpers.", "Reject profile layers that add suppressions without explicit source-truth review.")
+        };
+        if (signals.PomHeavy)
+            gates.Add(new("warning", "PROFILE_REQUIRE_POM_EVIDENCE", "POM-heavy project detected.", "Run index-pom and selector-evidence before mapping selectors."));
+        if (signals.HelperHeavy)
+            gates.Add(new("warning", "PROFILE_REQUIRE_HELPER_EVIDENCE", "Helper-heavy project detected.", "Run helper-inventory before mapping or suppressing helpers."));
+        return gates.ToArray();
+    }
+
+    static IEnumerable<string> EnumerateSourceFiles(string inputPath)
+    {
+        if (string.IsNullOrWhiteSpace(inputPath))
+            yield break;
+        if (File.Exists(inputPath))
+        {
+            yield return inputPath;
+            yield break;
+        }
+        if (!Directory.Exists(inputPath))
+            yield break;
+
+        var ignored = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "bin", "obj", ".git", ".vs", ".idea", "node_modules", "dist", "build", "coverage", "playwright-report", "test-results" };
+        foreach (var file in Directory.EnumerateFiles(inputPath, "*.*", SearchOption.AllDirectories))
+        {
+            if (file.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(part => ignored.Contains(part)))
+                continue;
+            var ext = Path.GetExtension(file);
+            if (ext.Equals(".cs", StringComparison.OrdinalIgnoreCase) || ext.Equals(".java", StringComparison.OrdinalIgnoreCase) || ext.Equals(".py", StringComparison.OrdinalIgnoreCase))
+                yield return file;
+        }
+    }
+
+    static string ReadSmallFile(string file)
+    {
+        try
+        {
+            using var stream = File.OpenRead(file);
+            using var reader = new StreamReader(stream);
+            var buffer = new char[64 * 1024];
+            var read = reader.Read(buffer, 0, buffer.Length);
+            return new string(buffer, 0, read);
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    static void AddFrameworkSignals(string file, string text, Dictionary<string, int> scores)
+    {
+        var ext = Path.GetExtension(file).ToLowerInvariant();
+        if (ext == ".cs")
+        {
+            Add("nunit", text.Contains("NUnit.Framework", StringComparison.Ordinal) || text.Contains("[Test", StringComparison.Ordinal) || text.Contains("[SetUp", StringComparison.Ordinal), 5);
+            Add("xunit", text.Contains("Xunit", StringComparison.Ordinal) || text.Contains("[Fact", StringComparison.Ordinal) || text.Contains("[Theory", StringComparison.Ordinal), 5);
+            Add("mstest", text.Contains("Microsoft.VisualStudio.TestTools", StringComparison.Ordinal) || text.Contains("[TestMethod", StringComparison.Ordinal), 5);
+        }
+        else if (ext == ".java")
+        {
+            Add("junit5", text.Contains("org.junit.jupiter", StringComparison.Ordinal), 5);
+            Add("junit4", text.Contains("org.junit.Test", StringComparison.Ordinal) || text.Contains("org.junit.Assert", StringComparison.Ordinal), 5);
+            Add("testng", text.Contains("org.testng", StringComparison.Ordinal), 5);
+        }
+        else if (ext == ".py")
+        {
+            Add("pytest", text.Contains("pytest", StringComparison.Ordinal) || text.Contains("def test_", StringComparison.Ordinal), 5);
+            Add("unittest", text.Contains("unittest.TestCase", StringComparison.Ordinal) || text.Contains("def setUp", StringComparison.Ordinal), 5);
+        }
+
+        void Add(string framework, bool condition, int value)
+        {
+            if (condition) scores[framework] += value;
+        }
+    }
+
+    static int CountOccurrences(string text, string value)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = text.IndexOf(value, index, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+        return count;
+    }
+
+    static bool LooksLikePom(string file, string text)
+    {
+        var name = Path.GetFileNameWithoutExtension(file);
+        return name.Contains("Page", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Pom", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("PageObject", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("IWebElement", StringComparison.Ordinal)
+            || text.Contains("FindElement", StringComparison.Ordinal);
+    }
+
+    static bool LooksLikeHelper(string file, string text)
+    {
+        var name = Path.GetFileNameWithoutExtension(file);
+        return name.Contains("Helper", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Extensions", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("static class", StringComparison.Ordinal)
+            || text.Contains("extension", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("WebDriverWait", StringComparison.Ordinal);
+    }
+
+    static bool FrameworkMatches(string expected, string actual)
+    {
+        if (string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return expected.ToLowerInvariant() switch
+        {
+            "nunit" => actual.Equals("nunit", StringComparison.OrdinalIgnoreCase),
+            "xunit" => actual.Equals("xunit", StringComparison.OrdinalIgnoreCase),
+            _ => false
+        };
+    }
+
+    static string InferLanguageFromSourceId(string sourceId)
+    {
+        if (sourceId.Contains("java", StringComparison.OrdinalIgnoreCase)) return "java";
+        if (sourceId.Contains("python", StringComparison.OrdinalIgnoreCase)) return "python";
+        return "csharp";
+    }
+
     static void PrintKnownProfileIds()
     {
         Console.Error.WriteLine("Known built-in profiles:");
@@ -539,6 +957,14 @@ internal static class ProfileMarketplaceCommand
         Console.WriteLine($"Profiles: {report.Profiles.Length}");
         foreach (var profile in report.Profiles)
             Console.WriteLine($"  - {profile.Id} {profile.Version} [{profile.SourceLanguage}/{profile.SourceFramework} -> {profile.TargetBackend}/{profile.TargetFramework}] {profile.SafetyLevel}");
+    }
+
+    static void WriteRecommendationReport(ProfileRecommendationReport report, string outPath, string format)
+    {
+        if (format is "json" or "both")
+            File.WriteAllText(Path.Combine(outPath, "profile-recommendations.json"), JsonSerializer.Serialize(report, JsonOptions) + Environment.NewLine);
+        if (format is "text" or "both")
+            File.WriteAllText(Path.Combine(outPath, "profile-recommendations.md"), BuildRecommendationMarkdown(report));
     }
 
     static void WriteCatalogReport(ProfileCatalogReport report, string outPath, string format, string basename)
@@ -582,10 +1008,10 @@ internal static class ProfileMarketplaceCommand
         if (!string.IsNullOrWhiteSpace(report.Query))
             sb.AppendLine($"Query: `{EscapeMd(report.Query)}`");
         sb.AppendLine();
-        sb.AppendLine("| ID | Version | Source | Target | Safety | Summary |");
-        sb.AppendLine("|---|---|---|---|---|---|");
+        sb.AppendLine("| ID | Version | Source | Target | Safety | Tags | Summary |");
+        sb.AppendLine("|---|---|---|---|---|---|---|");
         foreach (var p in report.Profiles)
-            sb.AppendLine($"| `{p.Id}` | `{p.Version}` | `{p.SourceLanguage}/{p.SourceFramework}` | `{p.TargetBackend}/{p.TargetFramework}` | `{p.SafetyLevel}` | {EscapeMd(p.Summary)} |");
+            sb.AppendLine($"| `{p.Id}` | `{p.Version}` | `{p.SourceLanguage}/{p.SourceFramework}` | `{p.TargetBackend}/{p.TargetFramework}` | `{p.SafetyLevel}` | {EscapeMd(string.Join(", ", p.Tags))} | {EscapeMd(p.Summary)} |");
         return sb.ToString();
     }
 
@@ -608,6 +1034,18 @@ internal static class ProfileMarketplaceCommand
         sb.AppendLine();
         sb.AppendLine("## Known limitations");
         foreach (var item in report.Metadata.KnownLimitations) sb.AppendLine($"- {EscapeMd(item)}");
+        sb.AppendLine();
+        sb.AppendLine("## Compatibility tags");
+        foreach (var item in report.Metadata.Tags) sb.AppendLine($"- `{EscapeMd(item)}`");
+        sb.AppendLine();
+        sb.AppendLine("## Risk summary");
+        foreach (var item in report.Metadata.RiskSummary) sb.AppendLine($"- {EscapeMd(item)}");
+        sb.AppendLine();
+        sb.AppendLine("## Recommended install order");
+        foreach (var item in report.Metadata.RecommendedInstallOrder) sb.AppendLine($"- {EscapeMd(item)}");
+        sb.AppendLine();
+        sb.AppendLine("## Profile quality gates");
+        foreach (var item in report.Metadata.QualityGates) sb.AppendLine($"- {EscapeMd(item)}");
         sb.AppendLine();
         sb.AppendLine("## Config summary");
         sb.AppendLine($"- Target framework: `{report.ConfigSummary.TargetTestFramework}`");
@@ -670,6 +1108,49 @@ internal static class ProfileMarketplaceCommand
         return sb.ToString();
     }
 
+    static string BuildRecommendationMarkdown(ProfileRecommendationReport report)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# Profile Marketplace Recommendations");
+        sb.AppendLine();
+        sb.AppendLine($"Input: `{EscapeMd(report.InputPath)}`");
+        sb.AppendLine($"Detected source: `{report.Signals.DetectedSourceId}` (`{report.Signals.SourceConfidence}` confidence)");
+        sb.AppendLine($"Detected framework: `{report.Signals.DetectedSourceFramework}`");
+        if (!string.IsNullOrWhiteSpace(report.Signals.RequestedTargetFramework))
+            sb.AppendLine($"Requested target framework: `{report.Signals.RequestedTargetFramework}`");
+        sb.AppendLine();
+        sb.AppendLine("## Project signals");
+        sb.AppendLine($"- Files scanned: {report.Signals.FilesScanned}");
+        sb.AppendLine($"- POM-heavy: `{report.Signals.PomHeavy.ToString().ToLowerInvariant()}`");
+        sb.AppendLine($"- Helper-heavy: `{report.Signals.HelperHeavy.ToString().ToLowerInvariant()}`");
+        sb.AppendLine($"- data-testid signals: {report.Signals.DataTestIdSignals}");
+        sb.AppendLine($"- data-tid signals: {report.Signals.DataTidSignals}");
+        foreach (var reason in report.Signals.Reasons.Take(8))
+            sb.AppendLine($"- {EscapeMd(reason)}");
+        sb.AppendLine();
+        sb.AppendLine("## Recommended install order");
+        foreach (var item in report.RecommendedInstallOrder)
+            sb.AppendLine($"- {EscapeMd(item)}");
+        sb.AppendLine();
+        sb.AppendLine("## Profile compatibility");
+        sb.AppendLine("| Profile | Score | Level | Tags | Why | Risks |");
+        sb.AppendLine("|---|---:|---|---|---|---|");
+        foreach (var item in report.Recommendations)
+        {
+            var why = string.Join("; ", item.ScoreReasons.Take(4));
+            var risks = string.Join("; ", item.RiskSummary.Take(3));
+            sb.AppendLine($"| `{item.Profile.Id}` | {item.CompatibilityScore} | `{item.CompatibilityLevel}` | {EscapeMd(string.Join(", ", item.Profile.Tags))} | {EscapeMd(why)} | {EscapeMd(risks)} |");
+        }
+        sb.AppendLine();
+        sb.AppendLine("## Quality gates");
+        foreach (var gate in report.QualityGates)
+            sb.AppendLine($"- **{gate.Severity.ToUpperInvariant()} `{gate.Code}`**: {EscapeMd(gate.Description)} Suggested action: {EscapeMd(gate.SuggestedAction)}");
+        sb.AppendLine();
+        sb.AppendLine("## Safety note");
+        sb.AppendLine("Recommendations do not install or apply profiles. Run `profile inspect`, `profile diff`, and `config-validate --validation-mode production` before using any layer.");
+        return sb.ToString();
+    }
+
     static string EscapeMd(string? value)
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
@@ -689,6 +1170,10 @@ internal static class ProfileMarketplaceCommand
         string[] SupportedPatterns,
         string[] RequiredEvidence,
         string[] KnownLimitations,
+        string[] Tags,
+        string[] RiskSummary,
+        string[] RecommendedInstallOrder,
+        string[] QualityGates,
         string[] Changelog,
         string ConfigJson);
 
@@ -712,7 +1197,11 @@ public sealed record ProfileCatalogEntry(
     string SafetyLevel,
     string CompatibilityRange,
     string Summary,
-    string[] KnownLimitations);
+    string[] KnownLimitations,
+    string[] Tags,
+    string[] RiskSummary,
+    string[] RecommendedInstallOrder,
+    string[] QualityGates);
 
 public sealed record ProfileMetadata(
     string Id,
@@ -725,6 +1214,10 @@ public sealed record ProfileMetadata(
     string[] RequiredEvidence,
     string SafetyLevel,
     string[] KnownLimitations,
+    string[] Tags,
+    string[] RiskSummary,
+    string[] RecommendedInstallOrder,
+    string[] QualityGates,
     string[] Changelog,
     string CompatibilityRange,
     string[] SafetyRules);
@@ -779,3 +1272,40 @@ public sealed record ProfileDiffReport(
 public sealed record ProfileDiffChange(string Section, string ChangeType, string Before, string After);
 
 public sealed record ProfileDiffRisk(string Severity, string Code, string Message, string Location, string SuggestedAction);
+
+public sealed record ProfileRecommendationReport(
+    string SchemaVersion,
+    DateTimeOffset GeneratedAtUtc,
+    string InputPath,
+    ProfileProjectSignals Signals,
+    ProfileRecommendation[] Recommendations,
+    string[] RecommendedInstallOrder,
+    ProfileQualityGate[] QualityGates);
+
+public sealed record ProfileProjectSignals(
+    string DetectedSourceId,
+    string SourceLanguage,
+    string SourceConfidence,
+    string DetectedSourceFramework,
+    string RequestedTargetFramework,
+    int FilesScanned,
+    int PomLikeFiles,
+    int HelperLikeFiles,
+    bool PomHeavy,
+    bool HelperHeavy,
+    int DataTestIdSignals,
+    int DataTidSignals,
+    int ConfigLayersProvided,
+    string[] Reasons);
+
+public sealed record ProfileRecommendation(
+    ProfileCatalogEntry Profile,
+    int CompatibilityScore,
+    string CompatibilityLevel,
+    string[] ScoreReasons,
+    string[] RiskSummary,
+    string[] RecommendedInstallOrder,
+    string[] KnownLimitations,
+    ProfileQualityGate[] QualityGates);
+
+public sealed record ProfileQualityGate(string Severity, string Code, string Description, string SuggestedAction);
