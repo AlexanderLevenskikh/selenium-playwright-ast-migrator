@@ -13,6 +13,7 @@ Public documentation is organized by the path a new user usually follows: instal
 - [Framework matrix](framework-matrix.md)
 - [Doctor fix mode](doctor-fix-mode.md) — safe repair planning and setup fixes.
 - [Report serve dashboard](report-serve-dashboard.md) — local dashboard, run comparison, and evidence zip workflow.
+- [Profile marketplace](profile-marketplace.md) — offline built-in profile catalog, install, inspect, and diff workflow.
 - [Troubleshooting](troubleshooting.md) — common setup, config, packaging, and verification problems.
 
 ## User guide

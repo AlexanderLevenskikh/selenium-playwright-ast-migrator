@@ -300,6 +300,18 @@ if (mode == "report-serve")
     return reportServeExitCode;
 }
 
+// Handle profile marketplace commands — offline built-in profile catalog/install/inspect/diff.
+if (mode == "profile-list")
+    return ProfileMarketplaceCommand.RunList(outPath, format);
+if (mode == "profile-search")
+    return ProfileMarketplaceCommand.RunSearch(inputPath, outPath, format);
+if (mode == "profile-inspect")
+    return ProfileMarketplaceCommand.RunInspect(inputPath, outPath, format);
+if (mode == "profile-install")
+    return ProfileMarketplaceCommand.RunInstall(inputPath, outPath, format);
+if (mode == "profile-diff")
+    return ProfileMarketplaceCommand.RunDiff(beforePath, afterPath, outPath, format);
+
 // Handle migration-board mode — builds an HTML dashboard from migration artifacts.
 if (mode == "migration-board")
 {
@@ -9441,7 +9453,7 @@ static CliOptions? ParseArgs(string[] args)
     if ((mode == "config-validate" || mode == "config-normalize") && string.IsNullOrEmpty(input) && configs.Count > 0)
         input = configs[^1];
 
-    if ((mode == "config-diff" || mode == "guard") && (string.IsNullOrEmpty(before) || string.IsNullOrEmpty(after)))
+    if ((mode == "config-diff" || mode == "guard" || mode == "profile-diff") && (string.IsNullOrEmpty(before) || string.IsNullOrEmpty(after)))
     {
         Console.Error.WriteLine($"--before and --after are required for {mode}");
         PrintHelp();
@@ -9570,6 +9582,22 @@ static string[] NormalizeDirectCommand(string[] args)
         && string.Equals(args[1], "serve", StringComparison.OrdinalIgnoreCase))
     {
         return new[] { "--mode", "report-serve" }.Concat(args.Skip(2)).ToArray();
+    }
+
+    if (string.Equals(args[0], "profile", StringComparison.OrdinalIgnoreCase) && args.Length > 1)
+    {
+        var subcommand = args[1].Trim().ToLowerInvariant();
+        var mode = subcommand switch
+        {
+            "list" => "profile-list",
+            "search" => "profile-search",
+            "inspect" => "profile-inspect",
+            "install" => "profile-install",
+            "diff" => "profile-diff",
+            _ => null
+        };
+        if (mode != null)
+            return new[] { "--mode", mode }.Concat(args.Skip(2)).ToArray();
     }
 
     return args;

@@ -63,6 +63,11 @@ public class CliProductizationTests
             "runtime-classify",
             "migration-board",
             "report-serve",
+            "profile-list",
+            "profile-search",
+            "profile-inspect",
+            "profile-install",
+            "profile-diff",
             "profile-match",
             "capabilities",
             "config-schema",
@@ -96,6 +101,9 @@ public class CliProductizationTests
         Assert.Contains("selenium-pw-migrator --mode migrate --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator --mode doctor --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator report serve --input migration/runs/latest --port 5077", catalog);
+        Assert.Contains("selenium-pw-migrator profile list", catalog);
+        Assert.Contains("selenium-pw-migrator profile inspect basic-csharp-xunit", catalog);
+        Assert.Contains("selenium-pw-migrator profile install basic-csharp-nunit", catalog);
         Assert.Contains("selenium-pw-migrator --mode verify-project --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator --mode helper-inventory --input ./OldTests", catalog);
         Assert.Contains("--target-test-framework <nunit|xunit>", catalog);
@@ -138,6 +146,9 @@ public class CliProductizationTests
         Assert.Contains("TraceArtifacts", models);
         Assert.Contains("ContextLinks", models);
         Assert.Contains("LikelyOwner", models);
+        Assert.Contains("ProfileMarketplaceCommand", program);
+        Assert.Contains("profile-list", program);
+        Assert.Contains("profile-install", program);
 
     }
 

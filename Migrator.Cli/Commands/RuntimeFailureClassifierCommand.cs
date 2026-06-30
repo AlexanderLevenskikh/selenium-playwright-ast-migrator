@@ -503,7 +503,7 @@ internal static class RuntimeFailureClassifierCommand
         if (fileMatch.Success)
             return (fileMatch.Groups["file"].Value.Trim(), null);
 
-        var jsonMatch = Regex.Match(text, @"\"sourceFile(?:Path)?\"\s*:\s*\"(?<file>[^\"]+\.cs)\"", RegexOptions.IgnoreCase);
+        var jsonMatch = Regex.Match(text, @"""sourceFile(?:Path)?""\s*:\s*""(?<file>[^""]+\.cs)""", RegexOptions.IgnoreCase);
         if (jsonMatch.Success)
             return (jsonMatch.Groups["file"].Value.Trim(), null);
 

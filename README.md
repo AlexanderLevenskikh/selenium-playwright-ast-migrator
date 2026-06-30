@@ -105,6 +105,7 @@ For a file-by-file walkthrough, see:
 | `verify-ts-project` | Experimental | Type-check generated Playwright TS specs inside an existing TS project. |
 | `orchestrate` | Experimental | Run analyze → migrate → verify → propose as one dry-run workflow. |
 | `explain-todo` / `smoke-plan` / `runtime-classify` / `migration-board` / `report-serve` | Experimental | Prioritize follow-up work from migration artifacts and runtime logs. |
+| `profile list/search/inspect/install/diff` | Experimental | Use offline built-in profiles as reviewed config layers. |
 
 Run command-specific help with:
 
@@ -130,6 +131,7 @@ If Selenium POMs contain proven selectors such as `ByTId("value")`, `CreateContr
 - [Framework matrix](docs/framework-matrix.md)
 - [Doctor fix mode](docs/doctor-fix-mode.md)
 - [Report serve dashboard](docs/report-serve-dashboard.md)
+- [Profile marketplace](docs/profile-marketplace.md)
 - [User guide](docs/user-guide/README.md)
 - [Config and profile guide](docs/config-profile-guide.md)
 - [Agent/autopilot guide](docs/agent-autopilot-guide.md)
