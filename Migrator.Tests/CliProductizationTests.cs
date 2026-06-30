@@ -62,6 +62,7 @@ public class CliProductizationTests
             "smoke-plan",
             "runtime-classify",
             "migration-board",
+            "report-serve",
             "profile-match",
             "capabilities",
             "config-schema",
@@ -94,6 +95,7 @@ public class CliProductizationTests
         Assert.Contains("selenium-pw-migrator init --wizard --source ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator --mode migrate --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator --mode doctor --input ./OldTests", catalog);
+        Assert.Contains("selenium-pw-migrator report serve --input migration/runs/latest --port 5077", catalog);
         Assert.Contains("selenium-pw-migrator --mode verify-project --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator --mode helper-inventory --input ./OldTests", catalog);
         Assert.Contains("--target-test-framework <nunit|xunit>", catalog);
@@ -117,11 +119,20 @@ public class CliProductizationTests
         Assert.Contains("--test-id-attribute", program);
         Assert.Contains("--fix", program);
         Assert.Contains("DoctorFixPlanner", program);
+        Assert.Contains("RunReportServe(inputPath, outPath, format, recursiveArtifacts, opts.Port, opts.StaticOnly)", program);
+        Assert.Contains("BuildReportServeDashboardReport", program);
+        Assert.Contains("CreateReportServeEvidenceZip", program);
+        Assert.Contains("ServeStaticDashboard", program);
+        Assert.Contains("report-serve", program);
+        Assert.Contains("--port", program);
+        Assert.Contains("--static-only", program);
         Assert.Contains("ApplyTargetTestFrameworkOverride", program);
         Assert.Contains("TargetTestFramework = targetTestFramework ?? \"nunit\"", program);
         Assert.Contains("BuildPackageReferences(verification, projectReferences, config)", program);
         Assert.Contains("Microsoft.Playwright.Xunit", program);
         Assert.Contains("string? TargetTestFramework", models);
+        Assert.Contains("ReportServeDashboardReport", models);
+        Assert.Contains("int Port", models);
     }
 
     static string FindRepositoryFile(string relativePath)

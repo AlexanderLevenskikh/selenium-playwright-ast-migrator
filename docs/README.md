@@ -11,7 +11,8 @@ Public documentation is organized by the path a new user usually follows: instal
 - [Screenshot walkthrough](public-launch/walkthrough.md) — install → doctor → migrate → verify → inspect report.
 - [Tool installation](tool-installation.md) — install from a packed dotnet tool or run from source.
 - [Framework matrix](framework-matrix.md)
-- [Doctor fix mode](doctor-fix-mode.md) — explicit source/target framework support and selection rules.
+- [Doctor fix mode](doctor-fix-mode.md) — safe repair planning and setup fixes.
+- [Report serve dashboard](report-serve-dashboard.md) — local dashboard, run comparison, and evidence zip workflow.
 - [Troubleshooting](troubleshooting.md) — common setup, config, packaging, and verification problems.
 
 ## User guide
@@ -57,6 +58,7 @@ Public documentation is organized by the path a new user usually follows: instal
 - [Project verification](project-verification.md)
 - [Explain TODO](explain-todo.md)
 - [Migration board](migration-board.md)
+- [Report serve dashboard](report-serve-dashboard.md)
 - [Migration quality program](migration-quality-program.md)
 - [Runtime readiness](runtime-readiness.md)
 - [Runtime failure classifier](runtime-failure-classifier.md)

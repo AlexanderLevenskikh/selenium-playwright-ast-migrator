@@ -104,7 +104,7 @@ For a file-by-file walkthrough, see:
 | `capabilities` | Stable | List built-in source frontend / target backend capability reports. |
 | `verify-ts-project` | Experimental | Type-check generated Playwright TS specs inside an existing TS project. |
 | `orchestrate` | Experimental | Run analyze → migrate → verify → propose as one dry-run workflow. |
-| `explain-todo` / `smoke-plan` / `runtime-classify` / `migration-board` | Experimental | Prioritize follow-up work from migration artifacts and runtime logs. |
+| `explain-todo` / `smoke-plan` / `runtime-classify` / `migration-board` / `report-serve` | Experimental | Prioritize follow-up work from migration artifacts and runtime logs. |
 
 Run command-specific help with:
 
@@ -129,6 +129,7 @@ If Selenium POMs contain proven selectors such as `ByTId("value")`, `CreateContr
 - [Init wizard](docs/init-wizard.md)
 - [Framework matrix](docs/framework-matrix.md)
 - [Doctor fix mode](docs/doctor-fix-mode.md)
+- [Report serve dashboard](docs/report-serve-dashboard.md)
 - [User guide](docs/user-guide/README.md)
 - [Config and profile guide](docs/config-profile-guide.md)
 - [Agent/autopilot guide](docs/agent-autopilot-guide.md)

@@ -103,7 +103,7 @@ migration/run-001/
 | `capabilities` | Stable | Показывает capability reports для source frontends и target backends. |
 | `verify-ts-project` | Experimental | Type-check generated Playwright TS specs внутри существующего TS проекта. |
 | `orchestrate` | Experimental | Dry-run analyze → migrate → verify → propose. |
-| `explain-todo` / `smoke-plan` / `runtime-classify` / `migration-board` | Experimental | Приоритизация следующих migration fixes по artifacts/logs. |
+| `explain-todo` / `smoke-plan` / `runtime-classify` / `migration-board` / `report-serve` | Experimental | Приоритизация следующих migration fixes по artifacts/logs. |
 
 Command-specific help:
 
@@ -132,6 +132,7 @@ selenium-pw-migrator --mode migrate --help
 - [Limitations](docs/user-guide/limitations.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Migration quality program](docs/migration-quality-program.md)
+- [Report serve dashboard](docs/report-serve-dashboard.md)
 - [Public launch pack](docs/public-launch/README.md)
 - [Public roadmap](docs/public-roadmap.md)
 - [Release process](docs/release-process.md)

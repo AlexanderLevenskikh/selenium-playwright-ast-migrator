@@ -84,6 +84,12 @@ internal static class CliCommandCatalog
             "Reads report, explain-todo, smoke-plan, verify, project-verify, generated files, and related artifacts.",
             "Directory with migration artifact files.",
             "selenium-pw-migrator --mode migration-board --input migration/verify-project --out board --format both"),
+        ExperimentalCommand("report-serve", "report-dashboard", true, true,
+            "Build and optionally serve a local migration dashboard.",
+            "Reads migration run artifacts, compares sibling runs, groups TODO/unsupported/unmapped items, links verify/runtime diagnostics, and exports a shareable evidence zip. Use direct form `selenium-pw-migrator report serve --input <run> --port 5077`; pass --port 0 or --static-only for static files only.",
+            "Directory with migration artifact files.",
+            "selenium-pw-migrator report serve --input migration/runs/latest --port 5077 --out report-dashboard",
+            "selenium-pw-migrator --mode report-serve --input migration/runs/latest --static-only --out report-dashboard"),
         ExperimentalCommand("profile-match", "profile-match", true, true,
             "Estimate whether existing config/profile layers can be reused for a source project.",
             "Compares source signals against one or more --config layers and writes profile-match reports.",
@@ -290,6 +296,8 @@ internal static class CliCommandCatalog
         sb.AppendLine("  --validation-mode <warn|strict|production>");
         sb.AppendLine("                                   Config validation strictness.");
         sb.AppendLine("  --recursive-artifacts            Allow nested artifact lookup where supported.");
+        sb.AppendLine("  --port <number>                  Local report server port for report-serve. Use 0 for static only.");
+        sb.AppendLine("  --static-only, --no-server       Generate report-serve static dashboard without starting a server.");
         sb.AppendLine("  --fail-on-unsupported            Exit code 2 if unsupported actions exist.");
         sb.AppendLine("  --fail-on-todo                   Exit code 3 if TODO comments exist.");
         sb.AppendLine("  --help, -h                       Show global or command-specific help.");

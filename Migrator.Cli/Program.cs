@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Diagnostics;
+using System.IO.Compression;
+using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
@@ -288,6 +291,13 @@ if (mode == "config-schema")
 {
     var schemaExitCode = ConfigSchemaCommand.RunConfigSchema(outPath, format);
     return schemaExitCode;
+}
+
+// Handle report-serve mode — builds a product dashboard and optionally serves it locally.
+if (mode == "report-serve")
+{
+    var reportServeExitCode = RunReportServe(inputPath, outPath, format, recursiveArtifacts, opts.Port, opts.StaticOnly);
+    return reportServeExitCode;
 }
 
 // Handle migration-board mode — builds an HTML dashboard from migration artifacts.
@@ -3461,7 +3471,8 @@ static string[] ArtifactLookupFileNames() => new[]
     "source-capabilities-report.json", "source-capabilities-report.md", "target-capabilities-report.json", "target-capabilities-report.md",
     "capabilities-report.json", "capabilities-report.md",
     "explain-todo.json", "explain-todo.md", "agent-next-task.md", "smoke-plan.json", "smoke-plan.md",
-    "runtime-checklist.md", "agent-runtime-next-task.md", "migration-board.json", "migration-board.md", "migration-board.html",
+    "runtime-checklist.md", "agent-runtime-next-task.md", "runtime-failure-report.json", "runtime-failure-report.md", "agent-runtime-failure-next-task.md",
+    "migration-board.json", "migration-board.md", "migration-board.html", "report-dashboard.json", "report-dashboard.md", "report-dashboard.html",
     "config-validate-report.json", "config-validate-report.md"
 };
 
@@ -4769,6 +4780,677 @@ static string WriteAgentRuntimeNextTaskMarkdown(SmokePlanReport report)
 }
 
 
+
+// --- Report serve dashboard mode ---
+
+static int RunReportServe(string inputPath, string outPath, string format, bool recursiveArtifacts, int port, bool staticOnly)
+{
+    if (!Directory.Exists(inputPath))
+    {
+        Console.Error.WriteLine($"Report serve expects a directory with migration artifacts: {inputPath}");
+        return 1;
+    }
+
+    Directory.CreateDirectory(outPath);
+    ReportServeDashboardReport dashboard;
+    try
+    {
+        dashboard = BuildReportServeDashboardReport(inputPath, recursiveArtifacts);
+    }
+    catch (ArtifactLookupException ex)
+    {
+        Console.Error.WriteLine(ex.Message);
+        return 2;
+    }
+
+    var staticFiles = WriteReportServeDashboardReport(dashboard, outPath, format).ToArray();
+    var evidenceZip = CreateReportServeEvidenceZip(inputPath, outPath, dashboard, staticFiles);
+    dashboard = dashboard with
+    {
+        StaticFiles = staticFiles.Select(Path.GetFullPath).ToArray(),
+        EvidenceZipPath = Path.GetFullPath(evidenceZip)
+    };
+    WriteReportServeDashboardReport(dashboard, outPath, format);
+
+    Console.WriteLine("=== Report Serve Dashboard ===");
+    Console.WriteLine($"Source: {inputPath}");
+    Console.WriteLine($"Artifact lookup: {(recursiveArtifacts ? "recursive" : "direct-only")}");
+    Console.WriteLine($"Dashboard: {Path.GetFullPath(Path.Combine(outPath, "report-dashboard.html"))}");
+    Console.WriteLine($"Evidence zip: {Path.GetFullPath(evidenceZip)}");
+    Console.WriteLine($"Runs compared: {dashboard.Trends.Length}");
+    Console.WriteLine($"TODO groups: {dashboard.TodoExplorer.Length}, Unsupported groups: {dashboard.UnsupportedActions.Length}, Unmapped groups: {dashboard.UnmappedTargets.Length}");
+
+    if (port > 0 && !staticOnly)
+        return ServeStaticDashboard(outPath, port);
+
+    Console.WriteLine("Static dashboard written. Pass --port 5077 to serve it locally.");
+    return 0;
+}
+
+static ReportServeDashboardReport BuildReportServeDashboardReport(string artifactDir, bool recursiveArtifacts)
+{
+    var board = BuildMigrationBoardReportFromArtifacts(artifactDir, recursiveArtifacts);
+    var missing = RequiredReportServeArtifacts()
+        .Where(name => FindFirstExisting(artifactDir, name, recursiveArtifacts) == null)
+        .ToArray();
+
+    var unsupportedPath = FindFirstExisting(artifactDir, "unsupported-actions.json", recursiveArtifacts);
+    var unsupported = ReadCountItems(unsupportedPath, "MethodOrSourceText", "Count", "ExampleFile", "ExampleLine");
+    if (unsupported.Count == 0)
+    {
+        var reportPath = FindFirstExisting(artifactDir, "report.json", recursiveArtifacts);
+        if (reportPath != null)
+            unsupported = ReadNestedCountItems(reportPath, "TopUnsupportedActions", "MethodOrSourceText", "Count", "ExampleFile", "ExampleLine");
+    }
+
+    var unmappedPath = FindFirstExisting(artifactDir, "unmapped-targets.json", recursiveArtifacts);
+    var unmapped = ReadCountItems(unmappedPath, "SourceExpression", "Usages", "ExampleFile", "ExampleLine");
+    if (unmapped.Count == 0)
+    {
+        var reportPath = FindFirstExisting(artifactDir, "report.json", recursiveArtifacts);
+        if (reportPath != null)
+            unmapped = ReadNestedCountItems(reportPath, "TopUnmappedTargets", "SourceExpression", "Usages", "ExampleFile", "ExampleLine");
+    }
+
+    var runtimeFailures = ReadRuntimeFailureGroups(artifactDir, recursiveArtifacts);
+
+    return new ReportServeDashboardReport(
+        GeneratedAtUtc: DateTimeOffset.UtcNow,
+        Source: Path.GetFullPath(artifactDir),
+        ArtifactRoot: Path.GetFullPath(artifactDir),
+        RecursiveArtifactLookup: recursiveArtifacts,
+        Current: board,
+        Trends: BuildReportServeRunTrends(artifactDir).ToArray(),
+        TodoExplorer: BuildTodoExplorerGroups(artifactDir, recursiveArtifacts).ToArray(),
+        UnsupportedActions: unsupported
+            .Select(kv => new ReportServeCountItem(kv.Key, kv.Value.Count, kv.Value.File, kv.Value.Line))
+            .OrderByDescending(x => x.Count)
+            .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(50)
+            .ToArray(),
+        UnmappedTargets: unmapped
+            .Select(kv => new ReportServeCountItem(kv.Key, kv.Value.Count, kv.Value.File, kv.Value.Line))
+            .OrderByDescending(x => x.Count)
+            .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(50)
+            .ToArray(),
+        RuntimeFailures: runtimeFailures,
+        MissingArtifacts: missing,
+        StaticFiles: Array.Empty<string>(),
+        EvidenceZipPath: null);
+}
+
+static IEnumerable<string> RequiredReportServeArtifacts() => new[]
+{
+    "report.json",
+    "project-verify-report.json",
+    "explain-todo.json",
+    "smoke-plan.json",
+    "runtime-failure-report.json"
+};
+
+static IEnumerable<ReportServeRunTrend> BuildReportServeRunTrends(string artifactDir)
+{
+    var root = Directory.GetParent(Path.GetFullPath(artifactDir));
+    if (root == null || !root.Exists)
+        yield break;
+
+    foreach (var dir in root.EnumerateDirectories()
+        .Where(d => HasDirectArtifactEvidence(d.FullName))
+        .OrderByDescending(d => d.LastWriteTimeUtc)
+        .Take(20))
+    {
+        var summary = new ArtifactSummary();
+        var reportPath = FindFirstExisting(dir.FullName, "report.json", recursiveArtifacts: false);
+        var verifyPath = FindFirstExisting(dir.FullName, "verify-report.json", recursiveArtifacts: false);
+        var projectVerifyPath = FindFirstExisting(dir.FullName, "project-verify-report.json", recursiveArtifacts: false);
+        if (reportPath != null)
+            ReadSummaryReport(reportPath, summary);
+        if (verifyPath != null)
+            ReadVerifyReport(verifyPath, summary);
+        var projectVerify = projectVerifyPath != null ? ReadProjectVerifyReport(projectVerifyPath) : null;
+        var smoke = BuildSmokePlanReportSafely(dir.FullName);
+        var compileErrors = Math.Max(summary.SyntaxErrors, projectVerify?.ClassifiedDiagnostics.Count(d => d.Severity.Equals("error", StringComparison.OrdinalIgnoreCase)) ?? 0);
+        yield return new ReportServeRunTrend(
+            Name: dir.Name,
+            Path: dir.FullName,
+            LastWriteTimeUtc: dir.LastWriteTimeUtc,
+            FilesProcessed: summary.FilesProcessed,
+            TestsFound: summary.TestsFound,
+            GeneratedFiles: smoke?.GeneratedFiles ?? 0,
+            TodoComments: summary.TodoComments,
+            UnsupportedActions: summary.UnsupportedActions,
+            UnmappedTargets: summary.UnmappedTargets,
+            CompileErrors: compileErrors,
+            ProjectVerifyStatus: projectVerify?.Status ?? summary.VerifyStatus ?? "not-run");
+    }
+}
+
+static SmokePlanReport? BuildSmokePlanReportSafely(string artifactDir)
+{
+    try
+    {
+        return BuildSmokePlanReportFromArtifacts(artifactDir, recursiveArtifacts: false);
+    }
+    catch
+    {
+        return null;
+    }
+}
+
+static IEnumerable<ReportServeTodoCodeGroup> BuildTodoExplorerGroups(string artifactDir, bool recursiveArtifacts)
+{
+    ValidateArtifactLookupRoot(artifactDir, recursiveArtifacts);
+    var files = Directory.EnumerateFiles(artifactDir, "*.*", recursiveArtifacts ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly)
+        .Where(file => file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+            || file.EndsWith(".ts", StringComparison.OrdinalIgnoreCase)
+            || file.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+        .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+            && !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase));
+
+    var groups = new Dictionary<string, (int Count, string File, int Line)>(StringComparer.OrdinalIgnoreCase);
+    foreach (var file in files)
+    {
+        string[] lines;
+        try
+        {
+            lines = File.ReadAllLines(file);
+        }
+        catch
+        {
+            continue;
+        }
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(lines[i], @"MIGRATOR:[A-Z0-9_:-]+"))
+            {
+                var code = match.Value;
+                if (groups.TryGetValue(code, out var existing))
+                    groups[code] = (existing.Count + 1, existing.File, existing.Line);
+                else
+                    groups[code] = (1, file, i + 1);
+            }
+        }
+    }
+
+    return groups
+        .Select(kv => new ReportServeTodoCodeGroup(kv.Key, kv.Value.Count, kv.Value.File, kv.Value.Line))
+        .OrderByDescending(x => x.Count)
+        .ThenBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
+        .Take(100);
+}
+
+static RuntimeFailureGroup[] ReadRuntimeFailureGroups(string artifactDir, bool recursiveArtifacts)
+{
+    var path = FindFirstExisting(artifactDir, "runtime-failure-report.json", recursiveArtifacts);
+    if (path == null)
+        return Array.Empty<RuntimeFailureGroup>();
+
+    try
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+        if (!doc.RootElement.TryGetProperty("Groups", out var groups) || groups.ValueKind != System.Text.Json.JsonValueKind.Array)
+            return Array.Empty<RuntimeFailureGroup>();
+
+        return groups.EnumerateArray()
+            .Select(ReadRuntimeFailureGroup)
+            .Where(g => !string.IsNullOrWhiteSpace(g.Category))
+            .OrderByDescending(g => g.Count)
+            .ToArray();
+    }
+    catch
+    {
+        return Array.Empty<RuntimeFailureGroup>();
+    }
+}
+
+static RuntimeFailureGroup ReadRuntimeFailureGroup(System.Text.Json.JsonElement group)
+{
+    var examples = group.TryGetProperty("Examples", out var examplesProp) && examplesProp.ValueKind == System.Text.Json.JsonValueKind.Array
+        ? examplesProp.EnumerateArray().Select(ReadRuntimeFailureObservation).ToArray()
+        : Array.Empty<RuntimeFailureObservation>();
+
+    return new RuntimeFailureGroup(
+        Category: ReadString(group, "Category") ?? "unknown-runtime-failure",
+        Count: ReadInt(group, "Count"),
+        Severity: ReadString(group, "Severity") ?? "unknown",
+        LikelyCause: ReadString(group, "LikelyCause") ?? "Runtime failure requires manual review.",
+        SuggestedAction: ReadString(group, "SuggestedAction") ?? "Inspect Playwright trace/log evidence.",
+        Examples: examples);
+}
+
+static RuntimeFailureObservation ReadRuntimeFailureObservation(System.Text.Json.JsonElement observation) => new(
+    Category: ReadString(observation, "Category") ?? "unknown-runtime-failure",
+    File: ReadString(observation, "File") ?? "",
+    Line: ReadInt(observation, "Line"),
+    TestName: ReadString(observation, "TestName"),
+    Message: ReadString(observation, "Message") ?? "",
+    Snippet: ReadString(observation, "Snippet") ?? "");
+
+static IEnumerable<string> WriteReportServeDashboardReport(ReportServeDashboardReport report, string outPath, string format)
+{
+    Directory.CreateDirectory(outPath);
+    var htmlPath = Path.Combine(outPath, "report-dashboard.html");
+    var mdPath = Path.Combine(outPath, "report-dashboard.md");
+    var jsonPath = Path.Combine(outPath, "report-dashboard.json");
+    File.WriteAllText(htmlPath, WriteReportServeHtml(report));
+    yield return htmlPath;
+
+    if (format == "json" || format == "both")
+    {
+        File.WriteAllText(jsonPath, System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        yield return jsonPath;
+    }
+
+    if (format == "text" || format == "both")
+    {
+        File.WriteAllText(mdPath, WriteReportServeMarkdown(report));
+        yield return mdPath;
+    }
+}
+
+static string WriteReportServeMarkdown(ReportServeDashboardReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Report Serve Dashboard");
+    sb.AppendLine();
+    sb.AppendLine($"- **Generated**: {report.GeneratedAtUtc:yyyy-MM-dd HH:mm:ss zzz}");
+    sb.AppendLine($"- **Source**: `{PathRedaction.Redact(report.Source)}`");
+    sb.AppendLine($"- **Artifact lookup**: `{(report.RecursiveArtifactLookup ? "recursive" : "direct-only")}`");
+    sb.AppendLine($"- **Evidence zip**: `{PathRedaction.Redact(report.EvidenceZipPath ?? "not-written")}`");
+    sb.AppendLine();
+    sb.AppendLine("## Overview");
+    sb.AppendLine("| Metric | Value |");
+    sb.AppendLine("|---|---:|");
+    sb.AppendLine($"| Files | {report.Current.Summary.FilesProcessed} |");
+    sb.AppendLine($"| Tests | {report.Current.Summary.TestsFound} |");
+    sb.AppendLine($"| Generated files | {report.Current.GeneratedFiles} |");
+    sb.AppendLine($"| Syntax/compile errors | {report.Current.Summary.SyntaxErrors} |");
+    sb.AppendLine($"| TODO | {report.Current.Summary.TodoComments} |");
+    sb.AppendLine($"| Unsupported actions | {report.Current.Summary.UnsupportedActions} |");
+    sb.AppendLine($"| Unmapped targets | {report.Current.Summary.UnmappedTargets} |");
+    sb.AppendLine();
+    AppendReportServeTrendMarkdown(sb, report);
+    AppendReportServeCountTable(sb, "TODO explorer", "Code", report.TodoExplorer.Select(x => new ReportServeCountItem(x.Code, x.Count, x.ExampleFile, x.ExampleLine)).ToArray());
+    AppendReportServeCountTable(sb, "Unsupported actions", "Action/source", report.UnsupportedActions);
+    AppendReportServeCountTable(sb, "Unmapped targets", "Source expression", report.UnmappedTargets);
+    sb.AppendLine("## Verify/project-verify diagnostics");
+    sb.AppendLine($"- Project verify: `{report.Current.ProjectVerifyStatus ?? "not-run"}`");
+    sb.AppendLine($"- Diagnostics: `{report.Current.ProjectDiagnostics}`");
+    sb.AppendLine();
+    sb.AppendLine("## Runtime failures");
+    if (report.RuntimeFailures.Length == 0)
+        sb.AppendLine("Runtime failure report not found or no groups were classified.");
+    else
+    {
+        sb.AppendLine("| Category | Count | Severity | Suggested action |");
+        sb.AppendLine("|---|---:|---|---|");
+        foreach (var group in report.RuntimeFailures.Take(25))
+            sb.AppendLine($"| `{EscapeMd(group.Category)}` | {group.Count} | `{EscapeMd(group.Severity)}` | {EscapeMd(group.SuggestedAction)} |");
+    }
+    sb.AppendLine();
+    sb.AppendLine("## Missing optional artifacts");
+    if (report.MissingArtifacts.Length == 0)
+        sb.AppendLine("All expected dashboard artifacts were found.");
+    else
+        foreach (var missing in report.MissingArtifacts)
+            sb.AppendLine($"- `{missing}`");
+    return sb.ToString();
+}
+
+static void AppendReportServeTrendMarkdown(StringBuilder sb, ReportServeDashboardReport report)
+{
+    sb.AppendLine("## Quality trend");
+    sb.AppendLine("| Run | Tests | Generated | TODO | Unsupported | Unmapped | Compile errors | Project verify |");
+    sb.AppendLine("|---|---:|---:|---:|---:|---:|---:|---|");
+    foreach (var run in report.Trends.Take(10))
+        sb.AppendLine($"| `{EscapeMd(run.Name)}` | {run.TestsFound} | {run.GeneratedFiles} | {run.TodoComments} | {run.UnsupportedActions} | {run.UnmappedTargets} | {run.CompileErrors} | `{EscapeMd(run.ProjectVerifyStatus)}` |");
+    if (report.Trends.Length == 0)
+        sb.AppendLine("|  | 0 | 0 | 0 | 0 | 0 | 0 | `not-run` |");
+    sb.AppendLine();
+}
+
+static void AppendReportServeCountTable(StringBuilder sb, string title, string nameHeader, ReportServeCountItem[] items)
+{
+    sb.AppendLine($"## {title}");
+    sb.AppendLine($"| # | {nameHeader} | Count | Example |");
+    sb.AppendLine("|---|---|---:|---|");
+    for (var i = 0; i < Math.Min(30, items.Length); i++)
+    {
+        var item = items[i];
+        var example = string.IsNullOrWhiteSpace(item.ExampleFile) ? "" : $"`{EscapeMd(PathRedaction.Redact(item.ExampleFile))}:{item.ExampleLine}`";
+        sb.AppendLine($"| {i + 1} | `{EscapeMd(item.Name)}` | {item.Count} | {example} |");
+    }
+    if (items.Length == 0)
+        sb.AppendLine($"|  | No {EscapeMd(title.ToLowerInvariant())} found. | 0 |  |");
+    sb.AppendLine();
+}
+
+static string WriteReportServeHtml(ReportServeDashboardReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("<!doctype html>");
+    sb.AppendLine("<html lang=\"ru\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+    sb.AppendLine("<title>Report Serve Dashboard</title>");
+    sb.AppendLine("<style>");
+    sb.AppendLine("body{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#f6f7fb;color:#172033}header{background:#111827;color:white;padding:24px 32px}.wrap{padding:24px 32px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.card{background:white;border-radius:12px;padding:16px;box-shadow:0 1px 4px #0001}.metric{font-size:28px;font-weight:700}.label{color:#667085;font-size:13px}.ok{color:#17803d}.warn{color:#b66a00}.bad{color:#b42318}.pill{display:inline-block;border-radius:999px;padding:4px 10px;font-size:12px;background:#eef2ff}.pill.ok{background:#dcfae6;color:#067647}.pill.warn{background:#fef0c7;color:#93370d}.pill.bad{background:#fee4e2;color:#b42318}table{border-collapse:collapse;width:100%;background:white;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px #0001}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #eaecf0;vertical-align:top}th{background:#f2f4f7;font-size:12px;text-transform:uppercase;color:#667085}code{background:#f2f4f7;padding:2px 4px;border-radius:4px}.section{margin:28px 0 14px}.small{font-size:12px;color:#667085}.empty{color:#667085;font-style:italic}.bar{height:8px;background:#eaecf0;border-radius:999px;overflow:hidden}.bar>span{display:block;height:8px;background:#3478f6}.action{border-left:4px solid #3478f6}a{color:#155eef;text-decoration:none}");
+    sb.AppendLine("</style></head><body>");
+    sb.AppendLine("<header><h1>Report Serve Dashboard</h1>");
+    sb.AppendLine($"<div class=\"small\">Generated: {Html(report.GeneratedAtUtc.ToString("yyyy-MM-dd HH:mm:ss zzz"))} · Source: <code>{Html(PathRedaction.Redact(report.Source))}</code></div>");
+    sb.AppendLine("</header><main class=\"wrap\">");
+
+    sb.AppendLine("<section class=\"grid\">");
+    MetricCard(sb, "Files", report.Current.Summary.FilesProcessed.ToString(), "processed", "");
+    MetricCard(sb, "Tests", report.Current.Summary.TestsFound.ToString(), "found", "");
+    MetricCard(sb, "Generated", report.Current.GeneratedFiles.ToString(), "files", "");
+    MetricCard(sb, "TODO", report.Current.Summary.TodoComments.ToString(), "remaining", report.Current.Summary.TodoComments == 0 ? "ok" : "warn");
+    MetricCard(sb, "Unsupported", report.Current.Summary.UnsupportedActions.ToString(), "actions", report.Current.Summary.UnsupportedActions == 0 ? "ok" : "warn");
+    MetricCard(sb, "Unmapped", report.Current.Summary.UnmappedTargets.ToString(), "targets", report.Current.Summary.UnmappedTargets == 0 ? "ok" : "warn");
+    MetricCard(sb, "Compile errors", report.Current.Summary.SyntaxErrors.ToString(), "syntax/project verify", report.Current.Summary.SyntaxErrors == 0 ? "ok" : "bad");
+    MetricCard(sb, "Project verify", report.Current.ProjectVerifyStatus ?? "not-run", "status", StatusCss(report.Current.ProjectVerifyStatus));
+    sb.AppendLine("</section>");
+
+    sb.AppendLine("<h2 class=\"section\">Downloadable evidence pack</h2>");
+    var evidenceName = string.IsNullOrWhiteSpace(report.EvidenceZipPath) ? "report-dashboard-evidence.zip" : Path.GetFileName(report.EvidenceZipPath);
+    sb.AppendLine($"<div class=\"card\">Evidence zip: <a href=\"{Html(evidenceName)}\">{Html(evidenceName)}</a><div class=\"small\">Includes reports, dashboard files, generated migration artifacts, manifest, and checksums. Source repository files are not included unless they are generated migration artifacts.</div></div>");
+
+    AppendReportServeTrendHtml(sb, report);
+    AppendReportServeActionsHtml(sb, report);
+    AppendReportServeCountHtml(sb, "TODO explorer", "Code", report.TodoExplorer.Select(x => new ReportServeCountItem(x.Code, x.Count, x.ExampleFile, x.ExampleLine)).ToArray(), "MIGRATOR:* groups found in generated files and reports.");
+    AppendReportServeCountHtml(sb, "Unsupported actions", "Action/source", report.UnsupportedActions, "High-frequency unsupported actions from unsupported-actions/report artifacts.");
+    AppendReportServeCountHtml(sb, "Unmapped targets", "Source expression", report.UnmappedTargets, "Source expressions that still need UiTarget/POM/profile evidence.");
+    AppendReportServeRuntimeHtml(sb, report);
+    AppendReportServeArtifactsHtml(sb, report);
+    sb.AppendLine("</main></body></html>");
+    return sb.ToString();
+}
+
+static void AppendReportServeTrendHtml(StringBuilder sb, ReportServeDashboardReport report)
+{
+    sb.AppendLine("<h2 class=\"section\">Quality trend</h2>");
+    sb.AppendLine("<table><thead><tr><th>Run</th><th>Tests</th><th>Generated</th><th>TODO</th><th>Unsupported</th><th>Unmapped</th><th>Compile errors</th><th>Project verify</th></tr></thead><tbody>");
+    if (report.Trends.Length == 0)
+        sb.AppendLine("<tr><td colspan=\"8\" class=\"empty\">No comparable sibling runs found.</td></tr>");
+    foreach (var run in report.Trends.Take(20))
+    {
+        var verifyCss = StatusCss(run.ProjectVerifyStatus);
+        sb.AppendLine($"<tr><td><code>{Html(run.Name)}</code><div class=\"small\">{Html(run.LastWriteTimeUtc.ToString("yyyy-MM-dd HH:mm"))} UTC</div></td><td>{run.TestsFound}</td><td>{run.GeneratedFiles}</td><td>{run.TodoComments}</td><td>{run.UnsupportedActions}</td><td>{run.UnmappedTargets}</td><td>{run.CompileErrors}</td><td><span class=\"pill {verifyCss}\">{Html(run.ProjectVerifyStatus)}</span></td></tr>");
+    }
+    sb.AppendLine("</tbody></table>");
+}
+
+static void AppendReportServeActionsHtml(StringBuilder sb, ReportServeDashboardReport report)
+{
+    sb.AppendLine("<h2 class=\"section\">Proposed next tickets</h2>");
+    if (report.Current.RecommendedNextActions.Length == 0)
+        sb.AppendLine("<div class=\"card empty\">No next-ticket recommendations found.</div>");
+    else
+    {
+        sb.AppendLine("<div class=\"grid\">");
+        foreach (var action in report.Current.RecommendedNextActions.Take(8))
+            sb.AppendLine($"<div class=\"card action\">{Html(action)}</div>");
+        sb.AppendLine("</div>");
+    }
+}
+
+static void AppendReportServeCountHtml(StringBuilder sb, string title, string nameHeader, ReportServeCountItem[] items, string description)
+{
+    sb.AppendLine($"<h2 class=\"section\">{Html(title)}</h2>");
+    sb.AppendLine($"<div class=\"small\">{Html(description)}</div>");
+    sb.AppendLine($"<table><thead><tr><th>#</th><th>{Html(nameHeader)}</th><th>Count</th><th>Example</th></tr></thead><tbody>");
+    if (items.Length == 0)
+        sb.AppendLine("<tr><td colspan=\"4\" class=\"empty\">No items found.</td></tr>");
+    for (var i = 0; i < Math.Min(50, items.Length); i++)
+    {
+        var item = items[i];
+        var example = string.IsNullOrWhiteSpace(item.ExampleFile) ? "" : $"{PathRedaction.Redact(item.ExampleFile)}:{item.ExampleLine}";
+        sb.AppendLine($"<tr><td>{i + 1}</td><td><code>{Html(item.Name)}</code></td><td>{item.Count}</td><td><code>{Html(example)}</code></td></tr>");
+    }
+    sb.AppendLine("</tbody></table>");
+}
+
+static void AppendReportServeRuntimeHtml(StringBuilder sb, ReportServeDashboardReport report)
+{
+    sb.AppendLine("<h2 class=\"section\">Runtime failures</h2>");
+    sb.AppendLine("<table><thead><tr><th>Category</th><th>Count</th><th>Severity</th><th>Likely cause</th><th>Suggested action</th></tr></thead><tbody>");
+    if (report.RuntimeFailures.Length == 0)
+        sb.AppendLine("<tr><td colspan=\"5\" class=\"empty\">No runtime-failure-report.json found or no runtime failures classified.</td></tr>");
+    foreach (var group in report.RuntimeFailures.Take(25))
+    {
+        var css = group.Severity.Equals("high", StringComparison.OrdinalIgnoreCase) ? "bad" : group.Severity.Equals("medium", StringComparison.OrdinalIgnoreCase) ? "warn" : "";
+        sb.AppendLine($"<tr><td><code>{Html(group.Category)}</code></td><td>{group.Count}</td><td><span class=\"pill {css}\">{Html(group.Severity)}</span></td><td>{Html(group.LikelyCause)}</td><td>{Html(group.SuggestedAction)}</td></tr>");
+    }
+    sb.AppendLine("</tbody></table>");
+}
+
+static void AppendReportServeArtifactsHtml(StringBuilder sb, ReportServeDashboardReport report)
+{
+    sb.AppendLine("<h2 class=\"section\">Verify/project-verify diagnostics</h2>");
+    sb.AppendLine($"<div class=\"card\">Project verify: <span class=\"pill {StatusCss(report.Current.ProjectVerifyStatus)}\">{Html(report.Current.ProjectVerifyStatus ?? "not-run")}</span> · Diagnostics: <strong>{report.Current.ProjectDiagnostics}</strong></div>");
+    sb.AppendLine("<h2 class=\"section\">Linked artifacts</h2>");
+    sb.AppendLine("<div class=\"card\"><ul>");
+    foreach (var artifact in report.Current.Artifacts)
+        sb.AppendLine($"<li><code>{Html(PathRedaction.Redact(artifact))}</code></li>");
+    if (report.Current.Artifacts.Length == 0)
+        sb.AppendLine("<li class=\"empty\">No linked artifacts found.</li>");
+    sb.AppendLine("</ul></div>");
+
+    sb.AppendLine("<h2 class=\"section\">Missing optional artifacts</h2>");
+    sb.AppendLine("<div class=\"card\"><ul>");
+    foreach (var missing in report.MissingArtifacts)
+        sb.AppendLine($"<li><code>{Html(missing)}</code></li>");
+    if (report.MissingArtifacts.Length == 0)
+        sb.AppendLine("<li>All expected dashboard artifacts were found.</li>");
+    sb.AppendLine("</ul></div>");
+}
+
+static string CreateReportServeEvidenceZip(string inputPath, string outPath, ReportServeDashboardReport report, string[] staticFiles)
+{
+    var zipPath = Path.Combine(outPath, "report-dashboard-evidence.zip");
+    if (File.Exists(zipPath))
+        File.Delete(zipPath);
+
+    var include = new List<string>();
+    include.AddRange(staticFiles.Where(File.Exists));
+    include.AddRange(report.Current.Artifacts.Where(File.Exists));
+    include.AddRange(FindGeneratedMigrationArtifactFiles(inputPath));
+    include = include
+        .Select(Path.GetFullPath)
+        .Where(path => IsInsideDirectory(path, outPath) || IsInsideDirectory(path, inputPath))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+        .Take(500)
+        .ToList();
+
+    var manifestEntries = new List<object>();
+    using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+    {
+        foreach (var file in include)
+        {
+            var relative = IsInsideDirectory(file, outPath)
+                ? Path.Combine("dashboard", SafeRelativePath(outPath, file))
+                : Path.Combine("artifacts", SafeRelativePath(inputPath, file));
+            archive.CreateEntryFromFile(file, NormalizeZipEntry(relative), CompressionLevel.Optimal);
+            manifestEntries.Add(new
+            {
+                Path = NormalizeZipEntry(relative),
+                Source = IsInsideDirectory(file, outPath) ? "dashboard" : "artifact",
+                SizeBytes = new FileInfo(file).Length,
+                Sha256 = ComputeSha256(file)
+            });
+        }
+
+        var manifest = new
+        {
+            SchemaVersion = "report-serve-evidence/v1",
+            GeneratedAtUtc = DateTimeOffset.UtcNow,
+            Source = PathRedaction.Redact(Path.GetFullPath(inputPath)),
+            Redaction = new
+            {
+                AbsolutePathsRedactedInReports = true,
+                ZipEntryNamesAreRelative = true,
+                SourceRepositoryFilesIncluded = false,
+                GeneratedMigrationArtifactsIncluded = true
+            },
+            Entries = manifestEntries
+        };
+        var entry = archive.CreateEntry("manifest.json", CompressionLevel.Optimal);
+        using var writer = new StreamWriter(entry.Open(), Encoding.UTF8);
+        writer.Write(System.Text.Json.JsonSerializer.Serialize(manifest, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    return zipPath;
+}
+
+static IEnumerable<string> FindGeneratedMigrationArtifactFiles(string inputPath)
+{
+    if (!Directory.Exists(inputPath))
+        yield break;
+
+    foreach (var file in Directory.EnumerateFiles(inputPath, "*.*", SearchOption.AllDirectories)
+        .Where(path => path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".ts", StringComparison.OrdinalIgnoreCase))
+        .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+            && !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)))
+    {
+        string text;
+        try
+        {
+            text = File.ReadAllText(file);
+        }
+        catch
+        {
+            continue;
+        }
+
+        if (text.Contains("Generated by Migrator", StringComparison.Ordinal) || text.Contains("MIGRATOR:", StringComparison.Ordinal))
+            yield return file;
+    }
+}
+
+static string SafeRelativePath(string root, string file)
+{
+    try
+    {
+        return Path.GetRelativePath(Path.GetFullPath(root), Path.GetFullPath(file));
+    }
+    catch
+    {
+        return Path.GetFileName(file);
+    }
+}
+
+static bool IsInsideDirectory(string file, string directory)
+{
+    var fullFile = Path.GetFullPath(file).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+    var fullDir = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+    return fullFile.StartsWith(fullDir, StringComparison.OrdinalIgnoreCase) || string.Equals(fullFile, fullDir.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase);
+}
+
+static string NormalizeZipEntry(string path) => path.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
+
+static string ComputeSha256(string file)
+{
+    using var stream = File.OpenRead(file);
+    return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+}
+
+static int ServeStaticDashboard(string outPath, int port)
+{
+    var root = Path.GetFullPath(outPath);
+    var prefix = $"http://localhost:{port}/";
+    using var listener = new HttpListener();
+    listener.Prefixes.Add(prefix);
+    try
+    {
+        listener.Start();
+    }
+    catch (Exception ex) when (ex is HttpListenerException or InvalidOperationException)
+    {
+        Console.Error.WriteLine($"Could not start local report server on {prefix}: {ex.Message}");
+        Console.Error.WriteLine("Static dashboard files were still written; open report-dashboard.html directly.");
+        return 2;
+    }
+
+    Console.WriteLine($"Serving report dashboard at {prefix}");
+    Console.WriteLine("Press Ctrl+C to stop.");
+    using var stopped = new ManualResetEventSlim(false);
+    Console.CancelKeyPress += (_, eventArgs) =>
+    {
+        eventArgs.Cancel = true;
+        stopped.Set();
+        try { listener.Stop(); } catch { }
+    };
+
+    while (listener.IsListening && !stopped.IsSet)
+    {
+        HttpListenerContext context;
+        try
+        {
+            context = listener.GetContext();
+        }
+        catch (HttpListenerException)
+        {
+            break;
+        }
+        catch (ObjectDisposedException)
+        {
+            break;
+        }
+
+        _ = ThreadPool.QueueUserWorkItem(_ => ServeDashboardRequest(context, root));
+    }
+
+    return 0;
+}
+
+static void ServeDashboardRequest(HttpListenerContext context, string root)
+{
+    try
+    {
+        var requestPath = WebUtility.UrlDecode(context.Request.Url?.AbsolutePath.TrimStart('/') ?? "") ?? "";
+        if (string.IsNullOrWhiteSpace(requestPath))
+            requestPath = "report-dashboard.html";
+        var fullPath = Path.GetFullPath(Path.Combine(root, requestPath.Replace('/', Path.DirectorySeparatorChar)));
+        if (!IsInsideDirectory(fullPath, root) || !File.Exists(fullPath))
+        {
+            context.Response.StatusCode = 404;
+            using var writer = new StreamWriter(context.Response.OutputStream);
+            writer.Write("Not found");
+            return;
+        }
+
+        context.Response.ContentType = ContentTypeFor(fullPath);
+        using var file = File.OpenRead(fullPath);
+        file.CopyTo(context.Response.OutputStream);
+    }
+    catch
+    {
+        if (context.Response.OutputStream.CanWrite)
+            context.Response.StatusCode = 500;
+    }
+    finally
+    {
+        try { context.Response.OutputStream.Close(); } catch { }
+    }
+}
+
+static string ContentTypeFor(string path)
+{
+    var ext = Path.GetExtension(path).ToLowerInvariant();
+    return ext switch
+    {
+        ".html" => "text/html; charset=utf-8",
+        ".htm" => "text/html; charset=utf-8",
+        ".json" => "application/json; charset=utf-8",
+        ".md" => "text/markdown; charset=utf-8",
+        ".zip" => "application/zip",
+        ".css" => "text/css; charset=utf-8",
+        ".js" => "text/javascript; charset=utf-8",
+        _ => "application/octet-stream"
+    };
+}
+
 // --- Migration board mode ---
 
 static int RunMigrationBoard(string inputPath, string outPath, string format, bool recursiveArtifacts)
@@ -4926,6 +5608,8 @@ static IEnumerable<string> FindBoardArtifacts(string artifactDir, bool recursive
         "agent-next-task.md", "migration-quality-dashboard.md", "migration-quality-dashboard.json", "migration-quality-tickets.md",
         "source-capabilities-report.md", "source-capabilities-report.json", "target-capabilities-report.md", "target-capabilities-report.json",
         "smoke-plan.md", "smoke-plan.json", "runtime-checklist.md", "agent-runtime-next-task.md",
+        "runtime-failure-report.md", "runtime-failure-report.json", "agent-runtime-failure-next-task.md",
+        "report-dashboard.html", "report-dashboard.md", "report-dashboard.json",
         "unmapped-targets.json", "unsupported-actions.json", "pom-index.generated.json", "doctor-report.md", "guard-report.md", "config-validate-report.md", "config-validate-report.json"
     };
 
@@ -8471,6 +9155,8 @@ static CliOptions? ParseArgs(string[] args)
     bool fix = false;
     bool apply = false;
     bool dryRun = false;
+    int port = 0;
+    bool staticOnly = false;
     var initModeRequested = IsInitModeRequest(args);
 
     for (int i = 0; i < args.Length; i++)
@@ -8571,6 +9257,20 @@ static CliOptions? ParseArgs(string[] args)
             case "--dry-run":
                 fix = true;
                 dryRun = true;
+                break;
+            case "--port":
+                if (i + 1 < args.Length && int.TryParse(args[++i], out var parsedPort) && parsedPort >= 0)
+                    port = parsedPort;
+                else
+                {
+                    Console.Error.WriteLine("--port requires a non-negative integer. Use 0 for static dashboard only.");
+                    return null;
+                }
+                break;
+            case "--static-only":
+            case "--no-server":
+                staticOnly = true;
+                port = 0;
                 break;
             case "--wizard":
                 wizard = true;
@@ -8841,7 +9541,13 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
-    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, source, sourceExplicit, tsProject, recursiveArtifacts, irVersion, renderIr, validationMode, targetTestFramework, wizard, installAgentKit, targetProjectExists, targetProjectPath, defaultTestIdAttribute, targetNamespace, targetBaseClass, fix, apply, dryRun);
+    if (port > 0 && !mode.Equals("report-serve", StringComparison.OrdinalIgnoreCase))
+    {
+        Console.Error.WriteLine("--port is only supported for report serve / --mode report-serve.");
+        return null;
+    }
+
+    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, source, sourceExplicit, tsProject, recursiveArtifacts, irVersion, renderIr, validationMode, targetTestFramework, wizard, installAgentKit, targetProjectExists, targetProjectPath, defaultTestIdAttribute, targetNamespace, targetBaseClass, fix, apply, dryRun, port, staticOnly);
 }
 
 static string[] NormalizeDirectCommand(string[] args)
@@ -8851,6 +9557,13 @@ static string[] NormalizeDirectCommand(string[] args)
 
     if (string.Equals(args[0], "init", StringComparison.OrdinalIgnoreCase))
         return new[] { "--mode", "init" }.Concat(args.Skip(1)).ToArray();
+
+    if (string.Equals(args[0], "report", StringComparison.OrdinalIgnoreCase)
+        && args.Length > 1
+        && string.Equals(args[1], "serve", StringComparison.OrdinalIgnoreCase))
+    {
+        return new[] { "--mode", "report-serve" }.Concat(args.Skip(2)).ToArray();
+    }
 
     return args;
 }

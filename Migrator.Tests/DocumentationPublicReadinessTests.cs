@@ -16,6 +16,7 @@ public class DocumentationPublicReadinessTests
             "docs/user-guide/limitations.md",
             "docs/troubleshooting.md",
             "docs/migration-quality-program.md",
+            "docs/report-serve-dashboard.md",
             "docs/examples/end-to-end-simple.md",
             "examples/simple/README.md",
         };
@@ -40,6 +41,7 @@ public class DocumentationPublicReadinessTests
             Assert.Contains("docs/user-guide/limitations.md", doc);
             Assert.Contains("docs/troubleshooting.md", doc);
             Assert.Contains("docs/migration-quality-program.md", doc);
+            Assert.Contains("docs/report-serve-dashboard.md", doc);
         }
 
         Assert.Contains("quick-start.md", docsIndex);
@@ -49,6 +51,7 @@ public class DocumentationPublicReadinessTests
         Assert.Contains("user-guide/limitations.md", docsIndex);
         Assert.Contains("troubleshooting.md", docsIndex);
         Assert.Contains("migration-quality-program.md", docsIndex);
+        Assert.Contains("report-serve-dashboard.md", docsIndex);
     }
 
     [Fact]
