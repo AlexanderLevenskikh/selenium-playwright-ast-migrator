@@ -15,7 +15,7 @@ Public documentation is organized by the path a new user usually follows: instal
 - [Tool installation](tool-installation.md) — install from a packed dotnet tool or run from source.
 - [Framework matrix](framework-matrix.md)
 - [Doctor fix mode](doctor-fix-mode.md) — safe repair planning and setup fixes.
-- [Report serve dashboard](report-serve-dashboard.md) — local dashboard, run comparison, and evidence zip workflow.
+- [Report serve dashboard](report-serve-dashboard.md) — local triage dashboard, run comparison, decision export, and evidence zip workflow.
 - [Profile marketplace](profile-marketplace.md) — offline built-in profile catalog, install, inspect, and diff workflow.
 - [Evidence pack workflow](evidence-pack.md) — shareable redacted zip with manifest and checksums.
 - [Troubleshooting](troubleshooting.md) — common setup, config, packaging, and verification problems.

@@ -107,7 +107,7 @@ migration/run-001/
 | `capabilities` | Stable | Показывает capability reports для source frontends и target backends. |
 | `verify-ts-project` | Experimental | Type-check generated Playwright TS specs внутри существующего TS проекта. |
 | `orchestrate` | Experimental | Dry-run analyze → migrate → verify → propose. |
-| `explain-todo` / `smoke-plan` / `runtime-classify` / `migration-board` / `report-serve` | Experimental | Приоритизация следующих migration fixes по artifacts/logs и dashboard по run artifacts. |
+| `explain-todo` / `smoke-plan` / `runtime-classify` / `migration-board` / `report-serve` | Experimental | Приоритизация fixes по artifacts/logs, dashboard по run artifacts и экспорт triage decisions. |
 | `evidence pack` | Stable | Redacted zip для issue/PR: reports, generated artifacts, manifest и checksums. |
 | `profile list/search/inspect/install/diff` | Experimental | Offline built-in profiles как reviewable config layers. |
 

@@ -46,7 +46,7 @@ Commands are grouped as stable public, experimental preview, and internal/mainta
 - `verify-ts-project` — experimental TypeScript project-aware type-checking.
 - `index-pom` — extract Selenium POM selector evidence.
 - `helper-inventory` — scan Selenium helper/POM method bodies and infer MethodSemantics candidates.
-- `explain-todo`, `smoke-plan`, `runtime-classify`, `migration-board`, `report-serve` — prioritize follow-up work from migration artifacts and runtime logs.
+- `explain-todo`, `smoke-plan`, `runtime-classify`, `migration-board`, `report-serve` — prioritize follow-up work from migration artifacts/runtime logs and export triage decisions.
 - `config-validate`, `config-diff`, `guard` — keep human and agent changes safe.
 - `capabilities` — list built-in source frontend and target backend support matrices.
 

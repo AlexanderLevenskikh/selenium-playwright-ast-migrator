@@ -143,7 +143,13 @@ public class CliProductizationTests
         Assert.Contains("Microsoft.Playwright.Xunit", program);
         Assert.Contains("string? TargetTestFramework", models);
         Assert.Contains("ReportServeDashboardReport", models);
+        Assert.Contains("ReportServeTriageDecision", models);
+        Assert.Contains("ReportServeRootCause", models);
         Assert.Contains("int Port", models);
+        Assert.Contains("report-triage-decisions.json", program);
+        Assert.Contains("BuildReportServeTriageDecisions", program);
+        Assert.Contains("AppendReportServeTriageHtml", program);
+        Assert.Contains("filterTriage", program);
         var runtimeClassifier = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/RuntimeFailureClassifierCommand.cs"));
         Assert.Contains("runtime-next-tickets.md", runtimeClassifier);
         Assert.Contains("TraceArtifacts", models);

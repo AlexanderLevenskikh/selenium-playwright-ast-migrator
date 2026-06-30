@@ -4844,6 +4844,7 @@ static int RunReportServe(string inputPath, string outPath, string format, bool 
     Console.WriteLine($"Evidence zip: {Path.GetFullPath(evidenceZip)}");
     Console.WriteLine($"Runs compared: {dashboard.Trends.Length}");
     Console.WriteLine($"TODO groups: {dashboard.TodoExplorer.Length}, Unsupported groups: {dashboard.UnsupportedActions.Length}, Unmapped groups: {dashboard.UnmappedTargets.Length}");
+    Console.WriteLine($"Triage decisions: {dashboard.TriageDecisions.Length} (export: {Path.GetFullPath(Path.Combine(outPath, "report-triage-decisions.json"))})");
 
     if (port > 0 && !staticOnly)
         return ServeStaticDashboard(outPath, port);
@@ -4884,6 +4885,21 @@ static ReportServeDashboardReport BuildReportServeDashboardReport(string artifac
     }
 
     var runtimeFailures = ReadRuntimeFailureGroups(artifactDir, recursiveArtifacts);
+    var todoExplorer = BuildTodoExplorerGroups(artifactDir, recursiveArtifacts).ToArray();
+    var unsupportedItems = unsupported
+        .Select(kv => new ReportServeCountItem(kv.Key, kv.Value.Count, kv.Value.File, kv.Value.Line))
+        .OrderByDescending(x => x.Count)
+        .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+        .Take(50)
+        .ToArray();
+    var unmappedItems = unmapped
+        .Select(kv => new ReportServeCountItem(kv.Key, kv.Value.Count, kv.Value.File, kv.Value.Line))
+        .OrderByDescending(x => x.Count)
+        .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+        .Take(50)
+        .ToArray();
+    var rootCauses = BuildReportServeRootCauses(board).ToArray();
+    var triageDecisions = BuildReportServeTriageDecisions(todoExplorer, unsupportedItems, unmappedItems, rootCauses, runtimeFailures).ToArray();
 
     return new ReportServeDashboardReport(
         GeneratedAtUtc: DateTimeOffset.UtcNow,
@@ -4892,20 +4908,12 @@ static ReportServeDashboardReport BuildReportServeDashboardReport(string artifac
         RecursiveArtifactLookup: recursiveArtifacts,
         Current: board,
         Trends: BuildReportServeRunTrends(artifactDir).ToArray(),
-        TodoExplorer: BuildTodoExplorerGroups(artifactDir, recursiveArtifacts).ToArray(),
-        UnsupportedActions: unsupported
-            .Select(kv => new ReportServeCountItem(kv.Key, kv.Value.Count, kv.Value.File, kv.Value.Line))
-            .OrderByDescending(x => x.Count)
-            .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
-            .Take(50)
-            .ToArray(),
-        UnmappedTargets: unmapped
-            .Select(kv => new ReportServeCountItem(kv.Key, kv.Value.Count, kv.Value.File, kv.Value.Line))
-            .OrderByDescending(x => x.Count)
-            .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
-            .Take(50)
-            .ToArray(),
+        TodoExplorer: todoExplorer,
+        UnsupportedActions: unsupportedItems,
+        UnmappedTargets: unmappedItems,
+        RootCauses: rootCauses,
         RuntimeFailures: runtimeFailures,
+        TriageDecisions: triageDecisions,
         MissingArtifacts: missingArtifacts,
         StaticFiles: Array.Empty<string>(),
         EvidenceZipPath: null);
@@ -5011,6 +5019,203 @@ static IEnumerable<ReportServeTodoCodeGroup> BuildTodoExplorerGroups(string arti
         .Take(100);
 }
 
+
+static IEnumerable<ReportServeRootCause> BuildReportServeRootCauses(MigrationBoardReport board)
+{
+    foreach (var rootCause in board.TopNormalizedRootCauses
+        .OrderByDescending(x => x.Count)
+        .ThenBy(x => x.Category, StringComparer.OrdinalIgnoreCase)
+        .Take(50))
+    {
+        yield return new ReportServeRootCause(
+            Category: rootCause.Category,
+            GroupKey: rootCause.GroupKey,
+            DisplayName: rootCause.DisplayName,
+            Count: rootCause.Count,
+            SuggestedAction: rootCause.SuggestedAction,
+            ExampleFile: rootCause.ExampleFile,
+            ExampleLine: rootCause.ExampleLine,
+            RepresentativeFiles: rootCause.RepresentativeFiles);
+    }
+}
+
+static IEnumerable<ReportServeTriageDecision> BuildReportServeTriageDecisions(
+    ReportServeTodoCodeGroup[] todoGroups,
+    ReportServeCountItem[] unsupportedItems,
+    ReportServeCountItem[] unmappedItems,
+    ReportServeRootCause[] rootCauses,
+    RuntimeFailureGroup[] runtimeFailures)
+{
+    var usedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    foreach (var root in rootCauses.Take(30))
+    {
+        var decision = root.Category.Contains("suppression", StringComparison.OrdinalIgnoreCase)
+            || root.Category.Contains("compile", StringComparison.OrdinalIgnoreCase)
+            ? "create-ticket"
+            : root.Count <= 1 ? "defer" : "create-ticket";
+        yield return CreateReportServeTriageDecision(
+            usedIds,
+            itemType: "root-cause",
+            key: root.GroupKey,
+            recommendedDecision: decision,
+            title: root.DisplayName,
+            reason: $"Root cause group `{root.Category}` appears {root.Count} time(s).",
+            count: root.Count,
+            suggestedAction: string.IsNullOrWhiteSpace(root.SuggestedAction) ? "Inspect representative files and decide whether this is a config/profile fix or a source-truth gap." : root.SuggestedAction,
+            exampleFile: root.ExampleFile,
+            exampleLine: root.ExampleLine,
+            evidenceLinks: root.RepresentativeFiles);
+    }
+
+    foreach (var item in todoGroups.Take(40))
+    {
+        var decision = item.Code.Contains("UNSUPPORTED", StringComparison.OrdinalIgnoreCase)
+            || item.Code.Contains("UNMAPPED", StringComparison.OrdinalIgnoreCase)
+            || item.Count >= 5
+            ? "create-ticket"
+            : "defer";
+        yield return CreateReportServeTriageDecision(
+            usedIds,
+            itemType: "todo",
+            key: item.Code,
+            recommendedDecision: decision,
+            title: item.Code,
+            reason: $"MIGRATOR TODO code appears {item.Count} time(s).",
+            count: item.Count,
+            suggestedAction: decision == "create-ticket" ? "Create a focused migration ticket or config/profile mapping task for this TODO code." : "Keep as deferred review unless it blocks compile/runtime readiness.",
+            exampleFile: item.ExampleFile,
+            exampleLine: item.ExampleLine,
+            evidenceLinks: new[] { item.ExampleFile });
+    }
+
+    foreach (var item in unsupportedItems.Take(30))
+    {
+        yield return CreateReportServeTriageDecision(
+            usedIds,
+            itemType: "unsupported",
+            key: item.Name,
+            recommendedDecision: item.Count >= 2 ? "create-ticket" : "defer",
+            title: item.Name,
+            reason: $"Unsupported action/source appears {item.Count} time(s).",
+            count: item.Count,
+            suggestedAction: item.Count >= 2 ? "Check helper-inventory/index-pom and add a reviewed method mapping or explicit limitation." : "Review manually when the surrounding test is selected for migration.",
+            exampleFile: item.ExampleFile,
+            exampleLine: item.ExampleLine,
+            evidenceLinks: new[] { item.ExampleFile });
+    }
+
+    foreach (var item in unmappedItems.Take(30))
+    {
+        yield return CreateReportServeTriageDecision(
+            usedIds,
+            itemType: "unmapped-target",
+            key: item.Name,
+            recommendedDecision: "create-ticket",
+            title: item.Name,
+            reason: $"Unmapped target appears {item.Count} time(s) and needs selector/POM evidence.",
+            count: item.Count,
+            suggestedAction: "Find selector evidence before adding UiTarget/Profile mapping. Do not invent locators.",
+            exampleFile: item.ExampleFile,
+            exampleLine: item.ExampleLine,
+            evidenceLinks: new[] { item.ExampleFile });
+    }
+
+    foreach (var failure in runtimeFailures.Take(30))
+    {
+        yield return CreateReportServeTriageDecision(
+            usedIds,
+            itemType: "runtime",
+            key: failure.Category,
+            recommendedDecision: failure.Severity.Equals("info", StringComparison.OrdinalIgnoreCase) ? "defer" : "create-ticket",
+            title: failure.Category,
+            reason: $"Runtime classifier grouped {failure.Count} failure(s); likely owner: {failure.LikelyOwner}.",
+            count: failure.Count,
+            suggestedAction: failure.SuggestedAction,
+            exampleFile: failure.Examples.FirstOrDefault()?.File ?? "",
+            exampleLine: failure.Examples.FirstOrDefault()?.Line ?? 0,
+            evidenceLinks: failure.Examples.Select(e => e.File).Where(file => !string.IsNullOrWhiteSpace(file)).Distinct(StringComparer.OrdinalIgnoreCase).Take(5).ToArray());
+    }
+}
+
+static ReportServeTriageDecision CreateReportServeTriageDecision(
+    HashSet<string> usedIds,
+    string itemType,
+    string key,
+    string recommendedDecision,
+    string title,
+    string reason,
+    int count,
+    string suggestedAction,
+    string exampleFile,
+    int exampleLine,
+    string[] evidenceLinks)
+{
+    var baseId = SlugifyForReportServe($"{itemType}-{key}");
+    var id = baseId;
+    var suffix = 2;
+    while (!usedIds.Add(id))
+        id = $"{baseId}-{suffix++}";
+
+    var safeEvidence = evidenceLinks
+        .Where(path => !string.IsNullOrWhiteSpace(path))
+        .Select(PathRedaction.Redact)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .Take(8)
+        .ToArray();
+
+    return new ReportServeTriageDecision(
+        Id: id,
+        ItemType: itemType,
+        Key: key,
+        RecommendedDecision: recommendedDecision,
+        Title: title,
+        Reason: reason,
+        Count: count,
+        SuggestedAction: suggestedAction,
+        ExampleFile: PathRedaction.Redact(exampleFile ?? ""),
+        ExampleLine: exampleLine,
+        EvidenceLinks: safeEvidence,
+        TicketTemplate: BuildReportServeTicketTemplate(itemType, key, recommendedDecision, reason, count, suggestedAction, exampleFile, exampleLine));
+}
+
+static string BuildReportServeTicketTemplate(string itemType, string key, string decision, string reason, int count, string suggestedAction, string exampleFile, int exampleLine)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine($"[{decision}] {itemType}: {key}");
+    sb.AppendLine();
+    sb.AppendLine($"Reason: {reason}");
+    sb.AppendLine($"Count: {count}");
+    if (!string.IsNullOrWhiteSpace(exampleFile))
+        sb.AppendLine($"Example: {PathRedaction.Redact(exampleFile)}:{exampleLine}");
+    sb.AppendLine($"Next action: {suggestedAction}");
+    sb.AppendLine();
+    sb.AppendLine("Acceptance:");
+    sb.AppendLine("- Evidence is attached or linked.");
+    sb.AppendLine("- Config/profile changes are validated with config-diff/config-validate.");
+    sb.AppendLine("- Generated output is re-run through verify/project-verify.");
+    return sb.ToString().TrimEnd();
+}
+
+static string SlugifyForReportServe(string value)
+{
+    var sb = new StringBuilder();
+    foreach (var ch in value.ToLowerInvariant())
+    {
+        if (char.IsLetterOrDigit(ch))
+            sb.Append(ch);
+        else if (sb.Length == 0 || sb[^1] != '-')
+            sb.Append('-');
+    }
+
+    return sb.ToString().Trim('-') switch
+    {
+        "" => "triage-item",
+        var slug when slug.Length > 80 => slug[..80].Trim('-'),
+        var slug => slug
+    };
+}
+
 static RuntimeFailureGroup[] ReadRuntimeFailureGroups(string artifactDir, bool recursiveArtifacts)
 {
     var path = FindFirstExisting(artifactDir, "runtime-classification.json", recursiveArtifacts)
@@ -5066,8 +5271,16 @@ static IEnumerable<string> WriteReportServeDashboardReport(ReportServeDashboardR
     var htmlPath = Path.Combine(outPath, "report-dashboard.html");
     var mdPath = Path.Combine(outPath, "report-dashboard.md");
     var jsonPath = Path.Combine(outPath, "report-dashboard.json");
+    var triageJsonPath = Path.Combine(outPath, "report-triage-decisions.json");
+    var triageMdPath = Path.Combine(outPath, "report-triage-decisions.md");
     File.WriteAllText(htmlPath, WriteReportServeHtml(report));
     yield return htmlPath;
+
+    File.WriteAllText(triageJsonPath, System.Text.Json.JsonSerializer.Serialize(report.TriageDecisions, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    yield return triageJsonPath;
+
+    File.WriteAllText(triageMdPath, WriteReportServeTriageMarkdown(report));
+    yield return triageMdPath;
 
     if (format == "json" || format == "both")
     {
@@ -5104,6 +5317,8 @@ static string WriteReportServeMarkdown(ReportServeDashboardReport report)
     sb.AppendLine($"| Unmapped targets | {report.Current.Summary.UnmappedTargets} |");
     sb.AppendLine();
     AppendReportServeTrendMarkdown(sb, report);
+    AppendReportServeTriageSummaryMarkdown(sb, report);
+    AppendReportServeRootCauseMarkdown(sb, report);
     AppendReportServeCountTable(sb, "TODO explorer", "Code", report.TodoExplorer.Select(x => new ReportServeCountItem(x.Code, x.Count, x.ExampleFile, x.ExampleLine)).ToArray());
     AppendReportServeCountTable(sb, "Unsupported actions", "Action/source", report.UnsupportedActions);
     AppendReportServeCountTable(sb, "Unmapped targets", "Source expression", report.UnmappedTargets);
@@ -5130,6 +5345,92 @@ static string WriteReportServeMarkdown(ReportServeDashboardReport report)
             sb.AppendLine($"- `{missing}`");
     return sb.ToString();
 }
+
+
+static string WriteReportServeTriageMarkdown(ReportServeDashboardReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Report Serve Triage Decisions");
+    sb.AppendLine();
+    sb.AppendLine($"- **Generated**: {report.GeneratedAtUtc:yyyy-MM-dd HH:mm:ss zzz}");
+    sb.AppendLine($"- **Source**: `{PathRedaction.Redact(report.Source)}`");
+    sb.AppendLine("- **Safety**: starter decisions only; review before applying labels or creating tickets.");
+    sb.AppendLine();
+    AppendReportServeTriageSummaryMarkdown(sb, report);
+    foreach (var group in report.TriageDecisions.GroupBy(d => d.RecommendedDecision).OrderBy(g => DecisionSortOrder(g.Key)))
+    {
+        sb.AppendLine($"## {group.Key}");
+        sb.AppendLine();
+        foreach (var decision in group.OrderByDescending(d => d.Count).ThenBy(d => d.ItemType, StringComparer.OrdinalIgnoreCase).ThenBy(d => d.Key, StringComparer.OrdinalIgnoreCase).Take(100))
+        {
+            sb.AppendLine($"### `{EscapeMd(decision.Id)}`");
+            sb.AppendLine();
+            sb.AppendLine($"- **Type**: `{EscapeMd(decision.ItemType)}`");
+            sb.AppendLine($"- **Key**: `{EscapeMd(decision.Key)}`");
+            sb.AppendLine($"- **Count**: `{decision.Count}`");
+            sb.AppendLine($"- **Reason**: {EscapeMd(decision.Reason)}");
+            sb.AppendLine($"- **Suggested action**: {EscapeMd(decision.SuggestedAction)}");
+            if (!string.IsNullOrWhiteSpace(decision.ExampleFile))
+                sb.AppendLine($"- **Example**: `{EscapeMd(decision.ExampleFile)}:{decision.ExampleLine}`");
+            if (decision.EvidenceLinks.Length > 0)
+            {
+                sb.AppendLine("- **Evidence**:");
+                foreach (var link in decision.EvidenceLinks)
+                    sb.AppendLine($"  - `{EscapeMd(link)}`");
+            }
+            sb.AppendLine();
+        }
+    }
+
+    if (report.TriageDecisions.Length == 0)
+        sb.AppendLine("No triage decisions were generated. Run report-serve against a migration run with report/TODO/runtime artifacts.");
+    return sb.ToString();
+}
+
+static void AppendReportServeTriageSummaryMarkdown(StringBuilder sb, ReportServeDashboardReport report)
+{
+    sb.AppendLine("## Triage decisions");
+    sb.AppendLine("| Decision | Count | Meaning | Export | ");
+    sb.AppendLine("|---|---:|---|---|");
+    foreach (var decision in new[] { "create-ticket", "defer", "accept" })
+    {
+        var count = report.TriageDecisions.Count(d => d.RecommendedDecision.Equals(decision, StringComparison.OrdinalIgnoreCase));
+        sb.AppendLine($"| `{decision}` | {count} | {EscapeMd(DescribeTriageDecision(decision))} | `report-triage-decisions.json/md` |");
+    }
+    sb.AppendLine();
+}
+
+static void AppendReportServeRootCauseMarkdown(StringBuilder sb, ReportServeDashboardReport report)
+{
+    sb.AppendLine("## Root cause explorer");
+    sb.AppendLine("| # | Category | Root cause | Count | Suggested action | Example | ");
+    sb.AppendLine("|---|---|---|---:|---|---|");
+    for (var i = 0; i < Math.Min(30, report.RootCauses.Length); i++)
+    {
+        var item = report.RootCauses[i];
+        var example = string.IsNullOrWhiteSpace(item.ExampleFile) ? "" : $"`{EscapeMd(PathRedaction.Redact(item.ExampleFile))}:{item.ExampleLine}`";
+        sb.AppendLine($"| {i + 1} | `{EscapeMd(item.Category)}` | `{EscapeMd(item.DisplayName)}` | {item.Count} | {EscapeMd(item.SuggestedAction)} | {example} |");
+    }
+    if (report.RootCauses.Length == 0)
+        sb.AppendLine("|  | No root cause groups found. |  | 0 | Run explain-todo/migration-board first. |  |");
+    sb.AppendLine();
+}
+
+static int DecisionSortOrder(string decision) => decision switch
+{
+    "create-ticket" => 0,
+    "defer" => 1,
+    "accept" => 2,
+    _ => 3
+};
+
+static string DescribeTriageDecision(string decision) => decision switch
+{
+    "accept" => "Known/acceptable item; keep evidence and do not open a blocker.",
+    "defer" => "Track later; not a first-wave blocker unless it appears in selected pilot tests.",
+    "create-ticket" => "Create a focused migration ticket with evidence and acceptance checks.",
+    _ => "Review manually."
+};
 
 static void AppendReportServeTrendMarkdown(StringBuilder sb, ReportServeDashboardReport report)
 {
@@ -5166,7 +5467,7 @@ static string WriteReportServeHtml(ReportServeDashboardReport report)
     sb.AppendLine("<html lang=\"ru\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
     sb.AppendLine("<title>Report Serve Dashboard</title>");
     sb.AppendLine("<style>");
-    sb.AppendLine("body{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#f6f7fb;color:#172033}header{background:#111827;color:white;padding:24px 32px}.wrap{padding:24px 32px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.card{background:white;border-radius:12px;padding:16px;box-shadow:0 1px 4px #0001}.metric{font-size:28px;font-weight:700}.label{color:#667085;font-size:13px}.ok{color:#17803d}.warn{color:#b66a00}.bad{color:#b42318}.pill{display:inline-block;border-radius:999px;padding:4px 10px;font-size:12px;background:#eef2ff}.pill.ok{background:#dcfae6;color:#067647}.pill.warn{background:#fef0c7;color:#93370d}.pill.bad{background:#fee4e2;color:#b42318}table{border-collapse:collapse;width:100%;background:white;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px #0001}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #eaecf0;vertical-align:top}th{background:#f2f4f7;font-size:12px;text-transform:uppercase;color:#667085}code{background:#f2f4f7;padding:2px 4px;border-radius:4px}.section{margin:28px 0 14px}.small{font-size:12px;color:#667085}.empty{color:#667085;font-style:italic}.bar{height:8px;background:#eaecf0;border-radius:999px;overflow:hidden}.bar>span{display:block;height:8px;background:#3478f6}.action{border-left:4px solid #3478f6}a{color:#155eef;text-decoration:none}");
+    sb.AppendLine("body{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#f6f7fb;color:#172033}header{background:#111827;color:white;padding:24px 32px}.wrap{padding:24px 32px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.card{background:white;border-radius:12px;padding:16px;box-shadow:0 1px 4px #0001}.metric{font-size:28px;font-weight:700}.label{color:#667085;font-size:13px}.ok{color:#17803d}.warn{color:#b66a00}.bad{color:#b42318}.pill{display:inline-block;border-radius:999px;padding:4px 10px;font-size:12px;background:#eef2ff}.pill.ok{background:#dcfae6;color:#067647}.pill.warn{background:#fef0c7;color:#93370d}.pill.bad{background:#fee4e2;color:#b42318}.pill.ticket{background:#eff8ff;color:#175cd3}.pill.defer{background:#fef0c7;color:#93370d}.pill.accept{background:#dcfae6;color:#067647}table{border-collapse:collapse;width:100%;background:white;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px #0001}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #eaecf0;vertical-align:top}th{background:#f2f4f7;font-size:12px;text-transform:uppercase;color:#667085}code{background:#f2f4f7;padding:2px 4px;border-radius:4px}.section{margin:28px 0 14px}.small{font-size:12px;color:#667085}.empty{color:#667085;font-style:italic}.bar{height:8px;background:#eaecf0;border-radius:999px;overflow:hidden}.bar>span{display:block;height:8px;background:#3478f6}.action{border-left:4px solid #3478f6}a{color:#155eef;text-decoration:none}.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:12px 0}.filters input,.filters select{padding:9px 10px;border:1px solid #d0d5dd;border-radius:8px;background:white}.hidden-row{display:none}.mono-small{font-family:Consolas,monospace;font-size:12px;white-space:pre-wrap;max-width:520px}");
     sb.AppendLine("</style></head><body>");
     sb.AppendLine("<header><h1>Report Serve Dashboard</h1>");
     sb.AppendLine($"<div class=\"small\">Generated: {Html(report.GeneratedAtUtc.ToString("yyyy-MM-dd HH:mm:ss zzz"))} · Source: <code>{Html(PathRedaction.Redact(report.Source))}</code></div>");
@@ -5189,13 +5490,75 @@ static string WriteReportServeHtml(ReportServeDashboardReport report)
 
     AppendReportServeTrendHtml(sb, report);
     AppendReportServeActionsHtml(sb, report);
+    AppendReportServeTriageHtml(sb, report);
+    AppendReportServeRootCauseHtml(sb, report);
     AppendReportServeCountHtml(sb, "TODO explorer", "Code", report.TodoExplorer.Select(x => new ReportServeCountItem(x.Code, x.Count, x.ExampleFile, x.ExampleLine)).ToArray(), "MIGRATOR:* groups found in generated files and reports.");
     AppendReportServeCountHtml(sb, "Unsupported actions", "Action/source", report.UnsupportedActions, "High-frequency unsupported actions from unsupported-actions/report artifacts.");
     AppendReportServeCountHtml(sb, "Unmapped targets", "Source expression", report.UnmappedTargets, "Source expressions that still need UiTarget/POM/profile evidence.");
     AppendReportServeRuntimeHtml(sb, report);
     AppendReportServeArtifactsHtml(sb, report);
+    AppendReportServeFilterScript(sb);
     sb.AppendLine("</main></body></html>");
     return sb.ToString();
+}
+
+
+static void AppendReportServeTriageHtml(StringBuilder sb, ReportServeDashboardReport report)
+{
+    sb.AppendLine("<h2 class=\"section\">Triage decisions</h2>");
+    sb.AppendLine("<div class=\"card\"><div class=\"small\">Static starter decisions are exported to <code>report-triage-decisions.json</code> and <code>report-triage-decisions.md</code>. Review before creating tickets or accepting risk.</div>");
+    sb.AppendLine("<div class=\"filters\"><input id=\"triageSearch\" placeholder=\"Filter by key, title, reason...\" oninput=\"filterTriage()\"><select id=\"triageType\" onchange=\"filterTriage()\"><option value=\"\">All types</option><option value=\"root-cause\">Root cause</option><option value=\"todo\">TODO</option><option value=\"unsupported\">Unsupported</option><option value=\"unmapped-target\">Unmapped target</option><option value=\"runtime\">Runtime</option></select><select id=\"triageDecision\" onchange=\"filterTriage()\"><option value=\"\">All decisions</option><option value=\"create-ticket\">Create ticket</option><option value=\"defer\">Defer</option><option value=\"accept\">Accept</option></select></div></div>");
+    sb.AppendLine("<table id=\"triageTable\"><thead><tr><th>Decision</th><th>Type</th><th>Key</th><th>Count</th><th>Reason / action</th><th>Example / evidence</th></tr></thead><tbody>");
+    if (report.TriageDecisions.Length == 0)
+        sb.AppendLine("<tr><td colspan=\"6\" class=\"empty\">No triage decisions were generated.</td></tr>");
+    foreach (var decision in report.TriageDecisions.Take(150))
+    {
+        var css = decision.RecommendedDecision switch
+        {
+            "create-ticket" => "ticket",
+            "defer" => "defer",
+            "accept" => "accept",
+            _ => ""
+        };
+        var text = $"{decision.Key} {decision.Title} {decision.Reason} {decision.SuggestedAction}".ToLowerInvariant();
+        var example = string.IsNullOrWhiteSpace(decision.ExampleFile) ? "" : $"{decision.ExampleFile}:{decision.ExampleLine}";
+        sb.AppendLine($"<tr class=\"triage-row\" data-type=\"{Html(decision.ItemType)}\" data-decision=\"{Html(decision.RecommendedDecision)}\" data-search=\"{Html(text)}\"><td><span class=\"pill {css}\">{Html(decision.RecommendedDecision)}</span><div class=\"small\">{Html(decision.Id)}</div></td><td>{Html(decision.ItemType)}</td><td><code>{Html(decision.Key)}</code></td><td>{decision.Count}</td><td>{Html(decision.Reason)}<div class=\"small\">{Html(decision.SuggestedAction)}</div></td><td><code>{Html(example)}</code>{RenderEvidenceList(decision.EvidenceLinks)}</td></tr>");
+    }
+    sb.AppendLine("</tbody></table>");
+}
+
+static void AppendReportServeRootCauseHtml(StringBuilder sb, ReportServeDashboardReport report)
+{
+    sb.AppendLine("<h2 class=\"section\">Root cause explorer</h2>");
+    sb.AppendLine("<table><thead><tr><th>Category</th><th>Root cause</th><th>Count</th><th>Suggested action</th><th>Example</th></tr></thead><tbody>");
+    if (report.RootCauses.Length == 0)
+        sb.AppendLine("<tr><td colspan=\"5\" class=\"empty\">No normalized root causes found. Run explain-todo or migration-board first.</td></tr>");
+    foreach (var item in report.RootCauses.Take(50))
+    {
+        var example = string.IsNullOrWhiteSpace(item.ExampleFile) ? "" : $"{PathRedaction.Redact(item.ExampleFile)}:{item.ExampleLine}";
+        sb.AppendLine($"<tr><td><code>{Html(item.Category)}</code></td><td>{Html(item.DisplayName)}<div class=\"small\">{Html(item.GroupKey)}</div></td><td>{item.Count}</td><td>{Html(item.SuggestedAction)}</td><td><code>{Html(example)}</code>{RenderEvidenceList(item.RepresentativeFiles.Select(PathRedaction.Redact).ToArray())}</td></tr>");
+    }
+    sb.AppendLine("</tbody></table>");
+}
+
+static string RenderEvidenceList(string[] links)
+{
+    if (links.Length == 0)
+        return "";
+
+    var sb = new StringBuilder();
+    sb.Append("<ul class=\"small\">");
+    foreach (var link in links.Where(link => !string.IsNullOrWhiteSpace(link)).Take(5))
+        sb.Append($"<li><code>{Html(link)}</code></li>");
+    sb.Append("</ul>");
+    return sb.ToString();
+}
+
+static void AppendReportServeFilterScript(StringBuilder sb)
+{
+    sb.AppendLine("<script>");
+    sb.AppendLine("function filterTriage(){const q=(document.getElementById('triageSearch')?.value||'').toLowerCase();const t=document.getElementById('triageType')?.value||'';const d=document.getElementById('triageDecision')?.value||'';document.querySelectorAll('.triage-row').forEach(r=>{const ok=(!q||(r.dataset.search||'').includes(q))&&(!t||r.dataset.type===t)&&(!d||r.dataset.decision===d);r.classList.toggle('hidden-row',!ok);});}");
+    sb.AppendLine("</script>");
 }
 
 static void AppendReportServeTrendHtml(StringBuilder sb, ReportServeDashboardReport report)
