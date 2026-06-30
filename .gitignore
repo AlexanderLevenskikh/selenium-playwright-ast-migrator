@@ -149,6 +149,10 @@ pnpm-debug.log*
 *.webm
 *.mp4
 
+# Public package assets are intentionally tracked even though screenshots are ignored.
+!assets/
+!assets/icon.png
+
 # Local/private profile configs
 *.local.json
 **/*.local.json
