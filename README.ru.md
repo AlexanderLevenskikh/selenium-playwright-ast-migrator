@@ -127,6 +127,8 @@ selenium-pw-migrator --mode migrate --help
 
 ## Карта документации
 
+- [Полное руководство пользователя](USER_GUIDE.ru.md)
+- [Complete user guide](USER_GUIDE.md)
 - [Documentation index](docs/README.md)
 - [Quick start](docs/quick-start.md)
 - [User guide](docs/user-guide/README.md)

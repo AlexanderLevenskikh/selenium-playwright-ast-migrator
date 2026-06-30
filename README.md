@@ -128,6 +128,8 @@ If Selenium POMs contain proven selectors such as `ByTId("value")`, `CreateContr
 
 ## Documentation map
 
+- [Complete user guide](USER_GUIDE.md)
+- [Полное руководство пользователя](USER_GUIDE.ru.md)
 - [Documentation index](docs/README.md)
 - [Quick start](docs/quick-start.md)
 - [Init wizard](docs/init-wizard.md)

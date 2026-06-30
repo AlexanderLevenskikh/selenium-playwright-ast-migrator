@@ -25,8 +25,8 @@ internal static class CliCommandCatalog
         StableCommand("init", "migration", false, false,
             "Create a safe starter migration workspace with the onboarding wizard.",
             "Writes profiles/adapter-config.json, current-ticket.md, state/run-ledger.md, README.md, next-commands.md, and optional scaffold/agent-loop files. Use direct form `selenium-pw-migrator init --wizard` or mode form `--mode init --wizard`.",
-            "Optional source path via --source <path> for direct init or --input <path> for mode form.",
-            "selenium-pw-migrator init --wizard --source ./OldTests --target dotnet --target-test-framework xunit --workspace migration"),
+            "Optional source path via --source-path <path> for direct init or --input <path> for mode form.",
+            "selenium-pw-migrator init --wizard --source-path ./OldTests --target dotnet --target-test-framework xunit --workspace migration"),
         StableCommand("analyze", "analysis", true, true,
             "Parse and analyze Selenium tests without generating target files.",
             "Produces reports, unmapped target lists, unsupported action lists, and draft adapter-config hints.",
@@ -311,7 +311,7 @@ internal static class CliCommandCatalog
         sb.AppendLine("  --fix                           Add safe doctor repair plan artifacts.");
         sb.AppendLine("  --dry-run                       Preview doctor fixes without writing project/config files.");
         sb.AppendLine("  --apply                         Apply safe doctor fixes inside workspace or .doctor.new config files.");
-        sb.AppendLine("  --source <path>                  Source path for direct `init --wizard` form.");
+        sb.AppendLine("  --source-path <path>             Source path for direct `init --wizard` form.");
         sb.AppendLine("  --test-id-attribute <attr>       Default test id attribute for init config.");
         sb.AppendLine("  --target-project <path>          Existing target project path for init/discover-target handoff.");
         sb.AppendLine("  --target-namespace <namespace>   Target namespace for init-generated config/scaffold.");

@@ -97,7 +97,7 @@ public class CliProductizationTests
 
         Assert.Contains("BuildCommandHelp(CliCommandInfo command)", catalog);
         Assert.Contains("Use `selenium-pw-migrator --mode <mode> --help`", catalog);
-        Assert.Contains("selenium-pw-migrator init --wizard --source ./OldTests", catalog);
+        Assert.Contains("selenium-pw-migrator init --wizard --source-path ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator --mode migrate --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator --mode doctor --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator report serve --input migration/runs/latest --port 5077", catalog);

@@ -9363,6 +9363,23 @@ static CliOptions? ParseArgs(string[] args)
                     return null;
                 }
                 break;
+            case "--source-path":
+                if (i + 1 < args.Length)
+                {
+                    if (!initModeRequested)
+                    {
+                        Console.Error.WriteLine("--source-path is only supported for init --wizard. Use --input for other modes.");
+                        return null;
+                    }
+
+                    input = args[++i];
+                }
+                else
+                {
+                    Console.Error.WriteLine("--source-path requires a source path for init --wizard");
+                    return null;
+                }
+                break;
             case "--source":
                 if (i + 1 < args.Length)
                 {
