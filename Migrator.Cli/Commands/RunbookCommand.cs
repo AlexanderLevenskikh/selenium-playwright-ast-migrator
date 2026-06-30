@@ -320,8 +320,9 @@ internal static class RunbookCommand
         yield return new RunbookCommandStep(3, "helper-inventory", $"selenium-pw-migrator --mode helper-inventory --input {input} --out runbook-helper-inventory --format both", "Identify helper semantics before suppressing or mapping wrappers.");
         yield return new RunbookCommandStep(4, "migrate-pilot", $"selenium-pw-migrator --mode migrate --input {pilotPath} {configArg} --target {targetAlias} --target-test-framework {targetTestFramework} --out runs/run-001-pilot --format both", "Generate a tiny first slice rather than the whole suite.");
         yield return new RunbookCommandStep(5, "verify-pilot", $"selenium-pw-migrator --mode verify --input runs/run-001-pilot {configArg} --out runs/run-001-pilot/verify --format both", "Check TODO/syntax quality gates before runtime work.");
-        yield return new RunbookCommandStep(6, "report-dashboard", "selenium-pw-migrator report serve --input migration/runs/run-001-pilot --static-only --out report-dashboard", "Create a shareable triage dashboard.");
-        yield return new RunbookCommandStep(7, "evidence-pack", "selenium-pw-migrator evidence pack --input migration/runs/run-001-pilot --out evidence/run-001-pilot.zip", "Prepare a reviewable evidence bundle.");
+        yield return new RunbookCommandStep(6, "selector-evidence", $"selenium-pw-migrator selector evidence --input runs/run-001-pilot {configArg} --out runs/run-001-pilot/selector-evidence --format both", "Prove generated locators against Selenium POM/source and config evidence.");
+        yield return new RunbookCommandStep(7, "report-dashboard", "selenium-pw-migrator report serve --input migration/runs/run-001-pilot --static-only --out report-dashboard", "Create a shareable triage dashboard.");
+        yield return new RunbookCommandStep(8, "evidence-pack", "selenium-pw-migrator evidence pack --input migration/runs/run-001-pilot --out evidence/run-001-pilot.zip", "Prepare a reviewable evidence bundle.");
     }
 
     static IEnumerable<RunbookArtifact> BuildArtifactsToCollect()
@@ -331,6 +332,7 @@ internal static class RunbookCommand
         yield return new RunbookArtifact("helper inventory", "runbook-helper-inventory/helper-inventory.md", "Helper semantics and mapping/suppression candidates.");
         yield return new RunbookArtifact("migration report", "migration/runs/run-001-pilot/report.md", "Generated quality summary and unmapped/unsupported categories.");
         yield return new RunbookArtifact("verify report", "migration/runs/run-001-pilot/verify/verify-report.md", "Syntax/TODO quality gate evidence.");
+        yield return new RunbookArtifact("selector evidence", "migration/runs/run-001-pilot/selector-evidence/selector-evidence.md", "Selector provenance, confidence, and unsafe/inferred locator evidence.");
         yield return new RunbookArtifact("dashboard", "migration/report-dashboard/report-dashboard.html", "Human triage overview.");
         yield return new RunbookArtifact("evidence zip", "evidence/run-001-pilot.zip", "Shareable review bundle with manifest and checksums.");
     }

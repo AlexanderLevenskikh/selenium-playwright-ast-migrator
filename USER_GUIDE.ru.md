@@ -512,6 +512,14 @@ selenium-pw-migrator --mode index-pom --input ./OldTests --out pom-index
 selenium-pw-migrator --mode helper-inventory --input ./OldTests --out helper-inventory
 ```
 
+`selector evidence`
+
+Объясняет происхождение локаторов: Selenium selector → config mapping → generated Playwright locator.
+
+```bash
+selenium-pw-migrator selector evidence --input migration/run-001 --config ./adapter-config.json --out selector-evidence
+```
+
 `propose`
 
 Создает mapping proposals из migration artifacts, не меняя config.
@@ -589,7 +597,7 @@ selenium-pw-migrator evidence pack --input migration/run-001 --out evidence/run-
 1. Запустите `init --wizard`.
 2. Используйте созданный `scaffold/`.
 3. Заполните auth, routes, base URL и target namespace.
-4. Запустите `index-pom` и `helper-inventory`.
+4. Запустите `index-pom`, `helper-inventory` и `selector evidence`.
 5. Запустите `migrate`.
 6. Запустите `verify-project`.
 
@@ -627,7 +635,7 @@ selenium-pw-migrator evidence pack --input migration/run-001 --out evidence/run-
 
 Profiles лучше ручных правок generated code. Если один TODO повторяется много раз, чините mapping или recognizer один раз.
 
-Доказательства лучше догадок. Перед broad config changes запускайте `index-pom`, `helper-inventory` и `discover-target`.
+Доказательства лучше догадок. Перед broad config changes запускайте `index-pom`, `helper-inventory`, `selector evidence` и `discover-target`.
 
 Project-aware verification лучше простой syntax check. Для Playwright .NET используйте `verify-project`.
 

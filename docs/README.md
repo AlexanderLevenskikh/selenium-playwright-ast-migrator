@@ -69,6 +69,7 @@ Public documentation is organized by the path a new user usually follows: instal
 - [Migration quality program](migration-quality-program.md)
 - [Runtime readiness](runtime-readiness.md)
 - [Runtime failure classifier](runtime-failure-classifier.md)
+- [Selector evidence explorer](selector-evidence-explorer.md)
 - [POM indexing](pom-indexing.md)
 - [POM recovery policy](pom-recovery-policy.md)
 - [Helper body inventory](helper-body-inventory.md)

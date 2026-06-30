@@ -292,6 +292,13 @@ if (mode == "runtime-classify")
     return runtimeExitCode;
 }
 
+// Handle selector-evidence mode — explains source/config/generated locator provenance.
+if (mode == "selector-evidence")
+{
+    var selectorEvidenceExitCode = SelectorEvidenceCommand.RunSelectorEvidence(inputPath, outPath, format, loadedConfig);
+    return selectorEvidenceExitCode;
+}
+
 // Handle config-schema mode — writes/copies adapter-config JSON Schema for editors and agents.
 if (mode == "config-schema")
 {
@@ -836,7 +843,7 @@ static bool ShouldAutoDetectSource(string mode, string source, bool sourceExplic
     if (string.IsNullOrWhiteSpace(inputPath) || (!File.Exists(inputPath) && !Directory.Exists(inputPath)))
         return false;
 
-    return mode is "analyze" or "dump-ir" or "migrate" or "verify" or "verify-project" or "doctor" or "runbook" or "orchestrate";
+    return mode is "analyze" or "dump-ir" or "migrate" or "verify" or "verify-project" or "doctor" or "runbook" or "selector-evidence" or "orchestrate";
 }
 
 static void WriteSourceDetectionReport(SourceDetectionReport report, string outPath, string format, string selectedSource, bool explicitSource)
@@ -913,7 +920,7 @@ static string BuildSourceDetectionMarkdown(SourceDetectionReport report, string 
 }
 
 static bool ShouldWriteSourceCapabilityReport(string mode) =>
-    mode is "analyze" or "dump-ir" or "migrate" or "verify" or "verify-project" or "doctor" or "orchestrate" or "config-normalize";
+    mode is "analyze" or "dump-ir" or "migrate" or "verify" or "verify-project" or "doctor" or "selector-evidence" or "orchestrate" or "config-normalize";
 
 static void WriteSourceCapabilityReport(SourceCapabilityReport report, string outPath, string format)
 {
@@ -996,7 +1003,7 @@ static string BuildSourceCapabilityMarkdown(SourceCapabilityReport report)
 
 
 static bool ShouldWriteTargetCapabilityReport(string mode) =>
-    mode is "analyze" or "dump-ir" or "migrate" or "verify" or "verify-project" or "doctor" or "orchestrate" or "config-normalize";
+    mode is "analyze" or "dump-ir" or "migrate" or "verify" or "verify-project" or "doctor" or "selector-evidence" or "orchestrate" or "config-normalize";
 
 static void WriteTargetCapabilityReport(TargetCapabilityReport report, string outPath, string format)
 {
@@ -3496,7 +3503,7 @@ static string[] ArtifactLookupFileNames() => new[]
     "source-capabilities-report.json", "source-capabilities-report.md", "target-capabilities-report.json", "target-capabilities-report.md",
     "capabilities-report.json", "capabilities-report.md",
     "explain-todo.json", "explain-todo.md", "agent-next-task.md", "smoke-plan.json", "smoke-plan.md",
-    "runtime-checklist.md", "agent-runtime-next-task.md", "runtime-classification.json", "runtime-classification.md", "runtime-feedback-loop.json", "runtime-feedback-loop.md", "runtime-failure-report.json", "runtime-failure-report.md", "runtime-next-tickets.md", "agent-runtime-failure-next-task.md",
+    "runtime-checklist.md", "agent-runtime-next-task.md", "runtime-classification.json", "runtime-classification.md", "runtime-feedback-loop.json", "runtime-feedback-loop.md", "runtime-failure-report.json", "runtime-failure-report.md", "runtime-next-tickets.md", "agent-runtime-failure-next-task.md", "selector-evidence.json", "selector-evidence.md",
     "migration-board.json", "migration-board.md", "migration-board.html", "report-dashboard.json", "report-dashboard.md", "report-dashboard.html",
     "config-validate-report.json", "config-validate-report.md"
 };
@@ -6005,7 +6012,7 @@ static IEnumerable<string> FindBoardArtifacts(string artifactDir, bool recursive
         "agent-next-task.md", "migration-quality-dashboard.md", "migration-quality-dashboard.json", "migration-quality-tickets.md",
         "source-capabilities-report.md", "source-capabilities-report.json", "target-capabilities-report.md", "target-capabilities-report.json",
         "smoke-plan.md", "smoke-plan.json", "runtime-checklist.md", "agent-runtime-next-task.md",
-        "runtime-classification.md", "runtime-classification.json", "runtime-feedback-loop.md", "runtime-feedback-loop.json", "runtime-failure-report.md", "runtime-failure-report.json", "runtime-next-tickets.md", "agent-runtime-failure-next-task.md",
+        "runtime-classification.md", "runtime-classification.json", "runtime-feedback-loop.md", "runtime-feedback-loop.json", "runtime-failure-report.md", "runtime-failure-report.json", "runtime-next-tickets.md", "agent-runtime-failure-next-task.md", "selector-evidence.md", "selector-evidence.json",
         "report-dashboard.html", "report-dashboard.md", "report-dashboard.json",
         "unmapped-targets.json", "unsupported-actions.json", "pom-index.generated.json", "doctor-report.md", "guard-report.md", "config-validate-report.md", "config-validate-report.json"
     };
@@ -9990,6 +9997,13 @@ static string[] NormalizeDirectCommand(string[] args)
 
     if (string.Equals(args[0], "runbook", StringComparison.OrdinalIgnoreCase))
         return new[] { "--mode", "runbook" }.Concat(args.Skip(1)).ToArray();
+
+    if (string.Equals(args[0], "selector", StringComparison.OrdinalIgnoreCase)
+        && args.Length > 1
+        && string.Equals(args[1], "evidence", StringComparison.OrdinalIgnoreCase))
+    {
+        return new[] { "--mode", "selector-evidence" }.Concat(args.Skip(2)).ToArray();
+    }
 
     if (string.Equals(args[0], "report", StringComparison.OrdinalIgnoreCase)
         && args.Length > 1

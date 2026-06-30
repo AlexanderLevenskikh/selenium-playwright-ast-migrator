@@ -102,13 +102,14 @@ For a file-by-file walkthrough, see:
 | `config-diff` | Stable | Compare profile changes and highlight risky edits. |
 | `guard` | Stable | Compare before/after migration metrics and catch regressions. |
 | `index-pom` | Stable | Mine Selenium PageObjects and selector evidence. |
+| `selector-evidence` | Experimental | Explain Selenium selector → config mapping → generated locator provenance with confidence and unsafe/inferred flags. |
 | `helper-inventory` | Stable | Inspect helper/POM method bodies and infer MethodSemantics candidates. |
 | `discover-target` | Stable | Scan an existing Playwright .NET project and create a reviewable target inventory. |
 | `scaffold` | Stable | Generate a minimal compile-ready Playwright .NET project scaffold. |
 | `capabilities` | Stable | List built-in source frontend / target backend capability reports. |
 | `verify-ts-project` | Experimental | Type-check generated Playwright TS specs inside an existing TS project. |
 | `orchestrate` | Experimental | Run analyze → migrate → verify → propose as one dry-run workflow. |
-| `explain-todo` / `smoke-plan` / `runtime-classify` / `migration-board` / `report-serve` | Experimental | Prioritize follow-up work from migration artifacts/runtime logs, classify runtime root causes, score readiness, and export triage decisions. |
+| `explain-todo` / `smoke-plan` / `runtime-classify` / `selector-evidence` / `migration-board` / `report-serve` | Experimental | Prioritize follow-up work from migration artifacts/runtime logs, classify runtime root causes, score readiness, explain selector provenance, and export triage decisions. |
 | `evidence pack` | Stable | Create a redacted shareable zip with reports, generated artifacts, manifest, and checksums. |
 | `profile list/search/inspect/install/diff` | Experimental | Use offline built-in profiles as reviewed config layers. |
 

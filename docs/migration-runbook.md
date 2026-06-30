@@ -29,7 +29,7 @@ The report contains:
 
 ## Safety model
 
-`runbook` is read-only. It never edits source tests, target projects, or config files. It may recommend commands such as `doctor`, `index-pom`, `helper-inventory`, `migrate`, `verify`, `report serve`, and `evidence pack`, but it does not run them for you.
+`runbook` is read-only. It never edits source tests, target projects, or config files. It may recommend commands such as `doctor`, `index-pom`, `helper-inventory`, `migrate`, `verify`, `selector evidence`, `report serve`, and `evidence pack`, but it does not run them for you.
 
 ## Recommended workflow
 
@@ -43,4 +43,4 @@ The report contains:
 
 The report explicitly calls out selector evidence work: prove selectors through Selenium POM/source truth before adding active mappings.
 
-Use the runbook to avoid starting with the entire suite. A good first pilot is usually compact, has direct Selenium locator/action/assertion signals, and avoids heavy dynamic selectors, custom helper stacks, frames/dialogs, and business-critical flaky paths. Run `index-pom` and `helper-inventory` before converting project-specific PageObjects or helper methods into config mappings.
+Use the runbook to avoid starting with the entire suite. A good first pilot is usually compact, has direct Selenium locator/action/assertion signals, and avoids heavy dynamic selectors, custom helper stacks, frames/dialogs, and business-critical flaky paths. Run `index-pom`, `helper-inventory`, and `selector evidence` before accepting project-specific PageObjects, helper methods, or generated locators as config/profile mappings.

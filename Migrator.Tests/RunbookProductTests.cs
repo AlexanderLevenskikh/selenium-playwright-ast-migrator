@@ -32,6 +32,7 @@ public class RunbookProductTests
         Assert.Contains("RunRunbook", command);
         Assert.Contains("index-pom", command);
         Assert.Contains("helper-inventory", command);
+        Assert.Contains("selector evidence", command);
         Assert.Contains("report serve", command);
         Assert.Contains("evidence pack", command);
         Assert.DoesNotContain("File.Delete(inputPath", command);

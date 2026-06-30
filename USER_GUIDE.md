@@ -512,6 +512,14 @@ Inspects helper/POM methods before you map or suppress helper wrappers.
 selenium-pw-migrator --mode helper-inventory --input ./OldTests --out helper-inventory
 ```
 
+`selector evidence`
+
+Explains Selenium selector → config mapping → generated Playwright locator provenance.
+
+```bash
+selenium-pw-migrator selector evidence --input migration/run-001 --config ./adapter-config.json --out selector-evidence
+```
+
 `propose`
 
 Creates mapping proposals from migration artifacts without changing config.
@@ -589,7 +597,7 @@ selenium-pw-migrator evidence pack --input migration/run-001 --out evidence/run-
 1. Run `init --wizard`.
 2. Use generated `scaffold/`.
 3. Fill in auth, routes, base URL, and target namespace.
-4. Run `index-pom` and `helper-inventory`.
+4. Run `index-pom`, `helper-inventory`, and `selector evidence`.
 5. Run `migrate`.
 6. Run `verify-project`.
 
@@ -627,7 +635,7 @@ Small inputs beat huge first runs. Start with a slice that contains common patte
 
 Profiles beat manual generated-code edits. If the same TODO appears many times, fix the mapping or recognizer once.
 
-Evidence beats guesses. Run `index-pom`, `helper-inventory`, and `discover-target` before broad config changes.
+Evidence beats guesses. Run `index-pom`, `helper-inventory`, `selector evidence`, and `discover-target` before broad config changes.
 
 Project-aware verification beats syntax checks. Use `verify-project` when targeting Playwright .NET.
 

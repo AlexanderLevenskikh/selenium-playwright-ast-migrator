@@ -62,6 +62,7 @@ public class CliProductizationTests
             "explain-todo",
             "smoke-plan",
             "runtime-classify",
+            "selector-evidence",
             "migration-board",
             "report-serve",
             "profile-list",
@@ -103,6 +104,7 @@ public class CliProductizationTests
         Assert.Contains("selenium-pw-migrator --mode migrate --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator --mode doctor --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator report serve --input migration/runs/latest --port 5077", catalog);
+        Assert.Contains("selenium-pw-migrator selector evidence --input migration/runs/latest", catalog);
         Assert.Contains("selenium-pw-migrator profile list", catalog);
         Assert.Contains("selenium-pw-migrator profile inspect basic-csharp-xunit", catalog);
         Assert.Contains("selenium-pw-migrator profile install basic-csharp-nunit", catalog);
