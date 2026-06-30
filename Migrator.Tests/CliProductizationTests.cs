@@ -133,6 +133,12 @@ public class CliProductizationTests
         Assert.Contains("string? TargetTestFramework", models);
         Assert.Contains("ReportServeDashboardReport", models);
         Assert.Contains("int Port", models);
+        var runtimeClassifier = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/RuntimeFailureClassifierCommand.cs"));
+        Assert.Contains("runtime-next-tickets.md", runtimeClassifier);
+        Assert.Contains("TraceArtifacts", models);
+        Assert.Contains("ContextLinks", models);
+        Assert.Contains("LikelyOwner", models);
+
     }
 
     static string FindRepositoryFile(string relativePath)

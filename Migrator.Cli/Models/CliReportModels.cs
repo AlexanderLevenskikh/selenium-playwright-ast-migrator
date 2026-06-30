@@ -152,8 +152,10 @@ record PomUsageCandidate(string SourceExpression, string SuggestedTargetExpressi
 record TypeScriptVerifyReport(DateTimeOffset GeneratedAtUtc, string Status, string InputPath, string TsProjectPath, string[] GeneratedFiles, string VerifyDirectory, string TsConfigPath, string Command, int ExitCode, string StdOut, string StdErr, string[] Diagnostics, TypeScriptVerifyDiagnostic[] ClassifiedDiagnostics);
 record TypeScriptVerifyDiagnostic(string Raw, string Code, string Severity, string Category, string LikelyCause, string SuggestedAction);
 
-record RuntimeFailureReport(DateTimeOffset GeneratedAtUtc, string Source, int FilesScanned, int Observations, RuntimeFailureGroup[] Groups, string[] RecommendedNextActions);
-record RuntimeFailureGroup(string Category, int Count, string Severity, string LikelyCause, string SuggestedAction, RuntimeFailureObservation[] Examples);
+record RuntimeFailureReport(DateTimeOffset GeneratedAtUtc, string Source, int FilesScanned, int Observations, RuntimeTraceArtifact[] TraceArtifacts, RuntimeContextLink[] ContextLinks, RuntimeFailureGroup[] Groups, string[] RecommendedNextActions);
+record RuntimeTraceArtifact(string Path, string Kind, long SizeBytes, string Notes);
+record RuntimeContextLink(string? TestName, string? GeneratedFile, int? GeneratedLine, string? SourceFile, int? SourceLine, string Evidence);
+record RuntimeFailureGroup(string Category, int Count, string Severity, string LikelyOwner, string LikelyCause, string SuggestedAction, RuntimeFailureObservation[] Examples);
 record RuntimeFailureObservation(string Category, string File, int Line, string? TestName, string Message, string Snippet);
 record ConfigSchemaReport(DateTimeOffset GeneratedAtUtc, string SchemaPath, string SchemaName, string[] SuggestedUsage);
 

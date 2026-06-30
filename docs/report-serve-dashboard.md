@@ -37,7 +37,7 @@ The server is optional. When `--port` is greater than zero, the CLI serves the o
 - Unsupported actions: frequency, examples, and source locations.
 - Unmapped targets: source expressions that still need profile/POM evidence.
 - Verify/project-verify diagnostics: status and diagnostic counts.
-- Runtime failures: groups from `runtime-failure-report.json` when available.
+- Runtime failures: groups from `runtime-classification.json` / `runtime-failure-report.json` when available.
 - Proposed next tickets: recommendations from migration-board/explain-todo/smoke-plan artifacts.
 - Evidence pack: downloadable zip for PRs/issues.
 
@@ -51,4 +51,4 @@ The server is optional. When `--port` is greater than zero, the CLI serves the o
 
 ## Missing artifacts
 
-The dashboard degrades gracefully. For example, if runtime classification has not been run yet, the runtime section explains that `runtime-failure-report.json` is missing instead of failing the command.
+The dashboard degrades gracefully. For example, if runtime classification has not been run yet, the runtime section explains that `runtime-classification.json` / `runtime-failure-report.json` is missing instead of failing the command.

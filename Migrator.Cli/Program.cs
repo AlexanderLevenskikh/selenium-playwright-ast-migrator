@@ -3471,7 +3471,7 @@ static string[] ArtifactLookupFileNames() => new[]
     "source-capabilities-report.json", "source-capabilities-report.md", "target-capabilities-report.json", "target-capabilities-report.md",
     "capabilities-report.json", "capabilities-report.md",
     "explain-todo.json", "explain-todo.md", "agent-next-task.md", "smoke-plan.json", "smoke-plan.md",
-    "runtime-checklist.md", "agent-runtime-next-task.md", "runtime-failure-report.json", "runtime-failure-report.md", "agent-runtime-failure-next-task.md",
+    "runtime-checklist.md", "agent-runtime-next-task.md", "runtime-classification.json", "runtime-classification.md", "runtime-failure-report.json", "runtime-failure-report.md", "runtime-next-tickets.md", "agent-runtime-failure-next-task.md",
     "migration-board.json", "migration-board.md", "migration-board.html", "report-dashboard.json", "report-dashboard.md", "report-dashboard.html",
     "config-validate-report.json", "config-validate-report.md"
 };
@@ -4832,7 +4832,13 @@ static ReportServeDashboardReport BuildReportServeDashboardReport(string artifac
     var board = BuildMigrationBoardReportFromArtifacts(artifactDir, recursiveArtifacts);
     var missing = RequiredReportServeArtifacts()
         .Where(name => FindFirstExisting(artifactDir, name, recursiveArtifacts) == null)
-        .ToArray();
+        .ToList();
+    if (FindFirstExisting(artifactDir, "runtime-classification.json", recursiveArtifacts) == null
+        && FindFirstExisting(artifactDir, "runtime-failure-report.json", recursiveArtifacts) == null)
+    {
+        missing.Add("runtime-classification.json or runtime-failure-report.json");
+    }
+    var missingArtifacts = missing.ToArray();
 
     var unsupportedPath = FindFirstExisting(artifactDir, "unsupported-actions.json", recursiveArtifacts);
     var unsupported = ReadCountItems(unsupportedPath, "MethodOrSourceText", "Count", "ExampleFile", "ExampleLine");
@@ -4875,7 +4881,7 @@ static ReportServeDashboardReport BuildReportServeDashboardReport(string artifac
             .Take(50)
             .ToArray(),
         RuntimeFailures: runtimeFailures,
-        MissingArtifacts: missing,
+        MissingArtifacts: missingArtifacts,
         StaticFiles: Array.Empty<string>(),
         EvidenceZipPath: null);
 }
@@ -4885,8 +4891,7 @@ static IEnumerable<string> RequiredReportServeArtifacts() => new[]
     "report.json",
     "project-verify-report.json",
     "explain-todo.json",
-    "smoke-plan.json",
-    "runtime-failure-report.json"
+    "smoke-plan.json"
 };
 
 static IEnumerable<ReportServeRunTrend> BuildReportServeRunTrends(string artifactDir)
@@ -4983,7 +4988,8 @@ static IEnumerable<ReportServeTodoCodeGroup> BuildTodoExplorerGroups(string arti
 
 static RuntimeFailureGroup[] ReadRuntimeFailureGroups(string artifactDir, bool recursiveArtifacts)
 {
-    var path = FindFirstExisting(artifactDir, "runtime-failure-report.json", recursiveArtifacts);
+    var path = FindFirstExisting(artifactDir, "runtime-classification.json", recursiveArtifacts)
+        ?? FindFirstExisting(artifactDir, "runtime-failure-report.json", recursiveArtifacts);
     if (path == null)
         return Array.Empty<RuntimeFailureGroup>();
 
@@ -5015,6 +5021,7 @@ static RuntimeFailureGroup ReadRuntimeFailureGroup(System.Text.Json.JsonElement 
         Category: ReadString(group, "Category") ?? "unknown-runtime-failure",
         Count: ReadInt(group, "Count"),
         Severity: ReadString(group, "Severity") ?? "unknown",
+        LikelyOwner: ReadString(group, "LikelyOwner") ?? "manual triage",
         LikelyCause: ReadString(group, "LikelyCause") ?? "Runtime failure requires manual review.",
         SuggestedAction: ReadString(group, "SuggestedAction") ?? "Inspect Playwright trace/log evidence.",
         Examples: examples);
@@ -5084,10 +5091,10 @@ static string WriteReportServeMarkdown(ReportServeDashboardReport report)
         sb.AppendLine("Runtime failure report not found or no groups were classified.");
     else
     {
-        sb.AppendLine("| Category | Count | Severity | Suggested action |");
-        sb.AppendLine("|---|---:|---|---|");
+        sb.AppendLine("| Category | Count | Severity | Likely owner | Suggested action |");
+        sb.AppendLine("|---|---:|---|---|---|");
         foreach (var group in report.RuntimeFailures.Take(25))
-            sb.AppendLine($"| `{EscapeMd(group.Category)}` | {group.Count} | `{EscapeMd(group.Severity)}` | {EscapeMd(group.SuggestedAction)} |");
+            sb.AppendLine($"| `{EscapeMd(group.Category)}` | {group.Count} | `{EscapeMd(group.Severity)}` | `{EscapeMd(group.LikelyOwner)}` | {EscapeMd(group.SuggestedAction)} |");
     }
     sb.AppendLine();
     sb.AppendLine("## Missing optional artifacts");
@@ -5213,13 +5220,13 @@ static void AppendReportServeCountHtml(StringBuilder sb, string title, string na
 static void AppendReportServeRuntimeHtml(StringBuilder sb, ReportServeDashboardReport report)
 {
     sb.AppendLine("<h2 class=\"section\">Runtime failures</h2>");
-    sb.AppendLine("<table><thead><tr><th>Category</th><th>Count</th><th>Severity</th><th>Likely cause</th><th>Suggested action</th></tr></thead><tbody>");
+    sb.AppendLine("<table><thead><tr><th>Category</th><th>Count</th><th>Severity</th><th>Likely owner</th><th>Likely cause</th><th>Suggested action</th></tr></thead><tbody>");
     if (report.RuntimeFailures.Length == 0)
-        sb.AppendLine("<tr><td colspan=\"5\" class=\"empty\">No runtime-failure-report.json found or no runtime failures classified.</td></tr>");
+        sb.AppendLine("<tr><td colspan=\"6\" class=\"empty\">No runtime-classification.json/runtime-failure-report.json found or no runtime failures classified.</td></tr>");
     foreach (var group in report.RuntimeFailures.Take(25))
     {
-        var css = group.Severity.Equals("high", StringComparison.OrdinalIgnoreCase) ? "bad" : group.Severity.Equals("medium", StringComparison.OrdinalIgnoreCase) ? "warn" : "";
-        sb.AppendLine($"<tr><td><code>{Html(group.Category)}</code></td><td>{group.Count}</td><td><span class=\"pill {css}\">{Html(group.Severity)}</span></td><td>{Html(group.LikelyCause)}</td><td>{Html(group.SuggestedAction)}</td></tr>");
+        var css = group.Severity.Equals("error", StringComparison.OrdinalIgnoreCase) || group.Severity.Equals("high", StringComparison.OrdinalIgnoreCase) ? "bad" : group.Severity.Equals("warning", StringComparison.OrdinalIgnoreCase) || group.Severity.Equals("medium", StringComparison.OrdinalIgnoreCase) ? "warn" : "";
+        sb.AppendLine($"<tr><td><code>{Html(group.Category)}</code></td><td>{group.Count}</td><td><span class=\"pill {css}\">{Html(group.Severity)}</span></td><td>{Html(group.LikelyOwner)}</td><td>{Html(group.LikelyCause)}</td><td>{Html(group.SuggestedAction)}</td></tr>");
     }
     sb.AppendLine("</tbody></table>");
 }
@@ -5608,7 +5615,7 @@ static IEnumerable<string> FindBoardArtifacts(string artifactDir, bool recursive
         "agent-next-task.md", "migration-quality-dashboard.md", "migration-quality-dashboard.json", "migration-quality-tickets.md",
         "source-capabilities-report.md", "source-capabilities-report.json", "target-capabilities-report.md", "target-capabilities-report.json",
         "smoke-plan.md", "smoke-plan.json", "runtime-checklist.md", "agent-runtime-next-task.md",
-        "runtime-failure-report.md", "runtime-failure-report.json", "agent-runtime-failure-next-task.md",
+        "runtime-classification.md", "runtime-classification.json", "runtime-failure-report.md", "runtime-failure-report.json", "runtime-next-tickets.md", "agent-runtime-failure-next-task.md",
         "report-dashboard.html", "report-dashboard.md", "report-dashboard.json",
         "unmapped-targets.json", "unsupported-actions.json", "pom-index.generated.json", "doctor-report.md", "guard-report.md", "config-validate-report.md", "config-validate-report.json"
     };
