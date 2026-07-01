@@ -92,6 +92,8 @@ For a file-by-file walkthrough, see:
 - [End-to-end simple example](docs/examples/end-to-end-simple.md)
 - [Public demo and guided tutorial](docs/public-demo-tutorial.md)
 - [Public Demo / Playground](docs/public-playground.md)
+- [Teaching demo: AST migration explained](examples/teaching-demo/README.md)
+- [AST migration explained](docs/articles/ast-migration-explained.md) / [RU](docs/articles/ast-migration-explained.ru.md)
 - [Public demo files](examples/public-demo/README.md)
 - [Public launch demo](examples/public-launch-demo/README.md)
 - [Screenshot walkthrough](docs/public-launch/walkthrough.md)
@@ -155,6 +157,8 @@ If Selenium POMs contain proven selectors such as `ByTId("value")`, `CreateContr
 - [Quick start](docs/quick-start.md)
 - [Init wizard](docs/init-wizard.md)
 - [Migration runbook](docs/migration-runbook.md)
+- [Teaching demo: AST migration explained](examples/teaching-demo/README.md)
+- [AST migration explained](docs/articles/ast-migration-explained.md) / [RU](docs/articles/ast-migration-explained.ru.md)
 - [Framework matrix](docs/framework-matrix.md) — static support table plus `framework matrix` generated readiness reports
 - [Doctor fix mode](docs/doctor-fix-mode.md)
 - [Report serve dashboard](docs/report-serve-dashboard.md)

@@ -49,6 +49,12 @@ dotnet tool run selenium-pw-migrator -- playground \
 
 Open `playground/try-this-first.md` and run the generated command chain before touching a real project.
 
+If you want to understand the AST-based migration model before using the tool on a real suite, open the teaching demo and article:
+
+- `examples/teaching-demo/README.md`
+- `docs/articles/ast-migration-explained.md`
+- `docs/articles/ast-migration-explained.ru.md`
+
 ### Install from a locally packed package
 
 If you are validating a release candidate before publishing it:

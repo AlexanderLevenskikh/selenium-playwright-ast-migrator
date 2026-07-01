@@ -8,6 +8,8 @@ The format follows the spirit of Keep a Changelog, and this project uses preview
 
 ### Added
 
+- Teaching demo under `examples/teaching-demo/` with Selenium source, PageObject selector evidence, adapter config, expected Playwright output, and AST action map.
+- `docs/articles/ast-migration-explained.md` and Russian translation explaining the parser → action model → source truth → renderer workflow.
 - Public-release hygiene guardrails for NuGet package metadata and package contents.
 - Short public NuGet `PackageId` (`SeleniumPlaywrightMigrator`) while keeping AST positioning in title, description, and tags.
 - `release-doctor` / `doctor release` readiness checks for NuGet preview metadata, release docs, scripts, workflow dry-run, secrets, and repository hygiene.

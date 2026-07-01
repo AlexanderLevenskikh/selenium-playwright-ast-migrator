@@ -49,6 +49,12 @@ dotnet tool run selenium-pw-migrator -- playground \
 
 Откройте `playground/try-this-first.md` и прогоните готовую цепочку команд перед настоящим проектом.
 
+Если хочется сначала понять AST-модель миграции, откройте teaching demo и статью:
+
+- `examples/teaching-demo/README.md`
+- `docs/articles/ast-migration-explained.md`
+- `docs/articles/ast-migration-explained.ru.md`
+
 ### Установка из локально собранного пакета
 
 Если вы проверяете release candidate до публикации:

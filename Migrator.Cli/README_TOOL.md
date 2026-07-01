@@ -60,6 +60,9 @@ Do not invent selectors. Use Selenium PageObject code, verified HTML attributes,
 - `docs/quick-start.md`
 - `docs/migration-runbook.md`
 - `docs/examples/end-to-end-simple.md`
+- `examples/teaching-demo/README.md`
+- `docs/articles/ast-migration-explained.md`
+- `docs/articles/ast-migration-explained.ru.md`
 - `examples/public-launch-demo/README.md`
 - `docs/public-launch/walkthrough.md`
 - `docs/user-guide/README.md`

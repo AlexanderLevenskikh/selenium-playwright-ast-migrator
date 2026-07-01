@@ -10,6 +10,8 @@ Public documentation is organized by the path a new user usually follows: instal
 - [End-to-end simple example](examples/end-to-end-simple.md) — real input, config, command, and expected generated output from `examples/simple/`.
 - [Public demo and guided tutorial](public-demo-tutorial.md) — 10-minute NUnit/xUnit walkthrough with dashboard sample.
 - [Public Demo / Playground](public-playground.md) — one-command five-minute disposable demo workspace.
+- [Teaching demo](../examples/teaching-demo/README.md) — small AST migration demo with source test, POM selector evidence, config, expected output, and action map.
+- [AST migration explained](articles/ast-migration-explained.md) / [RU](articles/ast-migration-explained.ru.md) — article explaining the parser → action model → source truth → renderer workflow.
 - [Public demo files](../examples/public-demo/README.md) — copyable demo inputs, configs, generated outputs, and dashboard.
 - [Public launch demo](../examples/public-launch-demo/README.md) — older copyable launch demo with before/after output and report.
 - [Screenshot walkthrough](public-launch/walkthrough.md) — install → doctor → migrate → verify → inspect report.
@@ -23,6 +25,12 @@ Public documentation is organized by the path a new user usually follows: instal
 - [Profile marketplace](profile-marketplace.md) — offline built-in profile catalog, compatibility scoring, install, inspect, and diff workflow.
 - [Evidence pack workflow](evidence-pack.md) — shareable redacted zip with manifest and checksums.
 - [Troubleshooting](troubleshooting.md) — common setup, config, packaging, and verification problems.
+
+## Learning articles
+
+- [AST migration explained](articles/ast-migration-explained.md) — why migration is an AST/profile problem rather than text replacement.
+- [Как работает AST-миграция](articles/ast-migration-explained.ru.md) — русская версия статьи.
+- [Teaching demo files](../examples/teaching-demo/README.md) — companion example for the article.
 
 ## User guide
 

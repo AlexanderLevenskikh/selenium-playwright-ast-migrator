@@ -1,0 +1,55 @@
+{
+  "$schema": "../../schemas/adapter-config.schema.json",
+  "SchemaVersion": "adapter-config/v1",
+  "SourceProjectName": "MyProduct.E2ETests",
+  "UiTargets": [
+    {
+      "SourceExpression": "page.UserName",
+      "TargetExpression": "GetByTestId(\"login-email\")",
+      "TargetKind": "TestId",
+      "SourceTruth": "input/PageObjects/LoginPage.cs: UserName uses [data-testid='login-email']",
+      "Confidence": "high"
+    },
+    {
+      "SourceExpression": "page.Password",
+      "TargetExpression": "GetByTestId(\"login-password\")",
+      "TargetKind": "TestId",
+      "SourceTruth": "input/PageObjects/LoginPage.cs: Password uses [data-testid='login-password']",
+      "Confidence": "high"
+    },
+    {
+      "SourceExpression": "page.SignInButton",
+      "TargetExpression": "GetByTestId(\"sign-in\")",
+      "TargetKind": "TestId",
+      "SourceTruth": "input/PageObjects/LoginPage.cs: SignInButton uses [data-testid='sign-in']",
+      "Confidence": "high"
+    },
+    {
+      "SourceExpression": "page.DashboardTitle",
+      "TargetExpression": "GetByTestId(\"dashboard-title\")",
+      "TargetKind": "TestId",
+      "SourceTruth": "input/PageObjects/LoginPage.cs: DashboardTitle uses [data-testid='dashboard-title']",
+      "Confidence": "high"
+    },
+    {
+      "SourceExpression": "page.PasswordError",
+      "TargetExpression": "GetByTestId(\"password-error\")",
+      "TargetKind": "TestId",
+      "SourceTruth": "input/PageObjects/LoginPage.cs: PasswordError uses [data-testid='password-error']",
+      "Confidence": "high"
+    }
+  ],
+  "PageObjects": [
+    {
+      "SourceType": "LoginPage",
+      "TargetType": "LoginPage",
+      "VariableName": "page",
+      "ConstructorStrategy": "ExistingPage"
+    }
+  ],
+  "SuppressedMethods": [
+    "WaitUntilReady",
+    "ValidateLoading"
+  ],
+  "Methods": []
+}

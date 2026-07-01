@@ -19,7 +19,15 @@ public class DocumentationPublicReadinessTests
             "docs/report-serve-dashboard.md",
             "docs/public-demo-tutorial.md",
             "docs/examples/end-to-end-simple.md",
+            "docs/articles/ast-migration-explained.md",
+            "docs/articles/ast-migration-explained.ru.md",
             "examples/simple/README.md",
+            "examples/teaching-demo/README.md",
+            "examples/teaching-demo/input/LoginTeachingTest.cs",
+            "examples/teaching-demo/input/PageObjects/LoginPage.cs",
+            "examples/teaching-demo/adapter-config.json",
+            "examples/teaching-demo/expected/LoginTeachingTestPlaywright.generated.cs",
+            "examples/teaching-demo/reports/ast-action-map.md",
             "examples/public-demo/README.md",
             "examples/public-demo/selenium-csharp-nunit/LoginSmokeTest.cs",
             "examples/public-demo/selenium-csharp-xunit/LoginSmokeFacts.cs",
@@ -50,6 +58,8 @@ public class DocumentationPublicReadinessTests
             Assert.Contains("docs/migration-quality-program.md", doc);
             Assert.Contains("docs/report-serve-dashboard.md", doc);
             Assert.Contains("docs/public-demo-tutorial.md", doc);
+            Assert.Contains("examples/teaching-demo/README.md", doc);
+            Assert.Contains("docs/articles/ast-migration-explained.md", doc);
             Assert.Contains("examples/public-demo/README.md", doc);
         }
 
@@ -63,6 +73,9 @@ public class DocumentationPublicReadinessTests
         Assert.Contains("migration-quality-program.md", docsIndex);
         Assert.Contains("report-serve-dashboard.md", docsIndex);
         Assert.Contains("public-demo-tutorial.md", docsIndex);
+        Assert.Contains("../examples/teaching-demo/README.md", docsIndex);
+        Assert.Contains("articles/ast-migration-explained.md", docsIndex);
+        Assert.Contains("articles/ast-migration-explained.ru.md", docsIndex);
         Assert.Contains("../examples/public-demo/README.md", docsIndex);
     }
 
@@ -111,6 +124,44 @@ public class DocumentationPublicReadinessTests
         Assert.Contains("examples/simple/expected/SimplePlaywright.generated.cs", exampleDoc);
         Assert.Contains("selenium-pw-migrator --mode migrate", exampleDoc);
         Assert.Contains("docs/examples/end-to-end-simple.md", exampleReadme);
+    }
+
+
+    [Fact]
+    public void TeachingDemo_ExplainsAstMigrationWithSourceTruthAndExpectedOutput()
+    {
+        var demoReadme = File.ReadAllText(FindRepositoryFile("examples/teaching-demo/README.md"));
+        var sourceTest = File.ReadAllText(FindRepositoryFile("examples/teaching-demo/input/LoginTeachingTest.cs"));
+        var pageObject = File.ReadAllText(FindRepositoryFile("examples/teaching-demo/input/PageObjects/LoginPage.cs"));
+        var config = File.ReadAllText(FindRepositoryFile("examples/teaching-demo/adapter-config.json"));
+        var expectedOutput = File.ReadAllText(FindRepositoryFile("examples/teaching-demo/expected/LoginTeachingTestPlaywright.generated.cs"));
+        var actionMap = File.ReadAllText(FindRepositoryFile("examples/teaching-demo/reports/ast-action-map.md"));
+        var article = File.ReadAllText(FindRepositoryFile("docs/articles/ast-migration-explained.md"));
+        var articleRu = File.ReadAllText(FindRepositoryFile("docs/articles/ast-migration-explained.ru.md"));
+
+        Assert.Contains("selenium-pw-migrator --mode migrate", demoReadme);
+        Assert.Contains("AST migration explained", demoReadme);
+
+        Assert.Contains("page.UserName.InputText", sourceTest);
+        Assert.Contains("Assert.That(page.PasswordError.Text", sourceTest);
+
+        Assert.Contains("[data-testid='login-email']", pageObject);
+        Assert.Contains("[data-testid='password-error']", pageObject);
+
+        Assert.Contains("adapter-config/v1", config);
+        Assert.Contains("page.UserName", config);
+        Assert.Contains("GetByTestId(\\\"login-email\\\")", config);
+        Assert.Contains("SourceTruth", config);
+
+        Assert.Contains("Page.GetByTestId(\"login-email\").FillAsync", expectedOutput);
+        Assert.Contains("Expect(Page.GetByTestId(\"password-error\")).ToContainTextAsync", expectedOutput);
+
+        Assert.Contains("AST action", actionMap);
+        Assert.Contains("source-truth mapping", actionMap);
+
+        Assert.Contains("parser", article, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("source truth", article, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("AST-модель", articleRu);
     }
 
 

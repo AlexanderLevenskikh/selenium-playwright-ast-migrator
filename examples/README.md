@@ -25,6 +25,27 @@ selenium-pw-migrator --mode migrate \
 
 The output is written to `migration/examples-simple-generated` by default.
 
+## Teaching demo: AST migration explained
+
+`teaching-demo/` is the smallest educational example for explaining the platform:
+
+- `input/LoginTeachingTest.cs` — Selenium C# / NUnit source test.
+- `input/PageObjects/LoginPage.cs` — PageObject selector evidence with real `data-testid` values.
+- `adapter-config.json` — reviewed source-expression → Playwright locator mappings.
+- `expected/LoginTeachingTestPlaywright.generated.cs` — expected readable Playwright .NET output.
+- `reports/ast-action-map.md` — action-by-action explanation of AST recognition and source-truth mapping.
+
+Walkthrough/article: [`docs/articles/ast-migration-explained.md`](../docs/articles/ast-migration-explained.md) / [`ru.md`](../docs/articles/ast-migration-explained.ru.md).
+
+Run from the repository root:
+
+```bash
+selenium-pw-migrator --mode migrate \
+  --input examples/teaching-demo/input \
+  --config examples/teaching-demo/adapter-config.json \
+  --out teaching-demo-generated \
+  --format both
+```
 
 ## Public demo and guided tutorial
 
