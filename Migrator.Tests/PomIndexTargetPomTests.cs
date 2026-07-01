@@ -105,6 +105,53 @@ public class CommentedPom
         }
     }
 
+    [Fact]
+    public void IndexPom_PlaywrightKonturTargetPom_UsesAstForNamedArgumentsAndStaticInterpolatedStrings()
+    {
+        var temp = CreateTempDir();
+        try
+        {
+            var pomDir = Path.Combine(temp, "TargetPom");
+            Directory.CreateDirectory(pomDir);
+            File.WriteAllText(Path.Combine(pomDir, "AstOnlyPom.cs"), """
+public class AstOnlyPom
+{
+    public Button NamedArgument => ControlFactory.Create<Button>(root: this, tid: $"named-button");
+
+    public Button Getter
+    {
+        get
+        {
+            return ControlFactory.Create<Button>(
+                WrappedItem.GetByTestId($"getter-button"));
+        }
+    }
+
+    public ILocator MethodLocator()
+    {
+        return Page
+            .Locator($"[data-testid='method-row']");
+    }
+}
+""");
+
+            var outDir = Path.Combine(temp, "pom-index");
+            var result = CliTestRunner.Run($"--mode index-pom --input \"{pomDir}\" --out \"{outDir}\" --format both");
+
+            AssertCliSuccess(result);
+            using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(outDir, "pom-index.generated.json")));
+            var facts = json.RootElement.GetProperty("Facts").EnumerateArray().ToArray();
+
+            AssertFact(facts, "AstOnlyPom.NamedArgument", "named-button", "TestId", "TargetPlaywrightPom", "high", requiresReview: false);
+            AssertFact(facts, "AstOnlyPom.Getter", "getter-button", "TestId", "TargetPlaywrightPom", "high", requiresReview: false);
+            AssertFact(facts, "AstOnlyPom.MethodLocator", "[data-testid='method-row']", "CssSelector", "TargetPlaywrightPom", "medium", requiresReview: true);
+        }
+        finally
+        {
+            TryDelete(temp);
+        }
+    }
+
     static void AssertFact(JsonElement[] facts, string sourceExpression, string selector, string selectorKind, string factOrigin, string confidence, bool requiresReview)
     {
         var fact = facts.SingleOrDefault(f =>

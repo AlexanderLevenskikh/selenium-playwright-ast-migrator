@@ -8,6 +8,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Migrator.Core;
 using Migrator.Core.Profiles;
 using Migrator.Core.SourceFrontends;
@@ -6993,7 +6996,12 @@ static IEnumerable<PomFact> ExtractPlaywrightTargetPomFacts(string text, string 
     var facts = new List<PomFact>();
     var commentSafeText = StripCommentsForPomFacts(text);
 
-    foreach (var member in ExtractPomMemberExpressions(commentSafeText, text))
+    foreach (var member in ExtractPomMemberExpressions(text))
+    {
+        AddTargetPomFactsFromMember(facts, text, file, className, member);
+    }
+
+    foreach (var member in ExtractPomMemberExpressionsByRegex(commentSafeText, text))
     {
         AddTargetPomFactsFromMember(facts, text, file, className, member);
     }
@@ -7004,7 +7012,64 @@ static IEnumerable<PomFact> ExtractPlaywrightTargetPomFacts(string text, string 
         .ToArray();
 }
 
-static IEnumerable<PomMemberExpression> ExtractPomMemberExpressions(string commentSafeText, string originalText)
+static IEnumerable<PomMemberExpression> ExtractPomMemberExpressions(string text)
+{
+    var tree = CSharpSyntaxTree.ParseText(text);
+    var root = tree.GetRoot();
+
+    foreach (var property in root.DescendantNodes().OfType<PropertyDeclarationSyntax>())
+    {
+        if (property.ExpressionBody?.Expression is { } expressionBody)
+            yield return CreatePomMemberExpression(property.Identifier.ValueText, "TargetPomProperty", property, expressionBody, text);
+
+        if (property.AccessorList == null)
+            continue;
+
+        foreach (var accessor in property.AccessorList.Accessors.Where(a => a.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.GetAccessorDeclaration)))
+        {
+            if (accessor.ExpressionBody?.Expression is { } accessorExpression)
+                yield return CreatePomMemberExpression(property.Identifier.ValueText, "TargetPomProperty", property, accessorExpression, text);
+
+            if (accessor.Body == null)
+                continue;
+
+            foreach (var returnStatement in accessor.Body.DescendantNodes().OfType<ReturnStatementSyntax>())
+            {
+                if (returnStatement.Expression is { } returnExpression)
+                    yield return CreatePomMemberExpression(property.Identifier.ValueText, "TargetPomProperty", property, returnExpression, text);
+            }
+        }
+    }
+
+    foreach (var method in root.DescendantNodes().OfType<MethodDeclarationSyntax>())
+    {
+        if (method.ExpressionBody?.Expression is { } expressionBody)
+            yield return CreatePomMemberExpression(method.Identifier.ValueText, "TargetPomMethod", method, expressionBody, text);
+
+        if (method.Body == null)
+            continue;
+
+        foreach (var returnStatement in method.Body.DescendantNodes().OfType<ReturnStatementSyntax>())
+        {
+            if (returnStatement.Expression is { } returnExpression)
+                yield return CreatePomMemberExpression(method.Identifier.ValueText, "TargetPomMethod", method, returnExpression, text);
+        }
+    }
+}
+
+static PomMemberExpression CreatePomMemberExpression(string name, string kind, MemberDeclarationSyntax member, ExpressionSyntax expression, string originalText)
+{
+    return new PomMemberExpression(
+        Name: name,
+        Expression: expression.ToFullString(),
+        StartIndex: member.SpanStart,
+        ExpressionStartIndex: expression.SpanStart,
+        Line: GetLineNumber(originalText, member.SpanStart),
+        Kind: kind,
+        Syntax: expression);
+}
+
+static IEnumerable<PomMemberExpression> ExtractPomMemberExpressionsByRegex(string commentSafeText, string originalText)
 {
     var memberRegexes = new[]
     {
@@ -7047,13 +7112,17 @@ static IEnumerable<PomMemberExpression> ExtractPomMemberExpressions(string comme
                 StartIndex: m.Index,
                 ExpressionStartIndex: m.Groups["expr"].Index,
                 Line: GetLineNumber(originalText, m.Index),
-                Kind: System.Text.RegularExpressions.Regex.IsMatch(m.Groups["signature"].Value, $@"\b{System.Text.RegularExpressions.Regex.Escape(name)}\s*\(") ? "TargetPomMethod" : "TargetPomProperty");
+                Kind: System.Text.RegularExpressions.Regex.IsMatch(m.Groups["signature"].Value, $@"\b{System.Text.RegularExpressions.Regex.Escape(name)}\s*\(") ? "TargetPomMethod" : "TargetPomProperty",
+                Syntax: null);
         }
     }
 }
 
 static void AddTargetPomFactsFromMember(List<PomFact> facts, string originalText, string file, string className, PomMemberExpression member)
 {
+    if (member.Syntax != null)
+        AddTargetPomFactsFromSyntax(facts, originalText, file, className, member);
+
     var expression = member.Expression;
 
     // Kontur-style control factory with explicit test-id second argument:
@@ -7083,7 +7152,7 @@ static void AddTargetPomFactsFromMember(List<PomFact> facts, string originalText
 
     var getByTestIdRegex = new System.Text.RegularExpressions.Regex(
         """
-        \b(?:Page|WrappedItem)\.GetByTestId\s*\(\s*@?(?<quote>["'])(?<selector>.*?)(?<!\\)\k<quote>
+        \b(?:Page|WrappedItem)\s*\.\s*GetByTestId\s*\(\s*@?(?<quote>["'])(?<selector>.*?)(?<!\\)\k<quote>
         """,
         System.Text.RegularExpressions.RegexOptions.IgnorePatternWhitespace | System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.Compiled);
 
@@ -7105,7 +7174,7 @@ static void AddTargetPomFactsFromMember(List<PomFact> facts, string originalText
 
     var dataTidLocatorRegex = new System.Text.RegularExpressions.Regex(
         """
-        \b(?:Page|WrappedItem)\.Locator\s*\(\s*@?(?<quote>["'])(?<selector>[^"']*(?:data-tid|data-test|data-testid|data-test-id)[^"']*)(?<!\\)\k<quote>
+        \b(?:Page|WrappedItem)\s*\.\s*Locator\s*\(\s*@?(?<quote>["'])(?<selector>.*?(?:data-tid|data-test|data-testid|data-test-id).*?)(?<!\\)\k<quote>
         """,
         System.Text.RegularExpressions.RegexOptions.IgnorePatternWhitespace | System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.Compiled);
 
@@ -7127,7 +7196,7 @@ static void AddTargetPomFactsFromMember(List<PomFact> facts, string originalText
 
     var getByTextRegex = new System.Text.RegularExpressions.Regex(
         """
-        \b(?:Page|WrappedItem)\.GetByText\s*\(\s*@?(?<quote>["'])(?<selector>.*?)(?<!\\)\k<quote>
+        (?:\b(?:Page|WrappedItem)\s*)?\.\s*GetByText\s*\(\s*@?(?<quote>["'])(?<selector>.*?)(?<!\\)\k<quote>
         """,
         System.Text.RegularExpressions.RegexOptions.IgnorePatternWhitespace | System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.Compiled);
 
@@ -7149,7 +7218,7 @@ static void AddTargetPomFactsFromMember(List<PomFact> facts, string originalText
 
     var textLocatorRegex = new System.Text.RegularExpressions.Regex(
         """
-        \b(?:Page|WrappedItem)\.Locator\s*\(\s*@?(?<quote>["'])text=(?<selector>.*?)(?<!\\)\k<quote>
+        \b(?:Page|WrappedItem)\s*\.\s*Locator\s*\(\s*@?(?<quote>["'])text=(?<selector>.*?)(?<!\\)\k<quote>
         """,
         System.Text.RegularExpressions.RegexOptions.IgnorePatternWhitespace | System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.Compiled);
 
@@ -7168,6 +7237,219 @@ static void AddTargetPomFactsFromMember(List<PomFact> facts, string originalText
             matchIndexInExpression: m.Index,
             notes: "Found Playwright text= Locator target POM evidence. Text locators are lower-confidence and require review.");
     }
+}
+
+static void AddTargetPomFactsFromSyntax(List<PomFact> facts, string originalText, string file, string className, PomMemberExpression member)
+{
+    if (member.Syntax == null)
+        return;
+
+    foreach (var invocation in member.Syntax.DescendantNodesAndSelf().OfType<InvocationExpressionSyntax>())
+    {
+        var methodName = GetInvocationMethodName(invocation);
+        var receiver = GetInvocationReceiver(invocation);
+
+        if (IsControlFactoryCreate(methodName, receiver))
+        {
+            var selector = FindControlFactoryStringSelector(invocation);
+            if (selector != null)
+            {
+                AddTargetPomFactAtIndex(
+                    facts,
+                    originalText,
+                    file,
+                    className,
+                    member,
+                    selector,
+                    selectorKind: "TestId",
+                    confidence: "high",
+                    requiresReview: false,
+                    absoluteIndex: invocation.SpanStart,
+                    notes: "Found Playwright/Kontur ControlFactory.Create target POM selector.");
+            }
+        }
+
+        if (string.Equals(methodName, "GetByTestId", StringComparison.Ordinal) && IsKnownPlaywrightReceiver(receiver))
+        {
+            var selector = GetStaticStringArgument(invocation, 0);
+            if (selector != null)
+            {
+                AddTargetPomFactAtIndex(
+                    facts,
+                    originalText,
+                    file,
+                    className,
+                    member,
+                    selector,
+                    selectorKind: "TestId",
+                    confidence: "high",
+                    requiresReview: false,
+                    absoluteIndex: invocation.SpanStart,
+                    notes: "Found Playwright/Kontur GetByTestId target POM selector.");
+            }
+        }
+
+        if (string.Equals(methodName, "Locator", StringComparison.Ordinal) && IsKnownPlaywrightReceiver(receiver))
+        {
+            var selector = GetStaticStringArgument(invocation, 0);
+            if (selector == null)
+                continue;
+
+            if (selector.StartsWith("text=", StringComparison.OrdinalIgnoreCase))
+            {
+                AddTargetPomFactAtIndex(
+                    facts,
+                    originalText,
+                    file,
+                    className,
+                    member,
+                    selector["text=".Length..],
+                    selectorKind: "Text",
+                    confidence: "low",
+                    requiresReview: true,
+                    absoluteIndex: invocation.SpanStart,
+                    notes: "Found Playwright text= Locator target POM evidence. Text locators are lower-confidence and require review.");
+            }
+            else if (ContainsTestIdSelector(selector))
+            {
+                AddTargetPomFactAtIndex(
+                    facts,
+                    originalText,
+                    file,
+                    className,
+                    member,
+                    selector,
+                    selectorKind: "CssSelector",
+                    confidence: "medium",
+                    requiresReview: true,
+                    absoluteIndex: invocation.SpanStart,
+                    notes: "Found Playwright/Kontur Locator target POM selector. Review CSS stability before using it as mapping evidence.");
+            }
+        }
+
+        if (string.Equals(methodName, "GetByText", StringComparison.Ordinal))
+        {
+            var selector = GetStaticStringArgument(invocation, 0);
+            if (selector != null)
+            {
+                AddTargetPomFactAtIndex(
+                    facts,
+                    originalText,
+                    file,
+                    className,
+                    member,
+                    selector,
+                    selectorKind: "Text",
+                    confidence: "low",
+                    requiresReview: true,
+                    absoluteIndex: invocation.SpanStart,
+                    notes: "Found Playwright GetByText target POM evidence. Text locators are lower-confidence and require review.");
+            }
+        }
+    }
+}
+
+static bool IsControlFactoryCreate(string? methodName, string? receiver)
+{
+    return (string.Equals(methodName, "Create", StringComparison.Ordinal)
+            || string.Equals(methodName, "CreateElementsCollection", StringComparison.Ordinal))
+        && receiver != null
+        && receiver.EndsWith("ControlFactory", StringComparison.OrdinalIgnoreCase);
+}
+
+static bool IsKnownPlaywrightReceiver(string? receiver)
+{
+    return string.Equals(receiver, "Page", StringComparison.Ordinal)
+        || string.Equals(receiver, "WrappedItem", StringComparison.Ordinal)
+        || string.Equals(receiver, "this.Page", StringComparison.Ordinal)
+        || string.Equals(receiver, "this.WrappedItem", StringComparison.Ordinal);
+}
+
+static bool ContainsTestIdSelector(string selector)
+{
+    return selector.Contains("data-tid", StringComparison.OrdinalIgnoreCase)
+        || selector.Contains("data-test", StringComparison.OrdinalIgnoreCase)
+        || selector.Contains("data-testid", StringComparison.OrdinalIgnoreCase)
+        || selector.Contains("data-test-id", StringComparison.OrdinalIgnoreCase);
+}
+
+static string? FindControlFactoryStringSelector(InvocationExpressionSyntax invocation)
+{
+    var args = invocation.ArgumentList.Arguments;
+    if (args.Count == 0)
+        return null;
+
+    foreach (var arg in args)
+    {
+        if (arg.NameColon == null)
+            continue;
+
+        var name = arg.NameColon.Name.Identifier.ValueText;
+        if (!name.Contains("selector", StringComparison.OrdinalIgnoreCase)
+            && !name.Contains("testId", StringComparison.OrdinalIgnoreCase)
+            && !name.Contains("tid", StringComparison.OrdinalIgnoreCase))
+            continue;
+
+        var namedValue = TryGetStaticString(arg.Expression);
+        if (namedValue != null)
+            return namedValue;
+    }
+
+    for (var i = 1; i < args.Count; i++)
+    {
+        var value = TryGetStaticString(args[i].Expression);
+        if (value != null)
+            return value;
+    }
+
+    return args.Count == 1 ? TryGetStaticString(args[0].Expression) : null;
+}
+
+static string? GetStaticStringArgument(InvocationExpressionSyntax invocation, int index)
+{
+    if (invocation.ArgumentList.Arguments.Count <= index)
+        return null;
+    return TryGetStaticString(invocation.ArgumentList.Arguments[index].Expression);
+}
+
+static string? TryGetStaticString(ExpressionSyntax expression)
+{
+    while (expression is ParenthesizedExpressionSyntax parenthesized)
+        expression = parenthesized.Expression;
+
+    if (expression is LiteralExpressionSyntax literal && literal.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.StringLiteralExpression))
+        return literal.Token.ValueText;
+
+    if (expression is InterpolatedStringExpressionSyntax interpolated
+        && interpolated.Contents.All(c => c is InterpolatedStringTextSyntax))
+    {
+        return string.Concat(interpolated.Contents.OfType<InterpolatedStringTextSyntax>().Select(c => c.TextToken.ValueText));
+    }
+
+    return null;
+}
+
+static string? GetInvocationMethodName(InvocationExpressionSyntax invocation)
+{
+    return invocation.Expression switch
+    {
+        MemberAccessExpressionSyntax memberAccess => memberAccess.Name switch
+        {
+            GenericNameSyntax genericName => genericName.Identifier.ValueText,
+            IdentifierNameSyntax identifierName => identifierName.Identifier.ValueText,
+            _ => memberAccess.Name.ToString()
+        },
+        IdentifierNameSyntax identifierName => identifierName.Identifier.ValueText,
+        GenericNameSyntax genericName => genericName.Identifier.ValueText,
+        _ => null
+    };
+}
+
+static string? GetInvocationReceiver(InvocationExpressionSyntax invocation)
+{
+    return invocation.Expression is MemberAccessExpressionSyntax memberAccess
+        ? memberAccess.Expression.ToString()
+        : null;
 }
 
 static void AddTargetPomFact(
@@ -7189,6 +7471,36 @@ static void AddTargetPomFact(
     if (IsInsideStringLiteral(originalText, member.ExpressionStartIndex + matchIndexInExpression))
         return;
 
+    AddTargetPomFactAtIndex(
+        facts,
+        originalText,
+        file,
+        className,
+        member,
+        selector,
+        selectorKind,
+        confidence,
+        requiresReview,
+        absoluteIndex: member.ExpressionStartIndex + matchIndexInExpression,
+        notes);
+}
+
+static void AddTargetPomFactAtIndex(
+    List<PomFact> facts,
+    string originalText,
+    string file,
+    string className,
+    PomMemberExpression member,
+    string selector,
+    string selectorKind,
+    string confidence,
+    bool requiresReview,
+    int absoluteIndex,
+    string notes)
+{
+    if (string.IsNullOrWhiteSpace(selector))
+        return;
+
     facts.Add(new PomFact(
         SourceExpression: $"{className}.{member.Name}",
         OwnerType: className,
@@ -7199,7 +7511,7 @@ static void AddTargetPomFact(
         TargetKindSuggestion: "PageObjectProperty",
         TargetExpressionSuggestion: member.Name,
         SourceFile: file,
-        SourceLine: GetLineNumber(originalText, member.ExpressionStartIndex + matchIndexInExpression),
+        SourceLine: GetLineNumber(originalText, absoluteIndex),
         Confidence: confidence,
         RequiresReview: requiresReview,
         FactOrigin: "TargetPlaywrightPom",
@@ -10770,7 +11082,7 @@ static string? FindOptionValue(string[] args, string optionName)
 }
 
 
-record PomMemberExpression(string Name, string Expression, int StartIndex, int ExpressionStartIndex, int Line, string Kind);
+record PomMemberExpression(string Name, string Expression, int StartIndex, int ExpressionStartIndex, int Line, string Kind, ExpressionSyntax? Syntax);
 
 sealed class NormalizedTodoGroupBuilder
 {
