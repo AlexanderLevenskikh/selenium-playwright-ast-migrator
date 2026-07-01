@@ -43,6 +43,8 @@ Public documentation is organized by the path a new user usually follows: instal
 - [Profile scoping](profile/profile-scoping.md)
 - [Config schema workflow](config-schema-workflow.md)
 - [Config layering](config-layering.md)
+- [Config Authoring Assistant](config-authoring-assistant.md) — evidence-driven config proposals with config-diff integration.
+- [Generation Policy](generation-policy.md) — choose conservative, balanced, or aggressive generation risk behavior.
 
 ## Agent and autopilot guide
 
@@ -72,6 +74,7 @@ Public documentation is organized by the path a new user usually follows: instal
 - [Report serve dashboard](report-serve-dashboard.md)
 - [Evidence pack workflow](evidence-pack.md)
 - [Migration PR pack](migration-pr-pack.md)
+- [Migration learning pack](migration-learning-pack.md)
 - [Migration quality program](migration-quality-program.md)
 - [Runtime readiness](runtime-readiness.md)
 - [Runtime failure classifier](runtime-failure-classifier.md)

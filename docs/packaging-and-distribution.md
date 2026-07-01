@@ -324,6 +324,30 @@ GitHub Actions now has separate release-safety jobs in `.github/workflows/ci.yml
 
 These gates are intentionally separate from normal tests so package failures are visible as release/distribution failures, not just generic unit-test failures.
 
+## Manual NuGet publish workflow
+
+Actual publication is intentionally manual. Use:
+
+```text
+.github/workflows/publish-nuget.yml
+```
+
+The workflow is started with `workflow_dispatch` and accepts:
+
+- `version` — exact package version, for example `0.6.0-preview.1`;
+- `source` — usually `https://api.nuget.org/v3/index.json`;
+- `dry_run` — default `true`, which builds, packs, verifies, smokes, and uploads the `.nupkg` artifact without publishing.
+
+For a real publish:
+
+1. run the workflow once with `dry_run=true`;
+2. check that build/test/package/smoke all pass;
+3. run it again with the same version and `dry_run=false`;
+4. make sure repository or environment secret `NUGET_API_KEY` is configured;
+5. optionally protect the `nuget-production` environment for a final human approval gate.
+
+Do not pass API keys through workflow inputs and do not commit credentials into `NuGet.config`.
+
 ## Проверка содержимого `.nupkg`
 
 Перед публикацией пакет проверяется отдельным скриптом:

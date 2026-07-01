@@ -115,6 +115,8 @@ For a file-by-file walkthrough, see:
 | `selector-evidence` | Experimental | Explain Selenium selector → config mapping → generated locator provenance with confidence and unsafe/inferred flags. |
 | `agent-contract` | Experimental | Generate a ticket-specific agent contract pack with allowed paths, stop policy, exact commands, and coordinator/migrator/verifier prompts. |
 | `pr-pack` | Experimental | Create a PR/review bundle with PR summary, changed/generated files list, before/after metrics, risk summary, reviewer checklist, evidence references, and suggested PR description. |
+| `learn-pack` | Experimental | Extract reusable migration knowledge from completed runs into a reviewable profile layer and learning changelog. |
+| `config-author` | Experimental | Generate evidence-driven config proposals and a reviewable patch without applying it. |
 | `helper-inventory` | Stable | Inspect helper/POM method bodies and infer MethodSemantics candidates. |
 | `discover-target` | Stable | Scan an existing Playwright .NET project and create a reviewable target inventory. |
 | `scaffold` | Stable | Generate a minimal compile-ready Playwright .NET project scaffold. |
@@ -155,6 +157,9 @@ If Selenium POMs contain proven selectors such as `ByTId("value")`, `CreateContr
 - [Profile marketplace](docs/profile-marketplace.md)
 - [Agent contract pack](docs/agent-contract-pack.md)
 - [Migration PR pack](docs/migration-pr-pack.md)
+- [Migration learning pack](docs/migration-learning-pack.md)
+- [Config Authoring Assistant](docs/config-authoring-assistant.md)
+- [Generation Policy](docs/generation-policy.md)
 - [Evidence pack workflow](docs/evidence-pack.md)
 - [User guide](docs/user-guide/README.md)
 - [Config and profile guide](docs/config-profile-guide.md)
@@ -179,23 +184,3 @@ The test suite covers parser behavior, adapter mappings, snapshots, compile-smok
 ## Public release status
 
 This project is currently prepared as a public preview. Stable commands are intended for external users; experimental commands may change between preview releases. See [CHANGELOG.md](CHANGELOG.md), [SECURITY.md](SECURITY.md), and [CONTRIBUTING.md](CONTRIBUTING.md).
-
-
-### Migration Learning Pack
-
-`learn pack` extracts reusable migration knowledge from a completed run and writes `learn-pack.md/json`, `learn-changelog.md`, `learning-safety-report.md`, and `reusable-profile-layer.json`. It is read-only: no source/config/generated files are edited, and suppressions/source-only identifiers are not exported.
-
-```bash
-selenium-pw-migrator learn pack --input migration/runs/latest --config ./adapter-config.json --out learn-pack --format both
-```
-
-See [Migration learning pack](docs/migration-learning-pack.md).
-
-### Config Authoring Assistant
-
-`config author` writes `config-proposals.md/json` and `config-proposals.patch` from selector-evidence, helper-inventory, index-pom, discover-target and explain-todo artifacts. It is read-only and integrates with `config-diff`/`config-validate`.
-
-
-### Generation Policy
-
-Use `--generation-policy conservative|balanced|aggressive` to control mapped-helper generation risk. Conservative produces more review/TODO output, balanced keeps current behavior, and aggressive emits more explicit mapped helper code with report risk annotations. See `docs/generation-policy.md`.

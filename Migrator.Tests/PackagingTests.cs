@@ -66,6 +66,22 @@ public class PackagingTests
     }
 
     [Fact]
+    public void ManualNuGetPublishWorkflow_PacksSmokesAndRequiresSecret()
+    {
+        var workflowPath = FindRepositoryFile(".github/workflows/publish-nuget.yml");
+        var workflow = File.ReadAllText(workflowPath);
+
+        Assert.Contains("workflow_dispatch", workflow);
+        Assert.Contains("dry_run", workflow);
+        Assert.Contains("scripts/pack-tool.sh", workflow);
+        Assert.Contains("scripts/verify-nupkg-contents.sh", workflow);
+        Assert.Contains("scripts/smoke-local-tool-package.sh", workflow);
+        Assert.Contains("secrets.NUGET_API_KEY", workflow);
+        Assert.Contains("scripts/push-tool.sh", workflow);
+        Assert.Contains("nuget-production", workflow);
+    }
+
+    [Fact]
     public void Ci_BuildsAndSmokesAgentBundle()
     {
         var ciPath = FindRepositoryFile(".github/workflows/ci.yml");

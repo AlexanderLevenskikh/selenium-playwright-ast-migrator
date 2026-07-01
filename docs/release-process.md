@@ -103,6 +103,44 @@ Before removing the preview suffix:
 
 ## Publishing
 
+### Recommended manual GitHub Actions publish
+
+The repository has a manual workflow for release publishing:
+
+```text
+.github/workflows/publish-nuget.yml
+```
+
+Run it from GitHub Actions with `workflow_dispatch` inputs:
+
+- `version` - the exact package version, for example `0.6.0-preview.1`;
+- `source` - usually `https://api.nuget.org/v3/index.json`;
+- `dry_run` - keep `true` for the first run; set to `false` only for the actual publish.
+
+The workflow:
+
+1. restores, builds, and tests the solution in Release;
+2. packs the dotnet tool;
+3. verifies `.nupkg` contents;
+4. installs the package from `artifacts/nuget` into a temporary local tool manifest and runs smoke checks;
+5. uploads the verified `.nupkg` as a workflow artifact;
+6. publishes only when `dry_run=false`.
+
+Required repository setup:
+
+- add `NUGET_API_KEY` as a GitHub Actions repository or environment secret;
+- protect the `nuget-production` environment if you want a final manual approval gate;
+- never put API keys into `NuGet.config`, scripts, workflow inputs, or committed files.
+
+Recommended sequence:
+
+1. run the workflow with `dry_run=true`;
+2. download/check the uploaded `.nupkg` artifact if needed;
+3. run the workflow again with the same `version` and `dry_run=false`;
+4. verify the package page on NuGet and test install from a clean directory.
+
+### Local/manual publish
+
 NuGet/GitHub package publishing should happen only after the CI package artifacts pass verification.
 
 ```bash
@@ -120,6 +158,16 @@ or on Windows:
 ```
 
 Use repository secrets for API keys. Never commit `NuGet.config` with credentials.
+
+After publishing to NuGet, verify install from a clean directory:
+
+```bash
+mkdir /tmp/migrator-tool-smoke
+cd /tmp/migrator-tool-smoke
+dotnet new tool-manifest
+dotnet tool install SeleniumPlaywrightAstMigrator --version 0.6.0-preview.1
+dotnet tool run selenium-pw-migrator -- --help
+```
 
 ## Rollback
 

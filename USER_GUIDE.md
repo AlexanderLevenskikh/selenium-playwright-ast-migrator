@@ -28,17 +28,49 @@ Weak guesses become TODOs or reports instead of unsafe generated code.
 
 ## 2. Installation And Local Use
 
+### Fast start from NuGet
+
+When the package is published, the best team-friendly setup is a project-local dotnet tool manifest:
+
+```bash
+dotnet new tool-manifest
+dotnet tool install SeleniumPlaywrightAstMigrator --version 0.6.0-preview.1
+dotnet tool run selenium-pw-migrator -- --help
+```
+
+Then create the disposable demo playground:
+
+```bash
+dotnet tool run selenium-pw-migrator -- playground \
+  --out playground \
+  --target-test-framework xunit \
+  --generation-policy conservative
+```
+
+Open `playground/try-this-first.md` and run the generated command chain before touching a real project.
+
+### Install from a locally packed package
+
+If you are validating a release candidate before publishing it:
+
+```bash
+./scripts/pack-tool.sh 0.6.0-preview.1
+dotnet new tool-manifest --force
+dotnet tool install SeleniumPlaywrightAstMigrator \
+  --version 0.6.0-preview.1 \
+  --add-source ./artifacts/nuget
+dotnet tool run selenium-pw-migrator -- --help
+```
+
+On Windows, use `./scripts/pack-tool.ps1 -Version 0.6.0-preview.1`.
+
+### Run from source
+
 From the repository:
 
 ```bash
 dotnet restore
 dotnet run --project Migrator.Cli -- --help
-```
-
-After packing as a local .NET tool:
-
-```bash
-selenium-pw-migrator --help
 ```
 
 Most examples below use `selenium-pw-migrator`. When running from source, replace it with:
@@ -55,7 +87,28 @@ dotnet run --project Migrator.Cli -- --mode analyze --input ./OldTests --out ana
 
 ## 3. Recommended First Run
 
-Start with a small folder of representative tests. Do not begin with the entire suite.
+Start with the playground or a small folder of representative tests. Do not begin with the entire suite.
+
+```bash
+selenium-pw-migrator playground \
+  --out playground \
+  --target-test-framework xunit \
+  --generation-policy conservative
+```
+
+For a real project, generate a runbook before the first migration run:
+
+```bash
+selenium-pw-migrator runbook \
+  --input ./OldTests \
+  --target dotnet \
+  --target-test-framework nunit \
+  --generation-policy conservative \
+  --out runbook \
+  --format both
+```
+
+Then create the migration workspace:
 
 ```bash
 selenium-pw-migrator init --wizard \
@@ -296,6 +349,22 @@ For Java, Python, and TypeScript target paths, framework support is still previe
 
 ### Setup and discovery
 
+`playground`
+
+Creates a disposable five-minute demo workspace with ready commands, expected outputs, dashboard sample, PR pack sample, and manifest.
+
+```bash
+selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
+```
+
+`runbook`
+
+Generates a practical migration plan: pilot scope, command chain, risk map, artifacts to collect, and acceptance checklist.
+
+```bash
+selenium-pw-migrator runbook --input ./OldTests --target dotnet --target-test-framework xunit --generation-policy conservative --out runbook
+```
+
 `init`
 
 Creates a migration workspace and starter config.
@@ -318,6 +387,14 @@ Lists available source frontends and target backends.
 
 ```bash
 selenium-pw-migrator --mode capabilities --out capabilities --format both
+```
+
+`framework matrix`
+
+Writes source framework detection and target framework readiness reports.
+
+```bash
+selenium-pw-migrator framework matrix --input ./OldTests --target dotnet --target-test-framework xunit --out framework-matrix --format both
 ```
 
 `discover-target`
@@ -359,8 +436,10 @@ selenium-pw-migrator --mode analyze --input ./OldTests --config ./adapter-config
 Generates Playwright output.
 
 ```bash
-selenium-pw-migrator --mode migrate --input ./OldTests --config ./adapter-config.json --target dotnet --out generated
+selenium-pw-migrator --mode migrate --input ./OldTests --config ./adapter-config.json --target dotnet --generation-policy balanced --out generated
 ```
+
+Use `--generation-policy conservative|balanced|aggressive` to control mapped-helper risk. Conservative emits more review/TODO output, balanced is the normal default, and aggressive emits more active helper code with risk annotations.
 
 `dump-ir`
 
@@ -462,6 +541,14 @@ Finds profiles by framework, backend, or capability.
 selenium-pw-migrator profile search xunit
 ```
 
+`profile recommend`
+
+Scores built-in profiles against a source project and recommends install order.
+
+```bash
+selenium-pw-migrator profile recommend --input ./OldTests --target-test-framework xunit --out profile-recommendations
+```
+
 `profile inspect`
 
 Explains a built-in profile before installation.
@@ -492,6 +579,14 @@ Estimates whether existing config/profile layers fit a source project.
 
 ```bash
 selenium-pw-migrator --mode profile-match --input ./OldTests --config ./profiles/base.adapter.json --out profile-match
+```
+
+`config author`
+
+Writes evidence-driven config proposals and a reviewable patch from selector evidence, POM index, helper inventory, target discovery, and TODO reports. It does not apply the patch.
+
+```bash
+selenium-pw-migrator config author --input migration/run-001 --config ./adapter-config.json --out config-proposals --format both
 ```
 
 ### Source truth helpers
@@ -554,6 +649,14 @@ Classifies Playwright runtime failures from logs, traces, screenshots, and video
 selenium-pw-migrator --mode runtime-classify --input migration/runtime-logs --out runtime-classify
 ```
 
+`learn pack`
+
+Extracts reusable migration knowledge from a completed run into a reviewable profile layer and learning changelog.
+
+```bash
+selenium-pw-migrator learn pack --input migration/run-001 --config ./adapter-config.json --out learn-pack --format both
+```
+
 `migration-board`
 
 Builds an HTML dashboard from migration artifacts.
@@ -590,6 +693,22 @@ Only use `--include-source` after explicit review:
 selenium-pw-migrator evidence pack --input migration/run-001 --out evidence/run-001.zip --include-source
 ```
 
+`pr pack`
+
+Creates a PR/review bundle: summary, generated files list, before/after metrics, risk summary, reviewer checklist, and suggested PR description.
+
+```bash
+selenium-pw-migrator pr pack --input migration/run-001 --out pr-pack --format both
+```
+
+`agent contract`
+
+Generates ticket-specific agent instructions with allowed paths, stop policy, exact commands, report template, and coordinator/migrator/verifier prompts.
+
+```bash
+selenium-pw-migrator agent contract --input migration/current-ticket.md --out agent-contract --format both
+```
+
 ## 8. Common Workflows
 
 ### I have only Selenium tests and no Playwright project
@@ -611,11 +730,13 @@ selenium-pw-migrator evidence pack --input migration/run-001 --out evidence/run-
 
 ### I want the fastest useful pilot
 
-1. Pick 10 to 30 representative tests.
-2. Run `init --wizard`.
-3. Run `orchestrate`.
-4. Open the report dashboard with `report serve`.
-5. Fix the top repeated unsupported category, not random one-off TODOs.
+1. Run `playground` once to understand the flow.
+2. Pick 10 to 30 representative tests.
+3. Run `runbook`.
+4. Run `init --wizard`.
+5. Run `orchestrate`.
+6. Open the report dashboard with `report serve`.
+7. Fix the top repeated unsupported category, not random one-off TODOs.
 
 ### I want to use agents safely
 
@@ -702,26 +823,3 @@ Migrator should not modify your source Selenium tests.
 Migrator should not claim runtime success before the target environment, auth, data, and routes are configured.
 
 The best migration is not the one with the fewest TODOs. It is the one where every generated line is either correct, verified, or clearly marked for review.
-
-
-### Framework matrix report
-
-Generate a project-specific framework matrix and source framework detection report:
-
-```bash
-selenium-pw-migrator framework matrix --input ./OldTests --target dotnet --target-test-framework xunit --out framework-matrix --format both
-```
-
-This writes `framework-matrix.md/json` and `source-framework-detection.md/json`. It is read-only, flags MSTest as detected/unsupported, and keeps Java/Python target frameworks marked as planned until implemented.
-
-
-## Five-minute public playground
-
-Create a disposable demo workspace before touching a real project:
-
-```bash
-selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
-cat playground/try-this-first.md
-```
-
-The playground includes ready commands, expected outputs, dashboard sample, PR pack sample, and a manifest.

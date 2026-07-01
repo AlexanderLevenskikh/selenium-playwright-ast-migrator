@@ -117,6 +117,10 @@ cat playground/try-this-first.md
 | `verify-ts-project` | Experimental | Type-check generated Playwright TS specs внутри существующего TS проекта. |
 | `orchestrate` | Experimental | Dry-run analyze → migrate → verify → propose. |
 | `explain-todo` / `smoke-plan` / `runtime-classify` / `selector-evidence` / `migration-board` / `report-serve` | Experimental | Приоритизация fixes по artifacts/logs, runtime root causes, readiness score, dashboard по run artifacts и экспорт triage decisions. |
+| `learn-pack` | Experimental | Извлечение reusable migration knowledge из завершённых runs в reviewable profile layer и learning changelog. |
+| `config-author` | Experimental | Evidence-driven config proposals и reviewable patch без автоматического применения. |
+| `agent-contract` | Experimental | Ticket-specific agent instructions: allowed paths, stop policy, exact commands и multi-agent prompts. |
+| `pr-pack` | Experimental | PR/review bundle: summary, generated files list, before/after metrics, risks, checklist и suggested PR description. |
 | `evidence pack` | Stable | Redacted zip для issue/PR: reports, generated artifacts, manifest и checksums. |
 | `profile list/search/inspect/install/diff` | Experimental | Offline built-in profiles как reviewable config layers. |
 
@@ -150,6 +154,13 @@ selenium-pw-migrator --mode migrate --help
 - [Troubleshooting](docs/troubleshooting.md)
 - [Migration quality program](docs/migration-quality-program.md)
 - [Report serve dashboard](docs/report-serve-dashboard.md)
+- [Migration runbook](docs/migration-runbook.md)
+- [Framework matrix](docs/framework-matrix.md)
+- [Agent contract pack](docs/agent-contract-pack.md)
+- [Migration PR pack](docs/migration-pr-pack.md)
+- [Migration learning pack](docs/migration-learning-pack.md)
+- [Config Authoring Assistant](docs/config-authoring-assistant.md)
+- [Generation Policy](docs/generation-policy.md)
 - [Public launch pack](docs/public-launch/README.md)
 - [Public roadmap](docs/public-roadmap.md)
 - [Release process](docs/release-process.md)
@@ -166,35 +177,3 @@ dotnet test --no-restore
 ## Public release status
 
 Проект готовится как public preview. Stable commands рассчитаны на внешних пользователей; experimental commands могут меняться между preview-релизами. См. [CHANGELOG.md](CHANGELOG.md), [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md).
-
-- [Migration PR pack](docs/migration-pr-pack.md) — PR summary, changed/generated files list, before/after metrics, risk summary, reviewer checklist и suggested PR description.
-
-
-### Migration Learning Pack
-
-`learn pack` извлекает reusable knowledge из завершённого run-а и пишет `learn-pack.md/json`, `learn-changelog.md`, `learning-safety-report.md` и `reusable-profile-layer.json`. Команда read-only: не меняет source/config/generated файлы и не экспортирует suppressions/source-only identifiers.
-
-```bash
-selenium-pw-migrator learn pack --input migration/runs/latest --config ./adapter-config.json --out learn-pack --format both
-```
-
-Подробнее: [Migration learning pack](docs/migration-learning-pack.md).
-
-### Config Authoring Assistant
-
-`config author` генерирует `config-proposals.md/json` и `config-proposals.patch` на основе selector-evidence, helper-inventory, index-pom, discover-target и explain-todo. Команда read-only: она не меняет исходники, generated output или adapter-config.
-
-
-### Generation Policy
-
-Use `--generation-policy conservative|balanced|aggressive` to control mapped-helper generation risk. Conservative produces more review/TODO output, balanced keeps current behavior, and aggressive emits more explicit mapped helper code with report risk annotations. See `docs/generation-policy.md`.
-
-### Framework Matrix Expansion
-
-`framework matrix` генерирует project-specific `framework-matrix.md/json` и `source-framework-detection.md/json`: C# NUnit/xUnit/MSTest, Java JUnit4/JUnit5/TestNG, Python pytest/unittest, target readiness и wizard guidance. Команда read-only и явно помечает MSTest как detected/unsupported, а Java/Python target frameworks как planned.
-
-```bash
-selenium-pw-migrator framework matrix --input ./OldTests --target dotnet --target-test-framework xunit --out framework-matrix --format both
-```
-
-Подробнее: [Framework matrix](docs/framework-matrix.md).

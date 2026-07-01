@@ -5239,7 +5239,7 @@ static ReportServeTriageDecision CreateReportServeTriageDecision(
         ExampleFile: PathRedaction.Redact(exampleFile ?? ""),
         ExampleLine: exampleLine,
         EvidenceLinks: safeEvidence,
-        TicketTemplate: BuildReportServeTicketTemplate(itemType, key, recommendedDecision, reason, count, suggestedAction, exampleFile, exampleLine));
+        TicketTemplate: BuildReportServeTicketTemplate(itemType, key, recommendedDecision, reason, count, suggestedAction, exampleFile ?? "", exampleLine));
 }
 
 static string BuildReportServeTicketTemplate(string itemType, string key, string decision, string reason, int count, string suggestedAction, string exampleFile, int exampleLine)

@@ -1,0 +1,88 @@
+name: Publish NuGet Tool
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Package version to publish, for example 0.6.0-preview.1'
+        required: true
+        type: string
+      source:
+        description: 'NuGet package source URL'
+        required: true
+        default: 'https://api.nuget.org/v3/index.json'
+        type: string
+      dry_run:
+        description: 'Build, pack, verify, and smoke only. Do not publish.'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  pack-smoke:
+    name: Pack and smoke release candidate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore Migrator.sln
+
+      - name: Build
+        run: dotnet build Migrator.sln --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test Migrator.sln --no-build --configuration Release --verbosity normal
+
+      - name: Pack dotnet tool
+        run: scripts/pack-tool.sh "${{ inputs.version }}"
+
+      - name: Verify nupkg contents
+        run: scripts/verify-nupkg-contents.sh "artifacts/nuget/SeleniumPlaywrightAstMigrator.${{ inputs.version }}.nupkg"
+
+      - name: Smoke local tool install
+        run: scripts/smoke-local-tool-package.sh "${{ inputs.version }}"
+
+      - name: Upload verified package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: selenium-playwright-ast-migrator-${{ inputs.version }}
+          path: artifacts/nuget/*.nupkg
+          if-no-files-found: error
+
+  publish:
+    name: Publish verified package
+    runs-on: ubuntu-latest
+    needs: pack-smoke
+    if: ${{ inputs.dry_run == false }}
+    environment: nuget-production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Download verified package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: selenium-playwright-ast-migrator-${{ inputs.version }}
+          path: artifacts/nuget
+
+      - name: Publish to NuGet source
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: scripts/push-tool.sh "${{ inputs.source }}" "${{ inputs.version }}"

@@ -1,5 +1,27 @@
 # Установка мигратора как dotnet tool
 
+## Самый быстрый старт из NuGet
+
+Если пакет уже опубликован в NuGet, лучше закрепить версию в local tool manifest проекта:
+
+```powershell
+dotnet new tool-manifest
+
+dotnet tool install SeleniumPlaywrightAstMigrator `
+  --version 0.6.0-preview.1
+
+dotnet tool run selenium-pw-migrator -- --help
+```
+
+Дальше можно запустить disposable playground:
+
+```powershell
+dotnet tool run selenium-pw-migrator -- playground `
+  --out playground `
+  --target-test-framework xunit `
+  --generation-policy conservative
+```
+
 ## Local tool для проекта
 
 Рекомендуемый способ:
@@ -28,6 +50,22 @@ dotnet tool run selenium-pw-migrator -- `
   --config "profiles/projects/discounts.adapter.json" `
   --out "discounts-migrate" `
   --format both
+```
+
+## Установка локально собранного `.nupkg`
+
+Если пакет ещё не опубликован и лежит в `artifacts/nuget`, установите его через explicit source:
+
+```powershell
+./scripts/pack-tool.ps1 -Version 0.6.0-preview.1
+
+dotnet new tool-manifest --force
+
+dotnet tool install SeleniumPlaywrightAstMigrator `
+  --version 0.6.0-preview.1 `
+  --add-source ./artifacts/nuget
+
+dotnet tool run selenium-pw-migrator -- --help
 ```
 
 ## Global tool
