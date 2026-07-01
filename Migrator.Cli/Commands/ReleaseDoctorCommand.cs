@@ -83,6 +83,7 @@ internal static class ReleaseDoctorCommand
             "docs/tool-installation.md",
             ".github/workflows/ci.yml",
             ".github/workflows/publish-nuget.yml",
+            ".github/workflows/full-validation.yml",
             "scripts/pack-tool.sh",
             "scripts/pack-tool.ps1",
             "scripts/verify-nupkg-contents.sh",

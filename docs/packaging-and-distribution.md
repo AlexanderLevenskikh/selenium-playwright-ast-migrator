@@ -314,15 +314,18 @@ pwsh -ExecutionPolicy Bypass -File .\scripts\package-agent-cli-bundle.ps1 `
 
 Не рекомендуется глобально включать `Unrestricted`, если вы точно не понимаете, зачем это нужно. Для запуска этого скрипта достаточно временного `Bypass` на уровне текущего процесса.
 
-## CI packaging gates
+## CI gates
 
-GitHub Actions now has separate release-safety jobs in `.github/workflows/ci.yml`:
+GitHub Actions keeps the pull-request path split by intent in `.github/workflows/ci.yml`:
 
-- `Build and test` — normal restore/build/test gate.
-- `Pack and smoke dotnet tool` — runs `dotnet pack`, verifies `.nupkg` contents, installs the package into a temporary local tool manifest, then runs `--help` and `--mode doctor` from the installed tool.
-- `Build and smoke agent bundle` — publishes the standalone bundle, verifies required docs/templates/schema files, validates `MANIFEST.sha256`, and runs help smoke from the published output.
+- `Test fast suite` — restore/build plus the normal unit, parser, renderer, docs, packaging, and architecture tests. It excludes process-heavy CLI tests with `Shard!=Cli`.
+- `Test CLI process suite` — restore/build plus CLI subprocess/orchestrator tests marked with `Shard=Cli`. These tests execute the already-built `Migrator.Cli.dll` and fail fast on process timeouts.
+- `Pack and smoke dotnet tool` — runs after both test shards, packs the dotnet tool, verifies `.nupkg` contents, installs the package into a temporary local tool manifest, then runs `--help` and `--mode doctor` from the installed tool.
+- `Build and smoke agent bundle` — runs after both test shards, publishes the standalone bundle, verifies required docs/templates/schema files, validates `MANIFEST.sha256`, and runs help smoke from the published output.
 
-These gates are intentionally separate from normal tests so package failures are visible as release/distribution failures, not just generic unit-test failures.
+These gates are intentionally separate from distribution checks so package failures are visible as release/distribution failures, not just generic unit-test failures.
+
+The repository also has `.github/workflows/full-validation.yml` for manual and nightly validation. It runs the unfiltered test suite, release doctor, dotnet-tool package smoke, and agent-bundle smoke, then uploads release-doctor/package/bundle artifacts for inspection.
 
 ## Manual NuGet publish workflow
 

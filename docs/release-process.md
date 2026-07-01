@@ -94,9 +94,12 @@ For Linux CI smoke, use a framework-dependent bundle:
 ```
 
 8. Wait for GitHub Actions to pass:
-   - build/test job;
+   - `Test fast suite`;
+   - `Test CLI process suite`;
    - dotnet-tool package job;
    - agent-bundle job.
+
+9. For release candidates, optionally run the manual `Full Validation` workflow. It runs the unfiltered test suite, `release-doctor`, dotnet-tool package smoke, and agent-bundle smoke in one end-to-end gate. The same workflow also runs nightly from `schedule`.
 
 ## Stable release checklist
 

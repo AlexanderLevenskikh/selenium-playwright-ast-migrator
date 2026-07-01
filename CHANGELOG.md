@@ -26,6 +26,7 @@ The format follows the spirit of Keep a Changelog, and this project uses preview
 - Extensibility/public API docs for `ISourceFrontend`, `ITargetBackend`, `adapter-config/v1`, and mini extension examples.
 - Target backend capability reports plus `--mode capabilities` for built-in source/target support matrices.
 - Public launch pack: demo repository assets, screenshot walkthrough, GitHub Actions migration-pilot example, public roadmap, issue templates, and preview release notes.
+- CI test sharding for fast tests vs CLI subprocess tests, plus a manual/nightly full-validation workflow.
 
 ### Changed
 

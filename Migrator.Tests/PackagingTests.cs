@@ -67,6 +67,30 @@ public class PackagingTests
     }
 
     [Fact]
+    public void Ci_SplitsFastAndCliProcessSuites()
+    {
+        var ciPath = FindRepositoryFile(".github/workflows/ci.yml");
+        var ci = File.ReadAllText(ciPath);
+
+        Assert.Contains("Test fast suite", ci);
+        Assert.Contains("Test CLI process suite", ci);
+        Assert.Contains("Shard!=Cli", ci);
+        Assert.Contains("Shard=Cli", ci);
+        Assert.Contains("needs: [ test-fast, test-cli ]", ci);
+
+        var cliProcessFiles = Directory.GetFiles(FindRepositoryFile("Migrator.Tests"), "*.cs", SearchOption.AllDirectories)
+            .Where(path => File.ReadAllText(path).Contains("[Collection(\"CliProcess\")]") )
+            .ToArray();
+
+        Assert.NotEmpty(cliProcessFiles);
+
+        foreach (var file in cliProcessFiles)
+        {
+            Assert.Contains("[Trait(\"Shard\", \"Cli\")]", File.ReadAllText(file));
+        }
+    }
+
+    [Fact]
     public void ManualNuGetPublishWorkflow_PacksSmokesAndRequiresSecret()
     {
         var workflowPath = FindRepositoryFile(".github/workflows/publish-nuget.yml");
@@ -80,6 +104,23 @@ public class PackagingTests
         Assert.Contains("secrets.NUGET_API_KEY", workflow);
         Assert.Contains("scripts/push-tool.sh", workflow);
         Assert.Contains("nuget-production", workflow);
+    }
+
+    [Fact]
+    public void FullValidationWorkflow_RunsNightlyManualFullGate()
+    {
+        var workflowPath = FindRepositoryFile(".github/workflows/full-validation.yml");
+        var workflow = File.ReadAllText(workflowPath);
+
+        Assert.Contains("workflow_dispatch", workflow);
+        Assert.Contains("schedule:", workflow);
+        Assert.Contains("Test full suite", workflow);
+        Assert.Contains("--mode release-doctor", workflow);
+        Assert.Contains("scripts/pack-tool.sh", workflow);
+        Assert.Contains("scripts/verify-nupkg-contents.sh", workflow);
+        Assert.Contains("scripts/smoke-local-tool-package.sh", workflow);
+        Assert.Contains("verify-agent-cli-bundle.ps1", workflow);
+        Assert.Contains("full-validation-artifacts", workflow);
     }
 
     [Fact]

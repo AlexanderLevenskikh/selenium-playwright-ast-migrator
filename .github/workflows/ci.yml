@@ -9,8 +9,8 @@ env:
   PACKAGE_VERSION: 0.6.0-preview.${{ github.run_number }}
 
 jobs:
-  dotnet:
-    name: Build and test
+  test-fast:
+    name: Test fast suite
     runs-on: ubuntu-latest
 
     steps:
@@ -28,13 +28,35 @@ jobs:
       - name: Build
         run: dotnet build Migrator.sln --no-restore --configuration Release
 
-      - name: Test
-        run: dotnet test Migrator.sln --no-build --configuration Release --verbosity normal
+      - name: Test fast suite
+        run: dotnet test Migrator.sln --no-build --configuration Release --verbosity normal --filter "Shard!=Cli"
+
+  test-cli:
+    name: Test CLI process suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore Migrator.sln
+
+      - name: Build
+        run: dotnet build Migrator.sln --no-restore --configuration Release
+
+      - name: Test CLI process suite
+        run: dotnet test Migrator.sln --no-build --configuration Release --verbosity normal --filter "Shard=Cli"
 
   package:
     name: Pack and smoke dotnet tool
     runs-on: ubuntu-latest
-    needs: dotnet
+    needs: [ test-fast, test-cli ]
 
     steps:
       - name: Checkout
@@ -67,7 +89,7 @@ jobs:
   agent-bundle:
     name: Build and smoke agent bundle
     runs-on: ubuntu-latest
-    needs: dotnet
+    needs: [ test-fast, test-cli ]
 
     steps:
       - name: Checkout

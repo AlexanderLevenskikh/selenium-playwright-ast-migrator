@@ -1,0 +1,70 @@
+name: Full Validation
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'
+
+env:
+  PACKAGE_VERSION: 0.6.0-preview.${{ github.run_number }}
+
+permissions:
+  contents: read
+
+jobs:
+  full-validation:
+    name: Full test, release doctor, package, and bundle smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore Migrator.sln
+
+      - name: Build
+        run: dotnet build Migrator.sln --no-restore --configuration Release
+
+      - name: Test full suite
+        run: dotnet test Migrator.sln --no-build --configuration Release --verbosity normal
+
+      - name: Release doctor
+        run: dotnet Migrator.Cli/bin/Release/net8.0/Migrator.Cli.dll --mode release-doctor --input . --out artifacts/release-doctor --format both
+
+      - name: Pack dotnet tool
+        run: scripts/pack-tool.sh "$PACKAGE_VERSION"
+
+      - name: Verify nupkg contents
+        run: scripts/verify-nupkg-contents.sh "artifacts/nuget/SeleniumPlaywrightMigrator.$PACKAGE_VERSION.nupkg"
+
+      - name: Smoke local tool install
+        run: scripts/smoke-local-tool-package.sh "$PACKAGE_VERSION"
+
+      - name: Package agent CLI bundle
+        shell: pwsh
+        run: ./scripts/package-agent-cli-bundle.ps1 -Runtime linux-x64 -Output artifacts/agent-cli-bundle -NoSelfContained
+
+      - name: Verify agent CLI bundle
+        shell: pwsh
+        run: ./scripts/verify-agent-cli-bundle.ps1 -BundleDirectory artifacts/agent-cli-bundle/tool -RunHelp
+
+      - name: Create agent bundle archive
+        run: tar -czf artifacts/agent-cli-bundle-linux-x64.tar.gz -C artifacts/agent-cli-bundle tool
+
+      - name: Upload validation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-validation-artifacts-${{ env.PACKAGE_VERSION }}
+          path: |
+            artifacts/release-doctor/**
+            artifacts/nuget/*.nupkg
+            artifacts/agent-cli-bundle-linux-x64.tar.gz
+            artifacts/agent-cli-bundle/tool/MANIFEST.sha256
+            artifacts/agent-cli-bundle/tool/manifest.json
+          if-no-files-found: error

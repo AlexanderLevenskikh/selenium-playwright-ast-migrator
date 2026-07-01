@@ -6,6 +6,7 @@ using Xunit;
 namespace Migrator.Tests;
 
 [Collection("CliProcess")]
+[Trait("Shard", "Cli")]
 public class SourceFrontendCliTests
 {
     [Fact]
