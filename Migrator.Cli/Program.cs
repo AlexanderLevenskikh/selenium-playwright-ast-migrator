@@ -6912,10 +6912,19 @@ static bool IsGeneratedOrBuildArtifact(string path)
         || normalized.EndsWith(".Designer.cs", StringComparison.OrdinalIgnoreCase);
 }
 
+
 static IEnumerable<PomFact> ExtractPomFacts(string text, string file, string className)
 {
+    foreach (var fact in ExtractSeleniumPomFacts(text, file, className))
+        yield return fact;
+    foreach (var fact in ExtractPlaywrightTargetPomFacts(text, file, className))
+        yield return fact;
+}
+
+static IEnumerable<PomFact> ExtractSeleniumPomFacts(string text, string file, string className)
+{
     var facts = new List<PomFact>();
-    var lines = text.Replace("\r\n", "\n").Split('\n');
+    var commentSafeText = StripCommentsForPomFacts(text);
 
     // Properties/methods returning a wrapper initialized with By.CssSelector/By.XPath/By.Id/etc.
     var propertyRegex = new System.Text.RegularExpressions.Regex(
@@ -6924,7 +6933,7 @@ static IEnumerable<PomFact> ExtractPomFacts(string text, string file, string cla
         """,
         System.Text.RegularExpressions.RegexOptions.IgnorePatternWhitespace | System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.Compiled);
 
-    foreach (System.Text.RegularExpressions.Match m in propertyRegex.Matches(text))
+    foreach (System.Text.RegularExpressions.Match m in propertyRegex.Matches(commentSafeText))
     {
         var name = m.Groups["name"].Value;
         var selector = m.Groups["selector"].Value;
@@ -6942,6 +6951,7 @@ static IEnumerable<PomFact> ExtractPomFacts(string text, string file, string cla
             SourceLine: GetLineNumber(text, m.Index),
             Confidence: "high",
             RequiresReview: false,
+            FactOrigin: "SeleniumPom",
             Notes: "Found explicit Selenium By selector in POM."));
     }
 
@@ -6952,7 +6962,7 @@ static IEnumerable<PomFact> ExtractPomFacts(string text, string file, string cla
         """,
         System.Text.RegularExpressions.RegexOptions.IgnorePatternWhitespace | System.Text.RegularExpressions.RegexOptions.Compiled);
 
-    foreach (System.Text.RegularExpressions.Match m in tidRegex.Matches(text))
+    foreach (System.Text.RegularExpressions.Match m in tidRegex.Matches(commentSafeText))
     {
         var name = m.Groups["name"].Value;
         var selector = m.Groups["selector"].Value;
@@ -6971,11 +6981,413 @@ static IEnumerable<PomFact> ExtractPomFacts(string text, string file, string cla
             SourceLine: GetLineNumber(text, m.Index),
             Confidence: "medium",
             RequiresReview: true,
+            FactOrigin: "SeleniumPom",
             Notes: "Found selector-like string. Review whether it is a POM target or helper constant."));
     }
 
     return facts;
 }
+
+static IEnumerable<PomFact> ExtractPlaywrightTargetPomFacts(string text, string file, string className)
+{
+    var facts = new List<PomFact>();
+    var commentSafeText = StripCommentsForPomFacts(text);
+
+    foreach (var member in ExtractPomMemberExpressions(commentSafeText, text))
+    {
+        AddTargetPomFactsFromMember(facts, text, file, className, member);
+    }
+
+    return facts
+        .GroupBy(f => $"{f.SourceExpression}::{f.SelectorKind}::{f.Selector}::{f.FactOrigin}", StringComparer.OrdinalIgnoreCase)
+        .Select(g => g.OrderBy(f => ConfidenceRank(f.Confidence)).ThenBy(f => f.RequiresReview).First())
+        .ToArray();
+}
+
+static IEnumerable<PomMemberExpression> ExtractPomMemberExpressions(string commentSafeText, string originalText)
+{
+    var memberRegexes = new[]
+    {
+        // public Button Save => ControlFactory.Create<Button>(this, "save-row-cost");
+        new System.Text.RegularExpressions.Regex(
+            """
+            (?<signature>\b(?:public|private|protected|internal)\s+(?:(?:static|virtual|override|sealed|new|async)\s+)*(?<type>[A-Za-z_][A-Za-z0-9_<>,\.>\?]*)\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?:\([^;{}]*\)\s*)?=>\s*(?<expr>.*?);)
+            """,
+            System.Text.RegularExpressions.RegexOptions.IgnorePatternWhitespace | System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.Compiled),
+
+        // public Button Save { get => ControlFactory.Create<Button>(this, "save-row-cost"); }
+        new System.Text.RegularExpressions.Regex(
+            """
+            (?<signature>\b(?:public|private|protected|internal)\s+(?:(?:static|virtual|override|sealed|new)\s+)*(?<type>[A-Za-z_][A-Za-z0-9_<>,\.>\?]*)\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*\{\s*get\s*=>\s*(?<expr>.*?);\s*\})
+            """,
+            System.Text.RegularExpressions.RegexOptions.IgnorePatternWhitespace | System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.Compiled),
+
+        // public Button Save { get { return ControlFactory.Create<Button>(this, "save-row-cost"); } }
+        new System.Text.RegularExpressions.Regex(
+            """
+            (?<signature>\b(?:public|private|protected|internal)\s+(?:(?:static|virtual|override|sealed|new)\s+)*(?<type>[A-Za-z_][A-Za-z0-9_<>,\.>\?]*)\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*\{\s*get\s*\{\s*return\s+(?<expr>.*?);\s*\}\s*\})
+            """,
+            System.Text.RegularExpressions.RegexOptions.IgnorePatternWhitespace | System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.Compiled)
+    };
+
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var regex in memberRegexes)
+    {
+        foreach (System.Text.RegularExpressions.Match m in regex.Matches(commentSafeText))
+        {
+            var name = m.Groups["name"].Value;
+            var expr = m.Groups["expr"].Value;
+            var key = $"{name}:{m.Groups["expr"].Index}:{m.Groups["expr"].Length}";
+            if (!seen.Add(key))
+                continue;
+
+            yield return new PomMemberExpression(
+                Name: name,
+                Expression: expr,
+                StartIndex: m.Index,
+                ExpressionStartIndex: m.Groups["expr"].Index,
+                Line: GetLineNumber(originalText, m.Index),
+                Kind: System.Text.RegularExpressions.Regex.IsMatch(m.Groups["signature"].Value, $@"\b{System.Text.RegularExpressions.Regex.Escape(name)}\s*\(") ? "TargetPomMethod" : "TargetPomProperty");
+        }
+    }
+}
+
+static void AddTargetPomFactsFromMember(List<PomFact> facts, string originalText, string file, string className, PomMemberExpression member)
+{
+    var expression = member.Expression;
+
+    // Kontur-style control factory with explicit test-id second argument:
+    // ControlFactory.Create<Button>(this, "save-row-cost")
+    // controlFactory.CreateElementsCollection<Row>(this, "row-item")
+    var factoryWithTestIdRegex = new System.Text.RegularExpressions.Regex(
+        """
+        \b[Cc]ontrolFactory\.Create(?:ElementsCollection)?\s*<[^>]+>\s*\(\s*[^,()]+\s*,\s*@?(?<quote>["'])(?<selector>.*?)(?<!\\)\k<quote>
+        """,
+        System.Text.RegularExpressions.RegexOptions.IgnorePatternWhitespace | System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    foreach (System.Text.RegularExpressions.Match m in factoryWithTestIdRegex.Matches(expression))
+    {
+        AddTargetPomFact(
+            facts,
+            originalText,
+            file,
+            className,
+            member,
+            selector: m.Groups["selector"].Value,
+            selectorKind: "TestId",
+            confidence: "high",
+            requiresReview: false,
+            matchIndexInExpression: m.Index,
+            notes: "Found Playwright/Kontur ControlFactory.Create target POM selector.");
+    }
+
+    var getByTestIdRegex = new System.Text.RegularExpressions.Regex(
+        """
+        \b(?:Page|WrappedItem)\.GetByTestId\s*\(\s*@?(?<quote>["'])(?<selector>.*?)(?<!\\)\k<quote>
+        """,
+        System.Text.RegularExpressions.RegexOptions.IgnorePatternWhitespace | System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    foreach (System.Text.RegularExpressions.Match m in getByTestIdRegex.Matches(expression))
+    {
+        AddTargetPomFact(
+            facts,
+            originalText,
+            file,
+            className,
+            member,
+            selector: m.Groups["selector"].Value,
+            selectorKind: "TestId",
+            confidence: "high",
+            requiresReview: false,
+            matchIndexInExpression: m.Index,
+            notes: "Found Playwright/Kontur GetByTestId target POM selector.");
+    }
+
+    var dataTidLocatorRegex = new System.Text.RegularExpressions.Regex(
+        """
+        \b(?:Page|WrappedItem)\.Locator\s*\(\s*@?(?<quote>["'])(?<selector>[^"']*(?:data-tid|data-test|data-testid|data-test-id)[^"']*)(?<!\\)\k<quote>
+        """,
+        System.Text.RegularExpressions.RegexOptions.IgnorePatternWhitespace | System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    foreach (System.Text.RegularExpressions.Match m in dataTidLocatorRegex.Matches(expression))
+    {
+        AddTargetPomFact(
+            facts,
+            originalText,
+            file,
+            className,
+            member,
+            selector: m.Groups["selector"].Value,
+            selectorKind: "CssSelector",
+            confidence: "medium",
+            requiresReview: true,
+            matchIndexInExpression: m.Index,
+            notes: "Found Playwright/Kontur Locator target POM selector. Review CSS stability before using it as mapping evidence.");
+    }
+
+    var getByTextRegex = new System.Text.RegularExpressions.Regex(
+        """
+        \b(?:Page|WrappedItem)\.GetByText\s*\(\s*@?(?<quote>["'])(?<selector>.*?)(?<!\\)\k<quote>
+        """,
+        System.Text.RegularExpressions.RegexOptions.IgnorePatternWhitespace | System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    foreach (System.Text.RegularExpressions.Match m in getByTextRegex.Matches(expression))
+    {
+        AddTargetPomFact(
+            facts,
+            originalText,
+            file,
+            className,
+            member,
+            selector: m.Groups["selector"].Value,
+            selectorKind: "Text",
+            confidence: "low",
+            requiresReview: true,
+            matchIndexInExpression: m.Index,
+            notes: "Found Playwright GetByText target POM evidence. Text locators are lower-confidence and require review.");
+    }
+
+    var textLocatorRegex = new System.Text.RegularExpressions.Regex(
+        """
+        \b(?:Page|WrappedItem)\.Locator\s*\(\s*@?(?<quote>["'])text=(?<selector>.*?)(?<!\\)\k<quote>
+        """,
+        System.Text.RegularExpressions.RegexOptions.IgnorePatternWhitespace | System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    foreach (System.Text.RegularExpressions.Match m in textLocatorRegex.Matches(expression))
+    {
+        AddTargetPomFact(
+            facts,
+            originalText,
+            file,
+            className,
+            member,
+            selector: m.Groups["selector"].Value,
+            selectorKind: "Text",
+            confidence: "low",
+            requiresReview: true,
+            matchIndexInExpression: m.Index,
+            notes: "Found Playwright text= Locator target POM evidence. Text locators are lower-confidence and require review.");
+    }
+}
+
+static void AddTargetPomFact(
+    List<PomFact> facts,
+    string originalText,
+    string file,
+    string className,
+    PomMemberExpression member,
+    string selector,
+    string selectorKind,
+    string confidence,
+    bool requiresReview,
+    int matchIndexInExpression,
+    string notes)
+{
+    if (string.IsNullOrWhiteSpace(selector))
+        return;
+
+    if (IsInsideStringLiteral(originalText, member.ExpressionStartIndex + matchIndexInExpression))
+        return;
+
+    facts.Add(new PomFact(
+        SourceExpression: $"{className}.{member.Name}",
+        OwnerType: className,
+        MemberName: member.Name,
+        MemberKind: member.Kind,
+        Selector: selector,
+        SelectorKind: selectorKind,
+        TargetKindSuggestion: "PageObjectProperty",
+        TargetExpressionSuggestion: member.Name,
+        SourceFile: file,
+        SourceLine: GetLineNumber(originalText, member.ExpressionStartIndex + matchIndexInExpression),
+        Confidence: confidence,
+        RequiresReview: requiresReview,
+        FactOrigin: "TargetPlaywrightPom",
+        Notes: notes));
+}
+
+static bool IsInsideStringLiteral(string text, int index)
+{
+    bool inString = false;
+    bool inVerbatimString = false;
+    char quote = '\0';
+    bool inLineComment = false;
+    bool inBlockComment = false;
+
+    for (int i = 0; i < text.Length && i <= index; i++)
+    {
+        var c = text[i];
+        var next = i + 1 < text.Length ? text[i + 1] : '\0';
+        var prev = i > 0 ? text[i - 1] : '\0';
+
+        if (inLineComment)
+        {
+            if (c == '\n') inLineComment = false;
+            continue;
+        }
+
+        if (inBlockComment)
+        {
+            if (c == '*' && next == '/')
+            {
+                i++;
+                inBlockComment = false;
+            }
+            continue;
+        }
+
+        if (inString)
+        {
+            if (i == index)
+                return true;
+
+            if (inVerbatimString && c == quote && next == quote)
+            {
+                i++;
+                continue;
+            }
+
+            if (c == quote && (inVerbatimString || prev != '\\'))
+            {
+                inString = false;
+                inVerbatimString = false;
+            }
+
+            continue;
+        }
+
+        if (i == index)
+            return false;
+
+        if (c == '/' && next == '/')
+        {
+            i++;
+            inLineComment = true;
+            continue;
+        }
+
+        if (c == '/' && next == '*')
+        {
+            i++;
+            inBlockComment = true;
+            continue;
+        }
+
+        if (c == '@' && next == '"')
+        {
+            inString = true;
+            inVerbatimString = true;
+            quote = '"';
+            i++;
+            continue;
+        }
+
+        if (c == '"' || c == '\'')
+        {
+            inString = true;
+            quote = c;
+        }
+    }
+
+    return false;
+}
+
+static int ConfidenceRank(string confidence) => confidence.ToLowerInvariant() switch
+{
+    "high" => 0,
+    "medium" => 1,
+    "low" => 2,
+    _ => 3
+};
+
+static string StripCommentsForPomFacts(string text)
+{
+    var sb = new System.Text.StringBuilder(text);
+    bool inString = false;
+    bool inVerbatimString = false;
+    char quote = '\0';
+    bool inLineComment = false;
+    bool inBlockComment = false;
+
+    for (int i = 0; i < sb.Length; i++)
+    {
+        var c = sb[i];
+        var next = i + 1 < sb.Length ? sb[i + 1] : '\0';
+        var prev = i > 0 ? sb[i - 1] : '\0';
+
+        if (inLineComment)
+        {
+            if (c == '\n') inLineComment = false;
+            else sb[i] = ' ';
+            continue;
+        }
+
+        if (inBlockComment)
+        {
+            if (c == '*' && next == '/')
+            {
+                sb[i] = ' ';
+                sb[i + 1] = ' ';
+                i++;
+                inBlockComment = false;
+            }
+            else if (c != '\n') sb[i] = ' ';
+            continue;
+        }
+
+        if (inString)
+        {
+            if (inVerbatimString && c == quote && next == quote)
+            {
+                i++;
+                continue;
+            }
+
+            if (c == quote && (inVerbatimString || prev != '\\'))
+            {
+                inString = false;
+                inVerbatimString = false;
+            }
+
+            continue;
+        }
+
+        if (c == '/' && next == '/')
+        {
+            sb[i] = ' ';
+            sb[i + 1] = ' ';
+            i++;
+            inLineComment = true;
+            continue;
+        }
+
+        if (c == '/' && next == '*')
+        {
+            sb[i] = ' ';
+            sb[i + 1] = ' ';
+            i++;
+            inBlockComment = true;
+            continue;
+        }
+
+        if (c == '@' && next == '"')
+        {
+            inString = true;
+            inVerbatimString = true;
+            quote = '"';
+            i++;
+            continue;
+        }
+
+        if (c == '"' || c == '\'')
+        {
+            inString = true;
+            quote = c;
+        }
+    }
+    return sb.ToString();
+}
+
 
 static IEnumerable<PomUsageCandidate> ExtractPomUsages(string text, string file)
 {
@@ -6998,6 +7410,7 @@ static IEnumerable<PomUsageCandidate> ExtractPomUsages(string text, string file)
                 ExampleLine: GetLineNumber(text, m.Index),
                 Confidence: "low",
                 RequiresSourceTruth: true,
+                FactOrigin: "InferredUsage",
                 Notes: "No explicit POM selector fact found in scanned files. This is an inferred candidate, not source truth.");
         }
         else
@@ -7025,6 +7438,7 @@ static string StripCommentsAndStringsForPomUsage(string text)
 {
     var sb = new System.Text.StringBuilder(text);
     bool inString = false;
+    bool inVerbatimString = false;
     char quote = '\0';
     bool inLineComment = false;
     bool inBlockComment = false;
@@ -7033,6 +7447,7 @@ static string StripCommentsAndStringsForPomUsage(string text)
     {
         var c = sb[i];
         var next = i + 1 < sb.Length ? sb[i + 1] : '\0';
+        var prev = i > 0 ? sb[i - 1] : '\0';
 
         if (inLineComment)
         {
@@ -7056,8 +7471,20 @@ static string StripCommentsAndStringsForPomUsage(string text)
 
         if (inString)
         {
-            if (c == quote && (i == 0 || text[i - 1] != '\\'))
+            if (inVerbatimString && c == quote && next == quote)
+            {
+                sb[i] = ' ';
+                sb[i + 1] = ' ';
+                i++;
+                continue;
+            }
+
+            if (c == quote && (inVerbatimString || prev != '\\'))
+            {
                 inString = false;
+                inVerbatimString = false;
+            }
+
             if (c != '\n') sb[i] = ' ';
             continue;
         }
@@ -7080,7 +7507,18 @@ static string StripCommentsAndStringsForPomUsage(string text)
             continue;
         }
 
-        if (c == '\"' || c == '\'')
+        if (c == '@' && next == '"')
+        {
+            sb[i] = ' ';
+            sb[i + 1] = ' ';
+            i++;
+            inString = true;
+            inVerbatimString = true;
+            quote = '"';
+            continue;
+        }
+
+        if (c == '"' || c == '\'')
         {
             quote = c;
             sb[i] = ' ';
@@ -7121,8 +7559,14 @@ static string SuggestTargetExpressionFromSelector(string selector, string fallba
 static string[] BuildPomIndexWarnings(IReadOnlyList<PomFact> facts, IReadOnlyList<PomUsageCandidate> inferred)
 {
     var warnings = new List<string>();
-    if (facts.Count == 0)
+    var seleniumFactCount = facts.Count(f => string.Equals(f.FactOrigin, "SeleniumPom", StringComparison.OrdinalIgnoreCase));
+    var targetPomFactCount = facts.Count(f => string.Equals(f.FactOrigin, "TargetPlaywrightPom", StringComparison.OrdinalIgnoreCase));
+
+    if (seleniumFactCount == 0 && targetPomFactCount > 0)
+        warnings.Add("No Selenium By selector facts were found, but target-side Playwright/Kontur POM facts were found. Treat them as target-side evidence/conventions, not automatic source mappings.");
+    else if (seleniumFactCount == 0)
         warnings.Add("No explicit Selenium By selector facts were found. Check input path: it may point only to tests without PageObjects.");
+
     if (inferred.Count > 0)
         warnings.Add($"{inferred.Count} inferred POM candidates were found without source-truth selectors. They require human/developer review before becoming adapter mappings.");
     return warnings.ToArray();
@@ -7131,11 +7575,20 @@ static string[] BuildPomIndexWarnings(IReadOnlyList<PomFact> facts, IReadOnlyLis
 static string WritePomIndexMarkdown(PomIndexReport index)
 {
     var sb = new System.Text.StringBuilder();
+    var seleniumFacts = index.Facts
+        .Where(f => string.Equals(f.FactOrigin, "SeleniumPom", StringComparison.OrdinalIgnoreCase))
+        .ToArray();
+    var targetPomFacts = index.Facts
+        .Where(f => string.Equals(f.FactOrigin, "TargetPlaywrightPom", StringComparison.OrdinalIgnoreCase))
+        .ToArray();
+
     sb.AppendLine("# POM index generated report");
     sb.AppendLine();
     sb.AppendLine($"Input: `{index.InputPath}`");
     sb.AppendLine($"Files scanned: {index.FilesScanned}");
     sb.AppendLine($"Facts found: {index.Facts.Length}");
+    sb.AppendLine($"Selenium source-truth facts: {seleniumFacts.Length}");
+    sb.AppendLine($"Target-side Playwright/Kontur POM facts: {targetPomFacts.Length}");
     sb.AppendLine($"Inferred candidates requiring review: {index.InferredCandidates.Length}");
     sb.AppendLine();
 
@@ -7147,13 +7600,15 @@ static string WritePomIndexMarkdown(PomIndexReport index)
         sb.AppendLine();
     }
 
-    sb.AppendLine("## Source-truth POM facts");
-    sb.AppendLine("| Source | Selector | Kind | File:Line | Confidence |");
-    sb.AppendLine("|---|---|---|---|---|");
-    foreach (var f in index.Facts.Take(200))
-        sb.AppendLine($"| `{f.SourceExpression}` | `{f.Selector}` | {f.TargetKindSuggestion} | `{f.SourceFile}:{f.SourceLine}` | {f.Confidence} |");
-    if (index.Facts.Length > 200)
-        sb.AppendLine($"| ... | ... | ... | ... | {index.Facts.Length - 200} more |");
+    sb.AppendLine("## Source-truth Selenium POM facts");
+    WritePomFactsTable(sb, seleniumFacts);
+    sb.AppendLine();
+
+    sb.AppendLine("## Target-side Playwright/Kontur POM facts");
+    sb.AppendLine();
+    sb.AppendLine("These facts describe selectors and conventions already present in the target POM. They are useful evidence, but they do not prove a source Selenium member maps to the same target member unless a name/usage/config review confirms that relation.");
+    sb.AppendLine();
+    WritePomFactsTable(sb, targetPomFacts);
     sb.AppendLine();
 
     sb.AppendLine("## Inferred candidates, not source truth");
@@ -7167,16 +7622,54 @@ static string WritePomIndexMarkdown(PomIndexReport index)
     return sb.ToString();
 }
 
+static void WritePomFactsTable(System.Text.StringBuilder sb, IReadOnlyList<PomFact> facts)
+{
+    sb.AppendLine("| Source | Selector | Selector kind | Suggested target | Origin | File:Line | Confidence | Review | Notes |");
+    sb.AppendLine("|---|---|---|---|---|---|---|---|---|");
+    foreach (var f in facts.Take(200))
+        sb.AppendLine($"| `{f.SourceExpression}` | `{EscapeMarkdownTableCell(f.Selector)}` | {f.SelectorKind} | `{f.TargetKindSuggestion}:{f.TargetExpressionSuggestion}` | {f.FactOrigin} | `{f.SourceFile}:{f.SourceLine}` | {f.Confidence} | {f.RequiresReview} | {EscapeMarkdownTableCell(f.Notes)} |");
+    if (facts.Count > 200)
+        sb.AppendLine($"| ... | ... | ... | ... | ... | ... | ... | ... | {facts.Count - 200} more |");
+}
+
+static string EscapeMarkdownTableCell(string value)
+{
+    return value.Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ");
+}
+
 static string WritePomAdapterDraft(PomIndexReport index)
 {
     var highConfidence = index.Facts
+        .Where(f => string.Equals(f.FactOrigin, "SeleniumPom", StringComparison.OrdinalIgnoreCase))
         .Where(f => !f.RequiresReview && !string.IsNullOrWhiteSpace(f.TargetExpressionSuggestion))
         .Select(f => new
         {
             f.SourceExpression,
             TargetExpression = f.TargetExpressionSuggestion,
             TargetKind = f.TargetKindSuggestion,
-            SourceTruth = $"{f.SourceFile}:{f.SourceLine}"
+            SourceTruth = $"{f.SourceFile}:{f.SourceLine}",
+            f.FactOrigin
+        })
+        .ToArray();
+
+    var targetPomEvidence = index.Facts
+        .Where(f => string.Equals(f.FactOrigin, "TargetPlaywrightPom", StringComparison.OrdinalIgnoreCase))
+        .Take(500)
+        .Select(f => new
+        {
+            f.SourceExpression,
+            f.OwnerType,
+            f.MemberName,
+            f.MemberKind,
+            f.Selector,
+            f.SelectorKind,
+            TargetExpression = f.TargetExpressionSuggestion,
+            TargetKind = f.TargetKindSuggestion,
+            SourceTruth = $"{f.SourceFile}:{f.SourceLine}",
+            f.Confidence,
+            f.RequiresReview,
+            f.FactOrigin,
+            f.Notes
         })
         .ToArray();
 
@@ -7191,14 +7684,16 @@ static string WritePomAdapterDraft(PomIndexReport index)
             c.ExampleFile,
             c.ExampleLine,
             c.RequiresSourceTruth,
+            FactOrigin = "InferredUsage",
             c.Notes
         })
         .ToArray();
 
     var draft = new
     {
-        Comment = "Review-only POM draft. Merge high-confidence UiTargets manually. InferredCandidates are NOT source truth and must not be auto-applied.",
+        Comment = "Review-only POM draft. Merge SeleniumPom high-confidence UiTargets manually. TargetPlaywrightPom facts are target-side evidence only and must not be auto-applied as source mappings.",
         UiTargets = highConfidence,
+        TargetPomEvidence = targetPomEvidence,
         InferredCandidates = reviewOnly
     };
     return System.Text.Json.JsonSerializer.Serialize(draft, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
@@ -10274,6 +10769,8 @@ static string? FindOptionValue(string[] args, string optionName)
     return null;
 }
 
+
+record PomMemberExpression(string Name, string Expression, int StartIndex, int ExpressionStartIndex, int Line, string Kind);
 
 sealed class NormalizedTodoGroupBuilder
 {

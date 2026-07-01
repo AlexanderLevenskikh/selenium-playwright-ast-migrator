@@ -44,7 +44,7 @@ Commands are grouped as stable public, experimental preview, and internal/mainta
 - `migrate` — generate Playwright target files.
 - `verify` / `verify-project` — check generated output and compile generated Playwright .NET tests.
 - `verify-ts-project` — experimental TypeScript project-aware type-checking.
-- `index-pom` — extract Selenium POM selector evidence.
+- `index-pom` — extract Selenium POM selector evidence plus target-side Playwright/Kontur POM facts.
 - `helper-inventory` — scan Selenium helper/POM method bodies and infer MethodSemantics candidates.
 - `explain-todo`, `smoke-plan`, `runtime-classify`, `selector-evidence`, `migration-board`, `report-serve` — prioritize follow-up work from migration artifacts/runtime logs, classify runtime root causes, score readiness, explain selector provenance, and export triage decisions.
 - `pr-pack` — create a PR/review bundle with before/after metrics, changed/generated files list, risk summary, reviewer checklist, evidence references, and suggested PR description.

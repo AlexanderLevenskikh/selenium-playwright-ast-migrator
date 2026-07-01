@@ -615,7 +615,7 @@ selenium-pw-migrator config author --input migration/run-001 --config ./adapter-
 
 `index-pom`
 
-Finds Selenium PageObject selectors and source-truth candidates.
+Finds Selenium PageObject selectors/source-truth candidates and target-side Playwright/Kontur POM evidence such as `ControlFactory.Create`, `GetByTestId`, and `Locator("[data-tid...]")`.
 
 ```bash
 selenium-pw-migrator --mode index-pom --input ./OldTests --out pom-index

@@ -116,7 +116,7 @@ For a file-by-file walkthrough, see:
 | `config-validate` | Stable | Validate profile structure and safety rules. |
 | `config-diff` | Stable | Compare profile changes and highlight risky edits. |
 | `guard` | Stable | Compare before/after migration metrics and catch regressions. |
-| `index-pom` | Stable | Mine Selenium PageObjects and selector evidence. |
+| `index-pom` | Stable | Mine Selenium PageObjects plus target-side Playwright/Kontur POM selector evidence. |
 | `selector-evidence` | Experimental | Explain Selenium selector → config mapping → generated locator provenance with confidence and unsafe/inferred flags. |
 | `agent-contract` | Experimental | Generate a ticket-specific agent contract pack with allowed paths, stop policy, exact commands, and coordinator/migrator/verifier prompts. |
 | `pr-pack` | Experimental | Create a PR/review bundle with PR summary, changed/generated files list, before/after metrics, risk summary, reviewer checklist, evidence references, and suggested PR description. |

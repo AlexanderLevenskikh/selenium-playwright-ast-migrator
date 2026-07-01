@@ -8,6 +8,7 @@ The format follows the spirit of Keep a Changelog, and this project uses preview
 
 ### Added
 
+- Target-side Playwright/Kontur POM indexing for `ControlFactory.Create`, `CreateElementsCollection`, `GetByTestId`, `Locator("[data-tid...]")`, and lower-confidence text locator evidence, with explicit `FactOrigin` metadata.
 - Teaching demo under `examples/teaching-demo/` with Selenium source, PageObject selector evidence, adapter config, expected Playwright output, and AST action map.
 - `docs/articles/ast-migration-explained.md` and Russian translation explaining the parser → action model → source truth → renderer workflow.
 - Public-release hygiene guardrails for NuGet package metadata and package contents.

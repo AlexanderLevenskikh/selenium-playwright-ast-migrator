@@ -146,8 +146,8 @@ sealed class ArtifactLookupException : Exception
 }
 
 record PomIndexReport(DateTimeOffset GeneratedAtUtc, string InputPath, int FilesScanned, PomFact[] Facts, PomUsageCandidate[] InferredCandidates, string[] Warnings);
-record PomFact(string SourceExpression, string OwnerType, string MemberName, string MemberKind, string Selector, string SelectorKind, string TargetKindSuggestion, string TargetExpressionSuggestion, string SourceFile, int SourceLine, string Confidence, bool RequiresReview, string Notes);
-record PomUsageCandidate(string SourceExpression, string SuggestedTargetExpression, string SuggestedTargetKind, int Usages, string ExampleFile, int ExampleLine, string Confidence, bool RequiresSourceTruth, string Notes);
+record PomFact(string SourceExpression, string OwnerType, string MemberName, string MemberKind, string Selector, string SelectorKind, string TargetKindSuggestion, string TargetExpressionSuggestion, string SourceFile, int SourceLine, string Confidence, bool RequiresReview, string FactOrigin, string Notes);
+record PomUsageCandidate(string SourceExpression, string SuggestedTargetExpression, string SuggestedTargetKind, int Usages, string ExampleFile, int ExampleLine, string Confidence, bool RequiresSourceTruth, string Notes, string FactOrigin = "InferredUsage");
 
 
 
