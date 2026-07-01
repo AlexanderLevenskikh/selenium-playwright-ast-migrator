@@ -117,10 +117,17 @@ public class ArchitectureDependencyTests
 
         var doc = XDocument.Load(projectPath);
         return doc.Descendants("ProjectReference")
+            .Where(IsCompileTimeProjectReference)
             .Select(e => e.Attribute("Include")?.Value)
             .Where(v => !string.IsNullOrWhiteSpace(v))
             .Select(v => NormalizeProjectReferenceName(v!))
             .ToArray();
+    }
+
+    static bool IsCompileTimeProjectReference(XElement projectReference)
+    {
+        var referenceOutputAssembly = projectReference.Attribute("ReferenceOutputAssembly")?.Value;
+        return !string.Equals(referenceOutputAssembly, "false", StringComparison.OrdinalIgnoreCase);
     }
 
     static string[] ReadPackageReferences(string root, string projectName)
