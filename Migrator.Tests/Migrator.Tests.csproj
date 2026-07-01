@@ -27,6 +27,7 @@
     <ProjectReference Include="..\Migrator.SeleniumCSharp\Migrator.SeleniumCSharp.csproj" />
     <ProjectReference Include="..\Migrator.PlaywrightDotNet\Migrator.PlaywrightDotNet.csproj" />
     <ProjectReference Include="..\Migrator.PlaywrightTypeScript\Migrator.PlaywrightTypeScript.csproj" />
+    <ProjectReference Include="..\Migrator.Cli\Migrator.Cli.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>

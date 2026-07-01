@@ -29,6 +29,7 @@ The format follows the spirit of Keep a Changelog, and this project uses preview
 
 ### Changed
 
+- Hardened CLI integration tests to execute the already-built `Migrator.Cli.dll`, drain stdout/stderr concurrently, and fail fast on timeouts instead of hanging CI pipelines.
 - Tightened public launch guardrails so stop-policy checklist references, selector-evidence warnings, quality guardrail IDs, and scaffold quick-start links stay visible in docs/reports.
 - Package-facing wording no longer describes the CLI as an internal-only tool.
 - README, README.ru, package README, and limitations now consistently label stable and experimental capabilities.

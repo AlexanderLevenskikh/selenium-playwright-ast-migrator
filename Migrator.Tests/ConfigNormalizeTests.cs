@@ -138,30 +138,7 @@ public class ConfigNormalizeTests
             $"Expected CLI exit code 0, got {result.ExitCode}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
     }
 
-    static CliResult RunCli(string arguments)
-    {
-        var repoRoot = GetRepoRoot();
-        if (repoRoot == null)
-            throw new InvalidOperationException("Could not find repo root (Migrator.sln not found)");
-
-        var cliProject = Path.Combine(repoRoot, "Migrator.Cli", "Migrator.Cli.csproj");
-        var psi = new ProcessStartInfo
-        {
-            FileName = "dotnet",
-            Arguments = $"run --project \"{cliProject}\" -- {arguments}",
-            WorkingDirectory = repoRoot,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        using var process = Process.Start(psi)!;
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        return new CliResult(process.ExitCode, stdout, stderr);
-    }
+    static CliResult RunCli(string arguments) => CliTestRunner.Run(arguments);
 
     static string? GetRepoRoot()
     {
@@ -197,6 +174,4 @@ public class ConfigNormalizeTests
             // Best-effort cleanup only.
         }
     }
-
-    sealed record CliResult(int ExitCode, string StdOut, string StdErr);
 }

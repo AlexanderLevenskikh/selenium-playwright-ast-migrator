@@ -500,30 +500,12 @@ public class OrchestratorTests
 
     static int RunOrchestratorCli(string inputPath, string outPath, string? configPath = null)
     {
-        var repoRoot = GetRepoRoot();
-        if (repoRoot == null)
-            throw new InvalidOperationException("Could not find repo root (Migrator.sln not found)");
-
-        var cliProject = Path.Combine(repoRoot, "Migrator.Cli", "Migrator.Cli.csproj");
-
-        var args = $"run --project \"{cliProject}\" -- --mode orchestrate --input \"{inputPath}\" --out \"{outPath}\" --format both";
+        var args = $"--mode orchestrate --input \"{inputPath}\" --out \"{outPath}\" --format both";
         if (configPath != null)
             args += $" --config \"{configPath}\"";
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = "dotnet",
-            Arguments = args,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            WorkingDirectory = repoRoot
-        };
-
-        using var proc = Process.Start(psi);
-        proc!.WaitForExit();
-        return proc.ExitCode;
+        var result = CliTestRunner.Run(args, TimeSpan.FromSeconds(120));
+        return result.ExitCode;
     }
 
     static OrchestrationReport CreateTestReport()
