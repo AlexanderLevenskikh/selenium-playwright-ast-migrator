@@ -39,6 +39,7 @@ public static class ProjectAdapterConfigMerger
 
         var sourceProjectName = LastNonEmpty(layers.Select(c => c.SourceProjectName)) ?? layers[0].SourceProjectName ?? "";
         var schemaVersion = LastNonEmpty(layers.Select(c => c.SchemaVersion)) ?? ProjectAdapterConfig.CurrentSchemaVersion;
+        var generationPolicy = GenerationPolicy.NormalizeOrDefault(LastNonEmpty(layers.Select(c => c.GenerationPolicy)));
 
         return new ProjectAdapterConfig(
             SourceProjectName: sourceProjectName,
@@ -63,7 +64,8 @@ public static class ProjectAdapterConfigMerger
             WaitPolicies: MergeBy(layers.SelectMany(c => c.WaitPolicies), WaitPolicyKey),
             SuppressedMethods: MergeStrings(layers.SelectMany(c => c.SuppressedMethods)),
             SuppressedMethodPatterns: MergeStrings(layers.SelectMany(c => c.SuppressedMethodPatterns)),
-            SchemaVersion: schemaVersion);
+            SchemaVersion: schemaVersion,
+            GenerationPolicy: generationPolicy);
     }
 
     static T[] MergeBy<T>(IEnumerable<T> items, Func<T, string?> keySelector)

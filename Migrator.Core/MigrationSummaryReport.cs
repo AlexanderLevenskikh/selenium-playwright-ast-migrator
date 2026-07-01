@@ -21,7 +21,8 @@ public record MigrationSummaryReport(
     IReadOnlyList<string> ProcessedFiles,
     IReadOnlyList<UnmappedTargetInfo> TopUnmappedTargets,
     IReadOnlyList<UnsupportedMethodInfo> TopUnsupportedActions,
-    IReadOnlyList<MigrationReport> PerFileReports
+    IReadOnlyList<MigrationReport> PerFileReports,
+    GenerationPolicyReport? GenerationPolicy = null
 );
 
 /// <summary>

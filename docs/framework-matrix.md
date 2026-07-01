@@ -88,3 +88,45 @@ When `Verification.DisableDefaultPackageReferences` is not `true`, `verify-proje
 | xUnit | `Microsoft.NET.Test.Sdk`, `Microsoft.Playwright.Xunit`, `xunit`, `xunit.runner.visualstudio` |
 
 Custom `Verification.PackageReferences` are still appended after defaults. Set `DisableDefaultPackageReferences` to `true` only when the target repository or verification harness supplies its own complete test framework package set.
+
+## Generated framework matrix reports
+
+Use `framework matrix` when you want project-specific framework evidence instead of the static support table:
+
+```bash
+selenium-pw-migrator framework matrix \
+  --input ./SeleniumTests \
+  --target dotnet \
+  --target-test-framework xunit \
+  --out migration/framework-matrix \
+  --format both
+```
+
+Mode form:
+
+```bash
+selenium-pw-migrator --mode framework-matrix \
+  --input ./SeleniumTests \
+  --target dotnet \
+  --target-test-framework nunit \
+  --out migration/framework-matrix \
+  --format both
+```
+
+Outputs:
+
+- `framework-matrix.md/json` — source/target framework matrix, selected row, readiness level, wizard guidance, and next actions.
+- `source-framework-detection.md/json` — explicit source framework detection reports for C# NUnit/xUnit/MSTest, Java JUnit 4/JUnit 5/TestNG, and Python pytest/unittest.
+- `source-capabilities-report.md/json` and `target-capabilities-report.md/json` — capability context written alongside the matrix.
+
+The command is read-only. It never edits source files, generated files, or adapter config. MSTest is intentionally reported as detected/unsupported for target output. Java and Python framework support is reported as experimental source detection with planned Java/Python target framework paths.
+
+## Framework expansion stance
+
+Framework expansion should stay evidence-driven:
+
+- C# NUnit/xUnit parity is production-hardening work: scaffold, renderer, verify-project, and public docs must stay aligned.
+- C# MSTest is a feasibility path until renderer attributes, lifecycle, assertions, scaffold, and verify-project fixtures exist.
+- Java JUnit 4/JUnit 5/TestNG detection is source-side only until Java target backends exist.
+- Python pytest/unittest detection is source-side only until Python target backends exist.
+- Wizard target framework selection must remain explicit for Playwright .NET: `nunit` or `xunit`.

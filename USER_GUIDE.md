@@ -702,3 +702,26 @@ Migrator should not modify your source Selenium tests.
 Migrator should not claim runtime success before the target environment, auth, data, and routes are configured.
 
 The best migration is not the one with the fewest TODOs. It is the one where every generated line is either correct, verified, or clearly marked for review.
+
+
+### Framework matrix report
+
+Generate a project-specific framework matrix and source framework detection report:
+
+```bash
+selenium-pw-migrator framework matrix --input ./OldTests --target dotnet --target-test-framework xunit --out framework-matrix --format both
+```
+
+This writes `framework-matrix.md/json` and `source-framework-detection.md/json`. It is read-only, flags MSTest as detected/unsupported, and keeps Java/Python target frameworks marked as planned until implemented.
+
+
+## Five-minute public playground
+
+Create a disposable demo workspace before touching a real project:
+
+```bash
+selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
+cat playground/try-this-first.md
+```
+
+The playground includes ready commands, expected outputs, dashboard sample, PR pack sample, and a manifest.

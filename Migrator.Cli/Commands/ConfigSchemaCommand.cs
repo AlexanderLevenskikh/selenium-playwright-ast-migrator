@@ -74,7 +74,8 @@ Use it in config/profile files:
 ```json
 {
   "$schema": "./schemas/adapter-config.schema.json",
-  "SchemaVersion": "adapter-config/v1"
+  "SchemaVersion": "adapter-config/v1",
+  "GenerationPolicy": "balanced"
 }
 ```
 
@@ -105,6 +106,7 @@ selenium-pw-migrator --mode config-validate --config adapter-config.json --out c
     "$schema": { "type": "string" },
     "SchemaVersion": { "type": "string", "const": "adapter-config/v1", "default": "adapter-config/v1" },
     "SourceProjectName": { "type": "string" },
+    "GenerationPolicy": { "type": "string", "enum": ["conservative", "balanced", "aggressive"], "default": "balanced" },
     "SourceOnlyIdentifiers": { "type": "array", "items": { "type": "string" } },
     "TargetKnownTypes": { "type": "array", "items": { "type": "string" } },
     "TargetKnownIdentifiers": { "type": "array", "items": { "type": "string" } },

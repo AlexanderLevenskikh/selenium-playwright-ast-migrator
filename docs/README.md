@@ -9,15 +9,17 @@ Public documentation is organized by the path a new user usually follows: instal
 - [Migration runbook](migration-runbook.md) — production migration plan, pilot scope, risks, and command chain.
 - [End-to-end simple example](examples/end-to-end-simple.md) — real input, config, command, and expected generated output from `examples/simple/`.
 - [Public demo and guided tutorial](public-demo-tutorial.md) — 10-minute NUnit/xUnit walkthrough with dashboard sample.
+- [Public Demo / Playground](public-playground.md) — one-command five-minute disposable demo workspace.
 - [Public demo files](../examples/public-demo/README.md) — copyable demo inputs, configs, generated outputs, and dashboard.
 - [Public launch demo](../examples/public-launch-demo/README.md) — older copyable launch demo with before/after output and report.
 - [Screenshot walkthrough](public-launch/walkthrough.md) — install → doctor → migrate → verify → inspect report.
 - [Tool installation](tool-installation.md) — install from a packed dotnet tool or run from source.
-- [Framework matrix](framework-matrix.md)
+- [Framework matrix](framework-matrix.md) — source/target framework support and generated detection reports
 - [Doctor fix mode](doctor-fix-mode.md) — safe repair planning and setup fixes.
 - [Report serve dashboard](report-serve-dashboard.md) — local triage dashboard, run comparison, decision export, and evidence zip workflow.
 - [Agent contract pack](agent-contract-pack.md) — ticket-specific allowed paths, stop policy, exact commands, and multi-agent prompts.
 - [Migration PR pack](migration-pr-pack.md) — PR summary, changed/generated files list, before/after metrics, risk summary, reviewer checklist, and suggested PR description.
+- [Migration learning pack](migration-learning-pack.md) — reusable migration knowledge, learning changelog, safety report, and reviewable profile layer.
 - [Profile marketplace](profile-marketplace.md) — offline built-in profile catalog, compatibility scoring, install, inspect, and diff workflow.
 - [Evidence pack workflow](evidence-pack.md) — shareable redacted zip with manifest and checksums.
 - [Troubleshooting](troubleshooting.md) — common setup, config, packaging, and verification problems.
@@ -95,3 +97,8 @@ The following folders are useful for maintainers and migration authors, but they
 - `docs/migrator-tickets/` — implementation ticket history and cross-language roadmap notes.
 - `docs/pilot/` — pilot migration evidence and experiment summaries.
 - `templates/` — bundled migration-kit, Codex, OpenCode, and loop-library templates.
+
+- [Config Authoring Assistant](config-authoring-assistant.md) — evidence-driven config proposals with config-diff integration.
+- [Migration learning pack](migration-learning-pack.md) — extract reusable mappings/helper/POM knowledge from completed runs.
+
+- [Generation Policy](generation-policy.md) — choose conservative, balanced, or aggressive generation risk behavior.

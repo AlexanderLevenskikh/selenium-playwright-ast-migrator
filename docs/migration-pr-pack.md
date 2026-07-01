@@ -24,7 +24,7 @@ selenium-pw-migrator --mode pr-pack \
 
 - `pr-summary.md` — human review overview with before/after metrics, changed/generated files list, risk summary, evidence pack link/manifest references, and suggested PR description.
 - `pr-pack.json` — machine-readable PR pack for agents, CI, dashboards, or issue automation.
-- `reviewer-checklist.md` — checklist for the reviewer.
+- `reviewer-checklist.md` — reviewer checklist for human review.
 - `suggested-pr-description.md` — copyable PR body.
 
 ## Inputs used when present

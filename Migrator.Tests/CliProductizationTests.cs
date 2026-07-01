@@ -63,6 +63,8 @@ public class CliProductizationTests
             "smoke-plan",
             "runtime-classify",
             "selector-evidence",
+            "config-author",
+            "learn-pack",
             "migration-board",
             "report-serve",
             "pr-pack",
@@ -102,11 +104,14 @@ public class CliProductizationTests
         Assert.Contains("Use `selenium-pw-migrator --mode <mode> --help`", catalog);
         Assert.Contains("selenium-pw-migrator init --wizard --source-path ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator runbook --input ./OldTests", catalog);
+        Assert.Contains("selenium-pw-migrator playground --out playground", catalog);
         Assert.Contains("selenium-pw-migrator --mode migrate --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator --mode doctor --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator report serve --input migration/runs/latest --port 5077", catalog);
         Assert.Contains("selenium-pw-migrator pr pack --input migration/runs/run-042", catalog);
         Assert.Contains("selenium-pw-migrator selector evidence --input migration/runs/latest", catalog);
+        Assert.Contains("selenium-pw-migrator config author --input migration/runs/latest", catalog);
+        Assert.Contains("selenium-pw-migrator learn pack --input migration/runs/latest", catalog);
         Assert.Contains("selenium-pw-migrator profile list", catalog);
         Assert.Contains("selenium-pw-migrator profile inspect basic-csharp-xunit", catalog);
         Assert.Contains("selenium-pw-migrator profile install basic-csharp-nunit", catalog);

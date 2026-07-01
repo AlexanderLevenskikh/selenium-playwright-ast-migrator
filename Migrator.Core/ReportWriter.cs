@@ -27,6 +27,11 @@ public static class ReportWriter
         sb.AppendLine();
         sb.AppendLine("Files with warnings: " + report.FilesWithWarnings);
         sb.AppendLine("Generated files: " + report.GeneratedFiles);
+        if (report.GenerationPolicy != null)
+        {
+            sb.AppendLine("Generation policy: " + report.GenerationPolicy.Policy);
+            sb.AppendLine("Generation policy details: " + report.GenerationPolicy.Description);
+        }
         sb.AppendLine();
 
         if (report.TopUnmappedTargets.Count > 0)
@@ -69,6 +74,7 @@ public static class ReportWriter
             TodoComments = report.TodoComments,
             FilesWithWarnings = report.FilesWithWarnings,
             GeneratedFiles = report.GeneratedFiles,
+            GenerationPolicy = report.GenerationPolicy,
             ProcessedFiles = PathRedaction.RedactAll(report.ProcessedFiles).ToArray(),
             TopUnmappedTargets = report.TopUnmappedTargets.Select(t => new
             {

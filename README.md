@@ -75,6 +75,14 @@ migration/run-001/
   orchestration-report.json
 ```
 
+
+Try the five-minute playground:
+
+```bash
+selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
+cat playground/try-this-first.md
+```
+
 For a file-by-file walkthrough, see:
 
 - [Quick start](docs/quick-start.md)
@@ -82,6 +90,7 @@ For a file-by-file walkthrough, see:
 - [Migration runbook](docs/migration-runbook.md)
 - [End-to-end simple example](docs/examples/end-to-end-simple.md)
 - [Public demo and guided tutorial](docs/public-demo-tutorial.md)
+- [Public Demo / Playground](docs/public-playground.md)
 - [Public demo files](examples/public-demo/README.md)
 - [Public launch demo](examples/public-launch-demo/README.md)
 - [Screenshot walkthrough](docs/public-launch/walkthrough.md)
@@ -93,6 +102,7 @@ For a file-by-file walkthrough, see:
 | Mode | Status | Purpose |
 |---|---|---|
 | `runbook` | Stable | Generate a practical migration plan with pilot scope, command chain, risk map, artifacts, and acceptance checklist. |
+| `playground` | Stable | Create a five-minute public demo workspace with ready commands, expected outputs, dashboard sample, and PR pack sample. |
 | `doctor` | Stable | Preflight checks plus safe `--fix` repair plans for inputs, config layers, project files, and workspace hygiene. |
 | `analyze` | Stable | Parse Selenium files and produce reports without generating target files. |
 | `migrate` | Stable | Generate Playwright target files. |
@@ -139,7 +149,7 @@ If Selenium POMs contain proven selectors such as `ByTId("value")`, `CreateContr
 - [Quick start](docs/quick-start.md)
 - [Init wizard](docs/init-wizard.md)
 - [Migration runbook](docs/migration-runbook.md)
-- [Framework matrix](docs/framework-matrix.md)
+- [Framework matrix](docs/framework-matrix.md) — static support table plus `framework matrix` generated readiness reports
 - [Doctor fix mode](docs/doctor-fix-mode.md)
 - [Report serve dashboard](docs/report-serve-dashboard.md)
 - [Profile marketplace](docs/profile-marketplace.md)
@@ -169,3 +179,23 @@ The test suite covers parser behavior, adapter mappings, snapshots, compile-smok
 ## Public release status
 
 This project is currently prepared as a public preview. Stable commands are intended for external users; experimental commands may change between preview releases. See [CHANGELOG.md](CHANGELOG.md), [SECURITY.md](SECURITY.md), and [CONTRIBUTING.md](CONTRIBUTING.md).
+
+
+### Migration Learning Pack
+
+`learn pack` extracts reusable migration knowledge from a completed run and writes `learn-pack.md/json`, `learn-changelog.md`, `learning-safety-report.md`, and `reusable-profile-layer.json`. It is read-only: no source/config/generated files are edited, and suppressions/source-only identifiers are not exported.
+
+```bash
+selenium-pw-migrator learn pack --input migration/runs/latest --config ./adapter-config.json --out learn-pack --format both
+```
+
+See [Migration learning pack](docs/migration-learning-pack.md).
+
+### Config Authoring Assistant
+
+`config author` writes `config-proposals.md/json` and `config-proposals.patch` from selector-evidence, helper-inventory, index-pom, discover-target and explain-todo artifacts. It is read-only and integrates with `config-diff`/`config-validate`.
+
+
+### Generation Policy
+
+Use `--generation-policy conservative|balanced|aggressive` to control mapped-helper generation risk. Conservative produces more review/TODO output, balanced keeps current behavior, and aggressive emits more explicit mapped helper code with report risk annotations. See `docs/generation-policy.md`.

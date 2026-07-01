@@ -31,6 +31,7 @@ public static class ConfigValidator
         var errors = new List<string>();
 
         ValidateSchemaVersion(config.SchemaVersion, errors);
+        ValidateGenerationPolicy(config.GenerationPolicy, errors);
         ValidateUiTargets(config.UiTargets, "UiTargets", errors);
         ValidateMethods(config.Methods, "Methods", errors);
         ValidateParameterizedMethods(config.ParameterizedMethods, "ParameterizedMethods", errors);
@@ -58,6 +59,15 @@ public static class ConfigValidator
 
         if (!string.Equals(schemaVersion, ProjectAdapterConfig.CurrentSchemaVersion, StringComparison.OrdinalIgnoreCase))
             errors.Add($"Unsupported adapter config SchemaVersion '{schemaVersion}'. Supported version: {ProjectAdapterConfig.CurrentSchemaVersion}.");
+    }
+
+    static void ValidateGenerationPolicy(string? generationPolicy, List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(generationPolicy))
+            return;
+
+        if (GenerationPolicy.Normalize(generationPolicy) == null)
+            errors.Add($"GenerationPolicy has unsupported value '{generationPolicy}'. Use: conservative|balanced|aggressive.");
     }
 
     /// <summary>

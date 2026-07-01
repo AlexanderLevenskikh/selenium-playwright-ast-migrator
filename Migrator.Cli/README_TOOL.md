@@ -90,3 +90,32 @@ selenium-pw-migrator pr pack --input migration/runs/latest --config ./adapter-co
 ```
 
 Writes `pr-summary.md`, `pr-pack.json`, `reviewer-checklist.md`, and `suggested-pr-description.md`.
+
+- `config author` / `--mode config-author` — propose small evidence-driven config changes and config-diff commands without applying them.
+- `learn pack` / `--mode learn-pack` — extract reusable migration knowledge into a learning pack and reviewable profile layer.
+
+
+### Generation Policy
+
+Use `--generation-policy conservative|balanced|aggressive` to control mapped-helper generation risk. Conservative produces more review/TODO output, balanced keeps current behavior, and aggressive emits more explicit mapped helper code with report risk annotations. See `docs/generation-policy.md`.
+
+
+### Framework matrix report
+
+Generate a project-specific framework matrix and source framework detection report:
+
+```bash
+selenium-pw-migrator framework matrix --input ./OldTests --target dotnet --target-test-framework xunit --out framework-matrix --format both
+```
+
+This writes `framework-matrix.md/json` and `source-framework-detection.md/json`. It is read-only, flags MSTest as detected/unsupported, and keeps Java/Python target frameworks marked as planned until implemented.
+
+
+## Five-minute playground
+
+```bash
+selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
+cat playground/try-this-first.md
+```
+
+The playground creates a disposable public demo workspace with ready commands, expected outputs, dashboard sample, and PR pack sample. It is read-only with respect to real projects.

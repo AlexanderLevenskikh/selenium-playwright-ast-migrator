@@ -20,6 +20,12 @@
       "type": "string",
       "description": "Human-readable project/profile name."
     },
+    "GenerationPolicy": {
+      "type": "string",
+      "enum": ["conservative", "balanced", "aggressive"],
+      "default": "balanced",
+      "description": "Controls mapped-helper generation risk. Conservative produces more review/TODO output, balanced preserves current behavior, aggressive emits more explicit mapped helper code with report risk annotations. Selectors are never invented."
+    },
     "SourceOnlyIdentifiers": {
       "type": "array",
       "items": {

@@ -60,6 +60,7 @@ string irVersion = opts.IrVersion;
 string renderIr = opts.RenderIr;
 string validationMode = opts.ValidationMode;
 string? targetTestFramework = opts.TargetTestFramework;
+string generationPolicy = GenerationPolicy.NormalizeOrDefault(opts.GenerationPolicy);
 
 // Agent-safety modes operate on config/report artifacts and do not process source files.
 if (mode == "config-validate")
@@ -134,6 +135,8 @@ if (configPaths.Length > 0)
         loadedConfig = ProjectAdapterConfigMerger.LoadAndMerge(configPaths);
         if (!string.IsNullOrWhiteSpace(targetTestFramework))
             loadedConfig = ApplyTargetTestFrameworkOverride(loadedConfig, targetTestFramework);
+        loadedConfig = GenerationPolicy.Apply(loadedConfig, opts.GenerationPolicy);
+        generationPolicy = GenerationPolicy.NormalizeOrDefault(loadedConfig.GenerationPolicy);
         adapter = new DefaultProjectAdapter(loadedConfig);
     }
     catch (ConfigValidationError cvex)
@@ -149,9 +152,13 @@ if (configPaths.Length > 0)
         : $"Loaded adapter config layers: {string.Join(" -> ", configPaths)}");
 }
 
-if (configPaths.Length == 0 && !string.IsNullOrWhiteSpace(targetTestFramework))
+if (configPaths.Length == 0 && (!string.IsNullOrWhiteSpace(targetTestFramework) || !string.IsNullOrWhiteSpace(opts.GenerationPolicy)))
 {
-    loadedConfig = ApplyTargetTestFrameworkOverride(new ProjectAdapterConfig(), targetTestFramework);
+    loadedConfig = new ProjectAdapterConfig();
+    if (!string.IsNullOrWhiteSpace(targetTestFramework))
+        loadedConfig = ApplyTargetTestFrameworkOverride(loadedConfig, targetTestFramework);
+    loadedConfig = GenerationPolicy.Apply(loadedConfig, opts.GenerationPolicy);
+    generationPolicy = GenerationPolicy.NormalizeOrDefault(loadedConfig.GenerationPolicy);
     adapter = new DefaultProjectAdapter(loadedConfig);
 }
 
@@ -215,8 +222,22 @@ if (mode == "config-normalize")
 
 if (mode == "runbook")
 {
-    var runbookExitCode = RunbookCommand.RunRunbook(inputPath, outPath, format, configPaths, loadedConfig, sourceDetection, sourceFrontend, targetBackend, targetTestFramework);
+    var runbookExitCode = RunbookCommand.RunRunbook(inputPath, outPath, format, configPaths, loadedConfig, sourceDetection, sourceFrontend, targetBackend, targetTestFramework, generationPolicy);
     return runbookExitCode;
+}
+
+// Handle framework matrix mode — writes explicit source/target framework readiness and detection reports.
+if (mode == "framework-matrix")
+{
+    var frameworkMatrixExitCode = FrameworkMatrixCommand.RunFrameworkMatrix(inputPath, outPath, format, targetTestFramework, sourceDetection, sourceFrontend, targetBackend);
+    return frameworkMatrixExitCode;
+}
+
+// Handle playground mode — writes a five-minute public demo workspace.
+if (mode == "playground")
+{
+    var playgroundExitCode = PublicPlaygroundCommand.RunPlayground(outPath, format, targetTestFramework ?? "nunit", generationPolicy);
+    return playgroundExitCode;
 }
 
 ITestFileParser parser;
@@ -297,6 +318,20 @@ if (mode == "selector-evidence")
 {
     var selectorEvidenceExitCode = SelectorEvidenceCommand.RunSelectorEvidence(inputPath, outPath, format, loadedConfig);
     return selectorEvidenceExitCode;
+}
+
+// Handle config authoring mode — proposes small evidence-driven config changes without applying them.
+if (mode == "config-author")
+{
+    var configAuthorExitCode = ConfigAuthoringCommand.RunConfigAuthoring(inputPath, outPath, format, loadedConfig, configPaths);
+    return configAuthorExitCode;
+}
+
+// Handle learn pack mode — extracts reusable migration knowledge into a reviewable profile layer.
+if (mode == "learn-pack")
+{
+    var learnPackExitCode = LearnPackCommand.RunLearnPack(inputPath, outPath, format, loadedConfig, configPaths);
+    return learnPackExitCode;
 }
 
 // Handle config-schema mode — writes/copies adapter-config JSON Schema for editors and agents.
@@ -433,7 +468,10 @@ catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
 }
 
 var resultsList = results.ToList();
-var summary = BuildSummary(resultsList, out var allUnmapped);
+var summary = BuildSummary(resultsList, out var allUnmapped) with
+{
+    GenerationPolicy = new GenerationPolicyReport(generationPolicy, GenerationPolicy.Description(generationPolicy), GenerationPolicy.RiskAnnotations(generationPolicy))
+};
 
 switch (mode)
 {
@@ -859,7 +897,7 @@ static bool ShouldAutoDetectSource(string mode, string source, bool sourceExplic
     if (string.IsNullOrWhiteSpace(inputPath) || (!File.Exists(inputPath) && !Directory.Exists(inputPath)))
         return false;
 
-    return mode is "analyze" or "dump-ir" or "migrate" or "verify" or "verify-project" or "doctor" or "runbook" or "selector-evidence" or "orchestrate";
+    return mode is "analyze" or "dump-ir" or "migrate" or "verify" or "verify-project" or "doctor" or "runbook" or "framework-matrix" or "selector-evidence" or "orchestrate";
 }
 
 static void WriteSourceDetectionReport(SourceDetectionReport report, string outPath, string format, string selectedSource, bool explicitSource)
@@ -936,7 +974,7 @@ static string BuildSourceDetectionMarkdown(SourceDetectionReport report, string 
 }
 
 static bool ShouldWriteSourceCapabilityReport(string mode) =>
-    mode is "analyze" or "dump-ir" or "migrate" or "verify" or "verify-project" or "doctor" or "selector-evidence" or "orchestrate" or "config-normalize";
+    mode is "analyze" or "dump-ir" or "migrate" or "verify" or "verify-project" or "doctor" or "framework-matrix" or "selector-evidence" or "orchestrate" or "config-normalize";
 
 static void WriteSourceCapabilityReport(SourceCapabilityReport report, string outPath, string format)
 {
@@ -1019,7 +1057,7 @@ static string BuildSourceCapabilityMarkdown(SourceCapabilityReport report)
 
 
 static bool ShouldWriteTargetCapabilityReport(string mode) =>
-    mode is "analyze" or "dump-ir" or "migrate" or "verify" or "verify-project" or "doctor" or "selector-evidence" or "orchestrate" or "config-normalize";
+    mode is "analyze" or "dump-ir" or "migrate" or "verify" or "verify-project" or "doctor" or "framework-matrix" or "selector-evidence" or "orchestrate" or "config-normalize";
 
 static void WriteTargetCapabilityReport(TargetCapabilityReport report, string outPath, string format)
 {
@@ -1262,6 +1300,7 @@ static ProjectAdapterConfig ApplyTargetTestFrameworkOverride(ProjectAdapterConfi
     {
         SchemaVersion = config.SchemaVersion,
         SourceProjectName = config.SourceProjectName,
+        GenerationPolicy = config.GenerationPolicy,
         UiTargets = config.UiTargets,
         PageObjects = config.PageObjects,
         Methods = config.Methods,
@@ -9566,6 +9605,7 @@ static CliOptions? ParseArgs(string[] args)
     string renderIr = "legacy";
     string validationMode = "warn";
     string? targetTestFramework = null;
+    string? generationPolicy = null;
     bool wizard = false;
     bool? installAgentKit = null;
     bool? targetProjectExists = null;
@@ -9669,6 +9709,15 @@ static CliOptions? ParseArgs(string[] args)
                 else
                 {
                     Console.Error.WriteLine("--target-test-framework requires a value: nunit|xunit");
+                    return null;
+                }
+                break;
+            case "--generation-policy":
+                if (i + 1 < args.Length)
+                    generationPolicy = args[++i];
+                else
+                {
+                    Console.Error.WriteLine("--generation-policy requires a value: conservative|balanced|aggressive");
                     return null;
                 }
                 break;
@@ -9919,6 +9968,13 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
+    generationPolicy = GenerationPolicy.Normalize(generationPolicy);
+    if (generationPolicy == null && args.Any(arg => string.Equals(arg, "--generation-policy", StringComparison.OrdinalIgnoreCase)))
+    {
+        Console.Error.WriteLine("Invalid --generation-policy. Use: conservative|balanced|aggressive");
+        return null;
+    }
+
     if (!string.Equals(source, "auto", StringComparison.OrdinalIgnoreCase))
     {
         try
@@ -10000,7 +10056,7 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
-    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, source, sourceExplicit, tsProject, recursiveArtifacts, irVersion, renderIr, validationMode, targetTestFramework, wizard, installAgentKit, targetProjectExists, targetProjectPath, defaultTestIdAttribute, targetNamespace, targetBaseClass, fix, apply, dryRun, port, staticOnly, includeSourceFiles);
+    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, source, sourceExplicit, tsProject, recursiveArtifacts, irVersion, renderIr, validationMode, targetTestFramework, generationPolicy, wizard, installAgentKit, targetProjectExists, targetProjectPath, defaultTestIdAttribute, targetNamespace, targetBaseClass, fix, apply, dryRun, port, staticOnly, includeSourceFiles);
 }
 
 static string[] NormalizeDirectCommand(string[] args)
@@ -10014,11 +10070,35 @@ static string[] NormalizeDirectCommand(string[] args)
     if (string.Equals(args[0], "runbook", StringComparison.OrdinalIgnoreCase))
         return new[] { "--mode", "runbook" }.Concat(args.Skip(1)).ToArray();
 
+    if (string.Equals(args[0], "framework", StringComparison.OrdinalIgnoreCase)
+        && args.Length > 1
+        && string.Equals(args[1], "matrix", StringComparison.OrdinalIgnoreCase))
+    {
+        return new[] { "--mode", "framework-matrix" }.Concat(args.Skip(2)).ToArray();
+    }
+
+    if (string.Equals(args[0], "playground", StringComparison.OrdinalIgnoreCase))
+        return new[] { "--mode", "playground" }.Concat(args.Skip(1)).ToArray();
+
     if (string.Equals(args[0], "selector", StringComparison.OrdinalIgnoreCase)
         && args.Length > 1
         && string.Equals(args[1], "evidence", StringComparison.OrdinalIgnoreCase))
     {
         return new[] { "--mode", "selector-evidence" }.Concat(args.Skip(2)).ToArray();
+    }
+
+    if (string.Equals(args[0], "config", StringComparison.OrdinalIgnoreCase)
+        && args.Length > 1
+        && string.Equals(args[1], "author", StringComparison.OrdinalIgnoreCase))
+    {
+        return new[] { "--mode", "config-author" }.Concat(args.Skip(2)).ToArray();
+    }
+
+    if (string.Equals(args[0], "learn", StringComparison.OrdinalIgnoreCase)
+        && args.Length > 1
+        && string.Equals(args[1], "pack", StringComparison.OrdinalIgnoreCase))
+    {
+        return new[] { "--mode", "learn-pack" }.Concat(args.Skip(2)).ToArray();
     }
 
     if (string.Equals(args[0], "report", StringComparison.OrdinalIgnoreCase)

@@ -75,12 +75,20 @@ migration/run-001/
   orchestration-report.json
 ```
 
+Быстрый пяти минутный playground:
+
+```bash
+selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
+cat playground/try-this-first.md
+```
+
 Пошагово:
 
 - [Quick start](docs/quick-start.md)
 - [Migration runbook](docs/migration-runbook.md)
 - [End-to-end simple example](docs/examples/end-to-end-simple.md)
 - [Public demo and guided tutorial](docs/public-demo-tutorial.md)
+- [Public Demo / Playground](docs/public-playground.md)
 - [Public demo files](examples/public-demo/README.md)
 - [Public launch demo](examples/public-launch-demo/README.md)
 - [Screenshot walkthrough](docs/public-launch/walkthrough.md)
@@ -91,6 +99,7 @@ migration/run-001/
 
 | Mode | Статус | Назначение |
 |---|---|---|
+| `playground` | Stable | Создать пяти минутный публичный demo workspace с готовыми командами, ожидаемыми outputs, dashboard sample и PR pack sample. |
 | `runbook` | Stable | Практический план миграции: pilot scope, command chain, risk map, artifacts и acceptance checklist. |
 | `doctor` | Stable | Preflight checks и безопасные `--fix` repair plans для input, config layers, project files и workspace hygiene. |
 | `analyze` | Stable | Парсинг Selenium-файлов и отчёты без генерации target files. |
@@ -159,3 +168,33 @@ dotnet test --no-restore
 Проект готовится как public preview. Stable commands рассчитаны на внешних пользователей; experimental commands могут меняться между preview-релизами. См. [CHANGELOG.md](CHANGELOG.md), [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md).
 
 - [Migration PR pack](docs/migration-pr-pack.md) — PR summary, changed/generated files list, before/after metrics, risk summary, reviewer checklist и suggested PR description.
+
+
+### Migration Learning Pack
+
+`learn pack` извлекает reusable knowledge из завершённого run-а и пишет `learn-pack.md/json`, `learn-changelog.md`, `learning-safety-report.md` и `reusable-profile-layer.json`. Команда read-only: не меняет source/config/generated файлы и не экспортирует suppressions/source-only identifiers.
+
+```bash
+selenium-pw-migrator learn pack --input migration/runs/latest --config ./adapter-config.json --out learn-pack --format both
+```
+
+Подробнее: [Migration learning pack](docs/migration-learning-pack.md).
+
+### Config Authoring Assistant
+
+`config author` генерирует `config-proposals.md/json` и `config-proposals.patch` на основе selector-evidence, helper-inventory, index-pom, discover-target и explain-todo. Команда read-only: она не меняет исходники, generated output или adapter-config.
+
+
+### Generation Policy
+
+Use `--generation-policy conservative|balanced|aggressive` to control mapped-helper generation risk. Conservative produces more review/TODO output, balanced keeps current behavior, and aggressive emits more explicit mapped helper code with report risk annotations. See `docs/generation-policy.md`.
+
+### Framework Matrix Expansion
+
+`framework matrix` генерирует project-specific `framework-matrix.md/json` и `source-framework-detection.md/json`: C# NUnit/xUnit/MSTest, Java JUnit4/JUnit5/TestNG, Python pytest/unittest, target readiness и wizard guidance. Команда read-only и явно помечает MSTest как detected/unsupported, а Java/Python target frameworks как planned.
+
+```bash
+selenium-pw-migrator framework matrix --input ./OldTests --target dotnet --target-test-framework xunit --out framework-matrix --format both
+```
+
+Подробнее: [Framework matrix](docs/framework-matrix.md).

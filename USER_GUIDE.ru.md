@@ -702,3 +702,26 @@ Migrator не должен менять исходные Selenium tests.
 Migrator не должен обещать runtime success, пока не настроены target environment, auth, data и routes.
 
 Лучшая миграция - не та, где меньше всего TODO любой ценой. Лучшая миграция - та, где каждая сгенерированная строка либо корректна, либо проверена, либо честно помечена для review.
+
+
+### Framework matrix report
+
+Generate a project-specific framework matrix and source framework detection report:
+
+```bash
+selenium-pw-migrator framework matrix --input ./OldTests --target dotnet --target-test-framework xunit --out framework-matrix --format both
+```
+
+This writes `framework-matrix.md/json` and `source-framework-detection.md/json`. It is read-only, flags MSTest as detected/unsupported, and keeps Java/Python target frameworks marked as planned until implemented.
+
+
+## Пяти минутный public playground
+
+Перед настоящим проектом можно создать одноразовый demo workspace:
+
+```bash
+selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
+cat playground/try-this-first.md
+```
+
+Playground содержит готовые команды, ожидаемые outputs, dashboard sample, PR pack sample и manifest.

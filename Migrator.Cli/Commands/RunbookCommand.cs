@@ -35,7 +35,8 @@ internal static class RunbookCommand
         SourceDetectionReport? sourceDetection,
         ISourceFrontend sourceFrontend,
         ITargetBackend targetBackend,
-        string? targetTestFramework)
+        string? targetTestFramework,
+        string? generationPolicy = null)
     {
         if (!File.Exists(inputPath) && !Directory.Exists(inputPath))
         {
@@ -44,7 +45,7 @@ internal static class RunbookCommand
         }
 
         Directory.CreateDirectory(outPath);
-        var report = BuildRunbook(inputPath, configPaths, config, sourceDetection, sourceFrontend, targetBackend, targetTestFramework);
+        var report = BuildRunbook(inputPath, configPaths, config, sourceDetection, sourceFrontend, targetBackend, targetTestFramework, generationPolicy);
         WriteRunbook(report, outPath, format);
 
         Console.WriteLine("=== Migration Runbook ===");
@@ -64,7 +65,8 @@ internal static class RunbookCommand
         SourceDetectionReport? sourceDetection,
         ISourceFrontend sourceFrontend,
         ITargetBackend targetBackend,
-        string? targetTestFramework)
+        string? targetTestFramework,
+        string? generationPolicy = null)
     {
         var fullInput = Path.GetFullPath(inputPath);
         var detection = sourceDetection ?? SourceAutoDetector.Detect(fullInput);
@@ -72,6 +74,7 @@ internal static class RunbookCommand
         var fileFacts = files.Select(file => BuildFileFacts(fullInput, file)).ToArray();
         var sourceFramework = InferSourceFramework(fileFacts, sourceFrontend.Source.Framework);
         var resolvedTargetFramework = ResolveTargetTestFramework(config, targetTestFramework, targetBackend.Target);
+        var resolvedGenerationPolicy = GenerationPolicy.NormalizeOrDefault(generationPolicy ?? config?.GenerationPolicy);
 
         var projectSummary = new RunbookProjectSummary(
             FilesScanned: files.Length,
@@ -87,7 +90,7 @@ internal static class RunbookCommand
 
         var pilot = BuildPilotCandidates(fullInput, fileFacts).ToArray();
         var risks = BuildRiskMap(detection, sourceFrontend, targetBackend, configPaths, config, projectSummary, fileFacts).ToArray();
-        var commands = BuildFirstCommandChain(fullInput, configPaths, targetBackend.Target, resolvedTargetFramework, pilot).ToArray();
+        var commands = BuildFirstCommandChain(fullInput, configPaths, targetBackend.Target, resolvedTargetFramework, resolvedGenerationPolicy, pilot).ToArray();
         var artifacts = BuildArtifactsToCollect().ToArray();
         var checklist = BuildAcceptanceChecklist(targetBackend.Target, resolvedTargetFramework).ToArray();
         var nextActions = BuildRecommendedNextActions(configPaths, pilot, risks).ToArray();
@@ -103,6 +106,7 @@ internal static class RunbookCommand
             TargetLanguage: targetBackend.Target.Language,
             TargetFramework: targetBackend.Target.Framework,
             TargetTestFramework: resolvedTargetFramework,
+            GenerationPolicy: new GenerationPolicyReport(resolvedGenerationPolicy, GenerationPolicy.Description(resolvedGenerationPolicy), GenerationPolicy.RiskAnnotations(resolvedGenerationPolicy)),
             ConfigLayers: configPaths.Select(Path.GetFullPath).Select(PathRedaction.Redact).ToArray(),
             ProjectSummary: projectSummary,
             RecommendedPilotScope: pilot,
@@ -303,7 +307,7 @@ internal static class RunbookCommand
         }
     }
 
-    static IEnumerable<RunbookCommandStep> BuildFirstCommandChain(string inputPath, string[] configPaths, TargetSpec target, string targetTestFramework, IReadOnlyList<RunbookPilotCandidate> pilot)
+    static IEnumerable<RunbookCommandStep> BuildFirstCommandChain(string inputPath, string[] configPaths, TargetSpec target, string targetTestFramework, string generationPolicy, IReadOnlyList<RunbookPilotCandidate> pilot)
     {
         var configArg = configPaths.Length > 0
             ? string.Join(" ", configPaths.Select(path => $"--config {Quote(path)}"))
@@ -318,7 +322,7 @@ internal static class RunbookCommand
         yield return new RunbookCommandStep(1, "doctor", $"selenium-pw-migrator --mode doctor --input {input} {configArg} --out runbook-doctor --format both", "Validate input/config/workspace before generating code.");
         yield return new RunbookCommandStep(2, "index-pom", $"selenium-pw-migrator --mode index-pom --input {input} --out runbook-pom-index --format both", "Collect selector/POM evidence before mapping locators.");
         yield return new RunbookCommandStep(3, "helper-inventory", $"selenium-pw-migrator --mode helper-inventory --input {input} --out runbook-helper-inventory --format both", "Identify helper semantics before suppressing or mapping wrappers.");
-        yield return new RunbookCommandStep(4, "migrate-pilot", $"selenium-pw-migrator --mode migrate --input {pilotPath} {configArg} --target {targetAlias} --target-test-framework {targetTestFramework} --out runs/run-001-pilot --format both", "Generate a tiny first slice rather than the whole suite.");
+        yield return new RunbookCommandStep(4, "migrate-pilot", $"selenium-pw-migrator --mode migrate --input {pilotPath} {configArg} --target {targetAlias} --target-test-framework {targetTestFramework} --generation-policy {generationPolicy} --out runs/run-001-pilot --format both", "Generate a tiny first slice rather than the whole suite with the selected generation policy.");
         yield return new RunbookCommandStep(5, "verify-pilot", $"selenium-pw-migrator --mode verify --input runs/run-001-pilot {configArg} --out runs/run-001-pilot/verify --format both", "Check TODO/syntax quality gates before runtime work.");
         yield return new RunbookCommandStep(6, "selector-evidence", $"selenium-pw-migrator selector evidence --input runs/run-001-pilot {configArg} --out runs/run-001-pilot/selector-evidence --format both", "Prove generated locators against Selenium POM/source and config evidence.");
         yield return new RunbookCommandStep(7, "report-dashboard", "selenium-pw-migrator report serve --input migration/runs/run-001-pilot --static-only --out report-dashboard", "Create a shareable triage dashboard.");
@@ -384,6 +388,15 @@ internal static class RunbookCommand
         sb.AppendLine($"Input: `{report.InputPath}`");
         sb.AppendLine($"Source: `{report.SourceFrontend}` / `{report.SourceFramework}` / confidence `{report.SourceConfidence}`");
         sb.AppendLine($"Target: `{report.TargetBackend}` / `{report.TargetTestFramework}`");
+        sb.AppendLine($"Generation policy: `{report.GenerationPolicy.Policy}` — {report.GenerationPolicy.Description}");
+        sb.AppendLine();
+
+        sb.AppendLine("## Generation policy");
+        sb.AppendLine();
+        sb.AppendLine($"Policy: `{report.GenerationPolicy.Policy}`");
+        sb.AppendLine();
+        foreach (var annotation in report.GenerationPolicy.RiskAnnotations)
+            sb.AppendLine($"- {annotation}");
         sb.AppendLine();
 
         sb.AppendLine("## Project summary");

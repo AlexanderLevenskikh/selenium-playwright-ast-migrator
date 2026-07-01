@@ -19,6 +19,15 @@ public sealed class ProjectAdapterConfig
     public string SchemaVersion { get; init; } = CurrentSchemaVersion;
 
     public string SourceProjectName { get; init; } = null!;
+
+    /// <summary>
+    /// Generation risk policy. Values: conservative, balanced, aggressive.
+    /// Balanced preserves existing behavior. Conservative forces mapped helpers through review-required output.
+    /// Aggressive emits more explicit mapped helper statements as active code; selectors are still never invented.
+    /// </summary>
+    [JsonPropertyName("GenerationPolicy")]
+    public string? GenerationPolicy { get; init; } = Migrator.Core.GenerationPolicy.Balanced;
+
     public UiTargetMapping[] UiTargets { get; init; } = Array.Empty<UiTargetMapping>();
     public PageObjectMapping[] PageObjects { get; init; } = Array.Empty<PageObjectMapping>();
     public MethodMapping[] Methods { get; init; } = Array.Empty<MethodMapping>();
@@ -181,10 +190,12 @@ public sealed class ProjectAdapterConfig
         string[]? SuppressedMethodPatterns = null,
         Dictionary<string, string>? NavigationUrls = null,
         string? NavigationTargetStatement = null,
-        string? SchemaVersion = null)
+        string? SchemaVersion = null,
+        string? GenerationPolicy = null)
     {
         this.SchemaVersion = string.IsNullOrWhiteSpace(SchemaVersion) ? CurrentSchemaVersion : SchemaVersion;
         this.SourceProjectName = SourceProjectName;
+        this.GenerationPolicy = Migrator.Core.GenerationPolicy.NormalizeOrDefault(GenerationPolicy);
         this.UiTargets = UiTargets;
         this.PageObjects = PageObjects;
         this.Methods = Methods;

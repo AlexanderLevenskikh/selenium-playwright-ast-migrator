@@ -201,7 +201,10 @@ internal static class MigrationPrPackCommand
         };
 
         var deltas = current.Keys.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(key => key, key => current.TryGetValue(key, out var value) - (before.TryGetValue(key, out var oldValue) ? oldValue : 0), StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(
+                key => key,
+                key => (current.TryGetValue(key, out var value) ? value : 0) - (before.TryGetValue(key, out var oldValue) ? oldValue : 0),
+                StringComparer.OrdinalIgnoreCase);
 
         return new MigrationPrPackMetrics(
             Before: before.Select(x => new MigrationPrPackMetric(x.Key, x.Value)).ToArray(),
