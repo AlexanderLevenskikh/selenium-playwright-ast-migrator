@@ -241,7 +241,7 @@ public class PackagingTests
         while (dir != null)
         {
             var candidate = Path.Combine(dir.FullName, relativePath.Replace('/', Path.DirectorySeparatorChar));
-            if (File.Exists(candidate))
+            if (File.Exists(candidate) || Directory.Exists(candidate))
                 return candidate;
             dir = dir.Parent;
         }
