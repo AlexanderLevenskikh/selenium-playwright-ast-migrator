@@ -2,11 +2,12 @@
 
 This file is intentionally hand-readable. It shows the mental model behind the
 migration: parse source code into actions, resolve each action against reviewed
-source truth, then render Playwright code. The tool should never invent selectors
-when the mapping is missing.
+source-truth mapping, then render Playwright code. The tool should never invent
+selectors when the mapping is missing.
 
 | Selenium source | AST action | SourceExpression | Source truth | Playwright output |
 |---|---|---|---|---|
+| `page = Navigation.OpenLoginPage()` | mapped setup helper | `Navigation.OpenLoginPage()` | reviewed config: login page route is `/login` | `Page.GotoAsync("/login")` |
 | `page.UserName.InputText("alex@example.com")` | `SendKeysAction` / fill text | `page.UserName` | `LoginPage.UserName => [data-testid='login-email']` | `Page.GetByTestId("login-email").FillAsync("alex@example.com")` |
 | `page.Password.InputText("correct horse battery staple")` | `SendKeysAction` / fill text | `page.Password` | `LoginPage.Password => [data-testid='login-password']` | `Page.GetByTestId("login-password").FillAsync(...)` |
 | `page.SignInButton.Click()` | `ClickAction` | `page.SignInButton` | `LoginPage.SignInButton => [data-testid='sign-in']` | `Page.GetByTestId("sign-in").ClickAsync()` |
@@ -18,9 +19,9 @@ when the mapping is missing.
 
 1. **AST recognition keeps intent.** The migrator sees a method invocation on
    `page.UserName`, not just a string containing `InputText`.
-2. **Source truth is explicit.** Locators come from `adapter-config.json` and the
-   Selenium PageObject evidence, not from guessing.
-3. **TODO comments are evidence.** Unsupported setup and project-specific waits
-   are preserved so a reviewer can move them into the right Playwright fixture.
+2. **Source truth is explicit.** Locators and setup behavior come from
+   `adapter-config.json` and Selenium PageObject/helper evidence, not from guessing.
+3. **Reviewed suppressions are visible.** The legacy `WaitUntilReady()` helper is
+   preserved as a source comment instead of silently disappearing.
 4. **Profiles are reusable.** Once `page.UserName` and friends are mapped, every
    repeated action can be rendered consistently across the suite.

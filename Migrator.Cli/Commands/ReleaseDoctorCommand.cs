@@ -26,6 +26,7 @@ internal static class ReleaseDoctorCommand
         AddScriptChecks(root, project, checks);
         AddWorkflowChecks(root, project, checks);
         AddDocumentationChecks(root, project, checks);
+        AddToolManifestExampleChecks(root, project, checks);
         AddRepositoryHygieneChecks(root, checks);
 
         var failed = checks.Count(c => c.Status == "fail");
@@ -194,6 +195,36 @@ internal static class ReleaseDoctorCommand
             var text = File.ReadAllText(changelog);
             Add(checks, text.Contains(version, StringComparison.Ordinal), "docs", "CHANGELOG.md", "changelog contains current version", $"CHANGELOG.md should contain {version}");
         }
+    }
+
+    static void AddToolManifestExampleChecks(string root, XDocument? project, List<ReleaseDoctorCheck> checks)
+    {
+        var packageId = project == null ? ExpectedPackageId : Value(project, "PackageId");
+        var expectedManifestKey = packageId.ToLowerInvariant();
+        const string manifest = "examples/tool-manifest/dotnet-tools.json";
+        var path = Path.Combine(root, ToOsPath(manifest));
+        if (!File.Exists(path))
+            return;
+
+        var text = File.ReadAllText(path);
+        Add(checks,
+            text.Contains($"\"{expectedManifestKey}\"", StringComparison.Ordinal),
+            "examples",
+            manifest,
+            "tool manifest example uses the current PackageId key",
+            $"tool manifest example should use key {expectedManifestKey}");
+        Add(checks,
+            !text.Contains("seleniumplaywrightastmigrator", StringComparison.OrdinalIgnoreCase),
+            "examples",
+            manifest,
+            "tool manifest example does not reference the old PackageId",
+            "tool manifest example still references seleniumplaywrightastmigrator");
+        Add(checks,
+            text.Contains(ExpectedToolCommand, StringComparison.Ordinal),
+            "examples",
+            manifest,
+            "tool manifest example exposes the public tool command",
+            $"tool manifest example should expose {ExpectedToolCommand}");
     }
 
     static void AddRepositoryHygieneChecks(string root, List<ReleaseDoctorCheck> checks)

@@ -9,7 +9,7 @@ an AST-based migration works.
 - `input/LoginTeachingTest.cs` — Selenium C# / NUnit source test.
 - `input/PageObjects/LoginPage.cs` — tiny PageObject with real `data-testid`
   selector evidence.
-- `adapter-config.json` — reviewed source-expression → Playwright locator map.
+- `adapter-config.json` — reviewed source-expression/helper → Playwright map.
 - `expected/LoginTeachingTestPlaywright.generated.cs` — expected generated output
   after the mappings are applied.
 - `reports/ast-action-map.md` — teaching map from Selenium source to AST action
@@ -42,8 +42,8 @@ created as `migration/teaching-demo-analyze` and `migration/teaching-demo-genera
    wrappers: `InputText`, `Click`, `ShouldBeVisible`, `Text`.
 2. Open `input/PageObjects/LoginPage.cs` and find the real selector evidence:
    `[data-testid='login-email']`, `[data-testid='sign-in']`, and so on.
-3. Open `adapter-config.json` and see how the reviewed source expressions map to
-   Playwright locators.
+3. Open `adapter-config.json` and see how reviewed source expressions and helper
+   calls map to Playwright locators, navigation, and assertions.
 4. Compare the generated output with
    `expected/LoginTeachingTestPlaywright.generated.cs`.
 5. Read `reports/ast-action-map.md` for the action-by-action explanation.

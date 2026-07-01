@@ -96,6 +96,35 @@ public class TicketRegressionTests
         Assert.DoesNotContain("= =", output);
     }
 
+    [Fact]
+    public void NUnitAssertThat_TextDoesContain_ResolvesThroughUiTarget()
+    {
+        var sourceModel = CreateModel(new TestAction[]
+        {
+            new AssertThatAction(
+                34,
+                "page.Status.Text",
+                "Does.Contain(\"Ready\")")
+        });
+        var config = new ProjectAdapterConfig(
+            "sample",
+            new[]
+            {
+                new UiTargetMapping(
+                    "page.Status",
+                    "GetByTestId(\"status\")",
+                    "TestId")
+            },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>());
+
+        var adapted = new DefaultProjectAdapter(config).Adapt(sourceModel);
+        var output = new PlaywrightDotNetRenderer().Render(adapted);
+
+        Assert.Contains("await Expect(Page.GetByTestId(\"status\")).ToContainTextAsync(\"Ready\")", output);
+        Assert.DoesNotContain("ASSERTION_CONSTRAINT", output);
+    }
+
 
     [Fact]
     public void SyntaxFallbackRawInvocation_UsesParameterizedMappingAndUiTarget()

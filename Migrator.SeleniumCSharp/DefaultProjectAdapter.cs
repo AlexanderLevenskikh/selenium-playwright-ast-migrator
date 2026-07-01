@@ -689,6 +689,7 @@ public class DefaultProjectAdapter : IProjectAdapter
                 press.Confidence) },
             TextAssertionAction ta => TryResolveTextAssertionWithTarget(ta, resolved,
                 ResolveTargetWithLocalVars(ta.Target.SourceExpression, resolved, localVariableMappings)),
+            AssertThatAction assertThat => TryResolveAssertThatWithLocalVars(assertThat, resolved, localVariableMappings),
             VisibilityAssertionAction va => new[] { new VisibilityAssertionAction(
                 va.SourceLine,
                 ResolveTargetWithLocalVars(va.Target.SourceExpression, resolved, localVariableMappings),
@@ -852,6 +853,7 @@ public class DefaultProjectAdapter : IProjectAdapter
                 press.KeyName,
                 press.Confidence) },
             TextAssertionAction ta => TryResolveTextAssertionWithMapping(ta, resolved),
+            AssertThatAction assertThat => TryResolveAssertThat(assertThat, resolved),
             TableRowTextAccessAction trt => new[] { new TableRowTextAccessAction(
                 trt.SourceLine,
                 ResolveTarget(trt.Target.SourceExpression, resolved),
@@ -943,6 +945,102 @@ public class DefaultProjectAdapter : IProjectAdapter
     {
         var resolvedTargetExpr = ResolveTarget(ta.Target.SourceExpression, resolved);
         return TryResolveTextAssertionWithTarget(ta, resolved, resolvedTargetExpr);
+    }
+
+    IEnumerable<TestAction> TryResolveAssertThat(AssertThatAction action, ResolvedFileConfig resolved)
+    {
+        if (!TryConvertAssertThatTextConstraint(action, out var textAssertion))
+            return new[] { action };
+
+        return TryResolveTextAssertionWithMapping(textAssertion, resolved);
+    }
+
+    IEnumerable<TestAction> TryResolveAssertThatWithLocalVars(
+        AssertThatAction action,
+        ResolvedFileConfig resolved,
+        Dictionary<string, TargetExpression> localVariableMappings)
+    {
+        if (!TryConvertAssertThatTextConstraint(action, out var textAssertion))
+            return new[] { action };
+
+        return TryResolveTextAssertionWithTarget(
+            textAssertion,
+            resolved,
+            ResolveTargetWithLocalVars(textAssertion.Target.SourceExpression, resolved, localVariableMappings));
+    }
+
+    static bool TryConvertAssertThatTextConstraint(AssertThatAction action, out TextAssertionAction textAssertion)
+    {
+        textAssertion = null!;
+
+        if (!TryExtractTextAssertionTarget(action.ActualExpression, out var target))
+            return false;
+
+        if (!TryExtractNUnitTextConstraint(action.ConstraintExpression, out var kind, out var expectedValue))
+            return false;
+
+        textAssertion = new TextAssertionAction(
+            action.SourceLine,
+            target,
+            kind,
+            expectedValue,
+            action.Confidence,
+            $"Assert.That({action.ActualExpression}, {action.ConstraintExpression})");
+        return true;
+    }
+
+    static bool TryExtractTextAssertionTarget(string actualExpression, out string target)
+    {
+        var actual = actualExpression.Trim();
+        foreach (var suffix in new[] { ".Text.Get()", ".Text()", ".Text" })
+        {
+            if (actual.EndsWith(suffix, StringComparison.Ordinal))
+            {
+                target = actual.Substring(0, actual.Length - suffix.Length).Trim();
+                return target.Length > 0;
+            }
+        }
+
+        target = string.Empty;
+        return false;
+    }
+
+    static bool TryExtractNUnitTextConstraint(string constraintExpression, out TextAssertionKind kind, out string? expectedValue)
+    {
+        var constraint = constraintExpression.Trim();
+        if (TryExtractConstraintArgument(constraint, "Does.Contain", out expectedValue))
+        {
+            kind = TextAssertionKind.TextContains;
+            return true;
+        }
+
+        if (TryExtractConstraintArgument(constraint, "Is.EqualTo", out expectedValue))
+        {
+            kind = TextAssertionKind.TextEquals;
+            return true;
+        }
+
+        if (TryExtractConstraintArgument(constraint, "Is.Not.EqualTo", out expectedValue))
+        {
+            kind = TextAssertionKind.TextNotEquals;
+            return true;
+        }
+
+        kind = TextAssertionKind.TextEquals;
+        expectedValue = null;
+        return false;
+    }
+
+    static bool TryExtractConstraintArgument(string constraint, string methodChain, out string argument)
+    {
+        argument = string.Empty;
+        var pattern = @"^" + Regex.Escape(methodChain).Replace(@"\.", @"\s*\.\s*") + @"\s*\((?<argument>.*)\)\s*$";
+        var match = Regex.Match(constraint, pattern, RegexOptions.Singleline);
+        if (!match.Success)
+            return false;
+
+        argument = match.Groups["argument"].Value.Trim();
+        return argument.Length > 0;
     }
 
     IEnumerable<TestAction> TryResolveTextAssertionWithTarget(TextAssertionAction ta, ResolvedFileConfig resolved, TargetExpression resolvedTargetExpr)

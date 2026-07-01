@@ -99,8 +99,8 @@ The teaching demo keeps source truth explicit in two places:
    public TextInput UserName => new(driver, By.CssSelector("[data-testid='login-email']"));
    ```
 
-2. `examples/teaching-demo/adapter-config.json` maps the source expression to the
-   target Playwright locator:
+2. `examples/teaching-demo/adapter-config.json` maps source expressions and a few
+   reviewed project helpers to target Playwright locators/statements:
 
    ```json
    {
@@ -131,7 +131,7 @@ TODO comments when a source construct is not safely understood. That is a featur
 not an embarrassment: unresolved work is evidence for the next profile or
 migrator improvement.
 
-## Step 5: preserve uncertainty instead of hiding it
+## Step 5: preserve or map uncertainty explicitly
 
 The teaching demo setup contains project-specific behavior:
 
@@ -140,11 +140,15 @@ page = Navigation.OpenLoginPage();
 page.WaitUntilReady();
 ```
 
-Those calls are not the same as ordinary UI actions. They might belong in a
-Playwright fixture, a navigation helper, a wait policy, or a project-specific
-PageObject constructor. If the migrator cannot prove the right target behavior,
-it should preserve the source as a TODO/source comment instead of fabricating
-working-looking code.
+Those calls are not the same as ordinary UI actions. In the teaching demo, the
+reviewed profile maps `Navigation.OpenLoginPage()` to `Page.GotoAsync("/login")`
+because the route is known. The legacy `WaitUntilReady()` helper is preserved as
+a source comment because its exact target wait policy is project-specific.
+
+In a real project, similar setup code might belong in a Playwright fixture, a
+navigation helper, a wait policy, or a project-specific PageObject constructor.
+If the migrator cannot prove the right target behavior, it should preserve the
+source as a TODO/source comment instead of fabricating working-looking code.
 
 This is the core safety rule:
 

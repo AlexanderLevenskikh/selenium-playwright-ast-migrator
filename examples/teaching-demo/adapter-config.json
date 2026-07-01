@@ -51,5 +51,22 @@
     "WaitUntilReady",
     "ValidateLoading"
   ],
-  "Methods": []
+  "Methods": [
+    {
+      "SourceMethod": "Navigation.OpenLoginPage()",
+      "Description": "Teaching demo navigation setup. The source helper returns LoginPage; the Playwright equivalent is explicit navigation.",
+      "TargetStatements": [
+        "await Page.GotoAsync(\"/login\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "page.DashboardTitle.ShouldBeVisible()",
+      "Description": "Teaching demo project assertion wrapper for visibility.",
+      "TargetStatements": [
+        "await Expect(Page.GetByTestId(\"dashboard-title\")).ToBeVisibleAsync();"
+      ],
+      "RequiresReview": false
+    }
+  ]
 }

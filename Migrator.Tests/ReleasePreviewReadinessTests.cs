@@ -20,14 +20,16 @@ public class ReleasePreviewReadinessTests
         Assert.Contains("README_TOOL.md", command);
         Assert.Contains("NUGET_API_KEY", command);
         Assert.Contains("dry_run", command);
+        Assert.Contains("examples/tool-manifest/dotnet-tools.json", command);
+        Assert.Contains("seleniumplaywrightastmigrator", command);
         Assert.Contains("release-doctor-report.md", command);
 
         Assert.Contains("StableCommand(\"release-doctor\"", catalog);
         Assert.Contains("selenium-pw-migrator doctor release --out release-doctor", catalog);
         Assert.Contains("ReleaseDoctorCommand.RunReleaseDoctor", program);
         Assert.Contains("\"release-doctor\"", program);
-        Assert.Contains("doctor release", program);
         Assert.Contains("release doctor", program);
+        Assert.Contains("doctor release", catalog);
 
         Assert.Contains("selenium-pw-migrator doctor release", releaseDocs);
         Assert.Contains("selenium-pw-migrator doctor release", toolReadme);
@@ -40,6 +42,7 @@ public class ReleasePreviewReadinessTests
         var docs = File.ReadAllText(FindRepositoryFile("docs/packaging-and-distribution.md"));
         var workflow = File.ReadAllText(FindRepositoryFile(".github/workflows/publish-nuget.yml"));
         var packScript = File.ReadAllText(FindRepositoryFile("scripts/pack-tool.sh"));
+        var toolManifest = File.ReadAllText(FindRepositoryFile("examples/tool-manifest/dotnet-tools.json"));
 
         Assert.Contains("<PackageId>SeleniumPlaywrightMigrator</PackageId>", project);
         Assert.Contains("<Title>Selenium → Playwright AST Migrator</Title>", project);
@@ -47,8 +50,10 @@ public class ReleasePreviewReadinessTests
         Assert.Contains("SeleniumPlaywrightMigrator", docs);
         Assert.Contains("SeleniumPlaywrightMigrator", workflow);
         Assert.Contains("SeleniumPlaywrightMigrator", packScript);
+        Assert.Contains("\"seleniumplaywrightmigrator\"", toolManifest);
         Assert.DoesNotContain("SeleniumPlaywrightAstMigrator", project);
         Assert.DoesNotContain("SeleniumPlaywrightAstMigrator", workflow);
+        Assert.DoesNotContain("seleniumplaywrightastmigrator", toolManifest);
     }
 
     static string FindRepositoryFile(string relativePath)
