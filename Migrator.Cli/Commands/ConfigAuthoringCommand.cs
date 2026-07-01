@@ -331,13 +331,13 @@ internal static class ConfigAuthoringCommand
     static IEnumerable<string> ExtractUnsafeSelectorHints(IEnumerable<ConfigAuthoringEvidenceFile> evidence)
     {
         foreach (var file in evidence.Where(f => f.Kind is "selector-evidence" or "runtime-feedback" or "triage"))
-        foreach (var line in file.ContentSample.Split('\n'))
-        {
-            if (!line.Contains("unsafe", StringComparison.OrdinalIgnoreCase) && !line.Contains("inferred", StringComparison.OrdinalIgnoreCase) && !line.Contains("raw", StringComparison.OrdinalIgnoreCase))
-                continue;
-            var candidate = ExtractBacktick(line);
-            yield return LooksConfigWorthy(candidate) ? candidate : line.Trim();
-        }
+            foreach (var line in file.ContentSample.Split('\n'))
+            {
+                if (!line.Contains("unsafe", StringComparison.OrdinalIgnoreCase) && !line.Contains("inferred", StringComparison.OrdinalIgnoreCase) && !line.Contains("raw", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                var candidate = ExtractBacktick(line);
+                yield return LooksConfigWorthy(candidate) ? candidate : line.Trim();
+            }
     }
 
     static bool AlreadyMappedUiTarget(ProjectAdapterConfig? config, string sourceExpression) => config != null
