@@ -7,7 +7,7 @@ This walkthrough is intentionally short and screenshot-like. It shows the happy 
 ![CLI help screenshot](../../assets/walkthrough/01-cli-help.svg)
 
 ```bash
-dotnet tool install --global SeleniumPlaywrightAstMigrator --prerelease
+dotnet tool install --global SeleniumPlaywrightMigrator --prerelease
 selenium-pw-migrator --help
 ```
 

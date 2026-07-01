@@ -8,7 +8,7 @@ fi
 
 SOURCE="$1"
 VERSION="${2:-0.6.0-preview.1}"
-PACKAGE_ID="${PACKAGE_ID:-SeleniumPlaywrightAstMigrator}"
+PACKAGE_ID="${PACKAGE_ID:-SeleniumPlaywrightMigrator}"
 API_KEY="${NUGET_API_KEY:-}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKAGE="$ROOT/artifacts/nuget/$PACKAGE_ID.$VERSION.nupkg"

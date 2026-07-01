@@ -34,7 +34,7 @@ When the package is published, the best team-friendly setup is a project-local d
 
 ```bash
 dotnet new tool-manifest
-dotnet tool install SeleniumPlaywrightAstMigrator --version 0.6.0-preview.1
+dotnet tool install SeleniumPlaywrightMigrator --version 0.6.0-preview.1
 dotnet tool run selenium-pw-migrator -- --help
 ```
 
@@ -56,7 +56,7 @@ If you are validating a release candidate before publishing it:
 ```bash
 ./scripts/pack-tool.sh 0.6.0-preview.1
 dotnet new tool-manifest --force
-dotnet tool install SeleniumPlaywrightAstMigrator \
+dotnet tool install SeleniumPlaywrightMigrator \
   --version 0.6.0-preview.1 \
   --add-source ./artifacts/nuget
 dotnet tool run selenium-pw-migrator -- --help
@@ -355,6 +355,22 @@ Creates a disposable five-minute demo workspace with ready commands, expected ou
 
 ```bash
 selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
+```
+
+`playground-verify`
+
+Checks that a generated playground still contains the public demo contract: manifest, ready command chain, sample Selenium input, adapter config, expected Playwright output, dashboard sample, PR pack sample, and selector-safety wording.
+
+```bash
+selenium-pw-migrator playground verify --input playground --out playground-verify
+```
+
+`release-doctor`
+
+Checks NuGet preview readiness from the repository root: package metadata, version/changelog consistency, release scripts, README_TOOL packaging docs, publish workflow dry-run support, NuGet secret references, and repository hygiene.
+
+```bash
+selenium-pw-migrator doctor release --out release-doctor
 ```
 
 `runbook`

@@ -52,6 +52,7 @@ public class CliProductizationTests
         {
             "init",
             "runbook",
+            "framework-matrix",
             "analyze",
             "dump-ir",
             "migrate",
@@ -59,6 +60,9 @@ public class CliProductizationTests
             "verify-project",
             "verify-ts-project",
             "doctor",
+            "playground",
+            "playground-verify",
+            "release-doctor",
             "explain-todo",
             "smoke-plan",
             "runtime-classify",
@@ -67,7 +71,10 @@ public class CliProductizationTests
             "learn-pack",
             "migration-board",
             "report-serve",
+            "evidence-pack",
             "pr-pack",
+            "agent-contract",
+            "profile-recommend",
             "profile-list",
             "profile-search",
             "profile-inspect",
@@ -105,6 +112,8 @@ public class CliProductizationTests
         Assert.Contains("selenium-pw-migrator init --wizard --source-path ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator runbook --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator playground --out playground", catalog);
+        Assert.Contains("selenium-pw-migrator playground verify --input playground", catalog);
+        Assert.Contains("selenium-pw-migrator doctor release --out release-doctor", catalog);
         Assert.Contains("selenium-pw-migrator --mode migrate --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator --mode doctor --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator report serve --input migration/runs/latest --port 5077", catalog);
@@ -123,6 +132,25 @@ public class CliProductizationTests
         Assert.Contains("--dry-run", catalog);
         Assert.Contains("selenium-pw-migrator --mode doctor --input ./OldTests --fix --dry-run", catalog);
         Assert.Contains("selenium-pw-migrator --mode scaffold --target-test-framework xunit", catalog);
+    }
+
+    [Fact]
+    public void StableCommandCatalog_IsFreshInReadmeAndUserGuide()
+    {
+        var catalog = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/CliCommandCatalog.cs"));
+        var readme = File.ReadAllText(FindRepositoryFile("README.md"));
+        var userGuide = File.ReadAllText(FindRepositoryFile("USER_GUIDE.md"));
+
+        var stableModes = Regex.Matches(catalog, @"StableCommand\(""([^""]+)""")
+            .Select(m => m.Groups[1].Value)
+            .ToArray();
+
+        Assert.NotEmpty(stableModes);
+        foreach (var mode in stableModes)
+        {
+            Assert.Contains(mode, readme);
+            Assert.Contains(mode, userGuide);
+        }
     }
 
 

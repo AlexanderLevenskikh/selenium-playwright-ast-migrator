@@ -1,6 +1,6 @@
 # Public launch pack
 
-This folder contains the launch-facing material for the first public preview of Selenium Playwright AST Migrator.
+This folder contains the launch-facing material for the first public preview of Selenium Playwright Migrator.
 
 Use it when preparing a GitHub or NuGet release, writing an announcement, or helping a new user run the tool without private project context.
 

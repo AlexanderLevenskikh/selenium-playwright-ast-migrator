@@ -52,7 +52,7 @@ jobs:
         run: scripts/pack-tool.sh "$PACKAGE_VERSION"
 
       - name: Verify nupkg contents
-        run: scripts/verify-nupkg-contents.sh "artifacts/nuget/SeleniumPlaywrightAstMigrator.$PACKAGE_VERSION.nupkg"
+        run: scripts/verify-nupkg-contents.sh "artifacts/nuget/SeleniumPlaywrightMigrator.$PACKAGE_VERSION.nupkg"
 
       - name: Smoke local tool install
         run: scripts/smoke-local-tool-package.sh "$PACKAGE_VERSION"

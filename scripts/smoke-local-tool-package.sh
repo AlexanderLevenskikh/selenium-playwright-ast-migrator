@@ -2,7 +2,7 @@
 set -euo pipefail
 
 VERSION="${1:-0.6.0-preview.1}"
-PACKAGE_ID="${PACKAGE_ID:-SeleniumPlaywrightAstMigrator}"
+PACKAGE_ID="${PACKAGE_ID:-SeleniumPlaywrightMigrator}"
 PACKAGE_DIRECTORY="${PACKAGE_DIRECTORY:-artifacts/nuget}"
 INPUT="${INPUT:-Migrator.Tests/TestFiles}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

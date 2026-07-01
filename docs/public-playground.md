@@ -6,6 +6,12 @@
 selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
 ```
 
+Verify the generated workspace before using it in release docs or demos:
+
+```bash
+selenium-pw-migrator playground verify --input playground --out playground-verify --format both
+```
+
 It writes a self-contained sample migration folder with:
 
 - `README.md` and `try-this-first.md`;
@@ -64,3 +70,4 @@ The generated `expected-outputs.md` describes what good looks like:
 - `docs/public-demo-tutorial.md` is the longer 10-minute walkthrough.
 - `examples/public-demo/README.md` contains committed demo inputs and expected output files.
 - `playground` creates a disposable five-minute workspace from the installed CLI.
+- `playground verify` checks that the disposable workspace still matches the public demo contract.

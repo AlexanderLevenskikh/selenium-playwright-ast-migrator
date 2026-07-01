@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Selenium Playwright AST Migrator are documented here.
+All notable changes to Selenium Playwright Migrator are documented here.
 
 The format follows the spirit of Keep a Changelog, and this project uses preview SemVer-style versions while the public API is still stabilizing.
 
@@ -9,6 +9,10 @@ The format follows the spirit of Keep a Changelog, and this project uses preview
 ### Added
 
 - Public-release hygiene guardrails for NuGet package metadata and package contents.
+- Short public NuGet `PackageId` (`SeleniumPlaywrightMigrator`) while keeping AST positioning in title, description, and tags.
+- `release-doctor` / `doctor release` readiness checks for NuGet preview metadata, release docs, scripts, workflow dry-run, secrets, and repository hygiene.
+- `playground-verify` / `playground verify` checks for the disposable public playground contract.
+- Documentation freshness guardrail that keeps stable command catalog entries visible in README and USER_GUIDE.
 - Public contribution and security policy documents.
 - CI packaging gates for `dotnet pack`, `.nupkg` content verification, local tool install smoke, and agent bundle smoke.
 - Release-process documentation for preview/stable publishing and rollback.

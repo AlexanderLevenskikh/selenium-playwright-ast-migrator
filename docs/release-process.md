@@ -1,6 +1,6 @@
 # Release process
 
-This document is the release checklist for publishing `SeleniumPlaywrightAstMigrator` as a public preview dotnet tool and for producing the standalone agent bundle.
+This document is the release checklist for publishing `SeleniumPlaywrightMigrator` as a public preview dotnet tool and for producing the standalone agent bundle.
 
 ## Versioning
 
@@ -25,6 +25,14 @@ Publish a stable version only when the public command set, package contents, and
    - `PackageLicenseExpression`
    - `PackageReadmeFile`
    - `PackageIcon`
+
+   Or run the release doctor from the repository root:
+
+```bash
+selenium-pw-migrator doctor release --out release-doctor --format both
+```
+
+   The report checks package metadata, version/changelog consistency, release scripts, README_TOOL packaging docs, publish workflow dry-run support, NuGet secret references, and repository hygiene.
 3. Run the normal build/test gate:
 
 ```bash
@@ -48,13 +56,13 @@ or on Windows:
 5. Verify `.nupkg` contents:
 
 ```bash
-scripts/verify-nupkg-contents.sh artifacts/nuget/SeleniumPlaywrightAstMigrator.0.6.0-preview.1.nupkg
+scripts/verify-nupkg-contents.sh artifacts/nuget/SeleniumPlaywrightMigrator.0.6.0-preview.1.nupkg
 ```
 
 or on Windows:
 
 ```powershell
-./scripts/verify-nupkg-contents.ps1 -PackagePath artifacts/nuget/SeleniumPlaywrightAstMigrator.0.6.0-preview.1.nupkg
+./scripts/verify-nupkg-contents.ps1 -PackagePath artifacts/nuget/SeleniumPlaywrightMigrator.0.6.0-preview.1.nupkg
 ```
 
 6. Smoke local installation from the package:
@@ -165,7 +173,7 @@ After publishing to NuGet, verify install from a clean directory:
 mkdir /tmp/migrator-tool-smoke
 cd /tmp/migrator-tool-smoke
 dotnet new tool-manifest
-dotnet tool install SeleniumPlaywrightAstMigrator --version 0.6.0-preview.1
+dotnet tool install SeleniumPlaywrightMigrator --version 0.6.0-preview.1
 dotnet tool run selenium-pw-migrator -- --help
 ```
 
@@ -181,7 +189,7 @@ NuGet packages are immutable. If a package is broken:
 For project-local tools, tell users to pin the previous good version:
 
 ```bash
-dotnet tool update SeleniumPlaywrightAstMigrator --version 0.6.0-preview.previous
+dotnet tool update SeleniumPlaywrightMigrator --version 0.6.0-preview.previous
 ```
 
 ## CI release gates

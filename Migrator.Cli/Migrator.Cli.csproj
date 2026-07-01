@@ -11,10 +11,11 @@
     -->
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>selenium-pw-migrator</ToolCommandName>
-    <PackageId>SeleniumPlaywrightAstMigrator</PackageId>
+    <PackageId>SeleniumPlaywrightMigrator</PackageId>
+    <Title>Selenium → Playwright AST Migrator</Title>
     <Version>0.6.0-preview.1</Version>
-    <Authors>Selenium Playwright AST Migrator Contributors</Authors>
-    <Company>Selenium Playwright AST Migrator Contributors</Company>
+    <Authors>Selenium Playwright Migrator Contributors</Authors>
+    <Company>Selenium Playwright Migrator Contributors</Company>
     <Description>Agent-assisted AST migration toolkit for moving Selenium tests toward Playwright.</Description>
     <PackageTags>selenium;playwright;migration;testing;dotnet-tool;ast</PackageTags>
     <PackageReadmeFile>README_TOOL.md</PackageReadmeFile>

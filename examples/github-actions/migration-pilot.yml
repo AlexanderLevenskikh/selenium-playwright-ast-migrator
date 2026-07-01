@@ -18,7 +18,7 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Install migrator tool
-        run: dotnet tool install --global SeleniumPlaywrightAstMigrator --prerelease
+        run: dotnet tool install --global SeleniumPlaywrightMigrator --prerelease
 
       - name: Doctor
         run: |

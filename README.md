@@ -80,6 +80,7 @@ Try the five-minute playground:
 
 ```bash
 selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
+selenium-pw-migrator playground verify --input playground --out playground-verify
 cat playground/try-this-first.md
 ```
 
@@ -103,7 +104,9 @@ For a file-by-file walkthrough, see:
 |---|---|---|
 | `runbook` | Stable | Generate a practical migration plan with pilot scope, command chain, risk map, artifacts, and acceptance checklist. |
 | `playground` | Stable | Create a five-minute public demo workspace with ready commands, expected outputs, dashboard sample, and PR pack sample. |
+| `playground-verify` | Stable | Verify that the generated playground still has the manifest, command chain, demo input, expected output, and safety wording. |
 | `doctor` | Stable | Preflight checks plus safe `--fix` repair plans for inputs, config layers, project files, and workspace hygiene. |
+| `release-doctor` | Stable | Check NuGet preview readiness: package metadata, docs, scripts, workflow dry-run, secret references, and release hygiene. |
 | `analyze` | Stable | Parse Selenium files and produce reports without generating target files. |
 | `migrate` | Stable | Generate Playwright target files. |
 | `verify` | Stable | Run lightweight generated-code verification. |
@@ -120,6 +123,7 @@ For a file-by-file walkthrough, see:
 | `helper-inventory` | Stable | Inspect helper/POM method bodies and infer MethodSemantics candidates. |
 | `discover-target` | Stable | Scan an existing Playwright .NET project and create a reviewable target inventory. |
 | `scaffold` | Stable | Generate a minimal compile-ready Playwright .NET project scaffold. |
+| `bootstrap-project` | Stable | Create reusable migration profile skeletons for a new source project. |
 | `capabilities` | Stable | List built-in source frontend / target backend capability reports. |
 | `verify-ts-project` | Experimental | Type-check generated Playwright TS specs inside an existing TS project. |
 | `orchestrate` | Experimental | Run analyze → migrate → verify → propose as one dry-run workflow. |

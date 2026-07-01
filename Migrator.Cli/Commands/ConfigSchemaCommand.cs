@@ -99,7 +99,7 @@ selenium-pw-migrator --mode config-validate --config adapter-config.json --out c
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/main/schemas/adapter-config.schema.json",
-  "title": "Selenium Playwright AST Migrator adapter-config",
+  "title": "Selenium Playwright Migrator adapter-config",
   "type": "object",
   "additionalProperties": true,
   "properties": {

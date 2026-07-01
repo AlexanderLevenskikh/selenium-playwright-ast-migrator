@@ -7,7 +7,7 @@
 ```powershell
 dotnet new tool-manifest
 
-dotnet tool install SeleniumPlaywrightAstMigrator `
+dotnet tool install SeleniumPlaywrightMigrator `
   --version 0.6.0-preview.1
 
 dotnet tool run selenium-pw-migrator -- --help
@@ -29,7 +29,7 @@ dotnet tool run selenium-pw-migrator -- playground `
 ```powershell
 dotnet new tool-manifest
 
-dotnet tool install SeleniumPlaywrightAstMigrator `
+dotnet tool install SeleniumPlaywrightMigrator `
   --version 0.6.0-preview.1 `
 
 ```
@@ -61,7 +61,7 @@ dotnet tool run selenium-pw-migrator -- `
 
 dotnet new tool-manifest --force
 
-dotnet tool install SeleniumPlaywrightAstMigrator `
+dotnet tool install SeleniumPlaywrightMigrator `
   --version 0.6.0-preview.1 `
   --add-source ./artifacts/nuget
 
@@ -73,7 +73,7 @@ dotnet tool run selenium-pw-migrator -- --help
 Подходит для личной машины разработчика:
 
 ```powershell
-dotnet tool install --global SeleniumPlaywrightAstMigrator `
+dotnet tool install --global SeleniumPlaywrightMigrator `
   --version 0.6.0-preview.1 `
 
 ```
@@ -89,7 +89,7 @@ selenium-pw-migrator --help
 Local tool:
 
 ```powershell
-dotnet tool update SeleniumPlaywrightAstMigrator `
+dotnet tool update SeleniumPlaywrightMigrator `
   --version 0.6.0-preview.2 `
 
 ```
@@ -97,7 +97,7 @@ dotnet tool update SeleniumPlaywrightAstMigrator `
 Global tool:
 
 ```powershell
-dotnet tool update --global SeleniumPlaywrightAstMigrator `
+dotnet tool update --global SeleniumPlaywrightMigrator `
   --version 0.6.0-preview.2 `
 
 ```

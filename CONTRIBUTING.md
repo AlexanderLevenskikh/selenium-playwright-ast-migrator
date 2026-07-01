@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve Selenium Playwright AST Migrator. The project is still preview-stage, so small, well-scoped changes with regression tests are especially valuable.
+Thanks for helping improve Selenium Playwright Migrator. The project is still preview-stage, so small, well-scoped changes with regression tests are especially valuable.
 
 ## Development setup
 

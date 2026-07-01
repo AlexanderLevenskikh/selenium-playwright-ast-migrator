@@ -240,6 +240,20 @@ if (mode == "playground")
     return playgroundExitCode;
 }
 
+// Handle playground verification mode — validates the generated public demo contract.
+if (mode == "playground-verify")
+{
+    var playgroundVerifyExitCode = PublicPlaygroundCommand.RunVerifyPlayground(inputPath, outPath, format);
+    return playgroundVerifyExitCode;
+}
+
+// Handle release doctor mode — validates NuGet preview readiness for maintainers.
+if (mode == "release-doctor")
+{
+    var releaseDoctorExitCode = ReleaseDoctorCommand.RunReleaseDoctor(inputPath, outPath, format);
+    return releaseDoctorExitCode;
+}
+
 ITestFileParser parser;
 try
 {
@@ -10077,8 +10091,29 @@ static string[] NormalizeDirectCommand(string[] args)
         return new[] { "--mode", "framework-matrix" }.Concat(args.Skip(2)).ToArray();
     }
 
+    if (string.Equals(args[0], "playground", StringComparison.OrdinalIgnoreCase)
+        && args.Length > 1
+        && string.Equals(args[1], "verify", StringComparison.OrdinalIgnoreCase))
+    {
+        return new[] { "--mode", "playground-verify" }.Concat(args.Skip(2)).ToArray();
+    }
+
     if (string.Equals(args[0], "playground", StringComparison.OrdinalIgnoreCase))
         return new[] { "--mode", "playground" }.Concat(args.Skip(1)).ToArray();
+
+    if (string.Equals(args[0], "doctor", StringComparison.OrdinalIgnoreCase)
+        && args.Length > 1
+        && string.Equals(args[1], "release", StringComparison.OrdinalIgnoreCase))
+    {
+        return new[] { "--mode", "release-doctor" }.Concat(args.Skip(2)).ToArray();
+    }
+
+    if (string.Equals(args[0], "release", StringComparison.OrdinalIgnoreCase)
+        && args.Length > 1
+        && string.Equals(args[1], "doctor", StringComparison.OrdinalIgnoreCase))
+    {
+        return new[] { "--mode", "release-doctor" }.Concat(args.Skip(2)).ToArray();
+    }
 
     if (string.Equals(args[0], "selector", StringComparison.OrdinalIgnoreCase)
         && args.Length > 1

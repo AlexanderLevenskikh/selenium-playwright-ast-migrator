@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)] [string]$PackagePath,
-    [string]$PackageId = "SeleniumPlaywrightAstMigrator"
+    [string]$PackageId = "SeleniumPlaywrightMigrator"
 )
 
 $ErrorActionPreference = "Stop"

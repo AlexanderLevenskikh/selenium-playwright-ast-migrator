@@ -37,7 +37,7 @@ Migrator.Cli/Migrator.Cli.csproj
 ```xml
 <PackAsTool>true</PackAsTool>
 <ToolCommandName>selenium-pw-migrator</ToolCommandName>
-<PackageId>SeleniumPlaywrightAstMigrator</PackageId>
+<PackageId>SeleniumPlaywrightMigrator</PackageId>
 ```
 
 `ToolCommandName` — имя команды после установки.
@@ -66,7 +66,7 @@ dotnet pack .\Migrator.Cli\Migrator.Cli.csproj `
 Результат:
 
 ```text
-artifacts/nuget/SeleniumPlaywrightAstMigrator.0.6.0-preview.1.nupkg
+artifacts/nuget/SeleniumPlaywrightMigrator.0.6.0-preview.1.nupkg
 ```
 
 ## Проверка пакета без публикации
@@ -76,7 +76,7 @@ artifacts/nuget/SeleniumPlaywrightAstMigrator.0.6.0-preview.1.nupkg
 ```powershell
 dotnet new tool-manifest --force
 
-dotnet tool install SeleniumPlaywrightAstMigrator `
+dotnet tool install SeleniumPlaywrightMigrator `
   --version 0.6.0-preview.1 `
   --add-source .\artifacts\nuget
 
@@ -103,7 +103,7 @@ dotnet tool run selenium-pw-migrator -- --help
 Или вручную:
 
 ```powershell
-dotnet nuget push .\artifacts\nuget\SeleniumPlaywrightAstMigrator.0.6.0-preview.1.nupkg `
+dotnet nuget push .\artifacts\nuget\SeleniumPlaywrightMigrator.0.6.0-preview.1.nupkg `
   --source https://api.nuget.org/v3/index.json `
   --api-key $env:NUGET_API_KEY
 ```
@@ -115,7 +115,7 @@ dotnet nuget push .\artifacts\nuget\SeleniumPlaywrightAstMigrator.0.6.0-preview.
 Глобально:
 
 ```powershell
-dotnet tool install --global SeleniumPlaywrightAstMigrator `
+dotnet tool install --global SeleniumPlaywrightMigrator `
   --version 0.6.0-preview.1 `
 
 ```
@@ -125,7 +125,7 @@ dotnet tool install --global SeleniumPlaywrightAstMigrator `
 ```powershell
 dotnet new tool-manifest
 
-dotnet tool install SeleniumPlaywrightAstMigrator `
+dotnet tool install SeleniumPlaywrightMigrator `
   --version 0.6.0-preview.1 `
 
 ```
@@ -354,13 +354,13 @@ Do not pass API keys through workflow inputs and do not commit credentials into 
 
 ```powershell
 ./scripts/verify-nupkg-contents.ps1 `
-  -PackagePath artifacts/nuget/SeleniumPlaywrightAstMigrator.0.6.0-preview.1.nupkg
+  -PackagePath artifacts/nuget/SeleniumPlaywrightMigrator.0.6.0-preview.1.nupkg
 ```
 
 Linux/macOS вариант:
 
 ```bash
-scripts/verify-nupkg-contents.sh artifacts/nuget/SeleniumPlaywrightAstMigrator.0.6.0-preview.1.nupkg
+scripts/verify-nupkg-contents.sh artifacts/nuget/SeleniumPlaywrightMigrator.0.6.0-preview.1.nupkg
 ```
 
 Проверка падает, если пакет не содержит публичные обязательные файлы или содержит локальные/private artifacts вроде `.agent-state`, `.migration`, `artifacts`, `bin`, `obj`, `.env`, `.local.json`.

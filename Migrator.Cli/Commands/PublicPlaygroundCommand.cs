@@ -8,6 +8,22 @@ using Migrator.Core;
 
 internal static class PublicPlaygroundCommand
 {
+    static readonly string[] PlaygroundRequiredFiles =
+    {
+        "README.md",
+        "try-this-first.md",
+        "commands.sh",
+        "commands.ps1",
+        "expected-outputs.md",
+        "reviewer-demo-checklist.md",
+        "playground-manifest.json",
+        "selenium-csharp-nunit/LoginSmokeTest.cs",
+        "configs/adapter-config.json",
+        "sample-artifacts/dashboard/report-dashboard.md",
+        "sample-artifacts/dashboard/report-dashboard.html",
+        "sample-artifacts/pr-pack/suggested-pr-description.md",
+    };
+
     public static int RunPlayground(string outPath, string format, string targetTestFramework, string generationPolicy)
     {
         var root = Path.GetFullPath(string.IsNullOrWhiteSpace(outPath) ? Path.Combine("migration", "playground") : outPath);
@@ -76,6 +92,70 @@ internal static class PublicPlaygroundCommand
         return 0;
     }
 
+    public static int RunVerifyPlayground(string inputPath, string outPath, string format)
+    {
+        var root = Path.GetFullPath(string.IsNullOrWhiteSpace(inputPath) ? "playground" : inputPath);
+        Directory.CreateDirectory(outPath);
+
+        var checks = new List<PlaygroundVerifyCheck>();
+        Add(checks, Directory.Exists(root), "root", ".", "playground root exists", $"playground root does not exist: {root}");
+
+        foreach (var file in PlaygroundRequiredFiles)
+        {
+            var fullPath = Path.Combine(root, file.Replace('/', Path.DirectorySeparatorChar));
+            Add(checks, File.Exists(fullPath), "file", file, "required playground file exists", "required playground file is missing");
+        }
+
+        AddContentCheck(checks, root, "try-this-first.md", "runbook", "try-this-first includes runbook step");
+        AddContentCheck(checks, root, "try-this-first.md", "framework matrix", "try-this-first includes framework matrix step");
+        AddContentCheck(checks, root, "try-this-first.md", "--mode migrate", "try-this-first includes migrate step");
+        AddContentCheck(checks, root, "try-this-first.md", "report serve", "try-this-first includes dashboard step");
+        AddContentCheck(checks, root, "try-this-first.md", "pr pack", "try-this-first includes PR pack step");
+        AddContentCheck(checks, root, "try-this-first.md", "evidence pack", "try-this-first includes evidence pack step");
+        AddContentCheck(checks, root, "try-this-first.md", "never invents selectors", "try-this-first keeps selector-safety warning");
+        AddContentCheck(checks, root, "commands.sh", "set -euo pipefail", "bash command chain fails fast");
+        AddContentCheck(checks, root, "configs/adapter-config.json", "adapter-config/v1", "adapter config declares schema version");
+
+        var expectedGeneratedExists = Directory.Exists(Path.Combine(root, "expected-playwright-dotnet"))
+            && Directory.EnumerateFiles(Path.Combine(root, "expected-playwright-dotnet"), "*.generated.cs", SearchOption.TopDirectoryOnly).Any();
+        Add(checks, expectedGeneratedExists, "file", "expected-playwright-dotnet/*.generated.cs", "expected generated Playwright file exists", "expected generated Playwright file is missing");
+
+        var manifestPath = Path.Combine(root, "playground-manifest.json");
+        if (File.Exists(manifestPath))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+                var schemaVersion = document.RootElement.TryGetProperty("SchemaVersion", out var schema) ? schema.GetString() : null;
+                Add(checks, string.Equals(schemaVersion, "public-playground/v1", StringComparison.Ordinal), "manifest", "SchemaVersion", "manifest schema version is public-playground/v1", $"manifest schema version is {schemaVersion ?? "missing"}");
+                var readOnly = document.RootElement.TryGetProperty("ReadOnly", out var ro) && ro.ValueKind == JsonValueKind.True;
+                Add(checks, readOnly, "manifest", "ReadOnly", "manifest marks playground as read-only", "manifest should set ReadOnly=true");
+            }
+            catch (JsonException ex)
+            {
+                Add(checks, false, "manifest", "playground-manifest.json", "manifest parses", $"manifest JSON parse failed: {ex.Message}");
+            }
+        }
+
+        var failed = checks.Count(c => c.Status == "fail");
+        var report = new PlaygroundVerifyReport(
+            "public-playground-verify/v1",
+            DateTimeOffset.UtcNow,
+            root,
+            failed == 0 ? "passed" : "failed",
+            failed,
+            checks.ToArray());
+
+        if (format == "text" || format == "both")
+            WriteFile(Path.Combine(outPath, "playground-verify-report.md"), BuildVerifyMarkdown(report));
+        if (format == "json" || format == "both")
+            WriteFile(Path.Combine(outPath, "playground-verify-report.json"), JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
+
+        Console.WriteLine($"Playground verify: {report.Status} ({failed} failed)");
+        Console.WriteLine($"Report: {Path.GetFullPath(outPath)}");
+        return failed == 0 ? 0 : 2;
+    }
+
     static string NormalizeFramework(string? framework)
     {
         if (string.Equals(framework, "xunit", StringComparison.OrdinalIgnoreCase))
@@ -88,6 +168,44 @@ internal static class PublicPlaygroundCommand
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory());
         File.WriteAllText(path, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
+
+    static void AddContentCheck(List<PlaygroundVerifyCheck> checks, string root, string relativePath, string expected, string ok)
+    {
+        var path = Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(path))
+        {
+            Add(checks, false, "content", relativePath, ok, "file missing; content could not be checked");
+            return;
+        }
+
+        var text = File.ReadAllText(path);
+        Add(checks, text.Contains(expected, StringComparison.OrdinalIgnoreCase), "content", relativePath, ok, $"expected content not found: {expected}");
+    }
+
+    static void Add(List<PlaygroundVerifyCheck> checks, bool condition, string category, string item, string ok, string fail)
+    {
+        checks.Add(new PlaygroundVerifyCheck(category, item, condition ? "pass" : "fail", condition ? ok : fail));
+    }
+
+    static string BuildVerifyMarkdown(PlaygroundVerifyReport report)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# Playground Verify Report");
+        sb.AppendLine();
+        sb.AppendLine($"Status: **{report.Status}**");
+        sb.AppendLine($"Playground root: `{report.PlaygroundRoot}`");
+        sb.AppendLine($"Generated at: `{report.GeneratedAtUtc:O}`");
+        sb.AppendLine();
+        sb.AppendLine($"Failed checks: {report.FailedChecks}");
+        sb.AppendLine();
+        sb.AppendLine("| Status | Category | Item | Message |");
+        sb.AppendLine("|---|---|---|---|");
+        foreach (var check in report.Checks.OrderBy(c => c.Status).ThenBy(c => c.Category).ThenBy(c => c.Item, StringComparer.OrdinalIgnoreCase))
+            sb.AppendLine($"| {Escape(check.Status)} | {Escape(check.Category)} | `{Escape(check.Item)}` | {Escape(check.Message)} |");
+        return sb.ToString();
+    }
+
+    static string Escape(string value) => value.Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ");
 
     static string BuildReadme(string framework, string policy) => $$"""
 # Selenium Playwright Migrator Public Playground
@@ -433,3 +551,13 @@ Adds a tiny Selenium C# to Playwright .NET playground migration sample.
 - [ ] Evidence artifacts are attached or linked.
 """;
 }
+
+internal sealed record PlaygroundVerifyReport(
+    string SchemaVersion,
+    DateTimeOffset GeneratedAtUtc,
+    string PlaygroundRoot,
+    string Status,
+    int FailedChecks,
+    PlaygroundVerifyCheck[] Checks);
+
+internal sealed record PlaygroundVerifyCheck(string Category, string Item, string Status, string Message);

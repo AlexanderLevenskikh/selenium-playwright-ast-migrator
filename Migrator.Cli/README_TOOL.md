@@ -1,4 +1,4 @@
-# SeleniumPlaywrightAstMigrator
+# SeleniumPlaywrightMigrator
 
 Dotnet tool for agent-assisted and human-reviewed migration of Selenium tests toward Playwright.
 
@@ -115,7 +115,18 @@ This writes `framework-matrix.md/json` and `source-framework-detection.md/json`.
 
 ```bash
 selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
+selenium-pw-migrator playground verify --input playground --out playground-verify
 cat playground/try-this-first.md
 ```
 
 The playground creates a disposable public demo workspace with ready commands, expected outputs, dashboard sample, and PR pack sample. It is read-only with respect to real projects.
+
+## Release readiness
+
+Before publishing a NuGet preview from the source repository, run:
+
+```bash
+selenium-pw-migrator doctor release --out release-doctor --format both
+```
+
+The release doctor checks PackageId/version metadata, README_TOOL packaging docs, release scripts, publish workflow dry-run support, NuGet secret references, changelog consistency, and basic repository hygiene.

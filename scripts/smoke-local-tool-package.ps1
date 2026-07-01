@@ -1,6 +1,6 @@
 param(
     [string]$Version = "0.6.0-preview.1",
-    [string]$PackageId = "SeleniumPlaywrightAstMigrator",
+    [string]$PackageId = "SeleniumPlaywrightMigrator",
     [string]$PackageDirectory = "artifacts/nuget",
     [Alias("Input")]
     [string]$SmokeInput = "Migrator.Tests/TestFiles"

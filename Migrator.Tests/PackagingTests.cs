@@ -13,7 +13,8 @@ public class PackagingTests
 
         Assert.Equal("true", ElementValue(doc, "PackAsTool"));
         Assert.Equal("selenium-pw-migrator", ElementValue(doc, "ToolCommandName"));
-        Assert.False(string.IsNullOrWhiteSpace(ElementValue(doc, "PackageId")));
+        Assert.Equal("SeleniumPlaywrightMigrator", ElementValue(doc, "PackageId"));
+        Assert.Equal("Selenium → Playwright AST Migrator", ElementValue(doc, "Title"));
         Assert.False(string.IsNullOrWhiteSpace(ElementValue(doc, "Version")));
     }
 
@@ -112,7 +113,9 @@ public class PackagingTests
         var projectPath = FindRepositoryFile("Migrator.Cli/Migrator.Cli.csproj");
         var doc = XDocument.Load(projectPath);
 
-        Assert.Equal("Selenium Playwright AST Migrator Contributors", ElementValue(doc, "Company"));
+        Assert.Equal("Selenium Playwright Migrator Contributors", ElementValue(doc, "Company"));
+        Assert.Contains("AST", ElementValue(doc, "Description"));
+        Assert.Contains("ast", ElementValue(doc, "PackageTags"));
         Assert.Equal("MIT", ElementValue(doc, "PackageLicenseExpression"));
         Assert.Equal("assets/icon.png", ElementValue(doc, "PackageIcon"));
         Assert.Equal("https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator", ElementValue(doc, "PackageProjectUrl"));
