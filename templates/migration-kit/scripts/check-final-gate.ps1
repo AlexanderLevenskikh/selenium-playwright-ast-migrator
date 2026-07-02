@@ -1,7 +1,10 @@
 param(
     [string]$Workspace = "migration",
     [string]$RepoRoot = ".",
-    [string[]]$AllowedRoots = @($Workspace)
+    [string[]]$AllowedRoots = @($Workspace),
+    [switch]$RequireOpenCodeExport,
+    [switch]$RequireExplainTodo,
+    [switch]$RequireVerificationArtifacts
 )
 
 $ErrorActionPreference = "Stop"
@@ -129,10 +132,6 @@ function Test-JsonStatusPassed([string]$Path) {
         if ($text -match '(?i)"(status|result|outcome)"\s*:\s*"(passed|pass|success|succeeded|ok)"') {
             return $true
         }
-
-        if ($text -match '(?i)"(errorCount|errors|failed|failureCount)"\s*:\s*0\b') {
-            return $true
-        }
     }
     catch {
         return $false
@@ -150,6 +149,118 @@ function Test-JsonDiagnosticsRecorded([string]$Path) {
     catch {
         return $false
     }
+}
+
+function Convert-ToIntOrNull($Value) {
+    if ($null -eq $Value) {
+        return $null
+    }
+
+    $number = 0
+    if ([int]::TryParse($Value.ToString(), [ref]$number)) {
+        return $number
+    }
+
+    return $null
+}
+
+function Get-ObjectProperty($Object, [string[]]$Names) {
+    if ($null -eq $Object) {
+        return $null
+    }
+
+    foreach ($name in $Names) {
+        $property = $Object.PSObject.Properties |
+            Where-Object { $_.Name.Equals($name, [StringComparison]::OrdinalIgnoreCase) } |
+            Select-Object -First 1
+        if ($property -ne $null) {
+            return $property.Value
+        }
+    }
+
+    return $null
+}
+
+function Find-DangerousQualityHitsFromJson($Node, [string[]]$DangerousPatterns, $Hits, [ref]$StructuredSeen) {
+    if ($null -eq $Node) {
+        return
+    }
+
+    if ($Node -is [System.Collections.IEnumerable] -and $Node -isnot [string] -and $Node -isnot [System.Management.Automation.PSCustomObject]) {
+        foreach ($item in $Node) {
+            Find-DangerousQualityHitsFromJson $item $DangerousPatterns $Hits $StructuredSeen
+        }
+        return
+    }
+
+    $categoryName = Get-ObjectProperty $Node @("category", "name", "id", "key")
+    if ($categoryName -ne $null) {
+        foreach ($pattern in $DangerousPatterns) {
+            if ($categoryName.ToString().Equals($pattern, [StringComparison]::OrdinalIgnoreCase)) {
+                $count = Convert-ToIntOrNull (Get-ObjectProperty $Node @("count", "total", "value"))
+                if ($count -ne $null) {
+                    $StructuredSeen.Value = $true
+                    if ($count -gt 0) {
+                        $Hits.Add("${pattern}:$count")
+                    }
+                }
+            }
+        }
+    }
+
+    foreach ($property in $Node.PSObject.Properties) {
+        foreach ($pattern in $DangerousPatterns) {
+            if ($property.Name.Equals($pattern, [StringComparison]::OrdinalIgnoreCase)) {
+                $count = Convert-ToIntOrNull $property.Value
+                if ($count -eq $null) {
+                    $count = Convert-ToIntOrNull (Get-ObjectProperty $property.Value @("count", "total", "value"))
+                }
+
+                if ($count -ne $null) {
+                    $StructuredSeen.Value = $true
+                    if ($count -gt 0) {
+                        $Hits.Add("${pattern}:$count")
+                    }
+                }
+            }
+        }
+
+        if ($property.Value -is [System.Management.Automation.PSCustomObject] -or
+            ($property.Value -is [System.Collections.IEnumerable] -and $property.Value -isnot [string])) {
+            Find-DangerousQualityHitsFromJson $property.Value $DangerousPatterns $Hits $StructuredSeen
+        }
+    }
+}
+
+function Find-DangerousQualityHits([string]$Path, [string]$Text, [string[]]$DangerousPatterns) {
+    $hits = New-Object System.Collections.Generic.List[string]
+    if ([System.IO.Path]::GetExtension($Path).Equals(".json", [StringComparison]::OrdinalIgnoreCase)) {
+        try {
+            $json = Get-Content -Raw -Path $Path | ConvertFrom-Json
+            $structuredSeen = $false
+            Find-DangerousQualityHitsFromJson $json $DangerousPatterns $hits ([ref]$structuredSeen)
+            if ($structuredSeen) {
+                return @($hits | Sort-Object -Unique)
+            }
+        }
+        catch {
+            # Fall back to text matching below.
+        }
+    }
+
+    return @($DangerousPatterns | Where-Object { $Text -match [regex]::Escape($_) })
+}
+
+function Test-AnyFileExists([string]$Root, [string[]]$Patterns) {
+    foreach ($pattern in $Patterns) {
+        $file = Get-ChildItem -Path $Root -Recurse -File -Filter $pattern -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($file -ne $null) {
+            return $true
+        }
+    }
+
+    return $false
 }
 
 function Test-TextLooksPassed([string]$Text) {
@@ -241,13 +352,28 @@ else {
         "ASSERTION_SUPPRESSION_BLOCKED",
         "DEPENDS_ON_SUPPRESSED_SIDE_EFFECT"
     )
-    $dangerousHits = @($dangerousPatterns | Where-Object { $dashboardText -match [regex]::Escape($_) })
+    $dangerousHits = @(Find-DangerousQualityHits -Path $dashboard.FullName -Text $dashboardText -DangerousPatterns $dangerousPatterns)
     Add-Result $results "quality-dangerous-categories" ($dangerousHits.Count -eq 0) ("dashboard: $($dashboard.FullName); hits: " + ($dangerousHits -join ", "))
 
     $emptyTestHit = $dashboardText -match "EMPTY_TEST_AFTER_SUPPRESSION"
     $emptyLooksZero = $dashboardText -match 'EMPTY_TEST_AFTER_SUPPRESSION[^0-9]{0,120}0\b'
     $classificationFile = Join-Path $workspacePath "reports/empty-test-classification.md"
     Add-Result $results "empty-test-after-suppression" ((-not $emptyTestHit) -or $emptyLooksZero -or (Test-Path $classificationFile)) ("empty category present: $emptyTestHit; classification: $classificationFile")
+}
+
+if ($RequireOpenCodeExport) {
+    $hasOpenCodeExport = Test-AnyFileExists $workspacePath @("opencode-session-export.*", "opencode-chat-bundle.*", "opencode-review-bundle.*")
+    Add-Result $results "opencode-evidence-export" $hasOpenCodeExport "required: $RequireOpenCodeExport; patterns: opencode-session-export.*, opencode-chat-bundle.*, opencode-review-bundle.*"
+}
+
+if ($RequireExplainTodo) {
+    $hasExplainTodo = Test-AnyFileExists $workspacePath @("explain-todo.json", "explain-todo.md")
+    Add-Result $results "explain-todo-artifacts" $hasExplainTodo "required: $RequireExplainTodo"
+}
+
+if ($RequireVerificationArtifacts) {
+    $hasVerificationArtifacts = Test-AnyFileExists $workspacePath @("verify-report.json", "verify-report.md", "project-verify-report.json", "project-verify-report.md")
+    Add-Result $results "verification-artifacts" $hasVerificationArtifacts "required: $RequireVerificationArtifacts"
 }
 
 $actualStatusTexts = @(

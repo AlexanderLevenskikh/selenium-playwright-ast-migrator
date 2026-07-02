@@ -14,6 +14,28 @@ $env:OPENCODE_CONFIG = "$PWD\.opencode-migrator\opencode.jsonc"
 opencode
 ```
 
+For OpenCode Desktop, install the project config into the repository root that
+Desktop opens:
+
+```powershell
+.\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop
+```
+
+This copies:
+
+- `opencode.jsonc` to the project root.
+- agents to `.opencode\agents`.
+- commands to `.opencode\commands`.
+
+Equivalent manual/direct setup:
+
+```powershell
+Copy-Item "migration\opencode-team\global\.config\opencode\opencode.jsonc" ".\opencode.jsonc" -Force
+New-Item -ItemType Directory -Force ".opencode\agents", ".opencode\commands"
+Copy-Item "migration\opencode-team\global\.config\opencode\agents\*" ".opencode\agents" -Recurse -Force
+Copy-Item "migration\opencode-team\global\.config\opencode\commands\*" ".opencode\commands" -Recurse -Force
+```
+
 ```bash
 bash ./scripts/install-unix.sh --mode ProjectLocal
 OPENCODE_CONFIG="$PWD/.opencode-migrator/opencode.jsonc" opencode
@@ -31,3 +53,9 @@ bash ./scripts/install-unix.sh --mode Global
 
 Global mode may affect TUI, CLI, desktop, and automation sessions that load the
 same user config.
+
+Do not approve shell commands that write these files:
+
+- `migration/scripts/check-scope.ps1`
+- `migration/scripts/check-final-gate.ps1`
+- `migration/.migration-kit/guard-checksums.json`

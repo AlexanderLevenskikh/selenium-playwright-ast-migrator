@@ -11,6 +11,12 @@ Do not fill this file by hand as proof. Run:
 
 The script writes `state/final-gate-result.md/json`; those files are the gate evidence.
 
+For strict forensic final checks, add optional switches:
+
+```powershell
+./migration/scripts/check-final-gate.ps1 -Workspace migration -RequireOpenCodeExport -RequireExplainTodo -RequireVerificationArtifacts
+```
+
 - [ ] PASS: scope guard shows no changed files outside the migration workspace.
 - [ ] PASS: guard script checksums match `.migration-kit/guard-checksums.json`.
 - [ ] PASS: latest run id is consistent across state files and reports.
@@ -21,7 +27,7 @@ The script writes `state/final-gate-result.md/json`; those files are the gate ev
 - [ ] PASS: config-validate passed, or an actual status/handoff file explicitly says `NOT RUNTIME READY`, `BLOCKED_BY_CONFIG`, or `BLOCKED_BY_DIAGNOSTICS`.
 - [ ] PASS: project verify passed, or an actual status/handoff file explicitly says `NOT RUNTIME READY`.
 - [ ] PASS: migration board / explain-todo / verification artifacts are updated for the latest run.
-- [ ] PASS: OpenCode/session evidence bundle is exported or the exact reason is recorded.
+- [ ] PASS: OpenCode/session evidence bundle is exported when `-RequireOpenCodeExport` is used, or the exact reason is recorded.
 
 ## Evidence Links
 
