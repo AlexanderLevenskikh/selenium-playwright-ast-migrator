@@ -32,7 +32,7 @@ Non-negotiable migration-artifact boundary:
 - The real target project, production POM project, Playwright test project, `.csproj`, `nuget.config`, and root-level generated files are read-only.
 - "Write POM" means generated POM proposal/scaffold under `migration/**`, not editing the real POM project.
 - If a real project change seems necessary, create a proposal under `migration/proposals/**` and stop with a forbidden-write blocker.
-- A run is failed if `git status --short --untracked-files=all` shows changed files outside the allowed artifact workspace.
+- A run is failed if `migration/scripts/check-scope.ps1` reports changed files outside the allowed artifact workspace.
 
 Default workflow:
 1. Understand the user's task and restate the concrete goal.

@@ -15,7 +15,7 @@ Hard artifact-only boundary:
 - "Write POM" means generated POM proposal/scaffold under `{{WORKSPACE}}/runs/<run-id>/generated-pom/**`, `{{WORKSPACE}}/runs/<run-id>/target-shadow/**`, or `{{WORKSPACE}}/proposals/**`.
 - If a real target/POM/project change is required, do not apply it. Write a proposal under `{{WORKSPACE}}/proposals/**` and stop with `BLOCKED_BY_FORBIDDEN_WRITE`.
 - Before each major action, restate which `{{WORKSPACE}}/AGENT_CONTRACT.md` rule allows it.
-- After every edit and before any final success claim, run `{{WORKSPACE}}/scripts/check-scope.ps1` or equivalent `git status --short --untracked-files=all` check. Any changed file outside `{{WORKSPACE}}/**` makes the run failed.
+- After every edit and before any final success claim, run `{{WORKSPACE}}/scripts/check-scope.ps1`. Any changed file outside `{{WORKSPACE}}/**` makes the run failed.
 
 Scope:
 - Source Selenium project: {{SOURCE}}
@@ -54,4 +54,5 @@ Rules:
 - Prefer config fixes for project-specific selectors/helper mappings.
 - Use engine fixes only in migrator-code mode for generic migrator limitations and add regression tests.
 - Before stopping or handing off, apply `.agent-loops/15-stop-policy-checklist.md` and update `{{WORKSPACE}}/state/stop-policy-checklist.md`.
+- Do not claim FINAL unless `{{WORKSPACE}}/scripts/check-final-gate.ps1` passes. If it fails, report `NOT FINAL - INVESTIGATION RESULT ONLY`.
 - If interrupted, the next agent must be able to resume from workspace files.

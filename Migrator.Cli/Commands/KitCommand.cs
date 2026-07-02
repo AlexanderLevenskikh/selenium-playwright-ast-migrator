@@ -167,6 +167,7 @@ internal static class KitCommand
         AddCheck(checks, "agent-contract", File.Exists(Path.Combine(workspacePath, "AGENT_CONTRACT.md")), Path.Combine(workspacePath, "AGENT_CONTRACT.md"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "final-gate", File.Exists(Path.Combine(workspacePath, "state", "final-gate.md")), Path.Combine(workspacePath, "state", "final-gate.md"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "scope-guard", File.Exists(Path.Combine(workspacePath, "scripts", "check-scope.ps1")), Path.Combine(workspacePath, "scripts", "check-scope.ps1"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "final-gate-script", File.Exists(Path.Combine(workspacePath, "scripts", "check-final-gate.ps1")), Path.Combine(workspacePath, "scripts", "check-final-gate.ps1"), "Run `migrator kit update --backup`.");
 
         var dotnet = RunProcess("dotnet", "--version");
         AddCheck(checks, "dotnet", dotnet.ExitCode == 0, dotnet.ExitCode == 0 ? dotnet.StdOut.Trim() : dotnet.StdErr.Trim(), "Install .NET SDK or use a self-contained migrator bundle.");

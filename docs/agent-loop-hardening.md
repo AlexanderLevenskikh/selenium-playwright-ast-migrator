@@ -58,6 +58,10 @@ OpenCode should be configured as an execution sandbox, not just a chat prompt:
 
 If path-level edit permissions are unavailable or unreliable, run `migration/scripts/check-scope.ps1` after every patch and before any final answer.
 
+Do not install the OpenCode team template globally unless you want these
+artifact-only rules in every OpenCode session. Prefer project-local install or a
+session-specific `OPENCODE_CONFIG` value for migration runs.
+
 ## Metric integrity
 
 TODO reduction is progress only when it represents real migration:

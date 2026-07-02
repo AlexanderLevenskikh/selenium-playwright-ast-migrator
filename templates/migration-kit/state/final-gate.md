@@ -3,6 +3,14 @@
 The agent may claim `FINAL` only when every applicable item is PASS.
 Otherwise the report must say `NOT FINAL - INVESTIGATION RESULT ONLY`.
 
+Do not fill this file by hand as proof. Run:
+
+```powershell
+./migration/scripts/check-final-gate.ps1 -Workspace migration
+```
+
+The script writes `state/final-gate-result.md/json`; those files are the gate evidence.
+
 - [ ] PASS: scope guard shows no changed files outside the migration workspace.
 - [ ] PASS: latest run id is consistent across state files and reports.
 - [ ] PASS: TODO decreased or was classified without new dangerous suppression categories.

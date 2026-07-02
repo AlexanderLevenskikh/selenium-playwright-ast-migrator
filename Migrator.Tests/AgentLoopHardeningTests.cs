@@ -1,4 +1,5 @@
 using Xunit;
+using System.Diagnostics;
 
 namespace Migrator.Tests;
 
@@ -112,6 +113,7 @@ public class AgentLoopHardeningTests
         Assert.Contains("AGENT_CONTRACT.md", kitCommand);
         Assert.Contains("state/final-gate.md", kitCommand);
         Assert.Contains("check-scope.ps1", kitCommand);
+        Assert.Contains("check-final-gate.ps1", kitCommand);
     }
 
     [Fact]
@@ -120,6 +122,7 @@ public class AgentLoopHardeningTests
         var contract = Read("templates/migration-kit/AGENT_CONTRACT.md");
         var finalGate = Read("templates/migration-kit/state/final-gate.md");
         var scopeGuard = Read("templates/migration-kit/scripts/check-scope.ps1");
+        var finalGateScript = Read("templates/migration-kit/scripts/check-final-gate.ps1");
         var kickoff = Read("templates/migration-kit/prompts/kickoff-prompt.txt");
         var loopBatch = Read("templates/migration-kit/prompts/loop-batch-prompt.txt");
         var review = Read("templates/migration-kit/prompts/review-batch-prompt.txt");
@@ -135,7 +138,13 @@ public class AgentLoopHardeningTests
         Assert.Contains("FluentAssertions/NUnit/business assertions were not suppressed", finalGate);
 
         Assert.Contains("SCOPE_GUARD_FAILED", scopeGuard);
-        Assert.Contains("git status --short --untracked-files=all", kickoff);
+        Assert.Contains("status --porcelain=v1 -z --untracked-files=all", scopeGuard);
+        Assert.Contains("FINAL_GATE_", finalGateScript);
+        Assert.Contains("check-scope.ps1", finalGateScript);
+        Assert.Contains("migration-quality-dashboard.json", finalGateScript);
+        Assert.Contains("EMPTY_TEST_AFTER_SUPPRESSION", finalGateScript);
+        Assert.Contains("NOT RUNTIME READY", finalGateScript);
+        Assert.Contains("check-scope.ps1", kickoff);
         Assert.Contains("TODO removed via suppression does not count as progress", kickoff);
         Assert.Contains("0 TODO", kickoff);
         Assert.Contains("check-scope.ps1", loopBatch);
@@ -160,13 +169,86 @@ public class AgentLoopHardeningTests
         Assert.Contains("\"question\": \"ask\"", config);
         Assert.Contains("\"doom_loop\": \"ask\"", config);
         Assert.Contains("\"external_directory\": \"ask\"", config);
+        Assert.Contains("\"python *\": \"ask\"", config);
+        Assert.Contains("\"Copy-Item *\": \"ask\"", config);
+        Assert.Contains("\"Set-Content *\": \"ask\"", config);
 
         Assert.Contains("Non-negotiable migration-artifact boundary", orchestrator);
-        Assert.Contains("A run is failed if `git status --short --untracked-files=all` shows changed files outside", orchestrator);
+        Assert.Contains("A run is failed if `migration/scripts/check-scope.ps1` reports changed files outside", orchestrator);
         Assert.Contains("Write only under `migration/**`", executor);
         Assert.Contains("Do not suppress assertion/check/helper methods", executor);
         Assert.Contains("forbidden paths changed, verdict is BLOCK", watchdog);
         Assert.Contains("reject the diff if any changed path is outside `migration/**`", reviewer);
+    }
+
+    [Fact]
+    public void OpenCodeSupervisedTask_ReadsContractAndRequiresFinalGate()
+    {
+        var command = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var installWindows = Read("templates/opencode-team/scripts/install-windows.ps1");
+        var installUnix = Read("templates/opencode-team/scripts/install-unix.sh");
+        var installSafety = Read("templates/opencode-team/INSTALLATION-SAFETY.md");
+
+        Assert.Contains("migration/AGENT_CONTRACT.md", command);
+        Assert.Contains("migration/state/final-gate.md", command);
+        Assert.Contains("migration/scripts/check-final-gate.ps1", command);
+        Assert.Contains("NOT FINAL - INVESTIGATION RESULT ONLY", command);
+
+        Assert.Contains("ProjectLocal", installWindows);
+        Assert.Contains("Global", installWindows);
+        Assert.Contains("OPENCODE_CONFIG", installWindows);
+        Assert.Contains("ProjectLocal", installUnix);
+        Assert.Contains("Global", installUnix);
+        Assert.Contains("OPENCODE_CONFIG", installUnix);
+        Assert.Contains("Recommended mode is project-local", installSafety);
+        Assert.Contains("Global mode is advanced", installSafety);
+    }
+
+    [Fact]
+    public void ScopeGuard_AllowsOnlyMigrationWorkspaceChanges()
+    {
+        using var repo = TemporaryGitRepo.Create();
+        repo.Write("migration/inside.txt", "inside");
+
+        var result = repo.RunScopeGuard("migration");
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("SCOPE_GUARD_PASSED", result.Output);
+    }
+
+    [Fact]
+    public void ScopeGuard_FailsForOutsideStagedUntrackedAndRenamedPaths()
+    {
+        using var repo = TemporaryGitRepo.Create();
+
+        repo.Write("outside.txt", "outside");
+        var untracked = repo.RunScopeGuard("migration");
+        Assert.NotEqual(0, untracked.ExitCode);
+        Assert.Contains("outside.txt", untracked.Output);
+
+        repo.Git("add outside.txt");
+        var staged = repo.RunScopeGuard("migration");
+        Assert.NotEqual(0, staged.ExitCode);
+        Assert.Contains("outside.txt", staged.Output);
+
+        repo.Git("commit -m baseline");
+        repo.Git("mv outside.txt migration/moved.txt");
+        var renamed = repo.RunScopeGuard("migration");
+        Assert.NotEqual(0, renamed.ExitCode);
+        Assert.Contains("outside.txt", renamed.Output);
+    }
+
+    [Fact]
+    public void ScopeGuard_HandlesSpacesAndAbsoluteAllowedRoots()
+    {
+        using var repo = TemporaryGitRepo.Create();
+        repo.Write("migration/with spaces/file name.txt", "inside");
+
+        var relative = repo.RunScopeGuard("migration");
+        Assert.Equal(0, relative.ExitCode);
+
+        var absoluteMigration = Path.Combine(repo.Path, "migration");
+        var absolute = repo.RunScopeGuard(absoluteMigration);
+        Assert.Equal(0, absolute.ExitCode);
     }
 
     static string Read(string relativePath) => File.ReadAllText(FindRepositoryFile(relativePath));
@@ -183,5 +265,80 @@ public class AgentLoopHardeningTests
         }
 
         throw new FileNotFoundException($"Could not find repository file: {relativePath}");
+    }
+
+    sealed class TemporaryGitRepo : IDisposable
+    {
+        readonly string _scriptPath;
+
+        TemporaryGitRepo(string path, string scriptPath)
+        {
+            Path = path;
+            _scriptPath = scriptPath;
+        }
+
+        public string Path { get; }
+
+        public static TemporaryGitRepo Create()
+        {
+            var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "migrator-scope-guard-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(path);
+            var repo = new TemporaryGitRepo(path, FindRepositoryFile("templates/migration-kit/scripts/check-scope.ps1"));
+            repo.Git("init");
+            repo.Git("config user.email test@example.local");
+            repo.Git("config user.name Test");
+            Directory.CreateDirectory(System.IO.Path.Combine(path, "migration"));
+            return repo;
+        }
+
+        public void Write(string relativePath, string content)
+        {
+            var fullPath = System.IO.Path.Combine(Path, relativePath.Replace('/', System.IO.Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(fullPath)!);
+            File.WriteAllText(fullPath, content);
+        }
+
+        public void Git(string arguments)
+        {
+            var result = RunProcess("git", arguments, Path);
+            if (result.ExitCode != 0)
+                throw new InvalidOperationException($"git {arguments} failed: {result.Output}");
+        }
+
+        public ProcessResult RunScopeGuard(string allowedRoot)
+            => RunProcess("powershell", $"-NoProfile -ExecutionPolicy Bypass -File \"{_scriptPath}\" -RepoRoot \"{Path}\" -AllowedRoots \"{allowedRoot}\"", Path);
+
+        public void Dispose()
+        {
+            try
+            {
+                Directory.Delete(Path, recursive: true);
+            }
+            catch
+            {
+                // Best-effort cleanup for temp test repositories.
+            }
+        }
+    }
+
+    sealed record ProcessResult(int ExitCode, string Output);
+
+    static ProcessResult RunProcess(string fileName, string arguments, string workingDirectory)
+    {
+        using var process = new Process();
+        process.StartInfo = new ProcessStartInfo
+        {
+            FileName = fileName,
+            Arguments = arguments,
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        process.Start();
+        var output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
+        process.WaitForExit(30000);
+        return new ProcessResult(process.ExitCode, output);
     }
 }

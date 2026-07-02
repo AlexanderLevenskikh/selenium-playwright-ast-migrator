@@ -28,6 +28,20 @@ permission:
     "pnpm test*": ask
     "pnpm lint*": ask
 
+    "python *": ask
+    "py *": ask
+    "powershell *": ask
+    "pwsh *": ask
+    "cmd /c *": ask
+    "cp *": ask
+    "copy *": ask
+    "Copy-Item *": ask
+    "mv *": ask
+    "Move-Item *": ask
+    "Set-Content *": ask
+    "Out-File *": ask
+    "New-Item *": ask
+
     "git commit*": deny
     "git push*": deny
     "git reset --hard*": deny
