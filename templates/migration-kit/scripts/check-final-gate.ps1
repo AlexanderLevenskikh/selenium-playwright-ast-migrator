@@ -251,12 +251,60 @@ function Find-DangerousQualityHits([string]$Path, [string]$Text, [string[]]$Dang
     return @($DangerousPatterns | Where-Object { $Text -match [regex]::Escape($_) })
 }
 
-function Test-AnyFileExists([string]$Root, [string[]]$Patterns) {
+function Test-PathMatchesAnyPattern([string]$RelativePath, [string[]]$Patterns) {
+    $normalized = $RelativePath.Replace("\", "/")
     foreach ($pattern in $Patterns) {
-        $file = Get-ChildItem -Path $Root -Recurse -File -Filter $pattern -ErrorAction SilentlyContinue |
-            Select-Object -First 1
-        if ($file -ne $null) {
+        $regex = "^" + [regex]::Escape($pattern).Replace("\*", ".*").Replace("\?", ".") + "$"
+        if ($normalized -match $regex) {
             return $true
+        }
+
+        $leaf = @($normalized -split "/")[-1]
+        $leafRegex = "^" + [regex]::Escape($pattern).Replace("\*", ".*").Replace("\?", ".") + "$"
+        if ($leaf -match $leafRegex) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Test-EvidenceExists([string]$Root, [string[]]$Patterns, [string]$LatestRunId = "", [switch]$RequireLatestRun) {
+    if (-not (Test-Path $Root)) {
+        return $false
+    }
+
+    $rootFull = [System.IO.Path]::GetFullPath($Root)
+    $items = Get-ChildItem -Path $Root -Recurse -Force -ErrorAction SilentlyContinue
+
+    foreach ($item in $items) {
+        $relative = [System.IO.Path]::GetRelativePath($rootFull, $item.FullName).Replace("\", "/")
+        if (-not (Test-PathMatchesAnyPattern $relative $Patterns)) {
+            continue
+        }
+
+        if (-not $RequireLatestRun) {
+            return $true
+        }
+
+        if ([string]::IsNullOrWhiteSpace($LatestRunId)) {
+            continue
+        }
+
+        if ($relative -match [regex]::Escape($LatestRunId)) {
+            return $true
+        }
+
+        if (-not $item.PSIsContainer) {
+            try {
+                $text = Get-Content -Raw -Path $item.FullName -ErrorAction Stop
+                if ($text -match [regex]::Escape($LatestRunId)) {
+                    return $true
+                }
+            }
+            catch {
+                # Ignore unreadable candidate files.
+            }
         }
     }
 
@@ -291,6 +339,7 @@ $agentStatePath = Join-Path $workspacePath "agent-state.md"
 $currentTicketPath = Join-Path $workspacePath "current-ticket.md"
 $runLedgerPath = Join-Path $workspacePath "state/run-ledger.md"
 $stateFiles = @($agentStatePath, $currentTicketPath, $runLedgerPath)
+$latestRunId = $null
 $boardFile = Find-LatestFile -Root $workspacePath -Names @("migration-board.md", "migration-board.json")
 if ($boardFile -ne $null) {
     $stateFiles += $boardFile.FullName
@@ -362,18 +411,18 @@ else {
 }
 
 if ($RequireOpenCodeExport) {
-    $hasOpenCodeExport = Test-AnyFileExists $workspacePath @("opencode-session-export.*", "opencode-chat-bundle.*", "opencode-review-bundle.*")
-    Add-Result $results "opencode-evidence-export" $hasOpenCodeExport "required: $RequireOpenCodeExport; patterns: opencode-session-export.*, opencode-chat-bundle.*, opencode-review-bundle.*"
+    $hasOpenCodeExport = Test-EvidenceExists $workspacePath @("opencode-session-export.*", "opencode-chat-bundle.*", "opencode-chat-bundle-*", "opencode-review-bundle.*", "opencode-review-bundle-*")
+    Add-Result $results "opencode-evidence-export" $hasOpenCodeExport "required: $RequireOpenCodeExport; patterns: opencode-session-export.*, opencode-chat-bundle.*, opencode-chat-bundle-*, opencode-review-bundle.*, opencode-review-bundle-*"
 }
 
 if ($RequireExplainTodo) {
-    $hasExplainTodo = Test-AnyFileExists $workspacePath @("explain-todo.json", "explain-todo.md")
-    Add-Result $results "explain-todo-artifacts" $hasExplainTodo "required: $RequireExplainTodo"
+    $hasExplainTodo = Test-EvidenceExists $workspacePath @("explain-todo.json", "explain-todo.md") $latestRunId -RequireLatestRun
+    Add-Result $results "explain-todo-artifacts" $hasExplainTodo "required: $RequireExplainTodo; latest run id: $latestRunId"
 }
 
 if ($RequireVerificationArtifacts) {
-    $hasVerificationArtifacts = Test-AnyFileExists $workspacePath @("verify-report.json", "verify-report.md", "project-verify-report.json", "project-verify-report.md")
-    Add-Result $results "verification-artifacts" $hasVerificationArtifacts "required: $RequireVerificationArtifacts"
+    $hasVerificationArtifacts = Test-EvidenceExists $workspacePath @("verify-report.json", "verify-report.md", "project-verify-report.json", "project-verify-report.md") $latestRunId -RequireLatestRun
+    Add-Result $results "verification-artifacts" $hasVerificationArtifacts "required: $RequireVerificationArtifacts; latest run id: $latestRunId"
 }
 
 $actualStatusTexts = @(

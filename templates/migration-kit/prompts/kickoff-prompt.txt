@@ -54,5 +54,5 @@ Rules:
 - Prefer config fixes for project-specific selectors/helper mappings.
 - Use engine fixes only in migrator-code mode for generic migrator limitations and add regression tests.
 - Before stopping or handing off, apply `.agent-loops/15-stop-policy-checklist.md` and update `{{WORKSPACE}}/state/stop-policy-checklist.md`.
-- Do not claim FINAL unless `{{WORKSPACE}}/scripts/check-final-gate.ps1` passes. If it fails, report `NOT FINAL - INVESTIGATION RESULT ONLY`.
+- Do not claim FINAL unless `{{WORKSPACE}}/scripts/check-final-gate.ps1 -RequireOpenCodeExport -RequireExplainTodo -RequireVerificationArtifacts` passes. If strict evidence is not available, report `NOT FINAL - INVESTIGATION RESULT ONLY`.
 - If interrupted, the next agent must be able to resume from workspace files.

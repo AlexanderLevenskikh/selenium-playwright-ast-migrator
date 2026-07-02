@@ -18,8 +18,13 @@ For OpenCode Desktop, install the project config into the repository root that
 Desktop opens:
 
 ```powershell
+Set-Location "C:\Users\levenskikh\Desktop\billy"
 .\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop
 ```
+
+`ProjectDesktop` backs up existing `opencode.jsonc`, `.opencode\agents`, and
+`.opencode\commands` under `.migration-kit\opencode-backups\<timestamp>` before
+overwriting them. Use `-Force` only when overwriting without a backup is intended.
 
 This copies:
 

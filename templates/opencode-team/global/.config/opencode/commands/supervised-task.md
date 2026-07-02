@@ -22,7 +22,7 @@ Use the supervised workflow:
 8. Run migration/scripts/check-scope.ps1 after any patch.
 9. Apply only minimal fixes if needed.
 10. Stop after at most 2 fix-review cycles unless the user asks to continue.
-11. Do not issue FINAL unless migration/scripts/check-final-gate.ps1 passes and migration/state/final-gate.md can be marked PASS with evidence. Otherwise say NOT FINAL - INVESTIGATION RESULT ONLY.
+11. Do not issue FINAL unless `migration/scripts/check-final-gate.ps1 -RequireOpenCodeExport -RequireExplainTodo -RequireVerificationArtifacts` passes and migration/state/final-gate.md can be marked PASS with evidence. Otherwise say NOT FINAL - INVESTIGATION RESULT ONLY.
 12. Final report:
    - changed files;
    - verification result;

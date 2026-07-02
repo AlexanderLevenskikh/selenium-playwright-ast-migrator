@@ -142,6 +142,9 @@ public class AgentLoopHardeningTests
         Assert.Contains("SCOPE_GUARD_FAILED", scopeGuard);
         Assert.Contains("status --porcelain=v1 -z --untracked-files=all", scopeGuard);
         Assert.Contains("FINAL_GATE_", finalGateScript);
+        Assert.Contains("RequireOpenCodeExport", finalGateScript);
+        Assert.Contains("Test-EvidenceExists", finalGateScript);
+        Assert.Contains("opencode-chat-bundle-*", finalGateScript);
         Assert.Contains("check-scope.ps1", finalGateScript);
         Assert.Contains("guard-checksums", finalGateScript);
         Assert.Contains("migration-quality-dashboard.json", finalGateScript);
@@ -149,9 +152,13 @@ public class AgentLoopHardeningTests
         Assert.Contains("NOT RUNTIME READY", finalGateScript);
         Assert.DoesNotContain("state/final-gate.md\")", finalGateScript);
         Assert.Contains("check-scope.ps1", kickoff);
+        Assert.Contains("RequireOpenCodeExport", kickoff);
+        Assert.Contains("RequireExplainTodo", kickoff);
+        Assert.Contains("RequireVerificationArtifacts", kickoff);
         Assert.Contains("TODO removed via suppression does not count as progress", kickoff);
         Assert.Contains("0 TODO", kickoff);
         Assert.Contains("check-scope.ps1", loopBatch);
+        Assert.Contains("RequireOpenCodeExport", loopBatch);
         Assert.Contains("no FluentAssertions/NUnit/business assertion suppression", review);
         Assert.Contains("Scope guard command/result", stopChecklist);
         Assert.Contains("Suppression categories before/after", stopChecklist);
@@ -199,15 +206,21 @@ public class AgentLoopHardeningTests
         Assert.Contains("migration/AGENT_CONTRACT.md", command);
         Assert.Contains("migration/state/final-gate.md", command);
         Assert.Contains("migration/scripts/check-final-gate.ps1", command);
+        Assert.Contains("RequireOpenCodeExport", command);
         Assert.Contains("NOT FINAL - INVESTIGATION RESULT ONLY", command);
 
         Assert.Contains("ProjectLocal", installWindows);
+        Assert.Contains("ProjectDesktop", installWindows);
+        Assert.Contains("Backup-PathIfExists", installWindows);
+        Assert.Contains("opencode-backups", installWindows);
         Assert.Contains("Global", installWindows);
         Assert.Contains("OPENCODE_CONFIG", installWindows);
         Assert.Contains("ProjectLocal", installUnix);
         Assert.Contains("Global", installUnix);
         Assert.Contains("OPENCODE_CONFIG", installUnix);
         Assert.Contains("Recommended mode is project-local", installSafety);
+        Assert.Contains("Set-Location", installSafety);
+        Assert.Contains("opencode-backups", installSafety);
         Assert.Contains("Global mode is advanced", installSafety);
     }
 
@@ -305,6 +318,187 @@ public class AgentLoopHardeningTests
         Assert.Contains("diagnostics recorded: True; explicit blocker status: False", report);
     }
 
+
+    [Fact]
+    public void FinalGate_DoesNotPassConfigValidateWhenJsonStatusFailedEvenWithZeroErrors()
+    {
+        using var repo = TemporaryGitRepo.Create();
+        PrepareFinalGateWorkspace(repo, latestRunId: "run-004", explicitStatus: null, includeProjectVerify: true, configPassed: true);
+        repo.Write("migration/reports/config-validate-report.json", """
+            { "status": "failed", "errorCount": 0, "errors": 0, "failed": 0, "failureCount": 0 }
+            """);
+
+        var result = repo.RunFinalGate();
+        var report = repo.Read("migration/state/final-gate-result.json");
+        var compact = CompactJsonLike(report);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("\"name\":\"config-validate\"", compact);
+        Assert.Contains("\"passed\":false", compact);
+        Assert.Contains("passed: False", report);
+    }
+
+    [Fact]
+    public void FinalGate_DangerousQualityCountsZeroPassButPositiveCountsFail()
+    {
+        using (var repo = TemporaryGitRepo.Create())
+        {
+            PrepareFinalGateWorkspace(repo, latestRunId: "run-005", explicitStatus: "Final status: NOT RUNTIME READY", includeProjectVerify: false, configPassed: true);
+            repo.Write("migration/runs/run-005/migration-quality-dashboard.json", """
+                {
+                  "status": "passed",
+                  "DANGEROUS_ASSERTION_SUPPRESSION": 0,
+                  "EMPTY_TEST_AFTER_SUPPRESSION": 0,
+                  "categories": [
+                    { "category": "ASSERTION_SUPPRESSION_BLOCKED", "count": 0 },
+                    { "category": "DEPENDS_ON_SUPPRESSED_SIDE_EFFECT", "count": 0 }
+                  ]
+                }
+                """);
+
+            var result = repo.RunFinalGate();
+            var report = repo.Read("migration/state/final-gate-result.json");
+            var compact = CompactJsonLike(report);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Contains("\"name\":\"quality-dangerous-categories\"", compact);
+            Assert.Contains("\"status\":\"PASS\"", compact);
+        }
+
+        using (var repo = TemporaryGitRepo.Create())
+        {
+            PrepareFinalGateWorkspace(repo, latestRunId: "run-006", explicitStatus: "Final status: NOT RUNTIME READY", includeProjectVerify: false, configPassed: true);
+            repo.Write("migration/runs/run-006/migration-quality-dashboard.json", """
+                {
+                  "status": "passed",
+                  "DANGEROUS_ASSERTION_SUPPRESSION": 2,
+                  "EMPTY_TEST_AFTER_SUPPRESSION": 0,
+                  "categories": [
+                    { "category": "ASSERTION_SUPPRESSION_BLOCKED", "count": 0 },
+                    { "category": "DEPENDS_ON_SUPPRESSED_SIDE_EFFECT", "count": 0 }
+                  ]
+                }
+                """);
+
+            var result = repo.RunFinalGate();
+            var report = repo.Read("migration/state/final-gate-result.json");
+            var compact = CompactJsonLike(report);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("\"name\":\"quality-dangerous-categories\"", compact);
+            Assert.Contains("\"passed\":false", compact);
+            Assert.Contains("DANGEROUS_ASSERTION_SUPPRESSION:2", report);
+        }
+    }
+
+    [Fact]
+    public void FinalGate_DangerousQualityCategoryArrayCountsAreStructural()
+    {
+        using (var repo = TemporaryGitRepo.Create())
+        {
+            PrepareFinalGateWorkspace(repo, latestRunId: "run-007", explicitStatus: "Final status: NOT RUNTIME READY", includeProjectVerify: false, configPassed: true);
+            repo.Write("migration/runs/run-007/migration-quality-dashboard.json", """
+                {
+                  "status": "passed",
+                  "EMPTY_TEST_AFTER_SUPPRESSION": 0,
+                  "categories": [
+                    { "category": "ASSERTION_SUPPRESSION_BLOCKED", "count": 0 }
+                  ]
+                }
+                """);
+
+            var result = repo.RunFinalGate();
+            Assert.Equal(0, result.ExitCode);
+        }
+
+        using (var repo = TemporaryGitRepo.Create())
+        {
+            PrepareFinalGateWorkspace(repo, latestRunId: "run-008", explicitStatus: "Final status: NOT RUNTIME READY", includeProjectVerify: false, configPassed: true);
+            repo.Write("migration/runs/run-008/migration-quality-dashboard.json", """
+                {
+                  "status": "passed",
+                  "EMPTY_TEST_AFTER_SUPPRESSION": 0,
+                  "categories": [
+                    { "category": "ASSERTION_SUPPRESSION_BLOCKED", "count": 1 }
+                  ]
+                }
+                """);
+
+            var result = repo.RunFinalGate();
+            var report = repo.Read("migration/state/final-gate-result.json");
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("ASSERTION_SUPPRESSION_BLOCKED:1", report);
+        }
+    }
+
+    [Fact]
+    public void FinalGate_RequireOpenCodeExportFailsWhenMissingAndAcceptsBundleDirectory()
+    {
+        using (var repo = TemporaryGitRepo.Create())
+        {
+            PrepareFinalGateWorkspace(repo, latestRunId: "run-009", explicitStatus: "Final status: NOT RUNTIME READY", includeProjectVerify: false, configPassed: true);
+
+            var result = repo.RunFinalGate("-RequireOpenCodeExport");
+            var report = repo.Read("migration/state/final-gate-result.json");
+            var compact = CompactJsonLike(report);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("\"name\":\"opencode-evidence-export\"", compact);
+            Assert.Contains("\"passed\":false", compact);
+        }
+
+        using (var repo = TemporaryGitRepo.Create())
+        {
+            PrepareFinalGateWorkspace(repo, latestRunId: "run-010", explicitStatus: "Final status: NOT RUNTIME READY", includeProjectVerify: false, configPassed: true);
+            Directory.CreateDirectory(System.IO.Path.Combine(repo.WorkspacePath, "evidence", "opencode-chat-bundle-run-010"));
+
+            var result = repo.RunFinalGate("-RequireOpenCodeExport");
+            var report = repo.Read("migration/state/final-gate-result.json");
+            var compact = CompactJsonLike(report);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Contains("\"name\":\"opencode-evidence-export\"", compact);
+            Assert.Contains("\"passed\":true", compact);
+        }
+    }
+
+    [Fact]
+    public void FinalGate_StrictExplainAndVerificationArtifactsMustMatchLatestRunId()
+    {
+        using (var repo = TemporaryGitRepo.Create())
+        {
+            PrepareFinalGateWorkspace(repo, latestRunId: "run-011", explicitStatus: "Final status: NOT RUNTIME READY", includeProjectVerify: false, configPassed: true);
+            repo.Write("migration/runs/run-001/explain-todo.json", "{ \"runId\": \"run-001\" }");
+            repo.Write("migration/runs/run-001/verify-report.json", "{ \"runId\": \"run-001\", \"status\": \"passed\" }");
+
+            var result = repo.RunFinalGate("-RequireExplainTodo -RequireVerificationArtifacts");
+            var report = repo.Read("migration/state/final-gate-result.json");
+            var compact = CompactJsonLike(report);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("\"name\":\"explain-todo-artifacts\"", compact);
+            Assert.Contains("\"name\":\"verification-artifacts\"", compact);
+            Assert.Contains("\"passed\":false", compact);
+        }
+
+        using (var repo = TemporaryGitRepo.Create())
+        {
+            PrepareFinalGateWorkspace(repo, latestRunId: "run-012", explicitStatus: "Final status: NOT RUNTIME READY", includeProjectVerify: false, configPassed: true);
+            repo.Write("migration/runs/run-012/explain-todo.json", "{ \"runId\": \"run-012\" }");
+            repo.Write("migration/runs/run-012/verify-report.json", "{ \"runId\": \"run-012\", \"status\": \"passed\" }");
+
+            var result = repo.RunFinalGate("-RequireExplainTodo -RequireVerificationArtifacts");
+            var report = repo.Read("migration/state/final-gate-result.json");
+            var compact = CompactJsonLike(report);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Contains("\"name\":\"explain-todo-artifacts\"", compact);
+            Assert.Contains("\"passed\":true", compact);
+            Assert.Contains("\"name\":\"verification-artifacts\"", compact);
+        }
+    }
+
     static string Read(string relativePath) => File.ReadAllText(FindRepositoryFile(relativePath));
 
     static string CompactJsonLike(string text)
@@ -319,7 +513,7 @@ public class AgentLoopHardeningTests
         repo.Write("migration/.migration-kit/guard-checksums.json", BuildGuardChecksumsJson(repo.WorkspacePath));
         repo.Write("migration/agent-state.md", $"# Agent State\n\nLatest run: {latestRunId}\n");
         repo.Write("migration/current-ticket.md", $"# Current Ticket\n\nLatest run: {latestRunId}\n");
-        repo.Write("migration/state/run-ledger.md", "# Run Ledger\n\n### run-001\n\nHistorical entry.\n\n### run-002\n\nLatest or historical entry.\n\n### run-003\n\nLatest or historical entry.\n");
+        repo.Write("migration/state/run-ledger.md", $"# Run Ledger\n\n### run-001\n\nHistorical entry.\n\n### run-002\n\nHistorical entry.\n\n### run-003\n\nHistorical entry.\n\n### {latestRunId}\n\nLatest entry.\n");
         repo.Write($"migration/runs/{latestRunId}/migration-board.md", $"# Board\n\nLatest run: {latestRunId}\n");
         repo.Write($"migration/runs/{latestRunId}/migration-quality-dashboard.json", "{ \"status\": \"passed\", \"EMPTY_TEST_AFTER_SUPPRESSION\": 0, \"categories\": [] }");
         repo.Write("migration/state/handoff.md", explicitStatus ?? "Status: READY_FOR_ACCEPTANCE\n");
@@ -418,11 +612,15 @@ public class AgentLoopHardeningTests
         public ProcessResult RunScopeGuard(string allowedRoot)
             => RunProcess("powershell", $"-NoProfile -ExecutionPolicy Bypass -File \"{_scriptPath}\" -RepoRoot \"{Path}\" -AllowedRoots \"{allowedRoot}\"", Path);
 
-        public ProcessResult RunFinalGate()
+        public ProcessResult RunFinalGate(string additionalArguments = "")
         {
             var scriptPath = System.IO.Path.Combine(Path, "migration", "scripts", "check-final-gate.ps1");
-            return RunProcess("powershell", $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\" -Workspace \"migration\" -RepoRoot \"{Path}\" -AllowedRoots \"migration\"", Path);
+            var args = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\" -Workspace \"migration\" -RepoRoot \"{Path}\" -AllowedRoots \"migration\"";
+            if (!string.IsNullOrWhiteSpace(additionalArguments))
+                args += " " + additionalArguments;
+            return RunProcess("powershell", args, Path);
         }
+
 
         public void Dispose()
         {

@@ -53,7 +53,7 @@ Safety gates:
 - If the change is unsafe or makes metrics worse without clear justification, revert it and mark `UNSAFE_REVERTED`.
 - Before each major action, restate which `{{WORKSPACE}}/AGENT_CONTRACT.md` rule allows it.
 - Run `{{WORKSPACE}}/scripts/check-scope.ps1` after edits. If any changed file is outside `{{WORKSPACE}}/**`, stop with `BLOCKED_BY_FORBIDDEN_WRITE`; do not ask whether to continue.
-- Do not claim FINAL unless `{{WORKSPACE}}/scripts/check-final-gate.ps1` passes. If it fails, report `NOT FINAL - INVESTIGATION RESULT ONLY`.
+- Do not claim FINAL unless `{{WORKSPACE}}/scripts/check-final-gate.ps1 -RequireOpenCodeExport -RequireExplainTodo -RequireVerificationArtifacts` passes. If strict evidence is not available, report `NOT FINAL - INVESTIGATION RESULT ONLY`.
 
 Helper/POM evidence rule:
 - If the current ticket involves suppressions, `MethodSemantics`, unknown helpers, or project/POM wrapper methods, run or request `--mode helper-inventory` before adding suppressions or mappings. Do not guess helper semantics from method names alone.
