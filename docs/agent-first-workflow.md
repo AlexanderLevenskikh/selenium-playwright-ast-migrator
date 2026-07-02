@@ -1,3 +1,5 @@
+> **Legacy/background note:** Do not use this document as the current guarded OpenCode Desktop launch procedure. For current migration-agent runs, start with `docs/guarded-opencode-desktop-runbook.ru.md`.
+
 # Agent-first workflow
 
 Этот документ описывает основной способ работы с мигратором после Milestone 7.

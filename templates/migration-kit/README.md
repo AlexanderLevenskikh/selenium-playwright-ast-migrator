@@ -1,5 +1,13 @@
 # Migration workspace
 
+For the current guarded OpenCode Desktop launch procedure, use the canonical runbook in the migrator repository:
+
+```text
+docs/guarded-opencode-desktop-runbook.ru.md
+```
+
+This README describes the installed `migration/` workspace layout and local rules.
+
 This folder is the local workspace for a Selenium C# → Playwright migration.
 
 It is intentionally file-based so an AI agent can resume after context loss.
@@ -40,10 +48,15 @@ migration/
 
 ## First run
 
+For OpenCode Desktop, follow `docs/guarded-opencode-desktop-runbook.ru.md` instead of copying prompts manually.
+
+Manual/non-Desktop fallback:
+
 1. Edit `profiles/adapter-config.json` or replace it with your project config.
 2. Copy `prompts/kickoff-prompt.txt` into your agent.
-3. Let the agent run the smallest safe migration loop.
+3. Run only a bounded artifact-only batch.
 4. After every batch, keep `agent-state.md`, `current-ticket.md`, and `state/*` up to date.
+5. Run `scripts/check-scope.ps1` and `scripts/check-final-gate.ps1` before accepting any batch.
 
 ## Updating the kit
 

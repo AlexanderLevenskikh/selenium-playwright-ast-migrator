@@ -1,3 +1,5 @@
+> **Legacy/background note:** Do not use this document as the current guarded OpenCode Desktop launch procedure. For current migration-agent runs, start with `docs/guarded-opencode-desktop-runbook.ru.md`.
+
 # Agent modes: Strict and Creative
 
 The migrator is designed to work well with AI agents, but different migration phases need different levels of freedom.

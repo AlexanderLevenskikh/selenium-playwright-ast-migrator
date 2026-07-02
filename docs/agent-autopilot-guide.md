@@ -1,3 +1,5 @@
+> **Legacy/background note:** Do not use this document as the current guarded OpenCode Desktop launch procedure. For current migration-agent runs, start with `docs/guarded-opencode-desktop-runbook.ru.md`.
+
 # Agent and autopilot guide
 
 The Migrator can be used manually or by a coding agent. Agent mode is useful when a migration has many repeated TODO/root-cause categories and the agent can run tests, edit config, verify output, and continue without asking for routine continuation decisions.

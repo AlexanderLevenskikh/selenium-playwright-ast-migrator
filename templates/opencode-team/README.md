@@ -1,6 +1,18 @@
 # OpenCode Agent Team Template
 
-Готовая структура для схемы:
+Готовая структура для guarded OpenCode workflow.
+
+## Canonical migration workflow
+
+For current guarded OpenCode Desktop migration runs, use the canonical runbook:
+
+```text
+docs/guarded-opencode-desktop-runbook.ru.md
+```
+
+This README only describes the reusable OpenCode team template. Do not use it as a complete migration launch procedure.
+
+## Agents
 
 - `orchestrator` — главный агент/тимлид, сам не редактирует файлы.
 - `executor` — исполнитель, делает маленькие scoped-правки.
@@ -10,69 +22,70 @@
 - `/checkpoint` — ручная команда для проверки текущего состояния watchdog'ом.
 - `AGENTS.md` — проектные правила, которые кладутся в корень репозитория.
 
-## Куда копировать
+The migration template is intentionally artifact-only by default: real product/POM/PW project edits are forbidden for normal migration runs. Put generated/shadow/proposal files under `migration/**`.
 
-### Глобально
+## Recommended installation modes
 
-Скопируй содержимое:
+### OpenCode Desktop / product repo
 
-```text
-global/.config/opencode/
-```
-
-в:
-
-```text
-~/.config/opencode/
-```
-
-На Windows обычно:
-
-```text
-%USERPROFILE%\.config\opencode\
-```
-
-### В проект
-
-Скопируй:
-
-```text
-project-template/AGENTS.md
-```
-
-в корень нужного репозитория.
-
-## Быстрая установка
-
-### Windows PowerShell
-
-Из корня распакованного архива:
+Use project-local Desktop installation from the product repository root:
 
 ```powershell
-.\scripts\install-windows.ps1
+Set-Location "C:\Users\levenskikh\Desktop\billy"
+.\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop
 ```
 
-### macOS/Linux/Git Bash
-
-```bash
-bash ./scripts/install-unix.sh
-```
-
-## Как пользоваться
-
-В opencode:
+This writes only project-local files:
 
 ```text
-/supervised-task исправить UnsupportedAction для page.Pagination.Forward, без широкого рефакторинга
+opencode.jsonc
+.opencode/agents/*
+.opencode/commands/*
 ```
 
-Ручной контроль:
+For full instructions, approve/deny rules, strict final gate, and forensic export, use:
+
+```text
+docs/guarded-opencode-desktop-runbook.ru.md
+```
+
+### CLI/TUI project-local mode
+
+Use project-local mode when you want a dedicated config directory and explicit `OPENCODE_CONFIG`:
+
+```powershell
+.\scripts\install-windows.ps1 -Mode ProjectLocal
+$env:OPENCODE_CONFIG = "$PWD\.opencode-migrator\opencode.jsonc"
+opencode
+```
+
+### Global mode
+
+Global mode is advanced and may affect all OpenCode sessions for the user:
+
+```powershell
+.\scripts\install-windows.ps1 -Mode Global
+```
+
+Do not use global mode for normal migration experiments unless you intentionally want these guarded migration defaults globally.
+
+## How to use inside OpenCode
+
+For guarded migration runs, open the product repo root in OpenCode Desktop and run:
+
+```text
+/supervised-task
+```
+
+Then use the kickoff prompt from the canonical runbook.
+
+Manual control:
 
 ```text
 /checkpoint
 ```
 
-Ручной вызов агента:
+Manual subagent calls:
 
 ```text
 @watchdog проверь текущую работу на соответствие AGENTS.md и задаче пользователя
@@ -86,21 +99,23 @@ bash ./scripts/install-unix.sh
 @executor реализуй только минимальный фикс, не трогай соседние категории
 ```
 
-## Идея workflow
+## Workflow idea
 
-1. Orchestrator понимает задачу и составляет план.
-2. Watchdog проверяет план на соответствие правилам.
-3. Executor делает минимальный patch.
-4. Watchdog проверяет, не уехал ли исполнитель.
-5. Reviewer проверяет diff.
-6. Executor исправляет только блокеры.
-7. Orchestrator выдаёт честный финальный отчёт.
+1. Orchestrator understands the task and proposes a bounded plan.
+2. Watchdog checks the plan against `AGENT_CONTRACT.md`, scope rules, and final gate rules.
+3. Executor makes the smallest allowed artifact-only patch.
+4. Watchdog verifies scope and policy drift.
+5. Reviewer checks the current diff/artifacts.
+6. Executor fixes only verified blockers.
+7. Orchestrator reports honestly: `FINAL` only when strict final gate passes, otherwise `NOT FINAL - INVESTIGATION RESULT ONLY`.
 
-## Важное
+## Important
 
-Это не “агент по таймеру”. Watchdog вызывается:
-- автоматически orchestrator'ом по чекпоинтам;
-- вручную через `@watchdog`;
-- вручную через `/checkpoint`.
+For hard safety, permissions and guard scripts are the source of truth, not the agent's final message.
 
-Для жёсткой защиты опасные действия лучше запрещать permissions, а не просто просить агента быть хорошим.
+Do not approve shell commands that write:
+
+- outside `migration/**`;
+- `migration/scripts/check-scope.ps1`;
+- `migration/scripts/check-final-gate.ps1`;
+- `migration/.migration-kit/guard-checksums.json`.

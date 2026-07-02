@@ -7,6 +7,7 @@ Public documentation is organized by the path a new user usually follows: instal
 - [Quick start](quick-start.md) — first successful local run.
 - [Init wizard](init-wizard.md)
 - [Migration runbook](migration-runbook.md) — production migration plan, pilot scope, risks, and command chain.
+- [Guarded OpenCode Desktop migration runbook](guarded-opencode-desktop-runbook.ru.md) — canonical guarded agent workflow: local tool build/update, kit update, ProjectDesktop install, `/supervised-task`, approve/deny rules, scope/final gates, and forensic export.
 - [End-to-end simple example](examples/end-to-end-simple.md) — real input, config, command, and expected generated output from `examples/simple/`.
 - [Public demo and guided tutorial](public-demo-tutorial.md) — 10-minute NUnit/xUnit walkthrough with dashboard sample.
 - [Public Demo / Playground](public-playground.md) — one-command five-minute disposable demo workspace.
@@ -56,13 +57,16 @@ Public documentation is organized by the path a new user usually follows: instal
 
 ## Agent and autopilot guide
 
-- [Agent/autopilot guide](agent-autopilot-guide.md)
-- [Autopilot loop](autopilot-loop.md)
-- [Agent loop hardening](agent-loop-hardening.md)
-- [Agent command set](agent-command-set.md)
-- [Agent config guidelines](agent-config-guidelines.md)
-- [Agent safety](agent-safety.md)
-- [Agent contract pack](agent-contract-pack.md)
+- [Guarded OpenCode Desktop migration runbook](guarded-opencode-desktop-runbook.ru.md) — **canonical launch procedure** for current guarded OpenCode Desktop migration runs. Start here.
+- [Agent docs audit](agent-docs-audit.md) — map of canonical, source-of-truth, deep-dive, and legacy agent docs.
+- [Agent loop hardening](agent-loop-hardening.md) — deep dive on stop policies, continuation rules, and artifact-only constraints.
+- [Agent safety](agent-safety.md) — deep dive on unsafe agent actions and review discipline.
+- [Agent tool boundary](agent-tool-boundary.md) — deep dive on source/tool boundaries.
+- [Agent command set](agent-command-set.md) — command reference.
+- [Agent config guidelines](agent-config-guidelines.md) — config/prompt authoring notes.
+- [Agent contract pack](agent-contract-pack.md) — ticket-specific allowed paths, stop policy, exact commands, and multi-agent prompts.
+- [Agent/autopilot guide](agent-autopilot-guide.md) — legacy/background context; do not use as the current guarded Desktop launch procedure without the canonical runbook above.
+- [Autopilot loop](autopilot-loop.md) — legacy/background context; current guarded flow is the runbook above.
 - [Agent playbooks](agent-playbooks/README.md)
 
 ## Extensibility and public API
