@@ -124,6 +124,19 @@ After such a trade, continue with category reduction or classification.
 
 Do not reduce TODO count by unsafe broad suppression.
 
+TODO removed via suppression is not migration progress. It is valid only when
+the suppressed source operation is proven to be non-behavioral noise, and the
+evidence is recorded.
+
+Never suppress FluentAssertions, NUnit assertions, assertion-like helpers, or
+business checks (`*.Should*`, `Should()`, `Assert*`, `Expect*`, `Equal*`,
+`Be*`, `Contain*`, validation/check helpers) merely to make TODO metrics look
+better.
+
+`0 TODO` is not success if it was achieved by broad suppression, empty tests,
+weakened assertions, deleted actions, dummy target-known declarations, or edits
+to the real target/POM project.
+
 Before adding more suppressions, inspect whether existing suppressions created `EMPTY_TEST_AFTER_SUPPRESSION`.
 
 If a suppression or `MethodSemantics` decision touches project/POM helper wrappers, first run or request `--mode helper-inventory` and base the decision on helper body evidence. Do not infer helper semantics from names alone.

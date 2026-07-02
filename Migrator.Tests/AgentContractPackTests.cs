@@ -35,10 +35,18 @@ public class AgentContractPackTests
         var docs = File.ReadAllText(FindRepositoryFile("docs/agent-contract-pack.md"));
 
         Assert.Contains("Do not edit Selenium source tests", command);
+        Assert.Contains("Do not edit the real target project", command);
         Assert.Contains("Do not invent selectors", command);
         Assert.Contains("selector evidence", command);
         Assert.Contains("broad-suppression", command);
+        Assert.Contains("forbidden-write", command);
+        Assert.Contains("metric-gaming", command);
+        Assert.Contains("FluentAssertions", command);
+        Assert.Contains("NOT FINAL - INVESTIGATION RESULT ONLY", command);
         Assert.Contains("missing-tooling", command);
+        Assert.DoesNotContain("Migrator.Cli/**", command);
+        Assert.DoesNotContain("Migrator.Core/**", command);
+        Assert.DoesNotContain("Migrator.Tests/**", command);
         Assert.DoesNotContain("File.Delete(inputPath", command);
         Assert.DoesNotContain("File.WriteAllText(inputPath", command);
 
@@ -47,6 +55,8 @@ public class AgentContractPackTests
         Assert.Contains("coordinator", docs);
         Assert.Contains("migrator", docs);
         Assert.Contains("verifier", docs);
+        Assert.Contains("artifact-only", docs);
+        Assert.Contains("Invalid success", docs);
     }
 
     [Fact]

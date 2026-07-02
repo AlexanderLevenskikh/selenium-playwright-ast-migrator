@@ -10,6 +10,10 @@ Rules:
 - Do not propose migrator source edits as executable work unless the next run will explicitly use `Mode: migrator-code`.
 - In migration-artifact mode, source changes must be written as ticket candidates.
 - If compiled migrator tool is provided, do not search for migrator source code.
+- The next ticket must be artifact-only by default: writes under `{{WORKSPACE}}/**`, proposals under `{{WORKSPACE}}/proposals/**`, no real target/POM/project edits.
+- Do not choose a ticket whose expected "progress" is lowering TODO by suppression.
+- Treat FluentAssertions/NUnit/business assertion suppression as a blocker unless explicitly human-approved with source evidence.
+- Prioritize source-backed mappings, helper/POM evidence, generated POM proposals, raw locators from proven selectors, or explicit TODOs.
 
 Return exactly these sections:
 
@@ -40,6 +44,7 @@ Include:
 ## Expected impact
 
 Do not propose adding target-known identifiers merely to hide unresolved source-side symbols.
+State why the ticket will not reduce TODO by assertion suppression, empty tests, target-project edits, or dummy known identifiers.
 
 ## Stop-policy checklist
 

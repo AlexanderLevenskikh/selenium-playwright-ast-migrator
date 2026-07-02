@@ -12,6 +12,11 @@ Fill this before stopping or handing off a migration batch. This file is `state/
 - Commands run:
 - Artifacts inspected:
 - Files changed:
+- Scope guard command/result:
+- Forbidden changed paths:
+- TODO count before/after and why this is real migration progress:
+- Suppression categories before/after:
+- Meaningful generated actions/assertions preserved: yes/no/evidence
 
 ## Valid stop reason
 
@@ -25,6 +30,8 @@ At least one must be checked before stopping:
 - [ ] Needed source edit is forbidden by the current mode/path contract.
 - [ ] Max iterations reached.
 - [ ] Unsafe change was reverted.
+- [ ] Forbidden write path was detected and the batch was rejected.
+- [ ] TODO decrease was caused by source-backed mappings or explicit classification, not by suppression/empty tests.
 
 ## Must not be true
 
@@ -34,11 +41,14 @@ At least one must be checked before stopping:
 - [ ] I did not search for migrator source in compiled-tool-only mode.
 - [ ] I did not invent selectors from names.
 - [ ] I did not hide behavior through broad suppressions or target-known declarations.
+- [ ] I did not add or broaden FluentAssertions/NUnit/business assertion suppression.
+- [ ] I did not count TODO removed by suppression as progress.
+- [ ] I did not accept `0 TODO` without config-validate/quality gate evidence and meaningful generated actions/assertions.
+- [ ] I did not change real target/POM project files, real Playwright tests, `.csproj`, `nuget.config`, or root-level generated files in artifact-only mode.
 - [ ] I did not edit generated files as the final fix unless generated-output edits were explicitly allowed.
 
 ## Evidence
 
 
 ## One concrete next action
-
 

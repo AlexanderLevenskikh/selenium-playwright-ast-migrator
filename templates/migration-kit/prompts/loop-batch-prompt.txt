@@ -15,6 +15,7 @@ Forbidden paths:
 - parent directories outside the allowed scope;
 - migrator repository source code unless Mode is migrator-code and repository source is explicitly listed as an allowed write path;
 - production source/target project files unless explicitly listed as allowed write paths.
+- real target/POM project files, real Playwright test project files, `Web/**`, `**/*.csproj`, `nuget.config`, and root-level generated files.
 
 Batch protocol:
 1. Reconcile the last safe checkpoint from `{{WORKSPACE}}/state/handoff.md` and `{{WORKSPACE}}/state/run-ledger.md`.
@@ -41,12 +42,17 @@ Required state updates after the batch:
 
 Safety gates:
 - Do not make tests falsely green.
-- Do not silently suppress assertions or business checks.
+- Do not add or broaden suppressions to reduce TODO count.
+- Do not silently suppress assertions, FluentAssertions, NUnit assertions, assertion-like helpers, or business checks (`*.Should*`, `Should()`, `Assert*`, `Expect*`, `Equal*`, `Be*`, `Contain*`, validation/check helpers).
+- TODO reduction via suppression, empty tests, weakened assertions, dummy target-known identifiers, or forbidden target-project edits is invalid progress.
+- `0 TODO` is not success without scope guard, config-validate/quality evidence, meaningful generated test bodies, and preserved source-backed actions/assertions.
 - Do not edit generated files as the final fix.
 - Do not edit migrator source code in migration-artifact mode.
 - Do not search for migrator source code in compiled-tool-only mode.
 - Do not add broad `TargetKnownIdentifiers` only to hide unresolved source-side symbols.
 - If the change is unsafe or makes metrics worse without clear justification, revert it and mark `UNSAFE_REVERTED`.
+- Before each major action, restate which `{{WORKSPACE}}/AGENT_CONTRACT.md` rule allows it.
+- Run `{{WORKSPACE}}/scripts/check-scope.ps1` or equivalent `git status --short --untracked-files=all` after edits. If any changed file is outside `{{WORKSPACE}}/**`, stop with `BLOCKED_BY_FORBIDDEN_WRITE`; do not ask whether to continue.
 
 Helper/POM evidence rule:
 - If the current ticket involves suppressions, `MethodSemantics`, unknown helpers, or project/POM wrapper methods, run or request `--mode helper-inventory` before adding suppressions or mappings. Do not guess helper semantics from method names alone.

@@ -9,6 +9,14 @@ Start Selenium → Playwright Migrator Autopilot Loop.
 
 Mode: migration-artifact
 
+Hard artifact-only boundary:
+- Allowed writes: `{{WORKSPACE}}/**` only.
+- Forbidden writes: real target project, production POM project, real Playwright test project, `Web/**`, `**/*.csproj`, `nuget.config`, root-level generated files, and migrator repository source code.
+- "Write POM" means generated POM proposal/scaffold under `{{WORKSPACE}}/runs/<run-id>/generated-pom/**`, `{{WORKSPACE}}/runs/<run-id>/target-shadow/**`, or `{{WORKSPACE}}/proposals/**`.
+- If a real target/POM/project change is required, do not apply it. Write a proposal under `{{WORKSPACE}}/proposals/**` and stop with `BLOCKED_BY_FORBIDDEN_WRITE`.
+- Before each major action, restate which `{{WORKSPACE}}/AGENT_CONTRACT.md` rule allows it.
+- After every edit and before any final success claim, run `{{WORKSPACE}}/scripts/check-scope.ps1` or equivalent `git status --short --untracked-files=all` check. Any changed file outside `{{WORKSPACE}}/**` makes the run failed.
+
 Scope:
 - Source Selenium project: {{SOURCE}}
 - Target/generated Playwright project: {{TARGET}}
@@ -38,7 +46,11 @@ Rules:
 - Do not stop at compile-green if the board still has actionable migration quality work.
 - Do not edit migrator source code in migration-artifact mode.
 - If compiled migrator tool is provided, run that tool directly and do not search for `Migrator.Cli`, `.sln`, `.csproj`, or migrator source code.
-- Do not add broad suppressions that hide assertions or business checks.
+- Do not add or broaden suppressions to reduce TODO count.
+- Never suppress FluentAssertions, NUnit assertions, assertion-like helpers, or business checks (`*.Should*`, `Should()`, `Assert*`, `Expect*`, `Equal*`, `Be*`, `Contain*`, validation/check helpers) unless a human explicitly approved that exact suppression with source evidence.
+- TODO removed via suppression does not count as progress.
+- TODO removed by weakening assertions, deleting actions, emptying tests, adding dummy target-known identifiers, or editing the real target project is a failed migration.
+- `0 TODO` is valid only when config-validate/quality gates show no dangerous suppression, no empty meaningful tests, no suppressed side-effect dependency, no forbidden writes, and generated tests still contain source-backed actions/assertions.
 - Prefer config fixes for project-specific selectors/helper mappings.
 - Use engine fixes only in migrator-code mode for generic migrator limitations and add regression tests.
 - Before stopping or handing off, apply `.agent-loops/15-stop-policy-checklist.md` and update `{{WORKSPACE}}/state/stop-policy-checklist.md`.

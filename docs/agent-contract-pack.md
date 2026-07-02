@@ -4,6 +4,8 @@
 
 Use it when you already have a migration ticket, runbook, dashboard triage output, selector evidence, runtime feedback, or a migration run directory and want to hand one bounded task to an agent without expanding the source-edit boundary.
 
+The default contract is artifact-only. It is designed for agents that use an installed `selenium-pw-migrator` dotnet tool and do not have, need, or search for migrator source code.
+
 ```bash
 selenium-pw-migrator agent contract \
   --input migration/current-ticket.md \
@@ -42,11 +44,24 @@ The command is read-only with respect to source tests, target product code, and 
 The generated contract tells agents to:
 
 - keep work inside allowed paths;
+- write artifact changes under `migration/**` and forbidden real-project changes only as proposals under `migration/proposals/**`;
 - prefer config/profile/generator changes over hand-editing generated output;
 - never invent selectors;
 - refresh selector evidence before selector mapping work;
-- stop according to the stop policy on broad suppressions, source-edit needs, or missing validation tools;
+- stop according to the stop policy on forbidden writes, broad suppressions, source-edit needs, or missing validation tools;
+- reject TODO reduction caused by suppression, empty tests, weakened assertions, dummy target-known identifiers, or real target/POM project edits;
+- treat `0 TODO` as success only when scope guard, quality gates, and verification evidence pass;
 - record exact commands and validation results.
+
+## Invalid success
+
+These outcomes must be rejected even if TODO count is lower:
+
+- TODO removed by suppressing FluentAssertions, NUnit assertions, assertion-like helpers, or business checks.
+- TODO removed by emptying generated tests or deleting meaningful actions/assertions.
+- TODO removed by adding dummy `TargetKnownIdentifiers` or similar symbol-hiding config.
+- TODO removed by editing real target project/POM/project files instead of migration artifacts.
+- `FINAL` claimed without scope guard, config-validate/quality gate, and verify/project-verify evidence.
 
 ## Multi-agent option
 

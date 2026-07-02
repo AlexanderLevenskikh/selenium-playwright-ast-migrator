@@ -9,6 +9,10 @@ Use this checklist before keeping a batch.
 - [ ] Empty tests are explicit TODO/inconclusive, not false-green.
 - [ ] Generated files were not edited as the final fix.
 - [ ] Source-only identifiers were not hidden by broad target-known declarations.
+- [ ] No FluentAssertions/NUnit/business assertions were suppressed to reduce TODO.
+- [ ] TODO reduction came from source-backed mappings, safe helper classification, generated POM/raw locator evidence, or explicit classification.
+- [ ] `0 TODO`, if claimed, was verified by quality gates and meaningful generated test bodies.
+- [ ] Scope guard passed: changed files are only inside the migration workspace.
 - [ ] New engine behavior has regression tests when possible.
 - [ ] Config changes include representative evidence.
 

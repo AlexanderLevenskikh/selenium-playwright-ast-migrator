@@ -8,7 +8,7 @@ using System.Text.Json;
 
 internal static class KitCommand
 {
-    const string KitVersion = "0.5.0";
+    const string KitVersion = "0.5.1";
 
     public static int Run(string[] args)
     {
@@ -77,7 +77,7 @@ internal static class KitCommand
         foreach (var dir in new[]
         {
             "runs", "reports", "logs", "profiles", "prompts", "schemas", "state",
-            "tickets", "evidence", "scripts", "codex", ".migration-kit"
+            "tickets", "evidence", "proposals", "scripts", "codex", ".migration-kit"
         })
         {
             Directory.CreateDirectory(Path.Combine(workspacePath, dir));
@@ -164,6 +164,9 @@ internal static class KitCommand
         AddCheck(checks, "stop-policy-checklist", File.Exists(Path.Combine(workspacePath, "state", "stop-policy-checklist.md")), Path.Combine(workspacePath, "state", "stop-policy-checklist.md"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "schema", File.Exists(Path.Combine(workspacePath, "schemas", "adapter-config.schema.json")), Path.Combine(workspacePath, "schemas", "adapter-config.schema.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "codex-files", File.Exists(Path.Combine(workspacePath, "codex", "CODEX.md")), Path.Combine(workspacePath, "codex", "CODEX.md"), "Run `migrator kit update --backup` without --no-codex-files.");
+        AddCheck(checks, "agent-contract", File.Exists(Path.Combine(workspacePath, "AGENT_CONTRACT.md")), Path.Combine(workspacePath, "AGENT_CONTRACT.md"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "final-gate", File.Exists(Path.Combine(workspacePath, "state", "final-gate.md")), Path.Combine(workspacePath, "state", "final-gate.md"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "scope-guard", File.Exists(Path.Combine(workspacePath, "scripts", "check-scope.ps1")), Path.Combine(workspacePath, "scripts", "check-scope.ps1"), "Run `migrator kit update --backup`.");
 
         var dotnet = RunProcess("dotnet", "--version");
         AddCheck(checks, "dotnet", dotnet.ExitCode == 0, dotnet.ExitCode == 0 ? dotnet.StdOut.Trim() : dotnet.StdErr.Trim(), "Install .NET SDK or use a self-contained migrator bundle.");
@@ -576,7 +579,8 @@ Fix only the current ticket.
             || normalized.StartsWith("state/run-ledger.md", StringComparison.Ordinal)
             || normalized.StartsWith("state/decision-log.md", StringComparison.Ordinal)
             || normalized.StartsWith("state/handoff.md", StringComparison.Ordinal)
-            || normalized.StartsWith("state/stop-policy-checklist.md", StringComparison.Ordinal);
+            || normalized.StartsWith("state/stop-policy-checklist.md", StringComparison.Ordinal)
+            || normalized.StartsWith("state/final-gate.md", StringComparison.Ordinal);
     }
 
     static string SafeRelativePath(string basePath, string path)

@@ -13,6 +13,9 @@ A stop is valid only when every applicable item is answered with evidence. If an
 - **Commands run:** exact command lines or exact reason command execution was impossible.
 - **Artifacts inspected:** reports, generated files, configs, POM/helper outputs, logs.
 - **Files changed:** exact paths or `none`.
+- **Scope guard result:** command/result proving writes stayed inside allowed roots.
+- **TODO movement evidence:** before/after count plus why the movement represents real migration progress.
+- **Suppression movement evidence:** before/after dangerous suppression categories.
 
 ## Hard stop checklist
 
@@ -24,6 +27,7 @@ The agent may stop only when at least one item below is true and supported by ev
 - [ ] `BLOCKED_BY_MISSING_INPUT`: required files/configs/reports are absent and cannot be inferred from allowed paths.
 - [ ] `MAX_ITERATIONS_REACHED`: the loop reached its explicit max iteration limit and includes the best current evidence.
 - [ ] `UNSAFE_REVERTED`: the attempted batch made metrics worse or violated safety rules and was reverted.
+- [ ] `BLOCKED_BY_FORBIDDEN_WRITE`: the next required step or current diff touches forbidden real project/source paths.
 
 ## Mandatory negative checks
 
@@ -35,6 +39,8 @@ Before stopping, confirm all of these:
 - [ ] In `migration-artifact` mode, the agent did **not** edit migrator repository source code.
 - [ ] In compiled-tool-only mode, the agent did **not** search for `Migrator.Cli`, `.sln`, `.csproj`, or migrator source folders.
 - [ ] Any suppression, helper mapping, or POM decision has `helper-inventory` / `index-pom` evidence, or remains an explicit TODO/ticket.
+- [ ] TODO reduction was not achieved by adding/broadening suppressions, especially FluentAssertions/NUnit/business assertion suppressions.
+- [ ] `0 TODO`, if claimed, is backed by config-validate/quality evidence and meaningful generated actions/assertions.
 - [ ] No selector was invented from a PageObject/member name.
 - [ ] No generated file was edited as the final fix unless the current task explicitly allowed generated-output artifact edits.
 

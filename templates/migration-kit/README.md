@@ -28,6 +28,7 @@ migration/
     stop-policy-checklist.md
   tickets/
   evidence/
+  proposals/
   runs/
   reports/
   logs/
@@ -78,6 +79,15 @@ A new agent should start from `state/handoff.md`, not from chat memory.
 - Compile-green is a checkpoint, not the end of migration quality work.
 - Keep source truth in source tests, POM/helper code, config, or existing target Playwright code.
 - Fill `state/stop-policy-checklist.md` before stopping, handing off, or reporting a blocker.
+
+## Artifact-Only Acceptance Rules
+
+- Default writes are artifact-only: keep changes inside `migration/**`.
+- Do not edit real target project files, production POMs, Playwright test project files, `.csproj`, `nuget.config`, or root-level generated files from an artifact-only run.
+- When POM code is needed, create generated POM/scaffold/proposal artifacts under `migration/**`; do not apply them to the real project.
+- Run `migration/scripts/check-scope.ps1` after edits and before accepting a batch.
+- Never count TODO removed by assertion/business suppression as migration progress.
+- `0 TODO` is not success if it was achieved by suppression, empty tests, weakened assertions, dummy known identifiers, or edits to the real target project.
 
 ## Optional MVP-3 helpers
 

@@ -27,11 +27,15 @@ ACCEPT / ACCEPT_WITH_NOTES / REVERT / NEED_MORE_EVIDENCE
 Confirm whether the batch preserved these rules:
 - no false-green tests;
 - no silent assertion suppression;
+- no FluentAssertions/NUnit/business assertion suppression used to lower TODO;
+- no TODO reduction by emptying tests, weakening assertions, deleting actions, dummy target-known identifiers, or editing the real target/POM project;
 - no generated-file-only fixes;
 - no migrator source-code edits in migration-artifact mode;
 - no compiled-tool-only source discovery;
 - no broad source-symbol hiding;
 - no invented selectors.
+- scope guard passed: changed files only under `{{WORKSPACE}}/**`;
+- `0 TODO`, if claimed, is backed by config-validate/quality gates and meaningful generated test bodies.
 
 ## Metrics before/after
 

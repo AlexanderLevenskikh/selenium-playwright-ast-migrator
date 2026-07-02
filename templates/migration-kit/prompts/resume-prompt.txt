@@ -8,6 +8,12 @@ Resume Selenium → Playwright Migrator Autopilot Loop.
 
 Mode: migration-artifact
 
+Artifact-only boundary:
+- Allowed writes: `{{WORKSPACE}}/**` only.
+- Forbidden writes: real target project, production POM project, real Playwright test project, `Web/**`, `**/*.csproj`, `nuget.config`, root-level generated files, and migrator source code.
+- If the previous batch changed forbidden paths, classify it as unsafe, stop that line of work, write a forbidden-write finding, and do not continue from that checkpoint.
+- Run `{{WORKSPACE}}/scripts/check-scope.ps1` or equivalent git status evidence before resuming implementation.
+
 Do not trust the previous summary blindly. Reconcile it with:
 - git status / git diff;
 - latest generated output under `{{WORKSPACE}}/runs`;
@@ -27,6 +33,8 @@ Rules:
 - Do not ask the user whether to continue when status is `CONTINUE_AUTONOMOUSLY`.
 - Do not edit migrator repository source code unless Mode is migrator-code and repository source is explicitly listed as an allowed write path.
 - If compiled migrator tool is provided, do not search for `Migrator.Cli`, `.sln`, `.csproj`, or migrator source code.
+- Do not accept TODO reduction achieved by suppression, especially FluentAssertions/NUnit/business assertion suppression.
+- `0 TODO` is not a safe checkpoint unless scope guard passed and quality gates show no dangerous suppression, empty meaningful tests, or suppressed side-effect dependencies.
 - Before stopping or handing off, apply `.agent-loops/15-stop-policy-checklist.md` and update `{{WORKSPACE}}/state/stop-policy-checklist.md`.
 
 Before continuing, rewrite `{{WORKSPACE}}/state/handoff.md` if it is stale or contradicts the latest run artifacts.

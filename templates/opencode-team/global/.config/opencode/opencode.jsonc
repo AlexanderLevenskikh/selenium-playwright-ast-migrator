@@ -4,7 +4,10 @@
   "default_agent": "orchestrator",
 
   "permission": {
-    "edit": "ask",
+    "edit": {
+      "*": "deny",
+      "migration/**": "allow"
+    },
     "bash": {
       "*": "ask",
 
@@ -24,6 +27,17 @@
       "rm -rf *": "deny",
       "del /s *": "deny",
       "Remove-Item * -Recurse*": "deny"
-    }
+    },
+    "task": {
+      "*": "deny",
+      "orchestrator": "allow",
+      "watchdog": "allow",
+      "reviewer": "allow",
+      "executor": "ask",
+      "general": "deny"
+    },
+    "question": "ask",
+    "external_directory": "ask",
+    "doom_loop": "ask"
   }
 }

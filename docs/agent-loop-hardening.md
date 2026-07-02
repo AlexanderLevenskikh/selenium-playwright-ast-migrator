@@ -39,6 +39,39 @@ and the repository source tree is listed under allowed write paths.
 
 If a compiled tool path is provided, the agent must run that tool directly and must not search for `Migrator.Cli`, `.sln`, `.csproj`, or migrator source folders.
 
+For installed-tool OpenCode runs, use an artifact-only boundary:
+
+- allowed writes: `migration/**`;
+- proposal-only writes for forbidden real project changes: `migration/proposals/**`;
+- forbidden writes: real target project, production POM project, Playwright test project, `.csproj`, `nuget.config`, root-level generated files, and migrator source code.
+
+`Write POM` means generated/shadow/proposal POM under `migration/**`, not editing the real POM project.
+
+## OpenCode hardening
+
+OpenCode should be configured as an execution sandbox, not just a chat prompt:
+
+- `permission.edit`: deny `*`, allow only `migration/**`;
+- `permission.task`: deny broad/general/build agents; allow only migration-specific reviewer/watchdog/executor agents;
+- `permission.question`, `external_directory`, and `doom_loop`: ask;
+- subagent prompts must repeat inherited path boundaries and evidence gates.
+
+If path-level edit permissions are unavailable or unreliable, run `migration/scripts/check-scope.ps1` after every patch and before any final answer.
+
+## Metric integrity
+
+TODO reduction is progress only when it represents real migration:
+
+- source-backed mappings;
+- helper/POM evidence;
+- generated POM proposals;
+- raw locators from proven selectors;
+- explicit TODO classification.
+
+TODO reduction is invalid when caused by broad suppression, FluentAssertions/NUnit/business assertion suppression, empty tests, weakened assertions, dummy target-known identifiers, or real project edits.
+
+`0 TODO` is not success unless scope guard, quality gates, verification evidence, and meaningful generated test bodies all pass.
+
 ## Stop-policy checklist
 
 Before any stop, blocker, or handoff, use `.agent-loops/15-stop-policy-checklist.md`.
