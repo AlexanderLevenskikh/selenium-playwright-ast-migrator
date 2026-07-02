@@ -6,7 +6,10 @@
   "permission": {
     "edit": {
       "*": "deny",
-      "migration/**": "allow"
+      "migration/**": "allow",
+      "migration/scripts/check-scope.ps1": "deny",
+      "migration/scripts/check-final-gate.ps1": "deny",
+      "migration/.migration-kit/guard-checksums.json": "deny"
     },
     "bash": {
       "*": "ask",

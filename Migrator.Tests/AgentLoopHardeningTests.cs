@@ -1,5 +1,6 @@
 using Xunit;
 using System.Diagnostics;
+using System.Security.Cryptography;
 
 namespace Migrator.Tests;
 
@@ -108,12 +109,13 @@ public class AgentLoopHardeningTests
         var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
 
         Assert.Contains("stop-policy-checklist", kitCommand);
-        Assert.Contains("KitVersion = \"0.5.1\"", kitCommand);
+        Assert.Contains("KitVersion = \"0.5.2\"", kitCommand);
         Assert.Contains("state/stop-policy-checklist.md", kitCommand);
         Assert.Contains("AGENT_CONTRACT.md", kitCommand);
         Assert.Contains("state/final-gate.md", kitCommand);
         Assert.Contains("check-scope.ps1", kitCommand);
         Assert.Contains("check-final-gate.ps1", kitCommand);
+        Assert.Contains("guard-checksums.json", kitCommand);
     }
 
     [Fact]
@@ -141,9 +143,11 @@ public class AgentLoopHardeningTests
         Assert.Contains("status --porcelain=v1 -z --untracked-files=all", scopeGuard);
         Assert.Contains("FINAL_GATE_", finalGateScript);
         Assert.Contains("check-scope.ps1", finalGateScript);
+        Assert.Contains("guard-checksums", finalGateScript);
         Assert.Contains("migration-quality-dashboard.json", finalGateScript);
         Assert.Contains("EMPTY_TEST_AFTER_SUPPRESSION", finalGateScript);
         Assert.Contains("NOT RUNTIME READY", finalGateScript);
+        Assert.DoesNotContain("state/final-gate.md\")", finalGateScript);
         Assert.Contains("check-scope.ps1", kickoff);
         Assert.Contains("TODO removed via suppression does not count as progress", kickoff);
         Assert.Contains("0 TODO", kickoff);
@@ -165,6 +169,9 @@ public class AgentLoopHardeningTests
         Assert.Contains("\"edit\"", config);
         Assert.Contains("\"*\": \"deny\"", config);
         Assert.Contains("\"migration/**\": \"allow\"", config);
+        Assert.Contains("\"migration/scripts/check-scope.ps1\": \"deny\"", config);
+        Assert.Contains("\"migration/scripts/check-final-gate.ps1\": \"deny\"", config);
+        Assert.Contains("\"migration/.migration-kit/guard-checksums.json\": \"deny\"", config);
         Assert.Contains("\"general\": \"deny\"", config);
         Assert.Contains("\"question\": \"ask\"", config);
         Assert.Contains("\"doom_loop\": \"ask\"", config);
@@ -251,7 +258,95 @@ public class AgentLoopHardeningTests
         Assert.Equal(0, absolute.ExitCode);
     }
 
+    [Fact]
+    public void FinalGate_DoesNotUseFinalGateTemplateAsNotRuntimeReadyEvidence()
+    {
+        using var repo = TemporaryGitRepo.Create();
+        PrepareFinalGateWorkspace(repo, latestRunId: "run-002", explicitStatus: null, includeProjectVerify: false, configPassed: true);
+
+        var result = repo.RunFinalGate();
+        var report = repo.Read("migration/state/final-gate-result.json");
+        var compact = CompactJsonLike(report);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("\"name\":\"project-verify-or-runtime-status\"", compact);
+        Assert.Contains("\"passed\":false", compact);
+        Assert.Contains("explicit NOT RUNTIME READY status: False", report);
+    }
+
+    [Fact]
+    public void FinalGate_AllowsHistoricalRunIdsInAppendOnlyLedger()
+    {
+        using var repo = TemporaryGitRepo.Create();
+        PrepareFinalGateWorkspace(repo, latestRunId: "run-002", explicitStatus: "Final status: NOT RUNTIME READY", includeProjectVerify: false, configPassed: true);
+
+        var result = repo.RunFinalGate();
+        var report = repo.Read("migration/state/final-gate-result.json");
+        var compact = CompactJsonLike(report);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("\"status\":\"PASS\"", compact);
+        Assert.Contains("latest active run id: run-002; ledger ids may be historical", report);
+    }
+
+    [Fact]
+    public void FinalGate_DoesNotPassConfigValidateOnlyBecauseDiagnosticsExist()
+    {
+        using var repo = TemporaryGitRepo.Create();
+        PrepareFinalGateWorkspace(repo, latestRunId: "run-003", explicitStatus: null, includeProjectVerify: true, configPassed: false);
+
+        var result = repo.RunFinalGate();
+        var report = repo.Read("migration/state/final-gate-result.json");
+        var compact = CompactJsonLike(report);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("\"name\":\"config-validate\"", compact);
+        Assert.Contains("\"passed\":false", compact);
+        Assert.Contains("diagnostics recorded: True; explicit blocker status: False", report);
+    }
+
     static string Read(string relativePath) => File.ReadAllText(FindRepositoryFile(relativePath));
+
+    static string CompactJsonLike(string text)
+        => text.Replace(" ", "").Replace("\r", "").Replace("\n", "").Replace("\t", "");
+
+    static void PrepareFinalGateWorkspace(TemporaryGitRepo repo, string latestRunId, string? explicitStatus, bool includeProjectVerify, bool configPassed)
+    {
+        repo.CopyRepositoryFile("templates/migration-kit/scripts/check-scope.ps1", "migration/scripts/check-scope.ps1");
+        repo.CopyRepositoryFile("templates/migration-kit/scripts/check-final-gate.ps1", "migration/scripts/check-final-gate.ps1");
+        repo.CopyRepositoryFile("templates/migration-kit/state/final-gate.md", "migration/state/final-gate.md");
+
+        repo.Write("migration/.migration-kit/guard-checksums.json", BuildGuardChecksumsJson(repo.WorkspacePath));
+        repo.Write("migration/agent-state.md", $"# Agent State\n\nLatest run: {latestRunId}\n");
+        repo.Write("migration/current-ticket.md", $"# Current Ticket\n\nLatest run: {latestRunId}\n");
+        repo.Write("migration/state/run-ledger.md", "# Run Ledger\n\n### run-001\n\nHistorical entry.\n\n### run-002\n\nLatest or historical entry.\n\n### run-003\n\nLatest or historical entry.\n");
+        repo.Write($"migration/runs/{latestRunId}/migration-board.md", $"# Board\n\nLatest run: {latestRunId}\n");
+        repo.Write($"migration/runs/{latestRunId}/migration-quality-dashboard.json", "{ \"status\": \"passed\", \"EMPTY_TEST_AFTER_SUPPRESSION\": 0, \"categories\": [] }");
+        repo.Write("migration/state/handoff.md", explicitStatus ?? "Status: READY_FOR_ACCEPTANCE\n");
+        repo.Write("migration/state/stop-policy-checklist.md", "Status: READY_FOR_ACCEPTANCE\n");
+
+        if (configPassed)
+            repo.Write("migration/reports/config-validate-report.json", "{ \"status\": \"passed\" }");
+        else
+            repo.Write("migration/reports/config-validate-report.json", "{ \"status\": \"failed\", \"diagnostics\": [{ \"severity\": \"error\", \"message\": \"bad config\" }] }");
+
+        if (includeProjectVerify)
+            repo.Write("migration/reports/project-verify-report.json", "{ \"status\": \"passed\" }");
+    }
+
+    static string BuildGuardChecksumsJson(string workspacePath)
+    {
+        string Entry(string relativePath)
+        {
+            var fullPath = Path.Combine(workspacePath, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            var hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(fullPath))).ToLowerInvariant();
+            return $"{{ \"path\": \"{relativePath}\", \"sha256\": \"{hash}\" }}";
+        }
+
+        return "{ \"schemaVersion\": \"guard-checksums/v1\", \"files\": [" +
+            Entry("scripts/check-scope.ps1") + ", " +
+            Entry("scripts/check-final-gate.ps1") + "] }";
+    }
 
     static string FindRepositoryFile(string relativePath)
     {
@@ -278,6 +373,7 @@ public class AgentLoopHardeningTests
         }
 
         public string Path { get; }
+        public string WorkspacePath => System.IO.Path.Combine(Path, "migration");
 
         public static TemporaryGitRepo Create()
         {
@@ -298,6 +394,20 @@ public class AgentLoopHardeningTests
             File.WriteAllText(fullPath, content);
         }
 
+        public string Read(string relativePath)
+        {
+            var fullPath = System.IO.Path.Combine(Path, relativePath.Replace('/', System.IO.Path.DirectorySeparatorChar));
+            return File.ReadAllText(fullPath);
+        }
+
+        public void CopyRepositoryFile(string repositoryRelativePath, string destinationRelativePath)
+        {
+            var source = FindRepositoryFile(repositoryRelativePath);
+            var destination = System.IO.Path.Combine(Path, destinationRelativePath.Replace('/', System.IO.Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(destination)!);
+            File.Copy(source, destination, overwrite: true);
+        }
+
         public void Git(string arguments)
         {
             var result = RunProcess("git", arguments, Path);
@@ -307,6 +417,12 @@ public class AgentLoopHardeningTests
 
         public ProcessResult RunScopeGuard(string allowedRoot)
             => RunProcess("powershell", $"-NoProfile -ExecutionPolicy Bypass -File \"{_scriptPath}\" -RepoRoot \"{Path}\" -AllowedRoots \"{allowedRoot}\"", Path);
+
+        public ProcessResult RunFinalGate()
+        {
+            var scriptPath = System.IO.Path.Combine(Path, "migration", "scripts", "check-final-gate.ps1");
+            return RunProcess("powershell", $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\" -Workspace \"migration\" -RepoRoot \"{Path}\" -AllowedRoots \"migration\"", Path);
+        }
 
         public void Dispose()
         {

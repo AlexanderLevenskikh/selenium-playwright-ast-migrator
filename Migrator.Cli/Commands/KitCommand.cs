@@ -3,12 +3,13 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
 internal static class KitCommand
 {
-    const string KitVersion = "0.5.1";
+    const string KitVersion = "0.5.2";
 
     public static int Run(string[] args)
     {
@@ -138,6 +139,7 @@ internal static class KitCommand
 
         WriteQuickStart(workspacePath, options);
         WriteVersionFile(workspacePath, options, updateMode: options.Update);
+        WriteGuardChecksums(workspacePath);
 
         Console.WriteLine();
         Console.WriteLine("Migration kit workspace ready.");
@@ -168,6 +170,7 @@ internal static class KitCommand
         AddCheck(checks, "final-gate", File.Exists(Path.Combine(workspacePath, "state", "final-gate.md")), Path.Combine(workspacePath, "state", "final-gate.md"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "scope-guard", File.Exists(Path.Combine(workspacePath, "scripts", "check-scope.ps1")), Path.Combine(workspacePath, "scripts", "check-scope.ps1"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "final-gate-script", File.Exists(Path.Combine(workspacePath, "scripts", "check-final-gate.ps1")), Path.Combine(workspacePath, "scripts", "check-final-gate.ps1"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "guard-checksums", File.Exists(Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json")), Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json"), "Run `migrator kit update --backup`.");
 
         var dotnet = RunProcess("dotnet", "--version");
         AddCheck(checks, "dotnet", dotnet.ExitCode == 0, dotnet.ExitCode == 0 ? dotnet.StdOut.Trim() : dotnet.StdErr.Trim(), "Install .NET SDK or use a self-contained migrator bundle.");
@@ -511,6 +514,35 @@ Fix only the current ticket.
             ["toolCommand"] = options.ToolCommand,
             ["installer"] = "cli-kit-command"
         };
+        File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine($"write: {path}");
+    }
+
+    static void WriteGuardChecksums(string workspacePath)
+    {
+        var guardFiles = new[] { "scripts/check-scope.ps1", "scripts/check-final-gate.ps1" };
+        var entries = guardFiles.Select(relative =>
+        {
+            var fullPath = Path.Combine(workspacePath, relative.Replace('/', Path.DirectorySeparatorChar));
+            var hash = File.Exists(fullPath)
+                ? Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(fullPath))).ToLowerInvariant()
+                : "";
+            return new SortedDictionary<string, object?>
+            {
+                ["path"] = relative,
+                ["sha256"] = hash
+            };
+        }).ToArray();
+
+        var payload = new SortedDictionary<string, object?>
+        {
+            ["schemaVersion"] = "guard-checksums/v1",
+            ["generatedAtUtc"] = DateTimeOffset.UtcNow.ToString("o"),
+            ["files"] = entries
+        };
+
+        var path = Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"write: {path}");
     }
