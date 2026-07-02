@@ -269,6 +269,21 @@ function Test-PathMatchesAnyPattern([string]$RelativePath, [string[]]$Patterns) 
     return $false
 }
 
+function Get-RelativePathCompat([string]$BasePath, [string]$FullPath) {
+    $baseFull = [System.IO.Path]::GetFullPath($BasePath)
+    $targetFull = [System.IO.Path]::GetFullPath($FullPath)
+
+    if (-not $baseFull.EndsWith([System.IO.Path]::DirectorySeparatorChar.ToString()) -and
+        -not $baseFull.EndsWith([System.IO.Path]::AltDirectorySeparatorChar.ToString())) {
+        $baseFull = $baseFull + [System.IO.Path]::DirectorySeparatorChar
+    }
+
+    $baseUri = New-Object System.Uri($baseFull)
+    $targetUri = New-Object System.Uri($targetFull)
+    $relativeUri = $baseUri.MakeRelativeUri($targetUri)
+    return [System.Uri]::UnescapeDataString($relativeUri.ToString()).Replace('/', [System.IO.Path]::DirectorySeparatorChar)
+}
+
 function Test-EvidenceExists([string]$Root, [string[]]$Patterns, [string]$LatestRunId = "", [switch]$RequireLatestRun) {
     if (-not (Test-Path $Root)) {
         return $false
@@ -278,7 +293,7 @@ function Test-EvidenceExists([string]$Root, [string[]]$Patterns, [string]$Latest
     $items = Get-ChildItem -Path $Root -Recurse -Force -ErrorAction SilentlyContinue
 
     foreach ($item in $items) {
-        $relative = [System.IO.Path]::GetRelativePath($rootFull, $item.FullName).Replace("\", "/")
+        $relative = (Get-RelativePathCompat $rootFull $item.FullName).Replace("\", "/")
         if (-not (Test-PathMatchesAnyPattern $relative $Patterns)) {
             continue
         }
