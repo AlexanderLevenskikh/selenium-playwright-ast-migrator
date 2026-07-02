@@ -1,49 +1,26 @@
-SECONDARY REVIEW WRAPPER.
-This prompt reviews a bounded batch under the primary `.agent-loops/kickoff-prompt.txt` contract.
-
-Review the last Selenium → Playwright migration loop batch.
+SECONDARY GUARDED REVIEW PROMPT.
+Review one completed migration batch against `{{WORKSPACE}}/AGENT_CONTRACT.md` and the machine gates.
 
 Read:
-- `.agent-loops/15-stop-policy-checklist.md`
-- `{{WORKSPACE}}/agent-state.md`
-- `{{WORKSPACE}}/current-ticket.md`
-- `{{WORKSPACE}}/state/run-ledger.md`
-- `{{WORKSPACE}}/state/decision-log.md`
-- `{{WORKSPACE}}/state/handoff.md`
+- `{{WORKSPACE}}/AGENT_CONTRACT.md`
+- `{{WORKSPACE}}/state/final-gate.md`
 - `{{WORKSPACE}}/state/stop-policy-checklist.md`
-- latest run output under `{{WORKSPACE}}/runs/`
-- git diff / changed files
+- latest board / explain-todo / quality dashboard / config-validate / verify artifacts
+- git diff/status for the product repo
 
-Return:
+Check:
+- no writes outside `{{WORKSPACE}}/**`;
+- no FluentAssertions/NUnit/business assertion suppression;
+- no empty meaningful tests;
+- no TODO reduction via suppression, weakened assertions, dummy known identifiers, or target/POM project edits;
+- generated artifacts preserve source-backed actions/assertions;
+- final claims match evidence.
 
-## Verdict
+Required output:
+- Verdict: PASS / FAIL / NOT FINAL - INVESTIGATION RESULT ONLY.
+- Scope guard command/result.
+- Final gate command/result.
+- Critical findings.
+- Recommended next ticket.
 
-ACCEPT / ACCEPT_WITH_NOTES / REVERT / NEED_MORE_EVIDENCE
-
-## Evidence
-
-## Safety check
-
-Confirm whether the batch preserved these rules:
-- no false-green tests;
-- no silent assertion suppression;
-- no FluentAssertions/NUnit/business assertion suppression used to lower TODO;
-- no TODO reduction by emptying tests, weakening assertions, deleting actions, dummy target-known identifiers, or editing the real target/POM project;
-- no generated-file-only fixes;
-- no migrator source-code edits in migration-artifact mode;
-- no compiled-tool-only source discovery;
-- no broad source-symbol hiding;
-- no invented selectors.
-- scope guard passed: changed files only under `{{WORKSPACE}}/**`;
-- `0 TODO`, if claimed, is backed by config-validate/quality gates and meaningful generated test bodies.
-- final gate passed: `{{WORKSPACE}}/scripts/check-final-gate.ps1` succeeded before any FINAL claim.
-
-## Metrics before/after
-
-## Stop-policy checklist
-
-Confirm whether `.agent-loops/15-stop-policy-checklist.md` supports the verdict.
-
-## Required follow-up
-
-If accepted, update `{{WORKSPACE}}/state/handoff.md` with one concrete next action. Do not ask whether to continue when the next status is `CONTINUE_AUTONOMOUSLY`.
+Do not claim FINAL unless strict final gate passes with `-RequireOpenCodeExport -RequireExplainTodo -RequireVerificationArtifacts`.

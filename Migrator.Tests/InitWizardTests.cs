@@ -58,7 +58,7 @@ public class SampleTests
         Assert.Contains("README.md", result.CreatedFiles);
         Assert.Contains("next-commands.md", result.CreatedFiles);
         Assert.Contains(Path.Combine("scaffold", "Migration.Playwright.Tests.csproj"), result.CreatedFiles);
-        Assert.Contains(Path.Combine(".agent-loops", "kickoff-prompt.txt"), result.CreatedFiles);
+        Assert.Contains(Path.Combine("agent-prompts", "kickoff-prompt.txt"), result.CreatedFiles);
 
         var configPath = Path.Combine(_workspace, "profiles", "adapter-config.json");
         var configJson = File.ReadAllText(configPath);

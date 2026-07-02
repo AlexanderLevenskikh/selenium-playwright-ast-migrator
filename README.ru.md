@@ -92,9 +92,8 @@ cat playground/try-this-first.md
 - [Teaching demo: AST migration explained](examples/teaching-demo/README.md)
 - [AST migration explained](docs/articles/ast-migration-explained.md) / [RU](docs/articles/ast-migration-explained.ru.md)
 - [Public demo files](examples/public-demo/README.md)
-- [Public launch demo](examples/public-launch-demo/README.md)
-- [Screenshot walkthrough](docs/public-launch/walkthrough.md)
 - [Migration workflow](docs/user-guide/migration-workflow.md)
+- [Guarded OpenCode Desktop migration runbook](docs/guarded-opencode-desktop-runbook.ru.md)
 - [Extensibility and public API](docs/extensibility.md)
 
 ## Основные CLI modes
@@ -150,8 +149,6 @@ selenium-pw-migrator --mode migrate --help
 - [Quick start](docs/quick-start.md)
 - [User guide](docs/user-guide/README.md)
 - [Config and profile guide](docs/config-profile-guide.md)
-- [Agent/autopilot guide](docs/agent-autopilot-guide.md)
-- [Agent loop hardening](docs/agent-loop-hardening.md)
 - [Limitations](docs/user-guide/limitations.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Migration quality program](docs/migration-quality-program.md)
@@ -160,12 +157,10 @@ selenium-pw-migrator --mode migrate --help
 - [Teaching demo: AST migration explained](examples/teaching-demo/README.md)
 - [AST migration explained](docs/articles/ast-migration-explained.md) / [RU](docs/articles/ast-migration-explained.ru.md)
 - [Framework matrix](docs/framework-matrix.md)
-- [Agent contract pack](docs/agent-contract-pack.md)
 - [Migration PR pack](docs/migration-pr-pack.md)
 - [Migration learning pack](docs/migration-learning-pack.md)
 - [Config Authoring Assistant](docs/config-authoring-assistant.md)
 - [Generation Policy](docs/generation-policy.md)
-- [Public launch pack](docs/public-launch/README.md)
 - [Public roadmap](docs/public-roadmap.md)
 - [Release process](docs/release-process.md)
 

@@ -32,30 +32,26 @@ These documents may explain concepts but must not be treated as the current laun
 
 | Document | Status | Notes |
 |---|---|---|
-| `docs/agent-loop-hardening.md` | Deep dive | Stop policies, continuation rules, artifact-only patterns. |
-| `docs/agent-safety.md` | Deep dive | Safety concepts and dangerous shortcuts. |
-| `docs/agent-tool-boundary.md` | Deep dive | Tool/source boundaries. |
-| `docs/agent-command-set.md` | Reference | Command reference. |
-| `docs/agent-config-guidelines.md` | Reference | Prompt/config authoring guidelines. |
-| `docs/agent-contract-pack.md` | Reference | Ticket-specific contract examples. |
 | `docs/tool-installation.md` | Reference | General tool install docs. |
 | `docs/packaging-and-distribution.md` | Reference | Packaging/release details. |
 | `docs/migration-runbook.md` | Reference | Product migration planning; not OpenCode Desktop launch procedure. |
 | `docs/project-verification.md` | Reference | Project verification details. |
 | `docs/explain-todo.md` | Reference | TODO explanation artifacts. |
 | `docs/evidence-pack.md` | Reference | Evidence pack workflow. |
+| `templates/migration-kit/AGENT_CONTRACT.md` | Runtime reference | Installed operational agent contract. |
+| `templates/opencode-team/INSTALLATION-SAFETY.md` | Runtime reference | OpenCode installation safety. |
 
-## Legacy/background docs
+## Removed legacy/noisy docs
 
-These documents predate the guarded Desktop flow or describe broader autopilot ideas. Keep as context, but do not follow them for current guarded migration runs unless they explicitly point back to the canonical runbook.
+The following old launch surfaces were removed because they duplicated or contradicted the guarded Desktop workflow:
 
-| Document/path | Status | Reason |
-|---|---|---|
-| `docs/agent-autopilot-guide.md` | Legacy/background | Broad autopilot guidance; current flow requires hard permissions and final gate. |
-| `docs/autopilot-loop.md` | Legacy/background | Older autopilot loop language can be unsafe without guarded gate. |
-| `docs/agent-first-workflow.md` | Legacy/background | Good onboarding context, but not the current Desktop launch procedure. |
-| `docs/agent-modes.md` | Legacy/background | Mode taxonomy; current run starts from guarded Desktop runbook. |
-| `.agent-loops/*` | Legacy loop-library | Reusable prompt fragments. Do not use as a launch recipe unless wrapped by current `migration/AGENT_CONTRACT.md` and final gate. |
+- root `.agent-loops/` prompt pack;
+- `FIRST_AUTOPILOT_LOOP_PROMPT_TEMPLATE.md`;
+- `examples/agent-first/` prompts;
+- older broad agent/autopilot launch docs and agent playbooks;
+- duplicate public-launch demo copy.
+
+Use git history if any removed material is needed for archaeology.
 
 ## Rule for future docs
 

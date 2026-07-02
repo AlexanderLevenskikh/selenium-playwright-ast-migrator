@@ -16,7 +16,7 @@ creates a starter workspace like this:
 
 ```text
 migration/public-demo-xunit/
-  .agent-loops/
+  opencode-team/
   .gitignore
   README.md
   current-ticket.md

@@ -60,14 +60,10 @@ Do not invent selectors. Use Selenium PageObject code, verified HTML attributes,
 - `docs/quick-start.md`
 - `docs/migration-runbook.md`
 - `docs/examples/end-to-end-simple.md`
-- `examples/teaching-demo/README.md`
 - `docs/articles/ast-migration-explained.md`
 - `docs/articles/ast-migration-explained.ru.md`
-- `examples/public-launch-demo/README.md`
-- `docs/public-launch/walkthrough.md`
 - `docs/user-guide/README.md`
 - `docs/config-profile-guide.md`
-- `docs/agent-autopilot-guide.md`
 - `docs/user-guide/limitations.md`
 - `docs/troubleshooting.md`
 - `docs/packaging-and-distribution.md`
@@ -84,7 +80,7 @@ Generate a ticket-specific prompt and safety pack for agent loops:
 selenium-pw-migrator agent contract --input migration/current-ticket.md --config ./adapter-config.json --out migration/agent-contract --format both
 ```
 
-The command writes `agent-contract.md/json`, allowed paths, stop policy, exact commands, report template, and `.agent-loops` role prompts.
+The command writes `agent-contract.md/json`, allowed paths, stop policy, exact commands, report template, and role prompts under `agent-prompts/` for specialized contract-pack workflows.
 
 ## Migration PR pack
 

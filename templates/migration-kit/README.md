@@ -120,5 +120,5 @@ OpenCode team files are optional and can be installed with:
 Reusable loop templates can be installed with:
 
 ```powershell
-.\tool\scripts\install-migration-kit.ps1 -Workspace migration -Update -Backup -WithLoopLibrary
+.\tool\scripts\install-migration-kit.ps1 -Workspace migration -Update -Backup
 ```

@@ -115,10 +115,6 @@ foreach ($file in $rootFiles) {
     }
 }
 
-$agentLoopsSource = Join-Path $root ".agent-loops"
-if (Test-Path $agentLoopsSource) {
-    Copy-Item -Path $agentLoopsSource -Destination (Join-Path $bundleDir ".agent-loops") -Recurse -Force
-}
 
 $templatesSource = Join-Path $root "templates"
 if (Test-Path $templatesSource) {
@@ -230,14 +226,13 @@ $readmeLines = @(
     '  scripts/install-migration-kit.ps1 -Workspace migration -Update -Backup -WithTeam',
     '  Then read migration/opencode-team/README.md',
     '',
-    'Optional loop library:',
-    '  scripts/install-migration-kit.ps1 -Workspace migration -Update -Backup -WithLoopLibrary',
+    'Refresh migration kit:',
+    '  scripts/install-migration-kit.ps1 -Workspace migration -Update -Backup',
     '',
     'Read first:',
-    '  docs/agent-tool-boundary.md',
-    '  docs/autopilot-loop.md',
+    '  docs/guarded-opencode-desktop-runbook.ru.md',
     '  docs/pom-recovery-policy.md',
-    '  .agent-loops/kickoff-prompt.txt',
+    '  templates/migration-kit/prompts/kickoff-prompt.txt',
     '  templates/migration-kit/prompts/loop-batch-prompt.txt',
     '  schemas/adapter-config.schema.json',
     '',

@@ -58,7 +58,7 @@ migration/
   next-commands.md
   .gitignore
   scaffold/                 # when no existing target project is selected and target is Playwright .NET
-  .agent-loops/             # only with --install-kit or interactive confirmation
+  opencode-team/  # guarded OpenCode templates, when installed
 ```
 
 ## Existing target project

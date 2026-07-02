@@ -1,39 +1,16 @@
 # Documentation index
 
-Public documentation is organized by the path a new user usually follows: install, run a small pilot, improve the profile, verify generated output, and then scale with or without an agent.
+This index keeps the current workflow short and avoids legacy agent-launch noise.
 
 ## Start here
 
 - [Quick start](quick-start.md) — first successful local run.
-- [Init wizard](init-wizard.md)
-- [Migration runbook](migration-runbook.md) — production migration plan, pilot scope, risks, and command chain.
 - [Guarded OpenCode Desktop migration runbook](guarded-opencode-desktop-runbook.ru.md) — canonical guarded agent workflow: local tool build/update, kit update, ProjectDesktop install, `/supervised-task`, approve/deny rules, scope/final gates, and forensic export.
-- [End-to-end simple example](examples/end-to-end-simple.md) — real input, config, command, and expected generated output from `examples/simple/`.
-- [Public demo and guided tutorial](public-demo-tutorial.md) — 10-minute NUnit/xUnit walkthrough with dashboard sample.
-- [Public Demo / Playground](public-playground.md) — one-command five-minute disposable demo workspace.
-- [Teaching demo](../examples/teaching-demo/README.md) — small AST migration demo with source test, POM selector evidence, config, expected output, and action map.
-- [AST migration explained](articles/ast-migration-explained.md) / [RU](articles/ast-migration-explained.ru.md) — article explaining the parser → action model → source truth → renderer workflow.
-- [Public demo files](../examples/public-demo/README.md) — copyable demo inputs, configs, generated outputs, and dashboard.
-- [Public launch demo](../examples/public-launch-demo/README.md) — older copyable launch demo with before/after output and report.
-- [Screenshot walkthrough](public-launch/walkthrough.md) — install → doctor → migrate → verify → inspect report.
+- [Migration runbook](migration-runbook.md) — production migration plan, pilot scope, risks, and command chain.
 - [Tool installation](tool-installation.md) — install from a packed dotnet tool or run from source.
-- [Framework matrix](framework-matrix.md) — source/target framework support and generated detection reports
-- [Doctor fix mode](doctor-fix-mode.md) — safe repair planning and setup fixes.
-- [Report serve dashboard](report-serve-dashboard.md) — local triage dashboard, run comparison, decision export, and evidence zip workflow.
-- [Agent contract pack](agent-contract-pack.md) — ticket-specific allowed paths, stop policy, exact commands, and multi-agent prompts.
-- [Migration PR pack](migration-pr-pack.md) — PR summary, changed/generated files list, before/after metrics, risk summary, reviewer checklist, and suggested PR description.
-- [Migration learning pack](migration-learning-pack.md) — reusable migration knowledge, learning changelog, safety report, and reviewable profile layer.
-- [Profile marketplace](profile-marketplace.md) — offline built-in profile catalog, compatibility scoring, install, inspect, and diff workflow.
-- [Evidence pack workflow](evidence-pack.md) — shareable redacted zip with manifest and checksums.
 - [Troubleshooting](troubleshooting.md) — common setup, config, packaging, and verification problems.
 
-## Learning articles
-
-- [AST migration explained](articles/ast-migration-explained.md) — why migration is an AST/profile problem rather than text replacement.
-- [Как работает AST-миграция](articles/ast-migration-explained.ru.md) — русская версия статьи.
-- [Teaching demo files](../examples/teaching-demo/README.md) — companion example for the article.
-
-## User guide
+## Core user docs
 
 - [User guide overview](user-guide/README.md)
 - [Migration workflow](user-guide/migration-workflow.md)
@@ -42,78 +19,61 @@ Public documentation is organized by the path a new user usually follows: instal
 - [No-infra scaffold](user-guide/no-infra-scaffold.md)
 - [Limitations](user-guide/limitations.md)
 
-## Config and profile guide
+## Examples and demos
+
+- [End-to-end simple example](examples/end-to-end-simple.md) — real input, config, command, and expected generated output from `examples/simple/`.
+- [Public demo and guided tutorial](public-demo-tutorial.md) — 10-minute NUnit/xUnit walkthrough with dashboard sample.
+- [Public Demo / Playground](public-playground.md) — one-command five-minute disposable demo workspace.
+- [Public demo files](../examples/public-demo/README.md) — copyable demo inputs, configs, generated outputs, and dashboard.
+- [AST migration explained](articles/ast-migration-explained.md) / [RU](articles/ast-migration-explained.ru.md)
+
+## Config, profile, and verification
 
 - [Config and profile guide](config-profile-guide.md)
 - [Profile cookbook](user-guide/project-profile-cookbook.md)
-- [Locator matching](profile/locator-matching.md)
-- [Method mappings](profile/method-mappings.md)
-- [Parameterized method mappings](profile/parameterized-method-mappings.md)
-- [Profile scoping](profile/profile-scoping.md)
 - [Config schema workflow](config-schema-workflow.md)
 - [Config layering](config-layering.md)
-- [Config Authoring Assistant](config-authoring-assistant.md) — evidence-driven config proposals with config-diff integration.
-- [Generation Policy](generation-policy.md) — choose conservative, balanced, or aggressive generation risk behavior.
-
-## Agent and autopilot guide
-
-- [Guarded OpenCode Desktop migration runbook](guarded-opencode-desktop-runbook.ru.md) — **canonical launch procedure** for current guarded OpenCode Desktop migration runs. Start here.
-- [Agent docs audit](agent-docs-audit.md) — map of canonical, source-of-truth, deep-dive, and legacy agent docs.
-- [Agent loop hardening](agent-loop-hardening.md) — deep dive on stop policies, continuation rules, and artifact-only constraints.
-- [Agent safety](agent-safety.md) — deep dive on unsafe agent actions and review discipline.
-- [Agent tool boundary](agent-tool-boundary.md) — deep dive on source/tool boundaries.
-- [Agent command set](agent-command-set.md) — command reference.
-- [Agent config guidelines](agent-config-guidelines.md) — config/prompt authoring notes.
-- [Agent contract pack](agent-contract-pack.md) — ticket-specific allowed paths, stop policy, exact commands, and multi-agent prompts.
-- [Agent/autopilot guide](agent-autopilot-guide.md) — legacy/background context; do not use as the current guarded Desktop launch procedure without the canonical runbook above.
-- [Autopilot loop](autopilot-loop.md) — legacy/background context; current guarded flow is the runbook above.
-- [Agent playbooks](agent-playbooks/README.md)
-
-## Extensibility and public API
-
-- [Extensibility overview](extensibility.md)
-- [Source frontend contract](source-frontend-contract.md)
-- [Target backend contract](target-backend-contract.md)
-- [Adapter-config versioning](adapter-config-versioning.md)
-
-## CLI, verification, and reports
-
-- [CLI productization](cli-productization.md)
-- [Migration runbook](migration-runbook.md)
+- [Config-driven recognizers](config-driven-recognizers.md)
 - [Project verification](project-verification.md)
+- [Runtime readiness](runtime-readiness.md)
+- [Runtime failure classifier](runtime-failure-classifier.md)
 - [Explain TODO](explain-todo.md)
 - [Migration board](migration-board.md)
 - [Report serve dashboard](report-serve-dashboard.md)
 - [Evidence pack workflow](evidence-pack.md)
-- [Migration PR pack](migration-pr-pack.md)
-- [Migration learning pack](migration-learning-pack.md)
-- [Migration quality program](migration-quality-program.md)
-- [Runtime readiness](runtime-readiness.md)
-- [Runtime failure classifier](runtime-failure-classifier.md)
-- [Selector evidence explorer](selector-evidence-explorer.md)
-- [POM indexing](pom-indexing.md)
-- [POM recovery policy](pom-recovery-policy.md)
-- [Helper body inventory](helper-body-inventory.md)
-- [Wait policy](wait-policy.md)
-- [Playwright TypeScript target](typescript-target.md)
 
-## Packaging and releases
+## Agent/guardrail references
 
-- [Packaging and distribution](packaging-and-distribution.md)
+The current launch procedure is only the guarded Desktop runbook above. Detailed runtime rules live in the installed templates, not in alternate launch docs.
+
+- [Agent docs audit](agent-docs-audit.md)
+- [Migration safety playbook](migration-safety-playbook.md)
+- [`templates/migration-kit/AGENT_CONTRACT.md`](../templates/migration-kit/AGENT_CONTRACT.md)
+- [`templates/migration-kit/state/final-gate.md`](../templates/migration-kit/state/final-gate.md)
+- [`templates/opencode-team/INSTALLATION-SAFETY.md`](../templates/opencode-team/INSTALLATION-SAFETY.md)
+
+## Architecture and internals
+
+- [Architecture](architecture.md)
+- [Extensibility](extensibility.md)
+- [Source frontend contract](source-frontend-contract.md)
+- [Target backend contract](target-backend-contract.md)
+- [Framework matrix](framework-matrix.md)
+- [Limitations](limitations.md)
+
+## Release and public preview
+
 - [Release process](release-process.md)
-- [Public launch pack](public-launch/README.md)
+- [Packaging and distribution](packaging-and-distribution.md)
 - [Public roadmap](public-roadmap.md)
-- [Preview release notes](release-notes/v0.6.0-preview.1.md)
+- [Release notes v0.6.0-preview.1](release-notes/v0.6.0-preview.1.md)
 
-## Maintainer and implementation notes
+## Rule for future docs
 
-The following folders are useful for maintainers and migration authors, but they are not required for a first user run:
+Do not add another “how to launch the agent” document. Add launch-procedure changes to:
 
-- `docs/migrator-tickets/` — implementation ticket history and cross-language roadmap notes.
-- `docs/pilot/` — pilot migration evidence and experiment summaries.
-- `templates/` — bundled migration-kit, Codex, OpenCode, and loop-library templates.
+```text
+docs/guarded-opencode-desktop-runbook.ru.md
+```
 
-- [Config Authoring Assistant](config-authoring-assistant.md) — evidence-driven config proposals with config-diff integration.
-- [Migration learning pack](migration-learning-pack.md) — extract reusable mappings/helper/POM knowledge from completed runs.
-
-- [Generation Policy](generation-policy.md) — choose conservative, balanced, or aggressive generation risk behavior.
+or create a deep-dive/reference doc that links back to that runbook.

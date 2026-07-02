@@ -125,17 +125,6 @@ internal static class KitCommand
             }
         }
 
-        if (options.WithLoopLibrary)
-        {
-            var loopSource = Path.Combine(kitRoot, "templates", "loops-library");
-            if (Directory.Exists(loopSource))
-                CopyDirectoryContents(loopSource, Path.Combine(workspacePath, "loops-library"), tokens, workspacePath, options);
-        }
-
-        if (!options.NoRootAgentFiles)
-        {
-            CopyRootAgentDirectory(Path.Combine(kitRoot, ".agent-loops"), Path.Combine(projectRoot, ".agent-loops"), workspacePath, options);
-        }
 
         WriteQuickStart(workspacePath, options);
         WriteVersionFile(workspacePath, options, updateMode: options.Update);
@@ -400,7 +389,7 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
                 CopyFileSystemEntry(entry, Path.Combine(workspaceBackup, Path.GetFileName(entry)));
         }
 
-        foreach (var name in new[] { ".agent-loops", ".agent-state", "AGENTS.md" })
+        foreach (var name in new[] { ".agent-state", "AGENTS.md" })
         {
             var path = Path.Combine(projectRoot, name);
             if (File.Exists(path) || Directory.Exists(path))
@@ -693,9 +682,7 @@ Common options:
   --backup                  Snapshot existing workspace before update/init.
   --force                   Overwrite kit-owned files instead of writing .new conflicts.
   --with-team               Install optional OpenCode team templates.
-  --with-loop-library       Install optional reusable loop library.
   --no-codex-files          Do not install migration/codex files.
-  --no-root-agent-files     Do not copy .agent-loops into project root.
   --input <path>            Artifact directory for kit next-ticket.
 
 Examples:
@@ -716,10 +703,8 @@ Examples:
         bool Update,
         bool Force,
         bool Backup,
-        bool NoRootAgentFiles,
         bool NoCodexFiles,
         bool WithTeam,
-        bool WithLoopLibrary,
         string? Input)
     {
         public static KitOptions? Parse(string[] args, out string error)
@@ -734,10 +719,8 @@ Examples:
                 Update: false,
                 Force: false,
                 Backup: false,
-                NoRootAgentFiles: false,
                 NoCodexFiles: false,
                 WithTeam: false,
-                WithLoopLibrary: false,
                 Input: null);
 
             error = string.Empty;
@@ -766,10 +749,8 @@ Examples:
                         "--update" => options with { Update = true },
                         "--force" => options with { Force = true },
                         "--backup" => options with { Backup = true },
-                        "--no-root-agent-files" => options with { NoRootAgentFiles = true },
                         "--no-codex-files" => options with { NoCodexFiles = true },
                         "--with-team" => options with { WithTeam = true },
-                        "--with-loop-library" => options with { WithLoopLibrary = true },
                         "--help" or "-h" => options,
                         _ when arg.StartsWith("-", StringComparison.Ordinal) => throw new ArgumentException($"Unknown option: {arg}"),
                         _ => throw new ArgumentException($"Unexpected argument: {arg}")

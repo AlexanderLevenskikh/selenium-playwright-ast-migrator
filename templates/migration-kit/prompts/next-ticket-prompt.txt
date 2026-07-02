@@ -1,55 +1,17 @@
 SECONDARY NEXT-TICKET PROMPT.
-This prompt prepares one bounded ticket; it does not replace the primary `.agent-loops/kickoff-prompt.txt` loop.
+Prepare one bounded, evidence-backed ticket under the guarded migration contract.
 
-Use the latest migration board and verify output under `{{WORKSPACE}}`.
+Read:
+- `{{WORKSPACE}}/AGENT_CONTRACT.md`
+- latest migration board, explain-todo, quality dashboard, config-validate, verify, and project-verify artifacts
+- `{{WORKSPACE}}/state/run-ledger.md` and `{{WORKSPACE}}/state/decision-log.md`
 
-Prepare the next actionable ticket. Do not implement yet.
+Create or update `{{WORKSPACE}}/current-ticket.md` with:
+- exact blocker/category;
+- source evidence;
+- allowed write path under `{{WORKSPACE}}/**`;
+- forbidden shortcuts;
+- exact verification commands;
+- expected final-gate impact.
 
-Rules:
-- Do not ask whether to continue.
-- Do not propose migrator source edits as executable work unless the next run will explicitly use `Mode: migrator-code`.
-- In migration-artifact mode, source changes must be written as ticket candidates.
-- If compiled migrator tool is provided, do not search for migrator source code.
-- The next ticket must be artifact-only by default: writes under `{{WORKSPACE}}/**`, proposals under `{{WORKSPACE}}/proposals/**`, no real target/POM/project edits.
-- Do not choose a ticket whose expected "progress" is lowering TODO by suppression.
-- Treat FluentAssertions/NUnit/business assertion suppression as a blocker unless explicitly human-approved with source evidence.
-- Prioritize source-backed mappings, helper/POM evidence, generated POM proposals, raw locators from proven selectors, or explicit TODOs.
-
-Return exactly these sections:
-
-## Findings
-
-## Evidence
-
-Include representative source snippets, generated snippets, config snippets, files/lines, and diagnostic categories.
-
-## Root cause groups
-
-Group repeated symptoms by upstream cause.
-
-## Recommended next ticket
-
-Include:
-- title;
-- fix type: CONFIG_FIX / ENGINE_FIX / TARGET_PROJECT_INFRA / SOURCE_TRUTH_MANUAL / NEED_MORE_EVIDENCE;
-- expected output;
-- files likely to change;
-- regression tests to add;
-- verification commands.
-
-## Why this is the next best ticket
-
-## Risks
-
-## Expected impact
-
-Do not propose adding target-known identifiers merely to hide unresolved source-side symbols.
-State why the ticket will not reduce TODO by assertion suppression, empty tests, target-project edits, or dummy known identifiers.
-
-## Stop-policy checklist
-
-State why this prompt is producing a ticket rather than asking the user to choose or continue.
-
-## Helper/POM evidence rule
-
-If the next ticket touches project helper wrappers, POM methods, suppressions, `MethodSemantics`, or unknown helper calls, include `--mode helper-inventory` in the evidence plan before recommending broad suppression or mapping. Use it to inspect helper/POM method bodies and classify methods as SafeWaitElide, ProjectWaitHelper, RequiredSideEffect, ReadOnlyProbe, AssertionHelper, or UnknownUnsafe.
+Do not implement the ticket in this prompt unless explicitly asked.

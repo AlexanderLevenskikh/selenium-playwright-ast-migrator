@@ -78,7 +78,7 @@ CI package smoke uses the same idea: pack → verify `.nupkg` contents → insta
 
 ## The agent keeps asking whether to continue
 
-Use `.agent-loops/kickoff-prompt.txt` as the primary prompt and avoid older checkpoint prompts. In autopilot mode, routine continuation decisions should be made by the agent. The agent should stop only when the stop policy and `.agent-loops/15-stop-policy-checklist.md` require a real human decision.
+Use `docs/guarded-opencode-desktop-runbook.ru.md` as the launch procedure. In guarded mode, routine continuation decisions should be made by the agent inside `migration/**`. The agent should stop only for a classified blocker, scope violation, loop/plateau, or failed final gate evidence.
 
 ## Runtime Playwright tests fail after generated code compiles
 

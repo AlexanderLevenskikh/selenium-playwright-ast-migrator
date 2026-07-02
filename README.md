@@ -96,8 +96,6 @@ For a file-by-file walkthrough, see:
 - [Teaching demo: AST migration explained](examples/teaching-demo/README.md)
 - [AST migration explained](docs/articles/ast-migration-explained.md) / [RU](docs/articles/ast-migration-explained.ru.md)
 - [Public demo files](examples/public-demo/README.md)
-- [Public launch demo](examples/public-launch-demo/README.md)
-- [Screenshot walkthrough](docs/public-launch/walkthrough.md)
 - [Migration workflow](docs/user-guide/migration-workflow.md)
 - [Extensibility and public API](docs/extensibility.md)
 
@@ -165,7 +163,6 @@ If Selenium POMs contain proven selectors such as `ByTId("value")`, `CreateContr
 - [Doctor fix mode](docs/doctor-fix-mode.md)
 - [Report serve dashboard](docs/report-serve-dashboard.md)
 - [Profile marketplace](docs/profile-marketplace.md)
-- [Agent contract pack](docs/agent-contract-pack.md)
 - [Migration PR pack](docs/migration-pr-pack.md)
 - [Migration learning pack](docs/migration-learning-pack.md)
 - [Config Authoring Assistant](docs/config-authoring-assistant.md)
@@ -174,12 +171,9 @@ If Selenium POMs contain proven selectors such as `ByTId("value")`, `CreateContr
 - [User guide](docs/user-guide/README.md)
 - [Config and profile guide](docs/config-profile-guide.md)
 - [Guarded OpenCode Desktop migration runbook](docs/guarded-opencode-desktop-runbook.ru.md) — canonical guarded agent launch procedure
-- [Agent/autopilot guide](docs/agent-autopilot-guide.md) — legacy/background context
-- [Agent loop hardening](docs/agent-loop-hardening.md)
 - [Limitations](docs/user-guide/limitations.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Migration quality program](docs/migration-quality-program.md)
-- [Public launch pack](docs/public-launch/README.md)
 - [Public roadmap](docs/public-roadmap.md)
 - [Release process](docs/release-process.md)
 

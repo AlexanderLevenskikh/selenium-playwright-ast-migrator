@@ -4878,7 +4878,7 @@ static string WriteAgentRuntimeNextTaskMarkdown(SmokePlanReport report)
     sb.AppendLine("## Ограничения");
     sb.AppendLine("- Не редактируй generated `.cs` вручную как финальное решение.");
     sb.AppendLine("- Если нужен mapping — добавляй его в adapter-config/profile.");
-    sb.AppendLine("- Если runtime failure связан с generic behavior мигратора — переходи к migrator-code fix loop или классифицируй blocker по `.agent-loops/03-stop-policy.md`.");
+    sb.AppendLine("- Если runtime failure связан с generic behavior мигратора — классифицируй blocker в migration/state/stop-policy-checklist.md или переходи к отдельному migrator-code режиму с явным scope.");
     sb.AppendLine("- После этапа дай краткий отчёт. Если статус `CONTINUE_AUTONOMOUSLY`, продолжай без вопроса пользователю.");
     return sb.ToString();
 }
@@ -8166,7 +8166,7 @@ static string BuildBootstrapAgentNextTask(string projectName, string inputPath, 
     sb.AppendLine("## Прочитай");
     sb.AppendLine("- `docs/config-layering.md`");
     sb.AppendLine("- `docs/migration-profiles.md`");
-    sb.AppendLine("- `.agent-loops/02-guardrails.md`");
+    sb.AppendLine("- `migration/AGENT_CONTRACT.md`");
     sb.AppendLine();
     sb.AppendLine("## Используй конфиги слева направо");
     sb.AppendLine($"1. `{baseConfigPath}`");
@@ -8185,7 +8185,7 @@ static string BuildBootstrapAgentNextTask(string projectName, string inputPath, 
     sb.AppendLine("- project-specific mappings клади в project profile;");
     sb.AppendLine("- не дублируй правило в project profile, если оно уже корректно покрыто base profile;");
     sb.AppendLine("- после итерации запускай config-validate и guard;");
-    sb.AppendLine("- если статус `CONTINUE_AUTONOMOUSLY`, продолжай без вопроса пользователю; останавливайся только по `.agent-loops/03-stop-policy.md`.");
+    sb.AppendLine("- если статус `CONTINUE_AUTONOMOUSLY`, продолжай без вопроса пользователю; останавливайся только по migration/AGENT_CONTRACT.md и migration/state/stop-policy-checklist.md.");
     return sb.ToString();
 }
 

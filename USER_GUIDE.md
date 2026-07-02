@@ -770,7 +770,7 @@ Give the agent:
 - The current migration artifacts.
 - A rule: do not edit source tests and do not invent selectors.
 
-Use `.agent-loops/` and `AGENTS.md` for repository-level autopilot behavior.
+Use `docs/guarded-opencode-desktop-runbook.ru.md` plus the installed `migration/AGENT_CONTRACT.md` for guarded OpenCode Desktop runs.
 
 ## 9. How To Get Better Results
 

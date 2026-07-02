@@ -152,7 +152,7 @@ internal static class CliCommandCatalog
             "selenium-pw-migrator --mode pr-pack --input migration/runs/latest --config ./adapter-config.json --out pr-pack --format both"),
         ExperimentalCommand("agent-contract", "agent-contract", true, true,
             "Generate a ticket-specific agent contract pack for safe migration loops.",
-            "Reads a migration ticket/workspace/artifact directory and writes agent-contract.md/json, allowed paths, stop policy, exact next commands, report template, and .agent-loops prompts for coordinator/migrator/verifier roles. Read-only for source tests and generated output.",
+            "Reads a migration ticket/workspace/artifact directory and writes agent-contract.md/json, allowed paths, stop policy, exact next commands, report template, and agent-prompts for coordinator/migrator/verifier roles. Read-only for source tests and generated output.",
             "Migration ticket, workspace, source project, or artifact directory.",
             "selenium-pw-migrator agent contract --input migration/current-ticket.md --out migration/agent-contract --format both",
             "selenium-pw-migrator --mode agent-contract --input migration/runs/latest --config ./adapter-config.json --out agent-contract --format both"),

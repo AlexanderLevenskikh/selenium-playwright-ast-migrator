@@ -7,67 +7,60 @@ namespace Migrator.Tests;
 public class AgentLoopHardeningTests
 {
     [Fact]
-    public void PrimaryKickoffPrompt_IsCanonicalAndHardened()
+    public void GuardedOpenCodeDesktopRunbook_IsCanonicalEntrypoint()
     {
-        var prompt = Read(".agent-loops/kickoff-prompt.txt");
-        var readme = Read(".agent-loops/README.md");
-        var docs = Read("docs/autopilot-loop.md");
+        var runbook = Read("docs/guarded-opencode-desktop-runbook.ru.md");
+        var docsIndex = Read("docs/README.md");
+        var rootReadme = Read("README.md");
+        var agents = Read("AGENTS.md");
 
-        Assert.StartsWith("PRIMARY LOOP PROMPT", prompt);
-        Assert.Contains("single source prompt", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("single primary loop prompt", readme, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("single primary loop prompt", docs, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Mode: migration-artifact", prompt);
-        Assert.Contains("CONTINUE_AUTONOMOUSLY", prompt);
-        Assert.Contains("Do not ask", prompt);
-        Assert.Contains(".agent-loops/15-stop-policy-checklist.md", prompt);
-        Assert.Contains("Repository source edits are forbidden", prompt);
+        Assert.Contains("canonical", runbook, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ProjectDesktop", runbook);
+        Assert.Contains("/supervised-task", runbook);
+        Assert.Contains("MIGRATION_ARTIFACT_ONLY", runbook);
+        Assert.Contains("-RequireOpenCodeExport", runbook);
+        Assert.Contains("-RequireExplainTodo", runbook);
+        Assert.Contains("-RequireVerificationArtifacts", runbook);
+        Assert.Contains("NOT FINAL - INVESTIGATION RESULT ONLY", runbook);
+        Assert.Contains("guarded-opencode-desktop-runbook.ru.md", docsIndex);
+        Assert.Contains("guarded-opencode-desktop-runbook.ru.md", rootReadme);
+        Assert.Contains("no longer uses the legacy root `.agent-loops/` prompt pack", agents);
     }
 
     [Fact]
-    public void SecondaryAndLegacyPrompts_AreMarkedAndDeferToPrimaryPrompt()
+    public void RemovedLegacyAgentLaunchDocs_DoNotRemainAsEntrypoints()
     {
-        var secondaryOrLegacy = new[]
+        foreach (var path in new[]
         {
-            ".agent-loops/resume-prompt.txt",
-            ".agent-loops/strict-ticket-prompt.txt",
-            ".agent-loops/09-continue-after-compile-fix-prompt.txt",
-            "templates/migration-kit/prompts/kickoff-prompt.txt",
-            "templates/migration-kit/prompts/loop-batch-prompt.txt",
-            "templates/migration-kit/prompts/resume-prompt.txt",
-            "templates/migration-kit/prompts/next-ticket-prompt.txt",
-            "templates/migration-kit/prompts/review-batch-prompt.txt",
+            ".agent-loops/kickoff-prompt.txt",
+            "FIRST_AUTOPILOT_LOOP_PROMPT_TEMPLATE.md",
             "examples/agent-first/start-strict.md",
             "examples/agent-first/start-creative.md",
-            "FIRST_AUTOPILOT_LOOP_PROMPT_TEMPLATE.md",
-        };
-
-        foreach (var path in secondaryOrLegacy)
+            "docs/agent-autopilot-guide.md",
+            "docs/autopilot-loop.md",
+            "docs/agent-first-workflow.md",
+            "docs/agent-modes.md",
+            "docs/agent-loop-hardening.md",
+        })
         {
-            var text = Read(path);
-            Assert.True(
-                text.Contains("SECONDARY", StringComparison.OrdinalIgnoreCase) ||
-                text.Contains("LEGACY", StringComparison.OrdinalIgnoreCase) ||
-                text.Contains("WRAPPER", StringComparison.OrdinalIgnoreCase),
-                $"Prompt must be marked secondary/legacy/wrapper: {path}");
-            Assert.Contains("kickoff-prompt.txt", text, StringComparison.OrdinalIgnoreCase);
+            Assert.False(RepositoryFileExists(path), $"Legacy launch entrypoint should be removed: {path}");
         }
     }
 
     [Fact]
-    public void StopPolicyChecklist_IsPresentAndReferencedFromLoopDocsAndKit()
+    public void MigrationKitStopPolicyChecklist_IsPresentAndReferencedFromKit()
     {
-        var checklist = Read(".agent-loops/15-stop-policy-checklist.md");
-        var stopPolicy = Read(".agent-loops/03-stop-policy.md");
         var kitChecklist = Read("templates/migration-kit/state/stop-policy-checklist.md");
         var kitReadme = Read("templates/migration-kit/README.md");
+        var kickoff = Read("templates/migration-kit/prompts/kickoff-prompt.txt");
+        var loopBatch = Read("templates/migration-kit/prompts/loop-batch-prompt.txt");
+        var resume = Read("templates/migration-kit/prompts/resume-prompt.txt");
 
-        Assert.Contains("Current mode", checklist);
-        Assert.Contains("Hard stop checklist", checklist);
-        Assert.Contains("Mandatory negative checks", checklist);
-        Assert.Contains("15-stop-policy-checklist.md", stopPolicy);
         Assert.Contains("stop-policy-checklist.md", kitChecklist);
         Assert.Contains("stop-policy-checklist.md", kitReadme);
+        Assert.Contains("stop-policy-checklist.md", kickoff);
+        Assert.Contains("stop-policy-checklist.md", loopBatch);
+        Assert.Contains("stop-policy-checklist.md", resume);
     }
 
     [Fact]
@@ -85,22 +78,12 @@ public class AgentLoopHardeningTests
             Assert.Contains("CONTINUE_AUTONOMOUSLY", text);
             Assert.Contains("whether to continue", text, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Do not edit migrator", text, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("15-stop-policy-checklist.md", text);
+            Assert.Contains("AGENT_CONTRACT.md", text);
+            Assert.Contains("check-scope.ps1", text);
+            Assert.Contains("check-final-gate.ps1", text);
+            Assert.Contains("RequireOpenCodeExport", text);
+            Assert.DoesNotContain("Read `.agent-loops", text);
         }
-    }
-
-    [Fact]
-    public void MultiAgentLoop_DefinesCoordinatorVerifierAndSourceEditBoundary()
-    {
-        var text = Read(".agent-loops/14-multi-agent-loop.md");
-
-        Assert.Contains("Coordinator", text);
-        Assert.Contains("Migration Agent", text);
-        Assert.Contains("Verifier Agent", text);
-        Assert.Contains("Migrator-Code Agent", text);
-        Assert.Contains("non-overlapping", text, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("no sub-agent may edit migrator repository source code", text, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("stop-policy checklist", text, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -539,6 +522,19 @@ public class AgentLoopHardeningTests
     }
 
     static string Read(string relativePath) => File.ReadAllText(FindRepositoryFile(relativePath));
+
+    static bool RepositoryFileExists(string relativePath)
+    {
+        try
+        {
+            FindRepositoryFile(relativePath);
+            return true;
+        }
+        catch (FileNotFoundException)
+        {
+            return false;
+        }
+    }
 
     static string CompactJsonLike(string text)
         => text.Replace(" ", "").Replace("\r", "").Replace("\n", "").Replace("\t", "");

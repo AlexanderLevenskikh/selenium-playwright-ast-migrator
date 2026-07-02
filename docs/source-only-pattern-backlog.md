@@ -13,7 +13,7 @@ Autopilot agents must not group TODO only by the root identifier.
 5. Fix one coherent pattern at a time.
 6. Add/update regression tests when the behavior is generic migrator behavior.
 7. Run build/tests/verify.
-8. Continue according to `.agent-loops/03-stop-policy.md`.
+8. Continue according to `migration/AGENT_CONTRACT.md` and `migration/state/stop-policy-checklist.md`.
 
 ## Hard rules
 

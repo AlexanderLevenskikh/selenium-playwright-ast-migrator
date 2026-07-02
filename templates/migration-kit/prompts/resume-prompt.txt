@@ -1,40 +1,27 @@
-SECONDARY RESUME WRAPPER.
-This prompt resumes the primary `.agent-loops/kickoff-prompt.txt` loop and must not redefine conflicting rules.
+SECONDARY GUARDED RESUME PROMPT.
+Resume an interrupted guarded migration run without using legacy root prompt packs.
 
-Read `.agent-loops/README.md` and every file in `.agent-loops/`, especially `.agent-loops/13-loop-contract.md`, `.agent-loops/11-strict-ticket-boundaries.md`, and `.agent-loops/15-stop-policy-checklist.md`.
-Read `{{WORKSPACE}}/agent-state.md`, `{{WORKSPACE}}/current-ticket.md`, and all files under `{{WORKSPACE}}/state/`.
-
-Resume Selenium → Playwright Migrator Autopilot Loop.
+Read first:
+- `{{WORKSPACE}}/AGENT_CONTRACT.md`
+- `{{WORKSPACE}}/agent-state.md`
+- `{{WORKSPACE}}/current-ticket.md`
+- `{{WORKSPACE}}/state/run-ledger.md`
+- `{{WORKSPACE}}/state/handoff.md`
+- `{{WORKSPACE}}/state/stop-policy-checklist.md`
+- `{{WORKSPACE}}/state/final-gate.md`
 
 Mode: migration-artifact
 
-Artifact-only boundary:
-- Allowed writes: `{{WORKSPACE}}/**` only.
-- Forbidden writes: real target project, production POM project, real Playwright test project, `Web/**`, `**/*.csproj`, `nuget.config`, root-level generated files, and migrator source code.
-- If the previous batch changed forbidden paths, classify it as unsafe, stop that line of work, write a forbidden-write finding, and do not continue from that checkpoint.
-- Run `{{WORKSPACE}}/scripts/check-scope.ps1` or equivalent git status evidence before resuming implementation.
-
-Do not trust the previous summary blindly. Reconcile it with:
-- git status / git diff;
-- latest generated output under `{{WORKSPACE}}/runs`;
-- latest verify/project-verify report;
-- latest migration board / explain-todo report.
-
-Then classify the last batch:
-- kept;
-- reverted;
-- unsafe;
-- unknown;
-- environment blocked.
-
-Continue only from the last safe checkpoint.
+Resume protocol:
+1. Identify latest run id from state files and latest `{{WORKSPACE}}/runs/run-*` artifacts.
+2. Reconstruct the last blocker, last command, and last verified evidence.
+3. Run `{{WORKSPACE}}/scripts/check-scope.ps1` before any edit.
+4. Continue only with an allowed write under `{{WORKSPACE}}/**`.
+5. If the next useful action would write outside `{{WORKSPACE}}/**`, stop with `BLOCKED_BY_FORBIDDEN_WRITE` and write a proposal under `{{WORKSPACE}}/proposals/**`.
 
 Rules:
-- Do not ask the user whether to continue when status is `CONTINUE_AUTONOMOUSLY`.
-- Do not edit migrator repository source code unless Mode is migrator-code and repository source is explicitly listed as an allowed write path.
-- If compiled migrator tool is provided, do not search for `Migrator.Cli`, `.sln`, `.csproj`, or migrator source code.
-- Do not accept TODO reduction achieved by suppression, especially FluentAssertions/NUnit/business assertion suppression.
-- `0 TODO` is not a safe checkpoint unless scope guard passed and quality gates show no dangerous suppression, empty meaningful tests, or suppressed side-effect dependencies.
-- Before stopping or handing off, apply `.agent-loops/15-stop-policy-checklist.md` and update `{{WORKSPACE}}/state/stop-policy-checklist.md`.
-
-Before continuing, rewrite `{{WORKSPACE}}/state/handoff.md` if it is stale or contradicts the latest run artifacts.
+- If status is `CONTINUE_AUTONOMOUSLY`, continue without asking the user whether to continue.
+- Do not edit migrator source code in migration-artifact mode.
+- Do not add suppressions, weaken assertions, empty tests, add dummy known identifiers, or edit target/POM project to reduce TODO.
+- Before stopping or handing off, update `{{WORKSPACE}}/state/stop-policy-checklist.md`.
+- Do not claim FINAL unless `{{WORKSPACE}}/scripts/check-final-gate.ps1 -RequireOpenCodeExport -RequireExplainTodo -RequireVerificationArtifacts` passes; otherwise report `NOT FINAL - INVESTIGATION RESULT ONLY`.

@@ -4,7 +4,7 @@ Sample inputs, configs, and outputs demonstrating Migrator usage.
 
 ## Simple end-to-end example
 
-`simple/` is the public-ready minimal example:
+`simple/` is the minimal example:
 
 - `input/SimpleSeleniumTest.cs` — sample Selenium C# / NUnit source test.
 - `adapter-config.json` — basic source-truth UiTarget mappings.
@@ -25,31 +25,9 @@ selenium-pw-migrator --mode migrate \
 
 The output is written to `migration/examples-simple-generated` by default.
 
-## Teaching demo: AST migration explained
-
-`teaching-demo/` is the smallest educational example for explaining the platform:
-
-- `input/LoginTeachingTest.cs` — Selenium C# / NUnit source test.
-- `input/PageObjects/LoginPage.cs` — PageObject selector evidence with real `data-testid` values.
-- `adapter-config.json` — reviewed source-expression → Playwright locator mappings.
-- `expected/LoginTeachingTestPlaywright.generated.cs` — expected readable Playwright .NET output.
-- `reports/ast-action-map.md` — action-by-action explanation of AST recognition and source-truth mapping.
-
-Walkthrough/article: [`docs/articles/ast-migration-explained.md`](../docs/articles/ast-migration-explained.md) / [`ru.md`](../docs/articles/ast-migration-explained.ru.md).
-
-Run from the repository root:
-
-```bash
-selenium-pw-migrator --mode migrate \
-  --input examples/teaching-demo/input \
-  --config examples/teaching-demo/adapter-config.json \
-  --out teaching-demo-generated \
-  --format both
-```
-
 ## Public demo and guided tutorial
 
-`public-demo/` is the current product demo for the growth wave:
+`public-demo/` is the current product demo:
 
 - `selenium-csharp-nunit/` — Selenium C# / NUnit input.
 - `selenium-csharp-xunit/` — Selenium C# / xUnit input.
@@ -72,18 +50,6 @@ selenium-pw-migrator init --wizard \
   --install-kit
 ```
 
-## Public launch demo
-
-`public-launch-demo/` is the copyable demo used by the public launch pack:
-
-- `selenium-tests/LoginSmokeTest.cs` — compact Selenium C# / NUnit input.
-- `adapter-config.json` — versioned `adapter-config/v1` mappings.
-- `playwright-migrated/LoginSmokePlaywright.generated.cs` — expected reviewable Playwright .NET output.
-- `reports/before-after-report.md` — reviewer-friendly before/after summary.
-
-Walkthrough: [`docs/public-launch/walkthrough.md`](../docs/public-launch/walkthrough.md).
-GitHub Actions example: [`github-actions/migration-pilot.yml`](github-actions/migration-pilot.yml).
-
 ## Profile examples
 
 Profile examples are useful when building project-specific config layers:
@@ -95,6 +61,8 @@ Profile examples are useful when building project-specific config layers:
 - `profiles/registry-pilot/` — complex page with method mappings.
 - `profiles/batch-migration/` — batch migration config for larger test sets.
 
-## Agent prompt examples
+## Other supporting examples
 
-`agent-first/` contains prompts for agent-assisted runs. Use the current docs in `docs/agent-autopilot-guide.md` and `.agent-loops/` as the source of truth before copying older prompt examples.
+- `github-actions/migration-pilot.yml` — CI example.
+- `tool-manifest/dotnet-tools.json` — local dotnet tool manifest example.
+- `extensibility/mini-source-target/` — small extension sample.

@@ -1,11 +1,16 @@
-PRIMARY MIGRATION-KIT WRAPPER PROMPT.
-This prompt delegates to the primary loop contract in `.agent-loops/kickoff-prompt.txt`; do not use older checkpoint prompts for new runs.
+PRIMARY GUARDED MIGRATION-KIT PROMPT.
+This is the canonical installed prompt for guarded artifact-only Selenium → Playwright migration runs. Do not delegate to legacy root `.agent-loops` prompts.
 
-Read `.agent-loops/README.md` and every file in `.agent-loops/`, especially `.agent-loops/kickoff-prompt.txt`, `.agent-loops/13-loop-contract.md`, `.agent-loops/11-strict-ticket-boundaries.md`, `.agent-loops/12-pom-helper-recovery-policy.md`, and `.agent-loops/15-stop-policy-checklist.md`.
-Read `AGENTS.md` if it exists.
-Read `{{WORKSPACE}}/README.md`, `{{WORKSPACE}}/agent-state.md`, `{{WORKSPACE}}/current-ticket.md`, and all files under `{{WORKSPACE}}/state/`.
+Read first:
+- `{{WORKSPACE}}/AGENT_CONTRACT.md`
+- `{{WORKSPACE}}/README.md`
+- `{{WORKSPACE}}/agent-state.md`
+- `{{WORKSPACE}}/current-ticket.md`
+- `{{WORKSPACE}}/state/final-gate.md`
+- `{{WORKSPACE}}/state/stop-policy-checklist.md`
+- all files under `{{WORKSPACE}}/state/`
 
-Start Selenium → Playwright Migrator Autopilot Loop.
+Start a guarded Selenium → Playwright migration run.
 
 Mode: migration-artifact
 
@@ -26,14 +31,6 @@ Scope:
 - Workspace: {{WORKSPACE}}
 - First output directory: {{OUTPUT}}
 
-Allowed write paths:
-- {{WORKSPACE}}
-
-Forbidden paths:
-- parent directories outside the allowed scope;
-- migrator repository source code unless Mode is migrator-code and repository source is explicitly listed as an allowed write path;
-- production source/target project files unless explicitly listed as allowed write paths.
-
 Expected first commands:
 1. Run doctor/config validation for the scope.
 2. Run the smallest useful migrate/verify/orchestrate command.
@@ -53,6 +50,6 @@ Rules:
 - `0 TODO` is valid only when config-validate/quality gates show no dangerous suppression, no empty meaningful tests, no suppressed side-effect dependency, no forbidden writes, and generated tests still contain source-backed actions/assertions.
 - Prefer config fixes for project-specific selectors/helper mappings.
 - Use engine fixes only in migrator-code mode for generic migrator limitations and add regression tests.
-- Before stopping or handing off, apply `.agent-loops/15-stop-policy-checklist.md` and update `{{WORKSPACE}}/state/stop-policy-checklist.md`.
+- Before stopping or handing off, update `{{WORKSPACE}}/state/stop-policy-checklist.md`.
 - Do not claim FINAL unless `{{WORKSPACE}}/scripts/check-final-gate.ps1 -RequireOpenCodeExport -RequireExplainTodo -RequireVerificationArtifacts` passes. If strict evidence is not available, report `NOT FINAL - INVESTIGATION RESULT ONLY`.
 - If interrupted, the next agent must be able to resume from workspace files.

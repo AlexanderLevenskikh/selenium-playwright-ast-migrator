@@ -29,9 +29,7 @@ Options:
   --backup                  Snapshot existing workspace before update/init.
   --force                   Overwrite kit-owned files.
   --with-team               Install optional OpenCode team templates.
-  --with-loop-library       Install optional reusable loop library.
   --no-codex-files          Do not install migration/codex files.
-  --no-root-agent-files     Do not copy .agent-loops into project root.
   -h, --help                Show help.
 USAGE
 }
@@ -45,7 +43,7 @@ while [[ $# -gt 0 ]]; do
     --out|--output) output_path="$2"; shift 2 ;;
     --tool-command) tool_command="$2"; shift 2 ;;
     --update) mode="update"; shift ;;
-    --backup|--force|--with-team|--with-loop-library|--no-codex-files|--no-root-agent-files)
+    --backup|--force|--with-team|--no-codex-files)
       extra_args+=("$1"); shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 2 ;;

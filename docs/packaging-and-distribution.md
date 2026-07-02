@@ -218,17 +218,15 @@ NuGet/tool решает доставку CLI, но не решает project-awa
 artifacts/agent-cli-bundle/tool/
   migrator.exe
   README_AGENT_TOOL.md
-  .agent-loops/kickoff-prompt.txt
-  run-migrator-template.ps1
+  templates/migration-kit/AGENT_CONTRACT.md
+  templates/migration-kit/prompts/kickoff-prompt.txt
+  templates/migration-kit/state/final-gate.md
+  templates/migration-kit/scripts/check-scope.ps1
+  templates/migration-kit/scripts/check-final-gate.ps1
   schemas/
     adapter-config.schema.json
-  .agent-loops/
-    kickoff-prompt.txt
-    01-autopilot-loop.md
-    03-stop-policy.md
   docs/
-    agent-tool-boundary.md
-    autopilot-loop.md
+    guarded-opencode-desktop-runbook.ru.md
     ...
 ```
 
@@ -261,7 +259,7 @@ dotnet run --project Migrator.Cli ...
 Подробнее:
 
 - `docs/agent-tool-boundary.md`
-- `docs/autopilot-loop.md`
+- `docs/guarded-opencode-desktop-runbook.ru.md`
 
 ## Windows PowerShell execution policy
 

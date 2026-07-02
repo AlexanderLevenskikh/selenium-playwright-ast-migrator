@@ -50,7 +50,6 @@
     <None Include="..\templates\**\*" Link="templates\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="templates\%(RecursiveDir)%(Filename)%(Extension)" />
     <None Include="..\scripts\install-migration-kit.ps1" Link="scripts\install-migration-kit.ps1" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="scripts\" />
     <None Include="..\scripts\install-migration-kit.sh" Link="scripts\install-migration-kit.sh" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="scripts\" Condition="Exists('..\scripts\install-migration-kit.sh')" />
-    <None Include="..\.agent-loops\**\*" Link=".agent-loops\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath=".agent-loops\%(RecursiveDir)" Condition="Exists('..\.agent-loops')" />
   </ItemGroup>
 
   <!-- Dotnet tool packages do not run from the source tree.

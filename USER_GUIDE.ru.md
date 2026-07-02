@@ -754,7 +754,7 @@ selenium-pw-migrator agent contract --input migration/current-ticket.md --out ag
 - Текущие migration artifacts.
 - Правило: не править source tests и не придумывать selectors.
 
-Для repo-level autopilot используйте `.agent-loops/` и `AGENTS.md`.
+Для guarded OpenCode Desktop запусков используйте `docs/guarded-opencode-desktop-runbook.ru.md` и установленный `migration/AGENT_CONTRACT.md`.
 
 ## 9. Как получать лучший результат
 

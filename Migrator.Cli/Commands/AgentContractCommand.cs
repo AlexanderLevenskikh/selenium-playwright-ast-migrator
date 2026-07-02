@@ -297,12 +297,12 @@ internal static class AgentContractCommand
         if (writeJson)
             File.WriteAllText(Path.Combine(outPath, "agent-contract.json"), JsonSerializer.Serialize(report, JsonOptions) + Environment.NewLine);
 
-        var loopsDir = Path.Combine(outPath, ".agent-loops");
-        Directory.CreateDirectory(loopsDir);
-        File.WriteAllText(Path.Combine(loopsDir, "coordinator.md"), RenderRolePrompt(report, "coordinator"));
-        File.WriteAllText(Path.Combine(loopsDir, "migrator.md"), RenderRolePrompt(report, "migrator"));
-        File.WriteAllText(Path.Combine(loopsDir, "verifier.md"), RenderRolePrompt(report, "verifier"));
-        File.WriteAllText(Path.Combine(loopsDir, "README.md"), RenderLoopReadme(report));
+        var promptsDir = Path.Combine(outPath, "agent-prompts");
+        Directory.CreateDirectory(promptsDir);
+        File.WriteAllText(Path.Combine(promptsDir, "coordinator.md"), RenderRolePrompt(report, "coordinator"));
+        File.WriteAllText(Path.Combine(promptsDir, "migrator.md"), RenderRolePrompt(report, "migrator"));
+        File.WriteAllText(Path.Combine(promptsDir, "verifier.md"), RenderRolePrompt(report, "verifier"));
+        File.WriteAllText(Path.Combine(promptsDir, "README.md"), RenderLoopReadme(report));
     }
 
     static string RenderMarkdown(AgentContractPackReport report)
@@ -442,7 +442,7 @@ internal static class AgentContractCommand
     static string RenderLoopReadme(AgentContractPackReport report)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("# Ticket-specific agent loops");
+        sb.AppendLine("# Ticket-specific agent prompts");
         sb.AppendLine();
         sb.AppendLine("Use these prompts only with the generated `agent-contract.md` in the parent folder.");
         sb.AppendLine("They do not expand allowed paths and they do not permit source-test edits.");

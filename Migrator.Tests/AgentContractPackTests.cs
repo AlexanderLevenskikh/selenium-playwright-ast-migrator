@@ -18,7 +18,7 @@ public class AgentContractPackTests
         Assert.Contains("stop-policy.md", command);
         Assert.Contains("next-commands.md", command);
         Assert.Contains("report-template.md", command);
-        Assert.Contains(".agent-loops", command);
+        Assert.Contains("agent-prompts", command);
         Assert.Contains("coordinator.md", command);
         Assert.Contains("migrator.md", command);
         Assert.Contains("verifier.md", command);
@@ -32,8 +32,6 @@ public class AgentContractPackTests
     public void AgentContractCommand_IsSourceSafeAndEvidenceDriven()
     {
         var command = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/AgentContractCommand.cs"));
-        var docs = File.ReadAllText(FindRepositoryFile("docs/agent-contract-pack.md"));
-
         Assert.Contains("Do not edit Selenium source tests", command);
         Assert.Contains("Do not edit the real target project", command);
         Assert.Contains("Do not invent selectors", command);
@@ -50,29 +48,18 @@ public class AgentContractPackTests
         Assert.DoesNotContain("File.Delete(inputPath", command);
         Assert.DoesNotContain("File.WriteAllText(inputPath", command);
 
-        Assert.Contains("allowed paths", docs);
-        Assert.Contains("stop policy", docs);
-        Assert.Contains("coordinator", docs);
-        Assert.Contains("migrator", docs);
-        Assert.Contains("verifier", docs);
-        Assert.Contains("artifact-only", docs);
-        Assert.Contains("Invalid success", docs);
     }
 
     [Fact]
     public void Program_NormalizesDirectAgentContractCommand()
     {
         var program = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Program.cs"));
-        var readme = File.ReadAllText(FindRepositoryFile("README.md"));
-        var docsIndex = File.ReadAllText(FindRepositoryFile("docs/README.md"));
 
         Assert.Contains("string.Equals(args[0], \"agent\"", program);
         Assert.Contains("string.Equals(args[1], \"contract\"", program);
         Assert.Contains("--mode", program);
         Assert.Contains("agent-contract", program);
         Assert.Contains("AgentContractCommand.RunAgentContract", program);
-        Assert.Contains("docs/agent-contract-pack.md", readme);
-        Assert.Contains("Agent contract pack", docsIndex);
     }
 
     static string FindRepositoryFile(string relativePath)

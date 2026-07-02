@@ -8,10 +8,8 @@ param(
     [switch]$Update,
     [switch]$Force,
     [switch]$Backup,
-    [switch]$NoRootAgentFiles,
     [switch]$NoCodexFiles,
     [switch]$WithTeam,
-    [switch]$WithLoopLibrary,
     [switch]$NoToolManifest
 )
 
@@ -22,17 +20,11 @@ function Resolve-RepoRootFromScript {
     $scriptDir = Split-Path -Parent $PSCommandPath
     $candidate = Split-Path -Parent $scriptDir
 
-    if ((Test-Path (Join-Path $candidate ".agent-loops")) -or
-        (Test-Path (Join-Path $candidate "templates/migration-kit")) -or
+    if ((Test-Path (Join-Path $candidate "templates/migration-kit")) -or
         (Test-Path (Join-Path $candidate "Migrator.Cli"))) {
         return $candidate
     }
 
-    # Agent bundle layout: tool/scripts/install-migration-kit.ps1
-    $bundleCandidate = Split-Path -Parent $scriptDir
-    if (Test-Path (Join-Path $bundleCandidate ".agent-loops")) {
-        return $bundleCandidate
-    }
 
     return $candidate
 }
@@ -70,7 +62,7 @@ function New-MigrationKitBackup([string]$WorkspacePath, [string]$ProjectRoot) {
         }
     }
 
-    foreach ($name in @(".agent-loops", ".agent-state")) {
+    foreach ($name in @(".agent-state")) {
         $path = Join-Path $ProjectRoot $name
         if (Test-Path $path) {
             Copy-Item -Path $path -Destination (Join-Path $backupRoot $name) -Recurse -Force
@@ -224,10 +216,8 @@ $script:workspacePath = Convert-ToAbsolutePath $Workspace $projectRoot
 $configPath = Convert-ToAbsolutePath $Config $projectRoot
 $outputPath = Convert-ToAbsolutePath $Output $projectRoot
 $templateRoot = Join-Path $kitRoot "templates/migration-kit"
-$agentLoopsSource = Join-Path $kitRoot ".agent-loops"
 $codexTemplateSource = Join-Path $kitRoot "templates/codex"
 $teamTemplateSource = Join-Path $kitRoot "templates/opencode-team"
-$loopLibrarySource = Join-Path $kitRoot "templates/loops-library"
 
 if (-not (Test-Path $templateRoot)) {
     throw "Migration kit templates were not found: $templateRoot"
@@ -282,17 +272,6 @@ if ($WithTeam -and (Test-Path $teamTemplateSource)) {
     if (Test-Path $agentsTemplate) {
         Set-TemplatedFile -SourcePath $agentsTemplate -DestinationPath (Join-Path $projectRoot "AGENTS.md") -Tokens $script:tokens -ForceWrite:$Force -UpdateMode:$Update
     }
-}
-
-if ($WithLoopLibrary -and (Test-Path $loopLibrarySource)) {
-    Copy-DirectoryContents -SourceDirectory $loopLibrarySource -DestinationDirectory (Join-Path $script:workspacePath "loops-library") -ForceCopy:$Force -UpdateMode:$Update
-}
-
-if (-not $NoRootAgentFiles) {
-    if (Test-Path $agentLoopsSource) {
-        Copy-RootAgentDirectorySafe -SourceDirectory $agentLoopsSource -DestinationDirectory (Join-Path $projectRoot ".agent-loops") -ForceCopy:$Force -UpdateMode:$Update
-    }
-
 }
 
 if (-not $NoToolManifest) {

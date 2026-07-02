@@ -11,7 +11,7 @@ public class DocumentationPublicReadinessTests
         {
             "docs/quick-start.md",
             "docs/user-guide/README.md",
-            "docs/agent-autopilot-guide.md",
+            "docs/guarded-opencode-desktop-runbook.ru.md",
             "docs/config-profile-guide.md",
             "docs/user-guide/limitations.md",
             "docs/troubleshooting.md",
@@ -52,7 +52,7 @@ public class DocumentationPublicReadinessTests
             Assert.Contains("docs/quick-start.md", doc);
             Assert.Contains("docs/user-guide/README.md", doc);
             Assert.Contains("docs/config-profile-guide.md", doc);
-            Assert.Contains("docs/agent-autopilot-guide.md", doc);
+            Assert.Contains("docs/guarded-opencode-desktop-runbook.ru.md", doc);
             Assert.Contains("docs/user-guide/limitations.md", doc);
             Assert.Contains("docs/troubleshooting.md", doc);
             Assert.Contains("docs/migration-quality-program.md", doc);
@@ -67,13 +67,12 @@ public class DocumentationPublicReadinessTests
         Assert.Contains("migration-runbook.md", docsIndex);
         Assert.Contains("user-guide/README.md", docsIndex);
         Assert.Contains("config-profile-guide.md", docsIndex);
-        Assert.Contains("agent-autopilot-guide.md", docsIndex);
+        Assert.Contains("guarded-opencode-desktop-runbook.ru.md", docsIndex);
         Assert.Contains("user-guide/limitations.md", docsIndex);
         Assert.Contains("troubleshooting.md", docsIndex);
         Assert.Contains("migration-quality-program.md", docsIndex);
         Assert.Contains("report-serve-dashboard.md", docsIndex);
         Assert.Contains("public-demo-tutorial.md", docsIndex);
-        Assert.Contains("../examples/teaching-demo/README.md", docsIndex);
         Assert.Contains("articles/ast-migration-explained.md", docsIndex);
         Assert.Contains("articles/ast-migration-explained.ru.md", docsIndex);
         Assert.Contains("../examples/public-demo/README.md", docsIndex);

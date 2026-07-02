@@ -366,17 +366,15 @@ Canonical entrypoint:
 docs/guarded-opencode-desktop-runbook.ru.md
 ```
 
-Deep dive:
+Useful details:
 
 ```text
-docs/agent-loop-hardening.md
-docs/agent-safety.md
-docs/agent-tool-boundary.md
 docs/tool-installation.md
 docs/packaging-and-distribution.md
+docs/troubleshooting.md
 templates/migration-kit/AGENT_CONTRACT.md
 templates/migration-kit/state/final-gate.md
 templates/opencode-team/INSTALLATION-SAFETY.md
 ```
 
-Legacy/autopilot material should not be used as the current launch procedure unless it explicitly points back to this runbook.
+Old root prompt packs and broad autopilot launch docs were removed to avoid conflicting instructions. Use git history for archaeology.
