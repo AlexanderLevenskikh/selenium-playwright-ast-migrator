@@ -22,6 +22,17 @@ Set-Location "C:\Users\levenskikh\Desktop\billy"
 .\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop
 ```
 
+`ProjectDesktop` is project-local. When the script is run from an installed kit
+layout such as `migration\opencode-team\scripts\install-windows.ps1`, it
+infers the repository root from that script path and writes only there. It must
+not write to `$HOME`, `%USERPROFILE%`, or the user-global OpenCode config.
+
+If inference is not possible, pass the repository root explicitly:
+
+```powershell
+.\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop -Target "C:\Users\levenskikh\Desktop\billy"
+```
+
 `ProjectDesktop` backs up existing `opencode.jsonc`, `.opencode\agents`, and
 `.opencode\commands` under `.migration-kit\opencode-backups\<timestamp>` before
 overwriting them. Use `-Force` only when overwriting without a backup is intended.

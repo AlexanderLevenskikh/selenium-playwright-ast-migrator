@@ -211,6 +211,9 @@ public class AgentLoopHardeningTests
 
         Assert.Contains("ProjectLocal", installWindows);
         Assert.Contains("ProjectDesktop", installWindows);
+        Assert.Contains("Get-ProjectDesktopTargetFromScriptLocation", installWindows);
+        Assert.Contains("ProjectDesktop cannot install into HOME", installWindows);
+        Assert.Contains("ProjectDesktop target must be the repository root", installWindows);
         Assert.Contains("Backup-PathIfExists", installWindows);
         Assert.Contains("opencode-backups", installWindows);
         Assert.Contains("Global", installWindows);
@@ -222,6 +225,42 @@ public class AgentLoopHardeningTests
         Assert.Contains("Set-Location", installSafety);
         Assert.Contains("opencode-backups", installSafety);
         Assert.Contains("Global mode is advanced", installSafety);
+    }
+
+    [Fact]
+    public void ProjectDesktopInstall_InfersRepositoryRootFromInstalledKitPath()
+    {
+        using var repo = TemporaryGitRepo.Create();
+        repo.CopyRepositoryDirectory("templates/opencode-team", "migration/opencode-team");
+
+        var outsideDirectory = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            "migrator-opencode-install-outside-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outsideDirectory);
+
+        try
+        {
+            var script = System.IO.Path.Combine(repo.Path, "migration", "opencode-team", "scripts", "install-windows.ps1");
+            var result = RunProcess("powershell", $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\" -Mode ProjectDesktop", outsideDirectory);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.True(File.Exists(System.IO.Path.Combine(repo.Path, "opencode.jsonc")), result.Output);
+            Assert.True(Directory.Exists(System.IO.Path.Combine(repo.Path, ".opencode", "agents")), result.Output);
+            Assert.True(Directory.Exists(System.IO.Path.Combine(repo.Path, ".opencode", "commands")), result.Output);
+            Assert.False(File.Exists(System.IO.Path.Combine(outsideDirectory, "opencode.jsonc")), result.Output);
+            Assert.Contains("ProjectDesktop mode", result.Output);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(outsideDirectory, recursive: true);
+            }
+            catch
+            {
+                // Best-effort cleanup for temp install test directory.
+            }
+        }
     }
 
     [Fact]
@@ -600,6 +639,24 @@ public class AgentLoopHardeningTests
             var destination = System.IO.Path.Combine(Path, destinationRelativePath.Replace('/', System.IO.Path.DirectorySeparatorChar));
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(destination)!);
             File.Copy(source, destination, overwrite: true);
+        }
+
+        public void CopyRepositoryDirectory(string repositoryRelativePath, string destinationRelativePath)
+        {
+            var source = new DirectoryInfo(System.IO.Path.GetDirectoryName(FindRepositoryFile(System.IO.Path.Combine(repositoryRelativePath, "README.md")))!);
+            var destination = new DirectoryInfo(System.IO.Path.Combine(Path, destinationRelativePath.Replace('/', System.IO.Path.DirectorySeparatorChar)));
+            CopyDirectory(source, destination);
+        }
+
+        static void CopyDirectory(DirectoryInfo source, DirectoryInfo destination)
+        {
+            Directory.CreateDirectory(destination.FullName);
+
+            foreach (var file in source.GetFiles())
+                file.CopyTo(System.IO.Path.Combine(destination.FullName, file.Name), overwrite: true);
+
+            foreach (var directory in source.GetDirectories())
+                CopyDirectory(directory, new DirectoryInfo(System.IO.Path.Combine(destination.FullName, directory.Name)));
         }
 
         public void Git(string arguments)

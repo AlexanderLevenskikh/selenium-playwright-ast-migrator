@@ -8,16 +8,98 @@ param(
 $ErrorActionPreference = "Stop"
 
 $Source = Join-Path $PSScriptRoot "..\global\.config\opencode"
+
+function Get-FullPathCompat([string]$PathValue) {
+    if ([string]::IsNullOrWhiteSpace($PathValue)) {
+        throw "Path value is empty."
+    }
+
+    if ([System.IO.Path]::IsPathRooted($PathValue)) {
+        return [System.IO.Path]::GetFullPath($PathValue)
+    }
+
+    return [System.IO.Path]::GetFullPath((Join-Path (Get-Location).Path $PathValue))
+}
+
+function Test-SamePath([string]$Left, [string]$Right) {
+    $leftFull = Get-FullPathCompat $Left
+    $rightFull = Get-FullPathCompat $Right
+    return [string]::Equals(
+        $leftFull.TrimEnd('\', '/'),
+        $rightFull.TrimEnd('\', '/'),
+        [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-ProjectDesktopTargetFromScriptLocation() {
+    # Expected installed-kit layout:
+    #   <project-root>\migration\opencode-team\scripts\install-windows.ps1
+    # In Desktop mode the target must be <project-root>, not the current shell directory
+    # and never the user's global OpenCode config directory.
+    $scriptsDir = Get-FullPathCompat $PSScriptRoot
+    $opencodeTeamDir = Split-Path -Parent $scriptsDir
+    $migrationDir = Split-Path -Parent $opencodeTeamDir
+    $projectRoot = Split-Path -Parent $migrationDir
+
+    if ((Split-Path -Leaf $scriptsDir) -ieq "scripts" -and
+        (Split-Path -Leaf $opencodeTeamDir) -ieq "opencode-team" -and
+        (Split-Path -Leaf $migrationDir) -ieq "migration" -and
+        -not [string]::IsNullOrWhiteSpace($projectRoot)) {
+        return $projectRoot
+    }
+
+    return ""
+}
+
+function Assert-ProjectDesktopTarget([string]$ProjectRoot) {
+    $projectRootFull = Get-FullPathCompat $ProjectRoot
+    $homeFull = Get-FullPathCompat $HOME
+    $globalOpenCodeFull = Get-FullPathCompat (Join-Path $HOME ".config\opencode")
+
+    if (Test-SamePath $projectRootFull $homeFull) {
+        throw "ProjectDesktop cannot install into HOME ($homeFull). Run from the project root, use the installed migration\\opencode-team script, or pass -Target <project-root>."
+    }
+
+    if (Test-SamePath $projectRootFull $globalOpenCodeFull) {
+        throw "ProjectDesktop cannot install into the global OpenCode config directory ($globalOpenCodeFull). Use -Mode Global for global install, or pass -Target <project-root>."
+    }
+
+    if ($projectRootFull -like (Join-Path $globalOpenCodeFull "*") ) {
+        throw "ProjectDesktop cannot install under the global OpenCode config directory ($globalOpenCodeFull). Use -Mode Global for global install, or pass -Target <project-root>."
+    }
+
+    $migrationPath = Join-Path $projectRootFull "migration"
+    if (-not (Test-Path $migrationPath)) {
+        throw "ProjectDesktop target must be the repository root containing a migration directory. Target '$projectRootFull' does not contain '$migrationPath'. Pass -Target <project-root> explicitly if needed."
+    }
+}
+
 if ([string]::IsNullOrWhiteSpace($Target)) {
     if ($Mode -eq "Global") {
         $Target = Join-Path $HOME ".config\opencode"
     }
     elseif ($Mode -eq "ProjectDesktop") {
-        $Target = Get-Location
+        $inferredTarget = Get-ProjectDesktopTargetFromScriptLocation
+        if (-not [string]::IsNullOrWhiteSpace($inferredTarget)) {
+            $Target = $inferredTarget
+        }
+        else {
+            $Target = (Get-Location).Path
+        }
     }
     else {
-        $Target = Join-Path (Get-Location) ".opencode-migrator"
+        $Target = Join-Path (Get-Location).Path ".opencode-migrator"
     }
+}
+
+$Source = Get-FullPathCompat $Source
+$Target = Get-FullPathCompat $Target
+
+if (-not (Test-Path $Source)) {
+    throw "OpenCode team source template was not found: $Source"
+}
+
+if ($Mode -eq "ProjectDesktop") {
+    Assert-ProjectDesktopTarget $Target
 }
 
 Write-Host "Installing OpenCode agent team template..."
@@ -31,6 +113,7 @@ if ($Mode -eq "Global") {
 }
 elseif ($Mode -eq "ProjectDesktop") {
     Write-Host "ProjectDesktop mode is recommended for OpenCode Desktop when the project folder is opened directly."
+    Write-Host "It installs only into the project root, never into the user's global OpenCode config."
 }
 else {
     Write-Host "ProjectLocal mode is recommended. Start OpenCode for migration sessions with this config only."
