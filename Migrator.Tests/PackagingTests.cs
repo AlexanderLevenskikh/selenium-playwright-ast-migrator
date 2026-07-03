@@ -87,7 +87,7 @@ public class PackagingTests
     }
 
     [Fact]
-    public void ManualNuGetPublishWorkflow_PacksSmokesAndRequiresSecret()
+    public void ManualNuGetPublishWorkflow_PacksSmokesAndUsesTrustedPublishing()
     {
         var workflowPath = FindRepositoryFile(".github/workflows/publish-nuget.yml");
         var workflow = File.ReadAllText(workflowPath);
@@ -97,7 +97,9 @@ public class PackagingTests
         Assert.Contains("scripts/pack-tool.sh", workflow);
         Assert.Contains("scripts/verify-nupkg-contents.sh", workflow);
         Assert.Contains("scripts/smoke-local-tool-package.sh", workflow);
-        Assert.Contains("secrets.NUGET_API_KEY", workflow);
+        Assert.Contains("NuGet/login@v1", workflow);
+        Assert.Contains("id-token: write", workflow);
+        Assert.Contains("steps.nuget-login.outputs.NUGET_API_KEY", workflow);
         Assert.Contains("scripts/push-tool.sh", workflow);
         Assert.Contains("nuget-production", workflow);
     }

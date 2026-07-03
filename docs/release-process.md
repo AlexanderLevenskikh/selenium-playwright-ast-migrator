@@ -137,9 +137,11 @@ The workflow:
 5. uploads the verified `.nupkg` as a workflow artifact;
 6. publishes only when `dry_run=false`.
 
-Required repository setup:
+Required repository setup for NuGet Trusted Publishing:
 
-- add `NUGET_API_KEY` as a GitHub Actions repository or environment secret;
+- create a nuget.org Trusted Publishing policy for this repository and the `publish-nuget.yml` workflow;
+- set the policy environment to `nuget-production`;
+- add `NUGET_USER` as a GitHub Actions repository or environment secret with the nuget.org profile name;
 - protect the `nuget-production` environment if you want a final manual approval gate;
 - never put API keys into `NuGet.config`, scripts, workflow inputs, or committed files.
 
@@ -153,9 +155,10 @@ Recommended sequence:
 ### Local/manual publish
 
 NuGet/GitHub package publishing should happen only after the CI package artifacts pass verification.
+For local/manual publication to nuget.org, set `NUGET_API_KEY` in the shell first.
 
 ```bash
-scripts/push-tool.sh https://api.nuget.org/v3/index.json 0.0.0-preview.1
+NUGET_API_KEY=<api-key> scripts/push-tool.sh https://api.nuget.org/v3/index.json 0.0.0-preview.1
 ```
 
 or on Windows:

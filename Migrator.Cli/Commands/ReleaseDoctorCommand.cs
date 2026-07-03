@@ -163,7 +163,9 @@ internal static class ReleaseDoctorCommand
         var workflow = File.ReadAllText(workflowPath);
         Add(checks, workflow.Contains("workflow_dispatch", StringComparison.Ordinal), "workflow", "publish-nuget.yml", "publish workflow is manual", "publish workflow should use workflow_dispatch");
         Add(checks, workflow.Contains("dry_run", StringComparison.Ordinal), "workflow", "publish-nuget.yml", "publish workflow supports dry-run", "publish workflow should support dry_run");
-        Add(checks, workflow.Contains("secrets.NUGET_API_KEY", StringComparison.Ordinal), "workflow", "publish-nuget.yml", "publish workflow requires NUGET_API_KEY secret", "publish workflow should require NUGET_API_KEY secret");
+        Add(checks, workflow.Contains("NuGet/login@v1", StringComparison.Ordinal), "workflow", "publish-nuget.yml", "publish workflow uses NuGet Trusted Publishing login", "publish workflow should use NuGet/login@v1 for Trusted Publishing");
+        Add(checks, workflow.Contains("id-token: write", StringComparison.Ordinal), "workflow", "publish-nuget.yml", "publish workflow can request GitHub OIDC token", "publish workflow should grant id-token: write for NuGet Trusted Publishing");
+        Add(checks, workflow.Contains("steps.nuget-login.outputs.NUGET_API_KEY", StringComparison.Ordinal), "workflow", "publish-nuget.yml", "publish workflow passes short-lived NuGet API key", "publish workflow should pass the NuGet/login@v1 NUGET_API_KEY output to push-tool");
         Add(checks, workflow.Contains("nuget-production", StringComparison.Ordinal), "workflow", "publish-nuget.yml", "publish workflow uses protected environment hook", "publish workflow should use a production environment gate");
         Add(checks, workflow.Contains(packageId, StringComparison.Ordinal), "workflow", "publish-nuget.yml", "workflow package path matches PackageId", $"workflow should reference {packageId} package path/artifact");
     }

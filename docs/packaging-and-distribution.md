@@ -91,7 +91,9 @@ dotnet tool run selenium-pw-migrator -- --help
 
 ## Публикация в NuGet/feed
 
-Если source уже есть в `NuGet.config`:
+Для GitHub Actions публикации в nuget.org используется Trusted Publishing: workflow `publish-nuget.yml` получает короткоживущий ключ через `NuGet/login@v1` и передаёт его в `scripts/push-tool.sh` как `NUGET_API_KEY`.
+
+Для локальной публикации задайте `NUGET_API_KEY` явно. Если source уже есть в `NuGet.config`:
 
 ```powershell
 .\scripts\push-tool.ps1 `
@@ -343,9 +345,10 @@ For a real publish:
 
 1. run the workflow once with `dry_run=true`;
 2. check that build/test/package/smoke all pass;
-3. run it again with the same version and `dry_run=false`;
-4. make sure repository or environment secret `NUGET_API_KEY` is configured;
-5. optionally protect the `nuget-production` environment for a final human approval gate.
+3. configure a nuget.org Trusted Publishing policy for this repository, `publish-nuget.yml`, and the `nuget-production` environment;
+4. add `NUGET_USER` as a GitHub Actions repository or environment secret with the nuget.org profile name;
+5. run the workflow again with the same version and `dry_run=false`;
+6. optionally protect the `nuget-production` environment for a final human approval gate.
 
 Do not pass API keys through workflow inputs and do not commit credentials into `NuGet.config`.
 

@@ -18,8 +18,28 @@ if [[ ! -f "$PACKAGE" ]]; then
   exit 1
 fi
 
-if [[ -n "$API_KEY" ]]; then
-  dotnet nuget push "$PACKAGE" --source "$SOURCE" --api-key "$API_KEY" --skip-duplicate
-else
+is_nuget_org_source() {
+  case "$SOURCE" in
+    *nuget.org*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if [[ -z "$API_KEY" ]]; then
+  if is_nuget_org_source; then
+    cat >&2 <<'MESSAGE'
+NUGET_API_KEY is required to publish to nuget.org.
+For GitHub Actions Trusted Publishing, run NuGet/login@v1 before this script and pass:
+  NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+For classic API key publishing, set the NUGET_API_KEY environment variable.
+MESSAGE
+    exit 1
+  fi
+
+  echo "Publishing $PACKAGE to $SOURCE without an explicit API key..."
   dotnet nuget push "$PACKAGE" --source "$SOURCE" --skip-duplicate
+  exit $?
 fi
+
+echo "Publishing $PACKAGE to $SOURCE..."
+dotnet nuget push "$PACKAGE" --source "$SOURCE" --api-key "$API_KEY" --skip-duplicate

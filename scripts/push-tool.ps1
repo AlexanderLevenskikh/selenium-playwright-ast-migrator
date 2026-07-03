@@ -16,10 +16,24 @@ if (-not (Test-Path $package)) {
     throw "Package not found: $package. Run scripts/pack-tool.ps1 first."
 }
 
+$effectiveApiKey = $ApiKey
+if ([string]::IsNullOrWhiteSpace($effectiveApiKey)) {
+    $effectiveApiKey = $env:NUGET_API_KEY
+}
+
+$isNuGetOrgSource = $Source -match 'nuget\.org'
+if ($isNuGetOrgSource -and [string]::IsNullOrWhiteSpace($effectiveApiKey)) {
+    throw @"
+NUGET_API_KEY is required to publish to nuget.org.
+For GitHub Actions Trusted Publishing, run NuGet/login@v1 before this script and pass the action output as NUGET_API_KEY.
+For classic API key publishing, pass -ApiKey or set the NUGET_API_KEY environment variable.
+"@
+}
+
 $args = @("nuget", "push", $package, "--source", $Source)
 
-if (-not [string]::IsNullOrWhiteSpace($ApiKey)) {
-    $args += @("--api-key", $ApiKey)
+if (-not [string]::IsNullOrWhiteSpace($effectiveApiKey)) {
+    $args += @("--api-key", $effectiveApiKey)
 }
 
 if ($SkipDuplicate) {
