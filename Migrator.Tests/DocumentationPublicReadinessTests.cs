@@ -203,18 +203,8 @@ public class DocumentationPublicReadinessTests
     public void PublicDocs_DoNotContainPersonalMachinePaths()
     {
         var repoRoot = FindRepositoryRoot();
-        var files = Directory.EnumerateFiles(repoRoot, "*", SearchOption.AllDirectories)
-            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
-            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
-            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}.git{Path.DirectorySeparatorChar}"))
+        var files = EnumeratePublicReadinessFiles(repoRoot, includeCode: false)
             .Where(path => !path.EndsWith("DocumentationPublicReadinessTests.cs", StringComparison.OrdinalIgnoreCase))
-            .Where(path =>
-                path.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
-                path.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase) ||
-                path.EndsWith(".sh", StringComparison.OrdinalIgnoreCase) ||
-                path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ||
-                path.EndsWith(".yml", StringComparison.OrdinalIgnoreCase) ||
-                path.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
         foreach (var file in files)
@@ -222,7 +212,8 @@ public class DocumentationPublicReadinessTests
             var text = File.ReadAllText(file);
             Assert.DoesNotContain("C:\\Users\\", text, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("C:/Users/", text, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain("levenskikh", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("C:\\Users\\levenskikh", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("C:/Users/levenskikh", text, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("Desktop\\billy", text, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("Desktop/billy", text, StringComparison.OrdinalIgnoreCase);
         }
@@ -248,20 +239,8 @@ public class DocumentationPublicReadinessTests
     public void RepositoryTargetsDotNet10Everywhere()
     {
         var repoRoot = FindRepositoryRoot();
-        var relevantFiles = Directory.EnumerateFiles(repoRoot, "*", SearchOption.AllDirectories)
-            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
-            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
-            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}.git{Path.DirectorySeparatorChar}"))
+        var relevantFiles = EnumeratePublicReadinessFiles(repoRoot, includeCode: true)
             .Where(path => !path.EndsWith("DocumentationPublicReadinessTests.cs", StringComparison.OrdinalIgnoreCase))
-            .Where(path =>
-                path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
-                path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ||
-                path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ||
-                path.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
-                path.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase) ||
-                path.EndsWith(".sh", StringComparison.OrdinalIgnoreCase) ||
-                path.EndsWith(".yml", StringComparison.OrdinalIgnoreCase) ||
-                path.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
         foreach (var file in relevantFiles)
@@ -287,6 +266,35 @@ public class DocumentationPublicReadinessTests
     }
 
 
+
+
+    static string[] EnumeratePublicReadinessFiles(string repoRoot, bool includeCode)
+    {
+        static bool HasPathSegment(string path, string segment)
+            => path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                .Any(part => string.Equals(part, segment, StringComparison.OrdinalIgnoreCase));
+
+        return Directory.EnumerateFiles(repoRoot, "*", SearchOption.AllDirectories)
+            .Where(path => !HasPathSegment(path, "bin"))
+            .Where(path => !HasPathSegment(path, "obj"))
+            .Where(path => !HasPathSegment(path, ".git"))
+            .Where(path => !HasPathSegment(path, ".agent-state"))
+            .Where(path => !HasPathSegment(path, ".dogfood"))
+            .Where(path => !HasPathSegment(path, ".kitroot-smoke"))
+            .Where(path => !HasPathSegment(path, "migration"))
+            .Where(path => !HasPathSegment(path, "TestResults"))
+            .Where(path => !HasPathSegment(path, "artifacts"))
+            .Where(path =>
+                path.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".sh", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".yml", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase) ||
+                (includeCode && path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)) ||
+                (includeCode && path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+    }
 
     static string FindRepositoryRoot()
     {

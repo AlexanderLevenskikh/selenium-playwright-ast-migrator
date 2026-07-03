@@ -601,7 +601,7 @@ public class AgentLoopHardeningTests
         try
         {
             var script = System.IO.Path.Combine(repo.Path, "migration", "opencode-team", "scripts", "install-windows.ps1");
-            var result = RunProcess("powershell", $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\" -Mode ProjectDesktop", outsideDirectory);
+            var result = RunPowerShell($"-NoProfile -ExecutionPolicy Bypass -File \"{script}\" -Mode ProjectDesktop", outsideDirectory);
 
             Assert.Equal(0, result.ExitCode);
             Assert.True(File.Exists(System.IO.Path.Combine(repo.Path, "opencode.jsonc")), result.Output);
@@ -1058,7 +1058,7 @@ public class AgentLoopHardeningTests
         }
 
         public ProcessResult RunScopeGuard(string allowedRoot)
-            => RunProcess("powershell", $"-NoProfile -ExecutionPolicy Bypass -File \"{_scriptPath}\" -RepoRoot \"{Path}\" -AllowedRoots \"{allowedRoot}\"", Path);
+            => RunPowerShell($"-NoProfile -ExecutionPolicy Bypass -File \"{_scriptPath}\" -RepoRoot \"{Path}\" -AllowedRoots \"{allowedRoot}\"", Path);
 
         public ProcessResult RunFinalGate(string additionalArguments = "")
         {
@@ -1066,7 +1066,7 @@ public class AgentLoopHardeningTests
             var args = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\" -Workspace \"migration\" -RepoRoot \"{Path}\" -AllowedRoots \"migration\"";
             if (!string.IsNullOrWhiteSpace(additionalArguments))
                 args += " " + additionalArguments;
-            return RunProcess("powershell", args, Path);
+            return RunPowerShell(args, Path);
         }
 
 
@@ -1084,6 +1084,28 @@ public class AgentLoopHardeningTests
     }
 
     sealed record ProcessResult(int ExitCode, string Output);
+
+    static ProcessResult RunPowerShell(string arguments, string workingDirectory)
+    {
+        var candidates = OperatingSystem.IsWindows()
+            ? new[] { "powershell", "pwsh" }
+            : new[] { "pwsh", "powershell" };
+
+        Exception? lastError = null;
+        foreach (var executable in candidates)
+        {
+            try
+            {
+                return RunProcess(executable, arguments, workingDirectory);
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                lastError = ex;
+            }
+        }
+
+        throw new InvalidOperationException("PowerShell is required for migration-kit guard script tests. Install PowerShell 7 (`pwsh`) on non-Windows runners.", lastError);
+    }
 
     static ProcessResult RunProcess(string fileName, string arguments, string workingDirectory)
     {

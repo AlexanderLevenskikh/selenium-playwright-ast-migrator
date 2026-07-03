@@ -132,6 +132,14 @@ dotnet tool run selenium-pw-migrator -- kit doctor --workspace migration
 
 См. [Migrator Agent Harness Kit](docs/migrator-agent-harness-kit.md), [Agent environments](docs/agent-environments.ru.md), [Harness dashboard](docs/migrator-agent-harness-dashboard.md) и канонический [Guarded OpenCode Desktop runbook](docs/guarded-opencode-desktop-runbook.ru.md).
 
+Developer smoke для проверки resolver-а template root в `bootstrap-opencode`:
+
+```powershell
+pwsh .\scripts\run-kitroot-shadow-smoke.ps1 -Clean
+```
+
+Он создаёт fake product repo с собственной папкой `templates/migration-kit` и проверяет, что `bootstrap-opencode` всё равно использует bundled шаблоны Migrator.
+
 ## Основные CLI modes
 
 | Mode | Статус | Назначение |
