@@ -6,10 +6,12 @@
 selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
 ```
 
+Relative `--out` values are written under the default `migration/` workspace, so this creates `migration/playground`.
+
 Verify the generated workspace before using it in release docs or demos:
 
 ```bash
-selenium-pw-migrator playground verify --input playground --out playground-verify --format both
+selenium-pw-migrator playground verify --input migration/playground --out playground-verify --format both
 ```
 
 It writes a self-contained sample migration folder with:
@@ -29,16 +31,16 @@ The public demo and guided tutorial show the repo content, but a new user may wa
 
 ## Ready command chain
 
-After generating the playground, open `try-this-first.md` or run the generated shell script:
+After generating the playground, open `migration/playground/try-this-first.md` or run the generated shell script:
 
 ```bash
-bash playground/commands.sh
+bash migration/playground/commands.sh
 ```
 
 On Windows PowerShell:
 
 ```powershell
-./playground/commands.ps1
+./migration/playground/commands.ps1
 ```
 
 The ready command chain demonstrates:

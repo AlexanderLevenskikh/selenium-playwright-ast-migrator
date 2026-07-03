@@ -87,6 +87,28 @@ dotnet tool run selenium-pw-migrator -- --help
 
 CI package smoke uses the same idea: pack → verify `.nupkg` contents → install from local source → run `--help` and `doctor`.
 
+## `dotnet tool update` says `--ignore-failed-sources` is a version
+
+This usually means the shell variable passed to `--version` is empty. PowerShell then treats the next token as the version value:
+
+```powershell
+dotnet tool update SeleniumPlaywrightMigrator --local --version $version --ignore-failed-sources
+```
+
+Check the variable first:
+
+```powershell
+$version
+```
+
+If it prints nothing, set it and pack the same version:
+
+```powershell
+$version = "0.6.0-local.$(Get-Date -Format yyyyMMddHHmmss)"
+dotnet pack .\Migrator.Cli\Migrator.Cli.csproj -c Release -o .\artifacts\local-tool /p:Version=$version
+dotnet tool update SeleniumPlaywrightMigrator --local --add-source .\artifacts\local-tool --version $version --ignore-failed-sources
+```
+
 ## The agent keeps asking whether to continue
 
 Use `docs/guarded-opencode-desktop-runbook.ru.md` as the launch procedure. In guarded mode, routine continuation decisions should be made by the agent inside `migration/**`. The agent should stop only for a classified blocker, scope violation, loop/plateau, or failed final gate evidence.

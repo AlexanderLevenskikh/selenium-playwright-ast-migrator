@@ -92,9 +92,9 @@ migration/run-001/
 Try the five-minute playground:
 
 ```bash
-selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
-selenium-pw-migrator playground verify --input playground --out playground-verify
-cat playground/try-this-first.md
+dotnet tool run selenium-pw-migrator -- playground --out playground --target-test-framework xunit --generation-policy conservative
+dotnet tool run selenium-pw-migrator -- playground verify --input migration/playground --out playground-verify
+cat migration/playground/try-this-first.md
 ```
 
 For a file-by-file walkthrough, see:

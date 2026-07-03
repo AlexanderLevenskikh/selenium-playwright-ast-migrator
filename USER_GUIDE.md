@@ -47,7 +47,9 @@ dotnet tool run selenium-pw-migrator -- playground \
   --generation-policy conservative
 ```
 
-Open `playground/try-this-first.md` and run the generated command chain before touching a real project.
+Open `migration/playground/try-this-first.md` and run the generated command chain before touching a real project.
+
+Relative `--out playground` is written under the default `migration/` workspace. Use an absolute `--out` path if you want the playground somewhere else.
 
 If you want to understand the AST-based migration model before using the tool on a real suite, open the teaching demo and article:
 
@@ -401,7 +403,7 @@ dotnet tool run selenium-pw-migrator -- playground --out playground --target-tes
 Checks that a generated playground still contains the public demo contract: manifest, ready command chain, sample Selenium input, adapter config, expected Playwright output, dashboard sample, PR pack sample, and selector-safety wording.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- playground verify --input playground --out playground-verify
+dotnet tool run selenium-pw-migrator -- playground verify --input migration/playground --out playground-verify
 ```
 
 `release-doctor`
@@ -889,4 +891,3 @@ pwsh .\scripts\run-kitroot-shadow-smoke.ps1 -Clean
 ```
 
 The smoke creates a fake product repo with a shadow `templates/migration-kit` directory and fails if that directory is used as the kit root.
-
