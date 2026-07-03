@@ -25,7 +25,18 @@ Migrator парсит Selenium-тесты, строит промежуточну
 | Selenium Java | Playwright .NET / TypeScript | Experimental MVP | Для простых Java Selenium fixtures; без Java semantic model. |
 | Selenium Python | Playwright .NET / TypeScript | Experimental spike | Для простых pytest/unittest Selenium diagnostics; не production-ready. |
 
-## Установка или локальный запуск
+## Установка
+
+Для обычного использования установите последнюю публичную preview-версию из NuGet. Клонировать репозиторий не нужно.
+
+```bash
+dotnet tool install --global SeleniumPlaywrightMigrator --prerelease
+selenium-pw-migrator --help
+```
+
+Репозиторий нужен только для разработки самого инструмента или сборки из исходников.
+
+## Сборка или локальный запуск из исходников
 
 Из исходников:
 
@@ -62,7 +73,7 @@ dotnet tool run selenium-pw-migrator -- --help
 Для стабильного production-сценария держим путь максимально коротким:
 
 ```bash
-dotnet tool install --global SeleniumPlaywrightMigrator --version 0.0.0-preview.1
+dotnet tool install --global SeleniumPlaywrightMigrator --prerelease
 selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
 bash playground/commands.sh
 selenium-pw-migrator playground verify --input playground --out playground-verify --format both

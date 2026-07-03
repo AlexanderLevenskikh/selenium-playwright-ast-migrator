@@ -25,7 +25,18 @@ The goal is not magic conversion. The goal is to make migration uncertainty visi
 | Selenium Java | Playwright .NET / TypeScript | Experimental MVP | Useful for simple Java Selenium fixtures; no Java semantic model. |
 | Selenium Python | Playwright .NET / TypeScript | Experimental spike | Useful for simple pytest/unittest Selenium diagnostics; not production-ready. |
 
-## Install or run locally
+## Install
+
+For normal use, install the latest public preview from NuGet. You do not need to clone this repository.
+
+```bash
+dotnet tool install --global SeleniumPlaywrightMigrator --prerelease
+selenium-pw-migrator --help
+```
+
+Clone the repository only if you want to contribute or build the tool from source.
+
+## Build or run locally from source
 
 From source:
 
@@ -62,7 +73,7 @@ See [Tool installation](docs/tool-installation.md) and [Packaging and distributi
 For the stable production path, keep it boring and small:
 
 ```bash
-dotnet tool install --global SeleniumPlaywrightMigrator --version 0.0.0-preview.1
+dotnet tool install --global SeleniumPlaywrightMigrator --prerelease
 selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
 bash playground/commands.sh
 selenium-pw-migrator playground verify --input playground --out playground-verify --format both

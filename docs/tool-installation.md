@@ -2,21 +2,19 @@
 
 ## Самый быстрый старт из NuGet
 
-Если пакет уже опубликован в NuGet, лучше закрепить версию в local tool manifest проекта:
+Для обычного использования установите последнюю публичную preview-версию глобально. Репозиторий клонировать не нужно:
 
 ```powershell
-dotnet new tool-manifest
+dotnet tool install --global SeleniumPlaywrightMigrator `
+  --prerelease
 
-dotnet tool install SeleniumPlaywrightMigrator `
-  --version 0.0.0-preview.1
-
-dotnet tool run selenium-pw-migrator -- --help
+selenium-pw-migrator --help
 ```
 
 Дальше можно запустить disposable playground:
 
 ```powershell
-dotnet tool run selenium-pw-migrator -- playground `
+selenium-pw-migrator playground `
   --out playground `
   --target-test-framework xunit `
   --generation-policy conservative
@@ -24,13 +22,13 @@ dotnet tool run selenium-pw-migrator -- playground `
 
 ## Local tool для проекта
 
-Рекомендуемый способ:
+Для командного репозитория можно закрепить фактически установленную preview-версию в local tool manifest:
 
 ```powershell
 dotnet new tool-manifest
 
 dotnet tool install SeleniumPlaywrightMigrator `
-  --version 0.0.0-preview.1
+  --prerelease
 ```
 
 Запуск:
@@ -73,7 +71,7 @@ dotnet tool run selenium-pw-migrator -- --help
 
 ```powershell
 dotnet tool install --global SeleniumPlaywrightMigrator `
-  --version 0.0.0-preview.1
+  --prerelease
 ```
 
 Запуск:
@@ -88,14 +86,14 @@ Local tool:
 
 ```powershell
 dotnet tool update SeleniumPlaywrightMigrator `
-  --version 0.0.0-preview.1
+  --prerelease
 ```
 
 Global tool:
 
 ```powershell
 dotnet tool update --global SeleniumPlaywrightMigrator `
-  --version 0.0.0-preview.1
+  --prerelease
 ```
 
 ## В CI

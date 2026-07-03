@@ -15,7 +15,7 @@ The main production path is Selenium C# to Playwright .NET. NUnit is the default
 Use this as the short path for new users:
 
 ```bash
-dotnet tool install --global SeleniumPlaywrightMigrator --version 0.0.0-preview.1
+dotnet tool install --global SeleniumPlaywrightMigrator --prerelease
 selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
 bash playground/commands.sh
 selenium-pw-migrator playground verify --input playground --out playground-verify --format both
@@ -49,11 +49,18 @@ Weak guesses become TODOs or reports instead of unsafe generated code.
 
 ### Fast start from NuGet
 
-When the package is published, the best team-friendly setup is a project-local dotnet tool manifest:
+For the fastest start, install the latest public preview globally. You do not need to clone the repository to use the migrator:
+
+```bash
+dotnet tool install --global SeleniumPlaywrightMigrator --prerelease
+selenium-pw-migrator --help
+```
+
+For team repositories, use a project-local dotnet tool manifest:
 
 ```bash
 dotnet new tool-manifest
-dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0-preview.1
+dotnet tool install SeleniumPlaywrightMigrator --prerelease
 dotnet tool run selenium-pw-migrator -- --help
 ```
 

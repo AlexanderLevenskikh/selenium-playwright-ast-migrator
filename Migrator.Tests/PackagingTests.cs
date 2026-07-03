@@ -23,6 +23,7 @@ public class PackagingTests
     {
         Assert.True(File.Exists(FindRepositoryFile("scripts/pack-tool.ps1")));
         Assert.True(File.Exists(FindRepositoryFile("scripts/push-tool.ps1")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/extract-release-notes.sh")));
         Assert.True(File.Exists(FindRepositoryFile("scripts/install-local-tool.ps1")));
         Assert.True(File.Exists(FindRepositoryFile("scripts/smoke-local-tool-package.ps1")));
         Assert.True(File.Exists(FindRepositoryFile("scripts/smoke-local-tool-package.sh")));
@@ -101,6 +102,12 @@ public class PackagingTests
         Assert.Contains("id-token: write", workflow);
         Assert.Contains("steps.nuget-login.outputs.NUGET_API_KEY", workflow);
         Assert.Contains("scripts/push-tool.sh", workflow);
+        Assert.Contains("contents: write", workflow);
+        Assert.Contains("create_github_release", workflow);
+        Assert.Contains("scripts/extract-release-notes.sh", workflow);
+        Assert.Contains("gh release create", workflow);
+        Assert.Contains("gh release upload", workflow);
+        Assert.Contains("--prerelease", workflow);
         Assert.Contains("nuget-production", workflow);
     }
 

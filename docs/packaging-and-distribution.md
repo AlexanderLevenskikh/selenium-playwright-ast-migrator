@@ -114,22 +114,22 @@ dotnet nuget push .\artifacts\nuget\SeleniumPlaywrightMigrator.0.0.0-preview.1.n
 
 ## Установка из NuGet/feed
 
-Глобально:
+Для обычного использования — глобально, без клонирования репозитория:
 
 ```powershell
 dotnet tool install --global SeleniumPlaywrightMigrator `
-  --version 0.0.0-preview.1 `
+  --prerelease
 
+selenium-pw-migrator --help
 ```
 
-В репозитории проекта лучше использовать local tool manifest:
+В репозитории проекта можно использовать local tool manifest; установленная preview-версия будет закреплена в `.config/dotnet-tools.json`:
 
 ```powershell
 dotnet new tool-manifest
 
 dotnet tool install SeleniumPlaywrightMigrator `
-  --version 0.0.0-preview.1 `
-
+  --prerelease
 ```
 
 После этого в репозитории появится:
@@ -339,7 +339,8 @@ The workflow is started with `workflow_dispatch` and accepts:
 
 - `version` — exact package version, for example `0.0.0-preview.1`;
 - `source` — usually `https://api.nuget.org/v3/index.json`;
-- `dry_run` — default `true`, which builds, packs, verifies, smokes, and uploads the `.nupkg` artifact without publishing.
+- `dry_run` — default `true`, which builds, packs, verifies, smokes, and uploads the `.nupkg` artifact without publishing;
+- `create_github_release` — default `true`; when `dry_run=false`, creates or updates the GitHub release after the NuGet push.
 
 For a real publish:
 
@@ -348,7 +349,8 @@ For a real publish:
 3. configure a nuget.org Trusted Publishing policy for this repository, `publish-nuget.yml`, and the `nuget-production` environment;
 4. add `NUGET_USER` as a GitHub Actions repository or environment secret with the nuget.org profile name;
 5. run the workflow again with the same version and `dry_run=false`;
-6. optionally protect the `nuget-production` environment for a final human approval gate.
+6. optionally protect the `nuget-production` environment for a final human approval gate;
+7. after a successful publish, the workflow creates or updates `v<version>` on GitHub, loads notes from `docs/release-notes/v<version>.md` when present, falls back to `CHANGELOG.md`, and attaches the verified `.nupkg`.
 
 Do not pass API keys through workflow inputs and do not commit credentials into `NuGet.config`.
 

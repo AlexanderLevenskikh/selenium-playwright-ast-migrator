@@ -126,7 +126,8 @@ Run it from GitHub Actions with `workflow_dispatch` inputs:
 
 - `version` - the exact package version, for example `0.0.0-preview.1`;
 - `source` - usually `https://api.nuget.org/v3/index.json`;
-- `dry_run` - keep `true` for the first run; set to `false` only for the actual publish.
+- `dry_run` - keep `true` for the first run; set to `false` only for the actual publish;
+- `create_github_release` - keep `true` to create or update the GitHub release after NuGet publish.
 
 The workflow:
 
@@ -135,7 +136,8 @@ The workflow:
 3. verifies `.nupkg` contents;
 4. installs the package from `artifacts/nuget` into a temporary local tool manifest and runs smoke checks;
 5. uploads the verified `.nupkg` as a workflow artifact;
-6. publishes only when `dry_run=false`.
+6. publishes only when `dry_run=false`;
+7. creates or updates the GitHub release `v<version>` after a successful publish, using `docs/release-notes/v<version>.md` first and falling back to the matching `CHANGELOG.md` section.
 
 Required repository setup for NuGet Trusted Publishing:
 
@@ -150,7 +152,7 @@ Recommended sequence:
 1. run the workflow with `dry_run=true`;
 2. download/check the uploaded `.nupkg` artifact if needed;
 3. run the workflow again with the same `version` and `dry_run=false`;
-4. verify the package page on NuGet and test install from a clean directory.
+4. verify the package page on NuGet, the GitHub release page, and test install from a clean directory.
 
 ### Local/manual publish
 
@@ -179,7 +181,7 @@ After publishing to NuGet, verify install from a clean directory:
 mkdir /tmp/migrator-tool-smoke
 cd /tmp/migrator-tool-smoke
 dotnet new tool-manifest
-dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0-preview.1
+dotnet tool install SeleniumPlaywrightMigrator --prerelease
 dotnet tool run selenium-pw-migrator -- --help
 ```
 

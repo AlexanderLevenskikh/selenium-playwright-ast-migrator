@@ -5,7 +5,7 @@ This path gets you from a small Selenium sample to generated Playwright output. 
 ## Short happy path
 
 ```bash
-dotnet tool install --global SeleniumPlaywrightMigrator --version 0.0.0-preview.1
+dotnet tool install --global SeleniumPlaywrightMigrator --prerelease
 selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
 bash playground/commands.sh
 selenium-pw-migrator playground verify --input playground --out playground-verify --format both

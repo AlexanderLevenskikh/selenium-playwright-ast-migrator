@@ -17,6 +17,11 @@ on:
         required: true
         default: true
         type: boolean
+      create_github_release:
+        description: 'After a successful publish, create or update the GitHub release and attach the nupkg.'
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -67,7 +72,7 @@ jobs:
     if: ${{ inputs.dry_run == false }}
     environment: nuget-production
     permissions:
-      contents: read
+      contents: write
       id-token: write
 
     steps:
@@ -95,3 +100,37 @@ jobs:
         env:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
         run: scripts/push-tool.sh "${{ inputs.source }}" "${{ inputs.version }}"
+
+      - name: Prepare GitHub release notes
+        if: ${{ inputs.create_github_release == true }}
+        run: scripts/extract-release-notes.sh "${{ inputs.version }}" .release-notes.md
+
+      - name: Create or update GitHub release
+        if: ${{ inputs.create_github_release == true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          tag="v${VERSION}"
+          title="Selenium Playwright Migrator ${VERSION}"
+          package="artifacts/nuget/SeleniumPlaywrightMigrator.${VERSION}.nupkg"
+          prerelease_flag=()
+
+          if [[ "$VERSION" == *-* ]]; then
+            prerelease_flag=(--prerelease)
+          fi
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" \
+              --title "$title" \
+              --notes-file .release-notes.md \
+              "${prerelease_flag[@]}"
+            gh release upload "$tag" "$package" --clobber
+          else
+            gh release create "$tag" "$package" \
+              --title "$title" \
+              --notes-file .release-notes.md \
+              "${prerelease_flag[@]}"
+          fi
