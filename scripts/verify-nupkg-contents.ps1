@@ -33,12 +33,12 @@ try {
     }
 
     $requiredPatterns = @(
-        '^tools/net8\.0/any/Migrator\.Cli\.(exe|dll)$',
-        '^tools/net8\.0/any/Migrator\.Core\.dll$',
-        '^tools/net8\.0/any/Migrator\.Roslyn\.dll$',
-        '^tools/net8\.0/any/Migrator\.PlaywrightDotNet\.dll$',
-        '^tools/net8\.0/any/Migrator\.PlaywrightTypeScript\.dll$',
-        '^tools/net8\.0/any/Migrator\.SeleniumCSharp\.dll$',
+        '^tools/net10\.0/any/Migrator\.Cli\.(exe|dll)$',
+        '^tools/net10\.0/any/Migrator\.Core\.dll$',
+        '^tools/net10\.0/any/Migrator\.Roslyn\.dll$',
+        '^tools/net10\.0/any/Migrator\.PlaywrightDotNet\.dll$',
+        '^tools/net10\.0/any/Migrator\.PlaywrightTypeScript\.dll$',
+        '^tools/net10\.0/any/Migrator\.SeleniumCSharp\.dll$',
         '^templates/migration-kit/README\.md$',
         '^templates/migration-kit/prompts/kickoff-prompt\.txt$',
         '^scripts/install-migration-kit\.ps1$'

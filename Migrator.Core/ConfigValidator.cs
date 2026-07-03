@@ -426,7 +426,7 @@ public static class ConfigValidator
         if (!string.IsNullOrWhiteSpace(verification.TargetFramework) &&
             !System.Text.RegularExpressions.Regex.IsMatch(verification.TargetFramework.Trim(), @"^net[0-9]+(\.[0-9]+)?([A-Za-z0-9.-]+)?$"))
         {
-            errors.Add($"Verification.TargetFramework looks invalid: '{verification.TargetFramework}'. Example: net8.0.");
+            errors.Add($"Verification.TargetFramework looks invalid: '{verification.TargetFramework}'. Example: net10.0.");
         }
 
         if (!string.IsNullOrWhiteSpace(verification.Solution) &&

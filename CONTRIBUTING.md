@@ -4,7 +4,7 @@ Thanks for helping improve Selenium Playwright Migrator. The project is still pr
 
 ## Development setup
 
-1. Install .NET 8 SDK.
+1. Install .NET 10 SDK.
 2. Restore and build the solution.
 3. Run the test suite before opening a pull request.
 

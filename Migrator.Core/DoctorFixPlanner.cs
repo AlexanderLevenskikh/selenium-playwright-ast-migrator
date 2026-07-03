@@ -344,7 +344,7 @@ runs/
             changed = true;
         }
 
-        changed |= EnsureString(verification, "TargetFramework", "net8.0");
+        changed |= EnsureString(verification, "TargetFramework", "net10.0");
         changed |= EnsureString(verification, "BaseDirectory", ".");
         changed |= EnsureString(verification, "BuildWorkingDirectory", ".");
         changed |= EnsureBool(verification, "AutoDiscoverNearestProject", true);
@@ -388,7 +388,7 @@ runs/
             },
             ["Verification"] = new JsonObject
             {
-                ["TargetFramework"] = "net8.0",
+                ["TargetFramework"] = "net10.0",
                 ["BaseDirectory"] = ".",
                 ["BuildWorkingDirectory"] = ".",
                 ["AutoDiscoverNearestProject"] = true,

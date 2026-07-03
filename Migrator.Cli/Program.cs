@@ -1751,7 +1751,7 @@ static string ResolveVerificationTargetFramework(VerificationConfig verification
             return tfm!;
     }
 
-    return "net8.0";
+    return "net10.0";
 }
 
 static string? ReadTargetFramework(string csprojPath)
@@ -2330,7 +2330,7 @@ static IEnumerable<Microsoft.CodeAnalysis.MetadataReference> GetGeneratedCodeRef
             var assemblyPath = Directory.EnumerateFiles(packageRoot, assemblyFileName, SearchOption.AllDirectories)
                 .Where(path => path.Contains($"{Path.DirectorySeparatorChar}lib{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
                             || path.Contains($"{Path.DirectorySeparatorChar}ref{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(path => path.Contains($"{Path.DirectorySeparatorChar}net8.0{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(path => path.Contains($"{Path.DirectorySeparatorChar}net10.0{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
                 .ThenByDescending(path => path.Contains($"{Path.DirectorySeparatorChar}net6.0{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
                 .ThenByDescending(path => path.Contains($"{Path.DirectorySeparatorChar}netstandard2.0{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
                 .ThenByDescending(File.GetLastWriteTimeUtc)

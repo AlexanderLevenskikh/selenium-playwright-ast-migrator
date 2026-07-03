@@ -1,6 +1,6 @@
 # Selenium → Playwright AST Migrator
 
-**.NET 8 CLI-инструмент для измеримой и проверяемой миграции Selenium-тестов в Playwright.**
+**.NET 10 CLI-инструмент для измеримой и проверяемой миграции Selenium-тестов в Playwright.**
 
 Migrator парсит Selenium-тесты, строит промежуточную модель действий, применяет project-specific profile/config mappings и генерирует Playwright-тесты вместе с отчётами. Он полезен, когда нужно переносить большой E2E-набор не вручную по одному тесту, а через контролируемый цикл: source truth → config/profile → generated code → verification → следующий паттерн.
 

@@ -34,7 +34,7 @@ Do not use `--mode scaffold` when:
 
 | File | Purpose |
 |---|---|
-| `*.csproj` | .NET 8 test project with Playwright + NUnit or xUnit packages |
+| `*.csproj` | .NET 10 test project with Playwright + NUnit or xUnit packages |
 | `GeneratedTestBase.cs` | Abstract base class with `LoginAsync`, `GoToAsync`, `WaitForAppReadyAsync` |
 | `TestSettings.cs` | Environment-variable-based configuration (`E2E_BASE_URL`, `E2E_LOGIN_ROUTE`, `E2E_DEFAULT_ROUTE`) |
 | `ExampleSmokeTest.cs` | Example test showing the expected style |
@@ -91,7 +91,7 @@ The draft config has `RequiresReview: true`. Fill in:
 
 ```bash
 dotnet build
-pwsh bin/Debug/net8.0/playwright.ps1 install
+pwsh bin/Debug/net10.0/playwright.ps1 install
 ```
 
 ## Why runtime pass is not guaranteed

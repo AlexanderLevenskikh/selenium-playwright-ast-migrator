@@ -34,7 +34,7 @@
 
 | Файл | Назначение |
 |---|---|
-| `*.csproj` | Проект .NET 8 с пакетами Playwright + NUnit или xUnit |
+| `*.csproj` | Проект .NET 10 с пакетами Playwright + NUnit или xUnit |
 | `GeneratedTestBase.cs` | Абстрактный base-класс с `LoginAsync`, `GoToAsync`, `WaitForAppReadyAsync` |
 | `TestSettings.cs` | Конфиг через переменные окружения (`E2E_BASE_URL`, `E2E_LOGIN_ROUTE`, `E2E_DEFAULT_ROUTE`) |
 | `ExampleSmokeTest.cs` | Пример теста, показывающий ожидаемый стиль |
@@ -90,7 +90,7 @@ Draft конфиг имеет `RequiresReview: true`. Заполните:
 
 ```bash
 dotnet build
-pwsh bin/Debug/net8.0/playwright.ps1 install
+pwsh bin/Debug/net10.0/playwright.ps1 install
 ```
 
 ## Почему runtime pass не гарантируется

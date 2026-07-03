@@ -58,7 +58,7 @@ migrate_discounts_project_verify/
 
 Поля:
 
-- `TargetFramework` — target framework временного проекта. Если не задан, берётся из первого найденного `.csproj`; fallback — `net8.0`.
+- `TargetFramework` — target framework временного проекта. Если не задан, берётся из первого найденного `.csproj`; fallback — `net10.0`.
 - `BaseDirectory` — база для относительных путей в `ProjectReferences`/`AssemblyReferences`/`Solution`.
 - `BuildWorkingDirectory` — рабочая директория для `dotnet build`; полезно указывать корень repo, чтобы подхватился `NuGet.config` внутреннего фида.
 - `Solution` — опциональный `.sln` для discovery/report context. Source solution не меняется.

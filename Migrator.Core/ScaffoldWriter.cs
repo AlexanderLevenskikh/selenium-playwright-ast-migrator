@@ -59,7 +59,7 @@ public sealed class ScaffoldWriter
             "Review and fill in adapter-config.draft.json with source-truth selectors.",
             $"Run migrate with this config: --mode migrate --target dotnet --target-test-framework {targetTestFramework} --input <selenium> --config adapter-config.draft.json --out src",
             "Run verify on generated code: --mode verify --input src --config adapter-config.draft.json --out verify",
-            "Install Playwright browsers: pwsh bin/Debug/net8.0/playwright.ps1 install",
+            "Install Playwright browsers: pwsh bin/Debug/net10.0/playwright.ps1 install",
             "Run compile smoke: dotnet build",
             "Run tests (after configuring auth/routes): dotnet test"
         };
@@ -108,7 +108,7 @@ public sealed class ScaffoldWriter
         var content = $@"<Project Sdk=""Microsoft.NET.Sdk"">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
@@ -351,7 +351,7 @@ It is **NOT** a runtime-ready test project.
 
 ```bash
 dotnet build
-pwsh bin/Debug/net8.0/playwright.ps1 install
+pwsh bin/Debug/net10.0/playwright.ps1 install
 ```
 
 ### 2. Configure environment variables

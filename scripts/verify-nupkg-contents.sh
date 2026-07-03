@@ -37,12 +37,12 @@ for required in required_exact:
         raise SystemExit(f'Package is missing required public file: {required}')
 
 required_patterns = [
-    r'^tools/net8\.0/any/Migrator\.Cli\.(exe|dll)$',
-    r'^tools/net8\.0/any/Migrator\.Core\.dll$',
-    r'^tools/net8\.0/any/Migrator\.Roslyn\.dll$',
-    r'^tools/net8\.0/any/Migrator\.PlaywrightDotNet\.dll$',
-    r'^tools/net8\.0/any/Migrator\.PlaywrightTypeScript\.dll$',
-    r'^tools/net8\.0/any/Migrator\.SeleniumCSharp\.dll$',
+    r'^tools/net10\.0/any/Migrator\.Cli\.(exe|dll)$',
+    r'^tools/net10\.0/any/Migrator\.Core\.dll$',
+    r'^tools/net10\.0/any/Migrator\.Roslyn\.dll$',
+    r'^tools/net10\.0/any/Migrator\.PlaywrightDotNet\.dll$',
+    r'^tools/net10\.0/any/Migrator\.PlaywrightTypeScript\.dll$',
+    r'^tools/net10\.0/any/Migrator\.SeleniumCSharp\.dll$',
     r'^templates/migration-kit/README\.md$',
     r'^templates/migration-kit/prompts/kickoff-prompt\.txt$',
     r'^scripts/install-migration-kit\.ps1$',

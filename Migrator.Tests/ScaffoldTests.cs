@@ -62,7 +62,7 @@ public class ScaffoldTests : IDisposable
 
         var content = File.ReadAllText(Path.Combine(_tmp, "Example.E2ETests.Playwright.csproj"));
 
-        Assert.Contains("net8.0", content);
+        Assert.Contains("net10.0", content);
         Assert.Contains("Microsoft.Playwright.NUnit", content);
         Assert.Contains("Microsoft.NET.Test.Sdk", content);
         Assert.Contains("NUnit", content);

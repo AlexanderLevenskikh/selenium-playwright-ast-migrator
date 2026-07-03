@@ -268,7 +268,7 @@ public sealed class WaitPolicyMapping
 public sealed class VerificationConfig
 {
     /// <summary>
-    /// Target framework for the temporary verification project. Default: net8.0.
+    /// Target framework for the temporary verification project. Default: net10.0.
     /// </summary>
     public string? TargetFramework { get; init; }
 

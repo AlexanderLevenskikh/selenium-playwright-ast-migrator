@@ -66,7 +66,7 @@ public sealed class DoctorFixModeTests : IDisposable
 
         var config = ConfigValidator.ValidateJson(File.ReadAllText(configPath), configPath);
         Assert.Equal("xunit", config.TestHost?.TargetTestFramework);
-        Assert.Equal("net8.0", config.Verification?.TargetFramework);
+        Assert.Equal("net10.0", config.Verification?.TargetFramework);
         Assert.False(config.Verification?.DisableDefaultPackageReferences);
     }
 

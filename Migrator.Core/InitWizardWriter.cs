@@ -112,7 +112,7 @@ public sealed class InitWizardWriter
             },
             Verification: new VerificationConfig
             {
-                TargetFramework = "net8.0",
+                TargetFramework = "net10.0",
                 AutoDiscoverNearestProject = true,
                 AutoDiscoverProjectReferences = true,
                 AutoDiscoverBuildFiles = true,

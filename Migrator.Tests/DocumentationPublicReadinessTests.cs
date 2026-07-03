@@ -207,6 +207,7 @@ public class DocumentationPublicReadinessTests
             .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
             .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
             .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}.git{Path.DirectorySeparatorChar}"))
+            .Where(path => !path.EndsWith("DocumentationPublicReadinessTests.cs", StringComparison.OrdinalIgnoreCase))
             .Where(path =>
                 path.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
                 path.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase) ||
@@ -239,6 +240,50 @@ public class DocumentationPublicReadinessTests
             Assert.DoesNotContain("```bash\n./scripts/pack-tool.sh\n./scripts/install-local-tool.ps1", text);
             Assert.Contains("dotnet tool run selenium-pw-migrator -- --help", text);
         }
+    }
+
+
+
+    [Fact]
+    public void RepositoryTargetsDotNet10Everywhere()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var relevantFiles = Directory.EnumerateFiles(repoRoot, "*", SearchOption.AllDirectories)
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}.git{Path.DirectorySeparatorChar}"))
+            .Where(path => !path.EndsWith("DocumentationPublicReadinessTests.cs", StringComparison.OrdinalIgnoreCase))
+            .Where(path =>
+                path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".sh", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".yml", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        foreach (var file in relevantFiles)
+        {
+            var text = File.ReadAllText(file);
+            Assert.DoesNotContain("net8.0", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("8.0.x", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("sdk:8.0", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(".NET 8", text, StringComparison.OrdinalIgnoreCase);
+        }
+
+        foreach (var project in Directory.EnumerateFiles(repoRoot, "*.csproj", SearchOption.AllDirectories)
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")))
+        {
+            var text = File.ReadAllText(project);
+            Assert.Contains("<TargetFramework>net10.0</TargetFramework>", text);
+        }
+
+        Assert.Contains("\"version\": \"10.0.100\"", File.ReadAllText(FindRepositoryFile("global.json")));
+        Assert.Contains("dotnet-version: '10.0.x'", File.ReadAllText(FindRepositoryFile(".github/workflows/ci.yml")));
+        Assert.Contains("mcr.microsoft.com/dotnet/sdk:10.0", File.ReadAllText(FindRepositoryFile("ci/gitlab-package.example.yml")));
     }
 
 

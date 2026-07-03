@@ -1,6 +1,6 @@
 # Selenium → Playwright AST Migrator
 
-**A .NET 8 CLI toolkit for turning Selenium test suites into measurable, reviewable Playwright migrations.**
+**A .NET 10 CLI toolkit for turning Selenium test suites into measurable, reviewable Playwright migrations.**
 
 The Migrator parses Selenium tests, builds an intermediate representation, applies project-specific profile mappings, and renders Playwright tests plus reports. It is designed for teams that want to migrate large E2E suites without pretending that every selector, helper, wait, and PageObject can be guessed safely.
 

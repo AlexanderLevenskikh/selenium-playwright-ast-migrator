@@ -87,7 +87,7 @@ internal static class CliTestRunner
             return explicitPath;
 
         var configuration = InferBuildConfiguration();
-        var expectedPath = Path.Combine(repoRoot, "Migrator.Cli", "bin", configuration, "net8.0", "Migrator.Cli.dll");
+        var expectedPath = Path.Combine(repoRoot, "Migrator.Cli", "bin", configuration, "net10.0", "Migrator.Cli.dll");
         if (File.Exists(expectedPath))
             return expectedPath;
 

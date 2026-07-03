@@ -4,7 +4,7 @@ This path gets you from a small Selenium sample to generated Playwright output. 
 
 ## Prerequisites
 
-- .NET 8 SDK
+- .NET 10 SDK
 - Selenium test files to migrate
 - Optional but recommended: `adapter-config.json` with verified PageObject/helper mappings
 
