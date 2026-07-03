@@ -50,13 +50,13 @@ jobs:
         run: dotnet test Migrator.sln --no-build --configuration Release --verbosity normal
 
       - name: Pack dotnet tool
-        run: scripts/pack-tool.sh "${{ inputs.version }}"
+        run: bash scripts/pack-tool.sh "${{ inputs.version }}"
 
       - name: Verify nupkg contents
-        run: scripts/verify-nupkg-contents.sh "artifacts/nuget/SeleniumPlaywrightMigrator.${{ inputs.version }}.nupkg"
+        run: bash scripts/verify-nupkg-contents.sh "artifacts/nuget/SeleniumPlaywrightMigrator.${{ inputs.version }}.nupkg"
 
       - name: Smoke local tool install
-        run: scripts/smoke-local-tool-package.sh "${{ inputs.version }}"
+        run: bash scripts/smoke-local-tool-package.sh "${{ inputs.version }}"
 
       - name: Upload verified package artifact
         uses: actions/upload-artifact@v4
@@ -99,11 +99,11 @@ jobs:
       - name: Publish to NuGet source
         env:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
-        run: scripts/push-tool.sh "${{ inputs.source }}" "${{ inputs.version }}"
+        run: bash scripts/push-tool.sh "${{ inputs.source }}" "${{ inputs.version }}"
 
       - name: Prepare GitHub release notes
         if: ${{ inputs.create_github_release == true }}
-        run: scripts/extract-release-notes.sh "${{ inputs.version }}" .release-notes.md
+        run: bash scripts/extract-release-notes.sh "${{ inputs.version }}" .release-notes.md
 
       - name: Create or update GitHub release
         if: ${{ inputs.create_github_release == true }}
