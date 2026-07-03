@@ -39,23 +39,44 @@ As a locally built dotnet tool package, use commands for your shell.
 Windows PowerShell:
 
 ```powershell
-.\scripts\pack-tool.ps1 -Version 0.0.0
-.\scripts\install-local-tool.ps1 -Version 0.0.0
+.\scripts\pack-tool.ps1 -Version 0.0.0-preview.1
+.\scripts\install-local-tool.ps1 -Version 0.0.0-preview.1
 dotnet tool run selenium-pw-migrator -- --help
 ```
 
 macOS/Linux/WSL:
 
 ```bash
-scripts/pack-tool.sh 0.0.0
+scripts/pack-tool.sh 0.0.0-preview.1
 dotnet new tool-manifest --force
-dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0 --add-source ./artifacts/nuget
+dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0-preview.1 --add-source ./artifacts/nuget
 dotnet tool run selenium-pw-migrator -- --help
 ```
 
 Use `selenium-pw-migrator --help` only after a global install. For repository-local tool manifests, prefer `dotnet tool run selenium-pw-migrator -- ...`.
 
 See [Tool installation](docs/tool-installation.md) and [Packaging and distribution](docs/packaging-and-distribution.md).
+
+## Happy path
+
+For the stable production path, keep it boring and small:
+
+```bash
+dotnet tool install --global SeleniumPlaywrightMigrator --version 0.0.0-preview.1
+selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
+bash playground/commands.sh
+selenium-pw-migrator playground verify --input playground --out playground-verify --format both
+```
+
+For a real project, bootstrap the guarded workspace once and then let the agent own the run lifecycle:
+
+```bash
+selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --opencode-install auto
+```
+
+Then run `/supervised-task` in OpenCode, or hand `migration/AGENT_CONTRACT.md` and `migration/prompts/kickoff-prompt.txt` to another agent. Do not create `migration/runs/<run-id>` manually; the harness does that.
+
+Java, Python, and Playwright TypeScript paths are experimental. Keep release demos and production migration promises focused on Selenium C# -> Playwright .NET.
 
 ## Quick start
 
@@ -93,8 +114,8 @@ Try the five-minute playground:
 
 ```bash
 dotnet tool run selenium-pw-migrator -- playground --out playground --target-test-framework xunit --generation-policy conservative
-dotnet tool run selenium-pw-migrator -- playground verify --input migration/playground --out playground-verify
-cat migration/playground/try-this-first.md
+dotnet tool run selenium-pw-migrator -- playground verify --input playground --out playground-verify
+cat playground/try-this-first.md
 ```
 
 For a file-by-file walkthrough, see:

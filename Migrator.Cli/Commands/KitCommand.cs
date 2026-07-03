@@ -10,7 +10,7 @@ using System.Text.Json;
 
 internal static class KitCommand
 {
-    const string KitVersion = "0.5.3";
+    const string KitVersion = "0.0.0-preview.1";
 
     public static int Run(string[] args)
     {
@@ -399,6 +399,8 @@ internal static class KitCommand
         AddCheck(checks, "final-gate", File.Exists(Path.Combine(workspacePath, "state", "final-gate.md")), Path.Combine(workspacePath, "state", "final-gate.md"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "scope-guard", File.Exists(Path.Combine(workspacePath, "scripts", "check-scope.ps1")), Path.Combine(workspacePath, "scripts", "check-scope.ps1"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "final-gate-script", File.Exists(Path.Combine(workspacePath, "scripts", "check-final-gate.ps1")), Path.Combine(workspacePath, "scripts", "check-final-gate.ps1"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "scope-guard-shell", File.Exists(Path.Combine(workspacePath, "scripts", "check-scope.sh")), Path.Combine(workspacePath, "scripts", "check-scope.sh"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "final-gate-shell", File.Exists(Path.Combine(workspacePath, "scripts", "check-final-gate.sh")), Path.Combine(workspacePath, "scripts", "check-final-gate.sh"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-reference", File.Exists(Path.Combine(workspacePath, "harness", "README.md")), Path.Combine(workspacePath, "harness", "README.md"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-policy", File.Exists(Path.Combine(workspacePath, "state", "harness-policy.json")), Path.Combine(workspacePath, "state", "harness-policy.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-run-template", File.Exists(Path.Combine(workspacePath, "state", "harness-run-template.json")), Path.Combine(workspacePath, "state", "harness-run-template.json"), "Run `migrator kit update --backup`.");
@@ -406,6 +408,7 @@ internal static class KitCommand
         AddCheck(checks, "harness-run-script", File.Exists(Path.Combine(workspacePath, "scripts", "new-harness-run.ps1")), Path.Combine(workspacePath, "scripts", "new-harness-run.ps1"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-event-script", File.Exists(Path.Combine(workspacePath, "scripts", "write-harness-event.ps1")), Path.Combine(workspacePath, "scripts", "write-harness-event.ps1"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-dashboard-script", File.Exists(Path.Combine(workspacePath, "scripts", "build-harness-dashboard.ps1")), Path.Combine(workspacePath, "scripts", "build-harness-dashboard.ps1"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "harness-shell-wrappers", File.Exists(Path.Combine(workspacePath, "scripts", "new-harness-run.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "check-harness-policy.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "write-harness-event.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "build-harness-dashboard.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-dashboard-i18n-en", File.Exists(Path.Combine(workspacePath, "dashboard", "i18n", "en.json")), Path.Combine(workspacePath, "dashboard", "i18n", "en.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-dashboard-i18n-ru", File.Exists(Path.Combine(workspacePath, "dashboard", "i18n", "ru.json")), Path.Combine(workspacePath, "dashboard", "i18n", "ru.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "guard-checksums", File.Exists(Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json")), Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json"), "Run `migrator kit update --backup`.");
@@ -687,7 +690,7 @@ PowerShell wrappers are still supported, but they are optional convenience scrip
 
 One-command portable bootstrap from the product repository root:
 
-```powershell
+```bash
 {{options.ToolCommand}} kit bootstrap-opencode --workspace "{{options.Workspace}}" --source "{{options.Source}}" --config "{{options.Config}}" --opencode-install auto
 ```
 
@@ -709,7 +712,7 @@ The legacy shortcut remains available on Windows:
 
 For non-OpenCode agents, give the agent `{{Path.Combine(options.Workspace, "AGENT_CONTRACT.md")}}`, `{{Path.Combine(options.Workspace, "prompts", "kickoff-prompt.txt")}}`, and `{{Path.Combine(options.Workspace, "harness", "README.md")}}`.
 
-Then run `/supervised-task` in OpenCode, or give the same kickoff prompt to Codex/CI/another agent. The agent should create or resume the active harness run itself with `{{Path.Combine(options.Workspace, "scripts", "new-harness-run.ps1")}}`; you should not manually create `{{Path.Combine(options.Workspace, "runs", "run-001")}}`.
+Then run `/supervised-task` in OpenCode, or give the same kickoff prompt to Codex/CI/another agent. The agent should create or resume the active harness run itself with `{{Path.Combine(options.Workspace, "scripts", "new-harness-run.sh")}}` from bash or `{{Path.Combine(options.Workspace, "scripts", "new-harness-run.ps1")}}` from PowerShell; you should not manually create `{{Path.Combine(options.Workspace, "runs", "run-001")}}`.
 
 ## Agent entrypoints
 
@@ -737,7 +740,14 @@ Stop-policy checklist before any stop/handoff:
 {{Path.Combine(options.Workspace, "state", "stop-policy-checklist.md")}}
 ```
 
-Harness autopilot run:
+Harness autopilot run from bash:
+
+```bash
+./{{Path.Combine(options.Workspace, "scripts", "new-harness-run.sh")}} -TaskTitle "Pilot migration batch" -Goal "Run one bounded artifact-only Selenium to Playwright migration batch."
+./{{Path.Combine(options.Workspace, "scripts", "check-harness-policy.sh")}} -Workspace "{{options.Workspace}}" -RepoRoot .
+```
+
+Harness autopilot run from PowerShell:
 
 ```powershell
 .\{{Path.Combine(options.Workspace, "scripts", "new-harness-run.ps1")}} -TaskTitle "Pilot migration batch" -Goal "Run one bounded artifact-only Selenium to Playwright migration batch."
@@ -746,11 +756,23 @@ Harness autopilot run:
 
 Harness Kit dogfood smoke from the Migrator repository root:
 
+```bash
+scripts/run-harness-dogfood-smoke.sh -Clean
+```
+
+or on PowerShell:
+
 ```powershell
 .\scripts\run-harness-dogfood-smoke.ps1 -Clean
 ```
 
-Generate Harness dashboard:
+Generate Harness dashboard from bash:
+
+```bash
+./{{Path.Combine(options.Workspace, "scripts", "build-harness-dashboard.sh")}} -Workspace "{{options.Workspace}}" -Out dashboard/harness -Language en
+```
+
+or on PowerShell:
 
 ```powershell
 .\{{Path.Combine(options.Workspace, "scripts", "build-harness-dashboard.ps1")}} -Workspace "{{options.Workspace}}" -Out dashboard/harness -Language en

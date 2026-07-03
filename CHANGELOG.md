@@ -2,50 +2,22 @@
 
 All notable changes to Selenium Playwright Migrator are documented here.
 
-The format follows the spirit of Keep a Changelog, and this project uses preview SemVer-style versions while the public API is still stabilizing.
+This project uses preview SemVer-style versions while the public API is still stabilizing.
 
 ## [Unreleased]
 
-### Added
+No unreleased changes yet.
 
-- Target-side Playwright/Kontur POM indexing for `ControlFactory.Create`, `CreateElementsCollection`, `GetByTestId`, `Locator("[data-tid...]")`, and lower-confidence text locator evidence, with explicit `FactOrigin` metadata.
-- Teaching demo under `examples/teaching-demo/` with Selenium source, PageObject selector evidence, adapter config, expected Playwright output, and AST action map.
-- `docs/articles/ast-migration-explained.md` and Russian translation explaining the parser → action model → source truth → renderer workflow.
-- Public-release hygiene guardrails for NuGet package metadata and package contents.
-- Short public NuGet `PackageId` (`SeleniumPlaywrightMigrator`) while keeping AST positioning in title, description, and tags.
-- `release-doctor` / `doctor release` readiness checks for NuGet preview metadata, release docs, scripts, workflow dry-run, secrets, and repository hygiene.
-- `playground-verify` / `playground verify` checks for the disposable public playground contract.
-- Documentation freshness guardrail that keeps stable command catalog entries visible in README and USER_GUIDE.
-- Public contribution and security policy documents.
-- CI packaging gates for `dotnet pack`, `.nupkg` content verification, local tool install smoke, and agent bundle smoke.
-- Release-process documentation for preview/stable publishing and rollback.
-- Agent bundle `MANIFEST.sha256` and `manifest.json` generation.
-- Public documentation entry points for quick start, user guide, config/profile guide, agent/autopilot guide, troubleshooting, limitations, and end-to-end examples.
-- Migration quality dashboard artifacts: `migration-quality-dashboard.json`, `migration-quality-dashboard.md`, and `migration-quality-tickets.md`.
-- Quality analyzer for TODO categories, unsupported actions, unmapped targets, selector-evidence requirements, and suppression/POM-helper guardrails.
-- Agent loop hardening: one primary kickoff prompt, stop-policy checklist, artifact-mode source-edit guardrails, and refined multi-agent handoff rules.
-- Extensibility/public API docs for `ISourceFrontend`, `ITargetBackend`, `adapter-config/v1`, and mini extension examples.
-- Target backend capability reports plus `--mode capabilities` for built-in source/target support matrices.
-- Public launch pack: demo repository assets, screenshot walkthrough, GitHub Actions migration-pilot example, public roadmap, issue templates, and preview release notes.
-- CI test sharding for fast tests vs CLI subprocess tests, plus a manual/nightly full-validation workflow.
-
-### Changed
-
-- Hardened CLI integration tests to execute the already-built `Migrator.Cli.dll`, drain stdout/stderr concurrently, and fail fast on timeouts instead of hanging CI pipelines.
-- Tightened public launch guardrails so stop-policy checklist references, selector-evidence warnings, quality guardrail IDs, and scaffold quick-start links stay visible in docs/reports.
-- Package-facing wording no longer describes the CLI as an internal-only tool.
-- README, README.ru, package README, and limitations now consistently label stable and experimental capabilities.
-- Migration-kit prompts now delegate to the primary autopilot contract and explicitly forbid routine “continue?” prompts under `CONTINUE_AUTONOMOUSLY`.
-- Adapter config now has an explicit default `SchemaVersion` of `adapter-config/v1`, and public schemas use the GitHub repository URL as `$id`.
-
-### Removed
-
-- Local `.agent-state` files from packaged dotnet-tool contents.
-
-## [0.0.0]
+## [0.0.0-preview.1]
 
 ### Added
 
-- Dotnet tool packaging for `selenium-pw-migrator`.
-- Migration kit templates and installation scripts.
-- Multi-frontend and multi-target migration architecture with Selenium C# and Playwright targets.
+- First public preview of the Selenium C# to Playwright .NET migration path.
+- Public dotnet tool packaging as `SeleniumPlaywrightMigrator` with command `selenium-pw-migrator`.
+- Reports, verification gates, PR/evidence packs, playground demo, and guarded migration-kit bootstrap.
+- Experimental preview support for Playwright TypeScript target output, Selenium Java source parsing, and Selenium Python source parsing.
+
+### Notes
+
+- The stable production path is Selenium C# -> Playwright .NET.
+- Java, Python, and TypeScript paths remain experimental and must be validated with generated reports and target project checks.

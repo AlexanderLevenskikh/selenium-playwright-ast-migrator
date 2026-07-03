@@ -10,7 +10,7 @@ namespace Migrator.Core;
 public static class PathRedaction
 {
     /// <summary>
-    /// Windows user-home paths: C:\Users\<user>\...
+    /// Windows user-home paths under the standard user profile directory.
     /// </summary>
     static readonly Regex WindowsUserPath = new(
         @"[A-Za-z]:\\Users\\[^\\]+",

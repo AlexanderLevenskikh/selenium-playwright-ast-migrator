@@ -39,23 +39,44 @@ dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --help
 Windows PowerShell:
 
 ```powershell
-.\scripts\pack-tool.ps1 -Version 0.0.0
-.\scripts\install-local-tool.ps1 -Version 0.0.0
+.\scripts\pack-tool.ps1 -Version 0.0.0-preview.1
+.\scripts\install-local-tool.ps1 -Version 0.0.0-preview.1
 dotnet tool run selenium-pw-migrator -- --help
 ```
 
 macOS/Linux/WSL:
 
 ```bash
-scripts/pack-tool.sh 0.0.0
+scripts/pack-tool.sh 0.0.0-preview.1
 dotnet new tool-manifest --force
-dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0 --add-source ./artifacts/nuget
+dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0-preview.1 --add-source ./artifacts/nuget
 dotnet tool run selenium-pw-migrator -- --help
 ```
 
 `selenium-pw-migrator --help` используйте только после global install. Для local tool manifest используйте `dotnet tool run selenium-pw-migrator -- ...`.
 
 Подробнее: [Tool installation](docs/tool-installation.md) и [Packaging and distribution](docs/packaging-and-distribution.md).
+
+## Happy path
+
+Для стабильного production-сценария держим путь максимально коротким:
+
+```bash
+dotnet tool install --global SeleniumPlaywrightMigrator --version 0.0.0-preview.1
+selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
+bash playground/commands.sh
+selenium-pw-migrator playground verify --input playground --out playground-verify --format both
+```
+
+Для реального проекта один раз bootstrap’им guarded workspace, дальше run lifecycle ведёт агент:
+
+```bash
+selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --opencode-install auto
+```
+
+Потом запускаем `/supervised-task` в OpenCode или передаём другому агенту `migration/AGENT_CONTRACT.md` и `migration/prompts/kickoff-prompt.txt`. `migration/runs/<run-id>` руками не создаём — это делает harness.
+
+Java, Python и Playwright TypeScript — experimental-направления. В release/demo/marketing основной production promise остаётся Selenium C# -> Playwright .NET.
 
 ## Быстрый старт
 

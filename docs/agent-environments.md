@@ -83,13 +83,26 @@ migration/harness/README.md
 migration/state/harness-policy.json
 ```
 
-Tell the agent to create or resume a run through:
+Tell the agent to create or resume a run through the shell wrapper:
+
+```bash
+./migration/scripts/new-harness-run.sh -TaskTitle "Pilot migration batch" -Goal "Run one bounded artifact-only migration batch."
+```
+
+Windows PowerShell can call the `.ps1` script directly:
 
 ```powershell
 ./migration/scripts/new-harness-run.ps1 -TaskTitle "Pilot migration batch" -Goal "Run one bounded artifact-only migration batch."
 ```
 
-Before final success, the agent must run the installed gates:
+Before final success, the agent must run the installed gates. Bash users can stay in bash:
+
+```bash
+./migration/scripts/check-harness-policy.sh -Workspace migration -RepoRoot .
+./migration/scripts/check-final-gate.sh -Workspace migration -RepoRoot .
+```
+
+PowerShell users can call the underlying scripts directly:
 
 ```powershell
 ./migration/scripts/check-harness-policy.ps1 -Workspace migration -RepoRoot .

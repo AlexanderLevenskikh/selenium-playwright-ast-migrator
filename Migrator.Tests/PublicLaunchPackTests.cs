@@ -11,7 +11,7 @@ public class PublicLaunchPackTests
         {
             "docs/public-demo-tutorial.md",
             "docs/public-roadmap.md",
-            "docs/release-notes/v0.0.0.md",
+            "docs/release-notes/v0.0.0-preview.1.md",
             "examples/public-demo/README.md",
             "examples/public-demo/selenium-csharp-nunit/LoginSmokeTest.cs",
             "examples/public-demo/selenium-csharp-xunit/LoginSmokeFacts.cs",
@@ -78,7 +78,7 @@ public class PublicLaunchPackTests
 
         Assert.Contains("../examples/public-demo/README.md", docsIndex);
         Assert.Contains("public-roadmap.md", docsIndex);
-        Assert.Contains("release-notes/v0.0.0.md", docsIndex);
+        Assert.Contains("release-notes/v0.0.0-preview.1.md", docsIndex);
     }
 
     static string FindRepositoryFile(string relativePath)

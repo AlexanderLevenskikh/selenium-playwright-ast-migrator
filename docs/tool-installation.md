@@ -8,7 +8,7 @@
 dotnet new tool-manifest
 
 dotnet tool install SeleniumPlaywrightMigrator `
-  --version 0.0.0
+  --version 0.0.0-preview.1
 
 dotnet tool run selenium-pw-migrator -- --help
 ```
@@ -30,7 +30,7 @@ dotnet tool run selenium-pw-migrator -- playground `
 dotnet new tool-manifest
 
 dotnet tool install SeleniumPlaywrightMigrator `
-  --version 0.0.0
+  --version 0.0.0-preview.1
 ```
 
 Запуск:
@@ -56,12 +56,12 @@ dotnet tool run selenium-pw-migrator -- `
 Если пакет ещё не опубликован и лежит в `artifacts/nuget`, установите его через explicit source:
 
 ```powershell
-./scripts/pack-tool.ps1 -Version 0.0.0
+./scripts/pack-tool.ps1 -Version 0.0.0-preview.1
 
 dotnet new tool-manifest --force
 
 dotnet tool install SeleniumPlaywrightMigrator `
-  --version 0.0.0 `
+  --version 0.0.0-preview.1 `
   --add-source ./artifacts/nuget
 
 dotnet tool run selenium-pw-migrator -- --help
@@ -73,7 +73,7 @@ dotnet tool run selenium-pw-migrator -- --help
 
 ```powershell
 dotnet tool install --global SeleniumPlaywrightMigrator `
-  --version 0.0.0
+  --version 0.0.0-preview.1
 ```
 
 Запуск:
@@ -88,14 +88,14 @@ Local tool:
 
 ```powershell
 dotnet tool update SeleniumPlaywrightMigrator `
-  --version 0.0.0
+  --version 0.0.0-preview.1
 ```
 
 Global tool:
 
 ```powershell
 dotnet tool update --global SeleniumPlaywrightMigrator `
-  --version 0.0.0
+  --version 0.0.0-preview.1
 ```
 
 ## В CI
@@ -116,13 +116,13 @@ dotnet tool run selenium-pw-migrator -- `
 Для релизной проверки используйте smoke из временного local tool manifest:
 
 ```powershell
-./scripts/smoke-local-tool-package.ps1 -Version 0.0.0
+./scripts/smoke-local-tool-package.ps1 -Version 0.0.0-preview.1
 ```
 
 Linux/macOS:
 
 ```bash
-scripts/smoke-local-tool-package.sh 0.0.0
+scripts/smoke-local-tool-package.sh 0.0.0-preview.1
 ```
 
 Это проверяет не source-run, а именно установленный `.nupkg`: `--help`, `--mode doctor` и запись `doctor-report.md`.

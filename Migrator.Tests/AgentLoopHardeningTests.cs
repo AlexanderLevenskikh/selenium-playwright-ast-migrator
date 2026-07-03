@@ -84,6 +84,9 @@ public class AgentLoopHardeningTests
         var psInstall = Read("scripts/install-migration-kit.ps1");
         var bundleScript = Read("scripts/package-agent-cli-bundle.ps1");
         var dogfoodSmoke = Read("scripts/run-harness-dogfood-smoke.ps1");
+        var scopeShell = Read("templates/migration-kit/scripts/check-scope.sh");
+        var finalGateShell = Read("templates/migration-kit/scripts/check-final-gate.sh");
+        var newRunShell = Read("templates/migration-kit/scripts/new-harness-run.sh");
 
         Assert.Contains("migrator-agent-harness-kit.md", docsIndex);
         Assert.Contains("English is canonical", harnessDoc);
@@ -111,6 +114,12 @@ public class AgentLoopHardeningTests
         Assert.Contains("trace.jsonl", newRunScript);
         Assert.Contains("harness-events.jsonl", eventScript);
         Assert.Contains("HARNESS_POLICY_", policyScript);
+        Assert.Contains("pwsh", scopeShell);
+        Assert.Contains("pwsh", finalGateShell);
+        Assert.Contains("pwsh", newRunShell);
+        Assert.Contains("check-scope.ps1", scopeShell);
+        Assert.Contains("check-final-gate.ps1", finalGateShell);
+        Assert.Contains("new-harness-run.ps1", newRunShell);
 
         Assert.Contains("scripts/check-harness-policy.ps1", finalGateScript);
         Assert.Contains("check-harness-policy.ps1", kitCommand);
@@ -271,7 +280,7 @@ public class AgentLoopHardeningTests
         var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
 
         Assert.Contains("stop-policy-checklist", kitCommand);
-        Assert.Contains("KitVersion = \"0.5.3\"", kitCommand);
+        Assert.Contains("KitVersion = \"0.0.0-preview.1\"", kitCommand);
         Assert.Contains("state/stop-policy-checklist.md", kitCommand);
         Assert.Contains("AGENT_CONTRACT.md", kitCommand);
         Assert.Contains("state/final-gate.md", kitCommand);
@@ -297,6 +306,9 @@ public class AgentLoopHardeningTests
         var review = Read("templates/migration-kit/prompts/review-batch-prompt.txt");
         var stopChecklist = Read("templates/migration-kit/state/stop-policy-checklist.md");
         var dogfoodSmoke = Read("scripts/run-harness-dogfood-smoke.ps1");
+        var scopeShell = Read("templates/migration-kit/scripts/check-scope.sh");
+        var finalGateShell = Read("templates/migration-kit/scripts/check-final-gate.sh");
+        var newRunShell = Read("templates/migration-kit/scripts/new-harness-run.sh");
 
         Assert.Contains("Allowed writes: `migration/**` only", contract);
         Assert.Contains("TODO reduction via suppression is failure", contract);
@@ -450,6 +462,9 @@ public class AgentLoopHardeningTests
         var kitReadme = Read("templates/migration-kit/README.md");
         var bundleScript = Read("scripts/package-agent-cli-bundle.ps1");
         var dogfoodSmoke = Read("scripts/run-harness-dogfood-smoke.ps1");
+        var scopeShell = Read("templates/migration-kit/scripts/check-scope.sh");
+        var finalGateShell = Read("templates/migration-kit/scripts/check-final-gate.sh");
+        var newRunShell = Read("templates/migration-kit/scripts/new-harness-run.sh");
         var psInstall = Read("scripts/install-migration-kit.ps1");
         var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
         var gitignore = Read(".gitignore");
@@ -516,6 +531,9 @@ public class AgentLoopHardeningTests
         var psInstall = Read("scripts/install-migration-kit.ps1");
         var bundleScript = Read("scripts/package-agent-cli-bundle.ps1");
         var dogfoodSmoke = Read("scripts/run-harness-dogfood-smoke.ps1");
+        var scopeShell = Read("templates/migration-kit/scripts/check-scope.sh");
+        var finalGateShell = Read("templates/migration-kit/scripts/check-final-gate.sh");
+        var newRunShell = Read("templates/migration-kit/scripts/new-harness-run.sh");
         var teamReadme = Read("templates/opencode-team/README.md");
         var dashboardCommand = Read("templates/opencode-team/global/.config/opencode/commands/dashboard-harness.md");
 
@@ -905,6 +923,52 @@ public class AgentLoopHardeningTests
         }
     }
 
+
+    [Fact]
+    public void PublicDocsKeepStableHappyPathAndExperimentalPathsSeparated()
+    {
+        var readme = Read("README.md");
+        var readmeRu = Read("README.ru.md");
+        var userGuide = Read("USER_GUIDE.md");
+        var userGuideRu = Read("USER_GUIDE.ru.md");
+        var roadmap = Read("docs/public-roadmap.md");
+
+        foreach (var text in new[] { readme, readmeRu, userGuide, userGuideRu })
+        {
+            Assert.Contains("Happy path", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Selenium C#", text);
+            Assert.Contains("Playwright .NET", text);
+            Assert.Contains("Experimental", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Java", text);
+            Assert.Contains("Python", text);
+            Assert.Contains("TypeScript", text);
+        }
+
+        Assert.Contains("Keep the stable path focused on Selenium C#", roadmap);
+        Assert.Contains("experimental Java, Python, and Playwright TypeScript", roadmap);
+    }
+
+    [Fact]
+    public void MigrationKitHasBashWrappersForHarnessScripts()
+    {
+        foreach (var script in new[]
+        {
+            "check-scope",
+            "check-final-gate",
+            "check-harness-policy",
+            "new-harness-run",
+            "write-harness-event",
+            "build-harness-dashboard"
+        })
+        {
+            var shell = Read($"templates/migration-kit/scripts/{script}.sh");
+            Assert.Contains("#!/usr/bin/env bash", shell);
+            Assert.Contains("set -euo pipefail", shell);
+            Assert.Contains("pwsh", shell);
+            Assert.Contains($"{script}.ps1", shell);
+        }
+    }
+
     static string Read(string relativePath) => File.ReadAllText(FindRepositoryFile(relativePath));
 
     static bool RepositoryFileExists(string relativePath)
@@ -928,6 +992,12 @@ public class AgentLoopHardeningTests
         repo.CopyRepositoryFile("templates/migration-kit/scripts/check-scope.ps1", "migration/scripts/check-scope.ps1");
         repo.CopyRepositoryFile("templates/migration-kit/scripts/check-final-gate.ps1", "migration/scripts/check-final-gate.ps1");
         repo.CopyRepositoryFile("templates/migration-kit/scripts/check-harness-policy.ps1", "migration/scripts/check-harness-policy.ps1");
+        repo.CopyRepositoryFile("templates/migration-kit/scripts/check-scope.sh", "migration/scripts/check-scope.sh");
+        repo.CopyRepositoryFile("templates/migration-kit/scripts/check-final-gate.sh", "migration/scripts/check-final-gate.sh");
+        repo.CopyRepositoryFile("templates/migration-kit/scripts/check-harness-policy.sh", "migration/scripts/check-harness-policy.sh");
+        repo.CopyRepositoryFile("templates/migration-kit/scripts/new-harness-run.sh", "migration/scripts/new-harness-run.sh");
+        repo.CopyRepositoryFile("templates/migration-kit/scripts/write-harness-event.sh", "migration/scripts/write-harness-event.sh");
+        repo.CopyRepositoryFile("templates/migration-kit/scripts/build-harness-dashboard.sh", "migration/scripts/build-harness-dashboard.sh");
         repo.CopyRepositoryFile("templates/migration-kit/state/final-gate.md", "migration/state/final-gate.md");
         repo.CopyRepositoryFile("templates/migration-kit/AGENT_CONTRACT.md", "migration/AGENT_CONTRACT.md");
         repo.CopyRepositoryFile("templates/migration-kit/state/harness-policy.json", "migration/state/harness-policy.json");

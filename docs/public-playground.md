@@ -6,12 +6,12 @@
 selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
 ```
 
-Relative `--out` values are written under the default `migration/` workspace, so this creates `migration/playground`.
+Relative `--out` values are resolved from the current working directory. The generated `commands.sh` and `commands.ps1` keep their run artifacts under the chosen playground folder, so nonstandard `--out` paths remain self-contained.
 
 Verify the generated workspace before using it in release docs or demos:
 
 ```bash
-selenium-pw-migrator playground verify --input migration/playground --out playground-verify --format both
+selenium-pw-migrator playground verify --input playground --out playground-verify --format both
 ```
 
 It writes a self-contained sample migration folder with:
@@ -31,16 +31,16 @@ The public demo and guided tutorial show the repo content, but a new user may wa
 
 ## Ready command chain
 
-After generating the playground, open `migration/playground/try-this-first.md` or run the generated shell script:
+After generating the playground, open `playground/try-this-first.md` or run the generated shell script:
 
 ```bash
-bash migration/playground/commands.sh
+bash playground/commands.sh
 ```
 
 On Windows PowerShell:
 
 ```powershell
-./migration/playground/commands.ps1
+./playground/commands.ps1
 ```
 
 The ready command chain demonstrates:
@@ -62,10 +62,10 @@ The playground never edits source tests and never invents selectors. Any risky s
 
 The generated `expected-outputs.md` describes what good looks like:
 
-- `playground-run/report.txt` exists;
-- `playground-dashboard/report-dashboard.html` opens locally;
-- `playground-pr-pack/suggested-pr-description.md` is reviewable;
-- `playground-evidence.zip` contains a manifest and checksums.
+- `runs/playground-run/report.txt` exists;
+- `runs/playground-dashboard/report-dashboard.html` opens locally;
+- `runs/playground-pr-pack/suggested-pr-description.md` is reviewable;
+- `runs/playground-evidence.zip` contains a manifest and checksums.
 
 ## Relationship to existing demos
 

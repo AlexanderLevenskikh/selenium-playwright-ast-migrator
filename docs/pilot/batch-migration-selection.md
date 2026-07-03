@@ -35,8 +35,8 @@
 |------|------:|------------------|
 | `Filters\Catalog\CatalogAwardSettingsFilter.cs` | 12 | ElementAt indices up to 32, highest DOM complexity |
 | `Functional\PartnersChangeSettings.cs` | 6 | Complex modal/error flows, multi-page |
-| `Functional\AwardTemplates.cs` | 3 | Has `[Ignore]`, deep helper methods (Create/Delete/Update) |
-| `Catalogs\Principals.cs` | 1 | Has `[Ignore]`, deep multi-step creation (5 helper methods) |
+| `Functional\AwardTemplates.cs` | 3 | Legacy disabled coverage, deep helper methods (Create/Delete/Update) |
+| `Catalogs\Principals.cs` | 1 | Legacy disabled coverage, deep multi-step creation (5 helper methods) |
 | `Catalogs\FixedSaleTypeDate.cs` | 1 | Uses DatePicker, date range assertions |
 | `Catalogs\PartnersDopCalc.cs` | 3 | Unsupported: CreateDopCalc/DeleteDopCalc/ChangeDopCalc |
 | `Catalogs\PartnersExceptions.cs` | 2 | Unsupported: CreateException/DeleteException |

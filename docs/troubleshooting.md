@@ -72,16 +72,16 @@ When testing locally, pack first and point installation to the local package sou
 Windows PowerShell:
 
 ```powershell
-.\scripts\pack-tool.ps1 -Version 0.0.0
-.\scripts\install-local-tool.ps1 -Version 0.0.0
+.\scripts\pack-tool.ps1 -Version 0.0.0-preview.1
+.\scripts\install-local-tool.ps1 -Version 0.0.0-preview.1
 ```
 
 macOS/Linux/WSL:
 
 ```bash
-scripts/pack-tool.sh 0.0.0
+scripts/pack-tool.sh 0.0.0-preview.1
 dotnet new tool-manifest --force
-dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0 --add-source ./artifacts/nuget
+dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0-preview.1 --add-source ./artifacts/nuget
 dotnet tool run selenium-pw-migrator -- --help
 ```
 
@@ -104,7 +104,7 @@ $version
 If it prints nothing, set it and pack the same version:
 
 ```powershell
-$version = "0.6.0-local.$(Get-Date -Format yyyyMMddHHmmss)"
+$version = "0.0.0-preview.local.$(Get-Date -Format yyyyMMddHHmmss)"
 dotnet pack .\Migrator.Cli\Migrator.Cli.csproj -c Release -o .\artifacts\local-tool /p:Version=$version
 dotnet tool update SeleniumPlaywrightMigrator --local --add-source .\artifacts\local-tool --version $version --ignore-failed-sources
 ```

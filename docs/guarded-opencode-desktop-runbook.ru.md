@@ -74,7 +74,7 @@ cd /d "C:\path\to\selenium-playwright-ast-migrator"
 dotnet build --no-restore
 dotnet test Migrator.Tests\Migrator.Tests.csproj --no-restore
 
-dotnet pack Migrator.Cli\Migrator.Cli.csproj -c Release -p:PackageVersion=0.0.0 -o artifacts\nuget
+dotnet pack Migrator.Cli\Migrator.Cli.csproj -c Release -p:PackageVersion=0.0.0-preview.1 -o artifacts\nuget
 ```
 
 Для быстрой проверки только agent guardrails:
@@ -92,8 +92,8 @@ cd /d "C:\path\to\product-repo"
 
 if not exist ".config\dotnet-tools.json" dotnet new tool-manifest
 
-dotnet tool update SeleniumPlaywrightMigrator --version 0.0.0 --add-source "C:\path\to\selenium-playwright-ast-migrator\artifacts\nuget"
-if errorlevel 1 dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0 --add-source "C:\path\to\selenium-playwright-ast-migrator\artifacts\nuget"
+dotnet tool update SeleniumPlaywrightMigrator --version 0.0.0-preview.1 --add-source "C:\path\to\selenium-playwright-ast-migrator\artifacts\nuget"
+if errorlevel 1 dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0-preview.1 --add-source "C:\path\to\selenium-playwright-ast-migrator\artifacts\nuget"
 
 dotnet tool run selenium-pw-migrator -- --help
 ```

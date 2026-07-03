@@ -25,7 +25,7 @@ internal static class ProfileMarketplaceCommand
             TargetBackend: "dotnet",
             TargetFramework: "nunit",
             SafetyLevel: "safe-starter",
-            CompatibilityRange: ">=0.1.0",
+            CompatibilityRange: ">=0.0.0-preview.1",
             Summary: "Minimal Selenium C# NUnit to Playwright .NET NUnit starter profile.",
             SupportedPatterns: new[]
             {
@@ -73,7 +73,7 @@ internal static class ProfileMarketplaceCommand
             TargetBackend: "dotnet",
             TargetFramework: "xunit",
             SafetyLevel: "safe-starter",
-            CompatibilityRange: ">=0.1.0",
+            CompatibilityRange: ">=0.0.0-preview.1",
             Summary: "Minimal Selenium C# xUnit to Playwright .NET xUnit starter profile.",
             SupportedPatterns: new[]
             {
@@ -121,7 +121,7 @@ internal static class ProfileMarketplaceCommand
             TargetBackend: "dotnet",
             TargetFramework: "nunit",
             SafetyLevel: "safe-starter",
-            CompatibilityRange: ">=0.1.0",
+            CompatibilityRange: ">=0.0.0-preview.1",
             Summary: "NUnit starter profile using data-tid as the default test id attribute.",
             SupportedPatterns: new[]
             {

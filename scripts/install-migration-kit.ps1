@@ -14,7 +14,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$KitVersion = "0.5.3"
+$KitVersion = "0.0.0-preview.1"
 
 function Resolve-RepoRootFromScript {
     $scriptDir = Split-Path -Parent $PSCommandPath
@@ -390,6 +390,15 @@ $quickStartLines = @(
     "",
     "## 5. Start an autopilot harness run",
     "",
+    "Bash:",
+    "",
+    "```bash",
+    "./$(Join-Path $Workspace 'scripts/new-harness-run.sh') -TaskTitle `"Pilot migration batch`" -Goal `"Run one bounded artifact-only Selenium to Playwright migration batch.`"",
+    "./$(Join-Path $Workspace 'scripts/check-harness-policy.sh') -Workspace `"$Workspace`" -RepoRoot .",
+    "```",
+    "",
+    "PowerShell:",
+    "",
     "```powershell",
     ".\$(Join-Path $Workspace 'scripts/new-harness-run.ps1') -TaskTitle `"Pilot migration batch`" -Goal `"Run one bounded artifact-only Selenium to Playwright migration batch.`"",
     ".\$(Join-Path $Workspace 'scripts/check-harness-policy.ps1') -Workspace `"$Workspace`" -RepoRoot .",
@@ -399,11 +408,23 @@ $quickStartLines = @(
     "",
     "From the Migrator repository root:",
     "",
+    "```bash",
+    "scripts/run-harness-dogfood-smoke.sh -Clean",
+    "```",
+    "",
+    "PowerShell:",
+    "",
     "```powershell",
     ".\scripts\run-harness-dogfood-smoke.ps1 -Clean",
     "```",
     "",
     "## 7. Generate Harness dashboard",
+    "",
+    "```bash",
+    "./$(Join-Path $Workspace 'scripts/build-harness-dashboard.sh') -Workspace `"$Workspace`" -Out dashboard/harness -Language en",
+    "```",
+    "",
+    "PowerShell:",
     "",
     "```powershell",
     ".\$(Join-Path $Workspace 'scripts/build-harness-dashboard.ps1') -Workspace `"$Workspace`" -Out dashboard/harness -Language en",
@@ -424,7 +445,13 @@ $quickStartLines = @(
     "",
     "## Optional: one-command OpenCode bootstrap",
     "",
-    "Prefer the CLI bootstrap when you want the workspace, OpenCode team files, kit doctor, and OpenCode Desktop ProjectDesktop config in one command:",
+    "Prefer the CLI bootstrap when you want the workspace, OpenCode team files, kit doctor, and environment-specific agent config in one command:",
+    "",
+    "```bash",
+    "$ToolCommand kit bootstrap-opencode --workspace `"$Workspace`" --source `"$Source`" --config `"$Config`" --opencode-install auto",
+    "```",
+    "",
+    "Windows OpenCode Desktop shortcut:",
     "",
     "```powershell",
     "$ToolCommand kit bootstrap-opencode --workspace `"$Workspace`" --source `"$Source`" --config `"$Config`" --project-desktop",

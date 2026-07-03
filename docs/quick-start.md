@@ -2,6 +2,17 @@
 
 This path gets you from a small Selenium sample to generated Playwright output. Start with 1-5 tests before scaling to a full suite.
 
+## Short happy path
+
+```bash
+dotnet tool install --global SeleniumPlaywrightMigrator --version 0.0.0-preview.1
+selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
+bash playground/commands.sh
+selenium-pw-migrator playground verify --input playground --out playground-verify --format both
+```
+
+Use this playground first. For real migrations, keep the production promise focused on Selenium C# -> Playwright .NET; Java, Python, and Playwright TypeScript remain experimental preview paths.
+
 ## Prerequisites
 
 - .NET 10 SDK
@@ -13,7 +24,7 @@ This path gets you from a small Selenium sample to generated Playwright output. 
 
 For a guarded OpenCode/Codex-style run, prefer the Migration Kit path over manually creating folders. See [Agent environments](agent-environments.md) for Windows Desktop, macOS/Linux/WSL CLI, Codex, CI, and other agents. From the product repository root, use the one-command bootstrap when you want the workspace, OpenCode team templates, `kit doctor`, and an environment-specific agent setup in one step:
 
-```powershell
+```bash
 dotnet tool run selenium-pw-migrator -- kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --opencode-install auto
 ```
 
@@ -26,11 +37,13 @@ dotnet tool run selenium-pw-migrator -- kit update --workspace migration --sourc
 dotnet tool run selenium-pw-migrator -- kit doctor --workspace migration
 ```
 
+Windows OpenCode Desktop fallback:
+
 ```powershell
 .\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop
 ```
 
-After that, open the selected agent environment and run `/supervised-task`, or give the kickoff prompt to a non-OpenCode agent. The agent should create or resume the active harness run itself through `new-harness-run.ps1`; it should not ask you to manually create `migration/runs/<run-id>/`.
+After that, open the selected agent environment and run `/supervised-task`, or give the kickoff prompt to a non-OpenCode agent. The agent should create or resume the active harness run itself through `new-harness-run.sh` from bash or `new-harness-run.ps1` from PowerShell; it should not ask you to manually create `migration/runs/<run-id>/`.
 
 Use the manual steps below when you are running the CLI yourself without an agent.
 

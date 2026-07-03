@@ -256,74 +256,30 @@ This playground is read-only with respect to your real project: it writes only i
 
 Run these commands from the repository root after building or installing the tool.
 
-This playground was generated at `{{playgroundRoot}}`. The commands below use that path explicitly.
+This playground was generated at `{{playgroundRoot}}`. The commands below keep all generated artifacts under `{{playgroundRoot}}/runs`, so custom `--out` paths stay self-contained.
 
-## 1. Generate a runbook
-
-```bash
-selenium-pw-migrator runbook \
-  --input {{playgroundRoot}}/selenium-csharp-nunit \
-  --target dotnet \
-  --target-test-framework {{framework}} \
-  --generation-policy {{policy}} \
-  --out migration/playground-runbook \
-  --format both
-```
-
-## 2. Check framework readiness
+## Bash happy path
 
 ```bash
-selenium-pw-migrator framework matrix \
-  --input {{playgroundRoot}}/selenium-csharp-nunit \
-  --target dotnet \
-  --target-test-framework {{framework}} \
-  --out migration/playground-framework-matrix \
-  --format both
+bash {{playgroundRoot}}/commands.sh
 ```
 
-## 3. Migrate the sample
+## Windows PowerShell happy path
 
-```bash
-selenium-pw-migrator --mode migrate \
-  --input {{playgroundRoot}}/selenium-csharp-nunit \
-  --config {{playgroundRoot}}/configs/adapter-config.json \
-  --target dotnet \
-  --target-test-framework {{framework}} \
-  --generation-policy {{policy}} \
-  --out migration/playground-run \
-  --format both
+```powershell
+./{{playgroundRoot}}/commands.ps1
 ```
 
-## 4. Build the dashboard
+## Ready command chain
 
-```bash
-selenium-pw-migrator report serve \
-  --input migration/playground-run \
-  --static-only \
-  --out migration/playground-dashboard \
-  --format both
-```
-
-## 5. Prepare review artifacts
-
-```bash
-selenium-pw-migrator pr pack \
-  --input migration/playground-run \
-  --config {{playgroundRoot}}/configs/adapter-config.json \
-  --out migration/playground-pr-pack \
-  --format both
-
-selenium-pw-migrator evidence pack \
-  --input migration/playground-run \
-  --out migration/playground-evidence.zip
-```
+The generated scripts run the same sequence: `runbook`, `framework matrix`, `--mode migrate`, `report serve`, `pr pack`, and `evidence pack`.
 
 ## What good looks like
 
-- `migration/playground-run/report.txt` exists.
-- `migration/playground-dashboard/report-dashboard.html` opens locally.
-- `migration/playground-pr-pack/suggested-pr-description.md` is reviewable.
-- `migration/playground-evidence.zip` has a manifest and checksums.
+- `{{playgroundRoot}}/runs/playground-run/report.txt` exists.
+- `{{playgroundRoot}}/runs/playground-dashboard/report-dashboard.html` opens locally.
+- `{{playgroundRoot}}/runs/playground-pr-pack/suggested-pr-description.md` is reviewable.
+- `{{playgroundRoot}}/runs/playground-evidence.zip` has a manifest and checksums.
 
 The playground never edits source tests and never invents selectors.
 """;
@@ -332,23 +288,31 @@ The playground never edits source tests and never invents selectors.
 #!/usr/bin/env bash
 set -euo pipefail
 
-selenium-pw-migrator runbook --input {{playgroundRoot}}/selenium-csharp-nunit --target dotnet --target-test-framework {{framework}} --generation-policy {{policy}} --out migration/playground-runbook --format both
-selenium-pw-migrator framework matrix --input {{playgroundRoot}}/selenium-csharp-nunit --target dotnet --target-test-framework {{framework}} --out migration/playground-framework-matrix --format both
-selenium-pw-migrator --mode migrate --input {{playgroundRoot}}/selenium-csharp-nunit --config {{playgroundRoot}}/configs/adapter-config.json --target dotnet --target-test-framework {{framework}} --generation-policy {{policy}} --out migration/playground-run --format both
-selenium-pw-migrator report serve --input migration/playground-run --static-only --out migration/playground-dashboard --format both
-selenium-pw-migrator pr pack --input migration/playground-run --config {{playgroundRoot}}/configs/adapter-config.json --out migration/playground-pr-pack --format both
-selenium-pw-migrator evidence pack --input migration/playground-run --out migration/playground-evidence.zip
+PLAYGROUND_ROOT="{{playgroundRoot}}"
+RUN_ROOT="$PLAYGROUND_ROOT/runs"
+mkdir -p "$RUN_ROOT"
+
+selenium-pw-migrator runbook --input "$PLAYGROUND_ROOT/selenium-csharp-nunit" --target dotnet --target-test-framework {{framework}} --generation-policy {{policy}} --out "$RUN_ROOT/playground-runbook" --format both
+selenium-pw-migrator framework matrix --input "$PLAYGROUND_ROOT/selenium-csharp-nunit" --target dotnet --target-test-framework {{framework}} --out "$RUN_ROOT/playground-framework-matrix" --format both
+selenium-pw-migrator --mode migrate --input "$PLAYGROUND_ROOT/selenium-csharp-nunit" --config "$PLAYGROUND_ROOT/configs/adapter-config.json" --target dotnet --target-test-framework {{framework}} --generation-policy {{policy}} --out "$RUN_ROOT/playground-run" --format both
+selenium-pw-migrator report serve --input "$RUN_ROOT/playground-run" --static-only --out "$RUN_ROOT/playground-dashboard" --format both
+selenium-pw-migrator pr pack --input "$RUN_ROOT/playground-run" --config "$PLAYGROUND_ROOT/configs/adapter-config.json" --out "$RUN_ROOT/playground-pr-pack" --format both
+selenium-pw-migrator evidence pack --input "$RUN_ROOT/playground-run" --out "$RUN_ROOT/playground-evidence.zip"
 """;
 
     static string BuildCommandsPs1(string framework, string policy, string playgroundRoot) => $$"""
 $ErrorActionPreference = "Stop"
 
-selenium-pw-migrator runbook --input {{playgroundRoot}}/selenium-csharp-nunit --target dotnet --target-test-framework {{framework}} --generation-policy {{policy}} --out migration/playground-runbook --format both
-selenium-pw-migrator framework matrix --input {{playgroundRoot}}/selenium-csharp-nunit --target dotnet --target-test-framework {{framework}} --out migration/playground-framework-matrix --format both
-selenium-pw-migrator --mode migrate --input {{playgroundRoot}}/selenium-csharp-nunit --config {{playgroundRoot}}/configs/adapter-config.json --target dotnet --target-test-framework {{framework}} --generation-policy {{policy}} --out migration/playground-run --format both
-selenium-pw-migrator report serve --input migration/playground-run --static-only --out migration/playground-dashboard --format both
-selenium-pw-migrator pr pack --input migration/playground-run --config {{playgroundRoot}}/configs/adapter-config.json --out migration/playground-pr-pack --format both
-selenium-pw-migrator evidence pack --input migration/playground-run --out migration/playground-evidence.zip
+$PlaygroundRoot = "{{playgroundRoot}}"
+$RunRoot = Join-Path $PlaygroundRoot "runs"
+New-Item -ItemType Directory -Force -Path $RunRoot | Out-Null
+
+selenium-pw-migrator runbook --input (Join-Path $PlaygroundRoot "selenium-csharp-nunit") --target dotnet --target-test-framework {{framework}} --generation-policy {{policy}} --out (Join-Path $RunRoot "playground-runbook") --format both
+selenium-pw-migrator framework matrix --input (Join-Path $PlaygroundRoot "selenium-csharp-nunit") --target dotnet --target-test-framework {{framework}} --out (Join-Path $RunRoot "playground-framework-matrix") --format both
+selenium-pw-migrator --mode migrate --input (Join-Path $PlaygroundRoot "selenium-csharp-nunit") --config (Join-Path $PlaygroundRoot "configs/adapter-config.json") --target dotnet --target-test-framework {{framework}} --generation-policy {{policy}} --out (Join-Path $RunRoot "playground-run") --format both
+selenium-pw-migrator report serve --input (Join-Path $RunRoot "playground-run") --static-only --out (Join-Path $RunRoot "playground-dashboard") --format both
+selenium-pw-migrator pr pack --input (Join-Path $RunRoot "playground-run") --config (Join-Path $PlaygroundRoot "configs/adapter-config.json") --out (Join-Path $RunRoot "playground-pr-pack") --format both
+selenium-pw-migrator evidence pack --input (Join-Path $RunRoot "playground-run") --out (Join-Path $RunRoot "playground-evidence.zip")
 """;
 
     static string BuildExpectedOutputs(string playgroundRoot) => $$"""
@@ -358,17 +322,17 @@ After the ready commands, the workspace should contain:
 
 ```text
 {{playgroundRoot}}/
-migration/playground-runbook/runbook.md
-migration/playground-framework-matrix/framework-matrix.md
-migration/playground-run/report.txt
-migration/playground-run/report.json
-migration/playground-run/adapter-config.draft.json
-migration/playground-dashboard/report-dashboard.html
-migration/playground-dashboard/report-triage-decisions.md
-migration/playground-pr-pack/pr-summary.md
-migration/playground-pr-pack/reviewer-checklist.md
-migration/playground-pr-pack/suggested-pr-description.md
-migration/playground-evidence.zip
+{{playgroundRoot}}/runs/playground-runbook/runbook.md
+{{playgroundRoot}}/runs/playground-framework-matrix/framework-matrix.md
+{{playgroundRoot}}/runs/playground-run/report.txt
+{{playgroundRoot}}/runs/playground-run/report.json
+{{playgroundRoot}}/runs/playground-run/adapter-config.draft.json
+{{playgroundRoot}}/runs/playground-dashboard/report-dashboard.html
+{{playgroundRoot}}/runs/playground-dashboard/report-triage-decisions.md
+{{playgroundRoot}}/runs/playground-pr-pack/pr-summary.md
+{{playgroundRoot}}/runs/playground-pr-pack/reviewer-checklist.md
+{{playgroundRoot}}/runs/playground-pr-pack/suggested-pr-description.md
+{{playgroundRoot}}/runs/playground-evidence.zip
 ```
 
 The demo is successful when the dashboard and PR pack can be reviewed without opening the source project.

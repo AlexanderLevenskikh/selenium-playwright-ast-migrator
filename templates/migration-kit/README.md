@@ -81,7 +81,7 @@ Manual/non-Desktop fallback:
 2. Copy `prompts/kickoff-prompt.txt` into your agent.
 3. Run only a bounded artifact-only batch.
 4. After every batch, keep `agent-state.md`, `current-ticket.md`, and `state/*` up to date.
-5. Run `scripts/check-harness-policy.ps1`, `scripts/check-scope.ps1`, and `scripts/check-final-gate.ps1` before accepting any batch.
+5. Run gates before accepting any batch. Bash users can run `scripts/check-harness-policy.sh`, `scripts/check-scope.sh`, and `scripts/check-final-gate.sh`; PowerShell users can call the matching `.ps1` scripts directly.
 
 ## Updating the kit
 

@@ -10,6 +10,25 @@ inspect the old tests -> collect source truth -> generate Playwright code -> ver
 
 The main production path is Selenium C# to Playwright .NET. NUnit is the default target test framework, and xUnit is also supported. Playwright TypeScript, Java Selenium input, and Python Selenium input exist as preview paths.
 
+## Happy path
+
+Use this as the short path for new users:
+
+```bash
+dotnet tool install --global SeleniumPlaywrightMigrator --version 0.0.0-preview.1
+selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
+bash playground/commands.sh
+selenium-pw-migrator playground verify --input playground --out playground-verify --format both
+```
+
+For a real agent-assisted migration:
+
+```bash
+selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --opencode-install auto
+```
+
+The stable production path is Selenium C# -> Playwright .NET. Treat Java, Python, and Playwright TypeScript as experimental preview paths until their reports and target-project checks prove readiness.
+
 ## 1. The Big Picture
 
 Migrator works best when you treat it as a migration assistant, not a blind text converter.
@@ -34,7 +53,7 @@ When the package is published, the best team-friendly setup is a project-local d
 
 ```bash
 dotnet new tool-manifest
-dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0
+dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0-preview.1
 dotnet tool run selenium-pw-migrator -- --help
 ```
 
@@ -47,9 +66,9 @@ dotnet tool run selenium-pw-migrator -- playground \
   --generation-policy conservative
 ```
 
-Open `migration/playground/try-this-first.md` and run the generated command chain before touching a real project.
+Open `playground/try-this-first.md` and run the generated command chain before touching a real project.
 
-Relative `--out playground` is written under the default `migration/` workspace. Use an absolute `--out` path if you want the playground somewhere else.
+Relative `--out playground` is resolved from the current directory. The generated command scripts keep run artifacts under the selected playground folder, so nonstandard `--out` paths remain self-contained.
 
 If you want to understand the AST-based migration model before using the tool on a real suite, open the teaching demo and article:
 
@@ -62,15 +81,15 @@ If you want to understand the AST-based migration model before using the tool on
 If you are validating a release candidate before publishing it:
 
 ```bash
-./scripts/pack-tool.sh 0.0.0
+./scripts/pack-tool.sh 0.0.0-preview.1
 dotnet new tool-manifest --force
 dotnet tool install SeleniumPlaywrightMigrator \
-  --version 0.0.0 \
+  --version 0.0.0-preview.1 \
   --add-source ./artifacts/nuget
 dotnet tool run selenium-pw-migrator -- --help
 ```
 
-On Windows, use `./scripts/pack-tool.ps1 -Version 0.0.0`.
+On Windows, use `./scripts/pack-tool.ps1 -Version 0.0.0-preview.1`.
 
 ### Run from source
 
@@ -403,7 +422,7 @@ dotnet tool run selenium-pw-migrator -- playground --out playground --target-tes
 Checks that a generated playground still contains the public demo contract: manifest, ready command chain, sample Selenium input, adapter config, expected Playwright output, dashboard sample, PR pack sample, and selector-safety wording.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- playground verify --input migration/playground --out playground-verify
+dotnet tool run selenium-pw-migrator -- playground verify --input playground --out playground-verify
 ```
 
 `release-doctor`

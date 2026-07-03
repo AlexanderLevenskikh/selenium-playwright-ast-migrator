@@ -7,7 +7,7 @@ if [[ $# -lt 1 ]]; then
 fi
 
 SOURCE="$1"
-VERSION="${2:-0.0.0}"
+VERSION="${2:-0.0.0-preview.1}"
 PACKAGE_ID="${PACKAGE_ID:-SeleniumPlaywrightMigrator}"
 API_KEY="${NUGET_API_KEY:-}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

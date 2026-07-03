@@ -16,7 +16,10 @@
     "opencode.jsonc",
     ".opencode/**",
     ".opencode-migrator/**",
-    "AGENTS.md"
+    "AGENTS.md",
+    "migration/scripts/check-scope.sh",
+    "migration/scripts/check-final-gate.sh",
+    "migration/scripts/check-harness-policy.sh"
   ],
   "deniedWrites": [
     ".git/**",
@@ -50,7 +53,31 @@
     "pwsh -NoProfile -ExecutionPolicy Bypass -File migration/scripts/check-harness-policy.ps1*",
     "powershell -NoProfile -ExecutionPolicy Bypass -File migration/scripts/check-scope.ps1*",
     "powershell -NoProfile -ExecutionPolicy Bypass -File migration/scripts/check-final-gate.ps1*",
-    "powershell -NoProfile -ExecutionPolicy Bypass -File migration/scripts/check-harness-policy.ps1*"
+    "powershell -NoProfile -ExecutionPolicy Bypass -File migration/scripts/check-harness-policy.ps1*",
+    "./migration/scripts/check-scope.sh*",
+    "./migration/scripts/check-final-gate.sh*",
+    "./migration/scripts/check-harness-policy.sh*",
+    "./migration/scripts/new-harness-run.sh*",
+    "./migration/scripts/write-harness-event.sh*",
+    "./migration/scripts/build-harness-dashboard.sh*",
+    "bash migration/scripts/check-scope.sh*",
+    "bash migration/scripts/check-final-gate.sh*",
+    "bash migration/scripts/check-harness-policy.sh*",
+    "bash migration/scripts/new-harness-run.sh*",
+    "bash migration/scripts/write-harness-event.sh*",
+    "bash migration/scripts/build-harness-dashboard.sh*",
+    "migration/scripts/check-scope.sh*",
+    "bash ./migration/scripts/check-scope.sh*",
+    "migration/scripts/check-final-gate.sh*",
+    "bash ./migration/scripts/check-final-gate.sh*",
+    "migration/scripts/check-harness-policy.sh*",
+    "bash ./migration/scripts/check-harness-policy.sh*",
+    "migration/scripts/new-harness-run.sh*",
+    "bash ./migration/scripts/new-harness-run.sh*",
+    "migration/scripts/write-harness-event.sh*",
+    "bash ./migration/scripts/write-harness-event.sh*",
+    "migration/scripts/build-harness-dashboard.sh*",
+    "bash ./migration/scripts/build-harness-dashboard.sh*"
   ],
   "askCommands": [
     "python *",
@@ -113,11 +140,18 @@
     "prompts/harness-review-prompt.txt",
     "scripts/new-harness-run.ps1",
     "scripts/write-harness-event.ps1",
-    "scripts/check-harness-policy.ps1"
+    "scripts/check-harness-policy.ps1",
+    "scripts/check-scope.sh",
+    "scripts/check-final-gate.sh",
+    "scripts/check-harness-policy.sh",
+    "scripts/new-harness-run.sh",
+    "scripts/write-harness-event.sh",
+    "scripts/build-harness-dashboard.sh"
   ],
   "finalGate": {
     "script": "scripts/check-final-gate.ps1",
     "requiredBeforeFinalAnswer": true,
-    "finalStatusFile": "state/final-gate-result.json"
+    "finalStatusFile": "state/final-gate-result.json",
+    "shellWrapper": "scripts/check-final-gate.sh"
   }
 }

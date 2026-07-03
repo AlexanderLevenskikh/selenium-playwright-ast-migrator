@@ -12,7 +12,7 @@ body:
     attributes:
       label: Version
       description: Tool version or commit SHA.
-      placeholder: 0.0.0
+      placeholder: 0.0.0-preview.1
     validations:
       required: true
   - type: dropdown

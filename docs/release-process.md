@@ -7,8 +7,8 @@ This document is the release checklist for publishing `SeleniumPlaywrightMigrato
 Use SemVer with preview suffixes while the CLI/config surface is still changing:
 
 ```text
-0.0.0
-0.0.0
+0.0.0-preview.1
+0.0.0-preview.1
 0.0.0-preview.N
 ```
 
@@ -44,37 +44,37 @@ dotnet test Migrator.sln --configuration Release --no-build
 4. Pack the dotnet tool:
 
 ```bash
-scripts/pack-tool.sh 0.0.0
+scripts/pack-tool.sh 0.0.0-preview.1
 ```
 
 or on Windows:
 
 ```powershell
-./scripts/pack-tool.ps1 -Version 0.0.0
+./scripts/pack-tool.ps1 -Version 0.0.0-preview.1
 ```
 
 5. Verify `.nupkg` contents:
 
 ```bash
-scripts/verify-nupkg-contents.sh artifacts/nuget/SeleniumPlaywrightMigrator.0.0.0.nupkg
+scripts/verify-nupkg-contents.sh artifacts/nuget/SeleniumPlaywrightMigrator.0.0.0-preview.1.nupkg
 ```
 
 or on Windows:
 
 ```powershell
-./scripts/verify-nupkg-contents.ps1 -PackagePath artifacts/nuget/SeleniumPlaywrightMigrator.0.0.0.nupkg
+./scripts/verify-nupkg-contents.ps1 -PackagePath artifacts/nuget/SeleniumPlaywrightMigrator.0.0.0-preview.1.nupkg
 ```
 
 6. Smoke local installation from the package:
 
 ```bash
-scripts/smoke-local-tool-package.sh 0.0.0
+scripts/smoke-local-tool-package.sh 0.0.0-preview.1
 ```
 
 or on Windows:
 
 ```powershell
-./scripts/smoke-local-tool-package.ps1 -Version 0.0.0
+./scripts/smoke-local-tool-package.ps1 -Version 0.0.0-preview.1
 ```
 
 The smoke installs the package into a temporary local tool manifest, runs `--help`, runs `--mode doctor`, and checks that a doctor report was written.
@@ -124,7 +124,7 @@ The repository has a manual workflow for release publishing:
 
 Run it from GitHub Actions with `workflow_dispatch` inputs:
 
-- `version` - the exact package version, for example `0.0.0`;
+- `version` - the exact package version, for example `0.0.0-preview.1`;
 - `source` - usually `https://api.nuget.org/v3/index.json`;
 - `dry_run` - keep `true` for the first run; set to `false` only for the actual publish.
 
@@ -155,14 +155,14 @@ Recommended sequence:
 NuGet/GitHub package publishing should happen only after the CI package artifacts pass verification.
 
 ```bash
-scripts/push-tool.sh https://api.nuget.org/v3/index.json 0.0.0
+scripts/push-tool.sh https://api.nuget.org/v3/index.json 0.0.0-preview.1
 ```
 
 or on Windows:
 
 ```powershell
 ./scripts/push-tool.ps1 `
-  -Version 0.0.0 `
+  -Version 0.0.0-preview.1 `
   -Source https://api.nuget.org/v3/index.json `
   -ApiKey $env:NUGET_API_KEY `
   -SkipDuplicate
@@ -176,7 +176,7 @@ After publishing to NuGet, verify install from a clean directory:
 mkdir /tmp/migrator-tool-smoke
 cd /tmp/migrator-tool-smoke
 dotnet new tool-manifest
-dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0
+dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0-preview.1
 dotnet tool run selenium-pw-migrator -- --help
 ```
 
@@ -192,7 +192,7 @@ NuGet packages are immutable. If a package is broken:
 For project-local tools, tell users to pin the previous good version:
 
 ```bash
-dotnet tool update SeleniumPlaywrightMigrator --version 0.0.0
+dotnet tool update SeleniumPlaywrightMigrator --version 0.0.0-preview.1
 ```
 
 ## CI release gates

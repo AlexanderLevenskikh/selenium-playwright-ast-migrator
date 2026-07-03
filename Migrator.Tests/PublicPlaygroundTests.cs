@@ -52,7 +52,14 @@ public class PublicPlaygroundTests
         Assert.Contains("pr pack", docs);
         Assert.Contains("evidence pack", docs);
         Assert.Contains("playground verify", docs);
-        Assert.Contains("playground-verify-report", File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/PublicPlaygroundCommand.cs")));
+        var commandSource = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/PublicPlaygroundCommand.cs"));
+        Assert.Contains("playground-verify-report", commandSource);
+        Assert.Contains("PLAYGROUND_ROOT=", commandSource);
+        Assert.Contains("$PlaygroundRoot", commandSource);
+        Assert.Contains("$PLAYGROUND_ROOT/runs", commandSource);
+        Assert.Contains("Join-Path $PlaygroundRoot", commandSource);
+        Assert.DoesNotContain("--out migration/playground-run", commandSource);
+        Assert.DoesNotContain("--input migration/playground-run", commandSource);
         Assert.Contains("read-only", docs);
         Assert.Contains("never invents selectors", docs);
 

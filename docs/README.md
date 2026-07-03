@@ -78,7 +78,7 @@ The current launch procedure is only the guarded Desktop runbook above. Detailed
 - [Release process](release-process.md)
 - [Packaging and distribution](packaging-and-distribution.md)
 - [Public roadmap](public-roadmap.md)
-- [Release notes v0.0.0](release-notes/v0.0.0.md)
+- [Release notes 0.0.0-preview.1](release-notes/v0.0.0-preview.1.md)
 
 ## Rule for future docs
 
