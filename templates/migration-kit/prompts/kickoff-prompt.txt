@@ -40,6 +40,8 @@ Expected first commands:
 
 Rules:
 - If status is `CONTINUE_AUTONOMOUSLY`, continue without asking the user whether to continue.
+- If the batch is `NOT FINAL - INVESTIGATION RESULT ONLY` or `NOT RUNTIME READY`, keep going when the evidence names an allowed next action such as adapter-config mapping, target-shadow/POM scaffold proposal, discover-target, explain-todo, or another verification pass under `{{WORKSPACE}}/**`.
+- Do not stop after a first-pass migrate/verify failure when the next root-cause ticket can be generated and executed from allowed source/config evidence.
 - Do not stop at compile-green if the board still has actionable migration quality work.
 - Do not edit migrator source code in migration-artifact mode.
 - If compiled migrator tool is provided, run that tool directly and do not search for `Migrator.Cli`, `.sln`, `.csproj`, or migrator source code.
@@ -51,5 +53,6 @@ Rules:
 - Prefer config fixes for project-specific selectors/helper mappings.
 - Use engine fixes only in migrator-code mode for generic migrator limitations and add regression tests.
 - Before stopping or handing off, update `{{WORKSPACE}}/state/stop-policy-checklist.md`.
+- A handoff/report is not a stop reason by itself. Stopping requires a valid checked reason from `{{WORKSPACE}}/state/stop-policy-checklist.md`, max iterations, or a next action that is outside the allowed lane.
 - Do not claim FINAL unless `{{WORKSPACE}}/scripts/check-final-gate.ps1 -RequireOpenCodeExport -RequireExplainTodo -RequireVerificationArtifacts` passes. If strict evidence is not available, report `NOT FINAL - INVESTIGATION RESULT ONLY`.
 - If interrupted, the next agent must be able to resume from workspace files.

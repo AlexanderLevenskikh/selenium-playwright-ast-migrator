@@ -23,6 +23,7 @@ Fill this before stopping or handing off a migration batch. This file is `state/
 At least one must be checked before stopping:
 
 - [ ] Selected batch is complete and verified.
+- [ ] Max autonomous batch budget or explicit fix-review cycle limit was reached after writing the next concrete ticket.
 - [ ] Source truth / selector evidence / helper semantics is missing and cannot be proven from allowed inputs.
 - [ ] Product or business semantics are required.
 - [ ] Required tool/dependency is unavailable and no useful static verification remains.
@@ -36,6 +37,7 @@ At least one must be checked before stopping:
 ## Must not be true
 
 - [ ] I am not asking the user whether to continue.
+- [ ] I am not stopping only because the latest report says `NOT FINAL - INVESTIGATION RESULT ONLY` or `NOT RUNTIME READY` while an allowed next config/scaffold/evidence action exists.
 - [ ] I am not stopping only because compile/project verify is green while actionable migration work remains.
 - [ ] I did not edit migrator source code in `migration-artifact` mode.
 - [ ] I did not search for migrator source in compiled-tool-only mode.
@@ -51,4 +53,3 @@ At least one must be checked before stopping:
 
 
 ## One concrete next action
-

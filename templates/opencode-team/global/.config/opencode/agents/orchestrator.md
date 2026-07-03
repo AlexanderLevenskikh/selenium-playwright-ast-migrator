@@ -12,6 +12,12 @@ permission:
     "git log*": allow
     "rg *": allow
     "grep *": allow
+    "Get-Content *": allow
+    "Test-Path *": allow
+    "Get-ChildItem *": allow
+    "Select-String *": allow
+    "ConvertFrom-Json*": allow
+    "Out-Null": allow
     "pwsh *new-harness-run.ps1*": allow
     "powershell *new-harness-run.ps1*": allow
     "pwsh *write-harness-event.ps1*": allow
@@ -87,6 +93,7 @@ Treat `migration/state/harness-policy.json` as the action policy:
 12. Run the scope guard and harness-policy gate after each executor patch and before final answer.
 13. Stop after at most 2 fix-review cycles unless the user explicitly asks to continue.
 14. Do not issue FINAL unless final gate evidence is present.
+15. If the current result is `NOT FINAL - INVESTIGATION RESULT ONLY` or `NOT RUNTIME READY`, do not stop merely to report that status while `CONTINUE_AUTONOMOUSLY` is still true and a next allowed migration-artifact action exists. Update `current-ticket.md` / `handoff.md`, start or delegate the next bounded config/scaffold/evidence step under `migration/**`, and stop only for a checklist-valid blocker such as missing source truth, forbidden writes, unavailable tools, max iterations, or a denied/ask action.
 
 ## Trace expectations
 
@@ -108,6 +115,7 @@ Do not fake trace events. If a command did not run, record or report that it did
 - Prefer minimal, reviewable changes over large rewrites.
 - Never commit or push.
 - Do not ask "what should I do next?" when an allowed next step exists.
+- Do not convert `NOT FINAL`, failed verify, or failed final readiness into a user-facing stop when the next evidence-backed config/scaffold/action step is allowed by the contract.
 - Do not treat TODO count reduction as progress if suppressions increased, tests became empty, assertions weakened, or real project files changed.
 
 ## Final report requirements

@@ -14,17 +14,54 @@ function Get-WorkspacePath([string]$Path) {
     return [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $Path))
 }
 
+function Test-CanonicalRunDirectory([string]$RunPath) {
+    if (-not (Test-Path $RunPath)) { return $false }
+    foreach ($file in @("Prompt.md", "Plan.md", "Implement.md", "Documentation.md", "trace.jsonl")) {
+        if (-not (Test-Path (Join-Path $RunPath $file))) { return $false }
+    }
+    return $true
+}
+
+function Test-DirectoryEmpty([string]$Path) {
+    if (-not (Test-Path $Path)) { return $true }
+    return $null -eq (Get-ChildItem -LiteralPath $Path -Force -ErrorAction SilentlyContinue | Select-Object -First 1)
+}
+
 function Get-NextRunId([string]$RunsPath) {
     if (-not (Test-Path $RunsPath)) { return "run-001" }
     $max = 0
     Get-ChildItem -Path $RunsPath -Directory -ErrorAction SilentlyContinue | ForEach-Object {
         $m = [regex]::Match($_.Name, '^run-(\d+)$')
-        if ($m.Success) {
+        if ($m.Success -and (Test-CanonicalRunDirectory $_.FullName)) {
             $n = [int]$m.Groups[1].Value
             if ($n -gt $max) { $max = $n }
         }
     }
-    return ("run-{0:D3}" -f ($max + 1))
+    $candidate = $max + 1
+    while ($true) {
+        $runId = "run-{0:D3}" -f $candidate
+        $candidatePath = Join-Path $RunsPath $runId
+        if (-not (Test-Path $candidatePath) -or (Test-DirectoryEmpty $candidatePath)) {
+            return $runId
+        }
+        $candidate++
+    }
+}
+
+function Get-ExistingRunIds([string]$RunsPath) {
+    if (-not (Test-Path $RunsPath)) { return @() }
+    return @(Get-ChildItem -Path $RunsPath -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^run-(\d+)$' } |
+        ForEach-Object { $_.Name } |
+        Sort-Object)
+}
+
+function Get-CanonicalRunIds([string]$RunsPath) {
+    if (-not (Test-Path $RunsPath)) { return @() }
+    return @(Get-ChildItem -Path $RunsPath -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^run-(\d+)$' -and (Test-CanonicalRunDirectory $_.FullName) } |
+        ForEach-Object { $_.Name } |
+        Sort-Object)
 }
 
 function Set-Utf8NoBom([string]$Path, [string]$Value) {
@@ -38,7 +75,11 @@ $workspacePath = Get-WorkspacePath $Workspace
 $runsPath = Join-Path $workspacePath "runs"
 New-Item -ItemType Directory -Force -Path $runsPath | Out-Null
 
+$existingRunIds = @(Get-ExistingRunIds $runsPath)
+$canonicalRunIds = @(Get-CanonicalRunIds $runsPath)
+$runIdSource = "explicit"
 if ([string]::IsNullOrWhiteSpace($RunId)) {
+    $runIdSource = "auto-from-existing-run-directories"
     $RunId = Get-NextRunId $runsPath
 }
 
@@ -47,7 +88,7 @@ if ($RunId -notmatch '^run-[0-9A-Za-z][0-9A-Za-z._-]*$') {
 }
 
 $runPath = Join-Path $runsPath $RunId
-if ((Test-Path $runPath) -and -not $Force) {
+if ((Test-Path $runPath) -and -not (Test-DirectoryEmpty $runPath) -and -not $Force) {
     throw "Run already exists: $runPath. Use -Force to overwrite run skeleton files."
 }
 
@@ -179,6 +220,9 @@ $runState = [ordered]@{
     taskTitle = $TaskTitle
     goal = $Goal
     allowedRoots = @($AllowedRoots)
+    runIdSource = $runIdSource
+    existingRunIdsBeforeCreate = @($existingRunIds)
+    canonicalRunIdsBeforeCreate = @($canonicalRunIds)
     files = [ordered]@{
         prompt = "runs/$RunId/Prompt.md"
         plan = "runs/$RunId/Plan.md"
@@ -258,7 +302,7 @@ $event = [ordered]@{
     phase = "bootstrap"
     action = "new-harness-run"
     status = "created"
-    detail = $Goal
+    detail = "$Goal; runIdSource=$runIdSource; existingRunIdsBeforeCreate=$($existingRunIds -join ','); canonicalRunIdsBeforeCreate=$($canonicalRunIds -join ',')"
 }
 $eventLine = $event | ConvertTo-Json -Compress -Depth 10
 Add-Content -Path (Join-Path $workspacePath "state/harness-events.jsonl") -Encoding UTF8 -Value $eventLine

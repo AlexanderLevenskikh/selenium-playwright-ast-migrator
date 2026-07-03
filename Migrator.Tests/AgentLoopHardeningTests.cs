@@ -112,6 +112,9 @@ public class AgentLoopHardeningTests
         Assert.Contains("requiredRunArtifacts", newRunScript);
         Assert.Contains("did not create required run artifacts", newRunScript);
         Assert.Contains("trace.jsonl", newRunScript);
+        Assert.Contains("Test-DirectoryEmpty", newRunScript);
+        Assert.Contains("Test-CanonicalRunDirectory", newRunScript);
+        Assert.Contains("canonicalRunIdsBeforeCreate", newRunScript);
         Assert.Contains("harness-events.jsonl", eventScript);
         Assert.Contains("HARNESS_POLICY_", policyScript);
         Assert.Contains("pwsh", scopeShell);
@@ -339,12 +342,17 @@ public class AgentLoopHardeningTests
         Assert.Contains("RequireOpenCodeExport", kickoff);
         Assert.Contains("RequireExplainTodo", kickoff);
         Assert.Contains("RequireVerificationArtifacts", kickoff);
+        Assert.Contains("NOT FINAL - INVESTIGATION RESULT ONLY", kickoff);
+        Assert.Contains("NOT RUNTIME READY", kickoff);
+        Assert.Contains("allowed next action", kickoff);
         Assert.Contains("TODO removed via suppression does not count as progress", kickoff);
         Assert.Contains("0 TODO", kickoff);
         Assert.Contains("check-scope.ps1", loopBatch);
         Assert.Contains("RequireOpenCodeExport", loopBatch);
         Assert.Contains("no FluentAssertions/NUnit/business assertion suppression", review);
         Assert.Contains("Scope guard command/result", stopChecklist);
+        Assert.Contains("NOT FINAL - INVESTIGATION RESULT ONLY", stopChecklist);
+        Assert.Contains("allowed next config/scaffold/evidence action", stopChecklist);
         Assert.Contains("Suppression categories before/after", stopChecklist);
     }
 
@@ -372,9 +380,17 @@ public class AgentLoopHardeningTests
         Assert.Contains("\"python *\": \"ask\"", config);
         Assert.Contains("\"Copy-Item *\": \"ask\"", config);
         Assert.Contains("\"Set-Content *\": \"ask\"", config);
+        Assert.Contains("\"Get-Content *\": \"allow\"", config);
+        Assert.Contains("\"ConvertFrom-Json*\": \"allow\"", config);
         Assert.Contains("\"dotnet test*\": \"allow\"", config);
         Assert.Contains("\"pwsh *check-harness-policy.ps1*\": \"allow\"", config);
         Assert.Contains("\"powershell *check-harness-policy.ps1*\": \"allow\"", config);
+        Assert.Contains("\"Get-Content *\": allow", orchestrator);
+        Assert.Contains("\"Get-Content *\": allow", executor);
+        Assert.Contains("\"Get-Content *\": allow", watchdog);
+        Assert.Contains("\"Get-Content *\": allow", reviewer);
+        Assert.Contains("\"pwsh *check-harness-policy.ps1*\": allow", watchdog);
+        Assert.Contains("\"pwsh *check-harness-policy.ps1*\": allow", reviewer);
 
         Assert.Contains("Non-negotiable migration-artifact boundary", orchestrator);
         Assert.Contains("A run is failed if `migration/scripts/check-scope.ps1` reports changed files outside", orchestrator);
@@ -423,6 +439,8 @@ public class AgentLoopHardeningTests
         Assert.Contains("routine continuation questions", reviewer);
         Assert.Contains("routine continuation questions", watchdog);
         Assert.Contains("routine continuation questions", supervisedTask);
+        Assert.Contains("NOT RUNTIME READY", supervisedTask);
+        Assert.Contains("Continue with that next bounded action", supervisedTask);
         Assert.Contains("routine continuation questions", projectAgents);
         Assert.Contains("routine continuation questions", teamReadme);
 

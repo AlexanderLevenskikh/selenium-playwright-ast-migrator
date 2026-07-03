@@ -14,6 +14,16 @@ permission:
 
     "rg *": allow
     "grep *": allow
+    "Get-Content *": allow
+    "Test-Path *": allow
+    "Get-ChildItem *": allow
+    "Select-String *": allow
+    "ConvertFrom-Json*": allow
+    "Out-Null": allow
+    "pwsh *check-scope.ps1*": allow
+    "powershell *check-scope.ps1*": allow
+    "pwsh *check-harness-policy.ps1*": allow
+    "powershell *check-harness-policy.ps1*": allow
 
   webfetch: deny
   websearch: deny

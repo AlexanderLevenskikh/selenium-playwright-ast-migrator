@@ -16,6 +16,12 @@ permission:
 
     "rg *": allow
     "grep *": allow
+    "Get-Content *": allow
+    "Test-Path *": allow
+    "Get-ChildItem *": allow
+    "Select-String *": allow
+    "ConvertFrom-Json*": allow
+    "Out-Null": allow
 
     "dotnet build*": ask
     "dotnet test*": ask
