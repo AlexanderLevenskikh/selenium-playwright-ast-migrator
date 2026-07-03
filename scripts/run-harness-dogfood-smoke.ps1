@@ -18,6 +18,28 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+
+function Get-PowerShellExecutable() {
+    $candidates = if ($IsWindows) { @("powershell", "pwsh") } else { @("pwsh", "powershell") }
+    foreach ($candidate in $candidates) {
+        $command = Get-Command $candidate -ErrorAction SilentlyContinue
+        if ($command -ne $null) {
+            return $command.Source
+        }
+    }
+
+    throw "PowerShell executable was not found. Install PowerShell 7 (`pwsh`) on non-Windows runners."
+}
+
+function Invoke-PowerShellChecked([string]$ScriptPath, [string[]]$Arguments, [string]$Label) {
+    $powerShell = Get-PowerShellExecutable
+    Write-Host "RUN: $powerShell -NoProfile -ExecutionPolicy Bypass -File $ScriptPath $($Arguments -join ' ')"
+    & $powerShell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ScriptPath) @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Label failed with exit code $LASTEXITCODE"
+    }
+}
+
 function Resolve-FullPath([string]$Base, [string]$Path) {
     if ([System.IO.Path]::IsPathRooted($Path)) {
         return [System.IO.Path]::GetFullPath($Path)
@@ -83,23 +105,19 @@ $eventScript = Join-Path $workspacePath "scripts/write-harness-event.ps1"
 $policyScript = Join-Path $workspacePath "scripts/check-harness-policy.ps1"
 $scopeScript = Join-Path $workspacePath "scripts/check-scope.ps1"
 
-& powershell -NoProfile -ExecutionPolicy Bypass -File $newRunScript `
-    -Workspace $Workspace `
-    -TaskTitle "Harness dogfood smoke" `
-    -Goal "Verify that the Migrator Agent Harness Kit installs, creates a run, writes events, and passes policy checks."
-if ($LASTEXITCODE -ne 0) {
-    throw "new-harness-run.ps1 failed with exit code $LASTEXITCODE"
-}
+Invoke-PowerShellChecked $newRunScript @(
+    "-Workspace", $Workspace,
+    "-TaskTitle", "Harness dogfood smoke",
+    "-Goal", "Verify that the Migrator Agent Harness Kit installs, creates a run, writes events, and passes policy checks."
+) "new-harness-run.ps1"
 
-& powershell -NoProfile -ExecutionPolicy Bypass -File $eventScript `
-    -Workspace $Workspace `
-    -Phase "dogfood" `
-    -Action "dogfood-smoke-started" `
-    -Status "started" `
-    -Detail "Harness dogfood smoke started."
-if ($LASTEXITCODE -ne 0) {
-    throw "write-harness-event.ps1 failed with exit code $LASTEXITCODE"
-}
+Invoke-PowerShellChecked $eventScript @(
+    "-Workspace", $Workspace,
+    "-Phase", "dogfood",
+    "-Action", "dogfood-smoke-started",
+    "-Status", "started",
+    "-Detail", "Harness dogfood smoke started."
+) "write-harness-event.ps1"
 
 $agentStateAfterRun = Get-Content -Raw -Path (Join-Path $workspacePath "agent-state.md")
 $latestRunMatch = [regex]::Match($agentStateAfterRun, '(?im)^\s*Latest run\s*:\s*(run-[0-9A-Za-z][0-9A-Za-z._-]*)\s*$')
@@ -112,22 +130,17 @@ foreach ($runArtifact in @("Prompt.md", "Plan.md", "Implement.md", "Documentatio
     Assert-File (Join-Path $latestRunDir $runArtifact)
 }
 
-& powershell -NoProfile -ExecutionPolicy Bypass -File $policyScript `
-    -Workspace $Workspace `
-    -RepoRoot $repoRootPath `
-    -AllowedRoots $AllowedRoots `
-    -SkipGitStatus
-if ($LASTEXITCODE -ne 0) {
-    throw "check-harness-policy.ps1 failed with exit code $LASTEXITCODE"
-}
+Invoke-PowerShellChecked $policyScript (@(
+    "-Workspace", $Workspace,
+    "-RepoRoot", $repoRootPath,
+    "-AllowedRoots"
+) + $AllowedRoots + @("-SkipGitStatus")) "check-harness-policy.ps1"
 
 if ($CheckWorkingTreeScope) {
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $scopeScript `
-        -RepoRoot $repoRootPath `
-        -AllowedRoots $AllowedRoots
-    if ($LASTEXITCODE -ne 0) {
-        throw "check-scope.ps1 failed with exit code $LASTEXITCODE"
-    }
+    Invoke-PowerShellChecked $scopeScript (@(
+        "-RepoRoot", $repoRootPath,
+        "-AllowedRoots"
+    ) + $AllowedRoots) "check-scope.ps1"
 } else {
     Write-Host "SCOPE_GUARD_SKIPPED: pass -CheckWorkingTreeScope to validate the current repository diff with check-scope.ps1"
 }
@@ -166,16 +179,14 @@ $evidence = @(
 )
 Set-Content -Path $evidencePath -Value ($evidence -join [Environment]::NewLine) -Encoding UTF8
 
-& powershell -NoProfile -ExecutionPolicy Bypass -File $eventScript `
-    -Workspace $Workspace `
-    -RunId $runId `
-    -Phase "dogfood" `
-    -Action "dogfood-smoke-pass" `
-    -Status "pass" `
-    -Detail "Harness dogfood smoke passed."
-if ($LASTEXITCODE -ne 0) {
-    throw "write-harness-event.ps1 pass event failed with exit code $LASTEXITCODE"
-}
+Invoke-PowerShellChecked $eventScript @(
+    "-Workspace", $Workspace,
+    "-RunId", $runId,
+    "-Phase", "dogfood",
+    "-Action", "dogfood-smoke-pass",
+    "-Status", "pass",
+    "-Detail", "Harness dogfood smoke passed."
+) "write-harness-event.ps1 pass event"
 
 Write-Host "HARNESS_DOGFOOD_PASS"
 Write-Host "Evidence: $evidencePath"

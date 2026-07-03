@@ -9,6 +9,36 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+
+function Get-PowerShellExecutable() {
+    $candidates = if ($IsWindows) { @("powershell", "pwsh") } else { @("pwsh", "powershell") }
+    foreach ($candidate in $candidates) {
+        $command = Get-Command $candidate -ErrorAction SilentlyContinue
+        if ($command -ne $null) {
+            return $command.Source
+        }
+    }
+
+    throw "PowerShell executable was not found. Install PowerShell 7 (`pwsh`) on non-Windows runners."
+}
+
+function Invoke-PowerShellScript([string]$ScriptPath, [string[]]$Arguments) {
+    try {
+        $powerShell = Get-PowerShellExecutable
+        $scriptArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ScriptPath) + $Arguments
+        & $powerShell @scriptArgs | Out-Host
+        if ($null -eq $LASTEXITCODE) {
+            return 0
+        }
+
+        return $LASTEXITCODE
+    }
+    catch {
+        Write-Warning "Failed to run ${ScriptPath}: $($_.Exception.Message)"
+        return 127
+    }
+}
+
 function Add-Result($Results, [string]$Name, [bool]$Passed, [string]$Detail) {
     $Results.Add([ordered]@{
         name = $Name
@@ -345,10 +375,9 @@ Add-Result $results "guard-checksums" $checksumOk $checksumDetail
 
 $harnessPolicyScript = Join-Path $workspacePath "scripts/check-harness-policy.ps1"
 if (Test-Path $harnessPolicyScript) {
-    $harnessArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $harnessPolicyScript, "-Workspace", $Workspace, "-RepoRoot", $RepoRoot, "-AllowedRoots") + @($AllowedRoots)
+    $harnessArgs = @("-Workspace", $Workspace, "-RepoRoot", $RepoRoot, "-AllowedRoots") + @($AllowedRoots)
 
-    & powershell @harnessArgs | Out-Host
-    $harnessExitCode = $LASTEXITCODE
+    $harnessExitCode = Invoke-PowerShellScript $harnessPolicyScript $harnessArgs
     Add-Result $results "harness-policy" ($harnessExitCode -eq 0) "check-harness-policy.ps1 exit code $harnessExitCode"
 }
 else {
@@ -357,10 +386,9 @@ else {
 
 $scopeScript = Join-Path $workspacePath "scripts/check-scope.ps1"
 if (Test-Path $scopeScript) {
-    $scopeArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $scopeScript, "-RepoRoot", $RepoRoot, "-AllowedRoots") + @($AllowedRoots)
+    $scopeArgs = @("-RepoRoot", $RepoRoot, "-AllowedRoots") + @($AllowedRoots)
 
-    & powershell @scopeArgs | Out-Host
-    $scopeExitCode = $LASTEXITCODE
+    $scopeExitCode = Invoke-PowerShellScript $scopeScript $scopeArgs
     Add-Result $results "scope-guard" ($scopeExitCode -eq 0) "check-scope.ps1 exit code $scopeExitCode"
 }
 else {

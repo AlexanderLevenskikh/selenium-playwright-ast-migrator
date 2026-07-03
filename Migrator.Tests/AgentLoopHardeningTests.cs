@@ -83,6 +83,7 @@ public class AgentLoopHardeningTests
         var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
         var psInstall = Read("scripts/install-migration-kit.ps1");
         var bundleScript = Read("scripts/package-agent-cli-bundle.ps1");
+        var dogfoodSmoke = Read("scripts/run-harness-dogfood-smoke.ps1");
 
         Assert.Contains("migrator-agent-harness-kit.md", docsIndex);
         Assert.Contains("English is canonical", harnessDoc);
@@ -295,6 +296,7 @@ public class AgentLoopHardeningTests
         var loopBatch = Read("templates/migration-kit/prompts/loop-batch-prompt.txt");
         var review = Read("templates/migration-kit/prompts/review-batch-prompt.txt");
         var stopChecklist = Read("templates/migration-kit/state/stop-policy-checklist.md");
+        var dogfoodSmoke = Read("scripts/run-harness-dogfood-smoke.ps1");
 
         Assert.Contains("Allowed writes: `migration/**` only", contract);
         Assert.Contains("TODO reduction via suppression is failure", contract);
@@ -308,6 +310,9 @@ public class AgentLoopHardeningTests
         Assert.Contains("SCOPE_GUARD_FAILED", scopeGuard);
         Assert.Contains("status --porcelain=v1 -z --untracked-files=all", scopeGuard);
         Assert.Contains("FINAL_GATE_", finalGateScript);
+        Assert.Contains("Invoke-PowerShellScript", finalGateScript);
+        Assert.DoesNotContain("& powershell", finalGateScript, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("& powershell", dogfoodSmoke, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("RequireOpenCodeExport", finalGateScript);
         Assert.Contains("Test-EvidenceExists", finalGateScript);
         Assert.Contains("opencode-chat-bundle-*", finalGateScript);
@@ -444,6 +449,7 @@ public class AgentLoopHardeningTests
         var policyScript = Read("templates/migration-kit/scripts/check-harness-policy.ps1");
         var kitReadme = Read("templates/migration-kit/README.md");
         var bundleScript = Read("scripts/package-agent-cli-bundle.ps1");
+        var dogfoodSmoke = Read("scripts/run-harness-dogfood-smoke.ps1");
         var psInstall = Read("scripts/install-migration-kit.ps1");
         var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
         var gitignore = Read(".gitignore");
@@ -509,6 +515,7 @@ public class AgentLoopHardeningTests
         var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
         var psInstall = Read("scripts/install-migration-kit.ps1");
         var bundleScript = Read("scripts/package-agent-cli-bundle.ps1");
+        var dogfoodSmoke = Read("scripts/run-harness-dogfood-smoke.ps1");
         var teamReadme = Read("templates/opencode-team/README.md");
         var dashboardCommand = Read("templates/opencode-team/global/.config/opencode/commands/dashboard-harness.md");
 
