@@ -167,3 +167,4 @@ profiles/**/*.local.json
 .agent-state/
 migration/
 .migration/
+.dogfood/

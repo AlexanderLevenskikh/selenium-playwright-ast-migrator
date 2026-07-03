@@ -78,7 +78,7 @@ internal static class KitCommand
         foreach (var dir in new[]
         {
             "runs", "reports", "logs", "profiles", "prompts", "schemas", "state",
-            "tickets", "evidence", "proposals", "scripts", "codex", "harness", ".migration-kit"
+            "tickets", "evidence", "proposals", "scripts", "codex", "harness", "dashboard", ".migration-kit"
         })
         {
             Directory.CreateDirectory(Path.Combine(workspacePath, dir));
@@ -165,6 +165,9 @@ internal static class KitCommand
         AddCheck(checks, "harness-policy-script", File.Exists(Path.Combine(workspacePath, "scripts", "check-harness-policy.ps1")), Path.Combine(workspacePath, "scripts", "check-harness-policy.ps1"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-run-script", File.Exists(Path.Combine(workspacePath, "scripts", "new-harness-run.ps1")), Path.Combine(workspacePath, "scripts", "new-harness-run.ps1"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-event-script", File.Exists(Path.Combine(workspacePath, "scripts", "write-harness-event.ps1")), Path.Combine(workspacePath, "scripts", "write-harness-event.ps1"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "harness-dashboard-script", File.Exists(Path.Combine(workspacePath, "scripts", "build-harness-dashboard.ps1")), Path.Combine(workspacePath, "scripts", "build-harness-dashboard.ps1"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "harness-dashboard-i18n-en", File.Exists(Path.Combine(workspacePath, "dashboard", "i18n", "en.json")), Path.Combine(workspacePath, "dashboard", "i18n", "en.json"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "harness-dashboard-i18n-ru", File.Exists(Path.Combine(workspacePath, "dashboard", "i18n", "ru.json")), Path.Combine(workspacePath, "dashboard", "i18n", "ru.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "guard-checksums", File.Exists(Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json")), Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json"), "Run `migrator kit update --backup`.");
 
         var dotnet = RunProcess("dotnet", "--version");
@@ -473,6 +476,18 @@ Harness autopilot run:
 .\{{Path.Combine(options.Workspace, "scripts", "check-harness-policy.ps1")}} -Workspace "{{options.Workspace}}" -RepoRoot .
 ```
 
+Harness Kit dogfood smoke from the Migrator repository root:
+
+```powershell
+.\scripts\run-harness-dogfood-smoke.ps1 -Clean
+```
+
+Generate Harness dashboard:
+
+```powershell
+.\{{Path.Combine(options.Workspace, "scripts", "build-harness-dashboard.ps1")}} -Workspace "{{options.Workspace}}" -Out dashboard/harness -Language en
+```
+
 Codex bounded ticket:
 
 ```text
@@ -526,7 +541,8 @@ Fix only the current ticket.
         {
             "scripts/check-scope.ps1",
             "scripts/check-final-gate.ps1",
-            "scripts/check-harness-policy.ps1"
+            "scripts/check-harness-policy.ps1",
+            "scripts/build-harness-dashboard.ps1"
         };
         var entries = guardFiles.Select(relative =>
         {

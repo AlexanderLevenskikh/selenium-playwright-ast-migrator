@@ -20,6 +20,7 @@ This README only describes the reusable OpenCode team template. Do not use it as
 - `reviewer` — ревьюер качества текущего diff, read-only.
 - `/supervised-task` — команда для задачи через orchestrator + watchdog + reviewer.
 - `/checkpoint` — ручная команда для проверки текущего состояния watchdog'ом.
+- `/dogfood-harness` — bounded Harness Kit dogfood command for docs/template/evidence-only validation inside the Migrator repository.
 - `AGENTS.md` — проектные правила, которые кладутся в корень репозитория.
 
 The migration template is intentionally artifact-only by default: real product/POM/PW project edits are forbidden for normal migration runs. Put generated/shadow/proposal files under `migration/**`.
@@ -123,8 +124,14 @@ Do not approve shell commands that write:
 
 ## Harness Kit commands
 
-For migration-artifact/autopilot work, start with `/harness-run` or `/supervised-task`.
+For migration-artifact/autopilot work, start with `/harness-run` or `/supervised-task`. For repository-level Harness Kit validation, use `/dogfood-harness`.
 
 - `/harness-run` creates or resumes `migration/runs/<run-id>/` and reads `Prompt.md`, `Plan.md`, `Implement.md`, `Documentation.md`, and `trace.jsonl`.
 - `/supervised-task` runs the full orchestrator/watchdog/reviewer loop and requires `check-scope.ps1`, `check-harness-policy.ps1`, and final gate evidence before FINAL.
+- `/dogfood-harness` follows `docs/migrator-agent-harness-dogfood.md` and uses explicit dogfood allowed roots for Migrator-repo validation.
 - Agents should not ask routine continuation questions when the next action is allowed by `migration/state/harness-policy.json` and OpenCode permissions.
+
+
+## Harness dashboard command
+
+Use `/dashboard-harness` after a harness run has produced `state/harness-events.jsonl` and `state/harness-policy-result.json`. It generates `migration/dashboard/harness/index.html` with English as the default language and Russian available through the language switch.

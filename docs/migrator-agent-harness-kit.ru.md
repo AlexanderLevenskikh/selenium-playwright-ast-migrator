@@ -22,3 +22,28 @@ Harness превращает агентский прогон миграции в
 Английская версия `docs/migrator-agent-harness-kit.md` является канонической. Русская версия — вспомогательная локализация.
 
 Машинные данные должны оставаться language-neutral: event/status/type codes хранятся на английском, а локализация делается на уровне UI/docs.
+
+
+## Dogfood smoke
+
+Первый repository-level прогон описан в `docs/migrator-agent-harness-dogfood.md` / `docs/migrator-agent-harness-dogfood.ru.md`. Скрипт `scripts/run-harness-dogfood-smoke.ps1` устанавливает kit в `.dogfood/migration`, создаёт run, пишет events и проверяет `check-harness-policy.ps1` с явными dogfood allowed roots.
+
+
+## Harness dashboard
+
+Используй `docs/migrator-agent-harness-dashboard.md` и `scripts/run-harness-dashboard-smoke.ps1`, чтобы генерировать статический дашборд из active harness run.
+
+В установленном workspace появляются:
+
+```text
+migration/dashboard/
+  i18n/
+    en.json
+    ru.json
+  harness/
+    index.html
+    harness-dashboard.json
+    harness-dashboard.md
+```
+
+English — язык дашборда по умолчанию. Русский доступен через переключатель `languageSelect`. Dashboard JSON остаётся language-neutral.

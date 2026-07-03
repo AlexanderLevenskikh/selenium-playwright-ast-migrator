@@ -126,6 +126,26 @@ if (Test-Path $installMigrationKit) {
     Copy-Item $installMigrationKit (Join-Path $scriptsDir "install-migration-kit.ps1") -Force
 }
 
+$dogfoodSmoke = Join-Path (Join-Path $root "scripts") "run-harness-dogfood-smoke.ps1"
+if (Test-Path $dogfoodSmoke) {
+    Copy-Item $dogfoodSmoke (Join-Path $scriptsDir "run-harness-dogfood-smoke.ps1") -Force
+}
+
+$dogfoodSmokeSh = Join-Path (Join-Path $root "scripts") "run-harness-dogfood-smoke.sh"
+if (Test-Path $dogfoodSmokeSh) {
+    Copy-Item $dogfoodSmokeSh (Join-Path $scriptsDir "run-harness-dogfood-smoke.sh") -Force
+}
+
+$dashboardSmoke = Join-Path (Join-Path $root "scripts") "run-harness-dashboard-smoke.ps1"
+if (Test-Path $dashboardSmoke) {
+    Copy-Item $dashboardSmoke (Join-Path $scriptsDir "run-harness-dashboard-smoke.ps1") -Force
+}
+
+$dashboardSmokeSh = Join-Path (Join-Path $root "scripts") "run-harness-dashboard-smoke.sh"
+if (Test-Path $dashboardSmokeSh) {
+    Copy-Item $dashboardSmokeSh (Join-Path $scriptsDir "run-harness-dashboard-smoke.sh") -Force
+}
+
 $installMigrationKitSh = Join-Path (Join-Path $root "scripts") "install-migration-kit.sh"
 if (Test-Path $installMigrationKitSh) {
     Copy-Item $installMigrationKitSh (Join-Path $scriptsDir "install-migration-kit.sh") -Force
@@ -235,6 +255,16 @@ $readmeLines = @(
     '  templates/migration-kit/state/harness-policy.json',
     '  templates/migration-kit/scripts/new-harness-run.ps1',
     '  templates/migration-kit/scripts/check-harness-policy.ps1',
+    '  templates/migration-kit/scripts/build-harness-dashboard.ps1',
+    '  templates/migration-kit/dashboard/i18n/en.json',
+    '  templates/migration-kit/dashboard/i18n/ru.json',
+    '  docs/migrator-agent-harness-dogfood.md',
+    '  docs/migrator-agent-harness-dashboard.md',
+    '  scripts/run-harness-dogfood-smoke.ps1',
+    '  scripts/run-harness-dogfood-smoke.sh',
+    '  docs/migrator-agent-harness-dashboard.md',
+    '  scripts/run-harness-dashboard-smoke.ps1',
+    '  scripts/run-harness-dashboard-smoke.sh',
     '',
     'Read first:',
     '  docs/guarded-opencode-desktop-runbook.ru.md',
@@ -243,6 +273,8 @@ $readmeLines = @(
     '  templates/migration-kit/prompts/loop-batch-prompt.txt',
     '  templates/migration-kit/prompts/autopilot-loop-prompt.txt',
     '  templates/migration-kit/harness/README.md',
+    '  docs/migrator-agent-harness-dogfood.md',
+    '  docs/migrator-agent-harness-dashboard.md',
     '  schemas/adapter-config.schema.json',
     '',
     'Windows PowerShell execution policy:',
@@ -290,7 +322,7 @@ foreach ($file in $bundleFiles) {
     $relative = Get-RelativePath `
         -BasePath $bundleDir `
         -TargetPath $file.FullName
-        
+
     $hash = (Get-FileHash -Algorithm SHA256 -Path $file.FullName).Hash.ToLowerInvariant()
     $shaLines.Add("$hash  $relative")
     $jsonFiles += [pscustomobject]@{

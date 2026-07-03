@@ -31,7 +31,18 @@ if ([string]::IsNullOrWhiteSpace($RunId)) {
 
 $data = $null
 if (-not [string]::IsNullOrWhiteSpace($DataJson)) {
-    $data = $DataJson | ConvertFrom-Json
+    try {
+        $data = $DataJson | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        # Event writing must not break a dogfood/finalization flow only because optional metadata
+        # was passed through a shell with stripped quotes (for example: {runId:run-001}).
+        # Preserve the raw value as diagnostic metadata and keep the event append-only.
+        Write-Warning "DataJson was not valid JSON; storing it as rawDataJson metadata. Received: $DataJson"
+        $data = [ordered]@{
+            rawDataJson = $DataJson
+            dataJsonParseStatus = "invalid-json-preserved"
+        }
+    }
 }
 
 $event = [ordered]@{

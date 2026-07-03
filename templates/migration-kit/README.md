@@ -42,6 +42,10 @@ migration/
   logs/
   harness/
     README.md
+  dashboard/
+    i18n/
+      en.json
+      ru.json
   .migration-kit/
     version.json
     updates/
@@ -84,6 +88,8 @@ Use `scripts/new-harness-run.ps1` to create a resumable run workspace under `run
 Use `state/harness-policy.json` as the machine-readable autopilot policy. `scripts/check-harness-policy.ps1` verifies policy presence, active run files, OpenCode edit policy, and guard-sensitive changes.
 
 Public docs are English-first. Russian docs are secondary localization (`*.ru.md`). Machine-readable event/status codes stay language-neutral.
+
+Repository-level Harness Kit dogfood is documented in `docs/migrator-agent-harness-dogfood.md`. Use `scripts/run-harness-dogfood-smoke.ps1` from the Migrator repository root to validate install/run/event/policy behavior in a temporary `.dogfood/migration` workspace.
 
 ## MVP-2 stateful loop
 
@@ -132,3 +138,13 @@ Reusable loop templates can be installed with:
 ```powershell
 .\tool\scripts\install-migration-kit.ps1 -Workspace migration -Update -Backup
 ```
+
+## Harness dashboard
+
+Use `scripts/build-harness-dashboard.ps1` to create a static dashboard from the active harness run:
+
+```powershell
+.\migration\scripts\build-harness-dashboard.ps1 -Workspace migration -Out dashboard/harness -Language en
+```
+
+The dashboard is English-first and includes a `languageSelect` control for Russian. Machine-readable event/status codes stay language-neutral.

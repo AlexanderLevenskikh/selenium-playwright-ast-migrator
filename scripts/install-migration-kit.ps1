@@ -284,7 +284,7 @@ if ($Backup -and (Test-Path $script:workspacePath)) {
 }
 
 New-Item -ItemType Directory -Force -Path $script:workspacePath | Out-Null
-foreach ($dir in @("runs", "reports", "logs", "profiles", "prompts", "schemas", "state", "tickets", "evidence", "scripts", "codex", "harness", ".migration-kit")) {
+foreach ($dir in @("runs", "reports", "logs", "profiles", "prompts", "schemas", "state", "tickets", "evidence", "scripts", "codex", "harness", "dashboard", ".migration-kit")) {
     New-Item -ItemType Directory -Force -Path (Join-Path $script:workspacePath $dir) | Out-Null
 }
 
@@ -391,11 +391,25 @@ $quickStartLines = @(
     "## 5. Start an autopilot harness run",
     "",
     "```powershell",
-    ".\$(Join-Path $Workspace 'scripts/new-harness-run.ps1') -TaskTitle "Pilot migration batch" -Goal "Run one bounded artifact-only Selenium to Playwright migration batch."",
+    ".\$(Join-Path $Workspace 'scripts/new-harness-run.ps1') -TaskTitle `"Pilot migration batch`" -Goal `"Run one bounded artifact-only Selenium to Playwright migration batch.`"",
     ".\$(Join-Path $Workspace 'scripts/check-harness-policy.ps1') -Workspace `"$Workspace`" -RepoRoot .",
     "```",
     "",
-    "## 6. Ask for next ticket",
+    "## 6. Run Harness Kit dogfood smoke",
+    "",
+    "From the Migrator repository root:",
+    "",
+    "```powershell",
+    ".\scripts\run-harness-dogfood-smoke.ps1 -Clean",
+    "```",
+    "",
+    "## 7. Generate Harness dashboard",
+    "",
+    "```powershell",
+    ".\$(Join-Path $Workspace 'scripts/build-harness-dashboard.ps1') -Workspace `"$Workspace`" -Out dashboard/harness -Language en",
+    "```",
+    "",
+    "## 8. Ask for next ticket",
     "",
     "```text",
     "$(Join-Path $Workspace 'prompts/next-ticket-prompt.txt')",

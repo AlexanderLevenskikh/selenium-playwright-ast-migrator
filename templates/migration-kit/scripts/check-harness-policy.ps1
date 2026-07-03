@@ -3,7 +3,8 @@ param(
     [string]$RepoRoot = ".",
     [string[]]$AllowedRoots = @($Workspace),
     [switch]$AllowNoGit,
-    [switch]$AllowGuardChanges
+    [switch]$AllowGuardChanges,
+    [switch]$SkipGitStatus
 )
 
 $ErrorActionPreference = "Stop"
@@ -40,6 +41,20 @@ function Test-AnyPattern([string]$Path, [object[]]$Patterns) {
         if (Test-GlobPath $Path $pattern.ToString()) { return $true }
     }
     return $false
+}
+
+function Expand-AllowedRootPatterns([string[]]$Roots) {
+    $patterns = New-Object System.Collections.Generic.List[string]
+    foreach ($rootValue in @($Roots)) {
+        if ([string]::IsNullOrWhiteSpace($rootValue)) { continue }
+        $normalized = $rootValue.Replace("\", "/").TrimStart("./").TrimEnd("/")
+        if ([string]::IsNullOrWhiteSpace($normalized)) { continue }
+        $patterns.Add($normalized) | Out-Null
+        if (-not $normalized.EndsWith("/**")) {
+            $patterns.Add("$normalized/**") | Out-Null
+        }
+    }
+    return @($patterns | Sort-Object -Unique)
 }
 
 function Get-GitChangedPaths([string]$Root, [switch]$AllowNoGit) {
@@ -115,23 +130,30 @@ if ($policy -ne $null) {
     Add-Result $results "active-run-files" ($missingRunFiles.Count -eq 0) $(if ($missingRunFiles.Count -eq 0) { "latest run $latestRunId is resumable" } else { "missing: " + ($missingRunFiles -join ", ") })
 
     $changed = @()
-    try {
-        $changed = @(Get-GitChangedPaths $repoRootPath -AllowNoGit:$AllowNoGit)
-        Add-Result $results "git-status-readable" $true "changed paths: $($changed.Count)"
-    } catch {
-        Add-Result $results "git-status-readable" $false $_.Exception.Message
-    }
-
-    if ($changed.Count -gt 0) {
-        $outsideAllowed = @($changed | Where-Object { -not (Test-AnyPattern $_ @($policy.allowedWrites)) })
-        Add-Result $results "changed-paths-allowed" ($outsideAllowed.Count -eq 0) $(if ($outsideAllowed.Count -eq 0) { "all changed paths match allowedWrites" } else { "outside allowedWrites: " + ($outsideAllowed -join ", ") })
-
-        $guardChanges = @($changed | Where-Object { Test-AnyPattern $_ @($policy.guardSensitiveWrites) })
-        $guardOk = ($guardChanges.Count -eq 0) -or $AllowGuardChanges
-        Add-Result $results "guard-sensitive-clean" $guardOk $(if ($guardChanges.Count -eq 0) { "no guard-sensitive changed paths" } else { "guard-sensitive changes: " + ($guardChanges -join ", ") })
+    if ($SkipGitStatus) {
+        Add-Result $results "git-status-readable" $true "skipped by -SkipGitStatus"
+        Add-Result $results "changed-paths-allowed" $true "skipped by -SkipGitStatus"
+        Add-Result $results "guard-sensitive-clean" $true "skipped by -SkipGitStatus"
     } else {
-        Add-Result $results "changed-paths-allowed" $true "no git changes detected or git skipped"
-        Add-Result $results "guard-sensitive-clean" $true "no guard-sensitive changed paths detected"
+        try {
+            $changed = @(Get-GitChangedPaths $repoRootPath -AllowNoGit:$AllowNoGit)
+            Add-Result $results "git-status-readable" $true "changed paths: $($changed.Count)"
+        } catch {
+            Add-Result $results "git-status-readable" $false $_.Exception.Message
+        }
+
+        if ($changed.Count -gt 0) {
+            $effectiveAllowedWrites = @($policy.allowedWrites) + @(Expand-AllowedRootPatterns $AllowedRoots)
+            $outsideAllowed = @($changed | Where-Object { -not (Test-AnyPattern $_ @($effectiveAllowedWrites)) })
+            Add-Result $results "changed-paths-allowed" ($outsideAllowed.Count -eq 0) $(if ($outsideAllowed.Count -eq 0) { "all changed paths match allowedWrites/AllowedRoots" } else { "outside allowedWrites/AllowedRoots: " + ($outsideAllowed -join ", ") })
+
+            $guardChanges = @($changed | Where-Object { Test-AnyPattern $_ @($policy.guardSensitiveWrites) })
+            $guardOk = ($guardChanges.Count -eq 0) -or $AllowGuardChanges
+            Add-Result $results "guard-sensitive-clean" $guardOk $(if ($guardChanges.Count -eq 0) { "no guard-sensitive changed paths" } else { "guard-sensitive changes: " + ($guardChanges -join ", ") })
+        } else {
+            Add-Result $results "changed-paths-allowed" $true "no git changes detected or git skipped"
+            Add-Result $results "guard-sensitive-clean" $true "no guard-sensitive changed paths detected"
+        }
     }
 
     $openCodeCandidates = @(

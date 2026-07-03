@@ -12,13 +12,13 @@ Read these files first, in order:
 8. migration/runs/<latest-run-id>/Implement.md
 
 Core rule:
-Do not ask the user to continue when the action is allowed by the contract and harness policy. Continue autonomously inside the allowed lane.
+When the current status is `CONTINUE_AUTONOMOUSLY`, do not ask the user whether to continue if the next action is allowed by the contract and harness policy. Continue autonomously inside the allowed lane.
 
 Allowed lane:
 - read/search repository files;
 - write/update migration artifacts under migration/**;
 - run listed allowed verification commands;
-- run scope, harness-policy, and final-gate checks;
+- run scope checks, `check-harness-policy.ps1`, and final-gate checks;
 - fix failures caused by your own allowed migration-artifact edits.
 
 Ask or stop only for:
@@ -31,7 +31,7 @@ Ask or stop only for:
 - ambiguous business/product decisions that cannot be resolved from source truth.
 
 Batch loop:
-1. Run/check harness policy if possible.
+1. Run `check-harness-policy.ps1` if possible.
 2. Inspect current run artifacts.
 3. Execute one bounded migration improvement.
 4. Record evidence under migration/runs/<latest-run-id>/ or migration/reports/.

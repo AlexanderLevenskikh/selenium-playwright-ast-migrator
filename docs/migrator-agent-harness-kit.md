@@ -75,6 +75,10 @@ Without this harness, the agent behaves like a nervous junior developer asking a
 
 With the harness, the allowed lane is explicit: read/search/build/test/migrate/write migration artifacts. The dangerous lane is also explicit: real project edits, guardrail edits, git push, dependency changes, secrets, network.
 
+## Dogfood smoke
+
+Use `docs/migrator-agent-harness-dogfood.md` and `scripts/run-harness-dogfood-smoke.ps1` for the first repository-level validation pass. The smoke installs the kit into `.dogfood/migration`, creates a run, writes events, and verifies `check-harness-policy.ps1` with explicit dogfood allowed roots.
+
 ## English-first and dashboard i18n
 
 English is canonical for public Harness Kit docs, prompts, report labels, event codes, and dashboard terminology.
@@ -88,3 +92,23 @@ Future dashboard work should default to English and provide a language switch:
 ```text
 Language: English / Русский
 ```
+
+
+## Harness dashboard
+
+Use `docs/migrator-agent-harness-dashboard.md` and `scripts/run-harness-dashboard-smoke.ps1` to generate a static dashboard from the active harness run.
+
+The installed workspace contains:
+
+```text
+migration/dashboard/
+  i18n/
+    en.json
+    ru.json
+  harness/
+    index.html
+    harness-dashboard.json
+    harness-dashboard.md
+```
+
+English is the default dashboard language. Russian is available through the `languageSelect` switch. Dashboard JSON remains language-neutral.

@@ -92,6 +92,7 @@ public class AgentLoopHardeningTests
         Assert.Contains("harness-policy.json", kitReadme);
         Assert.Contains("check-harness-policy.ps1", kitReadme);
         Assert.Contains("fenced workbench", harnessReadme);
+        Assert.Contains("invalid-json-preserved", eventScript);
 
         Assert.Contains("allowedWrites", policy);
         Assert.Contains("guardSensitiveWrites", policy);
@@ -99,10 +100,13 @@ public class AgentLoopHardeningTests
         Assert.Contains("check-harness-policy.ps1", policy);
         Assert.Contains("schemaVersion", runTemplate);
 
-        Assert.Contains("Continue autonomously", autopilotPrompt);
+        Assert.Contains("CONTINUE_AUTONOMOUSLY", autopilotPrompt);
         Assert.Contains("check-harness-policy.ps1", autopilotPrompt);
         Assert.Contains("final gate", reviewPrompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Prompt.md", newRunScript);
+        Assert.Contains("Implement.md", newRunScript);
+        Assert.Contains("requiredRunArtifacts", newRunScript);
+        Assert.Contains("did not create required run artifacts", newRunScript);
         Assert.Contains("trace.jsonl", newRunScript);
         Assert.Contains("harness-events.jsonl", eventScript);
         Assert.Contains("HARNESS_POLICY_", policyScript);
@@ -301,6 +305,130 @@ public class AgentLoopHardeningTests
         Assert.Contains("English docs/prompts as canonical", projectAgents);
         Assert.Contains("/harness-run", teamReadme);
         Assert.Contains("/supervised-task", teamReadme);
+    }
+
+    [Fact]
+    public void HarnessDogfood_IsDocumentedScriptedAndAgentRunnable()
+    {
+        var docsIndex = Read("docs/README.md");
+        var dogfoodDoc = Read("docs/migrator-agent-harness-dogfood.md");
+        var dogfoodDocRu = Read("docs/migrator-agent-harness-dogfood.ru.md");
+        var dogfoodCommand = Read("templates/opencode-team/global/.config/opencode/commands/dogfood-harness.md");
+        var teamReadme = Read("templates/opencode-team/README.md");
+        var dogfoodScript = Read("scripts/run-harness-dogfood-smoke.ps1");
+        var dogfoodScriptSh = Read("scripts/run-harness-dogfood-smoke.sh");
+        var policyScript = Read("templates/migration-kit/scripts/check-harness-policy.ps1");
+        var kitReadme = Read("templates/migration-kit/README.md");
+        var bundleScript = Read("scripts/package-agent-cli-bundle.ps1");
+        var psInstall = Read("scripts/install-migration-kit.ps1");
+        var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
+        var gitignore = Read(".gitignore");
+
+        Assert.Contains("migrator-agent-harness-dogfood.md", docsIndex);
+        Assert.Contains("reproducible dogfood pass", dogfoodDoc);
+        Assert.Contains("English-first", dogfoodDoc);
+        Assert.Contains("language-neutral codes", dogfoodDoc);
+        Assert.Contains("Dogfood", dogfoodDocRu);
+
+        Assert.Contains("docs/migrator-agent-harness-dogfood.md", dogfoodCommand);
+        Assert.Contains("new-harness-run.ps1", dogfoodCommand);
+        Assert.Contains("write-harness-event.ps1", dogfoodCommand);
+        Assert.Contains("check-harness-policy.ps1", dogfoodCommand);
+        Assert.Contains("check-scope.ps1", dogfoodCommand);
+        Assert.Contains("Do not ask routine continuation questions", dogfoodCommand);
+        Assert.Contains("templates/migration-kit/**", dogfoodCommand);
+        Assert.Contains("Normal product migration runs remain artifact-only", dogfoodCommand);
+        Assert.Contains("/dogfood-harness", teamReadme);
+
+        Assert.Contains("kit", dogfoodScript);
+        Assert.Contains("init", dogfoodScript);
+        Assert.Contains("--with-team", dogfoodScript);
+        Assert.Contains("new-harness-run.ps1", dogfoodScript);
+        Assert.Contains("write-harness-event.ps1", dogfoodScript);
+        Assert.Contains("check-harness-policy.ps1", dogfoodScript);
+        Assert.Contains("check-scope.ps1", dogfoodScript);
+        Assert.Contains("dogfood-smoke-started", dogfoodScript);
+        Assert.Contains("dogfood-smoke-pass", dogfoodScript);
+        Assert.Contains("harness-dogfood-smoke.md", dogfoodScript);
+        Assert.DoesNotContain("-DataJson `{runId:", dogfoodScript);
+        Assert.DoesNotContain("-DataJson \"{runId:", dogfoodScript);
+        Assert.Contains("Implement.md", dogfoodScript);
+        Assert.Contains("new-harness-run.ps1 did not write Latest run", dogfoodScript);
+        Assert.Contains("AllowedRoots", dogfoodScript);
+
+        Assert.Contains("Expand-AllowedRootPatterns", policyScript);
+        Assert.Contains("allowedWrites/AllowedRoots", policyScript);
+        Assert.Contains("docs/migrator-agent-harness-dogfood.md", kitReadme);
+        Assert.Contains("run-harness-dogfood-smoke.ps1", bundleScript);
+        Assert.Contains("run-harness-dogfood-smoke.sh", bundleScript);
+        Assert.Contains("run-harness-dogfood-smoke.ps1", dogfoodScriptSh);
+        Assert.Contains("Run Harness Kit dogfood smoke", psInstall);
+        Assert.Contains("run-harness-dogfood-smoke.ps1", kitCommand);
+        Assert.Contains(".dogfood/", gitignore);
+    }
+
+
+
+
+    [Fact]
+    public void HarnessDashboard_IsEnglishFirstLocalizedAndDogfoodable()
+    {
+        var docsIndex = Read("docs/README.md");
+        var dashboardDoc = Read("docs/migrator-agent-harness-dashboard.md");
+        var dashboardDocRu = Read("docs/migrator-agent-harness-dashboard.ru.md");
+        var dashboardScript = Read("templates/migration-kit/scripts/build-harness-dashboard.ps1");
+        var dashboardSmoke = Read("scripts/run-harness-dashboard-smoke.ps1");
+        var dashboardSmokeSh = Read("scripts/run-harness-dashboard-smoke.sh");
+        var en = Read("templates/migration-kit/dashboard/i18n/en.json");
+        var ru = Read("templates/migration-kit/dashboard/i18n/ru.json");
+        var kitReadme = Read("templates/migration-kit/README.md");
+        var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
+        var psInstall = Read("scripts/install-migration-kit.ps1");
+        var bundleScript = Read("scripts/package-agent-cli-bundle.ps1");
+        var teamReadme = Read("templates/opencode-team/README.md");
+        var dashboardCommand = Read("templates/opencode-team/global/.config/opencode/commands/dashboard-harness.md");
+
+        Assert.Contains("migrator-agent-harness-dashboard.md", docsIndex);
+        Assert.Contains("English is the default", dashboardDoc);
+        Assert.Contains("language-neutral", dashboardDoc);
+        Assert.Contains("languageSelect", dashboardDoc);
+        Assert.Contains("English", dashboardDocRu);
+        Assert.Contains("language-neutral", dashboardDocRu);
+
+        Assert.Contains("build-harness-dashboard.ps1", dashboardScript);
+        Assert.Contains("languageDefault", dashboardScript);
+        Assert.Contains("i18nLanguages", dashboardScript);
+        Assert.Contains("languageSelect", dashboardScript);
+        Assert.Contains("harness-dashboard.json", dashboardScript);
+        Assert.Contains("harness-dashboard.md", dashboardScript);
+        Assert.Contains("dashboard/i18n", dashboardScript);
+        Assert.Contains("Machine-readable data stays language-neutral", dashboardScript);
+
+        Assert.Contains("Migrator Agent Harness Dashboard", en);
+        Assert.Contains("Дашборд Migrator Agent Harness", ru);
+        Assert.Contains("dashboard.title", en);
+        Assert.Contains("dashboard.title", ru);
+
+        Assert.Contains("run-harness-dogfood-smoke.ps1", dashboardSmoke);
+        Assert.Contains("build-harness-dashboard.ps1", dashboardSmoke);
+        Assert.Contains("HARNESS_DASHBOARD_SMOKE_PASS", dashboardSmoke);
+        Assert.Contains("harness-dashboard-smoke.md", dashboardSmoke);
+        Assert.Contains("languageSelect", dashboardSmoke);
+        Assert.Contains("run-harness-dashboard-smoke.ps1", dashboardSmokeSh);
+
+        Assert.Contains("dashboard/", kitReadme);
+        Assert.Contains("build-harness-dashboard.ps1", kitReadme);
+        Assert.Contains("dashboard", kitCommand);
+        Assert.Contains("harness-dashboard-script", kitCommand);
+        Assert.Contains("harness-dashboard-i18n-en", kitCommand);
+        Assert.Contains("Generate Harness dashboard", kitCommand);
+        Assert.Contains("dashboard", psInstall);
+        Assert.Contains("Generate Harness dashboard", psInstall);
+        Assert.Contains("run-harness-dashboard-smoke.ps1", bundleScript);
+        Assert.Contains("templates/migration-kit/dashboard/i18n/en.json", bundleScript);
+        Assert.Contains("/dashboard-harness", teamReadme);
+        Assert.Contains("language-neutral", dashboardCommand);
+        Assert.Contains("migration/dashboard/harness/index.html", dashboardCommand);
     }
 
     [Fact]

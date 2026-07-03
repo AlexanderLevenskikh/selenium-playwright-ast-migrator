@@ -145,6 +145,26 @@ Status: STARTED
 - None recorded yet.
 "@
 
+# Defensive pass: the harness run must never be marked created unless every
+# canonical run artifact exists. This also makes the script robust across
+# Windows PowerShell execution quirks and partially overwritten runs.
+$requiredRunArtifacts = [ordered]@{
+    "Prompt.md" = "# $RunId Prompt`n`nTask: $TaskTitle`n`nGoal: $Goal`n`nStatus: CONTINUE_AUTONOMOUSLY`n"
+    "Plan.md" = "# $RunId Plan`n`n## Milestones`n`n- Read contract, policy, and handoff.`n- Execute one bounded batch.`n- Record evidence and run gates.`n"
+    "Implement.md" = "# $RunId Implement`n`n## Operating rules`n`n- Continue autonomously inside the allowed lane.`n- Keep changes scoped and reviewable.`n- Update trace and state files after meaningful progress.`n"
+    "Documentation.md" = "# $RunId Documentation`n`nCreated: $createdAt`nStatus: STARTED`n"
+}
+foreach ($entry in $requiredRunArtifacts.GetEnumerator()) {
+    $artifactPath = Join-Path $runPath $entry.Key
+    if (-not (Test-Path $artifactPath)) {
+        Set-Utf8NoBom $artifactPath $entry.Value
+    }
+}
+$missingRunArtifacts = @($requiredRunArtifacts.Keys | Where-Object { -not (Test-Path (Join-Path $runPath $_)) })
+if ($missingRunArtifacts.Count -gt 0) {
+    throw "new-harness-run.ps1 did not create required run artifacts: $($missingRunArtifacts -join ', ')"
+}
+
 $tracePath = Join-Path $runPath "trace.jsonl"
 if (-not (Test-Path $tracePath) -or $Force) {
     Set-Utf8NoBom $tracePath ""
