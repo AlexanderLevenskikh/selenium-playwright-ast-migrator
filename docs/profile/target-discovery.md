@@ -31,7 +31,7 @@
 ## Usage
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode discover-target --input ./team-playwright-tests --out ./target-discovery --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode discover-target --input ./team-playwright-tests --out ./target-discovery --format both
 ```
 
 ## Why draft config requires review

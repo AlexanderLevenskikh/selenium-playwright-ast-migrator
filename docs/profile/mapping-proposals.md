@@ -14,7 +14,7 @@ After running `--mode migrate`, you have:
 ## Usage
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode propose --input ./Generated/ --config ./Generated/adapter-config.draft.json --out ./mapping-proposals --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode propose --input ./Generated/ --config ./Generated/adapter-config.draft.json --out ./mapping-proposals --format both
 ```
 
 ### Flags

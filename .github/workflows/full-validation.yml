@@ -6,7 +6,7 @@ on:
     - cron: '0 2 * * *'
 
 env:
-  PACKAGE_VERSION: 0.6.0-preview.${{ github.run_number }}
+  PACKAGE_VERSION: 0.0.0-preview.${{ github.run_number }}
 
 permissions:
   contents: read

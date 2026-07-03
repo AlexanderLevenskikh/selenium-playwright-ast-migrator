@@ -18,7 +18,7 @@ For OpenCode Desktop, install the project config into the repository root that
 Desktop opens:
 
 ```powershell
-Set-Location "C:\Users\levenskikh\Desktop\billy"
+Set-Location "C:\path\to\product-repo"
 .\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop
 ```
 
@@ -30,7 +30,7 @@ not write to `$HOME`, `%USERPROFILE%`, or the user-global OpenCode config.
 If inference is not possible, pass the repository root explicitly:
 
 ```powershell
-.\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop -Target "C:\Users\levenskikh\Desktop\billy"
+.\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop -Target "C:\path\to\product-repo"
 ```
 
 `ProjectDesktop` backs up existing `opencode.jsonc`, `.opencode\agents`, and

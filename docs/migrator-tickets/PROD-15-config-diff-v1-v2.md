@@ -17,14 +17,14 @@
 ## Usage
 
 ```bash
-dotnet run --project Migrator.Cli -- \
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- \
   --mode config-normalize \
   --config adapter-config.json \
   --target playwright-typescript \
   --out config-normalized \
   --format both
 
-dotnet run --project Migrator.Cli -- \
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- \
   --mode config-diff \
   --before adapter-config.json \
   --after config-normalized/migration-profile.v2.json \

@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "0.6.0-preview.1",
+    [string]$Version = "0.0.0",
     [string]$PackageId = "SeleniumPlaywrightMigrator",
     [string]$Configuration = "Release",
     [string]$Output = "artifacts/nuget"

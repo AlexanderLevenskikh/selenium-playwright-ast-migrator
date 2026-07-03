@@ -383,13 +383,13 @@ This draft config has `RequiresReview: true`. Fill in:
 ### 6. Run migration
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode migrate --target dotnet --target-test-framework {targetTestFramework} --input ""<selenium-tests>"" --config ""adapter-config.draft.json"" --out ""src"" --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode migrate --target dotnet --target-test-framework {targetTestFramework} --input ""<selenium-tests>"" --config ""adapter-config.draft.json"" --out ""src"" --format both
 ```
 
 ### 7. Verify and iterate
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode verify --input ""src"" --config ""adapter-config.draft.json"" --out ""verify"" --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode verify --input ""src"" --config ""adapter-config.draft.json"" --out ""verify"" --format both
 ```
 
 ### 8. Compile smoke

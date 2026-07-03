@@ -69,9 +69,20 @@ selenium-pw-migrator --mode verify-ts-project --input migration/generated-ts --t
 
 When testing locally, pack first and point installation to the local package source:
 
+Windows PowerShell:
+
+```powershell
+.\scripts\pack-tool.ps1 -Version 0.0.0
+.\scripts\install-local-tool.ps1 -Version 0.0.0
+```
+
+macOS/Linux/WSL:
+
 ```bash
-./scripts/pack-tool.sh
-./scripts/install-local-tool.ps1 -PackageSource ./artifacts/nuget
+scripts/pack-tool.sh 0.0.0
+dotnet new tool-manifest --force
+dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0 --add-source ./artifacts/nuget
+dotnet tool run selenium-pw-migrator -- --help
 ```
 
 CI package smoke uses the same idea: pack → verify `.nupkg` contents → install from local source → run `--help` and `doctor`.

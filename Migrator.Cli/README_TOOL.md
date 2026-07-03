@@ -7,11 +7,12 @@ The stable public path is Selenium C# to Playwright .NET with NUnit as the defau
 ## Basic usage
 
 ```bash
-selenium-pw-migrator --help
-selenium-pw-migrator --mode doctor --input ./OldTests --config ./profiles/base.adapter.json --out doctor
-selenium-pw-migrator --mode runbook --input ./OldTests --config ./profiles/base.adapter.json --out runbook --format both
-selenium-pw-migrator --mode migrate --input ./OldTests --config ./profiles/base.adapter.json --target-test-framework xunit --out generated-tests --format both
-selenium-pw-migrator --mode capabilities --out capabilities --format both
+# Local tool manifest
+dotnet tool run selenium-pw-migrator -- --help
+dotnet tool run selenium-pw-migrator -- --mode doctor --input ./OldTests --config ./profiles/base.adapter.json --out doctor
+dotnet tool run selenium-pw-migrator -- --mode runbook --input ./OldTests --config ./profiles/base.adapter.json --out runbook --format both
+dotnet tool run selenium-pw-migrator -- --mode migrate --input ./OldTests --config ./profiles/base.adapter.json --target-test-framework xunit --out generated-tests --format both
+dotnet tool run selenium-pw-migrator -- --mode capabilities --out capabilities --format both
 ```
 
 Relative `--out` values are written under the default `migration/` workspace.
@@ -19,19 +20,21 @@ Relative `--out` values are written under the default `migration/` workspace.
 ## Cross-platform migration kit
 
 ```bash
-selenium-pw-migrator kit init --workspace migration --source ./OldTests
-selenium-pw-migrator kit update --workspace migration --backup
-selenium-pw-migrator kit doctor --workspace migration
-selenium-pw-migrator kit next-ticket --workspace migration
+dotnet tool run selenium-pw-migrator -- kit init --workspace migration --source ./OldTests
+dotnet tool run selenium-pw-migrator -- kit update --workspace migration --backup
+dotnet tool run selenium-pw-migrator -- kit doctor --workspace migration
+dotnet tool run selenium-pw-migrator -- kit next-ticket --workspace migration
 ```
 
 ## CLI help
 
 ```bash
-selenium-pw-migrator --help
-selenium-pw-migrator --mode migrate --help
-selenium-pw-migrator --mode verify-project --help
+dotnet tool run selenium-pw-migrator -- --help
+dotnet tool run selenium-pw-migrator -- --mode migrate --help
+dotnet tool run selenium-pw-migrator -- --mode verify-project --help
 ```
+
+Use `selenium-pw-migrator --help` only after a global install.
 
 Commands are grouped as stable public, experimental preview, and internal/maintainer. The command catalog is documented in `docs/cli-productization.md` in the repository.
 

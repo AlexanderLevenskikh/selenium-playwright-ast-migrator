@@ -4113,10 +4113,10 @@ static string WriteAgentNextTaskMarkdown(TodoExplanationReport report)
     sb.AppendLine("Use concrete project paths from the current migration workspace; do not point report commands at a parent folder containing multiple runs.");
     sb.AppendLine();
     sb.AppendLine("```powershell");
-    sb.AppendLine($"dotnet run --project Migrator.Cli -- --mode explain-todo --input \"{PathRedaction.Redact(report.ArtifactRoot)}\" --out \"<next-explain-out>\" --format both");
-    sb.AppendLine($"dotnet run --project Migrator.Cli -- --mode migration-board --input \"{PathRedaction.Redact(report.ArtifactRoot)}\" --out \"<next-board-out>\" --format both");
+    sb.AppendLine($"dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode explain-todo --input \"{PathRedaction.Redact(report.ArtifactRoot)}\" --out \"<next-explain-out>\" --format both");
+    sb.AppendLine($"dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode migration-board --input \"{PathRedaction.Redact(report.ArtifactRoot)}\" --out \"<next-board-out>\" --format both");
     if (ShouldRecommendHelperInventory(report))
-        sb.AppendLine("dotnet run --project Migrator.Cli -- --mode helper-inventory --input \"<selenium-tests-or-helper-root>\" --out \"<helper-inventory-out>\" --format both");
+        sb.AppendLine("dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode helper-inventory --input \"<selenium-tests-or-helper-root>\" --out \"<helper-inventory-out>\" --format both");
     sb.AppendLine("dotnet test Migrator.Tests/Migrator.Tests.csproj");
     sb.AppendLine("```");
     sb.AppendLine();
@@ -4125,7 +4125,7 @@ static string WriteAgentNextTaskMarkdown(TodoExplanationReport report)
         sb.AppendLine("Fresh verify-project is required before runtime-ready claims:");
         sb.AppendLine();
         sb.AppendLine("```powershell");
-        sb.AppendLine("dotnet run --project Migrator.Cli -- --mode verify-project --input \"<selenium-tests-root>\" --config \"<adapter-config.json>\" --out \"<verify-out>\" --format both");
+        sb.AppendLine("dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode verify-project --input \"<selenium-tests-root>\" --config \"<adapter-config.json>\" --out \"<verify-out>\" --format both");
         sb.AppendLine("```");
         sb.AppendLine();
     }

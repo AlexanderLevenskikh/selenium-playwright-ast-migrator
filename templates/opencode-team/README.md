@@ -32,7 +32,7 @@ The migration template is intentionally artifact-only by default: real product/P
 Prefer the one-command bootstrap from the product repository root when the CLI is available:
 
 ```powershell
-Set-Location "C:\Users\levenskikh\Desktop\billy"
+Set-Location "C:\path\to\product-repo"
 dotnet tool run selenium-pw-migrator -- kit bootstrap-opencode --workspace migration --source . --config migration/profiles/adapter-config.json --opencode-install auto
 ```
 

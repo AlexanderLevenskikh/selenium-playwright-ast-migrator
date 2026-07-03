@@ -198,6 +198,64 @@ public class DocumentationPublicReadinessTests
         Assert.Contains("MIGRATOR:UNSUPPORTED_ACTION", dashboard);
     }
 
+
+    [Fact]
+    public void PublicDocs_DoNotContainPersonalMachinePaths()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var files = Directory.EnumerateFiles(repoRoot, "*", SearchOption.AllDirectories)
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}.git{Path.DirectorySeparatorChar}"))
+            .Where(path =>
+                path.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".sh", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".yml", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        foreach (var file in files)
+        {
+            var text = File.ReadAllText(file);
+            Assert.DoesNotContain("C:\\Users\\", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("C:/Users/", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("levenskikh", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Desktop\\billy", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Desktop/billy", text, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public void PublicReadmes_DoNotMixShellsInLocalToolInstallSnippets()
+    {
+        foreach (var path in new[] { "README.md", "README.ru.md", "docs/troubleshooting.md" })
+        {
+            var text = File.ReadAllText(FindRepositoryFile(path));
+
+            Assert.DoesNotContain("./scripts/install-local-tool.ps1", text);
+            Assert.DoesNotContain("-PackageSource", text);
+            Assert.DoesNotContain("```bash\n./scripts/pack-tool.sh\n./scripts/install-local-tool.ps1", text);
+            Assert.Contains("dotnet tool run selenium-pw-migrator -- --help", text);
+        }
+    }
+
+
+
+    static string FindRepositoryRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Migrator.sln")))
+                return dir.FullName;
+            dir = dir.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not find repository root containing Migrator.sln");
+    }
+
     static string FindRepositoryFile(string relativePath)
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${1:-0.6.0-preview.1}"
+VERSION="${1:-0.0.0}"
 PACKAGE_ID="${PACKAGE_ID:-SeleniumPlaywrightMigrator}"
 PACKAGE_DIRECTORY="${PACKAGE_DIRECTORY:-artifacts/nuget}"
 INPUT="${INPUT:-Migrator.Tests/TestFiles}"
@@ -38,10 +38,10 @@ pushd "$TEMP_DIR" >/dev/null
 dotnet new tool-manifest
 dotnet tool install "$PACKAGE_ID" --version "$VERSION" --add-source "$SOURCE" --ignore-failed-sources
 
-dotnet selenium-pw-migrator --help
+dotnet tool run selenium-pw-migrator -- --help
 
 doctor_out="$TEMP_DIR/doctor"
-dotnet selenium-pw-migrator --mode doctor --input "$INPUT_PATH" --out "$doctor_out" --format both
+dotnet tool run selenium-pw-migrator -- --mode doctor --input "$INPUT_PATH" --out "$doctor_out" --format both
 
 if [[ ! -f "$doctor_out/doctor-report.md" ]]; then
   echo "Doctor smoke did not produce expected report: $doctor_out/doctor-report.md" >&2

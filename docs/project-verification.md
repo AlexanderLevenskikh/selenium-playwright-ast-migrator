@@ -35,8 +35,8 @@ migrate_discounts_project_verify/
 ```json
 {
   "Verification": {
-    "BaseDirectory": "C:/Users/levenskikh/Desktop/billy",
-    "BuildWorkingDirectory": "C:/Users/levenskikh/Desktop/billy",
+    "BaseDirectory": "C:/path/to/product-repo",
+    "BuildWorkingDirectory": "C:/path/to/product-repo",
     "Solution": "ArBilling.sln",
     "ProjectReferences": [
       "Web/MarketerWeb/MarketerWeb.UIFunctionalTests/MarketerWeb.UIFunctionalTests.csproj",

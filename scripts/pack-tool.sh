@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${1:-0.6.0-preview.1}"
+VERSION="${1:-0.0.0}"
 PACKAGE_ID="${PACKAGE_ID:-SeleniumPlaywrightMigrator}"
 CONFIGURATION="${CONFIGURATION:-Release}"
 OUTPUT="${OUTPUT:-artifacts/nuget}"

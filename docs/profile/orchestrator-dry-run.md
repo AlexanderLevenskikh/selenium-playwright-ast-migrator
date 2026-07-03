@@ -12,7 +12,7 @@ This mode is the primary entry point for:
 ## Usage
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode orchestrate --input ./SeleniumTests/ --config ./adapter-config.json --out ./orchestration-results --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode orchestrate --input ./SeleniumTests/ --config ./adapter-config.json --out ./orchestration-results --format both
 ```
 
 ### Flags

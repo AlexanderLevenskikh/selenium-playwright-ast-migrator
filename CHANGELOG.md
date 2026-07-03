@@ -42,7 +42,7 @@ The format follows the spirit of Keep a Changelog, and this project uses preview
 
 - Local `.agent-state` files from packaged dotnet-tool contents.
 
-## [0.6.0-preview.1]
+## [0.0.0]
 
 ### Added
 

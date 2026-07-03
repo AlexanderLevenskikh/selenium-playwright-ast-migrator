@@ -47,7 +47,7 @@ When auto-detection is used, capability output is written next to `source-detect
 Example:
 
 ```bash
-dotnet run --project Migrator.Cli -- \
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- \
   --mode migrate \
   --input ./JavaTests \
   --target ts \

@@ -16,15 +16,17 @@ The catalog is the source of truth for:
 Global help:
 
 ```bash
-selenium-pw-migrator --help
+dotnet tool run selenium-pw-migrator -- --help
 ```
+
+Use `selenium-pw-migrator --help` only after a global tool install.
 
 Command help:
 
 ```bash
-selenium-pw-migrator --mode migrate --help
-selenium-pw-migrator --mode verify-project --help
-selenium-pw-migrator --mode helper-inventory --help
+dotnet tool run selenium-pw-migrator -- --mode migrate --help
+dotnet tool run selenium-pw-migrator -- --mode verify-project --help
+dotnet tool run selenium-pw-migrator -- --mode helper-inventory --help
 ```
 
 Help requests return exit code `0` and do not run migration logic.

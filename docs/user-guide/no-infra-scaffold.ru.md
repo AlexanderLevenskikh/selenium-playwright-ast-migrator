@@ -49,7 +49,7 @@
 ## Как запустить
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode scaffold --out "./new-playwright-tests"
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode scaffold --out "./new-playwright-tests"
 ```
 
 Опциональные флаги:
@@ -113,13 +113,13 @@ Scaffold не может и не должен предоставлять ни о
 2. Запустите миграцию:
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode migrate --input "./SeleniumTests" --config "./adapter-config.json" --out "./generated" --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode migrate --input "./SeleniumTests" --config "./adapter-config.json" --out "./generated" --format both
 ```
 
 3. Запустите проверку:
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode verify --input "./generated" --config "./adapter-config.json" --out "./verify" --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode verify --input "./generated" --config "./adapter-config.json" --out "./verify" --format both
 ```
 
 4. Скопируйте сгенерированные файлы в сгенерированный проект и запустите compile smoke:

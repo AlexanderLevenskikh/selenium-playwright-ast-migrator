@@ -51,7 +51,7 @@ migration/proposals/**
 Перед новым агентским запуском product repo должен быть чистым:
 
 ```cmd
-cd /d "C:\Users\levenskikh\Desktop\billy"
+cd /d "C:\path\to\product-repo"
 git status --short --untracked-files=all
 ```
 
@@ -69,12 +69,12 @@ git status --short --untracked-files=all
 В репозитории migrator:
 
 ```cmd
-cd /d "C:\Users\levenskikh\Desktop\MyProjects\Migrator"
+cd /d "C:\path\to\selenium-playwright-ast-migrator"
 
 dotnet build --no-restore
 dotnet test Migrator.Tests\Migrator.Tests.csproj --no-restore
 
-dotnet pack Migrator.Cli\Migrator.Cli.csproj -c Release -p:PackageVersion=0.6.0-preview.1 -o artifacts\nuget
+dotnet pack Migrator.Cli\Migrator.Cli.csproj -c Release -p:PackageVersion=0.0.0 -o artifacts\nuget
 ```
 
 Для быстрой проверки только agent guardrails:
@@ -88,12 +88,12 @@ dotnet test Migrator.Tests\Migrator.Tests.csproj --no-restore --filter AgentLoop
 В product repo:
 
 ```cmd
-cd /d "C:\Users\levenskikh\Desktop\billy"
+cd /d "C:\path\to\product-repo"
 
 if not exist ".config\dotnet-tools.json" dotnet new tool-manifest
 
-dotnet tool update SeleniumPlaywrightMigrator --version 0.6.0-preview.1 --add-source "C:\Users\levenskikh\Desktop\MyProjects\Migrator\artifacts\nuget"
-if errorlevel 1 dotnet tool install SeleniumPlaywrightMigrator --version 0.6.0-preview.1 --add-source "C:\Users\levenskikh\Desktop\MyProjects\Migrator\artifacts\nuget"
+dotnet tool update SeleniumPlaywrightMigrator --version 0.0.0 --add-source "C:\path\to\selenium-playwright-ast-migrator\artifacts\nuget"
+if errorlevel 1 dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0 --add-source "C:\path\to\selenium-playwright-ast-migrator\artifacts\nuget"
 
 dotnet tool run selenium-pw-migrator -- --help
 ```
@@ -103,7 +103,7 @@ dotnet tool run selenium-pw-migrator -- --help
 Из корня product repo предпочтительно использовать один bootstrap:
 
 ```cmd
-cd /d "C:\Users\levenskikh\Desktop\billy"
+cd /d "C:\path\to\product-repo"
 
 dotnet tool run selenium-pw-migrator -- kit bootstrap-opencode --workspace migration --source . --config migration/profiles/adapter-config.json --opencode-install auto
 ```
@@ -132,14 +132,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ".\migration\scripts\check-f
 Если ты не использовал `kit bootstrap-opencode --opencode-install auto`, не полагайся на `OPENCODE_CONFIG` из консоли. Установи project-local config прямо в корень product repo:
 
 ```powershell
-Set-Location "C:\Users\levenskikh\Desktop\billy"
+Set-Location "C:\path\to\product-repo"
 .\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop
 ```
 
 Или явно укажи target:
 
 ```powershell
-.\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop -Target "C:\Users\levenskikh\Desktop\billy"
+.\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop -Target "C:\path\to\product-repo"
 ```
 
 `ProjectDesktop` должен создать или обновить только эти project-local файлы:
@@ -155,7 +155,7 @@ opencode.jsonc
 Если PowerShell execution policy блокирует `.ps1`, можно временно выполнить ручную установку из `cmd.exe`:
 
 ```cmd
-cd /d "C:\Users\levenskikh\Desktop\billy"
+cd /d "C:\path\to\product-repo"
 
 copy /Y "migration\opencode-team\global\.config\opencode\opencode.jsonc" "opencode.jsonc"
 
@@ -170,9 +170,9 @@ xcopy "migration\opencode-team\global\.config\opencode\commands" ".opencode\comm
 Проверка:
 
 ```cmd
-dir "C:\Users\levenskikh\Desktop\billy\opencode.jsonc"
-dir "C:\Users\levenskikh\Desktop\billy\.opencode\agents"
-dir "C:\Users\levenskikh\Desktop\billy\.opencode\commands"
+dir "C:\path\to\product-repo\opencode.jsonc"
+dir "C:\path\to\product-repo\.opencode\agents"
+dir "C:\path\to\product-repo\.opencode\commands"
 ```
 
 ## 6. Открыть OpenCode Desktop
@@ -180,7 +180,7 @@ dir "C:\Users\levenskikh\Desktop\billy\.opencode\commands"
 Открывай в Desktop именно корень product repo:
 
 ```text
-C:\Users\levenskikh\Desktop\billy
+C:\path\to\product-repo
 ```
 
 Не открывай `migration/`, `Web/**` или POM/PW subproject как workspace для guarded run: project-local `opencode.jsonc` лежит в корне repo.
@@ -288,7 +288,7 @@ migration/.migration-kit/guard-checksums.json
 В отдельном терминале:
 
 ```cmd
-cd /d "C:\Users\levenskikh\Desktop\billy"
+cd /d "C:\path\to\product-repo"
 
 git status --short --untracked-files=all
 
@@ -352,7 +352,7 @@ opencode.jsonc
 Это bug. Не запускай его повторно. Укажи target явно:
 
 ```powershell
-.\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop -Target "C:\Users\levenskikh\Desktop\billy"
+.\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop -Target "C:\path\to\product-repo"
 ```
 
 ### PowerShell блокирует `.ps1`

@@ -14,7 +14,7 @@ This gives refactors two independent baselines:
 Default behavior remains backward-compatible:
 
 ```bash
-dotnet run --project Migrator.Cli -- \
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- \
   --mode dump-ir \
   --input ./OldTests \
   --config ./adapter-config.json \
@@ -32,7 +32,7 @@ ir-dump.md
 To dump only IR V2:
 
 ```bash
-dotnet run --project Migrator.Cli -- \
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- \
   --mode dump-ir \
   --input ./OldTests \
   --config ./adapter-config.json \
@@ -44,7 +44,7 @@ dotnet run --project Migrator.Cli -- \
 To dump both schemas side-by-side:
 
 ```bash
-dotnet run --project Migrator.Cli -- \
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- \
   --mode dump-ir \
   --input ./OldTests \
   --config ./adapter-config.json \

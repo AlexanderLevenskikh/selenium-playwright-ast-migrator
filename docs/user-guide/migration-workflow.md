@@ -42,7 +42,7 @@ Do not start with your largest or most complex test suite.
 ## Step 2. Run analyze
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode analyze --input "./SeleniumTests" --out "./analysis" --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode analyze --input "./SeleniumTests" --out "./analysis" --format both
 ```
 
 Review:
@@ -81,7 +81,7 @@ Example:
 ## Step 4. Generate code
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode migrate --input "./SeleniumTests" --config "./adapter-config.json" --out "./generated" --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode migrate --input "./SeleniumTests" --config "./adapter-config.json" --out "./generated" --format both
 ```
 
 Review `generated/report.json` for:
@@ -92,7 +92,7 @@ Review `generated/report.json` for:
 ## Step 5. Verify generated output
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode verify --input "./generated" --config "./adapter-config.json" --out "./verify" --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode verify --input "./generated" --config "./adapter-config.json" --out "./verify" --format both
 ```
 
 Review `verify/verify-report.json`:
@@ -128,7 +128,7 @@ If tests fail, classify each failure (see [Failure Classification](#failure-clas
 ## Step 8. Use propose to pick next mappings
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode propose --input "./generated" --config "./adapter-config.json" --out "./proposals" --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode propose --input "./generated" --config "./adapter-config.json" --out "./proposals" --format both
 ```
 
 Review `proposals/mapping-proposals.md`. Start with the highest-priority proposals:
@@ -185,7 +185,7 @@ See [Reports & Quality Gates](reports-and-quality-gates.md) for details.
 For iterative development, use orchestrate mode to run the full pipeline:
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode orchestrate --input "./SeleniumTests" --config "./adapter-config.json" --out "./orchestration" --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode orchestrate --input "./SeleniumTests" --config "./adapter-config.json" --out "./orchestration" --format both
 ```
 
 Review `orchestration/orchestration-report.md` after each run. Apply one high-priority proposal, then re-run.

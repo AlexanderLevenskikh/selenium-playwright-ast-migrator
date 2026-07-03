@@ -11,7 +11,7 @@ Legacy `adapter-config.json` remains the runtime source of truth. `config-normal
 ## CLI usage
 
 ```bash
-dotnet run --project Migrator.Cli -- \
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- \
   --mode config-normalize \
   --config ./adapter-config.base.json \
   --config ./adapter-config.project.json \

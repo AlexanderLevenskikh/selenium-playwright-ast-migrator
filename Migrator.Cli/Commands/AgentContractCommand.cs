@@ -207,11 +207,11 @@ internal static class AgentContractCommand
     {
         var quotedInput = QuoteForShell(fullInput);
         yield return new AgentContractCommandStep(1, "Read the contract", "cat migration/agent-contract/agent-contract.md", "Start with the task boundary, stop policy, and allowed paths.");
-        yield return new AgentContractCommandStep(2, "Validate config", "dotnet run --project Migrator.Cli -- --mode config-validate --config ./adapter-config.json --validation-mode strict --out migration/agent-contract/config-validate", "Catch unsafe config changes before migration work.");
-        yield return new AgentContractCommandStep(3, "Refresh runbook", $"dotnet run --project Migrator.Cli -- runbook --input {quotedInput} --out migration/runbook --format both", "Refresh the practical plan when the source/project shape changed.");
-        yield return new AgentContractCommandStep(4, "Refresh selector evidence", $"dotnet run --project Migrator.Cli -- selector evidence --input {quotedInput} --config ./adapter-config.json --out migration/selector-evidence --format both", "Selector changes need source/config/generated proof.");
-        yield return new AgentContractCommandStep(5, "Generate triage dashboard", $"dotnet run --project Migrator.Cli -- report serve --input {quotedInput} --static-only --out migration/report-dashboard --format both", "Export current TODO/root-cause/runtime decisions for review.");
-        yield return new AgentContractCommandStep(6, "Pack evidence", $"dotnet run --project Migrator.Cli -- evidence pack --input {quotedInput} --out evidence/agent-contract.zip", "Create a reviewable redacted evidence bundle.");
+        yield return new AgentContractCommandStep(2, "Validate config", "dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode config-validate --config ./adapter-config.json --validation-mode strict --out migration/agent-contract/config-validate", "Catch unsafe config changes before migration work.");
+        yield return new AgentContractCommandStep(3, "Refresh runbook", $"dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- runbook --input {quotedInput} --out migration/runbook --format both", "Refresh the practical plan when the source/project shape changed.");
+        yield return new AgentContractCommandStep(4, "Refresh selector evidence", $"dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- selector evidence --input {quotedInput} --config ./adapter-config.json --out migration/selector-evidence --format both", "Selector changes need source/config/generated proof.");
+        yield return new AgentContractCommandStep(5, "Generate triage dashboard", $"dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- report serve --input {quotedInput} --static-only --out migration/report-dashboard --format both", "Export current TODO/root-cause/runtime decisions for review.");
+        yield return new AgentContractCommandStep(6, "Pack evidence", $"dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- evidence pack --input {quotedInput} --out evidence/agent-contract.zip", "Create a reviewable redacted evidence bundle.");
     }
 
     static IEnumerable<AgentContractRole> BuildRoles()

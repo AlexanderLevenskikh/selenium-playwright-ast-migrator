@@ -39,14 +39,14 @@ Use the manual steps below when you are running the CLI yourself without an agen
 For a new migration, start with the onboarding wizard:
 
 ```bash
-selenium-pw-migrator init --wizard --source ./SeleniumTests --target dotnet --target-test-framework nunit --workspace migration
+dotnet tool run selenium-pw-migrator -- init --wizard --source ./SeleniumTests --target dotnet --target-test-framework nunit --workspace migration
 ```
 
 For an existing config/workspace, run the preflight checks directly:
 
 ```bash
-selenium-pw-migrator --help
-selenium-pw-migrator --mode doctor --input ./SeleniumTests --config ./adapter-config.json --out doctor
+dotnet tool run selenium-pw-migrator -- --help
+dotnet tool run selenium-pw-migrator -- --mode doctor --input ./SeleniumTests --config ./adapter-config.json --out doctor
 ```
 
 Relative `--out` values are written under the default `migration/` workspace. The command above writes to `migration/doctor`.
@@ -54,7 +54,7 @@ Relative `--out` values are written under the default `migration/` workspace. Th
 ## 2. Analyze Selenium tests
 
 ```bash
-selenium-pw-migrator --mode analyze \
+dotnet tool run selenium-pw-migrator -- --mode analyze \
   --input ./SeleniumTests \
   --config ./adapter-config.json \
   --out analysis \
@@ -93,7 +93,7 @@ Small example:
 ## 4. Generate Playwright output
 
 ```bash
-selenium-pw-migrator --mode migrate \
+dotnet tool run selenium-pw-migrator -- --mode migrate \
   --input ./SeleniumTests \
   --config ./adapter-config.json \
   --out generated-tests \
@@ -107,7 +107,7 @@ Generated files and migration reports are written to `migration/generated-tests`
 For renderer-level checks:
 
 ```bash
-selenium-pw-migrator --mode verify \
+dotnet tool run selenium-pw-migrator -- --mode verify \
   --input ./SeleniumTests \
   --config ./adapter-config.json \
   --out verify \
@@ -117,7 +117,7 @@ selenium-pw-migrator --mode verify \
 For project-aware Playwright .NET compile checks:
 
 ```bash
-selenium-pw-migrator --mode verify-project \
+dotnet tool run selenium-pw-migrator -- --mode verify-project \
   --input ./SeleniumTests \
   --config ./adapter-config.json \
   --out verify-project \
@@ -131,7 +131,7 @@ For TypeScript preview output, generate with `--target ts` and type-check with `
 After the first pass works, use orchestration:
 
 ```bash
-selenium-pw-migrator --mode orchestrate \
+dotnet tool run selenium-pw-migrator -- --mode orchestrate \
   --input ./SeleniumTests \
   --config ./adapter-config.json \
   --out run-001 \

@@ -90,7 +90,7 @@ To run: replace `REPLACE-*` placeholders in the local profile with real selector
 ```bash
 # 1. Edit profiles/registry-pilot/adapter-config.local.json with real values
 # 2. Generate
-dotnet run --project Migrator.Cli -- ^
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- ^
   --mode migrate ^
   --input "Migrator.Tests\TestFiles\RegistryFilter.cs" ^
   --out <output-dir> ^

@@ -79,7 +79,7 @@ The wizard skips scaffold generation and writes a `discover-target` command into
 Always run the generated config through validation before the first migration:
 
 ```bash
-dotnet run --project Migrator.Cli -- \
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- \
   --mode config-validate \
   --config migration/profiles/adapter-config.json \
   --validation-mode strict \

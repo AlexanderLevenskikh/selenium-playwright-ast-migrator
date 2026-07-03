@@ -21,7 +21,7 @@ During the transition `PlaywrightDotNetBackend.RenderDocument` lowers IR V2 thro
 ## CLI usage
 
 ```bash
-dotnet run --project Migrator.Cli -- \
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- \
   --mode migrate \
   --input ./OldTests \
   --config ./adapter-config.json \

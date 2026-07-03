@@ -11,7 +11,7 @@ Make `config-validate` usable at different hardening stages:
 ## CLI
 
 ```bash
-dotnet run --project Migrator.Cli -- \
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- \
   --mode config-validate \
   --config adapter-config.json \
   --target playwright-typescript \

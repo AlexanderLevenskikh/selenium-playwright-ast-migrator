@@ -31,16 +31,29 @@ From source:
 
 ```bash
 dotnet restore
-dotnet run --project Migrator.Cli -- --help
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --help
 ```
 
-As a local dotnet tool package:
+As a locally built dotnet tool package, use commands for your shell.
+
+Windows PowerShell:
+
+```powershell
+.\scripts\pack-tool.ps1 -Version 0.0.0
+.\scripts\install-local-tool.ps1 -Version 0.0.0
+dotnet tool run selenium-pw-migrator -- --help
+```
+
+macOS/Linux/WSL:
 
 ```bash
-./scripts/pack-tool.sh
-./scripts/install-local-tool.ps1 -PackageSource ./artifacts/nuget
-selenium-pw-migrator --help
+scripts/pack-tool.sh 0.0.0
+dotnet new tool-manifest --force
+dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0 --add-source ./artifacts/nuget
+dotnet tool run selenium-pw-migrator -- --help
 ```
+
+Use `selenium-pw-migrator --help` only after a global install. For repository-local tool manifests, prefer `dotnet tool run selenium-pw-migrator -- ...`.
 
 See [Tool installation](docs/tool-installation.md) and [Packaging and distribution](docs/packaging-and-distribution.md).
 
@@ -49,12 +62,12 @@ See [Tool installation](docs/tool-installation.md) and [Packaging and distributi
 Start with a small pilot directory, not the whole suite:
 
 ```bash
-selenium-pw-migrator --mode doctor \
+dotnet tool run selenium-pw-migrator -- --mode doctor \
   --input ./SeleniumTests \
   --config ./adapter-config.json \
   --out doctor
 
-selenium-pw-migrator --mode orchestrate \
+dotnet tool run selenium-pw-migrator -- --mode orchestrate \
   --input ./SeleniumTests \
   --config ./adapter-config.json \
   --out run-001 \
@@ -130,6 +143,14 @@ Then start the selected agent environment and run `/supervised-task`, or give a 
 The only manual bootstrap that remains is installing/updating the tool and project-local OpenCode config. Once those are present, the agent should manage the workspace lifecycle and run artifacts itself.
 
 See [Migrator Agent Harness Kit](docs/migrator-agent-harness-kit.md), [Agent environments](docs/agent-environments.md), [Harness dashboard](docs/migrator-agent-harness-dashboard.md), and the canonical [Guarded OpenCode Desktop migration runbook](docs/guarded-opencode-desktop-runbook.ru.md).
+
+Developer smoke for the bootstrap template-root resolver:
+
+```powershell
+pwsh .\scripts\run-kitroot-shadow-smoke.ps1 -Clean
+```
+
+This creates a fake product repository that contains its own `templates/migration-kit` folder and verifies that `bootstrap-opencode` still uses the bundled Migrator templates.
 
 ## Main CLI modes
 

@@ -5,7 +5,7 @@ stages:
 
 variables:
   PACKAGE_ID: "SeleniumPlaywrightMigrator"
-  PACKAGE_VERSION: "0.6.0-preview.${CI_PIPELINE_IID}"
+  PACKAGE_VERSION: "0.0.0-preview.${CI_PIPELINE_IID}"
 
 test:migrator:
   stage: test

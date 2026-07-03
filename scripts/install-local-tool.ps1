@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "0.6.0-preview.1",
+    [string]$Version = "0.0.0",
     [string]$PackageId = "SeleniumPlaywrightMigrator",
     [string]$PackageDirectory = "artifacts/nuget"
 )
@@ -36,7 +36,7 @@ try {
         Invoke-DotnetChecked tool install $PackageId --version $Version --add-source $source
     }
 
-    Invoke-DotnetChecked selenium-pw-migrator --help
+    Invoke-DotnetChecked tool run selenium-pw-migrator -- --help
 }
 finally {
     Pop-Location

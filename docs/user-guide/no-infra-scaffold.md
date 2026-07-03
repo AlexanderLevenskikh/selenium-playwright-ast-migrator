@@ -49,7 +49,7 @@ Additionally, report files are generated in the output directory:
 ## How to run
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode scaffold --out "./new-playwright-tests"
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode scaffold --out "./new-playwright-tests"
 ```
 
 Optional flags:
@@ -114,13 +114,13 @@ Once you've reviewed and filled in the draft config:
 2. Run migration:
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode migrate --input "./SeleniumTests" --config "./adapter-config.json" --out "./generated" --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode migrate --input "./SeleniumTests" --config "./adapter-config.json" --out "./generated" --format both
 ```
 
 3. Run verify:
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode verify --input "./generated" --config "./adapter-config.json" --out "./verify" --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode verify --input "./generated" --config "./adapter-config.json" --out "./verify" --format both
 ```
 
 4. Copy generated files into your scaffolded project and run compile smoke:

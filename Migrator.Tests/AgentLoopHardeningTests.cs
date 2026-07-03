@@ -117,10 +117,48 @@ public class AgentLoopHardeningTests
         Assert.Contains("bootstrap-opencode", kitCommand);
         Assert.Contains("BOOTSTRAP_OPENCODE_READY", kitCommand);
         Assert.Contains("OPENCODE_PROJECT_DESKTOP_READY", kitCommand);
+        Assert.Contains("MIGRATOR_KIT_ROOT", kitCommand);
+        Assert.Contains("CandidateKitRootPaths", kitCommand);
+        var appContextCandidate = kitCommand.IndexOf("yield return AppContext.BaseDirectory;", StringComparison.Ordinal);
+        var currentDirectoryCandidate = kitCommand.IndexOf("yield return currentDirectory;", StringComparison.Ordinal);
+        Assert.True(appContextCandidate >= 0 && currentDirectoryCandidate > appContextCandidate, "Bundled/source templates must be tried before the product repo current directory.");
         Assert.Contains("WriteGuardChecksums", kitCommand);
         Assert.Contains("check-harness-policy.ps1", psInstall);
         Assert.Contains("Write-GuardChecksums", psInstall);
         Assert.Contains("templates/migration-kit/harness/README.md", bundleScript);
+    }
+
+    [Fact]
+    public void BootstrapOpenCode_DoesNotLetProductRepoTemplatesShadowBundledKit()
+    {
+        var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
+        var rootReadme = Read("README.md");
+        var rootReadmeRu = Read("README.ru.md");
+        var userGuide = Read("USER_GUIDE.md");
+        var userGuideRu = Read("USER_GUIDE.ru.md");
+        var smokePs = Read("scripts/run-kitroot-shadow-smoke.ps1");
+        var smokeSh = Read("scripts/run-kitroot-shadow-smoke.sh");
+
+        Assert.Contains("MIGRATOR_KIT_ROOT", kitCommand);
+        Assert.Contains("yield return AppContext.BaseDirectory;", kitCommand);
+        Assert.Contains("yield return currentDirectory;", kitCommand);
+        var appContextCandidate = kitCommand.IndexOf("yield return AppContext.BaseDirectory;", StringComparison.Ordinal);
+        var currentDirectoryCandidate = kitCommand.IndexOf("yield return currentDirectory;", StringComparison.Ordinal);
+        Assert.True(appContextCandidate >= 0 && currentDirectoryCandidate > appContextCandidate, "Bundled/source templates must be tried before the product repo current directory.");
+
+        Assert.Contains("PRODUCT_SHADOW_TEMPLATE_DO_NOT_USE", smokePs);
+        Assert.Contains("Kit root:", smokePs);
+        Assert.Contains("shadow bundled templates", smokePs, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("KITROOT_SHADOW_SMOKE_PASS", smokePs);
+        Assert.Contains("--opencode-install", smokePs);
+        Assert.Contains("none", smokePs);
+        Assert.Contains("PRODUCT_SHADOW_TEMPLATE_DO_NOT_USE", smokeSh);
+        Assert.Contains("KITROOT_SHADOW_SMOKE_PASS", smokeSh);
+
+        foreach (var text in new[] { rootReadme, rootReadmeRu, userGuide, userGuideRu })
+        {
+            Assert.Contains("run-kitroot-shadow-smoke.ps1", text);
+        }
     }
 
     [Fact]

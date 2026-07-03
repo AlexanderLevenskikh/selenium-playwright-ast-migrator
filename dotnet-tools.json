@@ -3,7 +3,7 @@
   "isRoot": true,
   "tools": {
     "seleniumplaywrightmigrator": {
-      "version": "0.0.0",
+      "version": "0.6.0-preview.1",
       "commands": [
         "selenium-pw-migrator"
       ],

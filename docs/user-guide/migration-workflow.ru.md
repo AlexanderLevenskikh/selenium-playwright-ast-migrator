@@ -42,7 +42,7 @@ analyze → configure profile → migrate → verify → propose → iterate
 ## Шаг 2. Запустите analyze
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode analyze --input "./SeleniumTests" --out "./analysis" --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode analyze --input "./SeleniumTests" --out "./analysis" --format both
 ```
 
 Проверьте:
@@ -81,7 +81,7 @@ Source truth — это:
 ## Шаг 4. Сгенерируйте код
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode migrate --input "./SeleniumTests" --config "./adapter-config.json" --out "./generated" --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode migrate --input "./SeleniumTests" --config "./adapter-config.json" --out "./generated" --format both
 ```
 
 Проверьте `generated/report.json`:
@@ -92,7 +92,7 @@ dotnet run --project Migrator.Cli -- --mode migrate --input "./SeleniumTests" --
 ## Шаг 5. Проверьте сгенерированный вывод
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode verify --input "./generated" --config "./adapter-config.json" --out "./verify" --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode verify --input "./generated" --config "./adapter-config.json" --out "./verify" --format both
 ```
 
 Проверьте `verify/verify-report.json`:
@@ -128,7 +128,7 @@ dotnet test --filter "FullyQualifiedName~YourTestClass"
 ## Шаг 8. Используйте propose для следующих mappings
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode propose --input "./generated" --config "./adapter-config.json" --out "./proposals" --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode propose --input "./generated" --config "./adapter-config.json" --out "./proposals" --format both
 ```
 
 Проверьте `proposals/mapping-proposals.md`. Начните с самых приоритетных:
@@ -185,7 +185,7 @@ dotnet run --project Migrator.Cli -- --mode propose --input "./generated" --conf
 Для итеративной разработки используйте режим orchestrate:
 
 ```bash
-dotnet run --project Migrator.Cli -- --mode orchestrate --input "./SeleniumTests" --config "./adapter-config.json" --out "./orchestration" --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode orchestrate --input "./SeleniumTests" --config "./adapter-config.json" --out "./orchestration" --format both
 ```
 
 Проверяйте `orchestration/orchestration-report.md` после каждого прогона. Применяйте одно high-priority предложение, затем реран.

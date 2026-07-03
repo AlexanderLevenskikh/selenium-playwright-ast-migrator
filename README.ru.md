@@ -31,16 +31,29 @@ Migrator парсит Selenium-тесты, строит промежуточну
 
 ```bash
 dotnet restore
-dotnet run --project Migrator.Cli -- --help
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --help
 ```
 
-Как локальный dotnet tool package:
+Как локально собранный dotnet tool package — команды разделены по shell.
+
+Windows PowerShell:
+
+```powershell
+.\scripts\pack-tool.ps1 -Version 0.0.0
+.\scripts\install-local-tool.ps1 -Version 0.0.0
+dotnet tool run selenium-pw-migrator -- --help
+```
+
+macOS/Linux/WSL:
 
 ```bash
-./scripts/pack-tool.sh
-./scripts/install-local-tool.ps1 -PackageSource ./artifacts/nuget
-selenium-pw-migrator --help
+scripts/pack-tool.sh 0.0.0
+dotnet new tool-manifest --force
+dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0 --add-source ./artifacts/nuget
+dotnet tool run selenium-pw-migrator -- --help
 ```
+
+`selenium-pw-migrator --help` используйте только после global install. Для local tool manifest используйте `dotnet tool run selenium-pw-migrator -- ...`.
 
 Подробнее: [Tool installation](docs/tool-installation.md) и [Packaging and distribution](docs/packaging-and-distribution.md).
 
@@ -49,12 +62,12 @@ selenium-pw-migrator --help
 Начинай с маленького pilot-набора, а не со всей тестовой базы:
 
 ```bash
-selenium-pw-migrator --mode doctor \
+dotnet tool run selenium-pw-migrator -- --mode doctor \
   --input ./SeleniumTests \
   --config ./adapter-config.json \
   --out doctor
 
-selenium-pw-migrator --mode orchestrate \
+dotnet tool run selenium-pw-migrator -- --mode orchestrate \
   --input ./SeleniumTests \
   --config ./adapter-config.json \
   --out run-001 \

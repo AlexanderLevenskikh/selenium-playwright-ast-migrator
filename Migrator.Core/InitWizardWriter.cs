@@ -218,7 +218,7 @@ Treat generated mappings as reviewable evidence, not magic. Prefer `index-pom`, 
         var targetFlag = isDotNet ? "--target dotnet" : "--target ts";
 
         var discover = _options.TargetProjectExists && !string.IsNullOrWhiteSpace(_options.TargetProjectPath)
-            ? $"dotnet run --project Migrator.Cli -- --mode discover-target --input {EscapePath(_options.TargetProjectPath!)} --out {EscapePath(Path.Combine(_options.WorkspacePath, "target-discovery"))} --format both"
+            ? $"dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode discover-target --input {EscapePath(_options.TargetProjectPath!)} --out {EscapePath(Path.Combine(_options.WorkspacePath, "target-discovery"))} --format both"
             : null;
 
         var lines = new List<string>
@@ -228,22 +228,22 @@ Treat generated mappings as reviewable evidence, not magic. Prefer `index-pom`, 
             "Run these from the repository root.",
             "",
             "```bash",
-            $"dotnet run --project Migrator.Cli -- --mode config-validate --config {config} --validation-mode strict --out {EscapePath(Path.Combine(_options.WorkspacePath, "config-validate"))}",
+            $"dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode config-validate --config {config} --validation-mode strict --out {EscapePath(Path.Combine(_options.WorkspacePath, "config-validate"))}",
         };
 
         if (discover != null)
             lines.Add(discover);
 
-        lines.Add($"dotnet run --project Migrator.Cli -- --mode analyze --input {source} --config {config} {targetFlag}{targetFrameworkFlag} --out {Path.Combine(runRoot, "run-001-analysis").Replace('\\', '/')}");
-        lines.Add($"dotnet run --project Migrator.Cli -- --mode migrate --input {source} --config {config} {targetFlag}{targetFrameworkFlag} --out {Path.Combine(runRoot, "run-001-generated").Replace('\\', '/')}");
+        lines.Add($"dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode analyze --input {source} --config {config} {targetFlag}{targetFrameworkFlag} --out {Path.Combine(runRoot, "run-001-analysis").Replace('\\', '/')}");
+        lines.Add($"dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode migrate --input {source} --config {config} {targetFlag}{targetFrameworkFlag} --out {Path.Combine(runRoot, "run-001-generated").Replace('\\', '/')}");
         if (isDotNet)
         {
-            lines.Add($"dotnet run --project Migrator.Cli -- --mode verify-project --input {source} --config {config}{targetFrameworkFlag} --out {Path.Combine(runRoot, "run-001-verify-project").Replace('\\', '/')}");
+            lines.Add($"dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode verify-project --input {source} --config {config}{targetFrameworkFlag} --out {Path.Combine(runRoot, "run-001-verify-project").Replace('\\', '/')}");
         }
         else
         {
             var tsProjectFlag = !string.IsNullOrWhiteSpace(_options.TargetProjectPath) ? $" --ts-project {EscapePath(_options.TargetProjectPath!)}" : "";
-            lines.Add($"dotnet run --project Migrator.Cli -- --mode verify-ts-project --input {Path.Combine(runRoot, "run-001-generated").Replace('\\', '/')}{tsProjectFlag} --out {Path.Combine(runRoot, "run-001-verify-ts").Replace('\\', '/')}");
+            lines.Add($"dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode verify-ts-project --input {Path.Combine(runRoot, "run-001-generated").Replace('\\', '/')}{tsProjectFlag} --out {Path.Combine(runRoot, "run-001-verify-ts").Replace('\\', '/')}");
         }
         lines.Add("```");
 

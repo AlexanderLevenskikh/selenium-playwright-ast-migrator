@@ -51,7 +51,7 @@ Migrator.Cli/Migrator.Cli.csproj
 ## Локальная упаковка
 
 ```powershell
-.\scripts\pack-tool.ps1 -Version 0.6.0-preview.1
+.\scripts\pack-tool.ps1 -Version 0.0.0
 ```
 
 Или вручную:
@@ -60,13 +60,13 @@ Migrator.Cli/Migrator.Cli.csproj
 dotnet pack .\Migrator.Cli\Migrator.Cli.csproj `
   -c Release `
   -o .\artifacts\nuget `
-  /p:Version=0.6.0-preview.1
+  /p:Version=0.0.0
 ```
 
 Результат:
 
 ```text
-artifacts/nuget/SeleniumPlaywrightMigrator.0.6.0-preview.1.nupkg
+artifacts/nuget/SeleniumPlaywrightMigrator.0.0.0.nupkg
 ```
 
 ## Проверка пакета без публикации
@@ -77,7 +77,7 @@ artifacts/nuget/SeleniumPlaywrightMigrator.0.6.0-preview.1.nupkg
 dotnet new tool-manifest --force
 
 dotnet tool install SeleniumPlaywrightMigrator `
-  --version 0.6.0-preview.1 `
+  --version 0.0.0 `
   --add-source .\artifacts\nuget
 
 dotnet tool run selenium-pw-migrator -- --help
@@ -86,7 +86,7 @@ dotnet tool run selenium-pw-migrator -- --help
 Или скриптом:
 
 ```powershell
-.\scripts\install-local-tool.ps1 -Version 0.6.0-preview.1
+.\scripts\install-local-tool.ps1 -Version 0.0.0
 ```
 
 ## Публикация в NuGet/feed
@@ -95,7 +95,7 @@ dotnet tool run selenium-pw-migrator -- --help
 
 ```powershell
 .\scripts\push-tool.ps1 `
-  -Version 0.6.0-preview.1 `
+  -Version 0.0.0 `
   -Source https://api.nuget.org/v3/index.json `
   -ApiKey $env:NUGET_API_KEY
 ```
@@ -103,7 +103,7 @@ dotnet tool run selenium-pw-migrator -- --help
 Или вручную:
 
 ```powershell
-dotnet nuget push .\artifacts\nuget\SeleniumPlaywrightMigrator.0.6.0-preview.1.nupkg `
+dotnet nuget push .\artifacts\nuget\SeleniumPlaywrightMigrator.0.0.0.nupkg `
   --source https://api.nuget.org/v3/index.json `
   --api-key $env:NUGET_API_KEY
 ```
@@ -116,7 +116,7 @@ dotnet nuget push .\artifacts\nuget\SeleniumPlaywrightMigrator.0.6.0-preview.1.n
 
 ```powershell
 dotnet tool install --global SeleniumPlaywrightMigrator `
-  --version 0.6.0-preview.1 `
+  --version 0.0.0 `
 
 ```
 
@@ -126,7 +126,7 @@ dotnet tool install --global SeleniumPlaywrightMigrator `
 dotnet new tool-manifest
 
 dotnet tool install SeleniumPlaywrightMigrator `
-  --version 0.6.0-preview.1 `
+  --version 0.0.0 `
 
 ```
 
@@ -335,7 +335,7 @@ Actual publication is intentionally manual. Use:
 
 The workflow is started with `workflow_dispatch` and accepts:
 
-- `version` — exact package version, for example `0.6.0-preview.1`;
+- `version` — exact package version, for example `0.0.0`;
 - `source` — usually `https://api.nuget.org/v3/index.json`;
 - `dry_run` — default `true`, which builds, packs, verifies, smokes, and uploads the `.nupkg` artifact without publishing.
 
@@ -355,13 +355,13 @@ Do not pass API keys through workflow inputs and do not commit credentials into 
 
 ```powershell
 ./scripts/verify-nupkg-contents.ps1 `
-  -PackagePath artifacts/nuget/SeleniumPlaywrightMigrator.0.6.0-preview.1.nupkg
+  -PackagePath artifacts/nuget/SeleniumPlaywrightMigrator.0.0.0.nupkg
 ```
 
 Linux/macOS вариант:
 
 ```bash
-scripts/verify-nupkg-contents.sh artifacts/nuget/SeleniumPlaywrightMigrator.0.6.0-preview.1.nupkg
+scripts/verify-nupkg-contents.sh artifacts/nuget/SeleniumPlaywrightMigrator.0.0.0.nupkg
 ```
 
 Проверка падает, если пакет не содержит публичные обязательные файлы или содержит локальные/private artifacts вроде `.agent-state`, `.migration`, `artifacts`, `bin`, `obj`, `.env`, `.local.json`.
@@ -371,13 +371,13 @@ scripts/verify-nupkg-contents.sh artifacts/nuget/SeleniumPlaywrightMigrator.0.6.
 После pack пакет нужно установить именно как tool, а не запускать из source tree:
 
 ```powershell
-./scripts/smoke-local-tool-package.ps1 -Version 0.6.0-preview.1
+./scripts/smoke-local-tool-package.ps1 -Version 0.0.0
 ```
 
 Linux/macOS вариант:
 
 ```bash
-scripts/smoke-local-tool-package.sh 0.6.0-preview.1
+scripts/smoke-local-tool-package.sh 0.0.0
 ```
 
 Smoke создает временный `dotnet-tools.json`, ставит пакет из `artifacts/nuget`, запускает `--help`, запускает `--mode doctor` на тестовых fixtures и проверяет, что появился `doctor-report.md`.

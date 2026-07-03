@@ -873,7 +873,29 @@ Fix only the current ticket.
 
     static IEnumerable<string> CandidateKitRoots()
     {
-        yield return Directory.GetCurrentDirectory();
+        // Prefer bundled/source templates over the product repository current directory.
+        // A target repo may legitimately contain its own `templates/migration-kit` folder; it must not
+        // shadow the templates shipped with the dotnet tool. Use MIGRATOR_KIT_ROOT only as an explicit
+        // developer override for local debugging.
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var candidate in CandidateKitRootPaths())
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+                continue;
+
+            var fullPath = Path.GetFullPath(candidate);
+            if (seen.Add(fullPath))
+                yield return fullPath;
+        }
+    }
+
+    static IEnumerable<string> CandidateKitRootPaths()
+    {
+        var overrideRoot = Environment.GetEnvironmentVariable("MIGRATOR_KIT_ROOT");
+        if (!string.IsNullOrWhiteSpace(overrideRoot))
+            yield return overrideRoot;
+
         yield return AppContext.BaseDirectory;
 
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -883,7 +905,10 @@ Fix only the current ticket.
             dir = dir.Parent;
         }
 
-        dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+        var currentDirectory = Directory.GetCurrentDirectory();
+        yield return currentDirectory;
+
+        dir = new DirectoryInfo(currentDirectory);
         while (dir != null)
         {
             yield return dir.FullName;

@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "0.6.0-preview.1",
+    [string]$Version = "0.0.0",
     [string]$PackageId = "SeleniumPlaywrightMigrator",
     [string]$PackageDirectory = "artifacts/nuget",
     [Alias("Input")]
@@ -39,10 +39,10 @@ try {
 
         Invoke-DotnetChecked tool install $PackageId --version $Version --add-source $source --ignore-failed-sources
 
-        Invoke-DotnetChecked selenium-pw-migrator --help
+        Invoke-DotnetChecked tool run selenium-pw-migrator -- --help
 
         $doctorOut = Join-Path $temp "doctor"
-        Invoke-DotnetChecked selenium-pw-migrator --mode doctor --input $inputPath --out $doctorOut --format both
+        Invoke-DotnetChecked tool run selenium-pw-migrator -- --mode doctor --input $inputPath --out $doctorOut --format both
 
         $doctorReport = Join-Path $doctorOut "doctor-report.md"
         if (-not (Test-Path $doctorReport)) {
