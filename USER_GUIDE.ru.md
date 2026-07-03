@@ -754,7 +754,22 @@ selenium-pw-migrator agent contract --input migration/current-ticket.md --out ag
 - Текущие migration artifacts.
 - Правило: не править source tests и не придумывать selectors.
 
-Для guarded OpenCode Desktop запусков используйте `docs/guarded-opencode-desktop-runbook.ru.md` и установленный `migration/AGENT_CONTRACT.md`.
+Для guarded agent запусков основной portable bootstrap теперь можно сделать одной командой из корня product repo:
+
+```powershell
+selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./OldTests --config migration/profiles/adapter-config.json --opencode-install auto
+```
+
+Режимы:
+
+```text
+--opencode-install auto             Windows => project-desktop; macOS/Linux/WSL => project-local
+--project-desktop                   shortcut для Windows OpenCode Desktop
+--opencode-install project-local    portable OpenCode CLI config в .opencode-migrator
+--opencode-install ci               Codex/CI/manual agents; без OpenCode config
+```
+
+После bootstrap запусти `/supervised-task` в OpenCode или передай kickoff prompt другому агенту. Агент должен сам создать или возобновить `migration/runs/<run-id>/` через `new-harness-run.ps1`. Для non-OpenCode agents передай `migration/AGENT_CONTRACT.md`, `migration/prompts/kickoff-prompt.txt` и `migration/harness/README.md`. Подробности: `docs/agent-environments.ru.md`.
 
 ## 9. Как получать лучший результат
 

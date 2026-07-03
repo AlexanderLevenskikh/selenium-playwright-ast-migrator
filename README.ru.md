@@ -96,6 +96,29 @@ cat playground/try-this-first.md
 - [Guarded OpenCode Desktop migration runbook](docs/guarded-opencode-desktop-runbook.ru.md)
 - [Extensibility and public API](docs/extensibility.md)
 
+## Безопасный агентский старт
+
+Для agent-assisted миграции не создавай `migration/` и `migration/runs/<run-id>/` вручную. Теперь основной portable bootstrap можно сделать одной командой из корня product repo:
+
+```powershell
+dotnet tool run selenium-pw-migrator -- kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --opencode-install auto
+```
+
+`auto` выбирает подходящий режим: Windows OpenCode Desktop => `project-desktop`, macOS/Linux/WSL OpenCode CLI => `project-local`. Для Codex/CI/manual agents используй `--opencode-install ci`, чтобы поставить workspace без OpenCode config. После bootstrap запусти `/supervised-task` в OpenCode или передай non-OpenCode агенту `migration/prompts/kickoff-prompt.txt`. Orchestrator должен сам создать или возобновить `migration/runs/<run-id>/` через `new-harness-run.ps1`, читать `Prompt.md` / `Plan.md` / `Implement.md` / `Documentation.md`, писать events, запускать `check-harness-policy.ps1` и завершаться только после final gate.
+
+Ручной fallback остаётся доступен:
+
+```bash
+dotnet tool run selenium-pw-migrator -- kit update --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --backup --with-team
+dotnet tool run selenium-pw-migrator -- kit doctor --workspace migration
+```
+
+```powershell
+.\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop
+```
+
+См. [Migrator Agent Harness Kit](docs/migrator-agent-harness-kit.md), [Agent environments](docs/agent-environments.ru.md), [Harness dashboard](docs/migrator-agent-harness-dashboard.md) и канонический [Guarded OpenCode Desktop runbook](docs/guarded-opencode-desktop-runbook.ru.md).
+
 ## Основные CLI modes
 
 | Mode | Статус | Назначение |
@@ -176,3 +199,6 @@ dotnet test --no-restore
 ## Public release status
 
 Проект готовится как public preview. Stable commands рассчитаны на внешних пользователей; experimental commands могут меняться между preview-релизами. См. [CHANGELOG.md](CHANGELOG.md), [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md).
+
+
+Windows OpenCode Desktop shortcut: `--project-desktop` остаётся alias для `--opencode-install project-desktop`.

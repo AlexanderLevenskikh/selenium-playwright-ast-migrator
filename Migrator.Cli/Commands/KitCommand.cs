@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -40,6 +41,7 @@ internal static class KitCommand
             "update" => RunInit(options with { Update = true }),
             "doctor" => RunDoctor(options),
             "next-ticket" => RunNextTicket(options),
+            "bootstrap-opencode" => RunBootstrapOpenCode(options),
             _ => UnknownCommand(command)
         };
     }
@@ -49,6 +51,244 @@ internal static class KitCommand
         Console.Error.WriteLine($"Unknown kit command: {command}");
         PrintHelp();
         return 2;
+    }
+
+
+    static int RunBootstrapOpenCode(KitOptions options)
+    {
+        var projectRoot = Directory.GetCurrentDirectory();
+        var workspacePath = ToAbsolutePath(options.Workspace, projectRoot);
+        var updateMode = Directory.Exists(workspacePath);
+        var bootstrapOptions = options with
+        {
+            Update = updateMode,
+            Backup = options.Backup || updateMode,
+            WithTeam = true
+        };
+
+        Console.WriteLine("Bootstrapping guarded OpenCode migration workspace");
+        Console.WriteLine("This command installs/updates the migration kit, installs OpenCode team templates, runs kit doctor, and can install an OpenCode config for Windows Desktop, Unix/WSL CLI, CI, or manual agent handoff.");
+        Console.WriteLine();
+
+        var initExitCode = RunInit(bootstrapOptions);
+        if (initExitCode != 0)
+            return initExitCode;
+
+        Console.WriteLine();
+        Console.WriteLine("Running kit doctor after bootstrap...");
+        var doctorExitCode = RunDoctor(bootstrapOptions);
+        if (doctorExitCode != 0)
+        {
+            Console.Error.WriteLine("bootstrap-opencode stopped because kit doctor reported a blocking issue.");
+            return doctorExitCode;
+        }
+
+        var installExitCode = RunOpenCodeInstall(workspacePath, projectRoot, options);
+        if (installExitCode != 0)
+            return installExitCode;
+
+        Console.WriteLine();
+        Console.WriteLine("BOOTSTRAP_OPENCODE_READY");
+        Console.WriteLine("Next:");
+        Console.WriteLine("  1. Start the selected agent environment using the instructions printed above or migration/QUICKSTART.md.");
+        Console.WriteLine("  2. Run /supervised-task or give the agent migration/prompts/kickoff-prompt.txt.");
+        Console.WriteLine("  3. Let the orchestrator create or resume the active harness run; do not hand-create migration/runs/<run-id>.");
+        return 0;
+    }
+
+    static int RunOpenCodeInstall(string workspacePath, string projectRoot, KitOptions options)
+    {
+        var mode = ResolveOpenCodeInstallMode(options);
+        Console.WriteLine();
+        Console.WriteLine($"OpenCode install mode: {mode}");
+
+        if (mode is "none" or "manual" or "ci")
+        {
+            PrintManualAgentBootstrapInstructions(options, mode);
+            return 0;
+        }
+
+        if (mode == "global" && !options.Force)
+        {
+            Console.Error.WriteLine("Refusing global OpenCode install without --force. Global mode affects every OpenCode session for this user.");
+            Console.Error.WriteLine("Use --opencode-install project-local for a safer portable config, or add --force if global install is intentional.");
+            return 2;
+        }
+
+        var installMode = mode switch
+        {
+            "project-desktop" => "ProjectDesktop",
+            "project-local" => "ProjectLocal",
+            "global" => "Global",
+            _ => throw new InvalidOperationException($"Unsupported OpenCode install mode: {mode}")
+        };
+
+        var target = mode switch
+        {
+            "project-desktop" => projectRoot,
+            "project-local" => Path.Combine(projectRoot, ".opencode-migrator"),
+            _ => ""
+        };
+
+        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? RunWindowsOpenCodeInstall(workspacePath, projectRoot, installMode, target)
+            : RunUnixOpenCodeInstall(workspacePath, projectRoot, installMode, target);
+    }
+
+    static string ResolveOpenCodeInstallMode(KitOptions options)
+    {
+        if (options.ProjectDesktop)
+            return "project-desktop";
+
+        var mode = string.IsNullOrWhiteSpace(options.OpenCodeInstall)
+            ? "manual"
+            : options.OpenCodeInstall.Trim().ToLowerInvariant();
+
+        return mode switch
+        {
+            "auto" => RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "project-desktop" : "project-local",
+            "none" or "manual" or "ci" or "project-local" or "project-desktop" or "global" => mode,
+            _ => throw new InvalidOperationException($"Unsupported OpenCode install mode: {options.OpenCodeInstall}")
+        };
+    }
+
+    static int RunWindowsOpenCodeInstall(string workspacePath, string projectRoot, string mode, string target)
+    {
+        var scriptPath = Path.Combine(workspacePath, "opencode-team", "scripts", "install-windows.ps1");
+        if (!File.Exists(scriptPath))
+        {
+            Console.Error.WriteLine($"OpenCode Windows installer was not found: {scriptPath}");
+            Console.Error.WriteLine("Run bootstrap-opencode without --no-team support, or install the kit with --with-team first.");
+            return 2;
+        }
+
+        var powershell = ResolvePowerShellExecutable();
+        if (powershell == null)
+        {
+            Console.Error.WriteLine("PowerShell was not found. Install PowerShell 7 (`pwsh`) or Windows PowerShell, then rerun bootstrap-opencode.");
+            return 2;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"Installing OpenCode config on Windows ({mode})...");
+        Console.WriteLine($"Installer: {scriptPath}");
+        if (!string.IsNullOrWhiteSpace(target))
+            Console.WriteLine($"Target:    {target}");
+
+        var args = $"-NoProfile -ExecutionPolicy Bypass -File {ProcessQuote(scriptPath)} -Mode {mode}";
+        if (!string.IsNullOrWhiteSpace(target))
+            args += $" -Target {ProcessQuote(target)}";
+
+        var result = RunProcess(powershell, args, timeoutMs: 60000);
+        WriteProcessOutput(result);
+
+        if (result.ExitCode != 0)
+        {
+            Console.Error.WriteLine($"OpenCode Windows install failed with exit code {result.ExitCode}.");
+            return result.ExitCode;
+        }
+
+        Console.WriteLine(mode == "ProjectDesktop" ? "OPENCODE_PROJECT_DESKTOP_READY" : "OPENCODE_PROJECT_LOCAL_READY");
+        PrintPostInstallAgentInstructions(mode, target);
+        return 0;
+    }
+
+    static int RunUnixOpenCodeInstall(string workspacePath, string projectRoot, string mode, string target)
+    {
+        if (mode == "ProjectDesktop")
+        {
+            Console.Error.WriteLine("ProjectDesktop mode is Windows/OpenCode Desktop only. Use --opencode-install project-local on macOS/Linux/WSL, or --opencode-install auto.");
+            return 2;
+        }
+
+        var scriptPath = Path.Combine(workspacePath, "opencode-team", "scripts", "install-unix.sh");
+        if (!File.Exists(scriptPath))
+        {
+            Console.Error.WriteLine($"OpenCode Unix installer was not found: {scriptPath}");
+            Console.Error.WriteLine("Run bootstrap-opencode without --no-team support, or install the kit with --with-team first.");
+            return 2;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"Installing OpenCode config on Unix-like environment ({mode})...");
+        Console.WriteLine($"Installer: {scriptPath}");
+        if (!string.IsNullOrWhiteSpace(target))
+            Console.WriteLine($"Target:    {target}");
+
+        var args = $"{ProcessQuote(scriptPath)} --mode {mode}";
+        if (!string.IsNullOrWhiteSpace(target))
+            args += $" --target {ProcessQuote(target)}";
+
+        var result = RunProcess("bash", args, timeoutMs: 60000);
+        WriteProcessOutput(result);
+
+        if (result.ExitCode != 0)
+        {
+            Console.Error.WriteLine($"OpenCode Unix install failed with exit code {result.ExitCode}.");
+            return result.ExitCode;
+        }
+
+        Console.WriteLine(mode == "Global" ? "OPENCODE_GLOBAL_READY" : "OPENCODE_PROJECT_LOCAL_READY");
+        PrintPostInstallAgentInstructions(mode, target);
+        return 0;
+    }
+
+    static void WriteProcessOutput(ProcessResult result)
+    {
+        if (!string.IsNullOrWhiteSpace(result.StdOut))
+            Console.Write(result.StdOut);
+        if (!string.IsNullOrWhiteSpace(result.StdErr))
+            Console.Error.Write(result.StdErr);
+    }
+
+    static void PrintManualAgentBootstrapInstructions(KitOptions options, string mode)
+    {
+        Console.WriteLine(mode == "ci"
+            ? "CI/manual-agent mode selected: no OpenCode config was installed."
+            : "No OpenCode config install was requested.");
+        Console.WriteLine("Use the installed migration workspace with any agent by giving it these entrypoints:");
+        Console.WriteLine($"  Contract: {Path.Combine(options.Workspace, "AGENT_CONTRACT.md")}");
+        Console.WriteLine($"  Kickoff:  {Path.Combine(options.Workspace, "prompts", "kickoff-prompt.txt")}");
+        Console.WriteLine($"  Harness:  {Path.Combine(options.Workspace, "harness", "README.md")}");
+        Console.WriteLine("For OpenCode CLI on macOS/Linux/WSL, rerun with:");
+        Console.WriteLine($"  {options.ToolCommand} kit bootstrap-opencode --workspace {Quote(options.Workspace)} --opencode-install project-local");
+        Console.WriteLine("For Windows OpenCode Desktop, rerun with:");
+        Console.WriteLine($"  {options.ToolCommand} kit bootstrap-opencode --workspace {Quote(options.Workspace)} --project-desktop");
+    }
+
+    static void PrintPostInstallAgentInstructions(string mode, string target)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Agent start:");
+        if (mode == "ProjectDesktop")
+        {
+            Console.WriteLine("  Open the repository root in OpenCode Desktop.");
+            Console.WriteLine("  Run /supervised-task or /harness-run.");
+        }
+        else if (mode == "ProjectLocal")
+        {
+            Console.WriteLine("  Start OpenCode CLI with this project-local config:");
+            Console.WriteLine(RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                ? $"  $env:OPENCODE_CONFIG = {ProcessQuote(Path.Combine(target, "opencode.jsonc"))}; opencode"
+                : $"  OPENCODE_CONFIG={ProcessQuote(Path.Combine(target, "opencode.jsonc"))} opencode");
+            Console.WriteLine("  Then run /supervised-task or /harness-run.");
+        }
+        else
+        {
+            Console.WriteLine("  Open OpenCode and run /supervised-task or /harness-run.");
+        }
+    }
+
+    static string? ResolvePowerShellExecutable()
+    {
+        foreach (var candidate in new[] { "pwsh", "powershell" })
+        {
+            var result = RunProcess(candidate, "-NoProfile -Command \"$PSVersionTable.PSVersion.ToString()\"", timeoutMs: 5000);
+            if (result.ExitCode == 0)
+                return candidate;
+        }
+
+        return null;
     }
 
     static int RunInit(KitOptions options)
@@ -443,6 +683,34 @@ Initial install/update should now work on Windows, macOS and Linux through the C
 
 PowerShell wrappers are still supported, but they are optional convenience scripts.
 
+## Guarded agent bootstrap
+
+One-command portable bootstrap from the product repository root:
+
+```powershell
+{{options.ToolCommand}} kit bootstrap-opencode --workspace "{{options.Workspace}}" --source "{{options.Source}}" --config "{{options.Config}}" --opencode-install auto
+```
+
+Install modes:
+
+```text
+--opencode-install auto             Windows => project-desktop, macOS/Linux/WSL => project-local
+--opencode-install project-desktop  Windows OpenCode Desktop project config
+--opencode-install project-local    Portable OpenCode CLI config in .opencode-migrator
+--opencode-install ci               CI/Codex/manual agents; no OpenCode config install
+--opencode-install none             Only install/update the migration workspace and run doctor
+```
+
+The legacy shortcut remains available on Windows:
+
+```powershell
+{{options.ToolCommand}} kit bootstrap-opencode --workspace "{{options.Workspace}}" --source "{{options.Source}}" --config "{{options.Config}}" --project-desktop
+```
+
+For non-OpenCode agents, give the agent `{{Path.Combine(options.Workspace, "AGENT_CONTRACT.md")}}`, `{{Path.Combine(options.Workspace, "prompts", "kickoff-prompt.txt")}}`, and `{{Path.Combine(options.Workspace, "harness", "README.md")}}`.
+
+Then run `/supervised-task` in OpenCode, or give the same kickoff prompt to Codex/CI/another agent. The agent should create or resume the active harness run itself with `{{Path.Combine(options.Workspace, "scripts", "new-harness-run.ps1")}}`; you should not manually create `{{Path.Combine(options.Workspace, "runs", "run-001")}}`.
+
 ## Agent entrypoints
 
 Kickoff:
@@ -666,7 +934,9 @@ Fix only the current ticket.
 
     static string Quote(string value) => value.Contains(' ') ? $"\"{value}\"" : value;
 
-    static ProcessResult RunProcess(string fileName, string arguments)
+    static string ProcessQuote(string value) => $"\"{value.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"";
+
+    static ProcessResult RunProcess(string fileName, string arguments, int timeoutMs = 5000)
     {
         try
         {
@@ -683,13 +953,27 @@ Fix only the current ticket.
             process.Start();
             var stdout = process.StandardOutput.ReadToEnd();
             var stderr = process.StandardError.ReadToEnd();
-            process.WaitForExit(5000);
+            if (!process.WaitForExit(timeoutMs))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                return new ProcessResult(124, stdout, $"Command timed out after {timeoutMs} ms: {fileName} {arguments}");
+            }
             return new ProcessResult(process.ExitCode, stdout, stderr);
         }
         catch (Exception ex)
         {
             return new ProcessResult(127, "", ex.Message);
         }
+    }
+
+    static string NormalizeOpenCodeInstallMode(string value)
+    {
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "auto" or "none" or "manual" or "ci" or "project-local" or "project-desktop" or "global" => normalized,
+            _ => throw new ArgumentException($"--opencode-install must be one of: auto, none, manual, ci, project-local, project-desktop, global. Got: {value}")
+        };
     }
 
     static bool IsHelp(string value) => value is "--help" or "-h" or "help";
@@ -702,12 +986,15 @@ Usage:
   selenium-pw-migrator kit update [options]
   selenium-pw-migrator kit doctor [options]
   selenium-pw-migrator kit next-ticket [options]
+  selenium-pw-migrator kit bootstrap-opencode [options]
 
 Commands:
   init          Create a migration workspace from bundled templates.
   update        Safely refresh kit-owned files. Project-owned state is preserved.
   doctor        Validate workspace health and cross-platform prerequisites.
   next-ticket   Generate a bounded prompt for deriving the next actionable ticket.
+  bootstrap-opencode
+                Install/update the kit, include OpenCode team files, run doctor, and optionally install ProjectDesktop config.
 
 Common options:
   --workspace <path>        Migration workspace root. Default: migration
@@ -719,6 +1006,8 @@ Common options:
   --backup                  Snapshot existing workspace before update/init.
   --force                   Overwrite kit-owned files instead of writing .new conflicts.
   --with-team               Install optional OpenCode team templates.
+  --project-desktop         Shortcut for --opencode-install project-desktop.
+  --opencode-install <mode> For kit bootstrap-opencode: auto, none, manual, ci, project-local, project-desktop, global.
   --no-codex-files          Do not install migration/codex files.
   --input <path>            Artifact directory for kit next-ticket.
 
@@ -727,6 +1016,8 @@ Examples:
   selenium-pw-migrator kit update --workspace migration --backup
   selenium-pw-migrator kit doctor --workspace migration
   selenium-pw-migrator kit next-ticket --workspace migration --input migration/runs/run-053
+  selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./OldTests --opencode-install auto
+  selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./OldTests --project-desktop
 """);
     }
 
@@ -742,6 +1033,8 @@ Examples:
         bool Backup,
         bool NoCodexFiles,
         bool WithTeam,
+        bool ProjectDesktop,
+        string OpenCodeInstall,
         string? Input)
     {
         public static KitOptions? Parse(string[] args, out string error)
@@ -758,6 +1051,8 @@ Examples:
                 Backup: false,
                 NoCodexFiles: false,
                 WithTeam: false,
+                ProjectDesktop: false,
+                OpenCodeInstall: "manual",
                 Input: null);
 
             error = string.Empty;
@@ -788,6 +1083,8 @@ Examples:
                         "--backup" => options with { Backup = true },
                         "--no-codex-files" => options with { NoCodexFiles = true },
                         "--with-team" => options with { WithTeam = true },
+                        "--project-desktop" => options with { ProjectDesktop = true, OpenCodeInstall = "project-desktop" },
+                        "--opencode-install" => options with { OpenCodeInstall = NormalizeOpenCodeInstallMode(ReadValue()) },
                         "--help" or "-h" => options,
                         _ when arg.StartsWith("-", StringComparison.Ordinal) => throw new ArgumentException($"Unknown option: {arg}"),
                         _ => throw new ArgumentException($"Unexpected argument: {arg}")

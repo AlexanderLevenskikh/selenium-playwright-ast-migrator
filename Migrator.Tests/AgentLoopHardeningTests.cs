@@ -114,6 +114,9 @@ public class AgentLoopHardeningTests
         Assert.Contains("scripts/check-harness-policy.ps1", finalGateScript);
         Assert.Contains("check-harness-policy.ps1", kitCommand);
         Assert.Contains("harness-policy.json", kitCommand);
+        Assert.Contains("bootstrap-opencode", kitCommand);
+        Assert.Contains("BOOTSTRAP_OPENCODE_READY", kitCommand);
+        Assert.Contains("OPENCODE_PROJECT_DESKTOP_READY", kitCommand);
         Assert.Contains("WriteGuardChecksums", kitCommand);
         Assert.Contains("check-harness-policy.ps1", psInstall);
         Assert.Contains("Write-GuardChecksums", psInstall);
@@ -143,6 +146,86 @@ public class AgentLoopHardeningTests
         }
     }
 
+
+    [Fact]
+    public void BootstrapOpenCodeCommand_IsDocumentedAndKeepsAgentRunLifecycleOwnedByHarness()
+    {
+        var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
+        var rootReadme = Read("README.md");
+        var rootReadmeRu = Read("README.ru.md");
+        var userGuide = Read("USER_GUIDE.md");
+        var userGuideRu = Read("USER_GUIDE.ru.md");
+        var quickStart = Read("docs/quick-start.md");
+        var runbookRu = Read("docs/guarded-opencode-desktop-runbook.ru.md");
+        var harnessDoc = Read("docs/migrator-agent-harness-kit.md");
+        var harnessDocRu = Read("docs/migrator-agent-harness-kit.ru.md");
+        var kitReadme = Read("templates/migration-kit/README.md");
+
+        Assert.Contains("bootstrap-opencode", kitCommand);
+        Assert.Contains("--project-desktop", kitCommand);
+        Assert.Contains("--opencode-install", kitCommand);
+        Assert.Contains("project-local", kitCommand);
+        Assert.Contains("WithTeam = true", kitCommand);
+        Assert.Contains("RunOpenCodeInstall", kitCommand);
+        Assert.Contains("RunUnixOpenCodeInstall", kitCommand);
+        Assert.Contains("kit doctor", kitCommand);
+
+        foreach (var text in new[] { rootReadme, userGuide, quickStart, harnessDoc, kitReadme })
+        {
+            Assert.Contains("kit bootstrap-opencode", text);
+            Assert.Contains("--opencode-install", text);
+            Assert.Contains("--project-desktop", text);
+            Assert.Contains("/supervised-task", text);
+            Assert.Contains("new-harness-run.ps1", text);
+        }
+
+        foreach (var text in new[] { rootReadmeRu, userGuideRu, runbookRu, harnessDocRu })
+        {
+            Assert.Contains("kit bootstrap-opencode", text);
+            Assert.Contains("--opencode-install", text);
+            Assert.Contains("--project-desktop", text);
+            Assert.Contains("/supervised-task", text);
+            Assert.Contains("new-harness-run.ps1", text);
+        }
+    }
+
+    [Fact]
+    public void BootstrapOpenCodeDocumentsPortableAgentEnvironments()
+    {
+        var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
+        var agentEnv = Read("docs/agent-environments.md");
+        var agentEnvRu = Read("docs/agent-environments.ru.md");
+        var docsIndex = Read("docs/README.md");
+        var rootReadme = Read("README.md");
+        var rootReadmeRu = Read("README.ru.md");
+        var userGuide = Read("USER_GUIDE.md");
+        var userGuideRu = Read("USER_GUIDE.ru.md");
+        var quickStart = Read("docs/quick-start.md");
+
+        Assert.Contains("--opencode-install", kitCommand);
+        Assert.Contains("auto", kitCommand);
+        Assert.Contains("project-local", kitCommand);
+        Assert.Contains("ci", kitCommand);
+        Assert.Contains("RunUnixOpenCodeInstall", kitCommand);
+        Assert.Contains("OPENCODE_PROJECT_LOCAL_READY", kitCommand);
+        Assert.Contains("Refusing global OpenCode install without --force", kitCommand);
+
+        foreach (var text in new[] { agentEnv, agentEnvRu, rootReadme, rootReadmeRu, userGuide, userGuideRu, quickStart })
+        {
+            Assert.Contains("--opencode-install auto", text);
+            Assert.Contains("project-local", text);
+            Assert.Contains("ci", text);
+            Assert.Contains("Codex", text);
+        }
+
+        Assert.Contains("agent-environments.md", docsIndex);
+        Assert.Contains("agent-environments.ru.md", docsIndex);
+        Assert.Contains("OPENCODE_CONFIG", agentEnv);
+        Assert.Contains("OPENCODE_CONFIG", agentEnvRu);
+        Assert.Contains("new-harness-run.ps1", agentEnv);
+        Assert.Contains("check-final-gate.ps1", agentEnv);
+    }
+
     [Fact]
     public void KitDoctorTracksStopPolicyChecklistTemplate()
     {
@@ -157,6 +240,9 @@ public class AgentLoopHardeningTests
         Assert.Contains("check-final-gate.ps1", kitCommand);
         Assert.Contains("check-harness-policy.ps1", kitCommand);
         Assert.Contains("harness-policy.json", kitCommand);
+        Assert.Contains("bootstrap-opencode", kitCommand);
+        Assert.Contains("BOOTSTRAP_OPENCODE_READY", kitCommand);
+        Assert.Contains("OPENCODE_PROJECT_DESKTOP_READY", kitCommand);
         Assert.Contains("guard-checksums.json", kitCommand);
     }
 

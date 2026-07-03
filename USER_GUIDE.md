@@ -114,7 +114,48 @@ selenium-pw-migrator runbook \
   --format both
 ```
 
-Then create the migration workspace:
+Then create the migration workspace. For an agent-assisted guarded run, use the kit command instead of manually creating folders:
+
+```bash
+dotnet tool run selenium-pw-migrator -- kit update \
+  --workspace migration \
+  --source ./OldTests \
+  --config migration/profiles/adapter-config.json \
+  --backup \
+  --with-team
+
+dotnet tool run selenium-pw-migrator -- kit doctor --workspace migration
+```
+
+This creates a safe migration workspace with:
+
+- `profiles/adapter-config.json` - starter profile.
+- `current-ticket.md` - the current migration scope.
+- `state/run-ledger.md` - a place to record runs.
+- `state/harness-policy.json` - the autopilot allow/ask/deny policy.
+- `scripts/new-harness-run.ps1` - active run bootstrapper.
+- `scripts/check-harness-policy.ps1` - harness policy gate.
+- `scripts/build-harness-dashboard.ps1` - static harness dashboard generator.
+- `opencode-team/` - optional OpenCode agents and commands when `--with-team` is used.
+
+For agent-assisted runs, the preferred portable bootstrap from the product repo root is:
+
+```powershell
+selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./OldTests --config migration/profiles/adapter-config.json --opencode-install auto
+```
+
+Install modes:
+
+```text
+--opencode-install auto             Windows => project-desktop; macOS/Linux/WSL => project-local
+--project-desktop                   shortcut for Windows OpenCode Desktop
+--opencode-install project-local    portable OpenCode CLI config in .opencode-migrator
+--opencode-install ci               Codex/CI/manual agents; no OpenCode config install
+```
+
+After bootstrap, start OpenCode with `/supervised-task` when using OpenCode, or give the kickoff prompt to another agent. The supervised agent should create or resume `migration/runs/<run-id>/` with `new-harness-run.ps1`; the user should not need to create run folders manually. For non-OpenCode agents, give the agent `migration/AGENT_CONTRACT.md`, `migration/prompts/kickoff-prompt.txt`, and `migration/harness/README.md`. See `docs/agent-environments.md`.
+
+If you are working without an agent and only want a starter config/scaffold, `init --wizard` is still available:
 
 ```bash
 selenium-pw-migrator init --wizard \
@@ -123,14 +164,6 @@ selenium-pw-migrator init --wizard \
   --target-test-framework nunit \
   --workspace migration
 ```
-
-This creates a safe migration workspace with:
-
-- `profiles/adapter-config.json` - starter profile.
-- `current-ticket.md` - the current migration scope.
-- `state/run-ledger.md` - a place to record runs.
-- `next-commands.md` - exact next commands.
-- `scaffold/` - optional Playwright .NET scaffold when no target project exists.
 
 If you prefer xUnit output:
 

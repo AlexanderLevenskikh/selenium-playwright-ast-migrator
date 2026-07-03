@@ -29,10 +29,16 @@ The migration template is intentionally artifact-only by default: real product/P
 
 ### OpenCode Desktop / product repo
 
-Use project-local Desktop installation from the product repository root:
+Prefer the one-command bootstrap from the product repository root when the CLI is available:
 
 ```powershell
 Set-Location "C:\Users\levenskikh\Desktop\billy"
+dotnet tool run selenium-pw-migrator -- kit bootstrap-opencode --workspace migration --source . --config migration/profiles/adapter-config.json --opencode-install auto
+```
+
+Manual fallback for project-local Desktop installation:
+
+```powershell
 .\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop
 ```
 
@@ -135,3 +141,6 @@ For migration-artifact/autopilot work, start with `/harness-run` or `/supervised
 ## Harness dashboard command
 
 Use `/dashboard-harness` after a harness run has produced `state/harness-events.jsonl` and `state/harness-policy-result.json`. It generates `migration/dashboard/harness/index.html` with English as the default language and Russian available through the language switch.
+
+
+Windows OpenCode Desktop shortcut: `--project-desktop` remains an alias for `--opencode-install project-desktop`.

@@ -99,6 +99,38 @@ For a file-by-file walkthrough, see:
 - [Migration workflow](docs/user-guide/migration-workflow.md)
 - [Extensibility and public API](docs/extensibility.md)
 
+
+## Guarded agent quick start
+
+For an agent-assisted migration, do not hand-create `migration/` folders. Install the kit and OpenCode team templates, then let the supervised agent create or resume the harness run.
+
+First-time product-repo bootstrap, including the migration workspace, OpenCode team templates, `kit doctor`, and an environment-specific OpenCode setup:
+
+```powershell
+dotnet tool run selenium-pw-migrator -- kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --opencode-install auto
+```
+
+Use explicit install modes when needed:
+
+```text
+--project-desktop / --opencode-install project-desktop  Windows OpenCode Desktop
+--opencode-install project-local                        macOS/Linux/WSL OpenCode CLI
+--opencode-install ci                                   Codex/CI/manual agents; no OpenCode config
+```
+
+Manual fallback when you do not want to install an OpenCode config in the same command:
+
+```bash
+dotnet tool run selenium-pw-migrator -- kit update --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --backup --with-team
+dotnet tool run selenium-pw-migrator -- kit doctor --workspace migration
+```
+
+Then start the selected agent environment and run `/supervised-task`, or give a non-OpenCode agent `migration/prompts/kickoff-prompt.txt`. The orchestrator must create or resume `migration/runs/<run-id>/` through `new-harness-run.ps1`, read `Prompt.md` / `Plan.md` / `Implement.md` / `Documentation.md`, record events, run `check-harness-policy.ps1`, and only claim final success after the final gate passes.
+
+The only manual bootstrap that remains is installing/updating the tool and project-local OpenCode config. Once those are present, the agent should manage the workspace lifecycle and run artifacts itself.
+
+See [Migrator Agent Harness Kit](docs/migrator-agent-harness-kit.md), [Agent environments](docs/agent-environments.md), [Harness dashboard](docs/migrator-agent-harness-dashboard.md), and the canonical [Guarded OpenCode Desktop migration runbook](docs/guarded-opencode-desktop-runbook.ru.md).
+
 ## Main CLI modes
 
 | Mode | Status | Purpose |

@@ -52,6 +52,25 @@ migration/
     backups/
 ```
 
+
+## First OpenCode agent start
+
+Do not manually create run folders. The same workspace supports OpenCode Desktop, OpenCode CLI, Codex, CI, and other agents; see `docs/agent-environments.md` in the source repository for the environment matrix. From the product repository root, prefer the one-command bootstrap; it installs or updates the kit, includes OpenCode team files, runs `kit doctor`, and installs the OpenCode Desktop ProjectDesktop config:
+
+```powershell
+dotnet tool run selenium-pw-migrator -- kit bootstrap-opencode --workspace migration --source . --config migration/profiles/adapter-config.json --opencode-install auto
+```
+
+Manual fallback:
+
+```powershell
+dotnet tool run selenium-pw-migrator -- kit update --workspace migration --source . --config migration/profiles/adapter-config.json --backup --with-team
+dotnet tool run selenium-pw-migrator -- kit doctor --workspace migration
+.\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop
+```
+
+Then open the product repo root in OpenCode Desktop and run `/supervised-task`. The orchestrator creates or resumes the active run with `scripts/new-harness-run.ps1`.
+
 ## First run
 
 For OpenCode Desktop, follow `docs/guarded-opencode-desktop-runbook.ru.md` instead of copying prompts manually.
@@ -148,3 +167,6 @@ Use `scripts/build-harness-dashboard.ps1` to create a static dashboard from the 
 ```
 
 The dashboard is English-first and includes a `languageSelect` control for Russian. Machine-readable event/status codes stay language-neutral.
+
+
+Windows OpenCode Desktop shortcut: `--project-desktop` remains an alias for `--opencode-install project-desktop`.

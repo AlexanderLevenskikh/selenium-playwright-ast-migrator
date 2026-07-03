@@ -8,6 +8,32 @@ This path gets you from a small Selenium sample to generated Playwright output. 
 - Selenium test files to migrate
 - Optional but recommended: `adapter-config.json` with verified PageObject/helper mappings
 
+
+## Agent-assisted guarded start
+
+For a guarded OpenCode/Codex-style run, prefer the Migration Kit path over manually creating folders. See [Agent environments](agent-environments.md) for Windows Desktop, macOS/Linux/WSL CLI, Codex, CI, and other agents. From the product repository root, use the one-command bootstrap when you want the workspace, OpenCode team templates, `kit doctor`, and an environment-specific agent setup in one step:
+
+```powershell
+dotnet tool run selenium-pw-migrator -- kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --opencode-install auto
+```
+
+Use `--opencode-install project-local` for macOS/Linux/WSL OpenCode CLI and `--opencode-install ci` for Codex/CI/manual agents.
+
+Manual fallback:
+
+```bash
+dotnet tool run selenium-pw-migrator -- kit update --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --backup --with-team
+dotnet tool run selenium-pw-migrator -- kit doctor --workspace migration
+```
+
+```powershell
+.\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop
+```
+
+After that, open the selected agent environment and run `/supervised-task`, or give the kickoff prompt to a non-OpenCode agent. The agent should create or resume the active harness run itself through `new-harness-run.ps1`; it should not ask you to manually create `migration/runs/<run-id>/`.
+
+Use the manual steps below when you are running the CLI yourself without an agent.
+
 ## 1. Check the tool and your input
 
 For a new migration, start with the onboarding wizard:
@@ -130,3 +156,6 @@ migration/run-001/
 - [Migration workflow](user-guide/migration-workflow.md)
 - [Config and profile guide](config-profile-guide.md)
 - [Limitations](user-guide/limitations.md)
+
+
+Windows OpenCode Desktop shortcut: `--project-desktop` remains an alias for `--opencode-install project-desktop`.

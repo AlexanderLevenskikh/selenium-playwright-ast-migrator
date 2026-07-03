@@ -4,8 +4,8 @@ This index keeps the current workflow short and avoids legacy agent-launch noise
 
 ## Start here
 
-- [Quick start](quick-start.md) — first successful local run.
-- [Guarded OpenCode Desktop migration runbook](guarded-opencode-desktop-runbook.ru.md) — canonical guarded agent workflow: local tool build/update, kit update, ProjectDesktop install, `/supervised-task`, approve/deny rules, scope/final gates, and forensic export.
+- [Quick start](quick-start.md) — first successful local run, including guarded agent bootstrap.
+- [Guarded OpenCode Desktop migration runbook](guarded-opencode-desktop-runbook.ru.md) — canonical guarded agent workflow: local tool build/update, `kit bootstrap-opencode`, `/supervised-task`, approve/deny rules, scope/final gates, and forensic export.
 - [Migration runbook](migration-runbook.md) — production migration plan, pilot scope, risks, and command chain.
 - [Tool installation](tool-installation.md) — install from a packed dotnet tool or run from source.
 - [Troubleshooting](troubleshooting.md) — common setup, config, packaging, and verification problems.
@@ -57,6 +57,7 @@ The current launch procedure is only the guarded Desktop runbook above. Detailed
 - [Agent docs audit](agent-docs-audit.md)
 - [Migration safety playbook](migration-safety-playbook.md)
 - [Migrator Agent Harness Kit](migrator-agent-harness-kit.md) / [RU](migrator-agent-harness-kit.ru.md) — English-first reference for autopilot policy, run artifacts, gates, and dashboard i18n.
+- [Agent environments](agent-environments.md) / [RU](agent-environments.ru.md) — portable bootstrap matrix for Windows OpenCode Desktop, macOS/Linux/WSL OpenCode CLI, Codex, CI, and other agents.
 - [Migrator Agent Harness Dogfood](migrator-agent-harness-dogfood.md) / [RU](migrator-agent-harness-dogfood.ru.md) — reproducible smoke pass for installing the kit, creating a run, writing events, and validating harness policy.
 - [Migrator Agent Harness Dashboard](migrator-agent-harness-dashboard.md) / [RU](migrator-agent-harness-dashboard.ru.md) — static English-first dashboard with Russian switch for run lifecycle, trace events, and harness policy results.
 - [`templates/migration-kit/AGENT_CONTRACT.md`](../templates/migration-kit/AGENT_CONTRACT.md)

@@ -98,14 +98,20 @@ if errorlevel 1 dotnet tool install SeleniumPlaywrightMigrator --version 0.6.0-p
 dotnet tool run selenium-pw-migrator -- --help
 ```
 
-## 4. Обновить migration kit
+## 4. Установить или обновить migration kit и OpenCode Desktop config
 
-Из корня product repo:
+Из корня product repo предпочтительно использовать один bootstrap:
 
 ```cmd
 cd /d "C:\Users\levenskikh\Desktop\billy"
 
-dotnet tool run selenium-pw-migrator -- kit update --workspace migration --backup --with-team
+dotnet tool run selenium-pw-migrator -- kit bootstrap-opencode --workspace migration --source . --config migration/profiles/adapter-config.json --opencode-install auto
+```
+
+Эта команда устанавливает/обновляет `migration/`, добавляет `opencode-team/`, запускает `kit doctor` и ставит project-local OpenCode Desktop config. Если нужен ручной fallback, выполни старую цепочку:
+
+```cmd
+dotnet tool run selenium-pw-migrator -- kit update --workspace migration --source . --config migration/profiles/adapter-config.json --backup --with-team
 dotnet tool run selenium-pw-migrator -- kit doctor --workspace migration
 ```
 
@@ -119,9 +125,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ".\migration\scripts\check-f
 
 `check-final-gate.ps1` может вернуть `FINAL_GATE_FAIL`, если ещё нет свежего run/evidence. Это нормально. На этом шаге важно, чтобы скрипт не падал с parse/runtime error.
 
-## 5. Установить OpenCode Desktop project-local config
+После этого workspace уже не нужно собирать вручную: в `migration/` должны быть `harness/`, `state/harness-policy.json`, `scripts/new-harness-run.ps1`, `scripts/check-harness-policy.ps1`, `scripts/write-harness-event.ps1`, `dashboard/i18n/en.json`, `dashboard/i18n/ru.json` и `opencode-team/`. Сам агент при `/supervised-task` создаёт или возобновляет `migration/runs/<run-id>/`.
 
-Для OpenCode Desktop не полагайся на `OPENCODE_CONFIG` из консоли. Установи project-local config прямо в корень product repo:
+## 5. Ручной fallback для OpenCode Desktop project-local config
+
+Если ты не использовал `kit bootstrap-opencode --opencode-install auto`, не полагайся на `OPENCODE_CONFIG` из консоли. Установи project-local config прямо в корень product repo:
 
 ```powershell
 Set-Location "C:\Users\levenskikh\Desktop\billy"
@@ -194,8 +202,14 @@ Read migration/prompts/kickoff-prompt.txt and execute it.
 
 Before planning, read:
 - migration/AGENT_CONTRACT.md
+- migration/state/harness-policy.json
+- migration/state/harness-run.json, if it exists
 - migration/state/final-gate.md
 - migration/state/stop-policy-checklist.md
+
+If there is no active matching harness run, create one first:
+
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\migration\scripts\new-harness-run.ps1" -Workspace migration -TaskTitle "Guarded migration batch" -Goal "Run one bounded artifact-only Selenium to Playwright migration batch."
 
 Run in MIGRATION_ARTIFACT_ONLY mode.
 
@@ -206,7 +220,8 @@ Non-negotiable rules:
 - TODO reduction via suppression, empty tests, weakened assertions, dummy known identifiers, or target-project edits is failure, not progress.
 - Do not ask “what should I do next” unless the next action requires changing scope or writing outside migration/**.
 - If blocked, write a precise BLOCKED report under migration/runs/<run-id>/ and stop.
-- After each major batch, run scope/final gate checks.
+- After each major batch, run scope, harness-policy, and final gate checks.
+- Record meaningful lifecycle events with migration/scripts/write-harness-event.ps1 when practical.
 - Do not claim FINAL unless strict final gate passes.
 
 Strict final gate command:
@@ -226,8 +241,12 @@ git status
 git diff
 git log
 dotnet tool run selenium-pw-migrator -- ...
+powershell ... new-harness-run.ps1
+powershell ... write-harness-event.ps1
 powershell ... check-scope.ps1
+powershell ... check-harness-policy.ps1
 powershell ... check-final-gate.ps1
+powershell ... build-harness-dashboard.ps1
 read-only file inspection
 writes strictly inside migration/**
 ```
@@ -378,3 +397,6 @@ templates/opencode-team/INSTALLATION-SAFETY.md
 ```
 
 Old root prompt packs and broad autopilot launch docs were removed to avoid conflicting instructions. Use git history for archaeology.
+
+
+Windows OpenCode Desktop shortcut: `--project-desktop` остаётся alias для `--opencode-install project-desktop`.

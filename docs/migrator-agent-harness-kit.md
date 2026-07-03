@@ -17,6 +17,32 @@ Prompts guide behavior; scripts enforce behavior.
 
 The agent may say it followed rules, but the final answer is not trusted until deterministic checks pass.
 
+
+## Bootstrap
+
+For cross-environment setup details, see [Agent environments](agent-environments.md). contract
+
+The user should not manually create `migration/` subfolders or `migration/runs/<run-id>/`. The preferred OpenCode bootstrap is one command from the product repository root:
+
+```powershell
+dotnet tool run selenium-pw-migrator -- kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --opencode-install auto
+```
+
+This installs or updates the migration workspace, includes OpenCode team templates, runs `kit doctor`, and installs the project-local OpenCode Desktop config. Manual fallback:
+
+```bash
+dotnet tool run selenium-pw-migrator -- kit update --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --backup --with-team
+dotnet tool run selenium-pw-migrator -- kit doctor --workspace migration
+```
+
+```powershell
+.\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop
+```
+
+After that, `/supervised-task` or `/harness-run` owns the run lifecycle. The orchestrator must call `migration/scripts/new-harness-run.ps1` when no matching active run exists, then continue from the generated run files.
+
+So the answer to “can the agent start from zero?” is: after the tool and project-local OpenCode config are bootstrapped, yes for migration workspace lifecycle and run artifacts. The first OpenCode config installation remains a one-time bootstrap step because the agent cannot use project-local roles before they exist.
+
 ## Minimal lifecycle
 
 ```text
@@ -112,3 +138,6 @@ migration/dashboard/
 ```
 
 English is the default dashboard language. Russian is available through the `languageSelect` switch. Dashboard JSON remains language-neutral.
+
+
+Windows OpenCode Desktop shortcut: `--project-desktop` remains an alias for `--opencode-install project-desktop`.
