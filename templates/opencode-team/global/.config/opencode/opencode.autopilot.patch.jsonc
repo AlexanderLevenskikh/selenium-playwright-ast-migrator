@@ -1,6 +1,8 @@
 {
-  "$schema": "https://opencode.ai/config.json",
-  "default_agent": "orchestrator",
+  // Reference patch for less noisy autopilot runs.
+  // Merge these entries into templates/opencode-team/global/.config/opencode/opencode.jsonc
+  // and into project-local opencode.jsonc produced by install-windows.ps1.
+  // Keep the existing deny defaults.
   "permission": {
     "edit": {
       "*": "deny",
@@ -9,7 +11,10 @@
       "migration/scripts/check-final-gate.ps1": "deny",
       "migration/scripts/check-harness-policy.ps1": "deny",
       "migration/.migration-kit/guard-checksums.json": "deny",
-      "migration/state/harness-policy.json": "deny"
+      "opencode.jsonc": "deny",
+      ".opencode/**": "deny",
+      ".opencode-migrator/**": "deny",
+      "AGENTS.md": "deny"
     },
     "bash": {
       "*": "ask",
@@ -21,27 +26,30 @@
       "grep *": "allow",
       "dotnet build*": "allow",
       "dotnet test*": "allow",
-      "dotnet tool run selenium-pw-migrator *": "allow",
+      "dotnet run --project Migrator.Cli*": "allow",
       "selenium-pw-migrator *": "allow",
-      "pwsh *check-scope.ps1*": "allow",
-      "pwsh *check-final-gate.ps1*": "allow",
-      "pwsh *check-harness-policy.ps1*": "allow",
-      "powershell *check-scope.ps1*": "allow",
-      "powershell *check-final-gate.ps1*": "allow",
-      "powershell *check-harness-policy.ps1*": "allow",
+      "dotnet tool run selenium-pw-migrator *": "allow",
+      "pwsh -NoProfile -ExecutionPolicy Bypass -File migration/scripts/check-scope.ps1*": "allow",
+      "pwsh -NoProfile -ExecutionPolicy Bypass -File migration/scripts/check-final-gate.ps1*": "allow",
+      "pwsh -NoProfile -ExecutionPolicy Bypass -File migration/scripts/check-harness-policy.ps1*": "allow",
+      "powershell -NoProfile -ExecutionPolicy Bypass -File migration/scripts/check-scope.ps1*": "allow",
+      "powershell -NoProfile -ExecutionPolicy Bypass -File migration/scripts/check-final-gate.ps1*": "allow",
+      "powershell -NoProfile -ExecutionPolicy Bypass -File migration/scripts/check-harness-policy.ps1*": "allow",
       "python *": "ask",
       "py *": "ask",
       "powershell *": "ask",
       "pwsh *": "ask",
       "cmd /c *": "ask",
-      "cp *": "ask",
-      "copy *": "ask",
       "Copy-Item *": "ask",
-      "mv *": "ask",
       "Move-Item *": "ask",
       "Set-Content *": "ask",
       "Out-File *": "ask",
       "New-Item *": "ask",
+      "npm *": "ask",
+      "yarn *": "ask",
+      "pnpm *": "ask",
+      "curl *": "ask",
+      "Invoke-WebRequest *": "ask",
       "git commit*": "deny",
       "git push*": "deny",
       "git reset --hard*": "deny",
@@ -55,7 +63,7 @@
       "orchestrator": "allow",
       "watchdog": "allow",
       "reviewer": "allow",
-      "executor": "ask",
+      "executor": "allow",
       "general": "deny"
     },
     "question": "ask",

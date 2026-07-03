@@ -1,0 +1,90 @@
+# Migrator Agent Harness Kit
+
+This is a reference document, not a second launch procedure. The canonical guarded OpenCode Desktop launch procedure remains `docs/guarded-opencode-desktop-runbook.ru.md`.
+
+## Purpose
+
+The kit turns a migration run into a controlled file-based workflow:
+
+1. A machine-readable policy says what the agent can do automatically, what requires approval, and what is denied.
+2. A run bootstrapper creates `Prompt.md`, `Plan.md`, `Implement.md`, `Documentation.md`, and trace files under `migration/runs/<run-id>/`.
+3. Guard scripts verify scope, final quality, and harness configuration.
+4. The agent works autonomously only inside this boundary.
+
+## Design principle
+
+Prompts guide behavior; scripts enforce behavior.
+
+The agent may say it followed rules, but the final answer is not trusted until deterministic checks pass.
+
+## Minimal lifecycle
+
+```text
+new-harness-run.ps1
+  -> creates run artifacts
+  -> updates agent-state/current-ticket/run-ledger/handoff
+agent reads autopilot-loop-prompt.txt
+  -> works inside migration/**
+  -> records trace events
+  -> runs scope/final/policy checks
+check-final-gate.ps1
+  -> decides PASS/FAIL for final claims
+```
+
+## Autopilot rule
+
+The agent should not ask the user for permission to do actions already allowed by `state/harness-policy.json` and the OpenCode permission configuration.
+
+It must ask only for:
+
+- writes outside allowed roots;
+- edits to guard scripts/checksums/permissions;
+- package installs or dependency upgrades;
+- network access;
+- git commit/push/reset/clean;
+- destructive delete/move operations;
+- changes to real product/POM/Playwright project files in artifact-only mode.
+
+## Files
+
+```text
+migration/
+  AGENT_CONTRACT.md
+  agent-state.md
+  current-ticket.md
+  state/
+    harness-policy.json
+    harness-run.json
+    harness-events.jsonl
+    harness-policy-result.md/json
+    run-ledger.md
+    handoff.md
+    final-gate.md
+  runs/
+    run-001/
+      Prompt.md
+      Plan.md
+      Implement.md
+      Documentation.md
+      trace.jsonl
+```
+
+## Why this helps
+
+Without this harness, the agent behaves like a nervous junior developer asking about every shell command.
+
+With the harness, the allowed lane is explicit: read/search/build/test/migrate/write migration artifacts. The dangerous lane is also explicit: real project edits, guardrail edits, git push, dependency changes, secrets, network.
+
+## English-first and dashboard i18n
+
+English is canonical for public Harness Kit docs, prompts, report labels, event codes, and dashboard terminology.
+
+Russian is supported as a secondary localization through `*.ru.md` docs and dashboard dictionaries such as `en.json` / `ru.json`.
+
+Machine-readable data must stay language-neutral. Store stable English codes such as `final-gate-pass`, `scope-guard-failed`, or `harness-policy-pass`; localize only UI labels and documentation.
+
+Future dashboard work should default to English and provide a language switch:
+
+```text
+Language: English / Русский
+```

@@ -19,6 +19,14 @@ This index keeps the current workflow short and avoids legacy agent-launch noise
 - [No-infra scaffold](user-guide/no-infra-scaffold.md)
 - [Limitations](user-guide/limitations.md)
 
+
+## Productized workflows
+
+- [Migration quality program](migration-quality-program.md) — public quality workflow, gates, and readiness criteria.
+- [Migration learning pack](migration-learning-pack.md) — guided learning material for users adopting the migrator.
+- [Migration PR pack](migration-pr-pack.md) — Migration PR pack for reviewable migration pull requests.
+- [Config Authoring Assistant](config-authoring-assistant.md) — helper workflow for generating and normalizing project config.
+
 ## Examples and demos
 
 - [End-to-end simple example](examples/end-to-end-simple.md) — real input, config, command, and expected generated output from `examples/simple/`.
@@ -48,6 +56,7 @@ The current launch procedure is only the guarded Desktop runbook above. Detailed
 
 - [Agent docs audit](agent-docs-audit.md)
 - [Migration safety playbook](migration-safety-playbook.md)
+- [Migrator Agent Harness Kit](migrator-agent-harness-kit.md) / [RU](migrator-agent-harness-kit.ru.md) — English-first reference for autopilot policy, run artifacts, gates, and dashboard i18n.
 - [`templates/migration-kit/AGENT_CONTRACT.md`](../templates/migration-kit/AGENT_CONTRACT.md)
 - [`templates/migration-kit/state/final-gate.md`](../templates/migration-kit/state/final-gate.md)
 - [`templates/opencode-team/INSTALLATION-SAFETY.md`](../templates/opencode-team/INSTALLATION-SAFETY.md)

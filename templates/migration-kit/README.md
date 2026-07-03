@@ -40,6 +40,8 @@ migration/
   runs/
   reports/
   logs/
+  harness/
+    README.md
   .migration-kit/
     version.json
     updates/
@@ -56,7 +58,7 @@ Manual/non-Desktop fallback:
 2. Copy `prompts/kickoff-prompt.txt` into your agent.
 3. Run only a bounded artifact-only batch.
 4. After every batch, keep `agent-state.md`, `current-ticket.md`, and `state/*` up to date.
-5. Run `scripts/check-scope.ps1` and `scripts/check-final-gate.ps1` before accepting any batch.
+5. Run `scripts/check-harness-policy.ps1`, `scripts/check-scope.ps1`, and `scripts/check-final-gate.ps1` before accepting any batch.
 
 ## Updating the kit
 
@@ -70,10 +72,18 @@ Safe update:
 
 Update rules:
 
-- project-owned files are not overwritten: config, state, current ticket, runs, reports, logs;
+- project-owned files are not overwritten: config, mutable state, current ticket, runs, reports, logs;
 - changed kit-owned files are written under `.migration-kit/updates/<timestamp>/*.new`;
 - `-Force` overwrites kit-owned files;
 - `-Backup` snapshots the workspace before update.
+
+## MVP-4 agent harness
+
+Use `scripts/new-harness-run.ps1` to create a resumable run workspace under `runs/<run-id>/` with `Prompt.md`, `Plan.md`, `Implement.md`, `Documentation.md`, and `trace.jsonl`.
+
+Use `state/harness-policy.json` as the machine-readable autopilot policy. `scripts/check-harness-policy.ps1` verifies policy presence, active run files, OpenCode edit policy, and guard-sensitive changes.
+
+Public docs are English-first. Russian docs are secondary localization (`*.ru.md`). Machine-readable event/status codes stay language-neutral.
 
 ## MVP-2 stateful loop
 

@@ -9,7 +9,7 @@ using System.Text.Json;
 
 internal static class KitCommand
 {
-    const string KitVersion = "0.5.2";
+    const string KitVersion = "0.5.3";
 
     public static int Run(string[] args)
     {
@@ -78,7 +78,7 @@ internal static class KitCommand
         foreach (var dir in new[]
         {
             "runs", "reports", "logs", "profiles", "prompts", "schemas", "state",
-            "tickets", "evidence", "proposals", "scripts", "codex", ".migration-kit"
+            "tickets", "evidence", "proposals", "scripts", "codex", "harness", ".migration-kit"
         })
         {
             Directory.CreateDirectory(Path.Combine(workspacePath, dir));
@@ -159,6 +159,12 @@ internal static class KitCommand
         AddCheck(checks, "final-gate", File.Exists(Path.Combine(workspacePath, "state", "final-gate.md")), Path.Combine(workspacePath, "state", "final-gate.md"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "scope-guard", File.Exists(Path.Combine(workspacePath, "scripts", "check-scope.ps1")), Path.Combine(workspacePath, "scripts", "check-scope.ps1"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "final-gate-script", File.Exists(Path.Combine(workspacePath, "scripts", "check-final-gate.ps1")), Path.Combine(workspacePath, "scripts", "check-final-gate.ps1"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "harness-reference", File.Exists(Path.Combine(workspacePath, "harness", "README.md")), Path.Combine(workspacePath, "harness", "README.md"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "harness-policy", File.Exists(Path.Combine(workspacePath, "state", "harness-policy.json")), Path.Combine(workspacePath, "state", "harness-policy.json"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "harness-run-template", File.Exists(Path.Combine(workspacePath, "state", "harness-run-template.json")), Path.Combine(workspacePath, "state", "harness-run-template.json"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "harness-policy-script", File.Exists(Path.Combine(workspacePath, "scripts", "check-harness-policy.ps1")), Path.Combine(workspacePath, "scripts", "check-harness-policy.ps1"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "harness-run-script", File.Exists(Path.Combine(workspacePath, "scripts", "new-harness-run.ps1")), Path.Combine(workspacePath, "scripts", "new-harness-run.ps1"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "harness-event-script", File.Exists(Path.Combine(workspacePath, "scripts", "write-harness-event.ps1")), Path.Combine(workspacePath, "scripts", "write-harness-event.ps1"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "guard-checksums", File.Exists(Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json")), Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json"), "Run `migrator kit update --backup`.");
 
         var dotnet = RunProcess("dotnet", "--version");
@@ -460,6 +466,13 @@ Stop-policy checklist before any stop/handoff:
 {{Path.Combine(options.Workspace, "state", "stop-policy-checklist.md")}}
 ```
 
+Harness autopilot run:
+
+```powershell
+.\{{Path.Combine(options.Workspace, "scripts", "new-harness-run.ps1")}} -TaskTitle "Pilot migration batch" -Goal "Run one bounded artifact-only Selenium to Playwright migration batch."
+.\{{Path.Combine(options.Workspace, "scripts", "check-harness-policy.ps1")}} -Workspace "{{options.Workspace}}" -RepoRoot .
+```
+
 Codex bounded ticket:
 
 ```text
@@ -509,7 +522,12 @@ Fix only the current ticket.
 
     static void WriteGuardChecksums(string workspacePath)
     {
-        var guardFiles = new[] { "scripts/check-scope.ps1", "scripts/check-final-gate.ps1" };
+        var guardFiles = new[]
+        {
+            "scripts/check-scope.ps1",
+            "scripts/check-final-gate.ps1",
+            "scripts/check-harness-policy.ps1"
+        };
         var entries = guardFiles.Select(relative =>
         {
             var fullPath = Path.Combine(workspacePath, relative.Replace('/', Path.DirectorySeparatorChar));
@@ -602,7 +620,10 @@ Fix only the current ticket.
             || normalized.StartsWith("state/decision-log.md", StringComparison.Ordinal)
             || normalized.StartsWith("state/handoff.md", StringComparison.Ordinal)
             || normalized.StartsWith("state/stop-policy-checklist.md", StringComparison.Ordinal)
-            || normalized.StartsWith("state/final-gate.md", StringComparison.Ordinal);
+            || normalized.StartsWith("state/final-gate.md", StringComparison.Ordinal)
+            || normalized.StartsWith("state/harness-run.json", StringComparison.Ordinal)
+            || normalized.StartsWith("state/harness-events.jsonl", StringComparison.Ordinal)
+            || normalized.StartsWith("state/harness-policy-result.", StringComparison.Ordinal);
     }
 
     static string SafeRelativePath(string basePath, string path)

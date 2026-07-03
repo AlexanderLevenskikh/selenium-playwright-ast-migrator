@@ -42,6 +42,22 @@ Final report must include:
 - Add regression tests when fixing bugs if a suitable test location exists.
 - Do not hide TODOs by suppressing diagnostics unless explicitly justified.
 
+
+## Harness Kit workflow
+
+Use these rules for migration-artifact/autopilot tasks:
+
+- Treat English docs/prompts as canonical; Russian docs are secondary localization.
+- Create or resume a Harness Kit run before implementation.
+- Read `migration/state/harness-policy.json` before planning.
+- Read the active run files before editing: `Prompt.md`, `Plan.md`, `Implement.md`, `Documentation.md`, and `trace.jsonl`.
+- Pass the active run id to executor/reviewer/watchdog tasks.
+- Do not ask routine continuation questions when the next action is allowed by `harness-policy.json` and local permissions.
+- Record important decisions, verification, and risks in `Documentation.md`.
+- Use `migration/state/harness-events.jsonl` / `trace.jsonl` for meaningful events; do not fake command results.
+- Run `migration/scripts/check-scope.ps1` and `migration/scripts/check-harness-policy.ps1` after edits when available.
+- Treat `migration/scripts/check-final-gate.ps1` as the only final acceptance gate for guarded migration runs.
+
 ## Migrator-specific notes
 
 Use these only for Selenium → Playwright migrator tasks:

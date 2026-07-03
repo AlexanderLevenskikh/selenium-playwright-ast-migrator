@@ -335,8 +335,25 @@ $workspacePath = [System.IO.Path]::GetFullPath($workspacePath)
 $results = New-Object System.Collections.Generic.List[object]
 
 $checksumDetail = ""
-$checksumOk = Test-GuardChecksums $workspacePath @("scripts/check-scope.ps1", "scripts/check-final-gate.ps1") ([ref]$checksumDetail)
+$guardFiles = @(
+    "scripts/check-scope.ps1",
+    "scripts/check-final-gate.ps1",
+    "scripts/check-harness-policy.ps1"
+)
+$checksumOk = Test-GuardChecksums $workspacePath $guardFiles ([ref]$checksumDetail)
 Add-Result $results "guard-checksums" $checksumOk $checksumDetail
+
+$harnessPolicyScript = Join-Path $workspacePath "scripts/check-harness-policy.ps1"
+if (Test-Path $harnessPolicyScript) {
+    $harnessArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $harnessPolicyScript, "-Workspace", $Workspace, "-RepoRoot", $RepoRoot, "-AllowedRoots") + @($AllowedRoots)
+
+    & powershell @harnessArgs | Out-Host
+    $harnessExitCode = $LASTEXITCODE
+    Add-Result $results "harness-policy" ($harnessExitCode -eq 0) "check-harness-policy.ps1 exit code $harnessExitCode"
+}
+else {
+    Add-Result $results "harness-policy" $false "missing $harnessPolicyScript"
+}
 
 $scopeScript = Join-Path $workspacePath "scripts/check-scope.ps1"
 if (Test-Path $scopeScript) {

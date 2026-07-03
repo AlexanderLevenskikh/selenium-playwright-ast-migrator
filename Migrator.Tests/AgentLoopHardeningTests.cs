@@ -63,6 +63,59 @@ public class AgentLoopHardeningTests
         Assert.Contains("stop-policy-checklist.md", resume);
     }
 
+
+    [Fact]
+    public void MigrationKitAgentHarness_IsInstalledDocumentedAndGuarded()
+    {
+        var docsIndex = Read("docs/README.md");
+        var harnessDoc = Read("docs/migrator-agent-harness-kit.md");
+        var harnessDocRu = Read("docs/migrator-agent-harness-kit.ru.md");
+        var kitReadme = Read("templates/migration-kit/README.md");
+        var harnessReadme = Read("templates/migration-kit/harness/README.md");
+        var policy = Read("templates/migration-kit/state/harness-policy.json");
+        var runTemplate = Read("templates/migration-kit/state/harness-run-template.json");
+        var autopilotPrompt = Read("templates/migration-kit/prompts/autopilot-loop-prompt.txt");
+        var reviewPrompt = Read("templates/migration-kit/prompts/harness-review-prompt.txt");
+        var newRunScript = Read("templates/migration-kit/scripts/new-harness-run.ps1");
+        var eventScript = Read("templates/migration-kit/scripts/write-harness-event.ps1");
+        var policyScript = Read("templates/migration-kit/scripts/check-harness-policy.ps1");
+        var finalGateScript = Read("templates/migration-kit/scripts/check-final-gate.ps1");
+        var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
+        var psInstall = Read("scripts/install-migration-kit.ps1");
+        var bundleScript = Read("scripts/package-agent-cli-bundle.ps1");
+
+        Assert.Contains("migrator-agent-harness-kit.md", docsIndex);
+        Assert.Contains("English is canonical", harnessDoc);
+        Assert.Contains("language-neutral", harnessDoc);
+        Assert.Contains("English", harnessDocRu);
+        Assert.Contains("harness/", kitReadme);
+        Assert.Contains("harness-policy.json", kitReadme);
+        Assert.Contains("check-harness-policy.ps1", kitReadme);
+        Assert.Contains("fenced workbench", harnessReadme);
+
+        Assert.Contains("allowedWrites", policy);
+        Assert.Contains("guardSensitiveWrites", policy);
+        Assert.Contains("allowedCommands", policy);
+        Assert.Contains("check-harness-policy.ps1", policy);
+        Assert.Contains("schemaVersion", runTemplate);
+
+        Assert.Contains("Continue autonomously", autopilotPrompt);
+        Assert.Contains("check-harness-policy.ps1", autopilotPrompt);
+        Assert.Contains("final gate", reviewPrompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Prompt.md", newRunScript);
+        Assert.Contains("trace.jsonl", newRunScript);
+        Assert.Contains("harness-events.jsonl", eventScript);
+        Assert.Contains("HARNESS_POLICY_", policyScript);
+
+        Assert.Contains("scripts/check-harness-policy.ps1", finalGateScript);
+        Assert.Contains("check-harness-policy.ps1", kitCommand);
+        Assert.Contains("harness-policy.json", kitCommand);
+        Assert.Contains("WriteGuardChecksums", kitCommand);
+        Assert.Contains("check-harness-policy.ps1", psInstall);
+        Assert.Contains("Write-GuardChecksums", psInstall);
+        Assert.Contains("templates/migration-kit/harness/README.md", bundleScript);
+    }
+
     [Fact]
     public void MigrationKitPrompts_BlockRoutineContinuationQuestionsAndArtifactModeSourceEdits()
     {
@@ -92,12 +145,14 @@ public class AgentLoopHardeningTests
         var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
 
         Assert.Contains("stop-policy-checklist", kitCommand);
-        Assert.Contains("KitVersion = \"0.5.2\"", kitCommand);
+        Assert.Contains("KitVersion = \"0.5.3\"", kitCommand);
         Assert.Contains("state/stop-policy-checklist.md", kitCommand);
         Assert.Contains("AGENT_CONTRACT.md", kitCommand);
         Assert.Contains("state/final-gate.md", kitCommand);
         Assert.Contains("check-scope.ps1", kitCommand);
         Assert.Contains("check-final-gate.ps1", kitCommand);
+        Assert.Contains("check-harness-policy.ps1", kitCommand);
+        Assert.Contains("harness-policy.json", kitCommand);
         Assert.Contains("guard-checksums.json", kitCommand);
     }
 
@@ -130,6 +185,7 @@ public class AgentLoopHardeningTests
         Assert.Contains("opencode-chat-bundle-*", finalGateScript);
         Assert.Contains("check-scope.ps1", finalGateScript);
         Assert.Contains("guard-checksums", finalGateScript);
+        Assert.Contains("check-harness-policy.ps1", finalGateScript);
         Assert.Contains("migration-quality-dashboard.json", finalGateScript);
         Assert.Contains("EMPTY_TEST_AFTER_SUPPRESSION", finalGateScript);
         Assert.Contains("NOT RUNTIME READY", finalGateScript);
@@ -161,6 +217,8 @@ public class AgentLoopHardeningTests
         Assert.Contains("\"migration/**\": \"allow\"", config);
         Assert.Contains("\"migration/scripts/check-scope.ps1\": \"deny\"", config);
         Assert.Contains("\"migration/scripts/check-final-gate.ps1\": \"deny\"", config);
+        Assert.Contains("\"migration/scripts/check-harness-policy.ps1\": \"deny\"", config);
+        Assert.Contains("\"migration/state/harness-policy.json\": \"deny\"", config);
         Assert.Contains("\"migration/.migration-kit/guard-checksums.json\": \"deny\"", config);
         Assert.Contains("\"general\": \"deny\"", config);
         Assert.Contains("\"question\": \"ask\"", config);
@@ -169,6 +227,9 @@ public class AgentLoopHardeningTests
         Assert.Contains("\"python *\": \"ask\"", config);
         Assert.Contains("\"Copy-Item *\": \"ask\"", config);
         Assert.Contains("\"Set-Content *\": \"ask\"", config);
+        Assert.Contains("\"dotnet test*\": \"allow\"", config);
+        Assert.Contains("\"pwsh *check-harness-policy.ps1*\": \"allow\"", config);
+        Assert.Contains("\"powershell *check-harness-policy.ps1*\": \"allow\"", config);
 
         Assert.Contains("Non-negotiable migration-artifact boundary", orchestrator);
         Assert.Contains("A run is failed if `migration/scripts/check-scope.ps1` reports changed files outside", orchestrator);
@@ -176,6 +237,70 @@ public class AgentLoopHardeningTests
         Assert.Contains("Do not suppress assertion/check/helper methods", executor);
         Assert.Contains("forbidden paths changed, verdict is BLOCK", watchdog);
         Assert.Contains("reject the diff if any changed path is outside `migration/**`", reviewer);
+    }
+
+    [Fact]
+    public void OpenCodeTeam_AgentsUseHarnessRunLifecycleAndTraceDiscipline()
+    {
+        var orchestrator = Read("templates/opencode-team/global/.config/opencode/agents/orchestrator.md");
+        var executor = Read("templates/opencode-team/global/.config/opencode/agents/executor.md");
+        var watchdog = Read("templates/opencode-team/global/.config/opencode/agents/watchdog.md");
+        var reviewer = Read("templates/opencode-team/global/.config/opencode/agents/reviewer.md");
+        var supervisedTask = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var checkpoint = Read("templates/opencode-team/global/.config/opencode/commands/checkpoint.md");
+        var harnessRun = Read("templates/opencode-team/global/.config/opencode/commands/harness-run.md");
+        var projectAgents = Read("templates/opencode-team/project-template/AGENTS.md");
+        var teamReadme = Read("templates/opencode-team/README.md");
+
+        foreach (var text in new[] { orchestrator, executor, watchdog, reviewer, supervisedTask, checkpoint, harnessRun, projectAgents })
+        {
+            Assert.Contains("harness-policy.json", text);
+            Assert.Contains("trace.jsonl", text);
+        }
+
+        Assert.Contains("new-harness-run.ps1", orchestrator);
+        Assert.Contains("new-harness-run.ps1", supervisedTask);
+        Assert.Contains("new-harness-run.ps1", harnessRun);
+        Assert.Contains("write-harness-event.ps1", orchestrator);
+        Assert.Contains("write-harness-event.ps1", executor);
+        Assert.Contains("write-harness-event.ps1", supervisedTask);
+
+        foreach (var text in new[] { orchestrator, executor, reviewer, watchdog, supervisedTask, harnessRun, projectAgents })
+        {
+            Assert.Contains("Prompt.md", text);
+            Assert.Contains("Plan.md", text);
+            Assert.Contains("Implement.md", text);
+            Assert.Contains("Documentation.md", text);
+        }
+
+        Assert.Contains("Do not ask routine continuation questions", orchestrator);
+        Assert.Contains("Do not ask routine continuation questions", executor);
+        Assert.Contains("routine continuation questions", reviewer);
+        Assert.Contains("routine continuation questions", watchdog);
+        Assert.Contains("routine continuation questions", supervisedTask);
+        Assert.Contains("routine continuation questions", projectAgents);
+        Assert.Contains("routine continuation questions", teamReadme);
+
+        Assert.Contains("repeated verification loops", watchdog, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("repeated expensive verification commands", checkpoint);
+        Assert.Contains("without an intervening diff", watchdog);
+
+        Assert.Contains("active run id", orchestrator);
+        Assert.Contains("active run id", executor);
+        Assert.Contains("active run evidence", reviewer, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Active run status", watchdog);
+        Assert.Contains("active run id", supervisedTask);
+        Assert.Contains("active run id", harnessRun);
+
+        Assert.Contains("check-harness-policy.ps1", orchestrator);
+        Assert.Contains("check-harness-policy.ps1", executor);
+        Assert.Contains("check-harness-policy.ps1", watchdog);
+        Assert.Contains("check-harness-policy.ps1", supervisedTask);
+        Assert.Contains("check-harness-policy.ps1", projectAgents);
+
+        Assert.Contains("English docs/prompts as canonical", projectAgents);
+        Assert.Contains("/harness-run", teamReadme);
+        Assert.Contains("/supervised-task", teamReadme);
     }
 
     [Fact]
@@ -543,12 +668,26 @@ public class AgentLoopHardeningTests
     {
         repo.CopyRepositoryFile("templates/migration-kit/scripts/check-scope.ps1", "migration/scripts/check-scope.ps1");
         repo.CopyRepositoryFile("templates/migration-kit/scripts/check-final-gate.ps1", "migration/scripts/check-final-gate.ps1");
+        repo.CopyRepositoryFile("templates/migration-kit/scripts/check-harness-policy.ps1", "migration/scripts/check-harness-policy.ps1");
         repo.CopyRepositoryFile("templates/migration-kit/state/final-gate.md", "migration/state/final-gate.md");
+        repo.CopyRepositoryFile("templates/migration-kit/AGENT_CONTRACT.md", "migration/AGENT_CONTRACT.md");
+        repo.CopyRepositoryFile("templates/migration-kit/state/harness-policy.json", "migration/state/harness-policy.json");
 
         repo.Write("migration/.migration-kit/guard-checksums.json", BuildGuardChecksumsJson(repo.WorkspacePath));
         repo.Write("migration/agent-state.md", $"# Agent State\n\nLatest run: {latestRunId}\n");
         repo.Write("migration/current-ticket.md", $"# Current Ticket\n\nLatest run: {latestRunId}\n");
         repo.Write("migration/state/run-ledger.md", $"# Run Ledger\n\n### run-001\n\nHistorical entry.\n\n### run-002\n\nHistorical entry.\n\n### run-003\n\nHistorical entry.\n\n### {latestRunId}\n\nLatest entry.\n");
+        repo.CopyRepositoryFile("templates/migration-kit/harness/README.md", "migration/harness/README.md");
+        repo.CopyRepositoryFile("templates/migration-kit/state/harness-run-template.json", "migration/state/harness-run-template.json");
+        repo.CopyRepositoryFile("templates/migration-kit/prompts/autopilot-loop-prompt.txt", "migration/prompts/autopilot-loop-prompt.txt");
+        repo.CopyRepositoryFile("templates/migration-kit/prompts/harness-review-prompt.txt", "migration/prompts/harness-review-prompt.txt");
+        repo.CopyRepositoryFile("templates/migration-kit/scripts/new-harness-run.ps1", "migration/scripts/new-harness-run.ps1");
+        repo.CopyRepositoryFile("templates/migration-kit/scripts/write-harness-event.ps1", "migration/scripts/write-harness-event.ps1");
+        repo.Write($"migration/runs/{latestRunId}/Prompt.md", $"# Prompt\n\nLatest run: {latestRunId}\n");
+        repo.Write($"migration/runs/{latestRunId}/Plan.md", $"# Plan\n\nLatest run: {latestRunId}\n");
+        repo.Write($"migration/runs/{latestRunId}/Implement.md", $"# Implement\n\nLatest run: {latestRunId}\n");
+        repo.Write($"migration/runs/{latestRunId}/Documentation.md", $"# Documentation\n\nLatest run: {latestRunId}\n");
+        repo.Write($"migration/runs/{latestRunId}/trace.jsonl", "");
         repo.Write($"migration/runs/{latestRunId}/migration-board.md", $"# Board\n\nLatest run: {latestRunId}\n");
         repo.Write($"migration/runs/{latestRunId}/migration-quality-dashboard.json", "{ \"status\": \"passed\", \"EMPTY_TEST_AFTER_SUPPRESSION\": 0, \"categories\": [] }");
         repo.Write("migration/state/handoff.md", explicitStatus ?? "Status: READY_FOR_ACCEPTANCE\n");
@@ -561,6 +700,9 @@ public class AgentLoopHardeningTests
 
         if (includeProjectVerify)
             repo.Write("migration/reports/project-verify-report.json", "{ \"status\": \"passed\" }");
+
+        repo.Git("add migration");
+        repo.Git("commit -m prepare-final-gate-workspace");
     }
 
     static string BuildGuardChecksumsJson(string workspacePath)
@@ -574,7 +716,8 @@ public class AgentLoopHardeningTests
 
         return "{ \"schemaVersion\": \"guard-checksums/v1\", \"files\": [" +
             Entry("scripts/check-scope.ps1") + ", " +
-            Entry("scripts/check-final-gate.ps1") + "] }";
+            Entry("scripts/check-final-gate.ps1") + ", " +
+            Entry("scripts/check-harness-policy.ps1") + "] }";
     }
 
     static string FindRepositoryFile(string relativePath)

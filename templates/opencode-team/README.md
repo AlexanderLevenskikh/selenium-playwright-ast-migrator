@@ -119,3 +119,12 @@ Do not approve shell commands that write:
 - `migration/scripts/check-scope.ps1`;
 - `migration/scripts/check-final-gate.ps1`;
 - `migration/.migration-kit/guard-checksums.json`.
+
+
+## Harness Kit commands
+
+For migration-artifact/autopilot work, start with `/harness-run` or `/supervised-task`.
+
+- `/harness-run` creates or resumes `migration/runs/<run-id>/` and reads `Prompt.md`, `Plan.md`, `Implement.md`, `Documentation.md`, and `trace.jsonl`.
+- `/supervised-task` runs the full orchestrator/watchdog/reviewer loop and requires `check-scope.ps1`, `check-harness-policy.ps1`, and final gate evidence before FINAL.
+- Agents should not ask routine continuation questions when the next action is allowed by `migration/state/harness-policy.json` and OpenCode permissions.

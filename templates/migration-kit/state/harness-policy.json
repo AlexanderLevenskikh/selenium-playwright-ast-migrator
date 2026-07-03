@@ -1,0 +1,123 @@
+{
+  "$schema": "https://example.local/migrator-agent-harness-policy.schema.json",
+  "schemaVersion": 1,
+  "name": "Migrator artifact-only autopilot policy",
+  "mode": "artifact-only",
+  "defaultWriteDecision": "deny",
+  "defaultShellDecision": "ask",
+  "allowedWrites": [
+    "migration/**"
+  ],
+  "guardSensitiveWrites": [
+    "migration/scripts/check-scope.ps1",
+    "migration/scripts/check-final-gate.ps1",
+    "migration/scripts/check-harness-policy.ps1",
+    "migration/.migration-kit/guard-checksums.json",
+    "opencode.jsonc",
+    ".opencode/**",
+    ".opencode-migrator/**",
+    "AGENTS.md"
+  ],
+  "deniedWrites": [
+    ".git/**",
+    "**/.env",
+    "**/.env.*",
+    "**/secrets/**",
+    "**/*secret*",
+    "**/*token*",
+    "**/nuget.config",
+    "**/*.csproj",
+    "**/*.sln",
+    "**/package.json",
+    "**/yarn.lock",
+    "**/package-lock.json",
+    "**/pnpm-lock.yaml"
+  ],
+  "allowedCommands": [
+    "git status*",
+    "git diff*",
+    "git diff --stat*",
+    "git log*",
+    "rg *",
+    "grep *",
+    "dotnet build*",
+    "dotnet test*",
+    "dotnet run --project Migrator.Cli*",
+    "selenium-pw-migrator *",
+    "dotnet tool run selenium-pw-migrator *",
+    "pwsh -NoProfile -ExecutionPolicy Bypass -File migration/scripts/check-scope.ps1*",
+    "pwsh -NoProfile -ExecutionPolicy Bypass -File migration/scripts/check-final-gate.ps1*",
+    "pwsh -NoProfile -ExecutionPolicy Bypass -File migration/scripts/check-harness-policy.ps1*",
+    "powershell -NoProfile -ExecutionPolicy Bypass -File migration/scripts/check-scope.ps1*",
+    "powershell -NoProfile -ExecutionPolicy Bypass -File migration/scripts/check-final-gate.ps1*",
+    "powershell -NoProfile -ExecutionPolicy Bypass -File migration/scripts/check-harness-policy.ps1*"
+  ],
+  "askCommands": [
+    "python *",
+    "py *",
+    "pwsh *",
+    "powershell *",
+    "cmd /c *",
+    "Copy-Item *",
+    "Move-Item *",
+    "Set-Content *",
+    "Out-File *",
+    "New-Item *",
+    "npm *",
+    "yarn *",
+    "pnpm *",
+    "curl *",
+    "Invoke-WebRequest *"
+  ],
+  "deniedCommands": [
+    "git commit*",
+    "git push*",
+    "git reset --hard*",
+    "git clean*",
+    "rm -rf *",
+    "del /s *",
+    "Remove-Item * -Recurse*"
+  ],
+  "autopilot": {
+    "statusWhenHealthy": "CONTINUE_AUTONOMOUSLY",
+    "maxSelfRepairCyclesPerBatch": 3,
+    "doNotAskFor": [
+      "reading repository files",
+      "searching with rg/grep",
+      "updating migration run artifacts",
+      "running allowed verification commands",
+      "running scope/final/harness checks"
+    ],
+    "askOnlyFor": [
+      "writes outside allowed roots",
+      "guard or permission changes",
+      "real product project edits in artifact-only mode",
+      "dependency installation or upgrade",
+      "network access",
+      "git commit/push/reset/clean",
+      "destructive delete/move"
+    ]
+  },
+  "requiredFiles": [
+    "AGENT_CONTRACT.md",
+    "agent-state.md",
+    "current-ticket.md",
+    "state/harness-policy.json",
+    "state/run-ledger.md",
+    "state/handoff.md",
+    "scripts/check-scope.ps1",
+    "scripts/check-final-gate.ps1",
+    "harness/README.md",
+    "state/harness-run-template.json",
+    "prompts/autopilot-loop-prompt.txt",
+    "prompts/harness-review-prompt.txt",
+    "scripts/new-harness-run.ps1",
+    "scripts/write-harness-event.ps1",
+    "scripts/check-harness-policy.ps1"
+  ],
+  "finalGate": {
+    "script": "scripts/check-final-gate.ps1",
+    "requiredBeforeFinalAnswer": true,
+    "finalStatusFile": "state/final-gate-result.json"
+  }
+}

@@ -14,7 +14,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$KitVersion = "0.4.0"
+$KitVersion = "0.5.3"
 
 function Resolve-RepoRootFromScript {
     $scriptDir = Split-Path -Parent $PSCommandPath
@@ -143,7 +143,12 @@ function Test-WorkspaceMutableFile([string]$RelativePath) {
         $normalized.StartsWith("logs/") -or
         $normalized.StartsWith("state/run-ledger.md") -or
         $normalized.StartsWith("state/decision-log.md") -or
-        $normalized.StartsWith("state/handoff.md")
+        $normalized.StartsWith("state/handoff.md") -or
+        $normalized.StartsWith("state/stop-policy-checklist.md") -or
+        $normalized.StartsWith("state/final-gate.md") -or
+        $normalized.StartsWith("state/harness-run.json") -or
+        $normalized.StartsWith("state/harness-events.jsonl") -or
+        $normalized.StartsWith("state/harness-policy-result.")
     )
 }
 
@@ -210,6 +215,37 @@ function Write-KitVersionFile([string]$WorkspacePath, [hashtable]$Tokens, [strin
     Write-Host "write: $versionPath"
 }
 
+
+function Write-GuardChecksums([string]$WorkspacePath) {
+    $metadataDir = Join-Path $WorkspacePath ".migration-kit"
+    New-Item -ItemType Directory -Force -Path $metadataDir | Out-Null
+    $checksumPath = Join-Path $metadataDir "guard-checksums.json"
+    $guardFiles = @(
+        "scripts/check-scope.ps1",
+        "scripts/check-final-gate.ps1",
+        "scripts/check-harness-policy.ps1"
+    )
+
+    $entries = @()
+    foreach ($relative in $guardFiles) {
+        $fullPath = Join-Path $WorkspacePath $relative
+        $hash = ""
+        if (Test-Path $fullPath) {
+            $hash = (Get-FileHash -Algorithm SHA256 -Path $fullPath).Hash.ToLowerInvariant()
+        }
+        $entries += [ordered]@{ path = $relative; sha256 = $hash }
+    }
+
+    $payload = [ordered]@{
+        schemaVersion = "guard-checksums/v1"
+        generatedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+        files = $entries
+    }
+
+    $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $checksumPath -Encoding UTF8
+    Write-Host "write: $checksumPath"
+}
+
 $kitRoot = Resolve-RepoRootFromScript
 $projectRoot = (Get-Location).Path
 $script:workspacePath = Convert-ToAbsolutePath $Workspace $projectRoot
@@ -248,7 +284,7 @@ if ($Backup -and (Test-Path $script:workspacePath)) {
 }
 
 New-Item -ItemType Directory -Force -Path $script:workspacePath | Out-Null
-foreach ($dir in @("runs", "reports", "logs", "profiles", "prompts", "schemas", "state", "tickets", "evidence", "scripts", "codex", ".migration-kit")) {
+foreach ($dir in @("runs", "reports", "logs", "profiles", "prompts", "schemas", "state", "tickets", "evidence", "scripts", "codex", "harness", ".migration-kit")) {
     New-Item -ItemType Directory -Force -Path (Join-Path $script:workspacePath $dir) | Out-Null
 }
 
@@ -352,7 +388,14 @@ $quickStartLines = @(
     "$(Join-Path $Workspace 'prompts/loop-batch-prompt.txt')",
     "```",
     "",
-    "## 5. Ask for next ticket",
+    "## 5. Start an autopilot harness run",
+    "",
+    "```powershell",
+    ".\$(Join-Path $Workspace 'scripts/new-harness-run.ps1') -TaskTitle "Pilot migration batch" -Goal "Run one bounded artifact-only Selenium to Playwright migration batch."",
+    ".\$(Join-Path $Workspace 'scripts/check-harness-policy.ps1') -Workspace `"$Workspace`" -RepoRoot .",
+    "```",
+    "",
+    "## 6. Ask for next ticket",
     "",
     "```text",
     "$(Join-Path $Workspace 'prompts/next-ticket-prompt.txt')",
@@ -380,6 +423,7 @@ $quickStartLines = @(
 Write-TextFileSafe -DestinationPath $quickStart -Content ($quickStartLines -join [Environment]::NewLine) -ForceWrite:$Force -UpdateMode:$Update
 
 Write-KitVersionFile -WorkspacePath $script:workspacePath -Tokens $script:tokens -Version $KitVersion -UpdateMode:$Update
+Write-GuardChecksums -WorkspacePath $script:workspacePath
 
 Write-Host ""
 Write-Host "Migration kit installed."
