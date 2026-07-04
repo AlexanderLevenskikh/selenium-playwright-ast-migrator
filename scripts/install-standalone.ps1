@@ -3,6 +3,8 @@ param(
     [string]$BaseUrl = "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/latest/download",
     [string]$InstallDir = "$HOME/.selenium-pw-migrator",
     [string]$Runtime = "",
+    [string]$ArchivePath = "",
+    [string]$ChecksumsPath = "",
     [switch]$AddToUserPath
 )
 
@@ -38,6 +40,29 @@ function Resolve-BaseUrl([string]$value, [string]$version) {
     return $value.TrimEnd('/')
 }
 
+function Assert-Checksum([string]$FilePath, [string]$ExpectedChecksumsPath, [string]$ExpectedArchiveName) {
+    if ([string]::IsNullOrWhiteSpace($ExpectedChecksumsPath)) {
+        return
+    }
+
+    if (-not (Test-Path $ExpectedChecksumsPath)) {
+        throw "Checksums file was not found: $ExpectedChecksumsPath"
+    }
+
+    $actual = (Get-FileHash -Algorithm SHA256 -Path $FilePath).Hash.ToLowerInvariant()
+    $line = Get-Content $ExpectedChecksumsPath | Where-Object { $_ -match "\s$([Regex]::Escape($ExpectedArchiveName))$" } | Select-Object -First 1
+    if (-not $line) {
+        throw "No checksum entry for $ExpectedArchiveName in $ExpectedChecksumsPath"
+    }
+
+    $expected = ($line -split "\s+")[0].ToLowerInvariant()
+    if ($expected -ne $actual) {
+        throw "Checksum mismatch for $ExpectedArchiveName. Expected $expected, actual $actual."
+    }
+
+    Write-Host "Checksum verified."
+}
+
 $resolvedRuntime = Resolve-Runtime
 $resolvedBaseUrl = Resolve-BaseUrl $BaseUrl $Version
 $archiveName = if ($Version -eq "latest") {
@@ -53,31 +78,35 @@ New-Item -ItemType Directory -Force -Path $temp | Out-Null
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 
 try {
-    $archiveUrl = "$resolvedBaseUrl/$archiveName"
-    $archivePath = Join-Path $temp $archiveName
-
-    Write-Host "Downloading $archiveUrl"
-    Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath
-
-    $checksumsUrl = "$resolvedBaseUrl/checksums.sha256"
-    $checksumsPath = Join-Path $temp "checksums.sha256"
-    try {
-        Invoke-WebRequest -Uri $checksumsUrl -OutFile $checksumsPath
-        $actual = (Get-FileHash -Algorithm SHA256 -Path $archivePath).Hash.ToLowerInvariant()
-        $line = Get-Content $checksumsPath | Where-Object { $_ -match "\s$([Regex]::Escape($archiveName))$" } | Select-Object -First 1
-        if ($line) {
-            $expected = ($line -split "\s+")[0].ToLowerInvariant()
-            if ($expected -ne $actual) {
-                throw "Checksum mismatch for $archiveName. Expected $expected, actual $actual."
-            }
-            Write-Host "Checksum verified."
+    if (-not [string]::IsNullOrWhiteSpace($ArchivePath)) {
+        if (-not (Test-Path $ArchivePath)) {
+            throw "ArchivePath was not found: $ArchivePath"
         }
-        else {
-            Write-Warning "checksums.sha256 was downloaded, but no entry for $archiveName was found. Skipping checksum verification."
+
+        $archivePath = (Resolve-Path $ArchivePath).Path
+        $archiveName = Split-Path -Leaf $archivePath
+        Write-Host "Using local archive: $archivePath"
+
+        if (-not [string]::IsNullOrWhiteSpace($ChecksumsPath)) {
+            Assert-Checksum -FilePath $archivePath -ExpectedChecksumsPath $ChecksumsPath -ExpectedArchiveName $archiveName
         }
     }
-    catch {
-        Write-Warning "Checksum verification skipped: $($_.Exception.Message)"
+    else {
+        $archiveUrl = "$resolvedBaseUrl/$archiveName"
+        $archivePath = Join-Path $temp $archiveName
+
+        Write-Host "Downloading $archiveUrl"
+        Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath
+
+        $checksumsUrl = "$resolvedBaseUrl/checksums.sha256"
+        $downloadedChecksumsPath = Join-Path $temp "checksums.sha256"
+        try {
+            Invoke-WebRequest -Uri $checksumsUrl -OutFile $downloadedChecksumsPath
+            Assert-Checksum -FilePath $archivePath -ExpectedChecksumsPath $downloadedChecksumsPath -ExpectedArchiveName $archiveName
+        }
+        catch {
+            Write-Warning "Checksum verification skipped: $($_.Exception.Message)"
+        }
     }
 
     $extractDir = Join-Path $temp "extract"

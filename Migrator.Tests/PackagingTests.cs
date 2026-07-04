@@ -169,6 +169,7 @@ public class PackagingTests
         var publishScript = File.ReadAllText(FindRepositoryFile("scripts/publish-standalone.ps1"));
         var packageScript = File.ReadAllText(FindRepositoryFile("scripts/package-standalone.ps1"));
         var verifyScript = File.ReadAllText(FindRepositoryFile("scripts/verify-standalone-package.ps1"));
+        var installScript = File.ReadAllText(FindRepositoryFile("scripts/install-standalone.ps1"));
 
         Assert.Contains("--self-contained", publishScript);
         Assert.Contains("PublishSingleFile=false", publishScript);
@@ -183,6 +184,9 @@ public class PackagingTests
         Assert.Contains("selenium-pw-migrator-$runtime", packageScript);
         Assert.Contains("README_STANDALONE.md", verifyScript);
         Assert.Contains("standalone-manifest.json", verifyScript);
+        Assert.Contains("ArchivePath", installScript);
+        Assert.Contains("ChecksumsPath", installScript);
+        Assert.Contains("Using local archive", installScript);
     }
 
     [Fact]
