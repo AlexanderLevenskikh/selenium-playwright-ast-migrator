@@ -261,6 +261,56 @@ public class PackagingTests
         Assert.Contains("MigratorDistribution=dotnet-tool", packToolSh);
     }
 
+
+    [Fact]
+    public void PublicReadmes_SurfaceStandaloneInstallQuickstartAndDiagnostics()
+    {
+        var readme = File.ReadAllText(FindRepositoryFile("README.md"));
+        var readmeRu = File.ReadAllText(FindRepositoryFile("README.ru.md"));
+        var standalone = File.ReadAllText(FindRepositoryFile("docs/standalone-installation.md"));
+        var standaloneRu = File.ReadAllText(FindRepositoryFile("docs/standalone-installation.ru.md"));
+        var troubleshooting = File.ReadAllText(FindRepositoryFile("docs/troubleshooting.md"));
+        var toolInstallation = File.ReadAllText(FindRepositoryFile("docs/tool-installation.md"));
+        var quickStart = File.ReadAllText(FindRepositoryFile("docs/quick-start.md"));
+        var userGuide = File.ReadAllText(FindRepositoryFile("USER_GUIDE.md"));
+        var userGuideRu = File.ReadAllText(FindRepositoryFile("USER_GUIDE.ru.md"));
+
+        Assert.Contains("### Recommended: standalone CLI", readme);
+        Assert.Contains("does not require the .NET SDK or .NET Runtime", readme);
+        Assert.Contains("releases/latest/download/install-standalone.ps1", readme);
+        Assert.Contains("releases/latest/download/install-standalone.sh", readme);
+        Assert.Contains("Get-Command selenium-pw-migrator -All", readme);
+        Assert.Contains("--source https://api.nuget.org/v3/index.json", readme);
+
+        Assert.Contains("### Рекомендуемый вариант: standalone CLI", readmeRu);
+        Assert.Contains("не требует установленного .NET SDK или .NET Runtime", readmeRu);
+        Assert.Contains("releases/latest/download/install-standalone.ps1", readmeRu);
+        Assert.Contains("Get-Command selenium-pw-migrator -All", readmeRu);
+
+        Assert.Contains("Quick install from GitHub Releases", standalone);
+        Assert.Contains("Version-pinned Windows install", standalone);
+        Assert.Contains("## Update", standalone);
+        Assert.Contains("Which installation is being used?", standalone);
+        Assert.Contains("Windows uninstall and remove the standalone directory from the user `PATH`", standalone);
+        Assert.Contains("Get-Command selenium-pw-migrator -All", standalone);
+        Assert.Contains("which -a selenium-pw-migrator", standalone);
+
+        Assert.Contains("Быстрая установка из GitHub Releases", standaloneRu);
+        Assert.Contains("Установка конкретной версии на Windows", standaloneRu);
+        Assert.Contains("## Обновление", standaloneRu);
+        Assert.Contains("Какая установка используется?", standaloneRu);
+        Assert.Contains("убрать standalone-папку из user `PATH`", standaloneRu);
+
+        Assert.Contains("I installed standalone, but PowerShell still runs the dotnet tool", troubleshooting);
+        Assert.Contains("%USERPROFILE%\\.selenium-pw-migrator\\bin", troubleshooting);
+        Assert.Contains("Get-Command selenium-pw-migrator -All", toolInstallation);
+        Assert.Contains("Быстрая standalone-установка на Windows без .NET", toolInstallation);
+        Assert.Contains("Recommended standalone install", quickStart);
+        Assert.Contains("selenium-pw-migrator playground", quickStart);
+        Assert.Contains("Fast standalone install", userGuide);
+        Assert.Contains("Быстрая standalone-установка", userGuideRu);
+    }
+
     [Fact]
     public void StandaloneInstallationDocs_ExplainNoDotnetRuntimeAndPathVerification()
     {

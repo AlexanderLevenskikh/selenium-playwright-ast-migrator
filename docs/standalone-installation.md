@@ -4,6 +4,92 @@ Standalone distribution does not require the .NET SDK or .NET Runtime on the tar
 
 The migrator is published as a self-contained runtime-specific bundle. It is intentionally not published as a single-file executable: `PublishSingleFile` is kept disabled (`PublishSingleFile=false`) because the CLI uses Roslyn and project-reference assemblies/resources that must stay next to the executable. Users still do not need .NET installed when the bundle was built with `--self-contained true`.
 
+## Quick install from GitHub Releases
+
+Use this path when you want the latest standalone CLI without cloning the repository and without installing .NET.
+
+Windows PowerShell:
+
+```powershell
+$installer = Join-Path $env:TEMP "install-standalone.ps1"
+Invoke-WebRequest "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/latest/download/install-standalone.ps1" -OutFile $installer
+& $installer
+selenium-pw-migrator --version
+```
+
+Version-pinned Windows install:
+
+```powershell
+$version = "0.0.0-preview.5"
+$baseUrl = "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v$version"
+$installer = Join-Path $env:TEMP "install-standalone.ps1"
+Invoke-WebRequest "$baseUrl/install-standalone.ps1" -OutFile $installer
+& $installer -Version $version -BaseUrl $baseUrl
+selenium-pw-migrator --version
+```
+
+Linux/macOS/WSL:
+
+```bash
+curl -fsSL https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/latest/download/install-standalone.sh -o /tmp/install-standalone.sh
+bash /tmp/install-standalone.sh
+export PATH="$HOME/.selenium-pw-migrator/bin:$PATH"
+selenium-pw-migrator --version
+```
+
+Version-pinned Linux/macOS/WSL install:
+
+```bash
+version="0.0.0-preview.5"
+base_url="https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v$version"
+curl -fsSL "$base_url/install-standalone.sh" -o /tmp/install-standalone.sh
+bash /tmp/install-standalone.sh --version "$version" --base-url "$base_url"
+export PATH="$HOME/.selenium-pw-migrator/bin:$PATH"
+selenium-pw-migrator --version
+```
+
+## Update
+
+Rerun the installer with the desired version. The installer overwrites the existing files in the install directory.
+
+Windows:
+
+```powershell
+$version = "0.0.0-preview.5"
+$baseUrl = "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v$version"
+$installer = Join-Path $env:TEMP "install-standalone.ps1"
+Invoke-WebRequest "$baseUrl/install-standalone.ps1" -OutFile $installer
+& $installer -Version $version -BaseUrl $baseUrl
+```
+
+Linux/macOS/WSL:
+
+```bash
+version="0.0.0-preview.5"
+base_url="https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v$version"
+curl -fsSL "$base_url/install-standalone.sh" -o /tmp/install-standalone.sh
+bash /tmp/install-standalone.sh --version "$version" --base-url "$base_url"
+```
+
+## Which installation is being used?
+
+Windows PowerShell:
+
+```powershell
+Get-Command selenium-pw-migrator -All
+where.exe selenium-pw-migrator
+selenium-pw-migrator --version
+```
+
+Unix-like shells:
+
+```bash
+which -a selenium-pw-migrator
+selenium-pw-migrator --version
+```
+
+The first path wins. On Windows, the standalone installer adds `%USERPROFILE%\.selenium-pw-migrator\bin` before the existing user `PATH`, so standalone normally wins over `%USERPROFILE%\.dotnet\tools`.
+
 ## Release artifacts
 
 A release contains these files:
@@ -162,19 +248,29 @@ Use `-RunHelp` only for an archive that matches the current OS/runtime.
 
 ## Uninstall
 
-Windows:
+Windows files-only uninstall:
 
 ```powershell
-Remove-Item -Recurse -Force "$HOME/.selenium-pw-migrator"
+Remove-Item -Recurse -Force "$env:USERPROFILE\.selenium-pw-migrator"
 ```
 
-Linux/macOS:
+Windows uninstall and remove the standalone directory from the user `PATH`:
+
+```powershell
+$binDir = "$env:USERPROFILE\.selenium-pw-migrator\bin"
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$nextPath = (($userPath -split ";") | Where-Object { $_ -and $_.TrimEnd([char[]]@('\', '/')) -ne $binDir.TrimEnd([char[]]@('\', '/')) }) -join ";"
+[Environment]::SetEnvironmentVariable("Path", $nextPath, "User")
+Remove-Item -Recurse -Force "$env:USERPROFILE\.selenium-pw-migrator"
+```
+
+Linux/macOS files-only uninstall:
 
 ```bash
 rm -rf ~/.selenium-pw-migrator
 ```
 
-Also remove the install directory from `PATH` if it was added manually.
+Then remove `~/.selenium-pw-migrator/bin` from your shell profile if you added it there.
 
 ## When to use dotnet tool instead
 

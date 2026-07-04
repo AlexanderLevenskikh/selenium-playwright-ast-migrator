@@ -27,10 +27,36 @@ Migrator парсит Selenium-тесты, строит промежуточну
 
 ## Установка
 
-Для обычного использования установите последнюю публичную preview-версию из NuGet. Клонировать репозиторий не нужно.
+### Рекомендуемый вариант: standalone CLI
+
+Standalone-дистрибутив не требует установленного .NET SDK или .NET Runtime на машине пользователя. Это самый простой вариант, если нужно только запускать мигратор.
+
+Windows PowerShell:
+
+```powershell
+$installer = Join-Path $env:TEMP "install-standalone.ps1"
+Invoke-WebRequest "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/latest/download/install-standalone.ps1" -OutFile $installer
+& $installer
+selenium-pw-migrator --version
+```
+
+Linux/macOS/WSL:
 
 ```bash
-dotnet tool install --global SeleniumPlaywrightMigrator --prerelease
+curl -fsSL https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/latest/download/install-standalone.sh -o /tmp/install-standalone.sh
+bash /tmp/install-standalone.sh
+export PATH="$HOME/.selenium-pw-migrator/bin:$PATH"
+selenium-pw-migrator --version
+```
+
+Windows-установщик по умолчанию добавляет standalone-папку в user `PATH`. Если нужно понять, какая версия запускается, используй `Get-Command selenium-pw-migrator -All` в PowerShell или `which -a selenium-pw-migrator` в Unix-like shell.
+
+### Для .NET-разработчиков: dotnet tool
+
+Используй dotnet tool, если нужна global/local .NET tool установка или закрепление версии через `.config/dotnet-tools.json`. Этот вариант требует .NET SDK.
+
+```bash
+dotnet tool install --global SeleniumPlaywrightMigrator --source https://api.nuget.org/v3/index.json --prerelease
 selenium-pw-migrator --help
 ```
 
@@ -73,7 +99,7 @@ dotnet tool run selenium-pw-migrator -- --help
 Для стабильного production-сценария держим путь максимально коротким:
 
 ```bash
-dotnet tool install --global SeleniumPlaywrightMigrator --prerelease
+dotnet tool install --global SeleniumPlaywrightMigrator --source https://api.nuget.org/v3/index.json --prerelease
 selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
 bash playground/commands.sh
 selenium-pw-migrator playground verify --input playground --out playground-verify --format both

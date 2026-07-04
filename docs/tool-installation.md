@@ -2,6 +2,21 @@
 
 Если .NET SDK на машине ставить не хочется, используйте standalone-дистрибутив: [standalone-installation.ru.md](standalone-installation.ru.md).
 
+Быстрая standalone-установка на Windows без .NET:
+
+```powershell
+$installer = Join-Path $env:TEMP "install-standalone.ps1"
+Invoke-WebRequest "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/latest/download/install-standalone.ps1" -OutFile $installer
+& $installer
+selenium-pw-migrator --version
+```
+
+Если на машине есть несколько установок, проверь приоритет командой:
+
+```powershell
+Get-Command selenium-pw-migrator -All
+```
+
 
 ## Самый быстрый старт из NuGet
 

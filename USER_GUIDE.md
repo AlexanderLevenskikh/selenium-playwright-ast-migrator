@@ -12,10 +12,9 @@ The main production path is Selenium C# to Playwright .NET. NUnit is the default
 
 ## Happy path
 
-Use this as the short path for new users:
+Install the CLI first. The recommended standalone installer does not require the .NET SDK or .NET Runtime; see [Standalone installation](docs/standalone-installation.md). Then use this as the short path for new users:
 
 ```bash
-dotnet tool install --global SeleniumPlaywrightMigrator --prerelease
 selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
 bash playground/commands.sh
 selenium-pw-migrator playground verify --input playground --out playground-verify --format both
@@ -47,12 +46,23 @@ Weak guesses become TODOs or reports instead of unsafe generated code.
 
 ## 2. Installation And Local Use
 
+### Fast standalone install
+
+Use standalone when you only need to run the CLI and do not want to install the .NET SDK or .NET Runtime:
+
+```powershell
+$installer = Join-Path $env:TEMP "install-standalone.ps1"
+Invoke-WebRequest "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/latest/download/install-standalone.ps1" -OutFile $installer
+& $installer
+selenium-pw-migrator --version
+```
+
 ### Fast start from NuGet
 
-For the fastest start, install the latest public preview globally. You do not need to clone the repository to use the migrator:
+Use the dotnet tool when you want a global/local .NET tool or a project-pinned `.config/dotnet-tools.json`. You do not need to clone the repository to use the migrator:
 
 ```bash
-dotnet tool install --global SeleniumPlaywrightMigrator --prerelease
+dotnet tool install --global SeleniumPlaywrightMigrator --source https://api.nuget.org/v3/index.json --prerelease
 selenium-pw-migrator --help
 ```
 
@@ -60,7 +70,7 @@ For team repositories, use a project-local dotnet tool manifest:
 
 ```bash
 dotnet new tool-manifest
-dotnet tool install SeleniumPlaywrightMigrator --prerelease
+dotnet tool install SeleniumPlaywrightMigrator --source https://api.nuget.org/v3/index.json --prerelease
 dotnet tool run selenium-pw-migrator -- --help
 ```
 

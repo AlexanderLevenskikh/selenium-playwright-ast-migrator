@@ -2,10 +2,22 @@
 
 This path gets you from a small Selenium sample to generated Playwright output. Start with 1-5 tests before scaling to a full suite.
 
+## Install the CLI
+
+Recommended standalone install, no .NET SDK/runtime required to run the CLI:
+
+```powershell
+$installer = Join-Path $env:TEMP "install-standalone.ps1"
+Invoke-WebRequest "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/latest/download/install-standalone.ps1" -OutFile $installer
+& $installer
+selenium-pw-migrator --version
+```
+
+For a project-pinned .NET tool, see [Tool installation](tool-installation.md).
+
 ## Short happy path
 
 ```bash
-dotnet tool install --global SeleniumPlaywrightMigrator --prerelease
 selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
 bash playground/commands.sh
 selenium-pw-migrator playground verify --input playground --out playground-verify --format both

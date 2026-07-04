@@ -126,3 +126,33 @@ Compilation does not prove runtime correctness. Classify runtime failures into:
 - generated code bug.
 
 Use `smoke-plan` and `runtime-classify` to prioritize follow-up work from generated artifacts and runtime logs.
+
+## I installed standalone, but PowerShell still runs the dotnet tool
+
+PowerShell resolves `selenium-pw-migrator` from the first matching directory in `PATH`.
+Check every visible installation:
+
+```powershell
+Get-Command selenium-pw-migrator -All
+where.exe selenium-pw-migrator
+selenium-pw-migrator --version
+```
+
+For standalone to win on Windows, this path should appear before `%USERPROFILE%\.dotnet\tools`:
+
+```text
+%USERPROFILE%\.selenium-pw-migrator\bin
+```
+
+The standalone Windows installer adds that directory to the user `PATH` by default and also prepends it to the current PowerShell session. Open a new terminal if another session still sees the old command. To bypass `PATH` entirely, run the installed executable directly:
+
+```powershell
+& "$env:USERPROFILE\.selenium-pw-migrator\bin\selenium-pw-migrator.exe" --version
+```
+
+On Linux/macOS/WSL, check command priority with:
+
+```bash
+which -a selenium-pw-migrator
+selenium-pw-migrator --version
+```
