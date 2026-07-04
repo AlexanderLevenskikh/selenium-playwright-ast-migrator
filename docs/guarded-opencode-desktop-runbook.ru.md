@@ -218,7 +218,7 @@ Non-negotiable rules:
 - Do not edit Web/**, real POM project, real Playwright project, *.csproj, nuget.config, root-level generated files.
 - If POM or Playwright code is needed, create only generated/shadow/proposal artifacts under migration/**.
 - TODO reduction via suppression, empty tests, weakened assertions, dummy known identifiers, or target-project edits is failure, not progress.
-- Do not ask “what should I do next” unless the next action requires changing scope or writing outside migration/**.
+- Do not ask “what should I do next”. If the next action requires changing scope or writing outside migration/**, stop with a concrete blocker.
 - If blocked, write a precise BLOCKED report under migration/runs/<run-id>/ and stop.
 - After each major batch, run scope, harness-policy, and final gate checks.
 - Record meaningful lifecycle events with migration/scripts/write-harness-event.ps1 when practical.

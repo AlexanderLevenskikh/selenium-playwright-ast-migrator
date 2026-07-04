@@ -18,15 +18,15 @@ The harness is the migration agent's fenced workbench: policy, run files, prompt
 
 ## Autopilot behavior
 
-The agent may continue without asking when all of these are true:
+The agent may continue without interactive approvals when all of these are true:
 
 - the write is under `migration/**`;
-- the command is listed under `allowedCommands` in `state/harness-policy.json`;
+- the command is not matched by `deniedCommands` in `state/harness-policy.json`;
 - no guard-sensitive file is being changed;
 - the action advances the current run/ticket;
 - the latest scope check is clean or the next action is fixing a scope violation.
 
-The agent must stop or ask when an action touches a denied/ask category.
+The agent must stop with a concrete blocker when an action touches a denied category. The low-noise autopilot profile intentionally avoids interactive ask prompts.
 
 ## Required checkpoints
 

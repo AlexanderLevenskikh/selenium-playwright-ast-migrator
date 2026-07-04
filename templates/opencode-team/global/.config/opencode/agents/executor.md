@@ -6,82 +6,52 @@ permission:
   edit:
     "*": deny
     "migration/**": allow
+    "migration/scripts/check-scope.ps1": deny
+    "migration/scripts/check-final-gate.ps1": deny
+    "migration/scripts/check-harness-policy.ps1": deny
+    "migration/.migration-kit/guard-checksums.json": deny
+    "migration/state/harness-policy.json": deny
+    "opencode.jsonc": deny
+    ".opencode/**": deny
+    ".opencode-migrator/**": deny
+    "AGENTS.md": deny
   bash:
-    "*": ask
-    "git status*": allow
-    "git diff*": allow
-    "git diff --stat*": allow
-    "git log*": allow
-    "rg *": allow
-    "grep *": allow
-    "Get-Content *": allow
-    "Get-Content*": allow
-    "Test-Path *": allow
-    "Test-Path*": allow
-    "Get-ChildItem *": allow
-    "Get-ChildItem*": allow
-    "Select-String *": allow
-    "Select-String*": allow
-    "Select-Object*": allow
-    "Resolve-Path*": allow
-    "ConvertFrom-Json*": allow
-    "Out-Null": allow
-
-    "dotnet build*": ask
-    "dotnet test*": ask
-    "yarn test*": ask
-    "yarn lint*": ask
-    "yarn typecheck*": ask
-    "npm test*": ask
-    "npm run lint*": ask
-    "npm run typecheck*": ask
-    "pnpm test*": ask
-    "pnpm lint*": ask
-    "pwsh *new-harness-run.ps1*": allow
-    "powershell *new-harness-run.ps1*": allow
-    "pwsh *write-harness-event.ps1*": allow
-    "powershell *write-harness-event.ps1*": allow
-    "./migration/scripts/new-harness-run.ps1*": allow
-    "./migration/scripts/write-harness-event.ps1*": allow
-    "pwsh *check-scope.ps1*": allow
-    "powershell *check-scope.ps1*": allow
-    "pwsh *check-harness-policy.ps1*": allow
-    "powershell *check-harness-policy.ps1*": allow
-    "pwsh *check-final-gate.ps1*": allow
-    "powershell *check-final-gate.ps1*": allow
-    "pwsh *build-harness-dashboard.ps1*": allow
-    "powershell *build-harness-dashboard.ps1*": allow
-    "./migration/scripts/check-scope.ps1*": allow
-    "./migration/scripts/check-harness-policy.ps1*": allow
-    "./migration/scripts/check-final-gate.ps1*": allow
-    "./migration/scripts/build-harness-dashboard.ps1*": allow
-    "python *": ask
-    "py *": ask
-    "powershell *": ask
-    "pwsh *": ask
-    "cmd /c *": ask
-    "cp *": ask
-    "copy *": ask
-    "Copy-Item *": ask
-    "mv *": ask
-    "Move-Item *": ask
-    "Set-Content *": ask
-    "Out-File *": ask
-    "New-Item *": ask
-
+    "*": allow
     "git commit*": deny
     "git push*": deny
     "git reset --hard*": deny
     "git clean*": deny
+    "git checkout*": deny
+    "git restore *": deny
+    "git switch *": deny
+    "git branch -D*": deny
+    "git branch -d*": deny
     "rm -rf *": deny
+    "rm -r *": deny
     "del /s *": deny
+    "rmdir /s *": deny
     "Remove-Item * -Recurse*": deny
-
+    "Remove-Item -Recurse *": deny
+    "format *": deny
+    "diskpart*": deny
+    "reg delete*": deny
+    "Set-ExecutionPolicy*": deny
+    "curl *": deny
+    "wget *": deny
+    "Invoke-WebRequest *": deny
+    "iwr *": deny
+    "Invoke-RestMethod *": deny
+    "irm *": deny
+    "npm publish*": deny
+    "yarn publish*": deny
+    "pnpm publish*": deny
+    "dotnet nuget push*": deny
+    "nuget push*": deny
   webfetch: deny
   websearch: deny
-  question: ask
-  external_directory: ask
-  doom_loop: ask
+  question: deny
+  external_directory: deny
+  doom_loop: allow
 ---
 
 You are an implementation agent.
@@ -108,7 +78,7 @@ Before editing, read these files when they exist:
 
 The active run id is part of your assignment. If the assignment does not include a run id, stop and report `BLOCKED_BY_MISSING_HARNESS_RUN`.
 
-Do not ask routine continuation questions when the next action is allowed by `harness-policy.json`, OpenCode permissions, and the assignment scope. Ask only for dangerous actions, ambiguous task intent, network/package updates, permission-policy edits, or writes outside the allowed workspace.
+Do not ask routine continuation questions when the next action is allowed by `harness-policy.json`, OpenCode permissions, and the assignment scope. For dangerous actions, ambiguous task intent, network/package updates, permission-policy edits, or writes outside the allowed workspace, stop with a concrete blocker instead of waiting for an interactive approval.
 
 ## Artifact-only boundary
 

@@ -6,7 +6,7 @@ This is a reference document, not a second launch procedure. The canonical guard
 
 The kit turns a migration run into a controlled file-based workflow:
 
-1. A machine-readable policy says what the agent can do automatically, what requires approval, and what is denied.
+1. A machine-readable policy says what the agent can do automatically and what is denied.
 2. A run bootstrapper creates `Prompt.md`, `Plan.md`, `Implement.md`, `Documentation.md`, and trace files under `migration/runs/<run-id>/`.
 3. Guard scripts verify scope, final quality, and harness configuration.
 4. The agent works autonomously only inside this boundary.
@@ -61,7 +61,7 @@ check-final-gate.ps1
 
 The agent should not ask the user for permission to do actions already allowed by `state/harness-policy.json` and the OpenCode permission configuration.
 
-It must ask only for:
+It must stop with a concrete blocker for:
 
 - writes outside allowed roots;
 - edits to guard scripts/checksums/permissions;

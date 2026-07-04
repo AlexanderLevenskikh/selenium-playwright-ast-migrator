@@ -5,43 +5,42 @@ temperature: 0.1
 permission:
   edit: deny
   bash:
-    "*": ask
-    "git status*": allow
-    "git diff*": allow
-    "git diff --stat*": allow
-    "git log*": allow
-    "rg *": allow
-    "grep *": allow
-    "Get-Content *": allow
-    "Get-Content*": allow
-    "Test-Path *": allow
-    "Test-Path*": allow
-    "Get-ChildItem *": allow
-    "Get-ChildItem*": allow
-    "Select-String *": allow
-    "Select-String*": allow
-    "Select-Object*": allow
-    "Resolve-Path*": allow
-    "ConvertFrom-Json*": allow
-    "Out-Null": allow
-    "pwsh *check-scope.ps1*": allow
-    "powershell *check-scope.ps1*": allow
-    "pwsh *check-harness-policy.ps1*": allow
-    "powershell *check-harness-policy.ps1*": allow
-    "pwsh *check-final-gate.ps1*": allow
-    "powershell *check-final-gate.ps1*": allow
-    "pwsh *build-harness-dashboard.ps1*": allow
-    "powershell *build-harness-dashboard.ps1*": allow
-    "./migration/scripts/check-scope.ps1*": allow
-    "./migration/scripts/check-harness-policy.ps1*": allow
-    "./migration/scripts/check-final-gate.ps1*": allow
-    "./migration/scripts/build-harness-dashboard.ps1*": allow
-
+    "*": allow
+    "git commit*": deny
+    "git push*": deny
+    "git reset --hard*": deny
+    "git clean*": deny
+    "git checkout*": deny
+    "git restore *": deny
+    "git switch *": deny
+    "git branch -D*": deny
+    "git branch -d*": deny
+    "rm -rf *": deny
+    "rm -r *": deny
+    "del /s *": deny
+    "rmdir /s *": deny
+    "Remove-Item * -Recurse*": deny
+    "Remove-Item -Recurse *": deny
+    "format *": deny
+    "diskpart*": deny
+    "reg delete*": deny
+    "Set-ExecutionPolicy*": deny
+    "curl *": deny
+    "wget *": deny
+    "Invoke-WebRequest *": deny
+    "iwr *": deny
+    "Invoke-RestMethod *": deny
+    "irm *": deny
+    "npm publish*": deny
+    "yarn publish*": deny
+    "pnpm publish*": deny
+    "dotnet nuget push*": deny
+    "nuget push*": deny
   webfetch: deny
   websearch: deny
-  question: ask
-  external_directory: ask
-  doom_loop: ask
+  question: deny
+  external_directory: deny
+  doom_loop: allow
 ---
 
 You are a strict code reviewer.

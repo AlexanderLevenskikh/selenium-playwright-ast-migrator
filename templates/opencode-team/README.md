@@ -50,7 +50,7 @@ opencode.jsonc
 .opencode/commands/*
 ```
 
-For full instructions, approve/deny rules, strict final gate, and forensic export, use:
+For full instructions, deny-list safety rules, strict final gate, and forensic export, use:
 
 ```text
 docs/guarded-opencode-desktop-runbook.ru.md
@@ -133,7 +133,7 @@ Do not approve shell commands that write:
 For migration-artifact/autopilot work, start with `/harness-run` or `/supervised-task`. For repository-level Harness Kit validation, use `/dogfood-harness`.
 
 - `/harness-run` creates or resumes `migration/runs/<run-id>/` and reads `Prompt.md`, `Plan.md`, `Implement.md`, `Documentation.md`, and `trace.jsonl`.
-- `/supervised-task` runs the full orchestrator/watchdog/reviewer loop and requires `check-scope.ps1`, `check-harness-policy.ps1`, and final gate evidence before FINAL.
+- `/supervised-task` runs the full orchestrator/watchdog/reviewer loop with low-noise deny-list permissions while still requiring `check-scope.ps1`, `check-harness-policy.ps1`, and final gate evidence before FINAL.
 - `/dogfood-harness` follows `docs/migrator-agent-harness-dogfood.md` and uses explicit dogfood allowed roots for Migrator-repo validation.
 - Agents should not ask routine continuation questions when the next action is allowed by `migration/state/harness-policy.json` and OpenCode permissions.
 

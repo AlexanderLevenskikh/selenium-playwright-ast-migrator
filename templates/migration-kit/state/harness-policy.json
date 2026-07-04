@@ -4,7 +4,7 @@
   "name": "Migrator artifact-only autopilot policy",
   "mode": "artifact-only",
   "defaultWriteDecision": "deny",
-  "defaultShellDecision": "ask",
+  "defaultShellDecision": "allow",
   "allowedWrites": [
     "migration/**"
   ],
@@ -121,31 +121,37 @@
     "migration/scripts/build-harness-dashboard.sh*",
     "bash ./migration/scripts/build-harness-dashboard.sh*"
   ],
-  "askCommands": [
-    "python *",
-    "py *",
-    "pwsh *",
-    "powershell *",
-    "cmd /c *",
-    "Copy-Item *",
-    "Move-Item *",
-    "Set-Content *",
-    "Out-File *",
-    "New-Item *",
-    "npm *",
-    "yarn *",
-    "pnpm *",
-    "curl *",
-    "Invoke-WebRequest *"
-  ],
   "deniedCommands": [
     "git commit*",
     "git push*",
     "git reset --hard*",
     "git clean*",
+    "git checkout*",
+    "git restore *",
+    "git switch *",
+    "git branch -D*",
+    "git branch -d*",
     "rm -rf *",
+    "rm -r *",
     "del /s *",
-    "Remove-Item * -Recurse*"
+    "rmdir /s *",
+    "Remove-Item * -Recurse*",
+    "Remove-Item -Recurse *",
+    "format *",
+    "diskpart*",
+    "reg delete*",
+    "Set-ExecutionPolicy*",
+    "curl *",
+    "wget *",
+    "Invoke-WebRequest *",
+    "iwr *",
+    "Invoke-RestMethod *",
+    "irm *",
+    "npm publish*",
+    "yarn publish*",
+    "pnpm publish*",
+    "dotnet nuget push*",
+    "nuget push*"
   ],
   "autopilot": {
     "statusWhenHealthy": "CONTINUE_AUTONOMOUSLY",
@@ -154,18 +160,20 @@
       "reading repository files",
       "read-only shell inspection of repository and migration evidence",
       "searching with rg/grep",
-      "updating migration run artifacts",
-      "running allowed verification commands",
-      "running scope/final/harness checks"
+      "copying/updating migration run artifacts",
+      "running local build/test/verification commands",
+      "running scope/final/harness checks",
+      "local PowerShell/bash/Python helper commands inside the workspace"
     ],
-    "askOnlyFor": [
+    "stopFor": [
       "writes outside allowed roots",
       "guard or permission changes",
       "real product project edits in artifact-only mode",
-      "dependency installation or upgrade",
-      "network access",
-      "git commit/push/reset/clean",
-      "destructive delete/move"
+      "external-directory access",
+      "network fetch/search commands",
+      "git commit/push/checkout/reset/clean",
+      "destructive delete/move",
+      "package publishing"
     ]
   },
   "requiredFiles": [

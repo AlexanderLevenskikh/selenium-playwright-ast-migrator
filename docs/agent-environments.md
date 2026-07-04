@@ -118,5 +118,5 @@ All environments share the same rules:
 - English docs are canonical; Russian docs are secondary localization.
 - Machine-readable events and report status codes are language-neutral.
 - The agent may continue autonomously only for actions allowed by `harness-policy.json` and `AGENT_CONTRACT.md`.
-- The agent must ask before package installs, network access, broad shell operations, or edits outside allowed roots.
+- The low-noise autopilot profile does not use routine permission prompts. It denies destructive VCS/reset/delete/publish/network-fetch commands and external-directory access; blocked cases must be reported explicitly.
 - Final success requires evidence and gates, not a confident chat answer.
