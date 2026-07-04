@@ -352,6 +352,31 @@ public class PackagingTests
         Assert.Contains("<base-url>/", releaseProcess);
     }
 
+
+
+    [Fact]
+    public void PreviewFiveReleaseNotes_DocumentStandaloneDistribution()
+    {
+        var changelog = File.ReadAllText(FindRepositoryFile("CHANGELOG.md"));
+        var notes = File.ReadAllText(FindRepositoryFile("docs/release-notes/v0.0.0-preview.5.md"));
+        var docsIndex = File.ReadAllText(FindRepositoryFile("docs/README.md"));
+
+        Assert.Contains("## [0.0.0-preview.5]", changelog);
+        Assert.Contains("Standalone self-contained release archives", changelog);
+        Assert.Contains("GitHub Releases now attach all standalone archives", changelog);
+        Assert.Contains("PublishSingleFile", changelog);
+
+        Assert.Contains("Selenium Playwright Migrator 0.0.0-preview.5", notes);
+        Assert.Contains("install-standalone.ps1", notes);
+        Assert.Contains("install-standalone.sh", notes);
+        Assert.Contains("checksums.sha256", notes);
+        Assert.Contains("standalone-release-manifest.json", notes);
+        Assert.Contains("distribution: standalone", notes);
+        Assert.Contains("does not require the .NET SDK or .NET Runtime", notes);
+
+        Assert.Contains("release-notes/v0.0.0-preview.5.md", docsIndex);
+    }
+
     [Fact]
     public void CliProject_HasPublicNuGetMetadata()
     {
