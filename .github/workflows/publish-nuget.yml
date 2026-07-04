@@ -40,6 +40,11 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Restore
         run: dotnet restore Migrator.sln
 
@@ -66,6 +71,20 @@ jobs:
         shell: pwsh
         run: ./scripts/verify-release-artifacts.ps1 -Version "${{ inputs.version }}"
 
+      - name: Smoke npm wrapper against local standalone archive
+        shell: pwsh
+        run: ./scripts/smoke-npm-wrapper.ps1 -Version "${{ inputs.version }}" -Runtime linux-x64 -ArchivePath "artifacts/release/selenium-pw-migrator-${{ inputs.version }}-linux-x64.tar.gz" -ChecksumsPath artifacts/release/checksums.sha256
+
+      - name: Pack npm wrapper
+        run: bash scripts/pack-npm-wrapper.sh "${{ inputs.version }}"
+
+      - name: Upload npm wrapper artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: selenium-playwright-ast-migrator-npm-${{ inputs.version }}
+          path: artifacts/npm/*.tgz
+          if-no-files-found: error
+
       - name: Upload verified package artifact
         uses: actions/upload-artifact@v4
         with:
@@ -89,6 +108,9 @@ jobs:
           cp artifacts/release/standalone-release-manifest.json "$asset_dir/"
           cp scripts/install-standalone.ps1 "$asset_dir/"
           cp scripts/install-standalone.sh "$asset_dir/"
+          if compgen -G "artifacts/npm/*.tgz" > /dev/null; then
+            cp artifacts/npm/*.tgz "$asset_dir/"
+          fi
 
           echo "Staged GitHub release assets:"
           find "$asset_dir" -maxdepth 1 -type f -printf '  %f\n' | sort

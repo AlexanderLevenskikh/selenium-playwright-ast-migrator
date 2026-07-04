@@ -53,6 +53,17 @@ Windows-установщик по умолчанию добавляет standalo
 
 Чтобы удалить standalone-установку на Windows, запусти тот же installer с `-Uninstall`. На Linux/macOS запусти `install-standalone.sh --uninstall` и убери PATH-строку из shell profile.
 
+### Вариант для frontend-команд: npm wrapper
+
+Npm-пакет — тонкая обёртка над теми же standalone release-архивами. Он удобен для frontend/test-automation команд, где Node.js уже есть, а .NET ставить не хочется.
+
+```bash
+npm install -g selenium-pw-migrator
+selenium-pw-migrator --version
+```
+
+Во время `postinstall` npm wrapper скачивает подходящий standalone-архив для `win-x64`, `linux-x64`, `osx-x64` или `osx-arm64`, проверяет `checksums.sha256`, если он доступен, и сохраняет exit code нативного CLI. Подробнее: [npm wrapper](docs/npm-wrapper.md).
+
 ### Для .NET-разработчиков: dotnet tool
 
 Используй dotnet tool, если нужна global/local .NET tool установка или закрепление версии через `.config/dotnet-tools.json`. Этот вариант требует .NET SDK.
@@ -94,7 +105,7 @@ dotnet tool run selenium-pw-migrator -- --help
 
 `selenium-pw-migrator --help` используйте только после global install. Для local tool manifest используйте `dotnet tool run selenium-pw-migrator -- ...`.
 
-Подробнее: [Tool installation](docs/tool-installation.md), [Standalone installation](docs/standalone-installation.ru.md) и [Packaging and distribution](docs/packaging-and-distribution.md).
+Подробнее: [Tool installation](docs/tool-installation.md), [Standalone installation](docs/standalone-installation.ru.md), [npm wrapper](docs/npm-wrapper.md) и [Packaging and distribution](docs/packaging-and-distribution.md).
 
 ## Happy path
 

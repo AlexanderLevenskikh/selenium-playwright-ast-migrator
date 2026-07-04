@@ -135,6 +135,13 @@ public class PackagingTests
         Assert.Contains("selenium-pw-migrator-${VERSION}-osx-arm64.tar.gz", workflow);
         Assert.Contains("scripts/install-standalone.ps1", workflow);
         Assert.Contains("scripts/install-standalone.sh", workflow);
+        Assert.Contains("actions/setup-node@v4", workflow);
+        Assert.Contains("Smoke npm wrapper against local standalone archive", workflow);
+        Assert.Contains("scripts/smoke-npm-wrapper.ps1", workflow);
+        Assert.Contains("Pack npm wrapper", workflow);
+        Assert.Contains("scripts/pack-npm-wrapper.sh", workflow);
+        Assert.Contains("selenium-playwright-ast-migrator-npm", workflow);
+        Assert.Contains("artifacts/npm/*.tgz", workflow);
     }
 
     [Fact]
@@ -320,6 +327,65 @@ public class PackagingTests
         Assert.Contains("selenium-pw-migrator playground", quickStart);
         Assert.Contains("Fast standalone install", userGuide);
         Assert.Contains("Быстрая standalone-установка", userGuideRu);
+    }
+
+
+
+    [Fact]
+    public void NpmWrapper_DistributesStandaloneCliWithoutDotnet()
+    {
+        var packageJson = File.ReadAllText(FindRepositoryFile("npm/package.json"));
+        var installer = File.ReadAllText(FindRepositoryFile("npm/scripts/install.js"));
+        var wrapper = File.ReadAllText(FindRepositoryFile("npm/bin/selenium-pw-migrator.js"));
+        var npmReadme = File.ReadAllText(FindRepositoryFile("npm/README.md"));
+        var npmDocs = File.ReadAllText(FindRepositoryFile("docs/npm-wrapper.md"));
+        var packPs1 = File.ReadAllText(FindRepositoryFile("scripts/pack-npm-wrapper.ps1"));
+        var packSh = File.ReadAllText(FindRepositoryFile("scripts/pack-npm-wrapper.sh"));
+        var smokePs1 = File.ReadAllText(FindRepositoryFile("scripts/smoke-npm-wrapper.ps1"));
+        var readme = File.ReadAllText(FindRepositoryFile("README.md"));
+        var readmeRu = File.ReadAllText(FindRepositoryFile("README.ru.md"));
+        var standalone = File.ReadAllText(FindRepositoryFile("docs/standalone-installation.md"));
+        var docsIndex = File.ReadAllText(FindRepositoryFile("docs/README.md"));
+        var releaseProcess = File.ReadAllText(FindRepositoryFile("docs/release-process.md"));
+        var gitignore = File.ReadAllText(FindRepositoryFile(".gitignore"));
+
+        Assert.Contains("\"name\": \"selenium-pw-migrator\"", packageJson);
+        Assert.Contains("\"postinstall\": \"node scripts/install.js\"", packageJson);
+        Assert.Contains("\"selenium-pw-migrator\": \"bin/selenium-pw-migrator.js\"", packageJson);
+        Assert.Contains("\"node\": \">=18\"", packageJson);
+
+        Assert.Contains("SELENIUM_PW_MIGRATOR_BASE_URL", installer);
+        Assert.Contains("SELENIUM_PW_MIGRATOR_ARCHIVE_PATH", installer);
+        Assert.Contains("SELENIUM_PW_MIGRATOR_CHECKSUMS_PATH", installer);
+        Assert.Contains("checksums.sha256", installer);
+        Assert.Contains("Expand-Archive", installer);
+        Assert.Contains("tar", installer);
+        Assert.Contains("win-x64", installer);
+        Assert.Contains("linux-x64", installer);
+        Assert.Contains("osx-arm64", installer);
+
+        Assert.Contains("spawnSync", wrapper);
+        Assert.Contains("process.argv.slice(2)", wrapper);
+        Assert.Contains("process.exit(result.status)", wrapper);
+
+        Assert.Contains("npm install -g selenium-pw-migrator", npmReadme);
+        Assert.Contains("does **not** require the .NET SDK or .NET Runtime", npmReadme);
+        Assert.Contains("Internal Nexus/static mirror", npmDocs);
+        Assert.Contains("SELENIUM_PW_MIGRATOR_BASE_URL", npmDocs);
+        Assert.Contains("smoke-npm-wrapper.ps1", npmDocs);
+
+        Assert.Contains("npm pack", packPs1);
+        Assert.Contains("npm pack", packSh);
+        Assert.Contains("SELENIUM_PW_MIGRATOR_ARCHIVE_PATH", smokePs1);
+        Assert.Contains("node $wrapperScript --version", smokePs1);
+
+        Assert.Contains("Frontend-friendly option: npm wrapper", readme);
+        Assert.Contains("Вариант для frontend-команд: npm wrapper", readmeRu);
+        Assert.Contains("npm install -g selenium-pw-migrator", standalone);
+        Assert.Contains("npm wrapper", docsIndex);
+        Assert.Contains("Pack the npm wrapper", releaseProcess);
+        Assert.Contains("npm wrapper smoke/package job", releaseProcess);
+        Assert.Contains("npm/native/", gitignore);
     }
 
     [Fact]

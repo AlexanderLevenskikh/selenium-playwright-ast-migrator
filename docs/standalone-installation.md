@@ -48,6 +48,17 @@ export PATH="$HOME/.selenium-pw-migrator/bin:$PATH"
 selenium-pw-migrator --version
 ```
 
+## npm wrapper
+
+Frontend-heavy teams can also install the same standalone CLI through npm:
+
+```bash
+npm install -g selenium-pw-migrator
+selenium-pw-migrator --version
+```
+
+The npm wrapper downloads the matching standalone release archive during `postinstall`. It still does not require the .NET SDK or .NET Runtime. See [npm wrapper](npm-wrapper.md).
+
 ## Update
 
 Rerun the installer with the desired version. The installer overwrites the existing files in the install directory.

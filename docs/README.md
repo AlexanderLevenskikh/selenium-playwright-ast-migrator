@@ -9,6 +9,7 @@ This index keeps the current workflow short and avoids legacy agent-launch noise
 - [Migration runbook](migration-runbook.md) — production migration plan, pilot scope, risks, and command chain.
 - [Tool installation](tool-installation.md) — install from a packed dotnet tool or run from source.
 - [Standalone installation](standalone-installation.md) / [RU](standalone-installation.ru.md) — install the CLI without .NET SDK/runtime.
+- [npm wrapper](npm-wrapper.md) — install the standalone CLI through npm for frontend-heavy teams.
 - [Troubleshooting](troubleshooting.md) — common setup, config, packaging, and verification problems.
 
 ## Core user docs
@@ -79,6 +80,7 @@ The current launch procedure is only the guarded Desktop runbook above. Detailed
 - [Release process](release-process.md)
 - [Packaging and distribution](packaging-and-distribution.md)
 - [Standalone installation](standalone-installation.md) / [RU](standalone-installation.ru.md)
+- [npm wrapper](npm-wrapper.md)
 - [Public roadmap](public-roadmap.md)
 - [Release notes 0.0.0-preview.5](release-notes/v0.0.0-preview.5.md)
 - [Release notes 0.0.0-preview.1](release-notes/v0.0.0-preview.1.md)

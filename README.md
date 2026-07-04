@@ -53,6 +53,17 @@ The Windows installer adds the standalone directory to the user `PATH` by defaul
 
 To uninstall the standalone Windows install, run the same installer with `-Uninstall`. On Linux/macOS, run `install-standalone.sh --uninstall` and remove the PATH line from your shell profile.
 
+### Frontend-friendly option: npm wrapper
+
+The npm package is a thin wrapper over the same standalone release archives. It is useful for frontend/test-automation teams that already have Node.js but do not want to install .NET.
+
+```bash
+npm install -g selenium-pw-migrator
+selenium-pw-migrator --version
+```
+
+The npm `postinstall` downloads the matching standalone archive for `win-x64`, `linux-x64`, `osx-x64`, or `osx-arm64`, verifies `checksums.sha256` when available, and preserves the native CLI exit code. See [npm wrapper](docs/npm-wrapper.md).
+
 ### .NET developers: dotnet tool
 
 Use the dotnet tool distribution when you want a global/local .NET tool or a project-pinned `.config/dotnet-tools.json`. This path requires the .NET SDK.
@@ -94,7 +105,7 @@ dotnet tool run selenium-pw-migrator -- --help
 
 Use `selenium-pw-migrator --help` only after a global install. For repository-local tool manifests, prefer `dotnet tool run selenium-pw-migrator -- ...`.
 
-See [Tool installation](docs/tool-installation.md), [Standalone installation](docs/standalone-installation.md), and [Packaging and distribution](docs/packaging-and-distribution.md).
+See [Tool installation](docs/tool-installation.md), [Standalone installation](docs/standalone-installation.md), [npm wrapper](docs/npm-wrapper.md), and [Packaging and distribution](docs/packaging-and-distribution.md).
 
 ## Happy path
 

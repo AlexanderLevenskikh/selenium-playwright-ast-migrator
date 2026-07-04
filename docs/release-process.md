@@ -109,7 +109,21 @@ Verify the complete release artifact set before uploading it:
   -Version 0.0.0-preview.1
 ```
 
-9. Verify the local Windows archive when running on Windows:
+9. Pack the npm wrapper:
+
+```powershell
+./scripts/pack-npm-wrapper.ps1 -Version 0.0.0-preview.1
+```
+
+or on Linux/macOS/WSL:
+
+```bash
+scripts/pack-npm-wrapper.sh 0.0.0-preview.1
+```
+
+The npm package is a thin wrapper that downloads the standalone release archives during `postinstall`. It is packaged separately from the NuGet tool and should use the same version as the release.
+
+10. Verify the local Windows archive when running on Windows:
 
 ```powershell
 ./scripts/verify-standalone-package.ps1 `
@@ -118,14 +132,15 @@ Verify the complete release artifact set before uploading it:
   -RunHelp
 ```
 
-10. Wait for GitHub Actions to pass:
+11. Wait for GitHub Actions to pass:
    - `Test fast suite`;
    - `Test CLI process suite`;
    - dotnet-tool package job;
    - standalone-release job;
+   - npm wrapper smoke/package job;
    - agent-bundle job.
 
-11. For release candidates, optionally run the manual `Full Validation` workflow. It runs the unfiltered test suite, `release-doctor`, dotnet-tool package smoke, standalone archive smoke, and agent-bundle smoke in one end-to-end gate. The same workflow also runs nightly from `schedule`.
+12. For release candidates, optionally run the manual `Full Validation` workflow. It runs the unfiltered test suite, `release-doctor`, dotnet-tool package smoke, standalone archive smoke, and agent-bundle smoke in one end-to-end gate. The same workflow also runs nightly from `schedule`.
 
 ## Stable release checklist
 
@@ -163,13 +178,14 @@ The workflow:
 3. verifies `.nupkg` contents;
 4. installs the package from `artifacts/nuget` into a temporary local tool manifest and runs smoke checks;
 5. builds standalone CLI archives for `win-x64`, `linux-x64`, `osx-x64`, and `osx-arm64`;
-6. stages one flat GitHub release asset directory at `artifacts/github-release`;
-7. verifies the staged GitHub release assets before upload;
-8. uploads the staged `.nupkg`, standalone archives, `checksums.sha256`, `standalone-release-manifest.json`, and standalone install scripts as one workflow artifact;
-9. publishes only when `dry_run=false`;
-10. downloads and verifies the same flat release asset directory in the publish job;
-11. creates or updates the GitHub release `v<version>` after a successful publish, using `docs/release-notes/v<version>.md` first and falling back to the matching `CHANGELOG.md` section;
-12. attaches every file from `artifacts/github-release` to the GitHub release.
+6. smokes the npm wrapper against the freshly built local standalone archive and runs `npm pack`;
+7. stages one flat GitHub release asset directory at `artifacts/github-release`;
+8. verifies the staged GitHub release assets before upload;
+9. uploads the staged `.nupkg`, standalone archives, optional npm wrapper `.tgz`, `checksums.sha256`, `standalone-release-manifest.json`, and standalone install scripts as one workflow artifact;
+10. publishes only when `dry_run=false`;
+11. downloads and verifies the same flat release asset directory in the publish job;
+12. creates or updates the GitHub release `v<version>` after a successful publish, using `docs/release-notes/v<version>.md` first and falling back to the matching `CHANGELOG.md` section;
+13. attaches every file from `artifacts/github-release` to the GitHub release.
 
 The staging directory is intentionally flat. Do not upload mixed source paths directly to GitHub Releases from `actions/download-artifact`; nested artifact layouts can make the install scripts appear in a release while the standalone archives are left behind.
 

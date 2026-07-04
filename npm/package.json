@@ -1,0 +1,31 @@
+{
+  "name": "selenium-pw-migrator",
+  "version": "0.0.0-preview.5",
+  "description": "Node/npm wrapper for the Selenium Playwright Migrator standalone CLI.",
+  "license": "MIT",
+  "homepage": "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/issues"
+  },
+  "bin": {
+    "selenium-pw-migrator": "bin/selenium-pw-migrator.js"
+  },
+  "scripts": {
+    "postinstall": "node scripts/install.js",
+    "install-native": "node scripts/install.js",
+    "smoke": "node bin/selenium-pw-migrator.js --version"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "README.md",
+    "package.json"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}
