@@ -66,7 +66,7 @@ dotnet tool run selenium-pw-migrator -- --help
 
 Use `selenium-pw-migrator --help` only after a global install. For repository-local tool manifests, prefer `dotnet tool run selenium-pw-migrator -- ...`.
 
-See [Tool installation](docs/tool-installation.md) and [Packaging and distribution](docs/packaging-and-distribution.md).
+See [Tool installation](docs/tool-installation.md), [Standalone installation](docs/standalone-installation.md), and [Packaging and distribution](docs/packaging-and-distribution.md).
 
 ## Happy path
 

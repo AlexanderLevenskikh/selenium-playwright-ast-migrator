@@ -58,11 +58,26 @@ jobs:
       - name: Smoke local tool install
         run: bash scripts/smoke-local-tool-package.sh "${{ inputs.version }}"
 
+      - name: Package standalone release archives
+        shell: pwsh
+        run: ./scripts/package-standalone.ps1 -Version "${{ inputs.version }}"
+
       - name: Upload verified package artifact
         uses: actions/upload-artifact@v4
         with:
           name: selenium-playwright-ast-migrator-${{ inputs.version }}
           path: artifacts/nuget/*.nupkg
+          if-no-files-found: error
+
+      - name: Upload standalone release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: selenium-playwright-ast-migrator-standalone-${{ inputs.version }}
+          path: |
+            artifacts/release/*.zip
+            artifacts/release/*.tar.gz
+            artifacts/release/checksums.sha256
+            artifacts/release/standalone-release-manifest.json
           if-no-files-found: error
 
   publish:
@@ -90,6 +105,12 @@ jobs:
           name: selenium-playwright-ast-migrator-${{ inputs.version }}
           path: artifacts/nuget
 
+      - name: Download standalone release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: selenium-playwright-ast-migrator-standalone-${{ inputs.version }}
+          path: artifacts/release
+
       - name: NuGet trusted publishing login
         uses: NuGet/login@v1
         id: nuget-login
@@ -116,6 +137,10 @@ jobs:
           tag="v${VERSION}"
           title="Selenium Playwright Migrator ${VERSION}"
           package="artifacts/nuget/SeleniumPlaywrightMigrator.${VERSION}.nupkg"
+          release_assets=("$package")
+          while IFS= read -r -d '' asset; do
+            release_assets+=("$asset")
+          done < <(find artifacts/release -maxdepth 1 -type f \( -name '*.zip' -o -name '*.tar.gz' -o -name 'checksums.sha256' -o -name 'standalone-release-manifest.json' \) -print0 | sort -z)
           prerelease_flag=()
 
           if [[ "$VERSION" == *-* ]]; then
@@ -127,9 +152,9 @@ jobs:
               --title "$title" \
               --notes-file .release-notes.md \
               "${prerelease_flag[@]}"
-            gh release upload "$tag" "$package" --clobber
+            gh release upload "$tag" "${release_assets[@]}" --clobber
           else
-            gh release create "$tag" "$package" \
+            gh release create "$tag" "${release_assets[@]}" \
               --title "$title" \
               --notes-file .release-notes.md \
               "${prerelease_flag[@]}"

@@ -1,11 +1,15 @@
 # Установка мигратора как dotnet tool
 
+Если .NET SDK на машине ставить не хочется, используйте standalone-дистрибутив: [standalone-installation.ru.md](standalone-installation.ru.md).
+
+
 ## Самый быстрый старт из NuGet
 
 Для обычного использования установите последнюю публичную preview-версию глобально. Репозиторий клонировать не нужно:
 
 ```powershell
 dotnet tool install --global SeleniumPlaywrightMigrator `
+  --source https://api.nuget.org/v3/index.json `
   --prerelease
 
 selenium-pw-migrator --help
@@ -28,6 +32,7 @@ selenium-pw-migrator playground `
 dotnet new tool-manifest
 
 dotnet tool install SeleniumPlaywrightMigrator `
+  --source https://api.nuget.org/v3/index.json `
   --prerelease
 ```
 
@@ -71,6 +76,7 @@ dotnet tool run selenium-pw-migrator -- --help
 
 ```powershell
 dotnet tool install --global SeleniumPlaywrightMigrator `
+  --source https://api.nuget.org/v3/index.json `
   --prerelease
 ```
 
@@ -86,6 +92,7 @@ Local tool:
 
 ```powershell
 dotnet tool update SeleniumPlaywrightMigrator `
+  --source https://api.nuget.org/v3/index.json `
   --prerelease
 ```
 
@@ -93,6 +100,7 @@ Global tool:
 
 ```powershell
 dotnet tool update --global SeleniumPlaywrightMigrator `
+  --source https://api.nuget.org/v3/index.json `
   --prerelease
 ```
 

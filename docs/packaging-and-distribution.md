@@ -408,6 +408,43 @@ manifest.json
 
 `-RunHelp` дополнительно запускает CLI из published output и проверяет, что help доступен без repository source.
 
+## Standalone public release archives
+
+For users who should not install .NET SDK/runtime, build self-contained standalone bundles:
+
+```powershell
+./scripts/package-standalone.ps1 `
+  -Version 0.0.0-preview.1
+```
+
+The script publishes runtime-specific self-contained folders and packages them into:
+
+```text
+artifacts/release/
+  selenium-pw-migrator-0.0.0-preview.1-win-x64.zip
+  selenium-pw-migrator-0.0.0-preview.1-linux-x64.tar.gz
+  selenium-pw-migrator-0.0.0-preview.1-osx-x64.tar.gz
+  selenium-pw-migrator-0.0.0-preview.1-osx-arm64.tar.gz
+  selenium-pw-migrator-win-x64.zip
+  selenium-pw-migrator-linux-x64.tar.gz
+  selenium-pw-migrator-osx-x64.tar.gz
+  selenium-pw-migrator-osx-arm64.tar.gz
+  checksums.sha256
+  standalone-release-manifest.json
+```
+
+`PublishSingleFile=false` is intentional. The migrator is Roslyn-heavy and must keep project-reference assemblies/resources next to the executable. The bundle still does not require .NET on the target machine when built self-contained.
+
+Manual smoke for one archive:
+
+```powershell
+./scripts/verify-standalone-package.ps1 `
+  -ArchivePath artifacts/release/selenium-pw-migrator-0.0.0-preview.1-win-x64.zip `
+  -ChecksumsPath artifacts/release/checksums.sha256
+```
+
+Installation docs: [Standalone installation](standalone-installation.md) / [RU](standalone-installation.ru.md).
+
 ## Release process
 
 Полный чеклист preview/stable release, публикации и rollback описан в [`docs/release-process.md`](release-process.md).

@@ -4,6 +4,7 @@ using System.IO;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Net;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -24,6 +25,12 @@ if (args.Length > 0 && string.Equals(args[0], "kit", StringComparison.OrdinalIgn
     return KitCommand.Run(args.Skip(1).ToArray());
 
 args = NormalizeDirectCommand(args);
+
+if (IsVersionRequest(args))
+{
+    PrintVersion();
+    return 0;
+}
 
 if (IsHelpRequest(args))
 {
@@ -11069,6 +11076,29 @@ static void PrintHelp()
 }
 
 static bool IsHelpRequest(string[] args) => args.Any(arg => arg is "--help" or "-h" or "help");
+
+static bool IsVersionRequest(string[] args) => args.Length == 1 && args[0] is "--version" or "-v" or "version";
+
+static void PrintVersion()
+{
+    var assembly = Assembly.GetExecutingAssembly();
+    var informationalVersion = assembly
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+        ?.InformationalVersion;
+    var version = !string.IsNullOrWhiteSpace(informationalVersion)
+        ? informationalVersion
+        : assembly.GetName().Version?.ToString() ?? "unknown";
+
+    var commit = Environment.GetEnvironmentVariable("MIGRATOR_COMMIT")
+        ?? assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
+            .FirstOrDefault(a => string.Equals(a.Key, "RepositoryCommit", StringComparison.OrdinalIgnoreCase))
+            ?.Value;
+
+    Console.WriteLine($"selenium-pw-migrator {version}");
+    if (!string.IsNullOrWhiteSpace(commit))
+        Console.WriteLine($"commit: {commit}");
+    Console.WriteLine($"framework: {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
+}
 
 static string? FindOptionValue(string[] args, string optionName)
 {

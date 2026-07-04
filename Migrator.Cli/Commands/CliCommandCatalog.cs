@@ -400,6 +400,7 @@ internal static class CliCommandCatalog
         sb.AppendLine("  --fail-on-unsupported            Exit code 2 if unsupported actions exist.");
         sb.AppendLine("  --fail-on-todo                   Exit code 3 if TODO comments exist.");
         sb.AppendLine("  --help, -h                       Show global or command-specific help.");
+        sb.AppendLine("  --version, -v                    Show CLI version metadata and exit.");
         sb.AppendLine();
     }
 

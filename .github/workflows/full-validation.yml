@@ -46,6 +46,14 @@ jobs:
       - name: Smoke local tool install
         run: scripts/smoke-local-tool-package.sh "$PACKAGE_VERSION"
 
+      - name: Package standalone bundle
+        shell: pwsh
+        run: ./scripts/package-standalone.ps1 -Version "$env:PACKAGE_VERSION" -Runtimes linux-x64 -NoSelfContained
+
+      - name: Verify standalone archive
+        shell: pwsh
+        run: ./scripts/verify-standalone-package.ps1 -ArchivePath "artifacts/release/selenium-pw-migrator-$env:PACKAGE_VERSION-linux-x64.tar.gz" -ChecksumsPath artifacts/release/checksums.sha256 -RunHelp
+
       - name: Package agent CLI bundle
         shell: pwsh
         run: ./scripts/package-agent-cli-bundle.ps1 -Runtime linux-x64 -Output artifacts/agent-cli-bundle -NoSelfContained
@@ -64,6 +72,9 @@ jobs:
           path: |
             artifacts/release-doctor/**
             artifacts/nuget/*.nupkg
+            artifacts/release/*.tar.gz
+            artifacts/release/checksums.sha256
+            artifacts/release/standalone-release-manifest.json
             artifacts/agent-cli-bundle-linux-x64.tar.gz
             artifacts/agent-cli-bundle/tool/MANIFEST.sha256
             artifacts/agent-cli-bundle/tool/manifest.json

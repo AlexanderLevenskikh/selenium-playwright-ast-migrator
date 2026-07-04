@@ -8,6 +8,7 @@ This index keeps the current workflow short and avoids legacy agent-launch noise
 - [Guarded OpenCode Desktop migration runbook](guarded-opencode-desktop-runbook.ru.md) — canonical guarded agent workflow: local tool build/update, `kit bootstrap-opencode`, `/supervised-task`, approve/deny rules, scope/final gates, and forensic export.
 - [Migration runbook](migration-runbook.md) — production migration plan, pilot scope, risks, and command chain.
 - [Tool installation](tool-installation.md) — install from a packed dotnet tool or run from source.
+- [Standalone installation](standalone-installation.md) / [RU](standalone-installation.ru.md) — install the CLI without .NET SDK/runtime.
 - [Troubleshooting](troubleshooting.md) — common setup, config, packaging, and verification problems.
 
 ## Core user docs
@@ -77,6 +78,7 @@ The current launch procedure is only the guarded Desktop runbook above. Detailed
 
 - [Release process](release-process.md)
 - [Packaging and distribution](packaging-and-distribution.md)
+- [Standalone installation](standalone-installation.md) / [RU](standalone-installation.ru.md)
 - [Public roadmap](public-roadmap.md)
 - [Release notes 0.0.0-preview.1](release-notes/v0.0.0-preview.1.md)
 

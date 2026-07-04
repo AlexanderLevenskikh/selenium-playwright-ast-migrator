@@ -1,29 +1,41 @@
 ---
-description: Audits whether the active task follows project rules, Harness Kit policy, safety constraints, scope, and user instructions. Read-only. Use after planning, after edits, before final answer, and whenever the main agent may be drifting.
+description: Audits scope, lifecycle, dangerous changes, verification evidence, and stop-policy compliance.
 mode: subagent
 temperature: 0.1
 permission:
   edit: deny
   bash:
     "*": ask
-
     "git status*": allow
     "git diff*": allow
     "git diff --stat*": allow
     "git log*": allow
-
     "rg *": allow
     "grep *": allow
     "Get-Content *": allow
+    "Get-Content*": allow
     "Test-Path *": allow
+    "Test-Path*": allow
     "Get-ChildItem *": allow
+    "Get-ChildItem*": allow
     "Select-String *": allow
+    "Select-String*": allow
+    "Select-Object*": allow
+    "Resolve-Path*": allow
     "ConvertFrom-Json*": allow
     "Out-Null": allow
     "pwsh *check-scope.ps1*": allow
     "powershell *check-scope.ps1*": allow
     "pwsh *check-harness-policy.ps1*": allow
     "powershell *check-harness-policy.ps1*": allow
+    "pwsh *check-final-gate.ps1*": allow
+    "powershell *check-final-gate.ps1*": allow
+    "pwsh *build-harness-dashboard.ps1*": allow
+    "powershell *build-harness-dashboard.ps1*": allow
+    "./migration/scripts/check-scope.ps1*": allow
+    "./migration/scripts/check-harness-policy.ps1*": allow
+    "./migration/scripts/check-final-gate.ps1*": allow
+    "./migration/scripts/build-harness-dashboard.ps1*": allow
 
   webfetch: deny
   websearch: deny

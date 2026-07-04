@@ -123,3 +123,38 @@ jobs:
             artifacts/agent-cli-bundle/tool/MANIFEST.sha256
             artifacts/agent-cli-bundle/tool/manifest.json
           if-no-files-found: error
+
+  standalone-release:
+    name: Build standalone release bundle
+    runs-on: ubuntu-latest
+    needs: [ test-fast, test-cli ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore Migrator.sln
+
+      - name: Package standalone bundle for CI smoke
+        shell: pwsh
+        run: ./scripts/package-standalone.ps1 -Version "$env:PACKAGE_VERSION" -Runtimes linux-x64 -NoSelfContained
+
+      - name: Verify standalone archive
+        shell: pwsh
+        run: ./scripts/verify-standalone-package.ps1 -ArchivePath "artifacts/release/selenium-pw-migrator-$env:PACKAGE_VERSION-linux-x64.tar.gz" -ChecksumsPath artifacts/release/checksums.sha256 -RunHelp
+
+      - name: Upload standalone release smoke artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: selenium-playwright-ast-migrator-standalone-linux-x64
+          path: |
+            artifacts/release/*.tar.gz
+            artifacts/release/checksums.sha256
+            artifacts/release/standalone-release-manifest.json
+          if-no-files-found: error

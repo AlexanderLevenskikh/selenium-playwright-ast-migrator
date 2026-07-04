@@ -13,21 +13,35 @@ permission:
     "rg *": allow
     "grep *": allow
     "Get-Content *": allow
+    "Get-Content*": allow
     "Test-Path *": allow
+    "Test-Path*": allow
     "Get-ChildItem *": allow
+    "Get-ChildItem*": allow
     "Select-String *": allow
+    "Select-String*": allow
+    "Select-Object*": allow
+    "Resolve-Path*": allow
     "ConvertFrom-Json*": allow
     "Out-Null": allow
     "pwsh *new-harness-run.ps1*": allow
     "powershell *new-harness-run.ps1*": allow
     "pwsh *write-harness-event.ps1*": allow
     "powershell *write-harness-event.ps1*": allow
+    "./migration/scripts/new-harness-run.ps1*": allow
+    "./migration/scripts/write-harness-event.ps1*": allow
     "pwsh *check-scope.ps1*": allow
     "powershell *check-scope.ps1*": allow
     "pwsh *check-harness-policy.ps1*": allow
     "powershell *check-harness-policy.ps1*": allow
     "pwsh *check-final-gate.ps1*": allow
     "powershell *check-final-gate.ps1*": allow
+    "pwsh *build-harness-dashboard.ps1*": allow
+    "powershell *build-harness-dashboard.ps1*": allow
+    "./migration/scripts/check-scope.ps1*": allow
+    "./migration/scripts/check-harness-policy.ps1*": allow
+    "./migration/scripts/check-final-gate.ps1*": allow
+    "./migration/scripts/build-harness-dashboard.ps1*": allow
   task:
     "*": deny
     "executor": ask

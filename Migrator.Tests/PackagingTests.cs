@@ -30,7 +30,15 @@ public class PackagingTests
         Assert.True(File.Exists(FindRepositoryFile("scripts/verify-nupkg-contents.ps1")));
         Assert.True(File.Exists(FindRepositoryFile("scripts/verify-nupkg-contents.sh")));
         Assert.True(File.Exists(FindRepositoryFile("scripts/verify-agent-cli-bundle.ps1")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/publish-standalone.ps1")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/package-standalone.ps1")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/package-standalone.sh")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/verify-standalone-package.ps1")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/install-standalone.ps1")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/install-standalone.sh")));
         Assert.True(File.Exists(FindRepositoryFile("docs/packaging-and-distribution.md")));
+        Assert.True(File.Exists(FindRepositoryFile("docs/standalone-installation.md")));
+        Assert.True(File.Exists(FindRepositoryFile("docs/standalone-installation.ru.md")));
         Assert.True(File.Exists(FindRepositoryFile("docs/release-process.md")));
         Assert.True(File.Exists(FindRepositoryFile("docs/tool-installation.md")));
         Assert.True(File.Exists(FindRepositoryFile("scripts/install-migration-kit.ps1")));
@@ -151,6 +159,75 @@ public class PackagingTests
         Assert.Contains("manifest.json", script);
         Assert.Contains("Get-FileHash -Algorithm SHA256", script);
         Assert.Contains("schemaVersion = 1", script);
+    }
+
+
+
+    [Fact]
+    public void StandaloneDistributionScripts_CreateSelfContainedRuntimeArchives()
+    {
+        var publishScript = File.ReadAllText(FindRepositoryFile("scripts/publish-standalone.ps1"));
+        var packageScript = File.ReadAllText(FindRepositoryFile("scripts/package-standalone.ps1"));
+        var verifyScript = File.ReadAllText(FindRepositoryFile("scripts/verify-standalone-package.ps1"));
+
+        Assert.Contains("--self-contained", publishScript);
+        Assert.Contains("PublishSingleFile=false", publishScript);
+        Assert.Contains("Roslyn", publishScript);
+        Assert.Contains("win-x64", packageScript);
+        Assert.Contains("linux-x64", packageScript);
+        Assert.Contains("osx-x64", packageScript);
+        Assert.Contains("osx-arm64", packageScript);
+        Assert.Contains("checksums.sha256", packageScript);
+        Assert.Contains("standalone-release-manifest.json", packageScript);
+        Assert.Contains("selenium-pw-migrator-$Version-$runtime", packageScript);
+        Assert.Contains("selenium-pw-migrator-$runtime", packageScript);
+        Assert.Contains("README_STANDALONE.md", verifyScript);
+        Assert.Contains("standalone-manifest.json", verifyScript);
+    }
+
+    [Fact]
+    public void StandaloneInstallationDocs_ExplainNoDotnetRuntimeAndPathVerification()
+    {
+        var english = File.ReadAllText(FindRepositoryFile("docs/standalone-installation.md"));
+        var russian = File.ReadAllText(FindRepositoryFile("docs/standalone-installation.ru.md"));
+        var index = File.ReadAllText(FindRepositoryFile("docs/README.md"));
+        var toolInstallation = File.ReadAllText(FindRepositoryFile("docs/tool-installation.md"));
+
+        Assert.Contains("does not require the .NET SDK or .NET Runtime", english);
+        Assert.Contains("PublishSingleFile", english);
+        Assert.Contains("checksums.sha256", english);
+        Assert.Contains("не нужен установленный .NET", russian);
+        Assert.Contains("standalone-installation.md", index);
+        Assert.Contains("standalone-installation.ru.md", index);
+        Assert.Contains("--source https://api.nuget.org/v3/index.json", toolInstallation);
+    }
+
+    [Fact]
+    public void CliVersionOption_IsDocumentedAndHandledBeforeWorkspaceParsing()
+    {
+        var program = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Program.cs"));
+        var catalog = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/CliCommandCatalog.cs"));
+
+        Assert.Contains("IsVersionRequest(args)", program);
+        Assert.Contains("AssemblyInformationalVersionAttribute", program);
+        Assert.Contains("selenium-pw-migrator {version}", program);
+        Assert.Contains("--version, -v", catalog);
+    }
+
+    [Fact]
+    public void CiAndPublishWorkflows_BuildStandaloneArtifacts()
+    {
+        var ci = File.ReadAllText(FindRepositoryFile(".github/workflows/ci.yml"));
+        var publish = File.ReadAllText(FindRepositoryFile(".github/workflows/publish-nuget.yml"));
+        var fullValidation = File.ReadAllText(FindRepositoryFile(".github/workflows/full-validation.yml"));
+
+        Assert.Contains("Build standalone release bundle", ci);
+        Assert.Contains("package-standalone.ps1", ci);
+        Assert.Contains("verify-standalone-package.ps1", ci);
+        Assert.Contains("Package standalone release archives", publish);
+        Assert.Contains("standalone-release-manifest.json", publish);
+        Assert.Contains("release_assets", publish);
+        Assert.Contains("Package standalone bundle", fullValidation);
     }
 
     [Fact]
