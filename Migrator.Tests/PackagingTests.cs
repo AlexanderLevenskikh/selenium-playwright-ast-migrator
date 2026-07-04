@@ -208,6 +208,9 @@ public class PackagingTests
         Assert.Contains("generic release directories such as Nexus/static HTTP folders", installScript);
         Assert.Contains("SkipUserPathUpdate", installScript);
         Assert.Contains("Added to current session PATH", installScript);
+        Assert.Contains("Uninstall", installScript);
+        Assert.Contains("Remove-UserPathEntry", installScript);
+        Assert.Contains("Refusing to uninstall", installScript);
     }
 
     [Fact]
@@ -226,6 +229,8 @@ public class PackagingTests
         Assert.Contains("--archive-path", installSh);
         Assert.Contains("--checksums-path", installSh);
         Assert.Contains("Using local archive", installSh);
+        Assert.Contains("--uninstall", installSh);
+        Assert.Contains("Removed Selenium Playwright Migrator standalone installation", installSh);
         Assert.Contains("Private Nexus/static release directory", english);
         Assert.Contains("https://nexus.example/repository/migrator/releases/v0.0.0-preview.1", english);
         Assert.Contains("Внутренний Nexus/static release directory", russian);
@@ -281,17 +286,21 @@ public class PackagingTests
         Assert.Contains("releases/latest/download/install-standalone.sh", readme);
         Assert.Contains("Get-Command selenium-pw-migrator -All", readme);
         Assert.Contains("--source https://api.nuget.org/v3/index.json", readme);
+        Assert.Contains("installer with `-Uninstall`", readme);
 
         Assert.Contains("### Рекомендуемый вариант: standalone CLI", readmeRu);
         Assert.Contains("не требует установленного .NET SDK или .NET Runtime", readmeRu);
         Assert.Contains("releases/latest/download/install-standalone.ps1", readmeRu);
         Assert.Contains("Get-Command selenium-pw-migrator -All", readmeRu);
+        Assert.Contains("installer с `-Uninstall`", readmeRu);
 
         Assert.Contains("Quick install from GitHub Releases", standalone);
         Assert.Contains("Version-pinned Windows install", standalone);
         Assert.Contains("## Update", standalone);
         Assert.Contains("Which installation is being used?", standalone);
-        Assert.Contains("Windows uninstall and remove the standalone directory from the user `PATH`", standalone);
+        Assert.Contains("Windows uninstall removes the standalone files and the standalone directory from the user `PATH`", standalone);
+        Assert.Contains("& $installer -Uninstall", standalone);
+        Assert.Contains("bash /tmp/install-standalone.sh --uninstall", standalone);
         Assert.Contains("Get-Command selenium-pw-migrator -All", standalone);
         Assert.Contains("which -a selenium-pw-migrator", standalone);
 
@@ -299,7 +308,9 @@ public class PackagingTests
         Assert.Contains("Установка конкретной версии на Windows", standaloneRu);
         Assert.Contains("## Обновление", standaloneRu);
         Assert.Contains("Какая установка используется?", standaloneRu);
-        Assert.Contains("убрать standalone-папку из user `PATH`", standaloneRu);
+        Assert.Contains("убирает standalone-папку из user `PATH`", standaloneRu);
+        Assert.Contains("& $installer -Uninstall", standaloneRu);
+        Assert.Contains("bash /tmp/install-standalone.sh --uninstall", standaloneRu);
 
         Assert.Contains("I installed standalone, but PowerShell still runs the dotnet tool", troubleshooting);
         Assert.Contains("%USERPROFILE%\\.selenium-pw-migrator\\bin", troubleshooting);

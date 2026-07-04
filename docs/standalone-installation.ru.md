@@ -248,26 +248,27 @@ export PATH="$HOME/.selenium-pw-migrator/bin:$PATH"
 
 ## Удаление
 
-Удалить только файлы на Windows:
+Windows uninstall удаляет standalone-файлы и убирает standalone-папку из user `PATH`:
 
 ```powershell
-Remove-Item -Recurse -Force "$env:USERPROFILE\.selenium-pw-migrator"
+$version = "0.0.0-preview.5"
+$baseUrl = "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v$version"
+$installer = Join-Path $env:TEMP "install-standalone.ps1"
+Invoke-WebRequest "$baseUrl/install-standalone.ps1" -OutFile $installer
+& $installer -Uninstall
 ```
 
-Удалить файлы и убрать standalone-папку из user `PATH` на Windows:
+Для кастомной папки установки:
 
 ```powershell
-$binDir = "$env:USERPROFILE\.selenium-pw-migrator\bin"
-$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-$nextPath = (($userPath -split ";") | Where-Object { $_ -and $_.TrimEnd([char[]]@('\', '/')) -ne $binDir.TrimEnd([char[]]@('\', '/')) }) -join ";"
-[Environment]::SetEnvironmentVariable("Path", $nextPath, "User")
-Remove-Item -Recurse -Force "$env:USERPROFILE\.selenium-pw-migrator"
+& $installer -Uninstall -InstallDir "C:\Tools\selenium-pw-migrator"
 ```
 
-Удалить файлы на Linux/macOS:
+Linux/macOS uninstall удаляет standalone-файлы:
 
 ```bash
-rm -rf ~/.selenium-pw-migrator
+curl -fsSL https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/latest/download/install-standalone.sh -o /tmp/install-standalone.sh
+bash /tmp/install-standalone.sh --uninstall
 ```
 
 Потом убери `~/.selenium-pw-migrator/bin` из shell profile, если добавлял эту папку туда.

@@ -51,6 +51,8 @@ selenium-pw-migrator --version
 
 Windows-установщик по умолчанию добавляет standalone-папку в user `PATH`. Если нужно понять, какая версия запускается, используй `Get-Command selenium-pw-migrator -All` в PowerShell или `which -a selenium-pw-migrator` в Unix-like shell.
 
+Чтобы удалить standalone-установку на Windows, запусти тот же installer с `-Uninstall`. На Linux/macOS запусти `install-standalone.sh --uninstall` и убери PATH-строку из shell profile.
+
 ### Для .NET-разработчиков: dotnet tool
 
 Используй dotnet tool, если нужна global/local .NET tool установка или закрепление версии через `.config/dotnet-tools.json`. Этот вариант требует .NET SDK.

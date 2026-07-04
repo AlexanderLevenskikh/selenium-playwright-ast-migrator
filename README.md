@@ -51,6 +51,8 @@ selenium-pw-migrator --version
 
 The Windows installer adds the standalone directory to the user `PATH` by default. For troubleshooting install priority, use `Get-Command selenium-pw-migrator -All` on Windows or `which -a selenium-pw-migrator` on Unix-like shells.
 
+To uninstall the standalone Windows install, run the same installer with `-Uninstall`. On Linux/macOS, run `install-standalone.sh --uninstall` and remove the PATH line from your shell profile.
+
 ### .NET developers: dotnet tool
 
 Use the dotnet tool distribution when you want a global/local .NET tool or a project-pinned `.config/dotnet-tools.json`. This path requires the .NET SDK.

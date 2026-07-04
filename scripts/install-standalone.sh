@@ -7,16 +7,18 @@ INSTALL_DIR="${INSTALL_DIR:-$HOME/.selenium-pw-migrator}"
 RUNTIME="${RUNTIME:-}"
 ARCHIVE_PATH="${ARCHIVE_PATH:-}"
 CHECKSUMS_PATH="${CHECKSUMS_PATH:-}"
+UNINSTALL="${UNINSTALL:-false}"
 
 usage() {
   cat <<USAGE
-Usage: install-standalone.sh [--version <version>] [--base-url <url>] [--install-dir <dir>] [--runtime <rid>] [--archive-path <path>] [--checksums-path <path>]
+Usage: install-standalone.sh [--version <version>] [--base-url <url>] [--install-dir <dir>] [--runtime <rid>] [--archive-path <path>] [--checksums-path <path>] [--uninstall]
 
 Modes:
   Remote release:  --version <version> --base-url <release-artifacts-url>
   Local archive:   --archive-path <archive.tar.gz> [--checksums-path <checksums.sha256>]
+  Uninstall:       --uninstall [--install-dir <dir>]
 
-Environment variables are also supported: VERSION, BASE_URL, INSTALL_DIR, RUNTIME, ARCHIVE_PATH, CHECKSUMS_PATH.
+Environment variables are also supported: VERSION, BASE_URL, INSTALL_DIR, RUNTIME, ARCHIVE_PATH, CHECKSUMS_PATH, UNINSTALL.
 USAGE
 }
 
@@ -28,10 +30,57 @@ while [[ $# -gt 0 ]]; do
     --runtime) RUNTIME="$2"; shift 2 ;;
     --archive-path) ARCHIVE_PATH="$2"; shift 2 ;;
     --checksums-path) CHECKSUMS_PATH="$2"; shift 2 ;;
+    --uninstall) UNINSTALL="true"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+
+normalize_path_for_compare() {
+  local value="$1"
+  value="${value%/}"
+  printf '%s' "$value"
+}
+
+assert_safe_install_dir() {
+  local dir="$1"
+  if [[ -z "$dir" ]]; then
+    echo "InstallDir cannot be empty." >&2
+    exit 1
+  fi
+
+  local full_dir=""
+  full_dir="$(cd "$(dirname "$dir")" 2>/dev/null && pwd -P)/$(basename "$dir")" || full_dir="$dir"
+  local home_norm="$(normalize_path_for_compare "$HOME")"
+  local dir_norm="$(normalize_path_for_compare "$full_dir")"
+
+  if [[ "$dir_norm" == "$home_norm" || "$dir_norm" == "/" ]]; then
+    echo "Refusing to uninstall from unsafe install directory: $full_dir" >&2
+    exit 1
+  fi
+}
+
+uninstall_standalone() {
+  assert_safe_install_dir "$INSTALL_DIR"
+  local bin_dir="$INSTALL_DIR/bin"
+
+  if [[ -d "$INSTALL_DIR" ]]; then
+    rm -rf "$INSTALL_DIR"
+    echo "Removed Selenium Playwright Migrator standalone installation: $INSTALL_DIR"
+  else
+    echo "Standalone installation directory was already absent: $INSTALL_DIR"
+  fi
+
+  echo "Remove this directory from your shell profile PATH entry if it is present:"
+  echo "  $bin_dir"
+  echo "For example, edit ~/.bashrc, ~/.zshrc, ~/.profile, or ~/.config/fish/config.fish."
+}
+
+if [[ "$UNINSTALL" == "true" ]]; then
+  uninstall_standalone
+  exit 0
+fi
 
 if [[ -z "$RUNTIME" ]]; then
   os="$(uname -s | tr '[:upper:]' '[:lower:]')"

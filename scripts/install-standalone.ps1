@@ -6,7 +6,8 @@ param(
     [string]$ArchivePath = "",
     [string]$ChecksumsPath = "",
     [switch]$AddToUserPath,
-    [switch]$SkipUserPathUpdate
+    [switch]$SkipUserPathUpdate,
+    [switch]$Uninstall
 )
 
 $ErrorActionPreference = "Stop"
@@ -63,6 +64,107 @@ function Assert-Checksum([string]$FilePath, [string]$ExpectedChecksumsPath, [str
     }
 
     Write-Host "Checksum verified."
+}
+
+function Normalize-PathForCompare([string]$PathValue) {
+    if ([string]::IsNullOrWhiteSpace($PathValue)) {
+        return ""
+    }
+
+    return $PathValue.Trim().TrimEnd([char[]]@('\', '/'))
+}
+
+function Remove-UserPathEntry([string]$PathToRemove) {
+    $normalizedTarget = Normalize-PathForCompare $PathToRemove
+    if ([string]::IsNullOrWhiteSpace($normalizedTarget)) {
+        return
+    }
+
+    $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if ($null -eq $currentPath) { $currentPath = "" }
+
+    $parts = $currentPath -split ";" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    $kept = New-Object System.Collections.Generic.List[string]
+    $removed = $false
+
+    foreach ($part in $parts) {
+        $normalizedPart = Normalize-PathForCompare $part
+        if ([string]::Equals($normalizedPart, $normalizedTarget, [StringComparison]::OrdinalIgnoreCase)) {
+            $removed = $true
+            continue
+        }
+
+        $kept.Add($part)
+    }
+
+    if ($removed) {
+        [Environment]::SetEnvironmentVariable("Path", ($kept -join ";"), "User")
+        Write-Host "Removed from user PATH: $PathToRemove"
+    }
+    else {
+        Write-Host "User PATH did not contain: $PathToRemove"
+    }
+
+    $processParts = $env:Path -split ";" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    $processKept = New-Object System.Collections.Generic.List[string]
+    $processRemoved = $false
+    foreach ($part in $processParts) {
+        $normalizedPart = Normalize-PathForCompare $part
+        if ([string]::Equals($normalizedPart, $normalizedTarget, [StringComparison]::OrdinalIgnoreCase)) {
+            $processRemoved = $true
+            continue
+        }
+
+        $processKept.Add($part)
+    }
+
+    if ($processRemoved) {
+        $env:Path = $processKept -join ";"
+        Write-Host "Removed from current session PATH: $PathToRemove"
+    }
+}
+
+function Assert-SafeInstallDir([string]$Directory) {
+    if ([string]::IsNullOrWhiteSpace($Directory)) {
+        throw "InstallDir cannot be empty."
+    }
+
+    $fullPath = [System.IO.Path]::GetFullPath($Directory)
+    $homePath = [System.IO.Path]::GetFullPath($HOME)
+    $rootPath = [System.IO.Path]::GetPathRoot($fullPath)
+
+    if ([string]::Equals((Normalize-PathForCompare $fullPath), (Normalize-PathForCompare $homePath), [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to uninstall from the user home directory: $fullPath"
+    }
+
+    if ([string]::Equals((Normalize-PathForCompare $fullPath), (Normalize-PathForCompare $rootPath), [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to uninstall from a drive root: $fullPath"
+    }
+
+    return $fullPath
+}
+
+function Invoke-UninstallStandalone([string]$Directory) {
+    $fullInstallDir = Assert-SafeInstallDir $Directory
+    $resolvedBinDir = Join-Path $fullInstallDir "bin"
+
+    Remove-UserPathEntry $resolvedBinDir
+
+    if (Test-Path $fullInstallDir) {
+        Remove-Item -Recurse -Force $fullInstallDir
+        Write-Host "Removed Selenium Playwright Migrator standalone installation: $fullInstallDir"
+    }
+    else {
+        Write-Host "Standalone installation directory was already absent: $fullInstallDir"
+    }
+
+    Write-Host "Open a new terminal window if another terminal still sees selenium-pw-migrator."
+}
+
+
+if ($Uninstall) {
+    Invoke-UninstallStandalone -Directory $InstallDir
+    return
 }
 
 $resolvedRuntime = Resolve-Runtime
