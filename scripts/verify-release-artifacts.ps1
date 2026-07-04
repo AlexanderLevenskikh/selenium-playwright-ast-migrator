@@ -4,7 +4,8 @@ param(
     [string]$ReleaseDir = "artifacts/release",
     [string]$ScriptsDir = "scripts",
     [string[]]$Runtimes = @("win-x64", "linux-x64", "osx-x64", "osx-arm64"),
-    [switch]$SkipInstallScripts
+    [switch]$SkipInstallScripts,
+    [switch]$RequireNpmWrapper
 )
 
 $ErrorActionPreference = "Stop"
@@ -73,6 +74,19 @@ foreach ($runtime in $Runtimes) {
     }
     if ($artifact.alias -ne $aliasName) {
         throw "Manifest alias mismatch for $runtime. Expected $aliasName, actual $($artifact.alias)."
+    }
+}
+
+
+if ($RequireNpmWrapper) {
+    $npmPackageName = "selenium-pw-migrator-$Version.tgz"
+    $npmPackagePath = Join-Path $releasePath $npmPackageName
+    if (-not (Test-Path $npmPackagePath)) {
+        throw "Expected npm wrapper package was not found: $npmPackagePath"
+    }
+
+    if ((Get-Item $npmPackagePath).Length -le 0) {
+        throw "npm wrapper package is empty: $npmPackagePath"
     }
 }
 

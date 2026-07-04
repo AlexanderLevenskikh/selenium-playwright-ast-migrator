@@ -62,7 +62,14 @@ npm install -g selenium-pw-migrator
 selenium-pw-migrator --version
 ```
 
-The npm `postinstall` downloads the matching standalone archive for `win-x64`, `linux-x64`, `osx-x64`, or `osx-arm64`, verifies `checksums.sha256` when available, and preserves the native CLI exit code. See [npm wrapper](docs/npm-wrapper.md).
+
+Before npm registry publication, install the packed wrapper directly from the GitHub Release asset:
+
+```bash
+npm install -g https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.5/selenium-pw-migrator-0.0.0-preview.5.tgz
+```
+
+The npm `postinstall` downloads the matching standalone archive for `win-x64`, `linux-x64`, `osx-x64`, or `osx-arm64`, verifies `checksums.sha256` when available, and preserves the native CLI exit code. See [npm wrapper](docs/npm-wrapper.md). Publishing instructions live in [npm publishing](docs/npm-publishing.md).
 
 ### .NET developers: dotnet tool
 

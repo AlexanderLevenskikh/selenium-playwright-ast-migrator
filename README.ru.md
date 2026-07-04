@@ -62,7 +62,14 @@ npm install -g selenium-pw-migrator
 selenium-pw-migrator --version
 ```
 
-Во время `postinstall` npm wrapper скачивает подходящий standalone-архив для `win-x64`, `linux-x64`, `osx-x64` или `osx-arm64`, проверяет `checksums.sha256`, если он доступен, и сохраняет exit code нативного CLI. Подробнее: [npm wrapper](docs/npm-wrapper.md).
+
+До публикации в npm registry можно поставить упакованную обёртку прямо из GitHub Release asset:
+
+```bash
+npm install -g https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.5/selenium-pw-migrator-0.0.0-preview.5.tgz
+```
+
+Во время `postinstall` npm wrapper скачивает подходящий standalone-архив для `win-x64`, `linux-x64`, `osx-x64` или `osx-arm64`, проверяет `checksums.sha256`, если он доступен, и сохраняет exit code нативного CLI. Подробнее: [npm wrapper](docs/npm-wrapper.md). Инструкция по публикации: [npm publishing](docs/npm-publishing.md).
 
 ### Для .NET-разработчиков: dotnet tool
 

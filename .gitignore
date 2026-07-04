@@ -169,10 +169,6 @@ migration/
 .migration/
 .dogfood/
 
-# npm wrapper native payload installed during local smoke
-npm/native/
-npm/*.tgz
-
 # npm wrapper sources are tracked; native payload/tarballs stay ignored.
 !npm/
 !npm/bin/

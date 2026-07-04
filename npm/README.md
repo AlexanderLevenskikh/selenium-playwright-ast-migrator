@@ -11,6 +11,14 @@ npm install -g selenium-pw-migrator
 selenium-pw-migrator --version
 ```
 
+
+Install directly from a GitHub Release asset before the package is published to npm:
+
+```bash
+npm install -g https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.5/selenium-pw-migrator-0.0.0-preview.5.tgz
+selenium-pw-migrator --version
+```
+
 Supported runtimes:
 
 - `win-x64`

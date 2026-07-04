@@ -117,7 +117,7 @@ jobs:
 
       - name: Verify staged GitHub release assets
         shell: pwsh
-        run: ./scripts/verify-release-artifacts.ps1 -Version "${{ inputs.version }}" -ReleaseDir artifacts/github-release -ScriptsDir artifacts/github-release
+        run: ./scripts/verify-release-artifacts.ps1 -Version "${{ inputs.version }}" -ReleaseDir artifacts/github-release -ScriptsDir artifacts/github-release -RequireNpmWrapper
 
       - name: Upload GitHub release assets
         uses: actions/upload-artifact@v4
@@ -165,7 +165,7 @@ jobs:
 
       - name: Verify downloaded GitHub release assets
         shell: pwsh
-        run: ./scripts/verify-release-artifacts.ps1 -Version "${{ inputs.version }}" -ReleaseDir artifacts/github-release -ScriptsDir artifacts/github-release
+        run: ./scripts/verify-release-artifacts.ps1 -Version "${{ inputs.version }}" -ReleaseDir artifacts/github-release -ScriptsDir artifacts/github-release -RequireNpmWrapper
 
       - name: NuGet trusted publishing login
         uses: NuGet/login@v1
@@ -207,6 +207,7 @@ jobs:
             "$asset_dir/selenium-pw-migrator-linux-x64.tar.gz"
             "$asset_dir/selenium-pw-migrator-osx-x64.tar.gz"
             "$asset_dir/selenium-pw-migrator-osx-arm64.tar.gz"
+            "$asset_dir/selenium-pw-migrator-${VERSION}.tgz"
           )
 
           for asset in "${required_assets[@]}"; do

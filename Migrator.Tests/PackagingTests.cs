@@ -55,6 +55,10 @@ public class PackagingTests
         Assert.True(File.Exists(FindRepositoryFile("templates/opencode-team/README.md")));
         Assert.True(File.Exists(FindRepositoryFile("docs/navigation-url-mapping.md")));
         Assert.True(File.Exists(FindRepositoryFile("docs/helper-body-inventory.md")));
+        Assert.True(File.Exists(FindRepositoryFile(".github/workflows/publish-npm.yml")));
+        Assert.True(File.Exists(FindRepositoryFile("docs/npm-publishing.md")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/publish-npm-wrapper.sh")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/publish-npm-wrapper.ps1")));
     }
 
 
@@ -142,6 +146,51 @@ public class PackagingTests
         Assert.Contains("scripts/pack-npm-wrapper.sh", workflow);
         Assert.Contains("selenium-playwright-ast-migrator-npm", workflow);
         Assert.Contains("artifacts/npm/*.tgz", workflow);
+        Assert.Contains("selenium-pw-migrator-${VERSION}.tgz", workflow);
+        Assert.Contains("-RequireNpmWrapper", workflow);
+    }
+
+
+
+    [Fact]
+    public void NpmPublishWorkflow_PublishesVerifiedGitHubReleaseTarball()
+    {
+        var workflow = File.ReadAllText(FindRepositoryFile(".github/workflows/publish-npm.yml"));
+        var publishPs1 = File.ReadAllText(FindRepositoryFile("scripts/publish-npm-wrapper.ps1"));
+        var publishSh = File.ReadAllText(FindRepositoryFile("scripts/publish-npm-wrapper.sh"));
+        var docs = File.ReadAllText(FindRepositoryFile("docs/npm-publishing.md"));
+        var docsIndex = File.ReadAllText(FindRepositoryFile("docs/README.md"));
+        var npmDocs = File.ReadAllText(FindRepositoryFile("docs/npm-wrapper.md"));
+        var readme = File.ReadAllText(FindRepositoryFile("README.md"));
+
+        Assert.Contains("Publish npm Wrapper", workflow);
+        Assert.Contains("workflow_dispatch", workflow);
+        Assert.Contains("dry_run", workflow);
+        Assert.Contains("npm-production", workflow);
+        Assert.Contains("id-token: write", workflow);
+        Assert.Contains("NPM_TOKEN", workflow);
+        Assert.Contains("--provenance", workflow);
+        Assert.Contains("npm publish", workflow);
+        Assert.Contains("selenium-pw-migrator-${VERSION}.tgz", workflow);
+        Assert.Contains("package_url", workflow);
+        Assert.Contains("scripts/publish-npm-wrapper.sh", workflow);
+
+        Assert.Contains("npm publish", publishPs1);
+        Assert.Contains("--dry-run", publishPs1);
+        Assert.Contains("--provenance", publishPs1);
+        Assert.Contains("Registry", publishPs1);
+        Assert.Contains("NPM_DRY_RUN=false", publishSh);
+        Assert.Contains("NPM_REGISTRY", publishSh);
+        Assert.Contains("--provenance", publishSh);
+
+        Assert.Contains("Publish npm wrapper", docs);
+        Assert.Contains("dry_run=true", docs);
+        Assert.Contains("npm install -g selenium-pw-migrator@0.0.0-preview.6", docs);
+        Assert.Contains("NPM_TOKEN", docs);
+        Assert.Contains("trusted publishing", docs);
+        Assert.Contains("npm-publishing.md", docsIndex);
+        Assert.Contains("Publishing to npm registry", npmDocs);
+        Assert.Contains("docs/npm-publishing.md", readme);
     }
 
     [Fact]
@@ -263,6 +312,9 @@ public class PackagingTests
         Assert.Contains("Get-FileHash -Algorithm SHA256", script);
         Assert.Contains("install-standalone.ps1", script);
         Assert.Contains("install-standalone.sh", script);
+        Assert.Contains("RequireNpmWrapper", script);
+        Assert.Contains("Expected npm wrapper package was not found", script);
+        Assert.Contains("selenium-pw-migrator-$Version.tgz", script);
 
         var publishStandalone = File.ReadAllText(FindRepositoryFile("scripts/publish-standalone.ps1"));
         var packToolPs1 = File.ReadAllText(FindRepositoryFile("scripts/pack-tool.ps1"));
@@ -385,6 +437,11 @@ public class PackagingTests
         Assert.Contains("npm wrapper", docsIndex);
         Assert.Contains("Pack the npm wrapper", releaseProcess);
         Assert.Contains("npm wrapper smoke/package job", releaseProcess);
+        Assert.Contains("selenium-pw-migrator-<version>.tgz", releaseProcess);
+        Assert.Contains("https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.5/selenium-pw-migrator-0.0.0-preview.5.tgz", npmDocs);
+        Assert.Contains("GitHub Release asset", npmDocs);
+        Assert.Contains("npm install -g https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.5/selenium-pw-migrator-0.0.0-preview.5.tgz", readme);
+        Assert.Contains("GitHub Release asset", readmeRu);
         Assert.Contains("npm/native/", gitignore);
     }
 
@@ -454,6 +511,8 @@ public class PackagingTests
         Assert.Contains("selenium-pw-migrator-${VERSION}-linux-x64.tar.gz", publish);
         Assert.Contains("selenium-pw-migrator-${VERSION}-osx-x64.tar.gz", publish);
         Assert.Contains("selenium-pw-migrator-${VERSION}-osx-arm64.tar.gz", publish);
+        Assert.Contains("selenium-pw-migrator-${VERSION}.tgz", publish);
+        Assert.Contains("-RequireNpmWrapper", publish);
         Assert.Contains("release_assets", publish);
         Assert.Contains("gh release upload", publish);
         Assert.Contains("Package standalone bundle", fullValidation);

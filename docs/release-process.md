@@ -109,7 +109,7 @@ Verify the complete release artifact set before uploading it:
   -Version 0.0.0-preview.1
 ```
 
-9. Pack the npm wrapper:
+9. Pack the npm wrapper and verify that the `.tgz` is attached to GitHub Release assets:
 
 ```powershell
 ./scripts/pack-npm-wrapper.ps1 -Version 0.0.0-preview.1
@@ -121,7 +121,7 @@ or on Linux/macOS/WSL:
 scripts/pack-npm-wrapper.sh 0.0.0-preview.1
 ```
 
-The npm package is a thin wrapper that downloads the standalone release archives during `postinstall`. It is packaged separately from the NuGet tool and should use the same version as the release.
+The npm package is a thin wrapper that downloads the standalone release archives during `postinstall`. It is packaged separately from the NuGet tool, should use the same version as the release, and must be staged as `selenium-pw-migrator-<version>.tgz` next to the standalone archives.
 
 10. Verify the local Windows archive when running on Windows:
 
@@ -181,7 +181,7 @@ The workflow:
 6. smokes the npm wrapper against the freshly built local standalone archive and runs `npm pack`;
 7. stages one flat GitHub release asset directory at `artifacts/github-release`;
 8. verifies the staged GitHub release assets before upload;
-9. uploads the staged `.nupkg`, standalone archives, optional npm wrapper `.tgz`, `checksums.sha256`, `standalone-release-manifest.json`, and standalone install scripts as one workflow artifact;
+9. uploads the staged `.nupkg`, standalone archives, npm wrapper `.tgz`, `checksums.sha256`, `standalone-release-manifest.json`, and standalone install scripts as one workflow artifact;
 10. publishes only when `dry_run=false`;
 11. downloads and verifies the same flat release asset directory in the publish job;
 12. creates or updates the GitHub release `v<version>` after a successful publish, using `docs/release-notes/v<version>.md` first and falling back to the matching `CHANGELOG.md` section;
@@ -220,6 +220,7 @@ Expected layout:
   selenium-pw-migrator-<version>-osx-arm64.tar.gz
   checksums.sha256
   standalone-release-manifest.json
+  selenium-pw-migrator-<version>.tgz
   install-standalone.ps1
   install-standalone.sh
 ```
@@ -260,6 +261,21 @@ or on Windows:
 ```
 
 Use repository secrets for API keys. Never commit `NuGet.config` with credentials.
+
+
+After the GitHub Release is created, smoke the npm wrapper directly from the release asset before publishing it to the npm registry:
+
+```bash
+npm install -g https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.5/selenium-pw-migrator-0.0.0-preview.5.tgz
+selenium-pw-migrator --version
+```
+
+Publish npm wrapper workflow after the release-asset smoke passes:
+
+1. Run `.github/workflows/publish-npm.yml` with `dry_run=true`.
+2. Verify `npm publish --dry-run` output.
+3. Rerun with `dry_run=false` in the `npm-production` environment.
+4. Smoke `npm install -g selenium-pw-migrator@<version>` from a clean shell.
 
 After publishing to NuGet, verify install from a clean directory:
 

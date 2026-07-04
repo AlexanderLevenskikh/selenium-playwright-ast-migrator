@@ -24,6 +24,18 @@ selenium-pw-migrator kit doctor --workspace migration
 - `osx-x64`
 - `osx-arm64`
 
+
+## Install from a GitHub Release asset
+
+Before publishing to the npm registry, the release workflow attaches the packed wrapper tarball to the GitHub Release. This lets users test the npm channel directly from the release assets:
+
+```bash
+npm install -g https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.5/selenium-pw-migrator-0.0.0-preview.5.tgz
+selenium-pw-migrator --version
+```
+
+The `.tgz` package still downloads the matching standalone archive during `postinstall`, so the GitHub Release must contain the npm tarball, the standalone archives, and `checksums.sha256` together.
+
 ## Internal Nexus/static mirror
 
 The wrapper supports the same flat release asset layout as the standalone installers:
@@ -65,3 +77,8 @@ The smoke uses `SELENIUM_PW_MIGRATOR_ARCHIVE_PATH` and `SELENIUM_PW_MIGRATOR_CHE
 ```
 
 The script stages the wrapper under `artifacts/npm/package`, sets the npm package version, and produces a `.tgz` package with `npm pack`.
+
+
+## Publishing to npm registry
+
+Publish the wrapper only after the GitHub Release asset install smoke passes. See [npm publishing](npm-publishing.md) for the dry-run-first workflow, `NPM_TOKEN`/trusted-publishing setup, and post-publish smoke.

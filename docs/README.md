@@ -81,6 +81,7 @@ The current launch procedure is only the guarded Desktop runbook above. Detailed
 - [Packaging and distribution](packaging-and-distribution.md)
 - [Standalone installation](standalone-installation.md) / [RU](standalone-installation.ru.md)
 - [npm wrapper](npm-wrapper.md)
+- [npm publishing](npm-publishing.md) — publish the npm wrapper after the GitHub Release asset is smoke-tested.
 - [Public roadmap](public-roadmap.md)
 - [Release notes 0.0.0-preview.5](release-notes/v0.0.0-preview.5.md)
 - [Release notes 0.0.0-preview.1](release-notes/v0.0.0-preview.1.md)

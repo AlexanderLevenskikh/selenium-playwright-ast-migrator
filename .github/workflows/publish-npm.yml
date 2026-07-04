@@ -1,0 +1,111 @@
+name: Publish npm Wrapper
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Package version to publish, for example 0.0.0-preview.6'
+        required: true
+        type: string
+      registry:
+        description: 'npm registry URL'
+        required: true
+        default: 'https://registry.npmjs.org/'
+        type: string
+      package_url:
+        description: 'Optional explicit .tgz URL. Defaults to the matching GitHub Release asset.'
+        required: false
+        default: ''
+        type: string
+      dry_run:
+        description: 'Run npm publish --dry-run only. Do not publish.'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish-npm:
+    name: Publish npm wrapper package
+    runs-on: ubuntu-latest
+    environment: npm-production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: ${{ inputs.registry }}
+
+      - name: Download GitHub Release npm package
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          PACKAGE_URL: ${{ inputs.package_url }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p artifacts/npm
+          if [[ -z "$PACKAGE_URL" ]]; then
+            PACKAGE_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/selenium-pw-migrator-${VERSION}.tgz"
+          fi
+
+          echo "Downloading npm wrapper package: $PACKAGE_URL"
+          curl -fsSL "$PACKAGE_URL" -o "artifacts/npm/selenium-pw-migrator-${VERSION}.tgz"
+          test -s "artifacts/npm/selenium-pw-migrator-${VERSION}.tgz"
+
+      - name: Inspect npm package
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          npm --version
+          npm publish "artifacts/npm/selenium-pw-migrator-${VERSION}.tgz" \
+            --registry "${{ inputs.registry }}" \
+            --access public \
+            --dry-run
+
+      - name: Configure npm token if provided
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_REGISTRY: ${{ inputs.registry }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${NODE_AUTH_TOKEN:-}" ]]; then
+            registry_host="$(node -e 'console.log(new URL(process.env.NPM_REGISTRY).host)')"
+            npm config set "//${registry_host}/:_authToken" "${NODE_AUTH_TOKEN}"
+          else
+            echo "NPM_TOKEN is not set; npm trusted publishing/provenance must be configured for this repository."
+          fi
+
+      - name: Publish npm package
+        if: ${{ inputs.dry_run == false }}
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          NPM_REGISTRY: ${{ inputs.registry }}
+          NPM_DRY_RUN: 'false'
+          NPM_PROVENANCE: 'true'
+        run: |
+          set -euo pipefail
+          echo "Using npm publish --provenance through scripts/publish-npm-wrapper.sh"
+          scripts/publish-npm-wrapper.sh "$VERSION" "artifacts/npm/selenium-pw-migrator-${VERSION}.tgz"
+
+      - name: Dry-run publish summary
+        if: ${{ inputs.dry_run == true }}
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          NPM_REGISTRY: ${{ inputs.registry }}
+          NPM_DRY_RUN: 'true'
+        run: |
+          set -euo pipefail
+          scripts/publish-npm-wrapper.sh "$VERSION" "artifacts/npm/selenium-pw-migrator-${VERSION}.tgz"
