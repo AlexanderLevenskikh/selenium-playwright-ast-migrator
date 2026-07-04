@@ -28,20 +28,29 @@ Supported runtimes:
 
 ## Configuration
 
-The installer supports these environment variables:
+The installer supports environment variables and equivalent npm config keys. Environment variables take priority.
 
-| Variable | Purpose |
-|---|---|
-| `SELENIUM_PW_MIGRATOR_VERSION` | Override the release version to download. Defaults to the npm package version. |
-| `SELENIUM_PW_MIGRATOR_BASE_URL` | Override the GitHub/Nexus/static release asset directory. |
-| `SELENIUM_PW_MIGRATOR_RUNTIME` | Override runtime detection, for example `win-x64`. |
-| `SELENIUM_PW_MIGRATOR_ARCHIVE_PATH` | Use a local standalone archive instead of downloading. Useful for smoke tests. |
-| `SELENIUM_PW_MIGRATOR_CHECKSUMS_PATH` | Verify a local archive using a local `checksums.sha256`. |
-| `SELENIUM_PW_MIGRATOR_SKIP_DOWNLOAD` | Skip native download during install. |
+| Environment variable | npm config key | Purpose |
+|---|---|---|
+| `SELENIUM_PW_MIGRATOR_VERSION` | `selenium-pw-migrator-version` | Override the release version to download. Defaults to the npm package version. |
+| `SELENIUM_PW_MIGRATOR_BASE_URL` | `selenium-pw-migrator-base-url` | Override the GitHub/Nexus/static release asset directory. |
+| `SELENIUM_PW_MIGRATOR_RUNTIME` | `selenium-pw-migrator-runtime` | Override runtime detection, for example `win-x64`. |
+| `SELENIUM_PW_MIGRATOR_ARCHIVE_PATH` | `selenium-pw-migrator-archive-path` | Use a local standalone archive instead of downloading. Useful for smoke tests. |
+| `SELENIUM_PW_MIGRATOR_CHECKSUMS_PATH` | `selenium-pw-migrator-checksums-path` | Verify a local archive using a local `checksums.sha256`. |
+| `SELENIUM_PW_MIGRATOR_SKIP_DOWNLOAD` | `selenium-pw-migrator-skip-download` | Skip native download during install. |
 
-Example internal mirror install:
+Example corporate Nexus install, with the npm package served by an npm proxy/group and the native standalone archives served by an internal raw/static mirror:
 
 ```bash
-SELENIUM_PW_MIGRATOR_BASE_URL=https://nexus.example/repository/migrator/releases/v0.0.0-preview.5 \
-  npm install -g selenium-pw-migrator@0.0.0-preview.5
+npm install -g selenium-pw-migrator@0.0.0-preview.8 \
+  --registry=https://nexus.example/repository/npm-group/ \
+  --selenium-pw-migrator-base-url=https://nexus.example/repository/migrator-releases/v0.0.0-preview.8
+```
+
+For repeated installs:
+
+```bash
+npm config set registry https://nexus.example/repository/npm-group/
+npm config set selenium-pw-migrator-base-url https://nexus.example/repository/migrator-releases/v0.0.0-preview.8
+npm install -g selenium-pw-migrator@0.0.0-preview.8
 ```

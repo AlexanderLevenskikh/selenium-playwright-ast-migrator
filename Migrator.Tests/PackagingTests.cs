@@ -417,6 +417,9 @@ public class PackagingTests
         Assert.Contains("\"node\": \">=18\"", packageJson);
 
         Assert.Contains("SELENIUM_PW_MIGRATOR_BASE_URL", installer);
+        Assert.Contains("readOption('SELENIUM_PW_MIGRATOR_BASE_URL'", installer);
+        Assert.Contains("npm_config_${normalized}", installer);
+        Assert.Contains("selenium-pw-migrator-base-url", installer);
         Assert.Contains("SELENIUM_PW_MIGRATOR_ARCHIVE_PATH", installer);
         Assert.Contains("SELENIUM_PW_MIGRATOR_CHECKSUMS_PATH", installer);
         Assert.Contains("checksums.sha256", installer);
@@ -434,6 +437,12 @@ public class PackagingTests
         Assert.Contains("does **not** require the .NET SDK or .NET Runtime", npmReadme);
         Assert.Contains("Internal Nexus/static mirror", npmDocs);
         Assert.Contains("SELENIUM_PW_MIGRATOR_BASE_URL", npmDocs);
+        Assert.Contains("Nexus npm proxy", npmDocs);
+        Assert.Contains("--registry=https://nexus.example/repository/npm-group/", npmDocs);
+        Assert.Contains("npm config set selenium-pw-migrator-base-url", npmDocs);
+        Assert.Contains("selenium-pw-migrator-base-url", npmReadme);
+        Assert.Contains("Nexus npm proxy", readme);
+        Assert.Contains("Nexus npm proxy", readmeRu);
         Assert.Contains("smoke-npm-wrapper.ps1", npmDocs);
 
         Assert.Contains("npm pack", packPs1);

@@ -14,13 +14,14 @@ const packageJson = require(path.join(packageRoot, 'package.json'));
 const SUPPORTED_RUNTIMES = new Set(['win-x64', 'linux-x64', 'osx-x64', 'osx-arm64']);
 
 const env = process.env;
-const skipDownload = env.SELENIUM_PW_MIGRATOR_SKIP_DOWNLOAD === '1' || env.SELENIUM_PW_MIGRATOR_SKIP_DOWNLOAD === 'true';
-const version = env.SELENIUM_PW_MIGRATOR_VERSION || packageJson.version;
-const runtime = validateRuntime(env.SELENIUM_PW_MIGRATOR_RUNTIME || resolveRuntime());
-const baseUrl = normalizeBaseUrl(env.SELENIUM_PW_MIGRATOR_BASE_URL || `https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v${version}`);
-const archivePathOverride = env.SELENIUM_PW_MIGRATOR_ARCHIVE_PATH || '';
-const checksumsPathOverride = env.SELENIUM_PW_MIGRATOR_CHECKSUMS_PATH || '';
-const installDir = env.SELENIUM_PW_MIGRATOR_INSTALL_DIR || path.join(packageRoot, 'native', runtime);
+const skipDownload = isTruthy(readOption('SELENIUM_PW_MIGRATOR_SKIP_DOWNLOAD', 'selenium-pw-migrator-skip-download'));
+const version = readOption('SELENIUM_PW_MIGRATOR_VERSION', 'selenium-pw-migrator-version') || packageJson.version;
+const runtime = validateRuntime(readOption('SELENIUM_PW_MIGRATOR_RUNTIME', 'selenium-pw-migrator-runtime') || resolveRuntime());
+const baseUrlOverride = readOption('SELENIUM_PW_MIGRATOR_BASE_URL', 'selenium-pw-migrator-base-url');
+const baseUrl = normalizeBaseUrl(baseUrlOverride || `https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v${version}`);
+const archivePathOverride = readOption('SELENIUM_PW_MIGRATOR_ARCHIVE_PATH', 'selenium-pw-migrator-archive-path') || '';
+const checksumsPathOverride = readOption('SELENIUM_PW_MIGRATOR_CHECKSUMS_PATH', 'selenium-pw-migrator-checksums-path') || '';
+const installDir = readOption('SELENIUM_PW_MIGRATOR_INSTALL_DIR', 'selenium-pw-migrator-install-dir') || path.join(packageRoot, 'native', runtime);
 const archiveName = resolveArchiveName(version, runtime, archivePathOverride);
 
 main().catch(error => {
@@ -30,8 +31,12 @@ main().catch(error => {
 
 async function main() {
   if (skipDownload) {
-    console.log('[selenium-pw-migrator] Native download skipped because SELENIUM_PW_MIGRATOR_SKIP_DOWNLOAD is set.');
+    console.log('[selenium-pw-migrator] Native download skipped because SELENIUM_PW_MIGRATOR_SKIP_DOWNLOAD or npm config selenium-pw-migrator-skip-download is set.');
     return;
+  }
+
+  if (baseUrlOverride) {
+    console.log(`[selenium-pw-migrator] Using configured standalone release base URL: ${baseUrl}`);
   }
 
   fs.rmSync(installDir, { recursive: true, force: true });
@@ -79,6 +84,35 @@ async function main() {
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
+}
+
+
+function readOption(envName, npmConfigName) {
+  const envValue = env[envName];
+  if (hasValue(envValue)) return envValue;
+
+  for (const npmEnvName of npmConfigEnvNames(npmConfigName)) {
+    const npmValue = env[npmEnvName];
+    if (hasValue(npmValue)) return npmValue;
+  }
+
+  return '';
+}
+
+function npmConfigEnvNames(configName) {
+  const normalized = String(configName).replace(/[^A-Za-z0-9]/g, '_');
+  return [
+    `npm_config_${normalized}`,
+    `NPM_CONFIG_${normalized.toUpperCase()}`
+  ];
+}
+
+function hasValue(value) {
+  return value !== undefined && value !== null && String(value).length > 0;
+}
+
+function isTruthy(value) {
+  return value === '1' || String(value).toLowerCase() === 'true' || String(value).toLowerCase() === 'yes';
 }
 
 function resolveRuntime() {
