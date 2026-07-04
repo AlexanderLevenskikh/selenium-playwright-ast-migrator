@@ -15,6 +15,7 @@ $project = Join-Path (Join-Path $root "Migrator.Cli") "Migrator.Cli.csproj"
 $outputRoot = if ([System.IO.Path]::IsPathRooted($Output)) { $Output } else { Join-Path $root $Output }
 $publishDir = Join-Path $outputRoot $Runtime
 $selfContainedValue = (-not $NoSelfContained).ToString().ToLowerInvariant()
+$buildDateUtc = [DateTimeOffset]::UtcNow.ToString("O")
 
 Write-Host "Publishing Selenium Playwright Migrator standalone bundle"
 Write-Host "Repo root:      $root"
@@ -49,6 +50,8 @@ $publishArgs = @(
     "/p:PublishSingleFile=false",
     "/p:DebugType=None",
     "/p:DebugSymbols=false",
+    "/p:MigratorDistribution=standalone",
+    "/p:MigratorBuildDateUtc=$buildDateUtc",
     "-o", $publishDir
 )
 
@@ -122,19 +125,22 @@ $readmeLines = @(
     '```bash',
     "./$ToolName --version",
     "./$ToolName --help",
-    '```'
+    '```',
+    "",
+    "The version output includes distribution, runtime, self-contained, publish-single-file, framework, and build metadata when available."
 )
 Set-Content -Path $readmePath -Value $readmeLines -Encoding UTF8
 
 $manifest = [ordered]@{
     schemaVersion = "standalone-publish/v1"
     version = if ([string]::IsNullOrWhiteSpace($Version)) { $null } else { $Version }
+    distribution = "standalone"
     runtime = $Runtime
     configuration = $Configuration
     selfContained = (-not $NoSelfContained)
     publishSingleFile = $false
     entrypoint = $entrypoint
-    generatedAtUtc = [DateTimeOffset]::UtcNow.ToString("O")
+    generatedAtUtc = $buildDateUtc
 }
 $manifest | ConvertTo-Json -Depth 6 | Set-Content -Path (Join-Path $publishDir "standalone-manifest.json") -Encoding UTF8
 

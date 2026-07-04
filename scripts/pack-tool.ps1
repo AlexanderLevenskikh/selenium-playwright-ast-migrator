@@ -10,6 +10,7 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $root "Migrator.Cli/Migrator.Cli.csproj"
 $outDir = Join-Path $root $Output
+$buildDateUtc = [DateTimeOffset]::UtcNow.ToString("O")
 
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
@@ -17,7 +18,9 @@ Write-Host "Packing $PackageId $Version..."
 dotnet pack $project `
     -c $Configuration `
     -o $outDir `
-    /p:Version=$Version
+    /p:Version=$Version `
+    /p:MigratorDistribution=dotnet-tool `
+    /p:MigratorBuildDateUtc=$buildDateUtc
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet pack failed with exit code $LASTEXITCODE"
 }

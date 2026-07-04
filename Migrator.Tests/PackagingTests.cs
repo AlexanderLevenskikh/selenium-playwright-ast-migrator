@@ -193,6 +193,8 @@ public class PackagingTests
         Assert.Contains("ChecksumsPath", installScript);
         Assert.Contains("Using local archive", installScript);
         Assert.Contains("generic release directories such as Nexus/static HTTP folders", installScript);
+        Assert.Contains("SkipUserPathUpdate", installScript);
+        Assert.Contains("Added to current session PATH", installScript);
     }
 
     [Fact]
@@ -214,6 +216,10 @@ public class PackagingTests
         Assert.Contains("Private Nexus/static release directory", english);
         Assert.Contains("https://nexus.example/repository/migrator/releases/v0.0.0-preview.1", english);
         Assert.Contains("Внутренний Nexus/static release directory", russian);
+        Assert.Contains("adds this directory to the user `PATH` by default", english);
+        Assert.Contains("-SkipUserPathUpdate", english);
+        Assert.Contains("по умолчанию добавляет эту папку в user `PATH`", russian);
+        Assert.Contains("-SkipUserPathUpdate", russian);
     }
 
 
@@ -228,9 +234,18 @@ public class PackagingTests
         Assert.Contains("osx-arm64", script);
         Assert.Contains("checksums.sha256", script);
         Assert.Contains("standalone-release-manifest.json", script);
+        Assert.Contains("Manifest distribution mismatch", script);
         Assert.Contains("Get-FileHash -Algorithm SHA256", script);
         Assert.Contains("install-standalone.ps1", script);
         Assert.Contains("install-standalone.sh", script);
+
+        var publishStandalone = File.ReadAllText(FindRepositoryFile("scripts/publish-standalone.ps1"));
+        var packToolPs1 = File.ReadAllText(FindRepositoryFile("scripts/pack-tool.ps1"));
+        var packToolSh = File.ReadAllText(FindRepositoryFile("scripts/pack-tool.sh"));
+        Assert.Contains("MigratorDistribution=standalone", publishStandalone);
+        Assert.Contains("MigratorBuildDateUtc", publishStandalone);
+        Assert.Contains("MigratorDistribution=dotnet-tool", packToolPs1);
+        Assert.Contains("MigratorDistribution=dotnet-tool", packToolSh);
     }
 
     [Fact]
@@ -244,7 +259,12 @@ public class PackagingTests
         Assert.Contains("does not require the .NET SDK or .NET Runtime", english);
         Assert.Contains("PublishSingleFile", english);
         Assert.Contains("checksums.sha256", english);
+        Assert.Contains("distribution: standalone", english);
+        Assert.Contains("runtime: win-x64", english);
+        Assert.Contains("self-contained: true", english);
         Assert.Contains("не нужен установленный .NET", russian);
+        Assert.Contains("distribution: standalone", russian);
+        Assert.Contains("runtime: win-x64", russian);
         Assert.Contains("standalone-installation.md", index);
         Assert.Contains("standalone-installation.ru.md", index);
         Assert.Contains("--source https://api.nuget.org/v3/index.json", toolInstallation);
@@ -258,6 +278,15 @@ public class PackagingTests
 
         Assert.Contains("IsVersionRequest(args)", program);
         Assert.Contains("AssemblyInformationalVersionAttribute", program);
+        Assert.Contains("ReadStandaloneVersionManifest", program);
+        Assert.Contains("standalone-manifest.json", program);
+        Assert.Contains("MIGRATOR_DISTRIBUTION", program);
+        Assert.Contains("AssemblyMetadataAttribute", program);
+        Assert.Contains("distribution: {distribution}", program);
+        Assert.Contains("runtime: {runtime}", program);
+        Assert.Contains("build: {buildDateUtc}", program);
+        Assert.Contains("self-contained: {manifest.SelfContained", program);
+        Assert.Contains("publish-single-file: {manifest.PublishSingleFile", program);
         Assert.Contains("selenium-pw-migrator {version}", program);
         Assert.Contains("--version, -v", catalog);
     }
@@ -313,6 +342,8 @@ public class PackagingTests
         Assert.Equal("https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator", ElementValue(doc, "PackageProjectUrl"));
         Assert.Equal("https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator", ElementValue(doc, "RepositoryUrl"));
         Assert.False(string.IsNullOrWhiteSpace(ElementValue(doc, "PackageReleaseNotes")));
+        Assert.Contains("MigratorDistribution", File.ReadAllText(projectPath));
+        Assert.Contains("AssemblyMetadataAttribute", File.ReadAllText(projectPath));
 
         var publicMetadata = string.Join("\n", new[]
         {

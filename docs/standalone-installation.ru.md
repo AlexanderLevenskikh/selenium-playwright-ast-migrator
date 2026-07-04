@@ -75,8 +75,7 @@ irm https://raw.githubusercontent.com/AlexanderLevenskikh/selenium-playwright-as
 ```powershell
 ./scripts/install-standalone.ps1 `
   -Version 0.0.0-preview.1 `
-  -BaseUrl https://nexus.example/repository/migrator/releases/v0.0.0-preview.1 `
-  -AddToUserPath
+  -BaseUrl https://nexus.example/repository/migrator/releases/v0.0.0-preview.1
 ```
 
 По умолчанию установка идёт сюда:
@@ -85,6 +84,8 @@ irm https://raw.githubusercontent.com/AlexanderLevenskikh/selenium-playwright-as
 %USERPROFILE%\.selenium-pw-migrator\bin
 ```
 
+Windows-установщик по умолчанию добавляет эту папку в user `PATH` и также подставляет её в `PATH` текущей PowerShell-сессии. Используй `-SkipUserPathUpdate`, только если нужно установить файлы без изменения `PATH`.
+
 Проверка:
 
 ```powershell
@@ -92,7 +93,20 @@ selenium-pw-migrator --version
 selenium-pw-migrator --help
 ```
 
-Если команда не находится, открой новое окно терминала или добавь папку установки в `PATH` вручную.
+В standalone-версии `--version` показывает канал поставки и runtime metadata:
+
+```text
+selenium-pw-migrator 0.0.0-preview.1+<commit>
+commit: <commit>
+build: <utc timestamp>
+distribution: standalone
+runtime: win-x64
+self-contained: true
+publish-single-file: false
+framework: .NET ...
+```
+
+Если команда не находится, открой новое окно терминала и проверь `Get-Command selenium-pw-migrator -All`. Чтобы standalone выигрывал у global dotnet tool, папка standalone-установки должна быть выше `%USERPROFILE%\.dotnet\tools`.
 
 ## Установка на Linux/macOS
 

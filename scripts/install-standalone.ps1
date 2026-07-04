@@ -5,7 +5,8 @@ param(
     [string]$Runtime = "",
     [string]$ArchivePath = "",
     [string]$ChecksumsPath = "",
-    [switch]$AddToUserPath
+    [switch]$AddToUserPath,
+    [switch]$SkipUserPathUpdate
 )
 
 $ErrorActionPreference = "Stop"
@@ -126,22 +127,54 @@ try {
         throw "Installed executable was not found: $exe"
     }
 
+    $shouldUpdateUserPath = -not $SkipUserPathUpdate
     if ($AddToUserPath) {
+        # Backward-compatible explicit opt-in. PATH updates are now the default
+        # for the Windows installer, but this switch remains valid for old docs/scripts.
+        $shouldUpdateUserPath = $true
+    }
+
+    if ($shouldUpdateUserPath) {
         $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
         if ($null -eq $currentPath) { $currentPath = "" }
         $parts = $currentPath -split ";" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-        if ($parts -notcontains $binDir) {
-            $newPath = if ([string]::IsNullOrWhiteSpace($currentPath)) { $binDir } else { "$currentPath;$binDir" }
+        $alreadyInUserPath = $false
+        foreach ($part in $parts) {
+            if ([string]::Equals($part.TrimEnd([char[]]@('\', '/')), $binDir.TrimEnd([char[]]@('\', '/')), [StringComparison]::OrdinalIgnoreCase)) {
+                $alreadyInUserPath = $true
+                break
+            }
+        }
+
+        if (-not $alreadyInUserPath) {
+            $newPath = if ([string]::IsNullOrWhiteSpace($currentPath)) { $binDir } else { "$binDir;$currentPath" }
             [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
             Write-Host "Added to user PATH: $binDir"
-            Write-Host "Open a new terminal window before using selenium-pw-migrator from PATH."
+            Write-Host "Open a new terminal window if another terminal does not see selenium-pw-migrator yet."
+        }
+        else {
+            Write-Host "User PATH already contains: $binDir"
+        }
+
+        $processPathParts = $env:Path -split ";" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        $alreadyInProcessPath = $false
+        foreach ($part in $processPathParts) {
+            if ([string]::Equals($part.TrimEnd([char[]]@('\', '/')), $binDir.TrimEnd([char[]]@('\', '/')), [StringComparison]::OrdinalIgnoreCase)) {
+                $alreadyInProcessPath = $true
+                break
+            }
+        }
+
+        if (-not $alreadyInProcessPath) {
+            $env:Path = "$binDir;$env:Path"
+            Write-Host "Added to current session PATH: $binDir"
         }
     }
 
     Write-Host "Installed Selenium Playwright Migrator to: $binDir"
     Write-Host "Run: $exe --version"
-    if (-not $AddToUserPath) {
-        Write-Host "To use from any terminal, add this directory to PATH: $binDir"
+    if ($SkipUserPathUpdate) {
+        Write-Host "PATH update was skipped. To use from any terminal, add this directory to PATH: $binDir"
     }
 }
 finally {

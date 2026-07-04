@@ -30,6 +30,22 @@
     <NoWarn>$(NoWarn);NU5110;NU5111</NoWarn>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <MigratorDistribution Condition="'$(MigratorDistribution)' == ''">dotnet-tool/source</MigratorDistribution>
+    <MigratorBuildDateUtc Condition="'$(MigratorBuildDateUtc)' == ''"></MigratorBuildDateUtc>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>Distribution</_Parameter1>
+      <_Parameter2>$(MigratorDistribution)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute" Condition="'$(MigratorBuildDateUtc)' != ''">
+      <_Parameter1>BuildDateUtc</_Parameter1>
+      <_Parameter2>$(MigratorBuildDateUtc)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" />
     <ProjectReference Include="..\Migrator.Core\Migrator.Core.csproj" />

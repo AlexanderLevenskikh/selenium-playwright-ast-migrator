@@ -32,6 +32,9 @@ $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
 if ($manifest.version -ne $Version) {
     throw "Manifest version mismatch. Expected '$Version', actual '$($manifest.version)'."
 }
+if ($manifest.distribution -ne "standalone") {
+    throw "Manifest distribution mismatch. Expected 'standalone', actual '$($manifest.distribution)'."
+}
 
 $manifestRuntimes = @($manifest.runtimes)
 foreach ($runtime in $Runtimes) {

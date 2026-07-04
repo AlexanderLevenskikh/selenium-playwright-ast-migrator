@@ -183,6 +183,8 @@ Recommended sequence:
 3. run the workflow again with the same `version` and `dry_run=false`;
 4. verify the package page on NuGet, the GitHub release page, release assets, checksums, and test install from a clean directory.
 
+After install, capture `selenium-pw-migrator --version` in the smoke notes. The output should include `distribution`, `runtime`, `self-contained`, `publish-single-file`, `framework`, and, when available, `commit`/`build`.
+
 ### Internal Nexus/static mirror
 
 For internal distribution, copy the complete standalone release directory to one flat Nexus/raw/static directory. Keep `checksums.sha256` next to the archives so install scripts can verify downloads.

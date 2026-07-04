@@ -128,6 +128,7 @@ Set-Content -Path $checksumPath -Value $checksumLines -Encoding ASCII
 $manifest = [ordered]@{
     schemaVersion = "standalone-release/v1"
     version = $Version
+    distribution = "standalone"
     generatedAtUtc = [DateTimeOffset]::UtcNow.ToString("O")
     selfContained = (-not $NoSelfContained)
     publishSingleFile = $false

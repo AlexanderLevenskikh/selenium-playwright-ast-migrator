@@ -11089,15 +11089,116 @@ static void PrintVersion()
         ? informationalVersion
         : assembly.GetName().Version?.ToString() ?? "unknown";
 
-    var commit = Environment.GetEnvironmentVariable("MIGRATOR_COMMIT")
-        ?? assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
-            .FirstOrDefault(a => string.Equals(a.Key, "RepositoryCommit", StringComparison.OrdinalIgnoreCase))
-            ?.Value;
+    var manifest = ReadStandaloneVersionManifest();
+    var commit = FirstNonEmpty(
+        Environment.GetEnvironmentVariable("MIGRATOR_COMMIT"),
+        GetAssemblyMetadata(assembly, "RepositoryCommit"),
+        ParseCommitFromInformationalVersion(informationalVersion));
+
+    var buildDateUtc = FirstNonEmpty(
+        Environment.GetEnvironmentVariable("MIGRATOR_BUILD_DATE_UTC"),
+        GetAssemblyMetadata(assembly, "BuildDateUtc"),
+        manifest?.GeneratedAtUtc);
+
+    var distribution = FirstNonEmpty(
+        Environment.GetEnvironmentVariable("MIGRATOR_DISTRIBUTION"),
+        GetAssemblyMetadata(assembly, "Distribution"),
+        manifest is null ? "dotnet-tool/source" : "standalone");
+
+    var runtime = FirstNonEmpty(
+        Environment.GetEnvironmentVariable("MIGRATOR_RUNTIME"),
+        manifest?.Runtime,
+        System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier);
 
     Console.WriteLine($"selenium-pw-migrator {version}");
     if (!string.IsNullOrWhiteSpace(commit))
         Console.WriteLine($"commit: {commit}");
+    if (!string.IsNullOrWhiteSpace(buildDateUtc))
+        Console.WriteLine($"build: {buildDateUtc}");
+    Console.WriteLine($"distribution: {distribution}");
+    Console.WriteLine($"runtime: {runtime}");
+    if (manifest is not null)
+    {
+        Console.WriteLine($"self-contained: {manifest.SelfContained.ToString().ToLowerInvariant()}");
+        Console.WriteLine($"publish-single-file: {manifest.PublishSingleFile.ToString().ToLowerInvariant()}");
+    }
     Console.WriteLine($"framework: {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
+}
+
+static StandaloneVersionManifest? ReadStandaloneVersionManifest()
+{
+    var manifestPath = Path.Combine(AppContext.BaseDirectory, "standalone-manifest.json");
+    if (!File.Exists(manifestPath))
+        return null;
+
+    try
+    {
+        using var stream = File.OpenRead(manifestPath);
+        using var document = JsonDocument.Parse(stream);
+        var root = document.RootElement;
+
+        return new StandaloneVersionManifest(
+            Runtime: GetJsonString(root, "runtime"),
+            GeneratedAtUtc: GetJsonString(root, "generatedAtUtc"),
+            SelfContained: GetJsonBool(root, "selfContained"),
+            PublishSingleFile: GetJsonBool(root, "publishSingleFile"));
+    }
+    catch
+    {
+        return null;
+    }
+}
+
+static string? GetJsonString(JsonElement element, string propertyName)
+{
+    return element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
+        ? property.GetString()
+        : null;
+}
+
+static bool GetJsonBool(JsonElement element, string propertyName)
+{
+    if (!element.TryGetProperty(propertyName, out var property))
+        return false;
+
+    return property.ValueKind switch
+    {
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        _ => false,
+    };
+}
+
+static string? GetAssemblyMetadata(Assembly assembly, string key)
+{
+    return assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
+        .FirstOrDefault(a => string.Equals(a.Key, key, StringComparison.OrdinalIgnoreCase))
+        ?.Value;
+}
+
+static string? ParseCommitFromInformationalVersion(string? informationalVersion)
+{
+    if (string.IsNullOrWhiteSpace(informationalVersion))
+        return null;
+
+    var plusIndex = informationalVersion.IndexOf('+');
+    if (plusIndex < 0 || plusIndex == informationalVersion.Length - 1)
+        return null;
+
+    var metadata = informationalVersion[(plusIndex + 1)..].Trim();
+    var separatorIndex = metadata.IndexOfAny(new[] { '.', '-' });
+    return separatorIndex > 0 ? metadata[..separatorIndex] : metadata;
+}
+
+static string? FirstNonEmpty(params string?[] values)
+{
+    foreach (var value in values)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+            return value;
+    }
+
+    return null;
 }
 
 static string? FindOptionValue(string[] args, string optionName)
@@ -11111,6 +11212,9 @@ static string? FindOptionValue(string[] args, string optionName)
     return null;
 }
 
+
+
+record StandaloneVersionManifest(string? Runtime, string? GeneratedAtUtc, bool SelfContained, bool PublishSingleFile);
 
 record PomMemberExpression(string Name, string Expression, int StartIndex, int ExpressionStartIndex, int Line, string Kind, ExpressionSyntax? Syntax);
 

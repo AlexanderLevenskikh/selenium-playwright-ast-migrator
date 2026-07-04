@@ -75,8 +75,7 @@ For a private feed or Nexus-hosted release directory, pass the base URL explicit
 ```powershell
 ./scripts/install-standalone.ps1 `
   -Version 0.0.0-preview.1 `
-  -BaseUrl https://nexus.example/repository/migrator/releases/v0.0.0-preview.1 `
-  -AddToUserPath
+  -BaseUrl https://nexus.example/repository/migrator/releases/v0.0.0-preview.1
 ```
 
 The default install location is:
@@ -85,6 +84,8 @@ The default install location is:
 %USERPROFILE%\.selenium-pw-migrator\bin
 ```
 
+The Windows installer adds this directory to the user `PATH` by default and also prepends it to the current PowerShell session. Use `-SkipUserPathUpdate` only when you want to install files without changing `PATH`.
+
 Verify:
 
 ```powershell
@@ -92,7 +93,20 @@ selenium-pw-migrator --version
 selenium-pw-migrator --help
 ```
 
-If the command is not found, open a new terminal or add the install directory to `PATH` manually.
+Standalone `--version` output includes the distribution channel and runtime metadata:
+
+```text
+selenium-pw-migrator 0.0.0-preview.1+<commit>
+commit: <commit>
+build: <utc timestamp>
+distribution: standalone
+runtime: win-x64
+self-contained: true
+publish-single-file: false
+framework: .NET ...
+```
+
+If the command is not found, open a new terminal and check `Get-Command selenium-pw-migrator -All`. The standalone install directory should appear before `%USERPROFILE%\.dotnet\tools` when you want standalone to win over a global dotnet tool.
 
 ## Linux/macOS install
 
