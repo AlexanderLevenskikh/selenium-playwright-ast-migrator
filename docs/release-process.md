@@ -163,10 +163,15 @@ The workflow:
 3. verifies `.nupkg` contents;
 4. installs the package from `artifacts/nuget` into a temporary local tool manifest and runs smoke checks;
 5. builds standalone CLI archives for `win-x64`, `linux-x64`, `osx-x64`, and `osx-arm64`;
-6. uploads the verified `.nupkg`, standalone archives, `checksums.sha256`, `standalone-release-manifest.json`, and standalone install scripts as workflow artifacts;
-7. publishes only when `dry_run=false`;
-8. creates or updates the GitHub release `v<version>` after a successful publish, using `docs/release-notes/v<version>.md` first and falling back to the matching `CHANGELOG.md` section;
-9. attaches the `.nupkg`, standalone archives, checksum/manifest files, and `install-standalone.ps1` / `install-standalone.sh` to the GitHub release.
+6. stages one flat GitHub release asset directory at `artifacts/github-release`;
+7. verifies the staged GitHub release assets before upload;
+8. uploads the staged `.nupkg`, standalone archives, `checksums.sha256`, `standalone-release-manifest.json`, and standalone install scripts as one workflow artifact;
+9. publishes only when `dry_run=false`;
+10. downloads and verifies the same flat release asset directory in the publish job;
+11. creates or updates the GitHub release `v<version>` after a successful publish, using `docs/release-notes/v<version>.md` first and falling back to the matching `CHANGELOG.md` section;
+12. attaches every file from `artifacts/github-release` to the GitHub release.
+
+The staging directory is intentionally flat. Do not upload mixed source paths directly to GitHub Releases from `actions/download-artifact`; nested artifact layouts can make the install scripts appear in a release while the standalone archives are left behind.
 
 Required repository setup for NuGet Trusted Publishing:
 

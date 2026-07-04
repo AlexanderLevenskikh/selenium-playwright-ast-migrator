@@ -120,6 +120,19 @@ public class PackagingTests
         Assert.Contains("nuget-production", workflow);
         Assert.Contains("Package standalone release archives", workflow);
         Assert.Contains("verify-release-artifacts.ps1", workflow);
+        Assert.Contains("Stage GitHub release assets", workflow);
+        Assert.Contains("Verify staged GitHub release assets", workflow);
+        Assert.Contains("Upload GitHub release assets", workflow);
+        Assert.Contains("Download GitHub release assets", workflow);
+        Assert.Contains("Verify downloaded GitHub release assets", workflow);
+        Assert.Contains("List downloaded GitHub release assets", workflow);
+        Assert.Contains("artifacts/github-release", workflow);
+        Assert.Contains("selenium-playwright-ast-migrator-release-assets", workflow);
+        Assert.Contains("required_assets", workflow);
+        Assert.Contains("selenium-pw-migrator-${VERSION}-win-x64.zip", workflow);
+        Assert.Contains("selenium-pw-migrator-${VERSION}-linux-x64.tar.gz", workflow);
+        Assert.Contains("selenium-pw-migrator-${VERSION}-osx-x64.tar.gz", workflow);
+        Assert.Contains("selenium-pw-migrator-${VERSION}-osx-arm64.tar.gz", workflow);
         Assert.Contains("scripts/install-standalone.ps1", workflow);
         Assert.Contains("scripts/install-standalone.sh", workflow);
     }
@@ -306,6 +319,14 @@ public class PackagingTests
         Assert.Contains("standalone-release-manifest.json", publish);
         Assert.Contains("scripts/install-standalone.ps1", publish);
         Assert.Contains("scripts/install-standalone.sh", publish);
+        Assert.Contains("Stage GitHub release assets", publish);
+        Assert.Contains("artifacts/github-release", publish);
+        Assert.Contains("selenium-playwright-ast-migrator-release-assets", publish);
+        Assert.Contains("required_assets", publish);
+        Assert.Contains("selenium-pw-migrator-${VERSION}-win-x64.zip", publish);
+        Assert.Contains("selenium-pw-migrator-${VERSION}-linux-x64.tar.gz", publish);
+        Assert.Contains("selenium-pw-migrator-${VERSION}-osx-x64.tar.gz", publish);
+        Assert.Contains("selenium-pw-migrator-${VERSION}-osx-arm64.tar.gz", publish);
         Assert.Contains("release_assets", publish);
         Assert.Contains("gh release upload", publish);
         Assert.Contains("Package standalone bundle", fullValidation);
@@ -324,6 +345,9 @@ public class PackagingTests
         Assert.Contains("install-standalone.ps1", releaseProcess);
         Assert.Contains("install-standalone.sh", releaseProcess);
         Assert.Contains("standalone archive smoke", releaseProcess);
+        Assert.Contains("artifacts/github-release", releaseProcess);
+        Assert.Contains("flat GitHub release asset directory", releaseProcess);
+        Assert.Contains("nested artifact layouts", releaseProcess);
         Assert.Contains("Internal Nexus/static mirror", releaseProcess);
         Assert.Contains("<base-url>/", releaseProcess);
     }
