@@ -1,6 +1,6 @@
 # Release process
 
-This document is the release checklist for publishing `SeleniumPlaywrightMigrator` as a public preview dotnet tool and for producing the standalone agent bundle.
+This document is the release checklist for publishing `SeleniumPlaywrightMigrator` as a public preview dotnet tool and for producing standalone CLI release archives.
 
 ## Versioning
 
@@ -93,13 +93,39 @@ For Linux CI smoke, use a framework-dependent bundle:
 ./scripts/verify-agent-cli-bundle.ps1 -BundleDirectory artifacts/agent-cli-bundle/tool -RunHelp
 ```
 
-8. Wait for GitHub Actions to pass:
+8. Build standalone release archives:
+
+```powershell
+./scripts/package-standalone.ps1 `
+  -Version 0.0.0-preview.1
+```
+
+The release directory must contain the versioned and latest-alias archives for `win-x64`, `linux-x64`, `osx-x64`, and `osx-arm64`, plus `checksums.sha256` and `standalone-release-manifest.json`.
+
+Verify the complete release artifact set before uploading it:
+
+```powershell
+./scripts/verify-release-artifacts.ps1 `
+  -Version 0.0.0-preview.1
+```
+
+9. Verify the local Windows archive when running on Windows:
+
+```powershell
+./scripts/verify-standalone-package.ps1 `
+  -ArchivePath artifacts/release/selenium-pw-migrator-0.0.0-preview.1-win-x64.zip `
+  -ChecksumsPath artifacts/release/checksums.sha256 `
+  -RunHelp
+```
+
+10. Wait for GitHub Actions to pass:
    - `Test fast suite`;
    - `Test CLI process suite`;
    - dotnet-tool package job;
+   - standalone-release job;
    - agent-bundle job.
 
-9. For release candidates, optionally run the manual `Full Validation` workflow. It runs the unfiltered test suite, `release-doctor`, dotnet-tool package smoke, and agent-bundle smoke in one end-to-end gate. The same workflow also runs nightly from `schedule`.
+11. For release candidates, optionally run the manual `Full Validation` workflow. It runs the unfiltered test suite, `release-doctor`, dotnet-tool package smoke, standalone archive smoke, and agent-bundle smoke in one end-to-end gate. The same workflow also runs nightly from `schedule`.
 
 ## Stable release checklist
 
@@ -108,6 +134,7 @@ Before removing the preview suffix:
 - no known package-content leaks;
 - `--help` and key command help are understandable without internal project context;
 - package smoke passes on CI;
+- standalone CLI release archives have `checksums.sha256` and `standalone-release-manifest.json`;
 - standalone agent bundle has `MANIFEST.sha256` and `manifest.json`;
 - docs describe stable, preview, and experimental commands consistently;
 - the public roadmap states what remains experimental.
@@ -135,9 +162,11 @@ The workflow:
 2. packs the dotnet tool;
 3. verifies `.nupkg` contents;
 4. installs the package from `artifacts/nuget` into a temporary local tool manifest and runs smoke checks;
-5. uploads the verified `.nupkg` as a workflow artifact;
-6. publishes only when `dry_run=false`;
-7. creates or updates the GitHub release `v<version>` after a successful publish, using `docs/release-notes/v<version>.md` first and falling back to the matching `CHANGELOG.md` section.
+5. builds standalone CLI archives for `win-x64`, `linux-x64`, `osx-x64`, and `osx-arm64`;
+6. uploads the verified `.nupkg`, standalone archives, `checksums.sha256`, `standalone-release-manifest.json`, and standalone install scripts as workflow artifacts;
+7. publishes only when `dry_run=false`;
+8. creates or updates the GitHub release `v<version>` after a successful publish, using `docs/release-notes/v<version>.md` first and falling back to the matching `CHANGELOG.md` section;
+9. attaches the `.nupkg`, standalone archives, checksum/manifest files, and `install-standalone.ps1` / `install-standalone.sh` to the GitHub release.
 
 Required repository setup for NuGet Trusted Publishing:
 
@@ -150,9 +179,9 @@ Required repository setup for NuGet Trusted Publishing:
 Recommended sequence:
 
 1. run the workflow with `dry_run=true`;
-2. download/check the uploaded `.nupkg` artifact if needed;
+2. download/check the uploaded `.nupkg` and standalone release artifacts if needed;
 3. run the workflow again with the same `version` and `dry_run=false`;
-4. verify the package page on NuGet, the GitHub release page, and test install from a clean directory.
+4. verify the package page on NuGet, the GitHub release page, release assets, checksums, and test install from a clean directory.
 
 ### Local/manual publish
 
@@ -207,4 +236,5 @@ The default CI intentionally verifies more than compilation:
 - `dotnet pack` catches broken package metadata and missing package assets;
 - `.nupkg` content verification catches private/local artifacts before publication;
 - local tool smoke verifies that installation and CLI startup work from the package, not just from source;
+- standalone archive smoke verifies the release archive, checksum entry, startup, and help output;
 - agent bundle smoke verifies the compiled bundle, docs/templates/schema presence, and checksum manifest integrity.

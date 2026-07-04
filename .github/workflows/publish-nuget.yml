@@ -62,6 +62,10 @@ jobs:
         shell: pwsh
         run: ./scripts/package-standalone.ps1 -Version "${{ inputs.version }}"
 
+      - name: Verify release artifact set
+        shell: pwsh
+        run: ./scripts/verify-release-artifacts.ps1 -Version "${{ inputs.version }}"
+
       - name: Upload verified package artifact
         uses: actions/upload-artifact@v4
         with:
@@ -78,6 +82,8 @@ jobs:
             artifacts/release/*.tar.gz
             artifacts/release/checksums.sha256
             artifacts/release/standalone-release-manifest.json
+            scripts/install-standalone.ps1
+            scripts/install-standalone.sh
           if-no-files-found: error
 
   publish:
@@ -137,7 +143,11 @@ jobs:
           tag="v${VERSION}"
           title="Selenium Playwright Migrator ${VERSION}"
           package="artifacts/nuget/SeleniumPlaywrightMigrator.${VERSION}.nupkg"
-          release_assets=("$package")
+          release_assets=(
+            "$package"
+            "scripts/install-standalone.ps1"
+            "scripts/install-standalone.sh"
+          )
           while IFS= read -r -d '' asset; do
             release_assets+=("$asset")
           done < <(find artifacts/release -maxdepth 1 -type f \( -name '*.zip' -o -name '*.tar.gz' -o -name 'checksums.sha256' -o -name 'standalone-release-manifest.json' \) -print0 | sort -z)

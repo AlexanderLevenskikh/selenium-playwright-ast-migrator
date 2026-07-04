@@ -34,6 +34,7 @@ public class PackagingTests
         Assert.True(File.Exists(FindRepositoryFile("scripts/package-standalone.ps1")));
         Assert.True(File.Exists(FindRepositoryFile("scripts/package-standalone.sh")));
         Assert.True(File.Exists(FindRepositoryFile("scripts/verify-standalone-package.ps1")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/verify-release-artifacts.ps1")));
         Assert.True(File.Exists(FindRepositoryFile("scripts/install-standalone.ps1")));
         Assert.True(File.Exists(FindRepositoryFile("scripts/install-standalone.sh")));
         Assert.True(File.Exists(FindRepositoryFile("docs/packaging-and-distribution.md")));
@@ -117,6 +118,10 @@ public class PackagingTests
         Assert.Contains("gh release upload", workflow);
         Assert.Contains("--prerelease", workflow);
         Assert.Contains("nuget-production", workflow);
+        Assert.Contains("Package standalone release archives", workflow);
+        Assert.Contains("verify-release-artifacts.ps1", workflow);
+        Assert.Contains("scripts/install-standalone.ps1", workflow);
+        Assert.Contains("scripts/install-standalone.sh", workflow);
     }
 
     [Fact]
@@ -189,6 +194,23 @@ public class PackagingTests
         Assert.Contains("Using local archive", installScript);
     }
 
+
+    [Fact]
+    public void ReleaseArtifactVerifier_ChecksAllRuntimeArchivesChecksumsManifestAndInstallScripts()
+    {
+        var script = File.ReadAllText(FindRepositoryFile("scripts/verify-release-artifacts.ps1"));
+
+        Assert.Contains("win-x64", script);
+        Assert.Contains("linux-x64", script);
+        Assert.Contains("osx-x64", script);
+        Assert.Contains("osx-arm64", script);
+        Assert.Contains("checksums.sha256", script);
+        Assert.Contains("standalone-release-manifest.json", script);
+        Assert.Contains("Get-FileHash -Algorithm SHA256", script);
+        Assert.Contains("install-standalone.ps1", script);
+        Assert.Contains("install-standalone.sh", script);
+    }
+
     [Fact]
     public void StandaloneInstallationDocs_ExplainNoDotnetRuntimeAndPathVerification()
     {
@@ -229,9 +251,28 @@ public class PackagingTests
         Assert.Contains("package-standalone.ps1", ci);
         Assert.Contains("verify-standalone-package.ps1", ci);
         Assert.Contains("Package standalone release archives", publish);
+        Assert.Contains("verify-release-artifacts.ps1", publish);
         Assert.Contains("standalone-release-manifest.json", publish);
+        Assert.Contains("scripts/install-standalone.ps1", publish);
+        Assert.Contains("scripts/install-standalone.sh", publish);
         Assert.Contains("release_assets", publish);
+        Assert.Contains("gh release upload", publish);
         Assert.Contains("Package standalone bundle", fullValidation);
+    }
+
+
+    [Fact]
+    public void ReleaseProcess_DocumentsStandaloneArtifactsAndInstallScripts()
+    {
+        var releaseProcess = File.ReadAllText(FindRepositoryFile("docs/release-process.md"));
+
+        Assert.Contains("package-standalone.ps1", releaseProcess);
+        Assert.Contains("verify-standalone-package.ps1", releaseProcess);
+        Assert.Contains("verify-release-artifacts.ps1", releaseProcess);
+        Assert.Contains("standalone-release-manifest.json", releaseProcess);
+        Assert.Contains("install-standalone.ps1", releaseProcess);
+        Assert.Contains("install-standalone.sh", releaseProcess);
+        Assert.Contains("standalone archive smoke", releaseProcess);
     }
 
     [Fact]
