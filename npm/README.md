@@ -6,16 +6,19 @@ During `npm install`, the package downloads the matching standalone release arch
 
 ## Install
 
+Preview releases are published under the `preview` dist-tag. Stable releases will use the default `latest` tag later.
+
 ```bash
-npm install -g selenium-pw-migrator
+npm install -g selenium-pw-migrator@preview
 selenium-pw-migrator --version
 ```
 
 
-Install directly from a GitHub Release asset before the package is published to npm:
+Install a pinned version from npm or directly from a GitHub Release asset:
 
 ```bash
-npm install -g https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.5/selenium-pw-migrator-0.0.0-preview.5.tgz
+npm install -g selenium-pw-migrator@0.0.0-preview.8
+npm install -g https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.8/selenium-pw-migrator-0.0.0-preview.8.tgz
 selenium-pw-migrator --version
 ```
 

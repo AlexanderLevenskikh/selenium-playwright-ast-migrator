@@ -177,12 +177,16 @@ public class PackagingTests
         Assert.Contains("selenium-pw-migrator-${VERSION}.tgz", workflow);
         Assert.Contains("package_url", workflow);
         Assert.Contains("For the first publish", workflow);
+        Assert.Contains("Validate npm dist-tag policy", workflow);
+        Assert.Contains("Prerelease versions must not be published with the latest dist-tag", workflow);
+        Assert.Contains("Use publish_tag=preview", workflow);
 
         Assert.Contains("npm publish", publishPs1);
         Assert.Contains("--dry-run", publishPs1);
         Assert.Contains("--tag", publishPs1);
         Assert.Contains("--provenance", publishPs1);
         Assert.Contains("Provenance is disabled by default", publishPs1);
+        Assert.Contains("Use -Tag preview", publishPs1);
         Assert.Contains("Registry", publishPs1);
         Assert.Contains("NPM_DRY_RUN=false", publishSh);
         Assert.Contains("NPM_REGISTRY", publishSh);
@@ -190,12 +194,15 @@ public class PackagingTests
         Assert.Contains("NPM_PROVENANCE:-false", publishSh);
         Assert.Contains("--tag", publishSh);
         Assert.Contains("--provenance", publishSh);
+        Assert.Contains("Use NPM_TAG=preview", publishSh);
 
         Assert.Contains("Publish npm wrapper", docs);
         Assert.Contains("dry_run=true", docs);
         Assert.Contains("publish_tag=preview", docs);
         Assert.Contains("use_provenance=false", docs);
-        Assert.Contains("npm install -g selenium-pw-migrator@0.0.0-preview.6", docs);
+        Assert.Contains("npm install -g selenium-pw-migrator@0.0.0-preview.8", docs);
+        Assert.Contains("npm install -g selenium-pw-migrator@preview", docs);
+        Assert.Contains("Corporate Nexus post-publish smoke", docs);
         Assert.Contains("NPM_TOKEN", docs);
         Assert.Contains("Trusted Publishing", docs);
         Assert.Contains("npm-publishing.md", docsIndex);
@@ -433,8 +440,9 @@ public class PackagingTests
         Assert.Contains("process.argv.slice(2)", wrapper);
         Assert.Contains("process.exit(result.status)", wrapper);
 
-        Assert.Contains("npm install -g selenium-pw-migrator", npmReadme);
+        Assert.Contains("npm install -g selenium-pw-migrator@preview", npmReadme);
         Assert.Contains("does **not** require the .NET SDK or .NET Runtime", npmReadme);
+        Assert.Contains("Preview releases are published under the `preview` dist-tag", npmReadme);
         Assert.Contains("Internal Nexus/static mirror", npmDocs);
         Assert.Contains("SELENIUM_PW_MIGRATOR_BASE_URL", npmDocs);
         Assert.Contains("Nexus npm proxy", npmDocs);
@@ -442,7 +450,9 @@ public class PackagingTests
         Assert.Contains("npm config set selenium-pw-migrator-base-url", npmDocs);
         Assert.Contains("selenium-pw-migrator-base-url", npmReadme);
         Assert.Contains("Nexus npm proxy", readme);
+        Assert.Contains("img.shields.io/npm/v/selenium-pw-migrator/preview", readme);
         Assert.Contains("Nexus npm proxy", readmeRu);
+        Assert.Contains("img.shields.io/npm/v/selenium-pw-migrator/preview", readmeRu);
         Assert.Contains("smoke-npm-wrapper.ps1", npmDocs);
 
         Assert.Contains("npm pack", packPs1);
@@ -451,15 +461,19 @@ public class PackagingTests
         Assert.Contains("node $wrapperScript --version", smokePs1);
 
         Assert.Contains("Frontend-friendly option: npm wrapper", readme);
+        Assert.Contains("npm install -g selenium-pw-migrator@preview", readme);
+        Assert.Contains("npm install -g selenium-pw-migrator@0.0.0-preview.8", readme);
         Assert.Contains("Вариант для frontend-команд: npm wrapper", readmeRu);
+        Assert.Contains("npm install -g selenium-pw-migrator@preview", readmeRu);
+        Assert.Contains("npm install -g selenium-pw-migrator@0.0.0-preview.8", readmeRu);
         Assert.Contains("npm install -g selenium-pw-migrator", standalone);
         Assert.Contains("npm wrapper", docsIndex);
         Assert.Contains("Pack the npm wrapper", releaseProcess);
         Assert.Contains("npm wrapper smoke/package job", releaseProcess);
         Assert.Contains("selenium-pw-migrator-<version>.tgz", releaseProcess);
-        Assert.Contains("https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.5/selenium-pw-migrator-0.0.0-preview.5.tgz", npmDocs);
+        Assert.Contains("https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.8/selenium-pw-migrator-0.0.0-preview.8.tgz", npmDocs);
         Assert.Contains("GitHub Release asset", npmDocs);
-        Assert.Contains("npm install -g https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.5/selenium-pw-migrator-0.0.0-preview.5.tgz", readme);
+        Assert.Contains("npm install -g https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.8/selenium-pw-migrator-0.0.0-preview.8.tgz", readme);
         Assert.Contains("GitHub Release asset", readmeRu);
         Assert.Contains("npm/native/", gitignore);
     }
@@ -580,6 +594,28 @@ public class PackagingTests
         Assert.Contains("does not require the .NET SDK or .NET Runtime", notes);
 
         Assert.Contains("release-notes/v0.0.0-preview.5.md", docsIndex);
+    }
+
+    [Fact]
+    public void PreviewEightReleaseNotes_DocumentNpmRegistryAndNexusDistribution()
+    {
+        var changelog = File.ReadAllText(FindRepositoryFile("CHANGELOG.md"));
+        var notes = File.ReadAllText(FindRepositoryFile("docs/release-notes/v0.0.0-preview.8.md"));
+        var docsIndex = File.ReadAllText(FindRepositoryFile("docs/README.md"));
+
+        Assert.Contains("## [0.0.0-preview.8]", changelog);
+        Assert.Contains("npm registry distribution", changelog);
+        Assert.Contains("preview` dist-tag", changelog);
+        Assert.Contains("Corporate Nexus npm proxy", changelog);
+
+        Assert.Contains("Selenium Playwright Migrator 0.0.0-preview.8", notes);
+        Assert.Contains("npm install -g selenium-pw-migrator@preview", notes);
+        Assert.Contains("selenium-pw-migrator-base-url", notes);
+        Assert.Contains("Token-first npm publish workflow", notes);
+        Assert.Contains("distribution: standalone", notes);
+        Assert.Contains("does not require the .NET SDK or .NET Runtime", notes);
+
+        Assert.Contains("release-notes/v0.0.0-preview.8.md", docsIndex);
     }
 
     [Fact]

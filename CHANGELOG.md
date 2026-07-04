@@ -8,6 +8,26 @@ This project uses preview SemVer-style versions while the public API is still st
 
 No unreleased changes yet.
 
+## [0.0.0-preview.8]
+
+### Added
+
+- npm registry distribution through the `selenium-pw-migrator` wrapper package.
+- Preview dist-tag guidance: install current previews with `npm install -g selenium-pw-migrator@preview`.
+- Corporate Nexus npm proxy support through npm config keys such as `selenium-pw-migrator-base-url`.
+- Token-first npm publish workflow with optional Trusted Publishing/provenance mode.
+
+### Fixed
+
+- npm publish workflow now defaults prereleases to the `preview` dist-tag instead of `latest`.
+- Publish scripts reject prerelease versions when the `latest` dist-tag is selected accidentally.
+- npm wrapper source files are tracked even though generic `bin/` folders are ignored elsewhere.
+
+### Notes
+
+- The npm package remains a thin wrapper around standalone release archives; it does not require the .NET SDK or .NET Runtime on the target machine.
+- Corporate users can install the npm package through a Nexus npm proxy and download the native standalone payload from an internal static/Nexus mirror.
+
 ## [0.0.0-preview.5]
 
 ### Added

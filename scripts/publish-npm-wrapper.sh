@@ -31,6 +31,11 @@ if [[ ! -f "$package_path" ]]; then
   exit 2
 fi
 
+if [[ "$version" == *-* && "$tag" == "latest" ]]; then
+  echo "Prerelease versions must not be published with the latest dist-tag. Use NPM_TAG=preview." >&2
+  exit 2
+fi
+
 args=(publish "$package_path" --registry "$registry" --access "$access" --tag "$tag")
 if [[ "$dry_run" == "true" || "$dry_run" == "1" ]]; then
   args+=(--dry-run)

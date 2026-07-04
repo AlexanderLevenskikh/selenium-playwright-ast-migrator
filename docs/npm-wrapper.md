@@ -1,13 +1,15 @@
 # npm wrapper
 
-The npm wrapper is an optional distribution channel for frontend-heavy teams. It lets users install the Selenium Playwright Migrator with `npm install -g selenium-pw-migrator` while still running the same standalone self-contained CLI bundle used by GitHub Release assets.
+The npm wrapper is an optional distribution channel for frontend-heavy teams. It lets users install the Selenium Playwright Migrator with `npm install -g selenium-pw-migrator@preview` while the project is in preview. It still runs the same standalone self-contained CLI bundle used by GitHub Release assets.
 
 The package does not embed the .NET SDK or require a local .NET installation. During `postinstall`, it downloads the matching standalone archive for the current platform and installs the native binary inside the npm package directory.
 
 ## User install
 
+Preview releases are published under the `preview` dist-tag. Stable releases will use the default `latest` tag later.
+
 ```bash
-npm install -g selenium-pw-migrator
+npm install -g selenium-pw-migrator@preview
 selenium-pw-migrator --version
 ```
 
@@ -27,10 +29,11 @@ selenium-pw-migrator kit doctor --workspace migration
 
 ## Install from a GitHub Release asset
 
-Before publishing to the npm registry, the release workflow attaches the packed wrapper tarball to the GitHub Release. This lets users test the npm channel directly from the release assets:
+The release workflow also attaches the packed wrapper tarball to the GitHub Release. This gives users a pinned fallback when npm registry access is proxied or when a specific preview must be tested directly from release assets:
 
 ```bash
-npm install -g https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.5/selenium-pw-migrator-0.0.0-preview.5.tgz
+npm install -g selenium-pw-migrator@0.0.0-preview.8
+npm install -g https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.8/selenium-pw-migrator-0.0.0-preview.8.tgz
 selenium-pw-migrator --version
 ```
 
@@ -92,9 +95,9 @@ After running `scripts/package-standalone.ps1`, run:
 
 ```powershell
 ./scripts/smoke-npm-wrapper.ps1 `
-  -Version 0.0.0-preview.5 `
+  -Version 0.0.0-preview.8 `
   -Runtime win-x64 `
-  -ArchivePath artifacts/release/selenium-pw-migrator-0.0.0-preview.5-win-x64.zip `
+  -ArchivePath artifacts/release/selenium-pw-migrator-0.0.0-preview.8-win-x64.zip `
   -ChecksumsPath artifacts/release/checksums.sha256
 ```
 
@@ -103,7 +106,7 @@ The smoke uses `SELENIUM_PW_MIGRATOR_ARCHIVE_PATH` and `SELENIUM_PW_MIGRATOR_CHE
 ## Packaging for npm publish
 
 ```powershell
-./scripts/pack-npm-wrapper.ps1 -Version 0.0.0-preview.5
+./scripts/pack-npm-wrapper.ps1 -Version 0.0.0-preview.8
 ```
 
 The script stages the wrapper under `artifacts/npm/package`, sets the npm package version, and produces a `.tgz` package with `npm pack`.

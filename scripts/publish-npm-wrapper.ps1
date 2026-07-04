@@ -29,6 +29,10 @@ if ([System.IO.Path]::GetFileName($resolvedPackagePath) -ne $expectedName) {
     throw "npm wrapper package name mismatch. Expected '$expectedName', actual '$([System.IO.Path]::GetFileName($resolvedPackagePath))'."
 }
 
+if ($Version.Contains('-') -and $Tag -eq 'latest') {
+    throw "Prerelease versions must not be published with the latest dist-tag. Use -Tag preview."
+}
+
 $args = @("publish", $resolvedPackagePath, "--registry", $Registry, "--access", $Access, "--tag", $Tag)
 if ($DryRun) {
     $args += "--dry-run"

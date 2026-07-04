@@ -1,5 +1,8 @@
 # Selenium → Playwright AST Migrator
 
+[![npm preview](https://img.shields.io/npm/v/selenium-pw-migrator/preview?label=npm%20preview)](https://www.npmjs.com/package/selenium-pw-migrator)
+[![NuGet preview](https://img.shields.io/nuget/vpre/SeleniumPlaywrightMigrator?label=NuGet)](https://www.nuget.org/packages/SeleniumPlaywrightMigrator)
+
 **A .NET 10 CLI toolkit for turning Selenium test suites into measurable, reviewable Playwright migrations.**
 
 The Migrator parses Selenium tests, builds an intermediate representation, applies project-specific profile mappings, and renders Playwright tests plus reports. It is designed for teams that want to migrate large E2E suites without pretending that every selector, helper, wait, and PageObject can be guessed safely.
@@ -58,15 +61,16 @@ To uninstall the standalone Windows install, run the same installer with `-Unins
 The npm package is a thin wrapper over the same standalone release archives. It is useful for frontend/test-automation teams that already have Node.js but do not want to install .NET.
 
 ```bash
-npm install -g selenium-pw-migrator
+npm install -g selenium-pw-migrator@preview
 selenium-pw-migrator --version
 ```
 
 
-Before npm registry publication, install the packed wrapper directly from the GitHub Release asset:
+For a pinned preview, install a specific npm version or use the matching GitHub Release asset:
 
 ```bash
-npm install -g https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.5/selenium-pw-migrator-0.0.0-preview.5.tgz
+npm install -g selenium-pw-migrator@0.0.0-preview.8
+npm install -g https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.8/selenium-pw-migrator-0.0.0-preview.8.tgz
 ```
 
 The npm `postinstall` downloads the matching standalone archive for `win-x64`, `linux-x64`, `osx-x64`, or `osx-arm64`, verifies `checksums.sha256` when available, and preserves the native CLI exit code. Corporate installs can use a Nexus npm proxy plus `--selenium-pw-migrator-base-url` for an internal standalone archive mirror. See [npm wrapper](docs/npm-wrapper.md). Publishing instructions live in [npm publishing](docs/npm-publishing.md).

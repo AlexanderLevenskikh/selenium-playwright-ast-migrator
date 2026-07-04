@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Package version to publish, for example 0.0.0-preview.6'
+        description: 'Package version to publish, for example 0.0.0-preview.8'
         required: true
         type: string
       registry:
@@ -52,6 +52,22 @@ jobs:
         with:
           node-version: '22'
           registry-url: ${{ inputs.registry }}
+
+      - name: Validate npm dist-tag policy
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          NPM_TAG: ${{ inputs.publish_tag }}
+        run: |
+          set -euo pipefail
+          if [[ "$VERSION" == *-* && "$NPM_TAG" == "latest" ]]; then
+            echo "Prerelease versions must not be published with the latest dist-tag. Use publish_tag=preview."
+            exit 2
+          fi
+          if [[ "$VERSION" != *-* && "$NPM_TAG" != "latest" ]]; then
+            echo "Stable version is being published with non-latest dist-tag '$NPM_TAG'."
+            echo "This is allowed for staged testing, but stable releases should normally use publish_tag=latest."
+          fi
 
       - name: Download GitHub Release npm package
         shell: bash

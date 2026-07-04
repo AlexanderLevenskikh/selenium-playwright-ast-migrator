@@ -266,7 +266,7 @@ Use repository secrets for API keys. Never commit `NuGet.config` with credential
 After the GitHub Release is created, smoke the npm wrapper directly from the release asset before publishing it to the npm registry:
 
 ```bash
-npm install -g https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.5/selenium-pw-migrator-0.0.0-preview.5.tgz
+npm install -g https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.8/selenium-pw-migrator-0.0.0-preview.8.tgz
 selenium-pw-migrator --version
 ```
 

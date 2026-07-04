@@ -7,7 +7,7 @@ The npm package is a thin Node.js wrapper over the standalone GitHub Release arc
 - `checksums.sha256`
 - `standalone-release-manifest.json`
 
-Preview versions must be published with the `preview` dist-tag. This preview dist-tag keeps prereleases away from the default stable install path. Reserve `latest` for the first stable release.
+Preview versions must be published with the `preview` dist-tag. This preview dist-tag keeps prereleases away from the default stable install path. Reserve `latest` for the first stable release. The workflow and publish scripts reject prerelease versions when `publish_tag=latest`, so a preview cannot accidentally become the default npm install.
 
 ## First-time npm setup
 
@@ -35,7 +35,7 @@ After the first successful publish, you can configure npm Trusted Publishing for
 ## Manual dry run from GitHub Release asset
 
 ```bash
-VERSION=0.0.0-preview.6
+VERSION=0.0.0-preview.8
 mkdir -p artifacts/npm
 curl -fsSL "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v${VERSION}/selenium-pw-migrator-${VERSION}.tgz" \
   -o "artifacts/npm/selenium-pw-migrator-${VERSION}.tgz"
@@ -45,7 +45,7 @@ NPM_DRY_RUN=true NPM_TAG=preview bash scripts/publish-npm-wrapper.sh "$VERSION"
 Windows PowerShell:
 
 ```powershell
-$version = "0.0.0-preview.6"
+$version = "0.0.0-preview.8"
 New-Item -ItemType Directory -Force artifacts/npm | Out-Null
 Invoke-WebRequest "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v$version/selenium-pw-migrator-$version.tgz" `
   -OutFile "artifacts/npm/selenium-pw-migrator-$version.tgz"
@@ -68,7 +68,7 @@ Workflow inputs:
 
 | Input | Default | Purpose |
 |---|---:|---|
-| `version` | required | Package version, for example `0.0.0-preview.6`. |
+| `version` | required | Package version, for example `0.0.0-preview.8`. |
 | `registry` | `https://registry.npmjs.org/` | npm registry URL. |
 | `package_url` | empty | Optional explicit `.tgz` URL. |
 | `publish_tag` | `preview` | npm dist-tag. Use `preview` for prereleases and `latest` only for stable releases. |
@@ -90,7 +90,7 @@ After publishing, test from a clean shell:
 
 ```bash
 npm uninstall -g selenium-pw-migrator || true
-npm install -g selenium-pw-migrator@0.0.0-preview.6
+npm install -g selenium-pw-migrator@0.0.0-preview.8
 selenium-pw-migrator --version
 ```
 
@@ -100,3 +100,18 @@ Expected metadata should still come from the standalone payload:
 distribution: standalone
 self-contained: true
 ```
+
+
+## Corporate Nexus post-publish smoke
+
+When direct npmjs/GitHub access is blocked, smoke the published package through the corporate npm proxy and point the native payload download at the internal standalone mirror:
+
+```bash
+npm view selenium-pw-migrator@preview version --registry=https://nexus.example/repository/npm-group/
+npm install -g selenium-pw-migrator@preview \
+  --registry=https://nexus.example/repository/npm-group/ \
+  --selenium-pw-migrator-base-url=https://nexus.example/repository/migrator-releases/v0.0.0-preview.8
+selenium-pw-migrator --version
+```
+
+The npm registry proxy and the standalone archive mirror are separate concerns: the first serves the npm package, the second serves the native `.zip` / `.tar.gz` payload used during `postinstall`.
