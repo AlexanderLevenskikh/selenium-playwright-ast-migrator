@@ -172,3 +172,16 @@ migration/
 # npm wrapper native payload installed during local smoke
 npm/native/
 npm/*.tgz
+
+# npm wrapper sources are tracked; native payload/tarballs stay ignored.
+!npm/
+!npm/bin/
+!npm/bin/selenium-pw-migrator.js
+!npm/scripts/
+!npm/scripts/install.js
+!npm/package.json
+!npm/README.md
+
+# npm wrapper native payload installed during local smoke
+npm/native/
+npm/*.tgz
