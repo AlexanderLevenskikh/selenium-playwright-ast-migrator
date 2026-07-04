@@ -81,4 +81,4 @@ The script stages the wrapper under `artifacts/npm/package`, sets the npm packag
 
 ## Publishing to npm registry
 
-Publish the wrapper only after the GitHub Release asset install smoke passes. See [npm publishing](npm-publishing.md) for the dry-run-first workflow, `NPM_TOKEN`/trusted-publishing setup, and post-publish smoke.
+Publish the wrapper only after the GitHub Release asset install smoke passes. See [npm publishing](npm-publishing.md) for the dry-run-first workflow, `NPM_TOKEN`/Trusted Publishing setup, preview dist-tag policy, and post-publish smoke.

@@ -7,12 +7,39 @@ The npm package is a thin Node.js wrapper over the standalone GitHub Release arc
 - `checksums.sha256`
 - `standalone-release-manifest.json`
 
+Preview versions must be published with the `preview` dist-tag. This preview dist-tag keeps prereleases away from the default stable install path. Reserve `latest` for the first stable release.
+
+## First-time npm setup
+
+For the first publish, use a token-based publish flow. Trusted Publishing is easier to enable after the package already exists.
+
+1. Create an npm granular access token with package creation/publish rights.
+   - Recommended name: `github-actions-selenium-pw-migrator`
+   - Permission: read/write
+   - Package scope: all packages, because the package may not exist yet
+   - Bypass 2FA for automation when npm offers that option
+2. Add the token to GitHub:
+   - Repository or environment secret name: `NPM_TOKEN`
+   - Environment: `npm-production`
+3. Run the **Publish npm Wrapper** workflow with:
+   - `dry_run=true`
+   - `publish_tag=preview`
+   - `use_provenance=false`
+4. If the dry run is clean, rerun with:
+   - `dry_run=false`
+   - `publish_tag=preview`
+   - `use_provenance=false`
+
+After the first successful publish, you can configure npm Trusted Publishing for `.github/workflows/publish-npm.yml` and use `use_provenance=true` without relying on `NPM_TOKEN`.
+
 ## Manual dry run from GitHub Release asset
 
 ```bash
 VERSION=0.0.0-preview.6
-curl -fsSL "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v${VERSION}/selenium-pw-migrator-${VERSION}.tgz"   -o "artifacts/npm/selenium-pw-migrator-${VERSION}.tgz"
-NPM_DRY_RUN=true scripts/publish-npm-wrapper.sh "$VERSION"
+mkdir -p artifacts/npm
+curl -fsSL "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v${VERSION}/selenium-pw-migrator-${VERSION}.tgz" \
+  -o "artifacts/npm/selenium-pw-migrator-${VERSION}.tgz"
+NPM_DRY_RUN=true NPM_TAG=preview bash scripts/publish-npm-wrapper.sh "$VERSION"
 ```
 
 Windows PowerShell:
@@ -22,7 +49,7 @@ $version = "0.0.0-preview.6"
 New-Item -ItemType Directory -Force artifacts/npm | Out-Null
 Invoke-WebRequest "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v$version/selenium-pw-migrator-$version.tgz" `
   -OutFile "artifacts/npm/selenium-pw-migrator-$version.tgz"
-./scripts/publish-npm-wrapper.ps1 -Version $version -DryRun
+./scripts/publish-npm-wrapper.ps1 -Version $version -DryRun -Tag preview
 ```
 
 ## GitHub Actions workflow
@@ -37,12 +64,23 @@ https://github.com/<owner>/<repo>/releases/download/v<version>/selenium-pw-migra
 
 You can override it with `package_url` for a private mirror or a one-off smoke.
 
+Workflow inputs:
+
+| Input | Default | Purpose |
+|---|---:|---|
+| `version` | required | Package version, for example `0.0.0-preview.6`. |
+| `registry` | `https://registry.npmjs.org/` | npm registry URL. |
+| `package_url` | empty | Optional explicit `.tgz` URL. |
+| `publish_tag` | `preview` | npm dist-tag. Use `preview` for prereleases and `latest` only for stable releases. |
+| `dry_run` | `true` | Run `npm publish --dry-run` only. |
+| `use_provenance` | `false` | Add `--provenance` for Trusted Publishing. Keep `false` for token-based first publish. |
+
 ## Authentication
 
 The workflow supports two registry authentication modes:
 
 1. `NPM_TOKEN` repository/environment secret, written to npm config before publish.
-2. npm trusted publishing/provenance, using GitHub OIDC with `id-token: write` and `npm publish --provenance`.
+2. npm Trusted Publishing/provenance, using GitHub OIDC with `id-token: write` and `npm publish --provenance`.
 
 Use the `npm-production` GitHub environment so real publishes require explicit approval.
 

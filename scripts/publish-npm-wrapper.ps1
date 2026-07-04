@@ -5,11 +5,17 @@ param(
     [string]$Registry = "https://registry.npmjs.org/",
     [ValidateSet("public", "restricted")]
     [string]$Access = "public",
+    [string]$Tag = "preview",
     [switch]$DryRun,
+    [switch]$Provenance,
     [switch]$NoProvenance
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($Provenance -and $NoProvenance) {
+    throw "Use either -Provenance or -NoProvenance, not both. Provenance is disabled by default."
+}
 
 $root = Split-Path -Parent $PSScriptRoot
 $resolvedPackagePath = if ([System.IO.Path]::IsPathRooted($PackagePath)) { $PackagePath } else { Join-Path $root $PackagePath }
@@ -23,16 +29,18 @@ if ([System.IO.Path]::GetFileName($resolvedPackagePath) -ne $expectedName) {
     throw "npm wrapper package name mismatch. Expected '$expectedName', actual '$([System.IO.Path]::GetFileName($resolvedPackagePath))'."
 }
 
-$args = @("publish", $resolvedPackagePath, "--registry", $Registry, "--access", $Access)
+$args = @("publish", $resolvedPackagePath, "--registry", $Registry, "--access", $Access, "--tag", $Tag)
 if ($DryRun) {
     $args += "--dry-run"
-} elseif (-not $NoProvenance) {
+} elseif ($Provenance) {
     $args += "--provenance"
 }
 
 Write-Host "Publishing npm wrapper package: $resolvedPackagePath"
 Write-Host "Registry: $Registry"
+Write-Host "Tag: $Tag"
 Write-Host "Dry run: $($DryRun.IsPresent)"
+Write-Host "Provenance: $($Provenance.IsPresent)"
 
 & npm @args
 if ($LASTEXITCODE -ne 0) {

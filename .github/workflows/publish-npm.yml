@@ -17,10 +17,20 @@ on:
         required: false
         default: ''
         type: string
+      publish_tag:
+        description: 'npm dist-tag. Use preview for prereleases and latest only for stable releases.'
+        required: true
+        default: 'preview'
+        type: string
       dry_run:
         description: 'Run npm publish --dry-run only. Do not publish.'
         required: true
         default: true
+        type: boolean
+      use_provenance:
+        description: 'Use npm provenance/trusted publishing. Keep false for token-based first publish.'
+        required: true
+        default: false
         type: boolean
 
 permissions:
@@ -64,13 +74,12 @@ jobs:
         shell: bash
         env:
           VERSION: ${{ inputs.version }}
+          NPM_REGISTRY: ${{ inputs.registry }}
+          NPM_TAG: ${{ inputs.publish_tag }}
         run: |
           set -euo pipefail
           npm --version
-          npm publish "artifacts/npm/selenium-pw-migrator-${VERSION}.tgz" \
-            --registry "${{ inputs.registry }}" \
-            --access public \
-            --dry-run
+          bash scripts/publish-npm-wrapper.sh "$VERSION" "artifacts/npm/selenium-pw-migrator-${VERSION}.tgz"
 
       - name: Configure npm token if provided
         shell: bash
@@ -82,8 +91,25 @@ jobs:
           if [[ -n "${NODE_AUTH_TOKEN:-}" ]]; then
             registry_host="$(node -e 'console.log(new URL(process.env.NPM_REGISTRY).host)')"
             npm config set "//${registry_host}/:_authToken" "${NODE_AUTH_TOKEN}"
+            echo "Configured npm auth token for ${registry_host}."
+            npm whoami --registry "$NPM_REGISTRY" || true
           else
-            echo "NPM_TOKEN is not set; npm trusted publishing/provenance must be configured for this repository."
+            echo "NPM_TOKEN is not set. Real publish must use npm trusted publishing/provenance."
+          fi
+
+      - name: Validate publish authentication mode
+        if: ${{ inputs.dry_run == false }}
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          USE_PROVENANCE: ${{ inputs.use_provenance }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${NODE_AUTH_TOKEN:-}" && "$USE_PROVENANCE" != "true" ]]; then
+            echo "NPM_TOKEN is not set and use_provenance=false."
+            echo "For the first publish, create an npm token with package creation/publish rights and save it as the NPM_TOKEN secret."
+            echo "Alternatively configure npm Trusted Publishing for this package/workflow and rerun with use_provenance=true."
+            exit 2
           fi
 
       - name: Publish npm package
@@ -93,11 +119,13 @@ jobs:
           VERSION: ${{ inputs.version }}
           NPM_REGISTRY: ${{ inputs.registry }}
           NPM_DRY_RUN: 'false'
-          NPM_PROVENANCE: 'true'
+          NPM_TAG: ${{ inputs.publish_tag }}
+          NPM_PROVENANCE: ${{ inputs.use_provenance }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
-          echo "Using npm publish --provenance through scripts/publish-npm-wrapper.sh"
-          scripts/publish-npm-wrapper.sh "$VERSION" "artifacts/npm/selenium-pw-migrator-${VERSION}.tgz"
+          echo "Publishing npm wrapper package through scripts/publish-npm-wrapper.sh"
+          bash scripts/publish-npm-wrapper.sh "$VERSION" "artifacts/npm/selenium-pw-migrator-${VERSION}.tgz"
 
       - name: Dry-run publish summary
         if: ${{ inputs.dry_run == true }}
@@ -106,6 +134,8 @@ jobs:
           VERSION: ${{ inputs.version }}
           NPM_REGISTRY: ${{ inputs.registry }}
           NPM_DRY_RUN: 'true'
+          NPM_TAG: ${{ inputs.publish_tag }}
+          NPM_PROVENANCE: ${{ inputs.use_provenance }}
         run: |
           set -euo pipefail
-          scripts/publish-npm-wrapper.sh "$VERSION" "artifacts/npm/selenium-pw-migrator-${VERSION}.tgz"
+          bash scripts/publish-npm-wrapper.sh "$VERSION" "artifacts/npm/selenium-pw-migrator-${VERSION}.tgz"

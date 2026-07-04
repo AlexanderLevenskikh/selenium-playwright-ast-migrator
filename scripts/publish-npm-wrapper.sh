@@ -6,7 +6,8 @@ package_path="${2:-}"
 registry="${NPM_REGISTRY:-https://registry.npmjs.org/}"
 access="${NPM_ACCESS:-public}"
 dry_run="${NPM_DRY_RUN:-true}"
-provenance="${NPM_PROVENANCE:-true}"
+tag="${NPM_TAG:-preview}"
+provenance="${NPM_PROVENANCE:-false}"
 
 if [[ -z "$version" ]]; then
   echo "Usage: scripts/publish-npm-wrapper.sh <version> [package-path]" >&2
@@ -30,7 +31,7 @@ if [[ ! -f "$package_path" ]]; then
   exit 2
 fi
 
-args=(publish "$package_path" --registry "$registry" --access "$access")
+args=(publish "$package_path" --registry "$registry" --access "$access" --tag "$tag")
 if [[ "$dry_run" == "true" || "$dry_run" == "1" ]]; then
   args+=(--dry-run)
 elif [[ "$provenance" == "true" || "$provenance" == "1" ]]; then
@@ -39,5 +40,7 @@ fi
 
 echo "Publishing npm wrapper package: $package_path"
 echo "Registry: $registry"
+echo "Tag: $tag"
 echo "Dry run: $dry_run"
+echo "Provenance: $provenance"
 npm "${args[@]}"
