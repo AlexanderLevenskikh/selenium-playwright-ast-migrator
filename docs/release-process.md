@@ -183,6 +183,40 @@ Recommended sequence:
 3. run the workflow again with the same `version` and `dry_run=false`;
 4. verify the package page on NuGet, the GitHub release page, release assets, checksums, and test install from a clean directory.
 
+### Internal Nexus/static mirror
+
+For internal distribution, copy the complete standalone release directory to one flat Nexus/raw/static directory. Keep `checksums.sha256` next to the archives so install scripts can verify downloads.
+
+Expected layout:
+
+```text
+<base-url>/
+  selenium-pw-migrator-<version>-win-x64.zip
+  selenium-pw-migrator-<version>-linux-x64.tar.gz
+  selenium-pw-migrator-<version>-osx-x64.tar.gz
+  selenium-pw-migrator-<version>-osx-arm64.tar.gz
+  checksums.sha256
+  standalone-release-manifest.json
+  install-standalone.ps1
+  install-standalone.sh
+```
+
+Windows smoke from Nexus/static mirror:
+
+```powershell
+./scripts/install-standalone.ps1 `
+  -Version 0.0.0-preview.1 `
+  -BaseUrl https://nexus.example/repository/migrator/releases/v0.0.0-preview.1
+```
+
+Linux/macOS smoke from Nexus/static mirror:
+
+```bash
+./scripts/install-standalone.sh \
+  --version 0.0.0-preview.1 \
+  --base-url https://nexus.example/repository/migrator/releases/v0.0.0-preview.1
+```
+
 ### Local/manual publish
 
 NuGet/GitHub package publishing should happen only after the CI package artifacts pass verification.

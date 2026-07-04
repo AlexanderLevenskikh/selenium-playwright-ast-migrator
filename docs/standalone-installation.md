@@ -23,6 +23,24 @@ standalone-release-manifest.json
 
 Each archive contains the executable, dependent DLL/resource files, license/security files, `README_STANDALONE.md`, and `standalone-manifest.json`.
 
+## Private Nexus/static release directory
+
+The install scripts do not require GitHub Releases. They also support a generic HTTP directory, for example an internal Nexus raw repository or any static file host. The directory must contain the release archives and `checksums.sha256` in one flat folder:
+
+```text
+https://nexus.example/repository/migrator/releases/v0.0.0-preview.1/
+  selenium-pw-migrator-0.0.0-preview.1-win-x64.zip
+  selenium-pw-migrator-0.0.0-preview.1-linux-x64.tar.gz
+  selenium-pw-migrator-0.0.0-preview.1-osx-x64.tar.gz
+  selenium-pw-migrator-0.0.0-preview.1-osx-arm64.tar.gz
+  checksums.sha256
+  standalone-release-manifest.json
+  install-standalone.ps1
+  install-standalone.sh
+```
+
+Use the same `-Version`/`VERSION` value that appears in the archive names. If the directory contains the unversioned alias archives such as `selenium-pw-migrator-win-x64.zip`, pass `latest` or omit the version.
+
 ## Build release archives locally
 
 ```powershell
@@ -85,9 +103,17 @@ curl -fsSL https://raw.githubusercontent.com/AlexanderLevenskikh/selenium-playwr
 For a private release directory:
 
 ```bash
-VERSION=0.0.0-preview.1 \
-BASE_URL=https://nexus.example/repository/migrator/releases/v0.0.0-preview.1 \
-sh ./scripts/install-standalone.sh
+./scripts/install-standalone.sh \
+  --version 0.0.0-preview.1 \
+  --base-url https://nexus.example/repository/migrator/releases/v0.0.0-preview.1
+```
+
+For local smoke testing from a downloaded archive:
+
+```bash
+./scripts/install-standalone.sh \
+  --archive-path artifacts/release/selenium-pw-migrator-0.0.0-preview.1-linux-x64.tar.gz \
+  --checksums-path artifacts/release/checksums.sha256
 ```
 
 The default install location is:

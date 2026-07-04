@@ -28,6 +28,7 @@ function Resolve-Runtime {
     throw "Unsupported Windows architecture: $arch. Published runtime: win-x64."
 }
 
+# Resolve-BaseUrl supports both GitHub Releases and generic release directories such as Nexus/static HTTP folders.
 function Resolve-BaseUrl([string]$value, [string]$version) {
     if ($version -eq "latest") {
         return $value.TrimEnd('/')
@@ -96,7 +97,12 @@ try {
         $archivePath = Join-Path $temp $archiveName
 
         Write-Host "Downloading $archiveUrl"
-        Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath
+        try {
+            Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath
+        }
+        catch {
+            throw "Failed to download standalone archive from $archiveUrl. For private Nexus/static release folders, verify that -BaseUrl points at the directory containing $archiveName and checksums.sha256. Original error: $($_.Exception.Message)"
+        }
 
         $checksumsUrl = "$resolvedBaseUrl/checksums.sha256"
         $downloadedChecksumsPath = Join-Path $temp "checksums.sha256"

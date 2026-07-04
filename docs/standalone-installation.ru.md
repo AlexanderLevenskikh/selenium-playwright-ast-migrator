@@ -23,6 +23,24 @@ standalone-release-manifest.json
 
 Внутри каждого архива лежит исполняемый файл, зависимые DLL/resource-файлы, license/security-файлы, `README_STANDALONE.md` и `standalone-manifest.json`.
 
+## Внутренний Nexus/static release directory
+
+Install-скрипты не привязаны к GitHub Releases. Они поддерживают обычную HTTP-директорию, например внутренний Nexus raw repository или любой статический файловый хостинг. В директории должны лежать release-архивы и `checksums.sha256` одним плоским списком:
+
+```text
+https://nexus.example/repository/migrator/releases/v0.0.0-preview.1/
+  selenium-pw-migrator-0.0.0-preview.1-win-x64.zip
+  selenium-pw-migrator-0.0.0-preview.1-linux-x64.tar.gz
+  selenium-pw-migrator-0.0.0-preview.1-osx-x64.tar.gz
+  selenium-pw-migrator-0.0.0-preview.1-osx-arm64.tar.gz
+  checksums.sha256
+  standalone-release-manifest.json
+  install-standalone.ps1
+  install-standalone.sh
+```
+
+Используй то же значение `-Version`/`VERSION`, которое есть в именах архивов. Если в директории лежат alias-архивы без версии, например `selenium-pw-migrator-win-x64.zip`, передай `latest` или не указывай версию.
+
 ## Собрать архивы локально
 
 ```powershell
@@ -85,9 +103,17 @@ curl -fsSL https://raw.githubusercontent.com/AlexanderLevenskikh/selenium-playwr
 Для внутренней папки с релизами:
 
 ```bash
-VERSION=0.0.0-preview.1 \
-BASE_URL=https://nexus.example/repository/migrator/releases/v0.0.0-preview.1 \
-sh ./scripts/install-standalone.sh
+./scripts/install-standalone.sh \
+  --version 0.0.0-preview.1 \
+  --base-url https://nexus.example/repository/migrator/releases/v0.0.0-preview.1
+```
+
+Для локальной smoke-проверки из скачанного архива:
+
+```bash
+./scripts/install-standalone.sh \
+  --archive-path artifacts/release/selenium-pw-migrator-0.0.0-preview.1-linux-x64.tar.gz \
+  --checksums-path artifacts/release/checksums.sha256
 ```
 
 По умолчанию установка идёт сюда:

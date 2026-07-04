@@ -192,6 +192,28 @@ public class PackagingTests
         Assert.Contains("ArchivePath", installScript);
         Assert.Contains("ChecksumsPath", installScript);
         Assert.Contains("Using local archive", installScript);
+        Assert.Contains("generic release directories such as Nexus/static HTTP folders", installScript);
+    }
+
+    [Fact]
+    public void StandaloneInstallScripts_SupportPrivateBaseUrlAndLocalArchiveSmoke()
+    {
+        var installPs1 = File.ReadAllText(FindRepositoryFile("scripts/install-standalone.ps1"));
+        var installSh = File.ReadAllText(FindRepositoryFile("scripts/install-standalone.sh"));
+        var english = File.ReadAllText(FindRepositoryFile("docs/standalone-installation.md"));
+        var russian = File.ReadAllText(FindRepositoryFile("docs/standalone-installation.ru.md"));
+
+        Assert.Contains("BaseUrl", installPs1);
+        Assert.Contains("Nexus/static", installPs1);
+        Assert.Contains("ArchivePath", installPs1);
+        Assert.Contains("ChecksumsPath", installPs1);
+        Assert.Contains("--base-url", installSh);
+        Assert.Contains("--archive-path", installSh);
+        Assert.Contains("--checksums-path", installSh);
+        Assert.Contains("Using local archive", installSh);
+        Assert.Contains("Private Nexus/static release directory", english);
+        Assert.Contains("https://nexus.example/repository/migrator/releases/v0.0.0-preview.1", english);
+        Assert.Contains("Внутренний Nexus/static release directory", russian);
     }
 
 
@@ -273,6 +295,8 @@ public class PackagingTests
         Assert.Contains("install-standalone.ps1", releaseProcess);
         Assert.Contains("install-standalone.sh", releaseProcess);
         Assert.Contains("standalone archive smoke", releaseProcess);
+        Assert.Contains("Internal Nexus/static mirror", releaseProcess);
+        Assert.Contains("<base-url>/", releaseProcess);
     }
 
     [Fact]
