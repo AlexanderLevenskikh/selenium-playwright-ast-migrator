@@ -1,0 +1,24 @@
+{
+  "version": "0.0.0-preview.8",
+  "description": "Selenium to Playwright AST migration CLI",
+  "homepage": "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.8/selenium-pw-migrator-0.0.0-preview.8-win-x64.zip",
+      "hash": "TODO_SHA256_WIN_X64"
+    }
+  },
+  "bin": "selenium-pw-migrator.exe",
+  "checkver": {
+    "github": "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v$version/selenium-pw-migrator-$version-win-x64.zip"
+      }
+    }
+  },
+  "notes": "Template only: replace TODO_SHA256_WIN_X64 with the published checksums.sha256 value before adding this to a Scoop bucket."
+}
