@@ -556,7 +556,9 @@ $projectLocalOpenCodeAllowedRoots = @(
     ".opencode",
     ".opencode/**",
     ".opencode-migrator",
-    ".opencode-migrator/**"
+    ".opencode-migrator/**",
+    "opencode",
+    "opencode/**"
 )
 $effectiveAllowedRoots = @($AllowedRoots) + $projectLocalOpenCodeAllowedRoots
 

@@ -22,7 +22,7 @@ The agent may continue without interactive approvals when all of these are true:
 
 - the write is under `migration/**`;
 - the command is not matched by `deniedCommands` in `state/harness-policy.json`;
-- no guard-sensitive file is being changed;
+- no guard-sensitive file is being changed, or changed kit-owned guard files match `.migration-kit/guard-checksums.json` after a trusted kit update;
 - the action advances the current run/ticket;
 - the latest scope check is clean or the next action is fixing a scope violation.
 

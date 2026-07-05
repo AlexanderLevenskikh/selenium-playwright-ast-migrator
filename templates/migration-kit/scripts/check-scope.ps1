@@ -118,9 +118,24 @@ try {
     }
 
     $gitRoot = $gitRoot.Trim()
-    $normalizedRoots = $AllowedRoots | ForEach-Object {
+    $normalizedRoots = @($AllowedRoots | ForEach-Object {
         Convert-ToGitRelativePath -GitRoot $gitRoot -Path $_
-    }
+    })
+
+    # Project-local OpenCode files are migration harness/config files installed at
+    # repository root so OpenCode Desktop/CLI can see them. They are not product
+    # source edits and must not make routine scope checks fail.
+    $projectLocalOpenCodeAllowedRoots = @(
+        "AGENTS.md",
+        "opencode.jsonc",
+        ".opencode",
+        ".opencode/**",
+        ".opencode-migrator",
+        ".opencode-migrator/**",
+        "opencode",
+        "opencode/**"
+    )
+    $normalizedRoots = @($normalizedRoots) + $projectLocalOpenCodeAllowedRoots
 
     $status = Read-GitStatusPorcelainZ
     $changedPaths = Get-ChangedPathsFromPorcelainZ $status

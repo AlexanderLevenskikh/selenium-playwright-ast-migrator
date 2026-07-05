@@ -222,8 +222,13 @@ function Write-GuardChecksums([string]$WorkspacePath) {
     $checksumPath = Join-Path $metadataDir "guard-checksums.json"
     $guardFiles = @(
         "scripts/check-scope.ps1",
+        "scripts/check-scope.sh",
         "scripts/check-final-gate.ps1",
-        "scripts/check-harness-policy.ps1"
+        "scripts/check-final-gate.sh",
+        "scripts/check-harness-policy.ps1",
+        "scripts/check-harness-policy.sh",
+        "scripts/build-harness-dashboard.ps1",
+        "scripts/build-harness-dashboard.sh"
     )
 
     $entries = @()

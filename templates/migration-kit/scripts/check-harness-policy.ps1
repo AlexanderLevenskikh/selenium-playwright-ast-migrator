@@ -43,6 +43,97 @@ function Test-AnyPattern([string]$Path, [object[]]$Patterns) {
     return $false
 }
 
+
+function Convert-ToWorkspaceRelativePath([string]$Path, [string]$WorkspaceRootName) {
+    $normalized = $Path.Replace("\", "/").TrimStart("./")
+    $workspacePrefix = $WorkspaceRootName.Replace("\", "/").TrimStart("./").TrimEnd("/")
+    if (-not [string]::IsNullOrWhiteSpace($workspacePrefix) -and
+        $normalized.StartsWith($workspacePrefix + "/", [StringComparison]::OrdinalIgnoreCase)) {
+        return $normalized.Substring($workspacePrefix.Length + 1)
+    }
+
+    return $normalized
+}
+
+function Read-GuardChecksumIndex([string]$WorkspacePath) {
+    $checksumPath = Join-Path $WorkspacePath ".migration-kit/guard-checksums.json"
+    if (-not (Test-Path $checksumPath)) {
+        throw "missing $checksumPath"
+    }
+
+    $json = Get-Content -Raw -Path $checksumPath | ConvertFrom-Json
+    $expected = @{}
+    foreach ($entry in @($json.files)) {
+        if ($entry.path -and $entry.sha256) {
+            $expected[$entry.path.ToString().Replace("\", "/")] = $entry.sha256.ToString().ToUpperInvariant()
+        }
+    }
+
+    return $expected
+}
+
+function Test-GuardSensitiveChangesMatchChecksumBaseline([string]$WorkspacePath, [string]$WorkspaceRootName, [string[]]$GuardChanges, [ref]$Detail) {
+    if ($null -eq $GuardChanges -or $GuardChanges.Count -eq 0) {
+        $Detail.Value = "no guard-sensitive changes"
+        return $true
+    }
+
+    $checksumPathPattern = ($WorkspaceRootName.Replace("\", "/").TrimStart("./").TrimEnd("/") + "/.migration-kit/guard-checksums.json")
+    $checksumChanged = $false
+    $guardFileChanges = New-Object System.Collections.Generic.List[string]
+    foreach ($path in @($GuardChanges)) {
+        $normalized = $path.Replace("\", "/").TrimStart("./")
+        if ($normalized.Equals($checksumPathPattern, [StringComparison]::OrdinalIgnoreCase)) {
+            $checksumChanged = $true
+            continue
+        }
+
+        $guardFileChanges.Add($normalized) | Out-Null
+    }
+
+    if ($checksumChanged -and $guardFileChanges.Count -eq 0) {
+        $Detail.Value = "guard-checksums.json changed without changed guard scripts"
+        return $false
+    }
+
+    try {
+        $expected = Read-GuardChecksumIndex $WorkspacePath
+    }
+    catch {
+        $Detail.Value = $_.Exception.Message
+        return $false
+    }
+
+    $mismatches = New-Object System.Collections.Generic.List[string]
+    foreach ($changedPath in $guardFileChanges) {
+        $relative = Convert-ToWorkspaceRelativePath $changedPath $WorkspaceRootName
+        if (-not $expected.ContainsKey($relative)) {
+            $mismatches.Add("$changedPath missing checksum baseline") | Out-Null
+            continue
+        }
+
+        $fullPath = Join-Path $WorkspacePath $relative
+        if (-not (Test-Path $fullPath)) {
+            $mismatches.Add("$changedPath missing on disk") | Out-Null
+            continue
+        }
+
+        $actual = (Get-FileHash -Algorithm SHA256 -Path $fullPath).Hash.ToUpperInvariant()
+        if ($actual -ne $expected[$relative]) {
+            $mismatches.Add("$changedPath checksum mismatch") | Out-Null
+        }
+    }
+
+    if ($mismatches.Count -gt 0) {
+        $Detail.Value = $mismatches -join "; "
+        return $false
+    }
+
+    $changedSummary = @($GuardChanges | Sort-Object -Unique) -join ", "
+    $Detail.Value = "guard-sensitive changes match guard-checksums baseline; changed: $changedSummary"
+    return $true
+}
+
 function Expand-AllowedRootPatterns([string[]]$Roots) {
     $patterns = New-Object System.Collections.Generic.List[string]
     foreach ($rootValue in @($Roots)) {
@@ -55,6 +146,19 @@ function Expand-AllowedRootPatterns([string[]]$Roots) {
         }
     }
     return @($patterns | Sort-Object -Unique)
+}
+
+function Get-ProjectLocalOpenCodePatterns {
+    return @(
+        "AGENTS.md",
+        "opencode.jsonc",
+        ".opencode",
+        ".opencode/**",
+        ".opencode-migrator",
+        ".opencode-migrator/**",
+        "opencode",
+        "opencode/**"
+    )
 }
 
 function Get-GitChangedPaths([string]$Root, [switch]$AllowNoGit) {
@@ -143,13 +247,45 @@ if ($policy -ne $null) {
         }
 
         if ($changed.Count -gt 0) {
-            $effectiveAllowedWrites = @($policy.allowedWrites) + @(Expand-AllowedRootPatterns $AllowedRoots)
+            $projectLocalOpenCodePatterns = @(Get-ProjectLocalOpenCodePatterns)
+            $effectiveAllowedWrites = @($policy.allowedWrites) + @(Expand-AllowedRootPatterns $AllowedRoots) + $projectLocalOpenCodePatterns
             $outsideAllowed = @($changed | Where-Object { -not (Test-AnyPattern $_ @($effectiveAllowedWrites)) })
             Add-Result $results "changed-paths-allowed" ($outsideAllowed.Count -eq 0) $(if ($outsideAllowed.Count -eq 0) { "all changed paths match allowedWrites/AllowedRoots" } else { "outside allowedWrites/AllowedRoots: " + ($outsideAllowed -join ", ") })
 
-            $guardChanges = @($changed | Where-Object { Test-AnyPattern $_ @($policy.guardSensitiveWrites) })
-            $guardOk = ($guardChanges.Count -eq 0) -or $AllowGuardChanges
-            Add-Result $results "guard-sensitive-clean" $guardOk $(if ($guardChanges.Count -eq 0) { "no guard-sensitive changed paths" } else { "guard-sensitive changes: " + ($guardChanges -join ", ") })
+            $projectLocalOpenCodeChanges = @($changed | Where-Object { Test-AnyPattern $_ $projectLocalOpenCodePatterns })
+            $guardChanges = @($changed | Where-Object {
+                (Test-AnyPattern $_ @($policy.guardSensitiveWrites)) -and
+                (-not (Test-AnyPattern $_ $projectLocalOpenCodePatterns))
+            })
+            $baselineDetail = ""
+            $baselineOk = $false
+            if ($guardChanges.Count -gt 0 -and -not $AllowGuardChanges) {
+                $baselineOk = Test-GuardSensitiveChangesMatchChecksumBaseline `
+                    -WorkspacePath $workspacePath `
+                    -WorkspaceRootName $Workspace `
+                    -GuardChanges @($guardChanges) `
+                    -Detail ([ref]$baselineDetail)
+            }
+
+            $guardOk = ($guardChanges.Count -eq 0) -or $AllowGuardChanges -or $baselineOk
+            $guardDetail = if ($guardChanges.Count -eq 0) {
+                if ($projectLocalOpenCodeChanges.Count -gt 0) {
+                    "no guard-sensitive changed paths; ignored project-local OpenCode config: " + (($projectLocalOpenCodeChanges | Sort-Object -Unique) -join ", ")
+                }
+                else {
+                    "no guard-sensitive changed paths"
+                }
+            }
+            elseif ($AllowGuardChanges) {
+                "guard-sensitive changes allowed by -AllowGuardChanges: " + ($guardChanges -join ", ")
+            }
+            elseif ($baselineOk) {
+                $baselineDetail
+            }
+            else {
+                "guard-sensitive changes: " + ($guardChanges -join ", ") + "; baseline check: " + $baselineDetail
+            }
+            Add-Result $results "guard-sensitive-clean" $guardOk $guardDetail
         } else {
             Add-Result $results "changed-paths-allowed" $true "no git changes detected or git skipped"
             Add-Result $results "guard-sensitive-clean" $true "no guard-sensitive changed paths detected"

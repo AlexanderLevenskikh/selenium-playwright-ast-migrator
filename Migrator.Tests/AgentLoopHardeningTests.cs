@@ -333,6 +333,11 @@ public class AgentLoopHardeningTests
         Assert.Contains("opencode-chat-bundle-*", finalGateScript);
         Assert.Contains("check-scope.ps1", finalGateScript);
         Assert.Contains("guard-checksums", finalGateScript);
+        var harnessPolicyScript = Read("templates/migration-kit/scripts/check-harness-policy.ps1");
+        Assert.Contains("Test-GuardSensitiveChangesMatchChecksumBaseline", harnessPolicyScript);
+        Assert.Contains("guard-sensitive changes match guard-checksums baseline", harnessPolicyScript);
+        Assert.Contains("scripts/check-scope.sh", Read("Migrator.Cli/Commands/KitCommand.cs"));
+        Assert.Contains("scripts/check-harness-policy.sh", Read("scripts/install-migration-kit.ps1"));
         Assert.Contains("check-harness-policy.ps1", finalGateScript);
         Assert.Contains("migration-quality-dashboard.json", finalGateScript);
         Assert.Contains("EMPTY_TEST_AFTER_SUPPRESSION", finalGateScript);
