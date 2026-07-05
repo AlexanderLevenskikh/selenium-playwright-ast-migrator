@@ -322,6 +322,8 @@ public class AgentLoopHardeningTests
         var scopeShell = Read("templates/migration-kit/scripts/check-scope.sh");
         var finalGateShell = Read("templates/migration-kit/scripts/check-final-gate.sh");
         var newRunShell = Read("templates/migration-kit/scripts/new-harness-run.sh");
+        var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
+        var psInstall = Read("scripts/install-migration-kit.ps1");
 
         Assert.Contains("Allowed writes: `migration/**` only", contract);
         Assert.Contains("TODO reduction via suppression is failure", contract);
@@ -344,11 +346,17 @@ public class AgentLoopHardeningTests
         Assert.Contains("check-scope.ps1", finalGateScript);
         Assert.Contains("guard-checksums", finalGateScript);
         var harnessPolicyScript = Read("templates/migration-kit/scripts/check-harness-policy.ps1");
+        var harnessPolicyShell = Read("templates/migration-kit/scripts/check-harness-policy.sh");
         Assert.Contains("Test-GuardSensitiveChangesMatchChecksumBaseline", harnessPolicyScript);
         Assert.Contains("guard-sensitive changes match guard-checksums baseline", harnessPolicyScript);
         Assert.Contains("Test-GuardChecksumIndexMatchesCurrentFiles", harnessPolicyScript);
         Assert.Contains("Get-RequiredGuardChecksumFiles", harnessPolicyScript);
         Assert.Contains("metadata-only change accepted", harnessPolicyScript);
+        Assert.Contains("test_guard_sensitive_changes_match_checksum_baseline", harnessPolicyShell);
+        Assert.Contains("guard-sensitive changes match guard-checksums baseline", harnessPolicyShell);
+        Assert.Contains("test_guard_checksum_index_matches_current_files", harnessPolicyShell);
+        Assert.Contains("required_guard_checksum_files", harnessPolicyShell);
+        Assert.Contains("metadata-only change accepted", harnessPolicyShell);
         Assert.Contains("WriteJsonFileIfSemanticChanged", kitCommand);
         Assert.Contains("ExistingJsonEqualsIgnoringProperties", kitCommand);
         Assert.Contains("updatedAtUtc", kitCommand);
@@ -378,6 +386,92 @@ public class AgentLoopHardeningTests
         Assert.Contains("NOT FINAL - INVESTIGATION RESULT ONLY", stopChecklist);
         Assert.Contains("allowed next config/scaffold/evidence action", stopChecklist);
         Assert.Contains("Suppression categories before/after", stopChecklist);
+    }
+
+    [Fact]
+    public void ShellAndPowerShellScriptPairs_HaveParityMarkers()
+    {
+        var expectedKitPairs = new[]
+        {
+            "build-harness-dashboard",
+            "check-final-gate",
+            "check-harness-policy",
+            "check-scope",
+            "new-harness-run",
+            "write-harness-event",
+        };
+
+        foreach (var scriptName in expectedKitPairs)
+        {
+            var ps = Read($"templates/migration-kit/scripts/{scriptName}.ps1");
+            var sh = Read($"templates/migration-kit/scripts/{scriptName}.sh");
+            Assert.Contains("#!/usr/bin/env bash", sh);
+            Assert.Contains("set -euo pipefail", sh);
+
+            if (scriptName == "check-harness-policy")
+            {
+                Assert.Contains("Test-GuardSensitiveChangesMatchChecksumBaseline", ps);
+                Assert.Contains("test_guard_sensitive_changes_match_checksum_baseline", sh);
+                Assert.Contains("Test-GuardChecksumIndexMatchesCurrentFiles", ps);
+                Assert.Contains("test_guard_checksum_index_matches_current_files", sh);
+                Assert.Contains("metadata-only change accepted", ps);
+                Assert.Contains("metadata-only change accepted", sh);
+                Assert.Contains("HARNESS_POLICY_", ps);
+                Assert.Contains("HARNESS_POLICY_", sh);
+            }
+            else
+            {
+                Assert.Contains($"{scriptName}.ps1", sh);
+                Assert.Contains("pwsh", sh);
+            }
+        }
+
+        var rootScriptPairs = new Dictionary<string, string[]>
+        {
+            ["diagnose-install"] = new[] { "selenium-pw-migrator", "dotnet tool list", "npm config get" },
+            ["install-migration-kit"] = new[] { "selenium-pw-migrator", "kit", "--workspace" },
+            ["install-standalone"] = new[] { "checksums.sha256", "selenium-pw-migrator" },
+            ["pack-npm-wrapper"] = new[] { "npm pack", "package.json" },
+            ["pack-tool"] = new[] { "dotnet pack", "MigratorDistribution=dotnet-tool" },
+            ["publish-npm-wrapper"] = new[] { "publish", "--tag" },
+            ["push-tool"] = new[] { "nuget", "push", "NUGET_API_KEY" },
+            ["run-kitroot-shadow-smoke"] = new[] { "bootstrap-opencode", "templates/migration-kit" },
+            ["smoke-local-tool-package"] = new[] { "tool install", "selenium-pw-migrator" },
+            ["smoke-npm-registry-install"] = new[] { "install", "selenium-pw-migrator" },
+            ["verify-distribution-final"] = new[] { "git diff --check", "pack-npm-wrapper" },
+            ["verify-nupkg-contents"] = new[] { "README_TOOL.md", "templates/migration-kit" },
+        };
+
+        foreach (var (scriptName, markers) in rootScriptPairs)
+        {
+            var ps = Read($"scripts/{scriptName}.ps1");
+            var sh = Read($"scripts/{scriptName}.sh");
+            Assert.Contains("#!/usr/bin/env", sh);
+            Assert.Contains("set -", sh);
+
+            foreach (var marker in markers)
+            {
+                Assert.Contains(marker, ps);
+                Assert.Contains(marker, sh);
+            }
+        }
+
+        var rootPowerShellWrappers = new[]
+        {
+            "package-standalone",
+            "run-harness-dashboard-smoke",
+            "run-harness-dogfood-smoke",
+        };
+
+        foreach (var scriptName in rootPowerShellWrappers)
+        {
+            _ = Read($"scripts/{scriptName}.ps1");
+            var sh = Read($"scripts/{scriptName}.sh");
+            Assert.Contains("#!/usr/bin/env", sh);
+            Assert.Contains("set -", sh);
+            Assert.Contains($"{scriptName}.ps1", sh);
+            Assert.Contains("pwsh", sh);
+        }
     }
 
     [Fact]
@@ -1188,6 +1282,7 @@ public class AgentLoopHardeningTests
         repo.CopyRepositoryFile("templates/migration-kit/scripts/check-harness-policy.sh", "migration/scripts/check-harness-policy.sh");
         repo.CopyRepositoryFile("templates/migration-kit/scripts/new-harness-run.sh", "migration/scripts/new-harness-run.sh");
         repo.CopyRepositoryFile("templates/migration-kit/scripts/write-harness-event.sh", "migration/scripts/write-harness-event.sh");
+        repo.CopyRepositoryFile("templates/migration-kit/scripts/build-harness-dashboard.ps1", "migration/scripts/build-harness-dashboard.ps1");
         repo.CopyRepositoryFile("templates/migration-kit/scripts/build-harness-dashboard.sh", "migration/scripts/build-harness-dashboard.sh");
         repo.CopyRepositoryFile("templates/migration-kit/state/final-gate.md", "migration/state/final-gate.md");
         repo.CopyRepositoryFile("templates/migration-kit/AGENT_CONTRACT.md", "migration/AGENT_CONTRACT.md");
@@ -1236,8 +1331,13 @@ public class AgentLoopHardeningTests
 
         return "{ \"schemaVersion\": \"guard-checksums/v1\", \"files\": [" +
             Entry("scripts/check-scope.ps1") + ", " +
+            Entry("scripts/check-scope.sh") + ", " +
             Entry("scripts/check-final-gate.ps1") + ", " +
-            Entry("scripts/check-harness-policy.ps1") + "] }";
+            Entry("scripts/check-final-gate.sh") + ", " +
+            Entry("scripts/check-harness-policy.ps1") + ", " +
+            Entry("scripts/check-harness-policy.sh") + ", " +
+            Entry("scripts/build-harness-dashboard.ps1") + ", " +
+            Entry("scripts/build-harness-dashboard.sh") + "] }";
     }
 
     static string FindRepositoryFile(string relativePath)
