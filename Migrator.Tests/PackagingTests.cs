@@ -433,7 +433,12 @@ public class PackagingTests
         Assert.Contains("Using local archive", installScript);
         Assert.Contains("generic release directories such as Nexus/static HTTP folders", installScript);
         Assert.Contains("SkipUserPathUpdate", installScript);
-        Assert.Contains("Added to current session PATH", installScript);
+        Assert.Contains("Ensure-StandalonePathPriority", installScript);
+        Assert.Contains("Prepended to user PATH", installScript);
+        Assert.Contains("Prepended to current session PATH", installScript);
+        Assert.Contains("RemoveDotnetTool", installScript);
+        Assert.Contains("dotnet tool uninstall --global", installScript);
+        Assert.Contains("SeleniumPlaywrightMigrator", installScript);
         Assert.Contains("Uninstall", installScript);
         Assert.Contains("Remove-UserPathEntry", installScript);
         Assert.Contains("Refusing to uninstall", installScript);
@@ -461,8 +466,13 @@ public class PackagingTests
         Assert.Contains("https://nexus.example/repository/migrator/releases/v0.0.0-preview.1", english);
         Assert.Contains("Внутренний Nexus/static release directory", russian);
         Assert.Contains("adds this directory to the user `PATH` by default", english);
+        Assert.Contains("moves it to the front if it was already present later", english);
+        Assert.Contains("-RemoveDotnetTool", english);
+        Assert.Contains("dotnet tool uninstall --global SeleniumPlaywrightMigrator", english);
         Assert.Contains("-SkipUserPathUpdate", english);
         Assert.Contains("по умолчанию добавляет эту папку в user `PATH`", russian);
+        Assert.Contains("-RemoveDotnetTool", russian);
+        Assert.Contains("dotnet tool uninstall --global SeleniumPlaywrightMigrator", russian);
         Assert.Contains("-SkipUserPathUpdate", russian);
     }
 
@@ -514,6 +524,7 @@ public class PackagingTests
         Assert.Contains("releases/latest/download/install-standalone.ps1", readme);
         Assert.Contains("releases/latest/download/install-standalone.sh", readme);
         Assert.Contains("Get-Command selenium-pw-migrator -All", readme);
+        Assert.Contains("-RemoveDotnetTool", readme);
         Assert.Contains("--source https://api.nuget.org/v3/index.json", readme);
         Assert.Contains("installer with `-Uninstall`", readme);
 
@@ -521,6 +532,7 @@ public class PackagingTests
         Assert.Contains("не требует установленного .NET SDK или .NET Runtime", readmeRu);
         Assert.Contains("releases/latest/download/install-standalone.ps1", readmeRu);
         Assert.Contains("Get-Command selenium-pw-migrator -All", readmeRu);
+        Assert.Contains("-RemoveDotnetTool", readmeRu);
         Assert.Contains("installer с `-Uninstall`", readmeRu);
 
         Assert.Contains("Quick install from GitHub Releases", standalone);
@@ -543,6 +555,7 @@ public class PackagingTests
 
         Assert.Contains("I installed standalone, but PowerShell still runs the dotnet tool", troubleshooting);
         Assert.Contains("%USERPROFILE%\\.selenium-pw-migrator\\bin", troubleshooting);
+        Assert.Contains("dotnet tool uninstall --global SeleniumPlaywrightMigrator", troubleshooting);
         Assert.Contains("Get-Command selenium-pw-migrator -All", toolInstallation);
         Assert.Contains("Быстрая standalone-установка на Windows без .NET", toolInstallation);
         Assert.Contains("Recommended standalone install", quickStart);

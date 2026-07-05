@@ -7,6 +7,7 @@ param(
     [string]$ChecksumsPath = "",
     [switch]$AddToUserPath,
     [switch]$SkipUserPathUpdate,
+    [switch]$RemoveDotnetTool,
     [switch]$Uninstall
 )
 
@@ -72,6 +73,99 @@ function Normalize-PathForCompare([string]$PathValue) {
     }
 
     return $PathValue.Trim().TrimEnd([char[]]@('\', '/'))
+}
+
+
+function Split-PathList([string]$PathValue) {
+    if ([string]::IsNullOrWhiteSpace($PathValue)) {
+        return @()
+    }
+
+    return @($PathValue -split ";" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+}
+
+function Join-PathList([object[]]$Parts) {
+    if ($null -eq $Parts -or $Parts.Count -eq 0) {
+        return ""
+    }
+
+    return ($Parts -join ";")
+}
+
+function Ensure-PathEntryFirst([string]$PathValue, [string]$PathToPrepend) {
+    $normalizedTarget = Normalize-PathForCompare $PathToPrepend
+    if ([string]::IsNullOrWhiteSpace($normalizedTarget)) {
+        return $PathValue
+    }
+
+    $parts = Split-PathList $PathValue
+    $kept = New-Object System.Collections.Generic.List[string]
+    foreach ($part in $parts) {
+        $normalizedPart = Normalize-PathForCompare $part
+        if ([string]::Equals($normalizedPart, $normalizedTarget, [StringComparison]::OrdinalIgnoreCase)) {
+            continue
+        }
+
+        $kept.Add($part)
+    }
+
+    $ordered = New-Object System.Collections.Generic.List[string]
+    $ordered.Add($PathToPrepend)
+    foreach ($part in $kept) {
+        $ordered.Add($part)
+    }
+
+    return (Join-PathList $ordered.ToArray())
+}
+
+function Ensure-StandalonePathPriority([string]$PathToPrepend) {
+    $currentUserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if ($null -eq $currentUserPath) { $currentUserPath = "" }
+
+    $newUserPath = Ensure-PathEntryFirst -PathValue $currentUserPath -PathToPrepend $PathToPrepend
+    if ($newUserPath -ne $currentUserPath) {
+        [Environment]::SetEnvironmentVariable("Path", $newUserPath, "User")
+        Write-Host "Prepended to user PATH: $PathToPrepend"
+    }
+    else {
+        Write-Host "User PATH already starts with standalone bin: $PathToPrepend"
+    }
+
+    $currentProcessPath = $env:Path
+    if ($null -eq $currentProcessPath) { $currentProcessPath = "" }
+    $newProcessPath = Ensure-PathEntryFirst -PathValue $currentProcessPath -PathToPrepend $PathToPrepend
+    if ($newProcessPath -ne $currentProcessPath) {
+        $env:Path = $newProcessPath
+        Write-Host "Prepended to current session PATH: $PathToPrepend"
+    }
+    else {
+        Write-Host "Current session PATH already starts with standalone bin: $PathToPrepend"
+    }
+}
+
+function Invoke-RemoveDotnetTool([string]$PackageId) {
+    $dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
+    if (-not $dotnet) {
+        Write-Host "dotnet was not found; skipping dotnet tool uninstall."
+        return
+    }
+
+    $globalTools = dotnet tool list --global 2>$null | Out-String
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "Could not inspect global dotnet tools; skipping dotnet tool uninstall."
+        return
+    }
+
+    if ($globalTools -notmatch "(?im)^\s*$([Regex]::Escape($PackageId))\s") {
+        Write-Host "Global dotnet tool was not installed: $PackageId"
+        return
+    }
+
+    Write-Host "Removing global dotnet tool so standalone wins PATH resolution: $PackageId"
+    dotnet tool uninstall --global $PackageId
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to uninstall global dotnet tool: $PackageId"
+    }
 }
 
 function Remove-UserPathEntry([string]$PathToRemove) {
@@ -237,44 +331,17 @@ try {
     }
 
     if ($shouldUpdateUserPath) {
-        $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
-        if ($null -eq $currentPath) { $currentPath = "" }
-        $parts = $currentPath -split ";" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-        $alreadyInUserPath = $false
-        foreach ($part in $parts) {
-            if ([string]::Equals($part.TrimEnd([char[]]@('\', '/')), $binDir.TrimEnd([char[]]@('\', '/')), [StringComparison]::OrdinalIgnoreCase)) {
-                $alreadyInUserPath = $true
-                break
-            }
-        }
+        Ensure-StandalonePathPriority -PathToPrepend $binDir
+        Write-Host "Open a new terminal window if another terminal does not see selenium-pw-migrator yet."
+    }
 
-        if (-not $alreadyInUserPath) {
-            $newPath = if ([string]::IsNullOrWhiteSpace($currentPath)) { $binDir } else { "$binDir;$currentPath" }
-            [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
-            Write-Host "Added to user PATH: $binDir"
-            Write-Host "Open a new terminal window if another terminal does not see selenium-pw-migrator yet."
-        }
-        else {
-            Write-Host "User PATH already contains: $binDir"
-        }
-
-        $processPathParts = $env:Path -split ";" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-        $alreadyInProcessPath = $false
-        foreach ($part in $processPathParts) {
-            if ([string]::Equals($part.TrimEnd([char[]]@('\', '/')), $binDir.TrimEnd([char[]]@('\', '/')), [StringComparison]::OrdinalIgnoreCase)) {
-                $alreadyInProcessPath = $true
-                break
-            }
-        }
-
-        if (-not $alreadyInProcessPath) {
-            $env:Path = "$binDir;$env:Path"
-            Write-Host "Added to current session PATH: $binDir"
-        }
+    if ($RemoveDotnetTool) {
+        Invoke-RemoveDotnetTool -PackageId "SeleniumPlaywrightMigrator"
     }
 
     Write-Host "Installed Selenium Playwright Migrator to: $binDir"
     Write-Host "Run: $exe --version"
+    Write-Host "Diagnose PATH priority: Get-Command selenium-pw-migrator -All; where.exe selenium-pw-migrator"
     if ($SkipUserPathUpdate) {
         Write-Host "PATH update was skipped. To use from any terminal, add this directory to PATH: $binDir"
     }

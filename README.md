@@ -52,7 +52,7 @@ export PATH="$HOME/.selenium-pw-migrator/bin:$PATH"
 selenium-pw-migrator --version
 ```
 
-The Windows installer adds the standalone directory to the user `PATH` by default. For troubleshooting install priority, use `Get-Command selenium-pw-migrator -All` on Windows or `which -a selenium-pw-migrator` on Unix-like shells.
+The Windows installer adds the standalone directory to the front of the user `PATH` by default, even if it was already present later. For troubleshooting install priority, use `Get-Command selenium-pw-migrator -All` on Windows or `which -a selenium-pw-migrator` on Unix-like shells. To remove an older dotnet global tool in the same install step, pass `-RemoveDotnetTool`.
 
 To uninstall the standalone Windows install, run the same installer with `-Uninstall`. On Linux/macOS, run `install-standalone.sh --uninstall` and remove the PATH line from your shell profile.
 

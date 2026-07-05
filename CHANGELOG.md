@@ -1,3 +1,7 @@
+## Unreleased
+
+- Standalone Windows installer now moves `%USERPROFILE%\.selenium-pw-migrator\bin` to the front of user/current-session `PATH` even when it was already present later, and supports `-RemoveDotnetTool` to remove an older global dotnet tool channel.
+
 - Added optional OpenCode `TrustedProject` permission profile for local dogfood runs and expanded default install diagnostics allowlist.
 
 # Changelog

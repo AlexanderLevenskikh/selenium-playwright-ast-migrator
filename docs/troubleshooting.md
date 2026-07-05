@@ -173,7 +173,13 @@ For standalone to win on Windows, this path should appear before `%USERPROFILE%\
 %USERPROFILE%\.selenium-pw-migrator\bin
 ```
 
-The standalone Windows installer adds that directory to the user `PATH` by default and also prepends it to the current PowerShell session. Open a new terminal if another session still sees the old command. To bypass `PATH` entirely, run the installed executable directly:
+The standalone Windows installer adds that directory to the user `PATH` by default, moves it to the front even when it was already present later, and also prepends it to the current PowerShell session. Open a new terminal if another session still sees the old command. If `%USERPROFILE%\.dotnet\tools` still wins, reinstall with `-RemoveDotnetTool` or remove the old global tool manually:
+
+```powershell
+dotnet tool uninstall --global SeleniumPlaywrightMigrator
+```
+
+To bypass `PATH` entirely, run the installed executable directly:
 
 ```powershell
 & "$env:USERPROFILE\.selenium-pw-migrator\bin\selenium-pw-migrator.exe" --version

@@ -104,6 +104,23 @@ selenium-pw-migrator --version
 
 The first path wins. On Windows, the standalone installer adds `%USERPROFILE%\.selenium-pw-migrator\bin` before the existing user `PATH`, so standalone normally wins over `%USERPROFILE%\.dotnet\tools`.
 
+The installer now **moves** the standalone directory to the front even if it was already present later in `PATH`. If you also have the old dotnet global tool installed and want to remove that channel in the same step, run the Windows installer with `-RemoveDotnetTool`:
+
+```powershell
+./scripts/install-standalone.ps1 `
+  -Version 0.0.0-preview.8 `
+  -Runtime win-x64 `
+  -ArchivePath artifacts/release/selenium-pw-migrator-0.0.0-preview.8-win-x64.zip `
+  -ChecksumsPath artifacts/release/checksums.sha256 `
+  -RemoveDotnetTool
+```
+
+Manual fallback:
+
+```powershell
+dotnet tool uninstall --global SeleniumPlaywrightMigrator
+```
+
 ## Release artifacts
 
 A release contains these files:
@@ -184,7 +201,7 @@ The default install location is:
 %USERPROFILE%\.selenium-pw-migrator\bin
 ```
 
-The Windows installer adds this directory to the user `PATH` by default and also prepends it to the current PowerShell session. Use `-SkipUserPathUpdate` only when you want to install files without changing `PATH`.
+The Windows installer adds this directory to the user `PATH` by default, moves it to the front if it was already present later, and also prepends it to the current PowerShell session. Use `-SkipUserPathUpdate` only when you want to install files without changing `PATH`.
 
 Verify:
 

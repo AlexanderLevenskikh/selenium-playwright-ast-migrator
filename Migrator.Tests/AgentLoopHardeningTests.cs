@@ -136,8 +136,18 @@ public class AgentLoopHardeningTests
         var currentDirectoryCandidate = kitCommand.IndexOf("yield return currentDirectory;", StringComparison.Ordinal);
         Assert.True(appContextCandidate >= 0 && currentDirectoryCandidate > appContextCandidate, "Bundled/source templates must be tried before the product repo current directory.");
         Assert.Contains("WriteGuardChecksums", kitCommand);
+        Assert.Contains("IsAutoUpdatedKitOwnedFile", kitCommand);
+        Assert.Contains("kit-overwrite", kitCommand);
+        Assert.Contains("scripts/check-final-gate.ps1", kitCommand);
+        Assert.Contains("state/continuation-contract.md", kitCommand);
+        Assert.Contains("StartsWith(\"prompts/\"", kitCommand);
         Assert.Contains("check-harness-policy.ps1", psInstall);
         Assert.Contains("Write-GuardChecksums", psInstall);
+        Assert.Contains("Test-AutoUpdatedKitOwnedFile", psInstall);
+        Assert.Contains("kit-overwrite", psInstall);
+        Assert.Contains("scripts/check-final-gate.ps1", psInstall);
+        Assert.Contains("state/continuation-contract.md", psInstall);
+        Assert.Contains("StartsWith(\"prompts/\"", psInstall);
         Assert.Contains("templates/migration-kit/harness/README.md", bundleScript);
     }
 

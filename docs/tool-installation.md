@@ -147,3 +147,14 @@ scripts/smoke-local-tool-package.sh 0.0.0-preview.1
 ```
 
 Это проверяет не source-run, а именно установленный `.nupkg`: `--help`, `--mode doctor` и запись `doctor-report.md`.
+
+
+### PATH priority and old dotnet global tool
+
+The standalone installer moves `%USERPROFILE%\.selenium-pw-migrator\bin` to the front of the user `PATH`. If an old dotnet global tool still appears first in `where.exe selenium-pw-migrator`, remove it with:
+
+```powershell
+dotnet tool uninstall --global SeleniumPlaywrightMigrator
+```
+
+or reinstall standalone with `-RemoveDotnetTool`.

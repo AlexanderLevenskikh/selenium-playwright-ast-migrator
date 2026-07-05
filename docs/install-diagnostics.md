@@ -85,7 +85,7 @@ PowerShell runs the first matching command in `PATH`. If standalone was installe
 %USERPROFILE%\.selenium-pw-migrator\bin
 ```
 
-The standalone Windows installer prepends it to the user PATH by default. Open a new terminal after installation, or run the standalone executable directly:
+The standalone Windows installer prepends it to the user PATH by default and moves it to the front if it was already present later. Open a new terminal after installation, or run the standalone executable directly. To remove the old dotnet global tool channel, use `dotnet tool uninstall --global SeleniumPlaywrightMigrator` or reinstall standalone with `-RemoveDotnetTool`:
 
 ```powershell
 & "$env:USERPROFILE\.selenium-pw-migrator\bin\selenium-pw-migrator.exe" --version

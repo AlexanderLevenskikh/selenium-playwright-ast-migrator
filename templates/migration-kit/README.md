@@ -96,8 +96,9 @@ Safe update:
 Update rules:
 
 - project-owned files are not overwritten: config, mutable state, current ticket, runs, reports, logs;
-- changed kit-owned files are written under `.migration-kit/updates/<timestamp>/*.new`;
-- `-Force` overwrites kit-owned files;
+- runtime kit files are updated in place: guard scripts, shell wrappers, harness prompts, and `state/continuation-contract.md`;
+- changed project-owned or mutable files are written under `.migration-kit/updates/<timestamp>/*.new`;
+- `-Force` overwrites non-mutable kit-owned files when a manual full refresh is intentional;
 - `-Backup` snapshots the workspace before update.
 
 ## MVP-4 agent harness

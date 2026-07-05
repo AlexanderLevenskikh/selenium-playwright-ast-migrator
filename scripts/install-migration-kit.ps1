@@ -100,12 +100,20 @@ function Write-TextFileSafe(
         return
     }
 
+    $relativeToWorkspace = Get-RelativePathCompat -BasePath $script:workspacePath -FullPath $DestinationPath
+    if ($relativeToWorkspace.StartsWith("..")) {
+        $relativeToWorkspace = (Split-Path $DestinationPath -Leaf)
+    }
+
+    if ($UpdateMode -and -not $NeverOverwrite -and (Test-AutoUpdatedKitOwnedFile $relativeToWorkspace)) {
+        Set-Content -Path $DestinationPath -Value $Content -Encoding UTF8
+        Write-Host "kit-overwrite: $DestinationPath"
+        return
+    }
+
     if ($UpdateMode) {
         $updatesRoot = Join-Path $script:workspacePath ".migration-kit/updates/$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-        $relative = Get-RelativePathCompat -BasePath $script:workspacePath -FullPath $DestinationPath
-        if ($relative.StartsWith("..")) {
-            $relative = (Split-Path $DestinationPath -Leaf)
-        }
+        $relative = $relativeToWorkspace
         $updatePath = Join-Path $updatesRoot ($relative + ".new")
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $updatePath) | Out-Null
         Set-Content -Path $updatePath -Value $Content -Encoding UTF8
@@ -130,6 +138,31 @@ function Set-TemplatedFile(
     }
 
     Write-TextFileSafe -DestinationPath $DestinationPath -Content $content -ForceWrite:$ForceWrite -UpdateMode:$UpdateMode -NeverOverwrite:$NeverOverwrite
+}
+
+
+function Test-AutoUpdatedKitOwnedFile([string]$RelativePath) {
+    $normalized = $RelativePath.Replace('\', '/')
+
+    # These files are migration-kit runtime files, not project migration state.
+    # `kit update` must apply them in place; otherwise safety fixes land only as
+    # `.migration-kit/updates/*.new` while stale guard scripts/prompts keep running.
+    return (
+        $normalized -eq "scripts/check-scope.ps1" -or
+        $normalized -eq "scripts/check-scope.sh" -or
+        $normalized -eq "scripts/check-harness-policy.ps1" -or
+        $normalized -eq "scripts/check-harness-policy.sh" -or
+        $normalized -eq "scripts/check-final-gate.ps1" -or
+        $normalized -eq "scripts/check-final-gate.sh" -or
+        $normalized -eq "scripts/build-harness-dashboard.ps1" -or
+        $normalized -eq "scripts/build-harness-dashboard.sh" -or
+        $normalized -eq "scripts/new-harness-run.ps1" -or
+        $normalized -eq "scripts/new-harness-run.sh" -or
+        $normalized -eq "scripts/write-harness-event.ps1" -or
+        $normalized -eq "scripts/write-harness-event.sh" -or
+        $normalized -eq "state/continuation-contract.md" -or
+        $normalized.StartsWith("prompts/")
+    )
 }
 
 function Test-WorkspaceMutableFile([string]$RelativePath) {

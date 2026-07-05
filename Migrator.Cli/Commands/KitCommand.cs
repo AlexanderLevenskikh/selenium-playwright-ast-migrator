@@ -614,10 +614,18 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
             return;
         }
 
+        var relativeToWorkspace = SafeRelativePath(workspacePath, destPath);
+        if (options.Update && !neverOverwrite && IsAutoUpdatedKitOwnedFile(relativeToWorkspace))
+        {
+            File.WriteAllText(destPath, content);
+            Console.WriteLine($"kit-overwrite: {destPath}");
+            return;
+        }
+
         if (options.Update)
         {
             var updatesRoot = Path.Combine(workspacePath, ".migration-kit", "updates", DateTime.Now.ToString("yyyyMMdd-HHmmss"));
-            var relative = SafeRelativePath(workspacePath, destPath);
+            var relative = relativeToWorkspace;
             var updatePath = Path.Combine(updatesRoot, relative + ".new");
             Directory.CreateDirectory(Path.GetDirectoryName(updatePath)!);
             File.WriteAllText(updatePath, content);
@@ -626,6 +634,33 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
         }
 
         Console.WriteLine($"skip existing: {destPath}");
+    }
+
+
+    static bool IsAutoUpdatedKitOwnedFile(string relativePath)
+    {
+        var normalized = relativePath.Replace('\\', '/');
+
+        // These files are part of the migration-kit runtime, not project migration state.
+        // `kit update` must apply them in place; otherwise safety fixes land only as
+        // `.migration-kit/updates/*.new`, while the workspace keeps executing stale
+        // guard scripts/prompts. Mutable files such as current-ticket.md, handoff.md,
+        // run-ledger.md and profiles/adapter-config.json still use conflict snapshots.
+        return normalized is
+            "scripts/check-scope.ps1" or
+            "scripts/check-scope.sh" or
+            "scripts/check-harness-policy.ps1" or
+            "scripts/check-harness-policy.sh" or
+            "scripts/check-final-gate.ps1" or
+            "scripts/check-final-gate.sh" or
+            "scripts/build-harness-dashboard.ps1" or
+            "scripts/build-harness-dashboard.sh" or
+            "scripts/new-harness-run.ps1" or
+            "scripts/new-harness-run.sh" or
+            "scripts/write-harness-event.ps1" or
+            "scripts/write-harness-event.sh" or
+            "state/continuation-contract.md"
+            || normalized.StartsWith("prompts/", StringComparison.Ordinal);
     }
 
     static void CreateBackup(string workspacePath, string projectRoot)

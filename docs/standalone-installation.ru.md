@@ -290,3 +290,24 @@ bash /tmp/install-standalone.sh --uninstall
 ## Когда лучше dotnet tool
 
 `dotnet tool` удобнее, если проект хочет закрепить версию CLI в `.config/dotnet-tools.json` или у всех пользователей уже установлен .NET SDK. См. [Tool installation](tool-installation.md).
+
+
+## PATH priority and dotnet tool removal
+
+
+Installer теперь **переставляет** standalone-папку в начало `PATH`, даже если она уже была добавлена раньше, но стояла после `.dotnet\tools`. Если хочешь заодно снести старую global dotnet tool установку, запусти Windows installer с `-RemoveDotnetTool`:
+
+```powershell
+./scripts/install-standalone.ps1 `
+  -Version 0.0.0-preview.8 `
+  -Runtime win-x64 `
+  -ArchivePath artifacts/release/selenium-pw-migrator-0.0.0-preview.8-win-x64.zip `
+  -ChecksumsPath artifacts/release/checksums.sha256 `
+  -RemoveDotnetTool
+```
+
+Ручной fallback:
+
+```powershell
+dotnet tool uninstall --global SeleniumPlaywrightMigrator
+```
