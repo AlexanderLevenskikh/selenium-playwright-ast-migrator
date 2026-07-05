@@ -24,6 +24,9 @@ using Migrator.SeleniumCSharp;
 if (args.Length > 0 && string.Equals(args[0], "kit", StringComparison.OrdinalIgnoreCase))
     return KitCommand.Run(args.Skip(1).ToArray());
 
+if (args.Length > 0 && string.Equals(args[0], "self", StringComparison.OrdinalIgnoreCase))
+    return SelfCommand.Run(args.Skip(1).ToArray());
+
 args = NormalizeDirectCommand(args);
 
 if (IsVersionRequest(args))
@@ -257,7 +260,14 @@ if (mode == "playground-verify")
     return playgroundVerifyExitCode;
 }
 
-// Handle release doctor mode — validates NuGet preview readiness for maintainers.
+// Handle install doctor mode — explains the active install channel and update command.
+if (mode == "install-doctor")
+{
+    var installDoctorExitCode = InstallDoctorCommand.RunInstallDoctor(outPath, format);
+    return installDoctorExitCode;
+}
+
+// Handle release doctor mode — validates NuGet/npm/standalone preview readiness for maintainers.
 if (mode == "release-doctor")
 {
     var releaseDoctorExitCode = ReleaseDoctorCommand.RunReleaseDoctor(inputPath, outPath, format);
@@ -10914,6 +10924,13 @@ static string[] NormalizeDirectCommand(string[] args)
 
     if (string.Equals(args[0], "playground", StringComparison.OrdinalIgnoreCase))
         return new[] { "--mode", "playground" }.Concat(args.Skip(1)).ToArray();
+
+    if (string.Equals(args[0], "doctor", StringComparison.OrdinalIgnoreCase)
+        && args.Length > 1
+        && string.Equals(args[1], "install", StringComparison.OrdinalIgnoreCase))
+    {
+        return new[] { "--mode", "install-doctor" }.Concat(args.Skip(2)).ToArray();
+    }
 
     if (string.Equals(args[0], "doctor", StringComparison.OrdinalIgnoreCase)
         && args.Length > 1

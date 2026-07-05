@@ -1,6 +1,6 @@
 # Release process
 
-This document is the release checklist for publishing `SeleniumPlaywrightMigrator` as a public preview dotnet tool and for producing standalone CLI release archives.
+This document is the release checklist for publishing `SeleniumPlaywrightMigrator` as a public preview dotnet tool, npm wrapper, and standalone CLI release archives.
 
 ## Versioning
 
@@ -32,7 +32,7 @@ Publish a stable version only when the public command set, package contents, and
 selenium-pw-migrator doctor release --out release-doctor --format both
 ```
 
-   The report checks package metadata, version/changelog consistency, release scripts, README_TOOL packaging docs, publish workflow dry-run support, NuGet secret references, and repository hygiene.
+   The report checks package metadata, version/changelog consistency, release scripts, README_TOOL packaging docs, publish workflow dry-run support, NuGet secret references, npm/standalone smoke scripts, install diagnostics, agent handoff UX, dashboard-first docs, and repository hygiene.
 3. Run the normal build/test gate:
 
 ```bash
@@ -141,6 +141,27 @@ The npm package is a thin wrapper that downloads the standalone release archives
    - agent-bundle job.
 
 12. For release candidates, optionally run the manual `Full Validation` workflow. It runs the unfiltered test suite, `release-doctor`, dotnet-tool package smoke, standalone archive smoke, and agent-bundle smoke in one end-to-end gate. The same workflow also runs nightly from `schedule`.
+
+## Final public release gate
+
+Run this single gate before tagging or publishing public artifacts:
+
+```bash
+selenium-pw-migrator doctor release --out release-doctor --format both
+```
+
+The gate is intentionally cheap and deterministic: it verifies that the npm-first install path, `doctor install`, `self update`, `kit bootstrap-agent`, release scripts, package metadata, publish workflows, standalone artifacts, npm smoke scripts, and dashboard-first documentation are present before heavier CI jobs publish anything.
+
+After publishing, smoke the public channels from a fresh shell:
+
+```bash
+npm install -g selenium-pw-migrator@preview
+selenium-pw-migrator doctor install
+selenium-pw-migrator playground --out playground
+npm update -g selenium-pw-migrator
+```
+
+For Nexus mirrors, run `scripts/smoke-npm-registry-install.*` against the internal registry and standalone archive mirror.
 
 ## Stable release checklist
 

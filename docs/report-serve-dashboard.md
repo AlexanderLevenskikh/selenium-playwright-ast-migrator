@@ -2,6 +2,16 @@
 
 `report serve` is the local dashboard entry point for reviewing migration run artifacts without sending project data anywhere.
 
+## Open this first
+
+After any real migration run, generate the dashboard before reading raw JSON/TXT artifacts:
+
+```bash
+selenium-pw-migrator report serve --input migration/runs/latest --static-only --out migration/dashboard/latest --format both
+```
+
+Open `migration/dashboard/latest/report-dashboard.html` first. It is the primary review surface for readiness, TODO categories, unsupported actions, generated files, next actions, evidence links, and agent run history.
+
 ```text
 selenium-pw-migrator report serve --input migration/runs/latest --port 5077
 ```

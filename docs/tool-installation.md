@@ -1,5 +1,25 @@
 # Установка мигратора как dotnet tool
 
+## Рекомендуемый npm-first путь
+
+Для пользователей продукта самый простой путь — npm wrapper. Он скачивает подходящий standalone CLI и не требует .NET SDK:
+
+```powershell
+npm install -g selenium-pw-migrator@preview
+selenium-pw-migrator doctor install
+```
+
+Обновление:
+
+```powershell
+npm update -g selenium-pw-migrator
+# или только напечатать команду обновления для текущего канала:
+selenium-pw-migrator self update
+```
+
+`doctor install` показывает, что именно запускается из shell: путь к executable, версию, канал (`npm`, `standalone`, `dotnet-tool`, `source`), PATH candidates и рекомендуемую команду install/update. Это первый диагностический шаг, если global npm, standalone, local dotnet tool или global dotnet tool могли затенить друг друга.
+
+
 Если .NET SDK на машине ставить не хочется, используйте standalone-дистрибутив: [standalone-installation.ru.md](standalone-installation.ru.md).
 
 Быстрая standalone-установка на Windows без .NET:

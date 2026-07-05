@@ -23,6 +23,9 @@ public class ReleasePreviewReadinessTests
         Assert.Contains("examples/tool-manifest/dotnet-tools.json", command);
         Assert.Contains("seleniumplaywrightastmigrator", command);
         Assert.Contains("release-doctor-report.md", command);
+        Assert.Contains("AddInstallUxChecks", command);
+        Assert.Contains("smoke-npm-registry-install", command);
+        Assert.Contains("verify-release-artifacts.ps1", command);
 
         Assert.Contains("StableCommand(\"release-doctor\"", catalog);
         Assert.Contains("selenium-pw-migrator doctor release --out release-doctor", catalog);
@@ -32,6 +35,8 @@ public class ReleasePreviewReadinessTests
         Assert.Contains("doctor release", catalog);
 
         Assert.Contains("selenium-pw-migrator doctor release", releaseDocs);
+        Assert.Contains("Final public release gate", releaseDocs);
+        Assert.Contains("selenium-pw-migrator doctor install", toolReadme);
         Assert.Contains("selenium-pw-migrator doctor release", toolReadme);
     }
 

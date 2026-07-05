@@ -4,6 +4,21 @@ Dotnet tool for agent-assisted and human-reviewed migration of Selenium tests to
 
 The stable public path is Selenium C# to Playwright .NET with NUnit as the default target framework and xUnit as a supported target framework. Playwright TypeScript, Java Selenium, and Python Selenium paths are available as experimental preview capabilities; check the repository documentation before using them for production migrations.
 
+## Install/update sanity check
+
+After installing through npm, standalone, or dotnet tool, run:
+
+```bash
+selenium-pw-migrator doctor install
+selenium-pw-migrator self update --print-command
+```
+
+`doctor install` prints the resolved executable, version, channel, PATH candidates, runtime, and recommended update command. For the npm wrapper, the normal update command is:
+
+```bash
+npm update -g selenium-pw-migrator
+```
+
 ## Basic usage
 
 ```bash
@@ -41,7 +56,9 @@ Commands are grouped as stable public, experimental preview, and internal/mainta
 ## Useful modes
 
 - `kit init/update/doctor/next-ticket` — install, update, check, and continue the migration workspace.
+- `kit bootstrap-opencode` / `kit bootstrap-agent --agent codex|generic` — create an agent-ready workspace for OpenCode or a non-OpenCode handoff pack.
 - `runbook` — generate pilot scope, command chain, risk map, artifacts, and acceptance checklist before the first migration run.
+- `doctor install` / `install-doctor` — explain the active install channel and update command.
 - `doctor` — preflight input, config, tooling, and source-truth hints.
 - `analyze` — inspect Selenium tests without generating target files.
 - `migrate` — generate Playwright target files.
@@ -131,4 +148,4 @@ Before publishing a NuGet preview from the source repository, run:
 selenium-pw-migrator doctor release --out release-doctor --format both
 ```
 
-The release doctor checks PackageId/version metadata, README_TOOL packaging docs, release scripts, publish workflow dry-run support, NuGet secret references, changelog consistency, and basic repository hygiene.
+The release doctor checks PackageId/version metadata, README_TOOL packaging docs, release scripts, publish workflow dry-run support, NuGet/npm/standalone smoke coverage, install diagnostics, agent handoff UX, changelog consistency, and basic repository hygiene.

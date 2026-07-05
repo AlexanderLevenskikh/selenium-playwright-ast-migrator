@@ -19,6 +19,40 @@ Migrator парсит Selenium-тесты, строит промежуточну
 
 Идея не в “магической конвертации”, а в том, чтобы вся неопределённость была видимой и проверяемой.
 
+
+## Три входа
+
+### 1. Попробовать без агента
+
+```bash
+npm install -g selenium-pw-migrator@preview
+selenium-pw-migrator doctor install
+selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
+```
+
+### 2. Миграция с OpenCode
+
+```bash
+npm install -g selenium-pw-migrator@preview
+selenium-pw-migrator doctor install
+selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --opencode-install auto
+```
+
+### 3. Миграция с другим агентом
+
+```bash
+selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --source ./SeleniumTests
+selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration --source ./SeleniumTests
+```
+
+После реального run сначала открывай dashboard:
+
+```bash
+selenium-pw-migrator report serve --input migration/runs/latest --static-only --out migration/dashboard/latest --format both
+```
+
+Открывай `migration/dashboard/latest/report-dashboard.html` до ручного чтения JSON/TXT артефактов.
+
 ## Поддерживаемые source и target
 
 | Source frontend | Target backend | Статус | Примечание |
@@ -30,9 +64,28 @@ Migrator парсит Selenium-тесты, строит промежуточну
 
 ## Установка
 
+### Вариант для frontend-команд: npm wrapper
+
+Для внешних пользователей самый простой путь — npm wrapper. Он скачивает подходящий standalone CLI и не требует установленного .NET SDK:
+
+```bash
+npm install -g selenium-pw-migrator@preview
+selenium-pw-migrator doctor install
+```
+
+Обновление:
+
+```bash
+npm update -g selenium-pw-migrator
+# или только напечатать команду обновления для текущего канала:
+selenium-pw-migrator self update
+```
+
+`doctor install` / `--mode install-doctor` показывает, что реально запускается из shell: executable, version, channel, runtime, PATH candidates и рекомендуемую команду install/update.
+
 ### Рекомендуемый вариант: standalone CLI
 
-Standalone-дистрибутив не требует установленного .NET SDK или .NET Runtime на машине пользователя. Это самый простой вариант, если нужно только запускать мигратор.
+Для закрытых окружений или release smoke tests standalone остаётся самым прямым install path. npm wrapper выше остаётся самым удобным frontend-friendly вариантом, но standalone-дистрибутив не требует установленного .NET SDK или .NET Runtime на машине пользователя. Используй его, если npm недоступен или нужен прямой GitHub Release install.
 
 Windows PowerShell:
 
@@ -126,7 +179,8 @@ dotnet tool run selenium-pw-migrator -- --help
 Для стабильного production-сценария держим путь максимально коротким:
 
 ```bash
-dotnet tool install --global SeleniumPlaywrightMigrator --source https://api.nuget.org/v3/index.json --prerelease
+npm install -g selenium-pw-migrator@preview
+selenium-pw-migrator doctor install
 selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
 bash playground/commands.sh
 selenium-pw-migrator playground verify --input playground --out playground-verify --format both

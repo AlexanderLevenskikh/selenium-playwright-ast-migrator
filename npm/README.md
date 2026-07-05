@@ -10,7 +10,7 @@ Preview releases are published under the `preview` dist-tag. Stable releases wil
 
 ```bash
 npm install -g selenium-pw-migrator@preview
-selenium-pw-migrator --version
+selenium-pw-migrator doctor install
 ```
 
 
@@ -21,6 +21,16 @@ npm install -g selenium-pw-migrator@0.0.0-preview.8
 npm install -g https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.8/selenium-pw-migrator-0.0.0-preview.8.tgz
 selenium-pw-migrator --version
 ```
+
+## Update
+
+```bash
+npm update -g selenium-pw-migrator
+# or print the detected channel-specific update command:
+selenium-pw-migrator self update
+```
+
+`doctor install` prints the resolved native executable, package channel, version, runtime, PATH candidates, and recommended update command.
 
 Supported runtimes:
 

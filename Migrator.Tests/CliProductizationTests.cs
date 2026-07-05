@@ -62,6 +62,7 @@ public class CliProductizationTests
             "doctor",
             "playground",
             "playground-verify",
+            "install-doctor",
             "release-doctor",
             "explain-todo",
             "smoke-plan",
@@ -113,6 +114,8 @@ public class CliProductizationTests
         Assert.Contains("selenium-pw-migrator runbook --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator playground --out playground", catalog);
         Assert.Contains("selenium-pw-migrator playground verify --input playground", catalog);
+        Assert.Contains("selenium-pw-migrator doctor install --out install-doctor", catalog);
+        Assert.Contains("selenium-pw-migrator self update --print-command", catalog);
         Assert.Contains("selenium-pw-migrator doctor release --out release-doctor", catalog);
         Assert.Contains("selenium-pw-migrator --mode migrate --input ./OldTests", catalog);
         Assert.Contains("selenium-pw-migrator --mode doctor --input ./OldTests", catalog);

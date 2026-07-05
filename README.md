@@ -19,6 +19,49 @@ The main production path is **Selenium C# → Playwright .NET** with **NUnit as 
 
 The goal is not magic conversion. The goal is to make migration uncertainty visible and fixable.
 
+
+## Choose your path
+
+### 1. Try it without an agent
+
+```bash
+npm install -g selenium-pw-migrator@preview
+selenium-pw-migrator doctor install
+selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
+```
+
+Open `playground/try-this-first.md` and run the generated commands. This is the safest disposable route.
+
+### 2. Migrate with OpenCode
+
+```bash
+npm install -g selenium-pw-migrator@preview
+selenium-pw-migrator doctor install
+selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --opencode-install auto
+```
+
+Then run `/supervised-task` in OpenCode. The harness creates or resumes `migration/runs/<run-id>`; do not create run folders by hand.
+
+### 3. Migrate with another agent
+
+```bash
+npm install -g selenium-pw-migrator@preview
+selenium-pw-migrator doctor install
+selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --source ./SeleniumTests
+# or:
+selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration --source ./SeleniumTests
+```
+
+This writes `migration/AGENT_HANDOFF.md`, `migration/AGENT_CONTRACT.md`, and the kickoff prompts without pretending the workflow is OpenCode-specific.
+
+After any real run, open the dashboard first:
+
+```bash
+selenium-pw-migrator report serve --input migration/runs/latest --static-only --out migration/dashboard/latest --format both
+```
+
+Open `migration/dashboard/latest/report-dashboard.html` before digging through raw JSON/TXT artifacts.
+
 ## Supported sources and targets
 
 | Source frontend | Target backend | Status | Notes |
@@ -30,9 +73,28 @@ The goal is not magic conversion. The goal is to make migration uncertainty visi
 
 ## Install
 
+### Frontend-friendly option: npm wrapper
+
+The npm package is the default public path for frontend/test-automation teams. It is a thin wrapper over the same standalone release archives, so users do not need to install the .NET SDK.
+
+```bash
+npm install -g selenium-pw-migrator@preview
+selenium-pw-migrator doctor install
+```
+
+Update:
+
+```bash
+npm update -g selenium-pw-migrator
+# or print the detected channel-specific command:
+selenium-pw-migrator self update
+```
+
+`doctor install` (mode-compatible form: `--mode install-doctor`) shows the resolved executable, version, channel, runtime, PATH candidates, and recommended install/update command. This is the first command to run when global npm, standalone, dotnet tool, or local tool installs may be shadowing each other. Use it to diagnose what your shell actually runs before checking package-manager state.
+
 ### Recommended: standalone CLI
 
-The standalone distribution does not require the .NET SDK or .NET Runtime on the target machine. It is the easiest path when you only need to run the migrator.
+For locked-down environments or release smoke tests, the standalone distribution is still the most direct install path. The npm wrapper remains the default frontend-friendly route above, but standalone does not require the .NET SDK or .NET Runtime on the target machine. Use it when npm is not available or when you want a direct GitHub Release install.
 
 Windows PowerShell:
 
@@ -56,18 +118,7 @@ The Windows installer adds the standalone directory to the front of the user `PA
 
 To uninstall the standalone Windows install, run the same installer with `-Uninstall`. On Linux/macOS, run `install-standalone.sh --uninstall` and remove the PATH line from your shell profile.
 
-### Frontend-friendly option: npm wrapper
-
-Before comparing installation channels, diagnose what your shell actually runs with `./scripts/diagnose-install.ps1` or `Get-Command selenium-pw-migrator -All`; do not rely on `dotnet tool list` alone.
-
-
-The npm package is a thin wrapper over the same standalone release archives. It is useful for frontend/test-automation teams that already have Node.js but do not want to install .NET.
-
-```bash
-npm install -g selenium-pw-migrator@preview
-selenium-pw-migrator --version
-```
-
+### npm details
 
 For a pinned preview, install a specific npm version or use the matching GitHub Release asset:
 
@@ -126,7 +177,8 @@ See [Tool installation](docs/tool-installation.md), [Standalone installation](do
 For the stable production path, keep it boring and small:
 
 ```bash
-dotnet tool install --global SeleniumPlaywrightMigrator --source https://api.nuget.org/v3/index.json --prerelease
+npm install -g selenium-pw-migrator@preview
+selenium-pw-migrator doctor install
 selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
 bash playground/commands.sh
 selenium-pw-migrator playground verify --input playground --out playground-verify --format both
@@ -138,7 +190,14 @@ For a real project, bootstrap the guarded workspace once and then let the agent 
 selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --opencode-install auto
 ```
 
-Then run `/supervised-task` in OpenCode, or hand `migration/AGENT_CONTRACT.md` and `migration/prompts/kickoff-prompt.txt` to another agent. Do not create `migration/runs/<run-id>` manually; the harness does that.
+For Codex or another agent, use the explicit non-OpenCode handoff:
+
+```bash
+selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --source ./SeleniumTests
+selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration --source ./SeleniumTests
+```
+
+Then run `/supervised-task` in OpenCode, or hand `migration/AGENT_HANDOFF.md`, `migration/AGENT_CONTRACT.md`, and `migration/prompts/kickoff-prompt.txt` to another agent. Do not create `migration/runs/<run-id>` manually; the harness does that.
 
 Java, Python, and Playwright TypeScript paths are experimental. Keep release demos and production migration promises focused on Selenium C# -> Playwright .NET.
 

@@ -27,6 +27,7 @@ internal static class ReleaseDoctorCommand
         AddWorkflowChecks(root, project, checks);
         AddDocumentationChecks(root, project, checks);
         AddToolManifestExampleChecks(root, project, checks);
+        AddInstallUxChecks(root, checks);
         AddRepositoryHygieneChecks(root, checks);
 
         var failed = checks.Count(c => c.Status == "fail");
@@ -84,6 +85,7 @@ internal static class ReleaseDoctorCommand
             ".github/workflows/ci.yml",
             ".github/workflows/publish-nuget.yml",
             ".github/workflows/full-validation.yml",
+            ".github/workflows/publish-npm.yml",
             "scripts/pack-tool.sh",
             "scripts/pack-tool.ps1",
             "scripts/verify-nupkg-contents.sh",
@@ -92,6 +94,12 @@ internal static class ReleaseDoctorCommand
             "scripts/smoke-local-tool-package.ps1",
             "scripts/push-tool.sh",
             "scripts/push-tool.ps1",
+            "scripts/package-standalone.sh",
+            "scripts/package-standalone.ps1",
+            "scripts/verify-standalone-package.ps1",
+            "scripts/smoke-npm-registry-install.sh",
+            "scripts/smoke-npm-registry-install.ps1",
+            "scripts/verify-release-artifacts.ps1",
         })
         {
             Add(checks, File.Exists(Path.Combine(root, ToOsPath(file))), "file", file, "required release file exists", "missing required release file");
@@ -228,6 +236,32 @@ internal static class ReleaseDoctorCommand
             manifest,
             "tool manifest example exposes the public tool command",
             $"tool manifest example should expose {ExpectedToolCommand}");
+    }
+
+    static void AddInstallUxChecks(string root, List<ReleaseDoctorCheck> checks)
+    {
+        AddSourceContains(root, checks, "Migrator.Cli/Program.cs", "InstallDoctorCommand.RunInstallDoctor", "install-ux", "doctor install direct command is wired");
+        AddSourceContains(root, checks, "Migrator.Cli/Commands/InstallDoctorCommand.cs", "install-doctor/v1", "install-ux", "install doctor writes versioned reports");
+        AddSourceContains(root, checks, "Migrator.Cli/Commands/SelfCommand.cs", "SELF_UPDATE_COMMAND", "install-ux", "self update prints channel-specific update command");
+        AddSourceContains(root, checks, "Migrator.Cli/Commands/KitCommand.cs", "bootstrap-agent", "agent-ux", "agent-generic bootstrap command is wired");
+        AddSourceContains(root, checks, "Migrator.Cli/Commands/KitCommand.cs", "AGENT_HANDOFF.md", "agent-ux", "agent handoff pack is generated");
+        AddSourceContains(root, checks, "README.md", "Choose your path", "docs", "README starts with three public entry paths");
+        AddSourceContains(root, checks, "README.md", "npm update -g selenium-pw-migrator", "docs", "README documents npm update path");
+        AddSourceContains(root, checks, "README.md", "doctor install", "docs", "README documents install diagnostics");
+        AddSourceContains(root, checks, "docs/report-serve-dashboard.md", "Open this first", "docs", "dashboard is documented as first review surface");
+    }
+
+    static void AddSourceContains(string root, List<ReleaseDoctorCheck> checks, string relativePath, string expected, string category, string okMessage)
+    {
+        var path = Path.Combine(root, ToOsPath(relativePath));
+        var exists = File.Exists(path);
+        var text = exists ? File.ReadAllText(path) : string.Empty;
+        Add(checks,
+            exists && text.Contains(expected, StringComparison.Ordinal),
+            category,
+            relativePath,
+            okMessage,
+            exists ? $"{relativePath} should contain {expected}" : $"{relativePath} is missing");
     }
 
     static void AddRepositoryHygieneChecks(string root, List<ReleaseDoctorCheck> checks)

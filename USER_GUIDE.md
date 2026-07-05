@@ -12,9 +12,11 @@ The main production path is Selenium C# to Playwright .NET. NUnit is the default
 
 ## Happy path
 
-Install the CLI first. The recommended standalone installer does not require the .NET SDK or .NET Runtime; see [Standalone installation](docs/standalone-installation.md). Then use this as the short path for new users:
+Install the CLI first. The recommended public path is the npm wrapper, which downloads the matching standalone CLI and does not require the .NET SDK:
 
 ```bash
+npm install -g selenium-pw-migrator@preview
+selenium-pw-migrator doctor install
 selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
 bash playground/commands.sh
 selenium-pw-migrator playground verify --input playground --out playground-verify --format both
@@ -24,7 +26,18 @@ For a real agent-assisted migration:
 
 ```bash
 selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --opencode-install auto
+# non-OpenCode handoff:
+selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --source ./SeleniumTests
+selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration --source ./SeleniumTests
 ```
+
+After a run, open the dashboard first:
+
+```bash
+selenium-pw-migrator report serve --input migration/runs/latest --static-only --out migration/dashboard/latest --format both
+```
+
+Open `migration/dashboard/latest/report-dashboard.html` before digging through raw artifacts.
 
 The stable production path is Selenium C# -> Playwright .NET. Treat Java, Python, and Playwright TypeScript as experimental preview paths until their reports and target-project checks prove readiness.
 
@@ -46,15 +59,28 @@ Weak guesses become TODOs or reports instead of unsafe generated code.
 
 ## 2. Installation And Local Use
 
+### Fast npm install
+
+Use npm when you want the least surprising public install/update path:
+
+```bash
+npm install -g selenium-pw-migrator@preview
+selenium-pw-migrator doctor install
+npm update -g selenium-pw-migrator
+```
+
+`selenium-pw-migrator self update` prints the channel-specific update command without mutating global installs automatically. Mode-compatible diagnostics form: `--mode install-doctor`.
+
 ### Fast standalone install
 
-Use standalone when you only need to run the CLI and do not want to install the .NET SDK or .NET Runtime:
+Use standalone when npm is unavailable and you still do not want to install the .NET SDK or .NET Runtime:
 
 ```powershell
 $installer = Join-Path $env:TEMP "install-standalone.ps1"
 Invoke-WebRequest "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/latest/download/install-standalone.ps1" -OutFile $installer
 & $installer
 selenium-pw-migrator --version
+selenium-pw-migrator doctor install
 ```
 
 ### Fast start from NuGet

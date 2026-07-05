@@ -37,6 +37,7 @@ This index keeps the current workflow short and avoids legacy agent-launch noise
 
 - [End-to-end simple example](examples/end-to-end-simple.md) — real input, config, command, and expected generated output from `examples/simple/`.
 - [Public demo and guided tutorial](public-demo-tutorial.md) — 10-minute NUnit/xUnit walkthrough with dashboard sample.
+- [Release UX Pack](release-ux-pack.md) — npm-first install/update diagnostics, three public entry paths, agent handoff, dashboard-first review, and final release gate.
 - [Public Demo / Playground](public-playground.md) — one-command five-minute disposable demo workspace.
 - [Public demo files](../examples/public-demo/README.md) — copyable demo inputs, configs, generated outputs, and dashboard.
 - [AST migration explained](articles/ast-migration-explained.md) / [RU](articles/ast-migration-explained.ru.md)

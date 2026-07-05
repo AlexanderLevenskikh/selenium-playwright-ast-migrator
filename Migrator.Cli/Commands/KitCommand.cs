@@ -42,6 +42,7 @@ internal static class KitCommand
             "doctor" => RunDoctor(options),
             "next-ticket" => RunNextTicket(options),
             "bootstrap-opencode" => RunBootstrapOpenCode(options),
+            "bootstrap-agent" => RunBootstrapAgent(options),
             _ => UnknownCommand(command)
         };
     }
@@ -53,6 +54,117 @@ internal static class KitCommand
         return 2;
     }
 
+
+    static int RunBootstrapAgent(KitOptions options)
+    {
+        var agent = NormalizeAgent(options.Agent);
+        if (agent == "opencode")
+            return RunBootstrapOpenCode(options with { OpenCodeInstall = string.IsNullOrWhiteSpace(options.OpenCodeInstall) || options.OpenCodeInstall == "manual" ? "auto" : options.OpenCodeInstall });
+
+        var projectRoot = Directory.GetCurrentDirectory();
+        var workspacePath = ToAbsolutePath(options.Workspace, projectRoot);
+        var updateMode = Directory.Exists(workspacePath);
+        var bootstrapOptions = options with
+        {
+            Update = updateMode,
+            Backup = options.Backup || updateMode,
+            WithTeam = false,
+            NoCodexFiles = agent == "generic"
+        };
+
+        Console.WriteLine($"Bootstrapping guarded {agent} migration workspace");
+        Console.WriteLine("This command installs/updates the migration kit, runs kit doctor, and writes an explicit non-OpenCode agent handoff pack.");
+        Console.WriteLine();
+
+        var initExitCode = RunInit(bootstrapOptions);
+        if (initExitCode != 0)
+            return initExitCode;
+
+        WriteAgentHandoff(workspacePath, bootstrapOptions, agent);
+
+        Console.WriteLine();
+        Console.WriteLine("Running kit doctor after bootstrap...");
+        var doctorExitCode = RunDoctor(bootstrapOptions);
+        if (doctorExitCode != 0)
+        {
+            Console.Error.WriteLine("bootstrap-agent stopped because kit doctor reported a blocking issue.");
+            return doctorExitCode;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("BOOTSTRAP_AGENT_READY");
+        Console.WriteLine($"Agent: {agent}");
+        Console.WriteLine($"Open first: {Path.Combine(options.Workspace, "AGENT_HANDOFF.md")}");
+        Console.WriteLine("Next:");
+        Console.WriteLine("  1. Give AGENT_HANDOFF.md plus AGENT_CONTRACT.md to the selected agent.");
+        Console.WriteLine("  2. Start with prompts/kickoff-prompt.txt unless the agent supports /supervised-task.");
+        Console.WriteLine("  3. Let the agent create or resume the active harness run; do not hand-create migration/runs/<run-id>.");
+        return 0;
+    }
+
+    static string NormalizeAgent(string value)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value) ? "generic" : value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "opencode" or "codex" or "generic" => normalized,
+            _ => throw new ArgumentException($"--agent must be one of: opencode, codex, generic. Got: {value}")
+        };
+    }
+
+    static void WriteAgentHandoff(string workspacePath, KitOptions options, string agent)
+    {
+        var extra = agent == "codex"
+            ? $"- Codex-specific pack: `{Path.Combine(options.Workspace, "codex", "CODEX.md")}` and `{Path.Combine(options.Workspace, "codex", "prompts", "ticket-fix-prompt.txt")}`."
+            : "- Generic agents should use only the contract, kickoff prompt, harness README, and current-ticket.md unless a project-specific prompt says otherwise.";
+
+        var handoff = $$"""
+# Agent Handoff Pack
+
+Agent: `{{agent}}`
+Workspace: `{{options.Workspace}}`
+Source Selenium path: `{{options.Source}}`
+Adapter config: `{{options.Config}}`
+
+## Open these first
+
+1. `{{Path.Combine(options.Workspace, "AGENT_CONTRACT.md")}}` — non-negotiable migration contract.
+2. `{{Path.Combine(options.Workspace, "prompts", "kickoff-prompt.txt")}}` — first task prompt.
+3. `{{Path.Combine(options.Workspace, "harness", "README.md")}}` — run lifecycle and gates.
+4. `{{Path.Combine(options.Workspace, "state", "harness-policy.json")}}` — policy enforced by final gates.
+
+{{extra}}
+
+## Operating rule
+
+The agent must create or resume a harness run through the provided scripts. Do not manually create `{{Path.Combine(options.Workspace, "runs", "run-001")}}`.
+
+PowerShell:
+
+```powershell
+.\{{Path.Combine(options.Workspace, "scripts", "new-harness-run.ps1")}} -TaskTitle "Pilot migration batch" -Goal "Run one bounded Selenium to Playwright migration batch."
+.\{{Path.Combine(options.Workspace, "scripts", "check-harness-policy.ps1")}} -Workspace "{{options.Workspace}}" -RepoRoot .
+```
+
+Bash:
+
+```bash
+./{{Path.Combine(options.Workspace, "scripts", "new-harness-run.sh")}} -TaskTitle "Pilot migration batch" -Goal "Run one bounded Selenium to Playwright migration batch."
+./{{Path.Combine(options.Workspace, "scripts", "check-harness-policy.sh")}} -Workspace "{{options.Workspace}}" -RepoRoot .
+```
+
+## Review surface
+
+Open the dashboard first after a run:
+
+```bash
+{{options.ToolCommand}} report serve --input {{Path.Combine(options.Workspace, "runs", "latest")}} --static-only --out {{Path.Combine(options.Workspace, "dashboard", "latest")}} --format both
+```
+
+The dashboard is the primary review surface for readiness, TODO categories, unsupported actions, generated files, next actions, and evidence links.
+""";
+        WriteTextFileSafe(Path.Combine(workspacePath, "AGENT_HANDOFF.md"), handoff, workspacePath, options, neverOverwrite: false);
+    }
 
     static int RunBootstrapOpenCode(KitOptions options)
     {
@@ -745,9 +857,26 @@ The legacy shortcut remains available on Windows:
 {{options.ToolCommand}} kit bootstrap-opencode --workspace "{{options.Workspace}}" --source "{{options.Source}}" --config "{{options.Config}}" --project-desktop
 ```
 
-For non-OpenCode agents, give the agent `{{Path.Combine(options.Workspace, "AGENT_CONTRACT.md")}}`, `{{Path.Combine(options.Workspace, "prompts", "kickoff-prompt.txt")}}`, and `{{Path.Combine(options.Workspace, "harness", "README.md")}}`.
+For non-OpenCode agents, prefer the explicit handoff command instead of using an OpenCode install mode as a workaround:
+
+```bash
+{{options.ToolCommand}} kit bootstrap-agent --agent codex --workspace "{{options.Workspace}}" --source "{{options.Source}}" --config "{{options.Config}}"
+{{options.ToolCommand}} kit bootstrap-agent --agent generic --workspace "{{options.Workspace}}" --source "{{options.Source}}" --config "{{options.Config}}"
+```
+
+This writes `{{Path.Combine(options.Workspace, "AGENT_HANDOFF.md")}}`, then gives the agent `{{Path.Combine(options.Workspace, "AGENT_CONTRACT.md")}}`, `{{Path.Combine(options.Workspace, "prompts", "kickoff-prompt.txt")}}`, and `{{Path.Combine(options.Workspace, "harness", "README.md")}}`.
 
 Then run `/supervised-task` in OpenCode, or give the same kickoff prompt to Codex/CI/another agent. The agent should create or resume the active harness run itself with `{{Path.Combine(options.Workspace, "scripts", "new-harness-run.sh")}}` from bash or `{{Path.Combine(options.Workspace, "scripts", "new-harness-run.ps1")}}` from PowerShell; you should not manually create `{{Path.Combine(options.Workspace, "runs", "run-001")}}`.
+
+## Open this first after a run
+
+The dashboard is the primary review surface. Generate it before reading raw JSON/TXT artifacts:
+
+```bash
+{{options.ToolCommand}} report serve --input {{Path.Combine(options.Workspace, "runs", "latest")}} --static-only --out {{Path.Combine(options.Workspace, "dashboard", "latest")}} --format both
+```
+
+Open `{{Path.Combine(options.Workspace, "dashboard", "latest", "report-dashboard.html")}}` first. It groups readiness, TODO root causes, unsupported actions, generated files, next actions, evidence links, and agent run history.
 
 ## Agent entrypoints
 
@@ -1117,6 +1246,7 @@ Usage:
   selenium-pw-migrator kit doctor [options]
   selenium-pw-migrator kit next-ticket [options]
   selenium-pw-migrator kit bootstrap-opencode [options]
+  selenium-pw-migrator kit bootstrap-agent --agent <codex|generic|opencode> [options]
 
 Commands:
   init          Create a migration workspace from bundled templates.
@@ -1125,6 +1255,8 @@ Commands:
   next-ticket   Generate a bounded prompt for deriving the next actionable ticket.
   bootstrap-opencode
                 Install/update the kit, include OpenCode team files, run doctor, and optionally install ProjectDesktop config.
+  bootstrap-agent
+                Install/update the kit and write an explicit handoff pack for Codex, generic agents, or OpenCode.
 
 Common options:
   --workspace <path>        Migration workspace root. Default: migration
@@ -1138,6 +1270,7 @@ Common options:
   --with-team               Install optional OpenCode team templates.
   --project-desktop         Shortcut for --opencode-install project-desktop.
   --opencode-install <mode> For kit bootstrap-opencode: auto, none, manual, ci, project-local, project-desktop, global.
+  --agent <name>            For kit bootstrap-agent: codex, generic, opencode. Default: generic.
   --no-codex-files          Do not install migration/codex files.
   --input <path>            Artifact directory for kit next-ticket.
 
@@ -1148,6 +1281,8 @@ Examples:
   selenium-pw-migrator kit next-ticket --workspace migration --input migration/runs/run-053
   selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./OldTests --opencode-install auto
   selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./OldTests --project-desktop
+  selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --source ./OldTests
+  selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration --source ./OldTests
 """);
     }
 
@@ -1165,6 +1300,7 @@ Examples:
         bool WithTeam,
         bool ProjectDesktop,
         string OpenCodeInstall,
+        string Agent,
         string? Input)
     {
         public static KitOptions? Parse(string[] args, out string error)
@@ -1183,6 +1319,7 @@ Examples:
                 WithTeam: false,
                 ProjectDesktop: false,
                 OpenCodeInstall: "manual",
+                Agent: "generic",
                 Input: null);
 
             error = string.Empty;
@@ -1215,6 +1352,7 @@ Examples:
                         "--with-team" => options with { WithTeam = true },
                         "--project-desktop" => options with { ProjectDesktop = true, OpenCodeInstall = "project-desktop" },
                         "--opencode-install" => options with { OpenCodeInstall = NormalizeOpenCodeInstallMode(ReadValue()) },
+                        "--agent" => options with { Agent = NormalizeAgent(ReadValue()) },
                         "--help" or "-h" => options,
                         _ when arg.StartsWith("-", StringComparison.Ordinal) => throw new ArgumentException($"Unknown option: {arg}"),
                         _ => throw new ArgumentException($"Unexpected argument: {arg}")
