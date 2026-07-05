@@ -58,6 +58,9 @@ To uninstall the standalone Windows install, run the same installer with `-Unins
 
 ### Frontend-friendly option: npm wrapper
 
+Before comparing installation channels, diagnose what your shell actually runs with `./scripts/diagnose-install.ps1` or `Get-Command selenium-pw-migrator -All`; do not rely on `dotnet tool list` alone.
+
+
 The npm package is a thin wrapper over the same standalone release archives. It is useful for frontend/test-automation teams that already have Node.js but do not want to install .NET.
 
 ```bash
@@ -73,7 +76,7 @@ npm install -g selenium-pw-migrator@0.0.0-preview.8
 npm install -g https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.8/selenium-pw-migrator-0.0.0-preview.8.tgz
 ```
 
-The npm `postinstall` downloads the matching standalone archive for `win-x64`, `linux-x64`, `osx-x64`, or `osx-arm64`, verifies `checksums.sha256` when available, and preserves the native CLI exit code. Corporate installs can use a Nexus npm proxy plus `--selenium-pw-migrator-base-url` for an internal standalone archive mirror. See [npm wrapper](docs/npm-wrapper.md). Publishing instructions live in [npm publishing](docs/npm-publishing.md).
+The npm `postinstall` downloads the matching standalone archive for `win-x64`, `linux-x64`, `osx-x64`, or `osx-arm64`, verifies `checksums.sha256` when available, and preserves the native CLI exit code. Corporate installs can use a Nexus npm proxy plus `--selenium-pw-migrator-base-url` for an internal standalone archive mirror. Isolated registry smoke scripts are available for npmjs and Nexus installs. See [npm wrapper](docs/npm-wrapper.md). Publishing instructions live in [npm publishing](docs/npm-publishing.md).
 
 ### .NET developers: dotnet tool
 

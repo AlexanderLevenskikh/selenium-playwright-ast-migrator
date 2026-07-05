@@ -10,6 +10,10 @@ This index keeps the current workflow short and avoids legacy agent-launch noise
 - [Tool installation](tool-installation.md) — install from a packed dotnet tool or run from source.
 - [Standalone installation](standalone-installation.md) / [RU](standalone-installation.ru.md) — install the CLI without .NET SDK/runtime.
 - [npm wrapper](npm-wrapper.md) — install the standalone CLI through npm for frontend-heavy teams.
+- [npm publishing](npm-publishing.md) — dry-run-first npm registry publishing and post-publish smoke through npmjs or Nexus.
+- [npm Trusted Publishing](npm-trusted-publishing.md) — switch the npm workflow from token-first publishing to OIDC after the package exists.
+- [Install diagnostics](install-diagnostics.md) — identify which standalone/npm/dotnet installation the shell actually resolves.
+- [Final release checklist](release-final-checklist.md) — repository, release, npm/Nexus, and project-pilot checks.
 - [Troubleshooting](troubleshooting.md) — common setup, config, packaging, and verification problems.
 
 ## Core user docs
@@ -82,6 +86,9 @@ The current launch procedure is only the guarded Desktop runbook above. Detailed
 - [Standalone installation](standalone-installation.md) / [RU](standalone-installation.ru.md)
 - [npm wrapper](npm-wrapper.md)
 - [npm publishing](npm-publishing.md) — publish the npm wrapper after the GitHub Release asset is smoke-tested.
+- [npm Trusted Publishing](npm-trusted-publishing.md)
+- [Package manager templates](package-managers.md) — Scoop/Homebrew starting points after checksums are copied.
+- [Final release checklist](release-final-checklist.md)
 - [Public roadmap](public-roadmap.md)
 - [Release notes 0.0.0-preview.8](release-notes/v0.0.0-preview.8.md)
 - [Release notes 0.0.0-preview.5](release-notes/v0.0.0-preview.5.md)
@@ -96,3 +103,5 @@ docs/guarded-opencode-desktop-runbook.ru.md
 ```
 
 or create a deep-dive/reference doc that links back to that runbook.
+
+- [OpenCode low-noise permissions](opencode-low-noise-permissions.md) - permission profile for low-interruption migration runs.

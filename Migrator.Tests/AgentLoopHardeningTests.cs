@@ -406,6 +406,60 @@ public class AgentLoopHardeningTests
         Assert.Contains("reject the diff if any changed path is outside `migration/**`", reviewer);
     }
 
+
+    [Fact]
+    public void OpenCodeTeam_AllowsLowNoiseReadOnlyDiagnosticsAndKnownSubagents()
+    {
+        var config = Read("templates/opencode-team/global/.config/opencode/opencode.jsonc");
+        var autopilotPatch = Read("templates/opencode-team/global/.config/opencode/opencode.autopilot.patch.jsonc");
+        var orchestrator = Read("templates/opencode-team/global/.config/opencode/agents/orchestrator.md");
+        var executor = Read("templates/opencode-team/global/.config/opencode/agents/executor.md");
+        var reviewer = Read("templates/opencode-team/global/.config/opencode/agents/reviewer.md");
+        var watchdog = Read("templates/opencode-team/global/.config/opencode/agents/watchdog.md");
+        var teamReadme = Read("templates/opencode-team/README.md");
+        var docs = Read("docs/opencode-low-noise-permissions.md");
+
+        foreach (var text in new[] { config, autopilotPatch })
+        {
+            Assert.Contains("\"read\": \"allow\"", text);
+            Assert.Contains("\"glob\": \"allow\"", text);
+            Assert.Contains("\"grep\": \"allow\"", text);
+            Assert.Contains("\"list\": \"allow\"", text);
+            Assert.Contains("\"lsp\": \"allow\"", text);
+            Assert.Contains("\"git status*\": \"allow\"", text);
+            Assert.Contains("\"git diff*\": \"allow\"", text);
+            Assert.Contains("\"git ls-files*\": \"allow\"", text);
+            Assert.Contains("\"Get-ChildItem*\": \"allow\"", text);
+            Assert.Contains("\"Get-Content*\": \"allow\"", text);
+            Assert.Contains("\"Test-Path*\": \"allow\"", text);
+            Assert.Contains("\"Select-String*\": \"allow\"", text);
+            Assert.Contains("\"rg *\": \"allow\"", text);
+            Assert.Contains("\"executor*\": \"allow\"", text);
+            Assert.Contains("\"@executor*\": \"allow\"", text);
+            Assert.Contains("\"general\": \"deny\"", text);
+            Assert.Contains("\"external_directory\": \"deny\"", text);
+        }
+
+        foreach (var agent in new[] { orchestrator, executor, reviewer, watchdog })
+        {
+            Assert.Contains("read: allow", agent);
+            Assert.Contains("glob: allow", agent);
+            Assert.Contains("grep: allow", agent);
+            Assert.Contains("list: allow", agent);
+            Assert.Contains("\"git status*\": allow", agent);
+            Assert.Contains("\"git diff*\": allow", agent);
+            Assert.Contains("\"Get-ChildItem*\": allow", agent);
+            Assert.Contains("\"Get-Content*\": allow", agent);
+        }
+
+        Assert.Contains("\"executor*\": allow", orchestrator);
+        Assert.Contains("\"@executor*\": allow", orchestrator);
+        Assert.Contains("routine git inspection", teamReadme);
+        Assert.Contains("Do not ask for permission for routine allowed inspection", Read("AGENTS.md"));
+        Assert.Contains("git status --short --untracked-files=all", docs);
+        Assert.Contains("Known migration subagents", docs);
+    }
+
     [Fact]
     public void OpenCodeTeam_AgentsUseHarnessRunLifecycleAndTraceDiscipline()
     {

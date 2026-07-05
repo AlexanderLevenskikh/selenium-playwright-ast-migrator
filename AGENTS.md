@@ -26,3 +26,40 @@ dotnet test Migrator.Tests\Migrator.Tests.csproj --no-restore
 ```
 
 For docs-only changes, at least run markdown/link sanity checks when available and `git diff --check`.
+
+## CLI installation diagnostics
+
+When diagnosing whether `selenium-pw-migrator` is installed, do not start with `dotnet tool list` only. The CLI may come from standalone install, npm wrapper, dotnet global tool, or dotnet local tool. First inspect what the shell actually resolves:
+
+Windows PowerShell:
+
+```powershell
+Get-Command selenium-pw-migrator -All
+where.exe selenium-pw-migrator
+selenium-pw-migrator --version
+```
+
+Bash/Linux/macOS/WSL:
+
+```bash
+command -v selenium-pw-migrator
+which -a selenium-pw-migrator || true
+selenium-pw-migrator --version
+```
+
+Only after PATH resolution, inspect package managers: `dotnet tool list --global`, `dotnet tool list --local`, `npm list -g selenium-pw-migrator --depth=0`, and npm registry/base-url config. Prefer `scripts/diagnose-install.ps1` or `scripts/diagnose-install.sh` when available.
+
+
+## OpenCode permission noise rule
+
+Do not ask for permission for routine allowed inspection. Start with actual shell resolution and repository state, not package-manager-specific checks only:
+
+```powershell
+Get-Command selenium-pw-migrator -All
+where.exe selenium-pw-migrator
+git status --short --untracked-files=all
+git diff --stat
+git diff
+```
+
+Known migration subagents (`executor`, `watchdog`, `reviewer`) are allowed by the OpenCode profile. If OpenCode asks for a routine read-only command, prefer using the documented low-noise permission profile rather than changing the migration plan.

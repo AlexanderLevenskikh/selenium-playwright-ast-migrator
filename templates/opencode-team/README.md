@@ -144,3 +144,18 @@ Use `/dashboard-harness` after a harness run has produced `state/harness-events.
 
 
 Windows OpenCode Desktop shortcut: `--project-desktop` remains an alias for `--opencode-install project-desktop`.
+
+
+## Low-noise permissions
+
+The bundled `opencode.jsonc` is intentionally low-noise for migration runs:
+
+- routine read/navigation tools (`read`, `glob`, `grep`, `list`, `lsp`) are allowed;
+- routine git inspection (`git status*`, `git diff*`, `git show*`, `git log*`, `git ls-files*`) is allowed;
+- PowerShell/source inspection commands (`Get-ChildItem*`, `Get-Content*`, `Test-Path*`, `Select-String*`, `rg *`) are allowed;
+- known subagents (`executor`, `watchdog`, `reviewer`) are allowed;
+- `general` remains denied;
+- destructive VCS, delete, publish, network fetch, and external-directory operations remain denied.
+
+This keeps autopilot runs from asking for approval on every slightly different `git diff` or `git status` command while preserving the `migration/**` edit boundary and final scope guards.
+

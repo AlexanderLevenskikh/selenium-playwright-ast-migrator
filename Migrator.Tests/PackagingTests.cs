@@ -59,6 +59,125 @@ public class PackagingTests
         Assert.True(File.Exists(FindRepositoryFile("docs/npm-publishing.md")));
         Assert.True(File.Exists(FindRepositoryFile("scripts/publish-npm-wrapper.sh")));
         Assert.True(File.Exists(FindRepositoryFile("scripts/publish-npm-wrapper.ps1")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/diagnose-install.ps1")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/diagnose-install.sh")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/verify-distribution-final.ps1")));
+        Assert.True(File.Exists(FindRepositoryFile("scripts/verify-distribution-final.sh")));
+        Assert.True(File.Exists(FindRepositoryFile("docs/install-diagnostics.md")));
+        Assert.True(File.Exists(FindRepositoryFile("docs/npm-trusted-publishing.md")));
+        Assert.True(File.Exists(FindRepositoryFile("docs/release-final-checklist.md")));
+        Assert.True(File.Exists(FindRepositoryFile("docs/package-managers.md")));
+        Assert.True(File.Exists(FindRepositoryFile("package-managers/scoop/selenium-pw-migrator.json")));
+        Assert.True(File.Exists(FindRepositoryFile("package-managers/homebrew/selenium-pw-migrator.rb")));
+    }
+
+
+    [Fact]
+    public void InstallDiagnostics_StartWithResolvedExecutableBeforePackageManagers()
+    {
+        var diagnosePs1 = File.ReadAllText(FindRepositoryFile("scripts/diagnose-install.ps1"));
+        var diagnoseSh = File.ReadAllText(FindRepositoryFile("scripts/diagnose-install.sh"));
+        var docs = File.ReadAllText(FindRepositoryFile("docs/install-diagnostics.md"));
+        var troubleshooting = File.ReadAllText(FindRepositoryFile("docs/troubleshooting.md"));
+        var standalone = File.ReadAllText(FindRepositoryFile("docs/standalone-installation.md"));
+        var standaloneRu = File.ReadAllText(FindRepositoryFile("docs/standalone-installation.ru.md"));
+        var npmDocs = File.ReadAllText(FindRepositoryFile("docs/npm-wrapper.md"));
+        var readme = File.ReadAllText(FindRepositoryFile("README.md"));
+        var readmeRu = File.ReadAllText(FindRepositoryFile("README.ru.md"));
+        var rootAgents = File.ReadAllText(FindRepositoryFile("AGENTS.md"));
+        var projectAgents = File.ReadAllText(FindRepositoryFile("templates/opencode-team/project-template/AGENTS.md"));
+        var checkpoint = File.ReadAllText(FindRepositoryFile("templates/opencode-team/global/.config/opencode/commands/checkpoint.md"));
+        var docsIndex = File.ReadAllText(FindRepositoryFile("docs/README.md"));
+
+        Assert.Contains("Do not start diagnostics with dotnet tool list only", diagnosePs1);
+        Assert.Contains("Get-Command $CommandName -All", diagnosePs1);
+        Assert.Contains("where.exe $CommandName", diagnosePs1);
+        Assert.Contains("dotnet tool list --global", diagnosePs1);
+        Assert.Contains("npm list -g selenium-pw-migrator --depth=0", diagnosePs1);
+        Assert.Contains("npm config get selenium-pw-migrator-base-url", diagnosePs1);
+
+        Assert.Contains("Do not start diagnostics with dotnet tool list only", diagnoseSh);
+        Assert.Contains("command -v $command_name", diagnoseSh);
+        Assert.Contains("which -a $command_name", diagnoseSh);
+        Assert.Contains("dotnet tool list --local", diagnoseSh);
+        Assert.Contains("npm config get registry", diagnoseSh);
+
+        Assert.Contains("Agent rule", docs);
+        Assert.Contains("Do not start diagnostics with `dotnet tool list` only", docs);
+        Assert.Contains("Get-Command selenium-pw-migrator -All", docs);
+        Assert.Contains("where.exe selenium-pw-migrator", docs);
+        Assert.Contains("which -a selenium-pw-migrator", docs);
+        Assert.Contains("scripts/diagnose-install.ps1", docs);
+        Assert.Contains("scripts/diagnose-install.sh", docs);
+        Assert.Contains("selenium-pw-migrator-base-url", docs);
+
+        Assert.Contains("Installation diagnostics starts with PATH", troubleshooting);
+        Assert.Contains("Do not start diagnostics with `dotnet tool list` only", troubleshooting);
+        Assert.Contains("install-diagnostics.md", standalone);
+        Assert.Contains("dotnet tool list", standaloneRu);
+        Assert.Contains("Get-Command selenium-pw-migrator -All", npmDocs);
+        Assert.Contains("diagnose what your shell actually runs", readme);
+        Assert.Contains("одного `dotnet tool list` недостаточно", readmeRu);
+        Assert.Contains("## CLI installation diagnostics", rootAgents);
+        Assert.Contains("Get-Command selenium-pw-migrator -All", projectAgents);
+        Assert.Contains("rather than `dotnet tool list` only", checkpoint);
+        Assert.Contains("Install diagnostics", docsIndex);
+    }
+
+    [Fact]
+    public void FinalDistributionPack_DocumentsReleaseNpmTrustedPublishingAndPackageManagers()
+    {
+        var verifyPs1 = File.ReadAllText(FindRepositoryFile("scripts/verify-distribution-final.ps1"));
+        var verifySh = File.ReadAllText(FindRepositoryFile("scripts/verify-distribution-final.sh"));
+        var checklist = File.ReadAllText(FindRepositoryFile("docs/release-final-checklist.md"));
+        var trusted = File.ReadAllText(FindRepositoryFile("docs/npm-trusted-publishing.md"));
+        var packageManagers = File.ReadAllText(FindRepositoryFile("docs/package-managers.md"));
+        var scoop = File.ReadAllText(FindRepositoryFile("package-managers/scoop/selenium-pw-migrator.json"));
+        var brew = File.ReadAllText(FindRepositoryFile("package-managers/homebrew/selenium-pw-migrator.rb"));
+        var publishingDocs = File.ReadAllText(FindRepositoryFile("docs/npm-publishing.md"));
+        var docsIndex = File.ReadAllText(FindRepositoryFile("docs/README.md"));
+        var changelog = File.ReadAllText(FindRepositoryFile("CHANGELOG.md"));
+
+        Assert.Contains("verify-distribution-final.ps1", checklist);
+        Assert.Contains("verify-distribution-final.sh", checklist);
+        Assert.Contains("RunPackagingSmoke", verifyPs1);
+        Assert.Contains("RunNpmRegistrySmoke", verifyPs1);
+        Assert.Contains("git diff --check", verifyPs1);
+        Assert.Contains("git ls-files -s -- \"*.sh\"", verifyPs1);
+        Assert.Contains("node -c npm/scripts/install.js", verifyPs1);
+        Assert.Contains("bash -n scripts/publish-npm-wrapper.sh", verifyPs1);
+        Assert.Contains("dotnet test Migrator.sln -c", verifyPs1);
+        Assert.Contains("smoke-npm-registry-install.ps1", verifyPs1);
+
+        Assert.Contains("--run-packaging-smoke", verifySh);
+        Assert.Contains("--run-npm-registry-smoke", verifySh);
+        Assert.Contains("git diff --check", verifySh);
+        Assert.Contains("git ls-files -s -- '*.sh'", verifySh);
+        Assert.Contains("node -c npm/bin/selenium-pw-migrator.js", verifySh);
+        Assert.Contains("scripts/smoke-npm-registry-install.sh", verifySh);
+
+        Assert.Contains("Repository final gate", checklist);
+        Assert.Contains("npm registry or Nexus smoke", checklist);
+        Assert.Contains("Installation diagnostics before project pilot", checklist);
+        Assert.Contains("Product-project pilot", checklist);
+        Assert.Contains("docs/guarded-opencode-desktop-runbook.ru.md", checklist);
+
+        Assert.Contains("npm Trusted Publishing", trusted);
+        Assert.Contains("use_provenance: true", trusted);
+        Assert.Contains("npm-production", trusted);
+        Assert.Contains("Workflow filename: publish-npm.yml", trusted);
+        Assert.Contains("remove or rotate the broad first-publish `NPM_TOKEN`", trusted);
+        Assert.Contains("npm-trusted-publishing.md", publishingDocs);
+
+        Assert.Contains("Scoop template", packageManagers);
+        Assert.Contains("Homebrew formula template", packageManagers);
+        Assert.Contains("TODO_SHA256_WIN_X64", scoop);
+        Assert.Contains("selenium-pw-migrator-0.0.0-preview.8-win-x64.zip", scoop);
+        Assert.Contains("class SeleniumPwMigrator < Formula", brew);
+        Assert.Contains("TODO_SHA256_OSX_ARM64", brew);
+        Assert.Contains("selenium-pw-migrator", brew);
+        Assert.Contains("Package manager templates", docsIndex);
+        Assert.Contains("Final distribution verification", changelog);
     }
 
 
@@ -208,6 +327,40 @@ public class PackagingTests
         Assert.Contains("npm-publishing.md", docsIndex);
         Assert.Contains("Publishing to npm registry", npmDocs);
         Assert.Contains("docs/npm-publishing.md", readme);
+    }
+
+
+    [Fact]
+    public void NpmRegistrySmokeScripts_TestPublishedPackageThroughNpmOrNexus()
+    {
+        var smokePs1 = File.ReadAllText(FindRepositoryFile("scripts/smoke-npm-registry-install.ps1"));
+        var smokeSh = File.ReadAllText(FindRepositoryFile("scripts/smoke-npm-registry-install.sh"));
+        var npmDocs = File.ReadAllText(FindRepositoryFile("docs/npm-wrapper.md"));
+        var publishingDocs = File.ReadAllText(FindRepositoryFile("docs/npm-publishing.md"));
+        var docsIndex = File.ReadAllText(FindRepositoryFile("docs/README.md"));
+        var readme = File.ReadAllText(FindRepositoryFile("README.md"));
+        var readmeRu = File.ReadAllText(FindRepositoryFile("README.ru.md"));
+
+        Assert.Contains("-Package selenium-pw-migrator@preview", smokePs1);
+        Assert.Contains("StandaloneBaseUrl", smokePs1);
+        Assert.Contains("--selenium-pw-migrator-base-url", smokePs1);
+        Assert.Contains("node_modules/.bin", smokePs1);
+        Assert.Contains("selenium-pw-migrator.cmd", smokePs1);
+
+        Assert.Contains("--package selenium-pw-migrator@preview", smokeSh);
+        Assert.Contains("--standalone-base-url", smokeSh);
+        Assert.Contains("--selenium-pw-migrator-base-url", smokeSh);
+        Assert.Contains("node_modules/.bin/selenium-pw-migrator", smokeSh);
+        Assert.Contains("mktemp -d", smokeSh);
+
+        Assert.Contains("Registry/Nexus install smoke", npmDocs);
+        Assert.Contains("smoke-npm-registry-install.ps1", npmDocs);
+        Assert.Contains("smoke-npm-registry-install.sh", npmDocs);
+        Assert.Contains("Corporate Nexus post-publish smoke", publishingDocs);
+        Assert.Contains("isolated smoke scripts", publishingDocs);
+        Assert.Contains("npm-publishing.md", docsIndex);
+        Assert.Contains("registry smoke scripts", readme);
+        Assert.Contains("registry smoke-скрипты", readmeRu);
     }
 
     [Fact]

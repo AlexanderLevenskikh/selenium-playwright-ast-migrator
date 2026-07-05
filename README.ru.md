@@ -58,6 +58,9 @@ Windows-установщик по умолчанию добавляет standalo
 
 ### Вариант для frontend-команд: npm wrapper
 
+Перед сравнением каналов установки проверь, что реально запускает shell: `./scripts/diagnose-install.ps1` или `Get-Command selenium-pw-migrator -All`; одного `dotnet tool list` недостаточно.
+
+
 Npm-пакет — тонкая обёртка над теми же standalone release-архивами. Он удобен для frontend/test-automation команд, где Node.js уже есть, а .NET ставить не хочется.
 
 ```bash
@@ -73,7 +76,7 @@ npm install -g selenium-pw-migrator@0.0.0-preview.8
 npm install -g https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/releases/download/v0.0.0-preview.8/selenium-pw-migrator-0.0.0-preview.8.tgz
 ```
 
-Во время `postinstall` npm wrapper скачивает подходящий standalone-архив для `win-x64`, `linux-x64`, `osx-x64` или `osx-arm64`, проверяет `checksums.sha256`, если он доступен, и сохраняет exit code нативного CLI. Для корпоративной установки можно использовать Nexus npm proxy и `--selenium-pw-migrator-base-url` на внутреннее зеркало standalone-архивов. Подробнее: [npm wrapper](docs/npm-wrapper.md). Инструкция по публикации: [npm publishing](docs/npm-publishing.md).
+Во время `postinstall` npm wrapper скачивает подходящий standalone-архив для `win-x64`, `linux-x64`, `osx-x64` или `osx-arm64`, проверяет `checksums.sha256`, если он доступен, и сохраняет exit code нативного CLI. Для корпоративной установки можно использовать Nexus npm proxy и `--selenium-pw-migrator-base-url` на внутреннее зеркало standalone-архивов. Для проверки npmjs/Nexus установки есть изолированные registry smoke-скрипты. Подробнее: [npm wrapper](docs/npm-wrapper.md). Инструкция по публикации: [npm publishing](docs/npm-publishing.md).
 
 ### Для .NET-разработчиков: dotnet tool
 

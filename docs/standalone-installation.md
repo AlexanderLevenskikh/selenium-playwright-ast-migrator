@@ -84,6 +84,9 @@ bash /tmp/install-standalone.sh --version "$version" --base-url "$base_url"
 
 ## Which installation is being used?
 
+For the full diagnostic flow, use [install diagnostics](install-diagnostics.md) or run `./scripts/diagnose-install.ps1` / `scripts/diagnose-install.sh`. Do not start with `dotnet tool list` only; first inspect PATH resolution.
+
+
 Windows PowerShell:
 
 ```powershell

@@ -1,5 +1,7 @@
 # Publish npm wrapper
 
+After the first token-based publish succeeds, switch to [npm Trusted Publishing](npm-trusted-publishing.md) to avoid long-lived npm tokens. Use [final release checklist](release-final-checklist.md) before running a real product-project pilot.
+
 The npm package is a thin Node.js wrapper over the standalone GitHub Release archives. Publish it only after the same version was released on GitHub and the release contains:
 
 - `selenium-pw-migrator-<version>.tgz`
@@ -84,14 +86,34 @@ The workflow supports two registry authentication modes:
 
 Use the `npm-production` GitHub environment so real publishes require explicit approval.
 
-## Post-publish smoke
+## Quick global smoke
 
-After publishing, test from a clean shell:
+For a quick human smoke on a clean machine, you can install the preview dist-tag or the pinned preview version globally:
 
 ```bash
-npm uninstall -g selenium-pw-migrator || true
+npm install -g selenium-pw-migrator@preview
+selenium-pw-migrator --version
+
 npm install -g selenium-pw-migrator@0.0.0-preview.8
 selenium-pw-migrator --version
+```
+
+Use the isolated smoke scripts below for CI and Nexus checks, because they do not pollute global npm state.
+
+## Post-publish smoke
+
+After publishing, prefer the isolated smoke scripts. They create a temporary npm project, install the published package, run the local wrapper binary, and remove the temp directory. This avoids polluting global npm state while still exercising `postinstall`, native payload download, checksum verification, wrapper dispatch, and CLI exit-code propagation.
+
+Public npm registry:
+
+```powershell
+./scripts/smoke-npm-registry-install.ps1 `
+  -Package selenium-pw-migrator@0.0.0-preview.8
+```
+
+```bash
+scripts/smoke-npm-registry-install.sh \
+  --package selenium-pw-migrator@0.0.0-preview.8
 ```
 
 Expected metadata should still come from the standalone payload:
@@ -101,17 +123,22 @@ distribution: standalone
 self-contained: true
 ```
 
-
 ## Corporate Nexus post-publish smoke
 
 When direct npmjs/GitHub access is blocked, smoke the published package through the corporate npm proxy and point the native payload download at the internal standalone mirror:
 
+```powershell
+./scripts/smoke-npm-registry-install.ps1 `
+  -Package selenium-pw-migrator@0.0.0-preview.8 `
+  -Registry https://nexus.example/repository/npm-group/ `
+  -StandaloneBaseUrl https://nexus.example/repository/migrator-releases/v0.0.0-preview.8
+```
+
 ```bash
-npm view selenium-pw-migrator@preview version --registry=https://nexus.example/repository/npm-group/
-npm install -g selenium-pw-migrator@preview \
-  --registry=https://nexus.example/repository/npm-group/ \
-  --selenium-pw-migrator-base-url=https://nexus.example/repository/migrator-releases/v0.0.0-preview.8
-selenium-pw-migrator --version
+scripts/smoke-npm-registry-install.sh \
+  --package selenium-pw-migrator@0.0.0-preview.8 \
+  --registry https://nexus.example/repository/npm-group/ \
+  --standalone-base-url https://nexus.example/repository/migrator-releases/v0.0.0-preview.8
 ```
 
 The npm registry proxy and the standalone archive mirror are separate concerns: the first serves the npm package, the second serves the native `.zip` / `.tar.gz` payload used during `postinstall`.

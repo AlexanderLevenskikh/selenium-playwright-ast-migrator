@@ -6,6 +6,9 @@ The package does not embed the .NET SDK or require a local .NET installation. Du
 
 ## User install
 
+When an install looks successful but a different binary runs, use [install diagnostics](install-diagnostics.md). The npm wrapper is only one possible install channel; `Get-Command selenium-pw-migrator -All` / `which -a selenium-pw-migrator` shows what the shell actually runs.
+
+
 Preview releases are published under the `preview` dist-tag. Stable releases will use the default `latest` tag later.
 
 ```bash
@@ -102,6 +105,42 @@ After running `scripts/package-standalone.ps1`, run:
 ```
 
 The smoke uses `SELENIUM_PW_MIGRATOR_ARCHIVE_PATH` and `SELENIUM_PW_MIGRATOR_CHECKSUMS_PATH`, so it does not need a published GitHub Release.
+
+
+## Registry/Nexus install smoke
+
+Use the registry smoke scripts to verify the published npm package in a temporary project without changing the global npm installation. They install the package from npmjs or a Nexus npm proxy, run the local wrapper binary, and then delete the temp project.
+
+Windows PowerShell, public npm registry:
+
+```powershell
+./scripts/smoke-npm-registry-install.ps1 `
+  -Package selenium-pw-migrator@preview
+```
+
+Windows PowerShell, corporate Nexus npm proxy plus internal standalone mirror:
+
+```powershell
+./scripts/smoke-npm-registry-install.ps1 `
+  -Package selenium-pw-migrator@0.0.0-preview.8 `
+  -Registry https://nexus.example/repository/npm-group/ `
+  -StandaloneBaseUrl https://nexus.example/repository/migrator-releases/v0.0.0-preview.8
+```
+
+Linux/macOS/WSL:
+
+```bash
+scripts/smoke-npm-registry-install.sh \
+  --package selenium-pw-migrator@0.0.0-preview.8 \
+  --registry https://nexus.example/repository/npm-group/ \
+  --standalone-base-url https://nexus.example/repository/migrator-releases/v0.0.0-preview.8
+```
+
+Pass extra CLI arguments after `--` when you want to smoke a command other than `--version`:
+
+```bash
+scripts/smoke-npm-registry-install.sh --package selenium-pw-migrator@preview -- --help
+```
 
 ## Packaging for npm publish
 

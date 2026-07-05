@@ -6,7 +6,13 @@ This project uses preview SemVer-style versions while the public API is still st
 
 ## [Unreleased]
 
-No unreleased changes yet.
+### Added
+
+- Installation diagnostics scripts and docs that start from PATH resolution before package-manager-specific checks.
+- Final distribution verification scripts/checklist for repository, npm/Nexus, release, and project-pilot readiness.
+- npm Trusted Publishing handoff docs plus Scoop/Homebrew package-manager templates.
+- Isolated npm registry smoke scripts for validating published wrapper installs through npmjs or corporate Nexus without changing global npm state.
+- Documentation for Nexus npm proxy plus internal standalone mirror post-publish smoke.
 
 ## [0.0.0-preview.8]
 

@@ -1,5 +1,34 @@
 # Troubleshooting
 
+## Installation diagnostics starts with PATH, not dotnet tool list
+
+Do not start diagnostics with `dotnet tool list` only. The CLI can be installed as standalone, npm wrapper, dotnet global tool, or dotnet local tool. First check what the current shell actually resolves:
+
+```powershell
+Get-Command selenium-pw-migrator -All
+where.exe selenium-pw-migrator
+selenium-pw-migrator --version
+```
+
+On Linux/macOS/WSL:
+
+```bash
+command -v selenium-pw-migrator
+which -a selenium-pw-migrator || true
+selenium-pw-migrator --version
+```
+
+Then inspect package managers:
+
+```powershell
+dotnet tool list --global
+dotnet tool list --local
+npm list -g selenium-pw-migrator --depth=0
+npm config get registry
+```
+
+For a fuller report, run `./scripts/diagnose-install.ps1` or `scripts/diagnose-install.sh`. See [install diagnostics](install-diagnostics.md).
+
 ## `--help` works, but my command fails immediately
 
 Run command-specific help first:

@@ -3,6 +3,12 @@ description: Implements small scoped code changes inside the active Harness Kit 
 mode: subagent
 temperature: 0.2
 permission:
+  read: allow
+  glob: allow
+  grep: allow
+  list: allow
+  lsp: allow
+  todowrite: allow
   edit:
     "*": deny
     "migration/**": allow
@@ -17,6 +23,25 @@ permission:
     "AGENTS.md": deny
   bash:
     "*": allow
+    "git status*": allow
+    "git diff*": allow
+    "git show*": allow
+    "git log*": allow
+    "git ls-files*": allow
+    "git rev-parse*": allow
+    "git branch --show-current*": allow
+    "Get-Command *": allow
+    "Get-Command*": allow
+    "where.exe *": allow
+    "Get-ChildItem*": allow
+    "Get-Content*": allow
+    "Test-Path*": allow
+    "Select-String*": allow
+    "Resolve-Path*": allow
+    "Select-Object*": allow
+    "Where-Object*": allow
+    "rg *": allow
+    "findstr *": allow
     "git commit*": deny
     "git push*": deny
     "git reset --hard*": deny
