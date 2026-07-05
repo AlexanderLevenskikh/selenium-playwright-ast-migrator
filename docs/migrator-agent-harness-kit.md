@@ -146,3 +146,10 @@ Windows OpenCode Desktop shortcut: `--project-desktop` remains an alias for `--o
 ## Harness continuation strict protocol
 
 After a non-final final gate, read `migration/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, `NOT FINAL` is not a stopping point: execute exactly one next bounded action under `migration/**` before a user-facing handoff. Stop only for `FINAL`, guard/scope/policy blocker, missing input, loop/plateau, or max autonomous budget.
+
+
+## `/supervised-task` auto-next dispatch
+
+`/supervised-task` is intended to be the tester-facing button for the next migration step. It can be invoked with no arguments. The command reads `continuation-decision.json`, `final-gate-result.json`, `current-ticket.md`, and the latest run evidence, then either continues a required next action or starts the next bounded ticket after a FINAL checkpoint.
+
+After FINAL, the command must not ask the tester to write a custom prompt. It should choose the next ticket from remaining risks: project-verify structural errors, unmapped UiTargets, syntax-fallback semantic context, RequiredSideEffect helpers, or stale review evidence.

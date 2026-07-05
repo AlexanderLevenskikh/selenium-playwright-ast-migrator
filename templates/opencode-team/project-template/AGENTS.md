@@ -118,3 +118,8 @@ Maintainer dogfood runs may use `TrustedProject` to suppress routine approval pr
 ## Harness continuation strict protocol
 
 After a non-final final gate, read `migration/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, `NOT FINAL` is not a stopping point: execute exactly one next bounded action under `migration/**` before a user-facing handoff. Stop only for `FINAL`, guard/scope/policy blocker, missing input, loop/plateau, or max autonomous budget.
+
+
+## `/supervised-task` auto-next UX
+
+`/supervised-task` is the normal tester-facing entrypoint and must work with no arguments. Do not ask the user what to do next just because the previous run is `FINAL`. Read `migration/state/continuation-decision.json`, `migration/state/final-gate-result.json`, `migration/current-ticket.md`, and `migration/state/handoff.md`; if continuation is required, execute the named bounded action; if the previous state is FINAL, auto-select the next bounded ticket from remaining risks such as project-verify structural errors, unmapped UiTargets, syntax-fallback semantic context, RequiredSideEffect helpers, or stale review evidence.

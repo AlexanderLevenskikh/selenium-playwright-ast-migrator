@@ -109,3 +109,5 @@ or create a deep-dive/reference doc that links back to that runbook.
 - [OpenCode TrustedProject permissions](opencode-trusted-project-permissions.md)
 
 - [Harness continuation strict protocol](harness-continuation-strict.md)
+
+- [Harness supervised task auto-next](harness-supervised-task-autonext.md) — `/supervised-task` zero-argument dispatcher for tester-friendly next bounded work.

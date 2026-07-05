@@ -18,7 +18,7 @@ This README only describes the reusable OpenCode team template. Do not use it as
 - `executor` — исполнитель, делает маленькие scoped-правки.
 - `watchdog` — контролёр правил/политик/дисциплины, read-only.
 - `reviewer` — ревьюер качества текущего diff, read-only.
-- `/supervised-task` — команда для задачи через orchestrator + watchdog + reviewer.
+- `/supervised-task` — zero-argument state-aware команда для следующей bounded-задачи через orchestrator + watchdog + reviewer.
 - `/checkpoint` — ручная команда для проверки текущего состояния watchdog'ом.
 - `/dogfood-harness` — bounded Harness Kit dogfood command for docs/template/evidence-only validation inside the Migrator repository.
 - `AGENTS.md` — проектные правила, которые кладутся в корень репозитория.
@@ -84,7 +84,7 @@ For guarded migration runs, open the product repo root in OpenCode Desktop and r
 /supervised-task
 ```
 
-Then use the kickoff prompt from the canonical runbook.
+No extra prompt is required for the normal path. `/supervised-task` is state-aware: if the workspace is FINAL, it starts the next bounded ticket from remaining risks; if continuation is required, it executes the next allowed bounded action.
 
 Manual control:
 
@@ -133,7 +133,7 @@ Do not approve shell commands that write:
 For migration-artifact/autopilot work, start with `/harness-run` or `/supervised-task`. For repository-level Harness Kit validation, use `/dogfood-harness`.
 
 - `/harness-run` creates or resumes `migration/runs/<run-id>/` and reads `Prompt.md`, `Plan.md`, `Implement.md`, `Documentation.md`, and `trace.jsonl`.
-- `/supervised-task` runs the full orchestrator/watchdog/reviewer loop with low-noise deny-list permissions while still requiring `check-scope.ps1`, `check-harness-policy.ps1`, and final gate evidence before FINAL.
+- `/supervised-task` runs the full orchestrator/watchdog/reviewer loop and can be invoked with no arguments. It reads continuation/final-gate state, auto-selects the next bounded ticket after FINAL, and still requires `check-scope.ps1`, `check-harness-policy.ps1`, and final gate evidence before FINAL.
 - `/dogfood-harness` follows `docs/migrator-agent-harness-dogfood.md` and uses explicit dogfood allowed roots for Migrator-repo validation.
 - Agents should not ask routine continuation questions when the next action is allowed by `migration/state/harness-policy.json` and OpenCode permissions.
 

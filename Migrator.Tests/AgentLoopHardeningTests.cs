@@ -688,6 +688,38 @@ public class AgentLoopHardeningTests
         Assert.Contains("migration/dashboard/harness/index.html", dashboardCommand);
     }
 
+
+    [Fact]
+    public void OpenCodeSupervisedTask_AutoSelectsNextBoundedTaskWhenNoArguments()
+    {
+        var command = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var docs = Read("docs/harness-supervised-task-autonext.md");
+        var teamReadme = Read("templates/opencode-team/README.md");
+        var rootAgents = Read("AGENTS.md");
+        var projectAgents = Read("templates/opencode-team/project-template/AGENTS.md");
+
+        foreach (var text in new[] { command, docs })
+        {
+            Assert.Contains("State-aware zero-argument dispatch", text);
+            Assert.Contains("If `$ARGUMENTS` is empty", text);
+            Assert.Contains("do not ask the user what to do next", text);
+            Assert.Contains("FINAL", text);
+            Assert.Contains("project-verify structural errors", text);
+            Assert.Contains("unmapped UiTargets", text);
+            Assert.Contains("syntax-fallback", text);
+            Assert.Contains("RequiredSideEffect", text);
+            Assert.Contains("migration/current-ticket.md", text);
+        }
+
+        Assert.Contains("/supervised-task", docs);
+        Assert.Contains("tester-facing", docs);
+        Assert.Contains("auto-selected by `/supervised-task`", docs);
+        Assert.Contains("No extra prompt is required", teamReadme);
+        Assert.Contains("auto-selects the next bounded ticket after FINAL", teamReadme);
+        Assert.Contains("`/supervised-task` is the normal tester-facing entrypoint", rootAgents);
+        Assert.Contains("`/supervised-task` is the normal tester-facing entrypoint", projectAgents);
+    }
+
     [Fact]
     public void OpenCodeSupervisedTask_ReadsContractAndRequiresFinalGate()
     {
