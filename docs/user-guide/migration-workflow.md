@@ -23,21 +23,41 @@ Before starting, determine which path applies to your team:
 
 See [No-Infra Scaffold](no-infra-scaffold.md) for details on Path B.
 
-## Step 1. Start with a small pilot
+## Step 1. Start with a representative pilot
 
-Do not start with your largest or most complex test suite.
+Do not start with your largest or most complex test suite. Let the CLI choose a bounded representative slice first:
 
-**Recommended pilot selection:**
-- 1 file with a simple page test
-- Tests that use straightforward locators (buttons, fields, links)
-- Tests without complex table/list logic
-- Avoid Registry-heavy, table-heavy, or pagination tests in the pilot
+```shell
+selenium-pw-migrator start --input ./SeleniumTests --agent manual --workspace migration
+selenium-pw-migrator pilot --input ./SeleniumTests --max-tests 10 --out migration/pilot
+```
+
+The pilot command writes:
+
+- `migration/pilot/pilot-selection.md/json` — selected files and reasons.
+- `migration/pilot/selected-tests.txt` — the exact source files.
+- `migration/pilot/selected-input/` — copied bounded input.
+- `migration/pilot/next-commands.md` — analyze/migrate commands for `selected-input`.
+
+The generated next commands must not run on the full suite. Use the pilot `selected-input/` until the profile and target-project checks are stable.
+
+**Selection strategy:**
+
+- simple smoke tests;
+- PageObject-heavy files;
+- table/filter patterns;
+- assertions and waits;
+- custom helpers;
+- XPath selectors;
+- data-driven tests;
+- base fixtures.
 
 **Iteration strategy:**
-1. Start with 1 file
-2. Expand to 5-10 tests
-3. Scale to 20-50 tests
-4. Tackle complex patterns last
+
+1. Prove the selected pilot.
+2. Fix repeated root causes with profile mappings.
+3. Expand to 20-50 tests.
+4. Tackle complex patterns last.
 
 ## Step 2. Run analyze
 

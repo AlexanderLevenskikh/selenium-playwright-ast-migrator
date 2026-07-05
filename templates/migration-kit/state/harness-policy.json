@@ -174,7 +174,13 @@
       "git commit/push/checkout/reset/clean",
       "destructive delete/move",
       "package publishing"
-    ]
+    ],
+    "successCheckpoint": {
+      "defaultAfterFinal": "STOP_FOR_REVIEW",
+      "zeroArgumentAfterFinal": "REPORT_STATUS_AND_RECOMMENDED_CONTINUE_COMMAND",
+      "continueRequires": "explicit user continue request or bounded autoContinuation for the exact next action",
+      "forbidSilentNextRunAfterFinal": true
+    }
   },
   "requiredFiles": [
     "AGENT_CONTRACT.md",

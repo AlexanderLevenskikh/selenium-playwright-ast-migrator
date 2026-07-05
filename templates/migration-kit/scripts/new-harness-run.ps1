@@ -136,7 +136,7 @@ Set-Utf8NoBom (Join-Path $runPath "Plan.md") @"
 6. Run relevant verification.
 7. Update handoff and run ledger.
 8. Run final gate only when claiming FINAL.
-9. If final gate writes continuation-decision.json with CONTINUE_REQUIRED, execute one next bounded action before handoff.
+9. If final gate writes continuation-decision.json with CONTINUE_REQUIRED, execute one next bounded action before handoff. If it writes FINAL, stop for review unless the user explicitly requested continue.
 
 ## Validation commands
 
@@ -157,7 +157,7 @@ Set-Utf8NoBom (Join-Path $runPath "Implement.md") @"
 - Prefer config/source-truth fixes over generated-code patching.
 - Write blockers as artifacts instead of asking vague continuation questions.
 - After a non-final final gate, read continuation-decision.json.
-- If continuation-decision.json says CONTINUE_REQUIRED, continue with exactly one next bounded action before user-facing handoff.
+- If continuation-decision.json says CONTINUE_REQUIRED, continue with exactly one next bounded action before user-facing handoff. If it says FINAL, stop for review and include one recommended `/supervised-task continue ...` command.
 - Update trace and state files after meaningful progress.
 
 ## Ask/stop triggers

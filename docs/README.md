@@ -111,4 +111,4 @@ or create a deep-dive/reference doc that links back to that runbook.
 
 - [Harness continuation strict protocol](harness-continuation-strict.md)
 
-- [Harness supervised task auto-next](harness-supervised-task-autonext.md) — `/supervised-task` zero-argument dispatcher for tester-friendly next bounded work.
+- [Harness supervised task dispatch](harness-supervised-task-autonext.md) — `/supervised-task` zero-argument dispatcher, explicit `continue`, and stop-for-review after SUCCESS.

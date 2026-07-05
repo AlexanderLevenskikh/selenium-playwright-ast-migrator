@@ -10,7 +10,7 @@ Use the supervised Harness Kit workflow.
 
 ## State-aware zero-argument dispatch
 
-`/supervised-task` is the normal tester-facing entrypoint. It must work with no arguments. If `$ARGUMENTS` is empty or only whitespace, do not ask the user what to do next and do not require them to know Harness internals. Instead, inspect workspace state and choose the next bounded action.
+`/supervised-task` is the normal tester-facing entrypoint. It must work with no arguments. If `$ARGUMENTS` is empty or only whitespace, inspect workspace state and choose the safe behavior below; do not ask the user what to do next and do not require them to know Harness internals.
 
 Before planning, always read:
 
@@ -31,11 +31,14 @@ Then dispatch:
 
 1. If `migration/state/continuation-decision.json` says `CONTINUE_REQUIRED`, Continue with that next bounded action. Do not produce a user-facing handoff first.
 2. If the latest final gate is non-final and current-ticket, verify output, handoff, or continuation decision names an allowed next config/scaffold/evidence action under `migration/**`, execute exactly one next bounded action.
-3. If the latest final gate is `FINAL` / `HARNESS_CONTINUATION_FINAL`, do not continue the old run blindly and do not ask the user for a prompt. Start the next bounded ticket from remaining evidence and risks.
-4. If there is no active run, create the first bounded migration run.
-5. Stop only for `FINAL`, explicit `BLOCKED_*`, missing required user input, denied writes, or autonomous budget/plateau limits.
+3. If the latest final gate is `FINAL` / `HARNESS_CONTINUATION_FINAL` and `$ARGUMENTS` does not explicitly request `continue`, stop for review: summarize the completed checkpoint, final-gate evidence, changed artifacts, remaining risks, and one recommended continue command. Do not start another run/ticket and do not show a broad menu.
+Do not show a broad menu after a successful checkpoint; give one recommended continue command instead.
+4. If `$ARGUMENTS` explicitly requests `continue` after a `FINAL` checkpoint, start exactly one new bounded ticket from the recommended remaining risks. This is the explicit continue path.
+5. If `continuation-decision.json` contains bounded auto-continuation for the exact next action, obey that budget; otherwise `FINAL` always means stop-for-review.
+6. If there is no active run, create the first bounded migration run.
+7. Stop only for `FINAL` stop-for-review, explicit `BLOCKED_*`, missing required user input, denied writes, or autonomous budget/plateau limits.
 
-When choosing a new ticket after a FINAL checkpoint, use this priority order unless `$ARGUMENTS` names a more specific task:
+When `$ARGUMENTS` explicitly requests `continue` after a FINAL checkpoint, choose one bounded ticket using this priority order unless the user names a more specific task:
 
 1. project-verify structural errors, missing project references, missing package references, missing usings, or generated test host configuration;
 2. unmapped UiTargets that can be reduced using source-truth evidence under `migration/**`;
@@ -43,9 +46,20 @@ When choosing a new ticket after a FINAL checkpoint, use this priority order unl
 4. RequiredSideEffect helpers that need safe adapter-config mappings;
 5. stale or incomplete migration documentation/evidence that affects review readiness.
 
-For an auto-selected ticket, write or update `migration/current-ticket.md` with the selected title, evidence files read, allowed roots, stop conditions, and verification plan. Record that the ticket was auto-selected by `/supervised-task` so a tester can audit why it was chosen.
+For an explicit-continue ticket, write or update `migration/current-ticket.md` with the selected title, evidence files read, allowed roots, stop conditions, and verification plan. Record that the ticket was selected by explicit `/supervised-task continue` so a tester can audit why it was started.
 
 If external assemblies, product project references, credentials, network access, package installation, or product source edits are required and cannot be safely inferred under `migration/**`, stop with `BLOCKED_USER_INPUT_REQUIRED` and list exact user actions.
+
+### Start-workspace no-menu fallback
+
+If `migration/next-commands.md`, `migration/state/start-dispatch.json`, or `migration/current-ticket.md` exists but a full Harness Kit state is not complete yet, do not ask the user to choose among broad repository tasks. Treat the start artifacts as the active ticket and execute the first safe migration setup action from this priority order:
+
+1. run `selenium-pw-migrator doctor install` when install diagnostics are missing;
+2. run `selenium-pw-migrator kit bootstrap-agent ...` from `migration/next-commands.md` when `migration/AGENT_CONTRACT.md` is missing;
+3. run `selenium-pw-migrator pilot ...` when `migration/pilot/selected-input` or `migration/pilot/pilot-selection.json` is missing;
+4. create/resume the Harness run and continue from `migration/current-ticket.md`.
+
+Do not offer options such as README updates, package maintenance, broad refactors, or unrelated repository cleanup unless the user explicitly asks for them. Ask a question only when the source path, workspace path, or required write permission is missing or contradictory.
 
 ## Lifecycle
 
@@ -54,7 +68,7 @@ If external assemblies, product project references, credentials, network access,
    - if a matching run exists, read its `Prompt.md`, `Plan.md`, `Implement.md`, `Documentation.md`, and `trace.jsonl`.
 2. Before each major action, state which AGENT_CONTRACT or harness-policy rule allows it.
 3. Make or update a short plan in the active run context.
-4. Record important lifecycle events when practical with `migration/scripts/write-harness-event.ps1`, especially `plan-written`, `ticket-auto-selected`, `scope-check-pass`, `tests-pass`, `tests-failed`, `final-gate-pass`, and `handoff-written`.
+4. Record important lifecycle events when practical with `migration/scripts/write-harness-event.ps1`, especially `plan-written`, `explicit-continue-ticket-selected`, `scope-check-pass`, `tests-pass`, `tests-failed`, `final-gate-pass`, and `handoff-written`.
 5. Ask watchdog to check the plan.
 6. Delegate implementation to executor only if needed, and include the active run id.
 7. Ask watchdog to check the result.
@@ -67,7 +81,7 @@ If external assemblies, product project references, credentials, network access,
 14. Do not issue FINAL unless `migration/scripts/check-final-gate.ps1 -RequireOpenCodeExport -RequireExplainTodo -RequireVerificationArtifacts` passes and migration/state/final-gate.md can be marked PASS with evidence. Otherwise say NOT FINAL - INVESTIGATION RESULT ONLY.
 15. After every non-final final-gate run, read `migration/state/continuation-decision.json` and `migration/state/continuation-decision.md`.
 16. If continuation status is `CONTINUE_REQUIRED`, do not send a user-facing handoff yet. Execute exactly one next bounded action named by the decision/current ticket/handoff, then rerun scope, harness policy, verification, and final gate. A response that only repeats NOT FINAL / NOT RUNTIME READY while `CONTINUE_REQUIRED` exists is a protocol violation.
-17. Do not stop just because the report is NOT FINAL / NOT RUNTIME READY if `current-ticket.md`, verify output, handoff, or `continuation-decision.json` names an allowed next config/scaffold/evidence action under `migration/**`. Stop only when `state/stop-policy-checklist.md` has a valid blocker, max iterations were reached, or the next action is denied by policy.
+17. After every successful `FINAL` / PASS checkpoint, stop and report. Starting another run/ticket requires explicit user `continue` or bounded auto-continuation in `continuation-decision.json`.
 18. Final report:
    - active run id;
    - changed files;
@@ -77,6 +91,7 @@ If external assemblies, product project references, credentials, network access,
    - final gate result;
    - trace/events status;
    - remaining risks;
+   - one recommended continue command;
    - anything intentionally not fixed.
 
-Continuation rule: Continue with that next bounded action when `migration/state/continuation-decision.json` reports `CONTINUE_REQUIRED`.
+Continuation rule: Continue with the next bounded action only when `migration/state/continuation-decision.json` reports `CONTINUE_REQUIRED`, the user explicitly requested `continue`, or bounded auto-continuation allows this exact action.

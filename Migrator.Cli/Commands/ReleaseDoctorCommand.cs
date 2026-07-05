@@ -251,7 +251,11 @@ internal static class ReleaseDoctorCommand
         AddSourceContains(root, checks, "README.md", "selenium-pw-migrator start", "docs", "README documents product-repo onboarding wizard");
         AddSourceContains(root, checks, "README.md", "selenium-pw-migrator pilot", "docs", "README documents representative pilot selection");
         AddSourceContains(root, checks, "Migrator.Cli/Commands/StartCommand.cs", "start-wizard/v1", "start-ux", "start wizard writes versioned onboarding reports");
+        AddSourceContains(root, checks, "Migrator.Cli/Commands/StartCommand.cs", "start-dispatch.json", "start-ux", "start wizard leaves a no-menu dispatch state for /supervised-task");
+        AddSourceContains(root, checks, "Migrator.Cli/Commands/StartCommand.cs", "runs", "start-ux", "start dashboard command points at run artifacts");
         AddSourceContains(root, checks, "Migrator.Cli/Commands/PilotCommand.cs", "pilot-selection/v1", "pilot-ux", "pilot selection writes versioned reports");
+        AddSourceContains(root, checks, "Migrator.Cli/Commands/PilotCommand.cs", "selected-input", "pilot-ux", "pilot next commands operate on the selected slice");
+        AddSourceContains(root, checks, "templates/opencode-team/global/.config/opencode/commands/supervised-task.md", "Start-workspace no-menu fallback", "agent-ux", "/supervised-task suppresses broad menus after start");
         AddSourceContains(root, checks, "Migrator.Cli/Program.cs", "suggested-config-patch", "todo-ux", "explain-todo writes suggested config patch artifacts");
         AddSourceContains(root, checks, "docs/report-serve-dashboard.md", "Open this first", "docs", "dashboard is documented as first review surface");
     }

@@ -64,9 +64,11 @@ The wizard writes:
 - `start-summary.md/json`;
 - `migration/profiles/adapter-config.start.json`;
 - `migration/README.start.md`;
-- `migration/next-commands.md`.
+- `migration/next-commands.md`;
+- `migration/current-ticket.md`;
+- `migration/state/start-dispatch.json`.
 
-It prints the next safe chain: `doctor install`, `pilot`, `doctor`, agent bootstrap or manual migrate, optional `discover-target`, and dashboard generation. Agent values are `opencode`, `codex`, `generic`, and `manual`.
+It prints the next safe chain: `doctor install`, agent bootstrap when needed, `pilot`, `doctor`, manual migrate or `/supervised-task`, optional `discover-target`, and dashboard generation after a run exists. Agent values are `opencode`, `codex`, `generic`, and `manual`. `/supervised-task` must treat the start artifacts as the active ticket instead of asking the user for a broad menu.
 
 ## Representative pilot slice
 
@@ -76,7 +78,7 @@ Before the first real batch, users can let the CLI choose a bounded representati
 selenium-pw-migrator pilot --input ./SeleniumTests --max-tests 10 --out migration/pilot
 ```
 
-The command writes `pilot-selection.md/json`, `selected-tests.txt`, and `next-commands.md`. It scores Selenium-like files and tries to cover simple smoke tests, PageObject-heavy files, table/filter patterns, assertions, waits, custom helpers, XPath selectors, data-driven tests, and base fixtures.
+The command writes `pilot-selection.md/json`, `selected-tests.txt`, `next-commands.md`, and a copied `selected-input/` directory. The generated analyze/migrate commands point at `selected-input/`, not the full suite. It scores Selenium-like files and tries to cover simple smoke tests, PageObject-heavy files, table/filter patterns, assertions, waits, custom helpers, XPath selectors, data-driven tests, and base fixtures.
 
 ## TODO root causes and suggested config patch
 
@@ -101,3 +103,8 @@ selenium-pw-migrator doctor release --out release-doctor --format both
 ```
 
 The release doctor verifies package metadata, publish workflows, npm/standalone smoke script presence, install diagnostics, `self update`, `bootstrap-agent`, dashboard-first docs, and repository hygiene before heavier CI/publish jobs run.
+
+
+## SUCCESS checkpoint / explicit continue
+
+SUCCESS checkpoints default to stop-for-review. After FINAL/PASS, `/supervised-task` reports evidence, remaining risks, and one recommended `/supervised-task continue ...` command. It must not silently start another run unless the user explicitly says `continue` or bounded auto-continuation is recorded for that exact next action.

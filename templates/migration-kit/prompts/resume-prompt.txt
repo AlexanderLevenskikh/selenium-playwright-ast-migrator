@@ -22,9 +22,10 @@ Resume protocol:
 5. If the next useful action would write outside `{{WORKSPACE}}/**`, stop with `BLOCKED_BY_FORBIDDEN_WRITE` and write a proposal under `{{WORKSPACE}}/proposals/**`.
 
 Rules:
-- If status is `CONTINUE_AUTONOMOUSLY`, continue without asking the user whether to continue.
+- If status is `CONTINUE_AUTONOMOUSLY` for a non-final batch, continue without asking the user whether to continue.
 - Do not edit migrator source code in migration-artifact mode.
 - Do not add suppressions, weaken assertions, empty tests, add dummy known identifiers, or edit target/POM project to reduce TODO.
 - Before stopping or handing off, update `{{WORKSPACE}}/state/stop-policy-checklist.md`.
 - After a non-final final-gate run, read `{{WORKSPACE}}/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, execute exactly one next bounded action before any user-facing handoff. A response that only repeats `NOT FINAL` / `NOT RUNTIME READY` while continuation is required is a protocol violation.
+After a successful `FINAL` / PASS checkpoint, stop and report. Start another run only when the user explicitly says `continue` or bounded auto-continuation is recorded for this exact next action.
 - Do not claim FINAL unless `{{WORKSPACE}}/scripts/check-final-gate.ps1 -RequireOpenCodeExport -RequireExplainTodo -RequireVerificationArtifacts` passes; otherwise report `NOT FINAL - INVESTIGATION RESULT ONLY`.

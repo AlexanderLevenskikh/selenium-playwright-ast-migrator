@@ -1,115 +1,126 @@
-# Окружения и агенты
+# Агентские окружения
 
-Migrator Agent Harness Kit не привязан только к одному агенту. OpenCode сейчас поддержан лучше всего, но главный контракт — установленный workspace `migration/`. Другие агенты могут использовать тот же контракт, если читают установленные файлы, работают только в разрешённых корнях и запускают gates.
+Migrator Agent Harness Kit не привязан к конкретному агенту. OpenCode сегодня поддержан лучше всего как UI, но настоящий контракт — это установленный workspace `migration/`. Codex, CI и generic agents могут работать по тому же контракту, если читают установленные файлы, остаются внутри allowed roots и запускают gates.
 
-## Bootstrap одной командой
+## Рекомендуемый маршрут
 
-Из корня product repository лучше использовать:
+Для product repo сначала создайте onboarding-state, потом выберите нужный handoff:
 
-```powershell
-selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --opencode-install auto
+```shell
+selenium-pw-migrator start --input ./SeleniumTests --agent opencode --workspace migration
+selenium-pw-migrator pilot --input ./SeleniumTests --max-tests 10 --out migration/pilot
 ```
 
-`--opencode-install auto` выбирает безопасный setup под текущее окружение:
+`start` пишет `migration/current-ticket.md`, `migration/next-commands.md` и `migration/state/start-dispatch.json`. Агент должен считать эти файлы активной bounded task. Если state понятен, агент не должен снова спрашивать пользователя широким меню “что делать дальше”.
 
-| Окружение | Что делает auto | Когда использовать |
+## OpenCode Desktop или OpenCode CLI
+
+Используйте OpenCode-specific bootstrap, когда нужны роли, команды и low-noise permissions именно для OpenCode:
+
+```shell
+selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.start.json --opencode-install auto
+```
+
+`--opencode-install auto` выбирает самый безопасный режим для текущего окружения:
+
+| Окружение | Поведение auto | Когда использовать |
 |---|---|---|
-| Windows + OpenCode Desktop | `project-desktop` | Открываешь папку репозитория напрямую в OpenCode Desktop. |
-| macOS/Linux/WSL + OpenCode CLI | `project-local` | Запускаешь OpenCode CLI с `OPENCODE_CONFIG=.opencode-migrator/opencode.jsonc`. |
-| CI/Codex/manual agent | Используй `--opencode-install ci` или `none` | Агент читает prompts/contracts, но OpenCode config не устанавливается. |
+| Windows + OpenCode Desktop | `project-desktop` | Вы открываете корень репозитория в OpenCode Desktop. |
+| macOS/Linux/WSL + OpenCode CLI | `project-local` | Вы запускаете OpenCode CLI с `OPENCODE_CONFIG=.opencode-migrator/opencode.jsonc`. |
+| CI / non-OpenCode | Используйте `bootstrap-agent` | Агент читает handoff docs/contracts, но OpenCode config не устанавливается. |
 
-Старый Windows shortcut тоже остаётся:
-
-```powershell
-selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --project-desktop
-```
-
-## Режимы установки
-
-```text
---opencode-install auto             Windows => project-desktop; macOS/Linux/WSL => project-local
---opencode-install project-desktop  Windows OpenCode Desktop config в корне репозитория
---opencode-install project-local    Portable OpenCode CLI config в .opencode-migrator
---opencode-install ci               Только установить/обновить workspace; без OpenCode config
---opencode-install none             То же для non-OpenCode агентов/manual режима
---opencode-install global --force   Глобальный OpenCode config; специально требует --force
-```
-
-Для OpenCode Desktop выбирай `project-desktop`, для OpenCode CLI — `project-local`. `global` лучше не использовать, если ты не хочешь, чтобы migration-роли влияли на все OpenCode-сессии текущего пользователя.
-
-## OpenCode Desktop на Windows
+Legacy Windows shortcut всё ещё поддержан:
 
 ```powershell
-selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --project-desktop
+selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.start.json --project-desktop
 ```
 
-Потом открой корень product repository в OpenCode Desktop и запусти:
+После этого откройте корень product repo в OpenCode и запустите:
 
 ```text
 /supervised-task
 ```
 
-Orchestrator должен сам создать или возобновить `migration/runs/<run-id>/` через `migration/scripts/new-harness-run.ps1`; пользователю не нужно создавать run-папки вручную.
-
-## OpenCode CLI на macOS/Linux/WSL
-
-```bash
-selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --opencode-install project-local
-OPENCODE_CONFIG=.opencode-migrator/opencode.jsonc opencode
-```
-
-Потом запусти:
-
-```text
-/supervised-task
-```
-
-Этот режим не трогает глобальный OpenCode config.
+Orchestrator должен сам создать или возобновить `migration/runs/<run-id>/` через `migration/scripts/new-harness-run.ps1` или `.sh`; пользователь не должен руками создавать run folders.
 
 ## Codex, CI или другой coding agent
 
-Используй kit без установки OpenCode config:
+Для non-OpenCode агентов основной путь теперь явный:
 
-```bash
-selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --opencode-install ci
+```shell
+selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.start.json
 ```
 
-Передай агенту эти файлы:
+Для generic agent или CI runner:
+
+```shell
+selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.start.json
+```
+
+Передайте агенту эти файлы:
 
 ```text
+migration/AGENT_HANDOFF.md
 migration/AGENT_CONTRACT.md
-migration/prompts/kickoff-prompt.txt
+migration/current-ticket.md
+migration/next-commands.md
+migration/pilot/selected-tests.txt
+migration/pilot/next-commands.md
 migration/harness/README.md
 migration/state/harness-policy.json
+migration/state/start-dispatch.json
 ```
 
-Скажи агенту создать или возобновить run через shell wrapper:
+Попросите агента сначала работать с выбранным pilot input:
 
-```bash
-./migration/scripts/new-harness-run.sh -TaskTitle "Pilot migration batch" -Goal "Run one bounded artifact-only migration batch."
+```text
+migration/pilot/selected-input
 ```
 
-Windows PowerShell может напрямую вызвать `.ps1`:
+Сгенерированный `migration/pilot/next-commands.md` должен запускать analyze/migrate по `selected-input`, а не по всему suite.
+
+## Legacy compatibility mode
+
+`bootstrap-opencode --opencode-install ci` всё ещё поддержан как compatibility alias для старых docs/scripts. Для новых non-OpenCode setup используйте `kit bootstrap-agent --agent codex` или `--agent generic`.
+
+```shell
+selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.start.json --opencode-install ci
+```
+
+## Справочник install modes
+
+```text
+--opencode-install auto             Windows => project-desktop; macOS/Linux/WSL => project-local
+--opencode-install project-desktop  Windows OpenCode Desktop project config в корне репозитория
+--opencode-install project-local    Portable OpenCode CLI config в .opencode-migrator
+--opencode-install ci               Legacy compatibility: только workspace; без OpenCode config
+--opencode-install none             То же направление для ci/manual non-OpenCode agents
+--opencode-install global --force   Global OpenCode config; специально сложно вызвать случайно
+```
+
+Для OpenCode Desktop предпочитайте `project-desktop`, для OpenCode CLI — `project-local`. `global` используйте только если сознательно хотите применить migration roles ко всем OpenCode sessions текущего OS user.
+
+## Final gates и dashboard
+
+Перед финальным успехом агент обязан запустить установленные gates. Bash:
+
+```shell
+./migration/scripts/check-harness-policy.sh
+./migration/scripts/check-final-gate.sh
+```
+
+Windows PowerShell:
 
 ```powershell
-./migration/scripts/new-harness-run.ps1 -TaskTitle "Pilot migration batch" -Goal "Run one bounded artifact-only migration batch."
+./migration/scripts/check-harness-policy.ps1
+./migration/scripts/check-final-gate.ps1
 ```
 
-Перед финальным успехом агент обязан запустить gates. В bash можно остаться в bash:
+После появления run artifacts первым открывайте dashboard:
 
-```bash
-./migration/scripts/check-harness-policy.sh -Workspace migration -RepoRoot .
-./migration/scripts/check-final-gate.sh -Workspace migration -RepoRoot .
+```shell
+selenium-pw-migrator report serve --input migration/runs/latest --static-only --out migration/dashboard/latest --format both
 ```
-
-В PowerShell можно вызвать underlying scripts напрямую:
-
-```powershell
-./migration/scripts/check-harness-policy.ps1 -Workspace migration -RepoRoot .
-./migration/scripts/check-final-gate.ps1 -Workspace migration -RepoRoot .
-```
-
-В CI сохраняй как artifacts: `migration/runs/**`, `migration/state/harness-events.jsonl`, `migration/dashboard/harness/**`.
 
 ## Safety contract
 

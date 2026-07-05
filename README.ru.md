@@ -22,6 +22,9 @@ Migrator парсит Selenium-тесты, строит промежуточну
 
 ## Три входа
 
+Жизненным циклом harness run управляет `new-harness-run.ps1`; агенты используют установленные скрипты Harness Kit, а не создают migration/runs вручную.
+
+
 ### Product-repo onboarding wizard
 
 Если ты уже внутри реального продуктового репозитория и не хочешь руками выбирать весь маршрут, начинай отсюда:
@@ -32,7 +35,7 @@ selenium-pw-migrator doctor install
 selenium-pw-migrator start --input ./SeleniumTests --agent opencode --workspace migration
 ```
 
-`start` определяет source, создаёт `migration/profiles/adapter-config.start.json`, пишет `migration/next-commands.md` и печатает цепочку: `pilot`, `doctor`, agent bootstrap или ручной режим, затем dashboard. Для другого агента используй `--agent codex`, `--agent generic` или `--agent manual`.
+`start` определяет source, создаёт `migration/profiles/adapter-config.start.json`, пишет `migration/next-commands.md`, `migration/current-ticket.md` и `migration/state/start-dispatch.json`, затем печатает цепочку: install diagnostics, agent bootstrap, `pilot`, `doctor`, ручной migrate или `/supervised-task`, затем dashboard после появления run artifacts. Для другого агента используй `--agent codex`, `--agent generic` или `--agent manual`.
 
 ### 1. Попробовать без агента
 
@@ -63,7 +66,7 @@ selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration -
 selenium-pw-migrator pilot --input ./SeleniumTests --max-tests 10 --out migration/pilot
 ```
 
-`pilot` пишет `pilot-selection.md/json`, `selected-tests.txt` и `next-commands.md`. Он старается покрыть простые smoke tests, PageObjects, table/filter patterns, waits, assertions, custom helpers, XPath и data-driven tests.
+`pilot` пишет `pilot-selection.md/json`, `selected-tests.txt`, `next-commands.md` и копирует выбранные файлы в `selected-input/`. Сгенерированные analyze/migrate команды работают по `selected-input/`, а не по всему suite. Он старается покрыть простые smoke tests, PageObjects, table/filter patterns, waits, assertions, custom helpers, XPath и data-driven tests.
 
 После реального run сначала открывай dashboard:
 
@@ -214,6 +217,8 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Sel
 
 Потом запускаем `/supervised-task` в OpenCode или передаём другому агенту `migration/AGENT_CONTRACT.md` и `migration/prompts/kickoff-prompt.txt`. `migration/runs/<run-id>` руками не создаём — это делает harness.
 
+После успешного FINAL/PASS checkpoint агент останавливается для review и показывает evidence. Для продолжения используйте явный `/supervised-task continue ...`.
+
 Java, Python и Playwright TypeScript — experimental-направления. В release/demo/marketing основной production promise остаётся Selenium C# -> Playwright .NET.
 
 ## Быстрый старт
@@ -270,24 +275,35 @@ cat playground/try-this-first.md
 
 ## Безопасный агентский старт
 
-Для agent-assisted миграции не создавай `migration/` и `migration/runs/<run-id>/` вручную. Теперь основной portable bootstrap можно сделать одной командой из корня product repo:
+Для agent-assisted миграции не создавай `migration/` и `migration/runs/<run-id>/` вручную. Сначала создай product onboarding-state и representative pilot, потом выбери agent handoff.
 
-```powershell
-dotnet tool run selenium-pw-migrator -- kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --opencode-install auto
+```shell
+selenium-pw-migrator start --input ./SeleniumTests --agent opencode --workspace migration
+selenium-pw-migrator pilot --input ./SeleniumTests --max-tests 10 --out migration/pilot
 ```
 
-`auto` выбирает подходящий режим: Windows OpenCode Desktop => `project-desktop`, macOS/Linux/WSL OpenCode CLI => `project-local`. Для Codex/CI/manual agents используй `--opencode-install ci`, чтобы поставить workspace без OpenCode config. После bootstrap запусти `/supervised-task` в OpenCode или передай non-OpenCode агенту `migration/prompts/kickoff-prompt.txt`. Orchestrator должен сам создать или возобновить `migration/runs/<run-id>/` через `new-harness-run.ps1`, читать `Prompt.md` / `Plan.md` / `Implement.md` / `Documentation.md`, писать events, запускать `check-harness-policy.ps1` и завершаться только после final gate.
+OpenCode path:
 
-Ручной fallback остаётся доступен:
-
-```bash
-dotnet tool run selenium-pw-migrator -- kit update --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --backup --with-team
-dotnet tool run selenium-pw-migrator -- kit doctor --workspace migration
+```shell
+selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.start.json --opencode-install auto
 ```
 
-```powershell
-.\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop
+Codex/generic/CI path:
+
+```shell
+selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.start.json
+selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.start.json
 ```
+
+OpenCode install modes:
+
+```text
+--project-desktop / --opencode-install project-desktop  Windows OpenCode Desktop
+--opencode-install project-local                        macOS/Linux/WSL OpenCode CLI
+--opencode-install ci                                   Legacy compatibility; для non-OpenCode агентов предпочитай bootstrap-agent
+```
+
+После bootstrap запусти `/supervised-task` в OpenCode или передай non-OpenCode агенту `migration/AGENT_HANDOFF.md` и `migration/AGENT_CONTRACT.md`. Orchestrator должен читать `migration/current-ticket.md`, `migration/state/start-dispatch.json` и `migration/pilot/next-commands.md`; если state понятен, он не должен снова спрашивать широкое меню.
 
 См. [Migrator Agent Harness Kit](docs/migrator-agent-harness-kit.md), [Agent environments](docs/agent-environments.ru.md), [Harness dashboard](docs/migrator-agent-harness-dashboard.md) и канонический [Guarded OpenCode Desktop runbook](docs/guarded-opencode-desktop-runbook.ru.md).
 

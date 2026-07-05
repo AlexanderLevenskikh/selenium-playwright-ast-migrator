@@ -35,12 +35,15 @@ internal static class PilotCommand
         }
 
         var selected = SelectRepresentativeSlice(candidates, maxTests).ToArray();
+        var pilotInputPath = Path.Combine(outPath, "selected-input");
+        WriteSelectedInput(fullInput, pilotInputPath, selected);
         var categories = candidates.SelectMany(c => c.Categories).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToArray();
         var covered = selected.SelectMany(c => c.Categories).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToArray();
         var report = new PilotSelectionReport(
             SchemaVersion: "pilot-selection/v1",
             GeneratedAtUtc: DateTimeOffset.UtcNow,
             InputPath: fullInput,
+            PilotInputPath: Path.GetFullPath(pilotInputPath),
             MaxTests: maxTests,
             CandidateFiles: candidates.Length,
             EstimatedCandidateTests: candidates.Sum(c => c.EstimatedTests),
@@ -50,7 +53,7 @@ internal static class PilotCommand
             DetectedCategories: categories,
             CoveredCategories: covered,
             Selected: selected.Select(ToSelected).ToArray(),
-            NextCommands: BuildNextCommands(fullInput, outPath, selected));
+            NextCommands: BuildNextCommands(pilotInputPath, outPath));
 
         WriteArtifacts(outPath, format, report);
         Console.WriteLine("=== Pilot selection ===");
@@ -212,15 +215,15 @@ internal static class PilotCommand
         Waits: c.Waits,
         Helpers: c.Helpers);
 
-    static string[] BuildNextCommands(string input, string outPath, PilotTestCandidate[] selected)
+    static string[] BuildNextCommands(string pilotInputPath, string outPath)
     {
         var selectedList = Path.Combine(outPath, "selected-tests.txt");
         return new[]
         {
-            $"selenium-pw-migrator --mode analyze --input {Quote(input)} --out {Quote(Path.Combine(outPath, "analysis"))} --format both",
-            $"selenium-pw-migrator --mode migrate --input {Quote(input)} --out {Quote(Path.Combine(outPath, "generated"))} --format both",
-            $"selenium-pw-migrator --mode explain-todo --input {Quote(Path.Combine(outPath, "generated"))} --out {Quote(Path.Combine(outPath, "explain-todo"))} --recursive-artifacts",
-            $"# Pilot file list: {selectedList}"
+            $"selenium-pw-migrator --mode analyze --input {Quote(ToCommandPath(pilotInputPath))} --out {Quote(ToCommandPath(Path.Combine(outPath, "analysis")))} --format both",
+            $"selenium-pw-migrator --mode migrate --input {Quote(ToCommandPath(pilotInputPath))} --out {Quote(ToCommandPath(Path.Combine(outPath, "generated")))} --format both",
+            $"selenium-pw-migrator --mode explain-todo --input {Quote(ToCommandPath(Path.Combine(outPath, "generated")))} --out {Quote(ToCommandPath(Path.Combine(outPath, "explain-todo")))} --recursive-artifacts",
+            $"# Pilot file list: {ToCommandPath(selectedList)}"
         };
     }
 
@@ -229,11 +232,11 @@ internal static class PilotCommand
         if (format is "json" or "both")
             File.WriteAllText(Path.Combine(outPath, "pilot-selection.json"), JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine, new UTF8Encoding(false));
         if (format is "text" or "both")
-        {
             File.WriteAllText(Path.Combine(outPath, "pilot-selection.md"), BuildMarkdown(report), new UTF8Encoding(false));
-            File.WriteAllLines(Path.Combine(outPath, "selected-tests.txt"), report.Selected.Select(x => x.File), new UTF8Encoding(false));
-            File.WriteAllText(Path.Combine(outPath, "next-commands.md"), BuildNextCommandsMarkdown(report), new UTF8Encoding(false));
-        }
+
+        // Control artifacts are written for every format because they drive the next safe action.
+        File.WriteAllLines(Path.Combine(outPath, "selected-tests.txt"), report.Selected.Select(x => x.File), new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(outPath, "next-commands.md"), BuildNextCommandsMarkdown(report), new UTF8Encoding(false));
     }
 
     static string BuildMarkdown(PilotSelectionReport report)
@@ -246,6 +249,7 @@ internal static class PilotCommand
         sb.AppendLine("## Summary");
         sb.AppendLine();
         sb.AppendLine($"- Input: `{report.InputPath}`");
+        sb.AppendLine($"- Pilot input: `{report.PilotInputPath}`");
         sb.AppendLine($"- Candidate files: `{report.CandidateFiles}`");
         sb.AppendLine($"- Estimated candidate tests: `{report.EstimatedCandidateTests}`");
         sb.AppendLine($"- Max tests budget: `{report.MaxTests}`");
@@ -267,7 +271,7 @@ internal static class PilotCommand
         sb.AppendLine();
         foreach (var command in report.NextCommands)
         {
-            sb.AppendLine("```bash");
+            sb.AppendLine("```shell");
             sb.AppendLine(command);
             sb.AppendLine("```");
         }
@@ -283,12 +287,59 @@ internal static class PilotCommand
         sb.AppendLine();
         foreach (var command in report.NextCommands)
         {
-            sb.AppendLine("```bash");
+            sb.AppendLine("```shell");
             sb.AppendLine(command);
             sb.AppendLine("```");
         }
         return sb.ToString();
     }
+
+
+    static void WriteSelectedInput(string fullInput, string pilotInputPath, PilotTestCandidate[] selected)
+    {
+        if (Directory.Exists(pilotInputPath))
+            Directory.Delete(pilotInputPath, recursive: true);
+        Directory.CreateDirectory(pilotInputPath);
+
+        var inputIsDirectory = Directory.Exists(fullInput);
+        foreach (var item in selected)
+        {
+            var relative = inputIsDirectory
+                ? SafeRelativePath(fullInput, item.File)
+                : Path.GetFileName(item.File);
+            var destination = Path.Combine(pilotInputPath, relative);
+            var directory = Path.GetDirectoryName(destination);
+            if (!string.IsNullOrWhiteSpace(directory))
+                Directory.CreateDirectory(directory);
+            File.Copy(item.File, destination, overwrite: true);
+        }
+    }
+
+    static string SafeRelativePath(string root, string path)
+    {
+        var relative = Path.GetRelativePath(root, path);
+        if (relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+            || relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal)
+            || Path.IsPathRooted(relative))
+            return Path.GetFileName(path);
+        return relative;
+    }
+
+    static string ToCommandPath(string path)
+    {
+        if (!Path.IsPathRooted(path))
+            return NormalizeSeparators(path);
+
+        var relative = Path.GetRelativePath(Directory.GetCurrentDirectory(), path);
+        if (!relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+            && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal)
+            && !Path.IsPathRooted(relative))
+            return NormalizeSeparators(relative);
+
+        return NormalizeSeparators(path);
+    }
+
+    static string NormalizeSeparators(string path) => path.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
 
     static int CountMatches(string text, string pattern) => Regex.Matches(text, pattern, RegexOptions.IgnoreCase).Count;
 
@@ -323,6 +374,7 @@ record PilotSelectionReport(
     string SchemaVersion,
     DateTimeOffset GeneratedAtUtc,
     string InputPath,
+    string PilotInputPath,
     int MaxTests,
     int CandidateFiles,
     int EstimatedCandidateTests,

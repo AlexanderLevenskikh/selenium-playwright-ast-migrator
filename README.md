@@ -22,6 +22,9 @@ The goal is not magic conversion. The goal is to make migration uncertainty visi
 
 ## Choose your path
 
+Harness run lifecycle is owned by `new-harness-run.ps1`; agents use the installed Harness Kit scripts instead of inventing migration/runs folders.
+
+
 ### Product-repo onboarding wizard
 
 If you are inside a real product repository and do not want to choose the workflow by hand, start here:
@@ -32,7 +35,7 @@ selenium-pw-migrator doctor install
 selenium-pw-migrator start --input ./SeleniumTests --agent opencode --workspace migration
 ```
 
-`start` detects the source, creates `migration/profiles/adapter-config.start.json`, writes `migration/next-commands.md`, and points you to `pilot`, `doctor`, agent bootstrap, and the dashboard. Use `--agent codex`, `--agent generic`, or `--agent manual` to choose the handoff route.
+`start` detects the source, creates `migration/profiles/adapter-config.start.json`, writes `migration/next-commands.md`, `migration/current-ticket.md`, and `migration/state/start-dispatch.json`, then points you to install diagnostics, agent bootstrap, `pilot`, `doctor`, and the dashboard after a run exists. Use `--agent codex`, `--agent generic`, or `--agent manual` to choose the handoff route.
 
 ### 1. Try it without an agent
 
@@ -54,6 +57,8 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Sel
 
 Then run `/supervised-task` in OpenCode. The harness creates or resumes `migration/runs/<run-id>`; do not create run folders by hand.
 
+After a successful FINAL/PASS checkpoint, the supervised agent stops for review and reports evidence. To continue from the recommended next action, run `/supervised-task continue ...`.
+
 ### 3. Migrate with another agent
 
 ```bash
@@ -72,7 +77,7 @@ Before scaling a real migration, let the CLI choose a small representative pilot
 selenium-pw-migrator pilot --input ./SeleniumTests --max-tests 10 --out migration/pilot
 ```
 
-`pilot` writes `pilot-selection.md/json`, `selected-tests.txt`, and `next-commands.md`. The selection tries to cover simple smoke tests, PageObjects, table/filter patterns, waits, assertions, custom helpers, XPath, and data-driven tests.
+`pilot` writes `pilot-selection.md/json`, `selected-tests.txt`, `next-commands.md`, and a copied `selected-input/` directory. The generated next commands analyze/migrate `selected-input/`, not the full suite. The selection tries to cover simple smoke tests, PageObjects, table/filter patterns, waits, assertions, custom helpers, XPath, and data-driven tests.
 
 After any real run, open the dashboard first:
 
@@ -286,30 +291,35 @@ For a file-by-file walkthrough, see:
 
 ## Guarded agent quick start
 
-For an agent-assisted migration, do not hand-create `migration/` folders. Install the kit and OpenCode team templates, then let the supervised agent create or resume the harness run.
+For an agent-assisted migration, do not hand-create `migration/` folders or `migration/runs/<run-id>/`. Start from the product onboarding state, run the representative pilot, then choose the matching agent handoff.
 
-First-time product-repo bootstrap, including the migration workspace, OpenCode team templates, `kit doctor`, and an environment-specific OpenCode setup:
-
-```powershell
-dotnet tool run selenium-pw-migrator -- kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --opencode-install auto
+```shell
+selenium-pw-migrator start --input ./SeleniumTests --agent opencode --workspace migration
+selenium-pw-migrator pilot --input ./SeleniumTests --max-tests 10 --out migration/pilot
 ```
 
-Use explicit install modes when needed:
+OpenCode path:
+
+```shell
+selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.start.json --opencode-install auto
+```
+
+Codex/generic/CI path:
+
+```shell
+selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.start.json
+selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.start.json
+```
+
+OpenCode install modes:
 
 ```text
 --project-desktop / --opencode-install project-desktop  Windows OpenCode Desktop
 --opencode-install project-local                        macOS/Linux/WSL OpenCode CLI
---opencode-install ci                                   Codex/CI/manual agents; no OpenCode config
+--opencode-install ci                                   Legacy compatibility; prefer bootstrap-agent for non-OpenCode agents
 ```
 
-Manual fallback when you do not want to install an OpenCode config in the same command:
-
-```bash
-dotnet tool run selenium-pw-migrator -- kit update --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --backup --with-team
-dotnet tool run selenium-pw-migrator -- kit doctor --workspace migration
-```
-
-Then start the selected agent environment and run `/supervised-task`, or give a non-OpenCode agent `migration/prompts/kickoff-prompt.txt`. The orchestrator must create or resume `migration/runs/<run-id>/` through `new-harness-run.ps1`, read `Prompt.md` / `Plan.md` / `Implement.md` / `Documentation.md`, record events, run `check-harness-policy.ps1`, and only claim final success after the final gate passes.
+Then start the selected agent environment and run `/supervised-task`, or give a non-OpenCode agent `migration/AGENT_HANDOFF.md` and `migration/AGENT_CONTRACT.md`. The orchestrator must read `migration/current-ticket.md`, `migration/state/start-dispatch.json`, and `migration/pilot/next-commands.md`; it should not ask the user for a broad menu when the state is clear.
 
 The only manual bootstrap that remains is installing/updating the tool and project-local OpenCode config. Once those are present, the agent should manage the workspace lifecycle and run artifacts itself.
 

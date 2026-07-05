@@ -12,6 +12,9 @@ The main production path is Selenium C# to Playwright .NET. NUnit is the default
 
 ## Happy path
 
+Harness run lifecycle is owned by `new-harness-run.ps1`; agents use the installed Harness Kit scripts instead of inventing migration/runs folders.
+
+
 Install the CLI first. The recommended public path is the npm wrapper, which downloads the matching standalone CLI and does not require the .NET SDK:
 
 ```bash
@@ -33,6 +36,8 @@ For a real agent-assisted migration:
 
 ```bash
 selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --opencode-install auto
+# Windows OpenCode Desktop legacy shortcut:
+selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --project-desktop
 # non-OpenCode handoff:
 selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --source ./SeleniumTests
 selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration --source ./SeleniumTests
@@ -164,85 +169,59 @@ dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode analyze --inpu
 
 ## 3. Recommended First Run
 
-Start with the playground or a small folder of representative tests. Do not begin with the entire suite.
+Start with the playground or a representative pilot slice. Do not begin with the entire suite.
 
-```bash
-dotnet tool run selenium-pw-migrator -- playground \
-  --out playground \
-  --target-test-framework xunit \
-  --generation-policy conservative
+```shell
+selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
+bash playground/commands.sh
+selenium-pw-migrator playground verify --input playground --out playground-verify --format both
 ```
 
-For a real project, generate a runbook before the first migration run:
+For a real product repository, prefer `start` over the older manual wizard:
 
-```bash
-dotnet tool run selenium-pw-migrator -- runbook \
-  --input ./OldTests \
-  --target dotnet \
-  --target-test-framework nunit \
-  --generation-policy conservative \
-  --out runbook \
-  --format both
+```shell
+selenium-pw-migrator start --input ./OldTests --agent opencode --workspace migration
+selenium-pw-migrator pilot --input ./OldTests --max-tests 10 --out migration/pilot
 ```
 
-Then create the migration workspace. For an agent-assisted guarded run, use the kit command instead of manually creating folders:
+`start` creates the product onboarding state:
 
-```bash
-dotnet tool run selenium-pw-migrator -- kit update \
-  --workspace migration \
-  --source ./OldTests \
-  --config migration/profiles/adapter-config.json \
-  --backup \
-  --with-team
+- `migration/current-ticket.md` - the active bounded migration scope.
+- `migration/next-commands.md` - exact next commands for the chosen route.
+- `migration/profiles/adapter-config.start.json` - starter profile skeleton.
+- `migration/state/start-dispatch.json` - no-menu dispatch state for `/supervised-task`.
 
-dotnet tool run selenium-pw-migrator -- kit doctor --workspace migration
+`pilot` creates a bounded representative input:
+
+- `migration/pilot/pilot-selection.md/json` - why files were selected.
+- `migration/pilot/selected-tests.txt` - selected source files.
+- `migration/pilot/selected-input/` - copied pilot input.
+- `migration/pilot/next-commands.md` - analyze/migrate commands that point at `selected-input`, not the full suite.
+
+For OpenCode, install the agent team after `start`:
+
+```shell
+selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./OldTests --config migration/profiles/adapter-config.start.json --opencode-install auto
 ```
 
-This creates a safe migration workspace with:
+Then run `/supervised-task`. After a successful FINAL/PASS checkpoint, `/supervised-task` stops for review by default. Use `/supervised-task continue ...` to start exactly one next bounded ticket from the reported recommendation. The supervised agent should read `current-ticket.md` and `state/start-dispatch.json`, create or resume `migration/runs/<run-id>/`, and avoid asking the user broad menu questions when the state is clear.
 
-- `profiles/adapter-config.json` - starter profile.
-- `current-ticket.md` - the current migration scope.
-- `state/run-ledger.md` - a place to record runs.
-- `state/harness-policy.json` - the autopilot allow/ask/deny policy.
-- `scripts/new-harness-run.ps1` - active run bootstrapper.
-- `scripts/check-harness-policy.ps1` - harness policy gate.
-- `scripts/build-harness-dashboard.ps1` - static harness dashboard generator.
-- `opencode-team/` - optional OpenCode agents and commands when `--with-team` is used.
+For Codex, CI, or another agent, use the explicit handoff path:
 
-For agent-assisted runs, the preferred portable bootstrap from the product repo root is:
-
-```powershell
-dotnet tool run selenium-pw-migrator -- kit bootstrap-opencode --workspace migration --source ./OldTests --config migration/profiles/adapter-config.json --opencode-install auto
+```shell
+selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --source ./OldTests --config migration/profiles/adapter-config.start.json
+selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration --source ./OldTests --config migration/profiles/adapter-config.start.json
 ```
 
-Install modes:
+`bootstrap-opencode --opencode-install ci` remains supported as a legacy compatibility mode, but new non-OpenCode setups should use `bootstrap-agent`.
 
-```text
---opencode-install auto             Windows => project-desktop; macOS/Linux/WSL => project-local
---project-desktop                   shortcut for Windows OpenCode Desktop
---opencode-install project-local    portable OpenCode CLI config in .opencode-migrator
---opencode-install ci               Codex/CI/manual agents; no OpenCode config install
-```
+If you are working without an agent and only want the older starter config/scaffold, `init --wizard` is still available as the manual scaffold path:
 
-After bootstrap, start OpenCode with `/supervised-task` when using OpenCode, or give the kickoff prompt to another agent. The supervised agent should create or resume `migration/runs/<run-id>/` with `new-harness-run.ps1`; the user should not need to create run folders manually. For non-OpenCode agents, give the agent `migration/AGENT_CONTRACT.md`, `migration/prompts/kickoff-prompt.txt`, and `migration/harness/README.md`. See `docs/agent-environments.md`.
-
-If you are working without an agent and only want a starter config/scaffold, `init --wizard` is still available:
-
-```bash
-dotnet tool run selenium-pw-migrator -- init --wizard \
+```shell
+selenium-pw-migrator init --wizard \
   --source-path ./OldTests \
   --target dotnet \
   --target-test-framework nunit \
-  --workspace migration
-```
-
-If you prefer xUnit output:
-
-```bash
-dotnet tool run selenium-pw-migrator -- init --wizard \
-  --source-path ./OldTests \
-  --target dotnet \
-  --target-test-framework xunit \
   --workspace migration
 ```
 
@@ -491,12 +470,28 @@ Generates a practical migration plan: pilot scope, command chain, risk map, arti
 dotnet tool run selenium-pw-migrator -- runbook --input ./OldTests --target dotnet --target-test-framework xunit --generation-policy conservative --out runbook
 ```
 
+`start`
+
+Product-repo onboarding wizard. It creates a profile skeleton, `current-ticket.md`, `next-commands.md`, and `state/start-dispatch.json` for no-menu `/supervised-task` dispatch.
+
+```shell
+selenium-pw-migrator start --input ./OldTests --agent opencode --workspace migration
+```
+
+`pilot`
+
+Selects a representative slice, copies it into `selected-input/`, and writes next commands for the bounded input.
+
+```shell
+selenium-pw-migrator pilot --input ./OldTests --max-tests 10 --out migration/pilot
+```
+
 `init`
 
-Creates a migration workspace and starter config.
+Legacy/manual scaffold wizard. Use it when you want the older starter config/scaffold without the product `start` state.
 
-```bash
-dotnet tool run selenium-pw-migrator -- init --wizard --source-path ./OldTests --target dotnet --target-test-framework xunit
+```shell
+selenium-pw-migrator init --wizard --source-path ./OldTests --target dotnet --target-test-framework xunit
 ```
 
 `doctor`
@@ -796,13 +791,13 @@ dotnet tool run selenium-pw-migrator -- --mode migration-board --input migration
 Builds and optionally serves a local dashboard.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- report serve --input migration/run-001 --port 5077 --out report-dashboard
+dotnet tool run selenium-pw-migrator -- report serve --input migration/runs/latest --port 5077 --out migration/dashboard/latest
 ```
 
 Use static-only mode for CI artifacts:
 
 ```bash
-dotnet tool run selenium-pw-migrator -- report serve --input migration/run-001 --static-only --out report-dashboard
+dotnet tool run selenium-pw-migrator -- report serve --input migration/runs/latest --static-only --out migration/dashboard/latest
 ```
 
 `evidence pack`
@@ -839,12 +834,13 @@ dotnet tool run selenium-pw-migrator -- agent contract --input migration/current
 
 ### I have only Selenium tests and no Playwright project
 
-1. Run `init --wizard`.
-2. Use generated `scaffold/`.
-3. Fill in auth, routes, base URL, and target namespace.
-4. Run `index-pom`, `helper-inventory`, and `selector evidence`.
-5. Run `migrate`.
-6. Run `verify-project`.
+1. Run `start --input ./OldTests --agent manual --workspace migration`.
+2. Run `pilot --input ./OldTests --max-tests 10 --out migration/pilot`.
+3. Use `init --wizard` only if you specifically need the legacy `scaffold/` generator.
+4. Fill in auth, routes, base URL, and target namespace.
+5. Run `index-pom`, `helper-inventory`, and `selector evidence`.
+6. Run `migrate` against the pilot `selected-input/` first.
+7. Run `verify-project`.
 
 ### I already have a Playwright .NET project
 
@@ -857,11 +853,11 @@ dotnet tool run selenium-pw-migrator -- agent contract --input migration/current
 ### I want the fastest useful pilot
 
 1. Run `playground` once to understand the flow.
-2. Pick 10 to 30 representative tests.
-3. Run `runbook`.
-4. Run `init --wizard`.
-5. Run `orchestrate`.
-6. Open the report dashboard with `report serve`.
+2. Run `start --input ./OldTests --agent manual --workspace migration`.
+3. Run `pilot --input ./OldTests --max-tests 10 --out migration/pilot`.
+4. Run the generated commands from `migration/pilot/next-commands.md`.
+5. Open the dashboard with `report serve` after a run exists.
+6. Run `explain-todo` and review `suggested-config-patch.md/json`.
 7. Fix the top repeated unsupported category, not random one-off TODOs.
 
 ### I want to use agents safely
@@ -873,6 +869,13 @@ Give the agent:
 - The current config/profile.
 - The current migration artifacts.
 - A rule: do not edit source tests and do not invent selectors.
+
+Use `start`, `pilot`, and then one of the bootstrap commands:
+
+```shell
+selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./OldTests --config migration/profiles/adapter-config.start.json --opencode-install auto
+selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --source ./OldTests --config migration/profiles/adapter-config.start.json
+```
 
 Use `docs/guarded-opencode-desktop-runbook.ru.md` plus the installed `migration/AGENT_CONTRACT.md` for guarded OpenCode Desktop runs.
 

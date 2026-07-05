@@ -1,8 +1,11 @@
 # Harness continuation strict protocol
 
-This protocol prevents agents from stopping just because a report says `NOT FINAL - INVESTIGATION RESULT ONLY` or `NOT RUNTIME READY`.
+This protocol prevents two opposite failures:
 
-## Rule
+1. stopping too early when a non-final report already names a safe next action;
+2. continuing too far after a successful checkpoint.
+
+## Non-final continuation rule
 
 `NOT FINAL` is not a reportable terminal state when the workspace contains an allowed next config/scaffold/evidence action.
 
@@ -20,11 +23,40 @@ If `continuation-decision.json` says:
 
 then the agent must execute exactly one next bounded action before sending a user-facing message. Saying only “NOT FINAL” or “NOT RUNTIME READY” is a protocol violation.
 
+## SUCCESS checkpoint rule
+
+`FINAL` is a successful checkpoint, not permission to start the next migration run automatically.
+
+If `continuation-decision.json` says:
+
+```json
+{
+  "status": "FINAL",
+  "postSuccessPolicy": "STOP_FOR_REVIEW"
+}
+```
+
+then the agent must stop and report:
+
+- active run id;
+- final gate evidence;
+- changed artifacts;
+- remaining risks/TODO root causes;
+- one recommended next bounded action;
+- exact continue command, for example `/supervised-task continue fix remaining unmapped targets`.
+
+The agent may start a new run/ticket after `FINAL` only when:
+
+1. the user explicitly requests continuation; or
+2. the decision file records bounded auto-continuation for this exact next action.
+
+A zero-argument `/supervised-task` after FINAL must not show a broad menu and must not silently mutate the completed run.
+
 ## Stop states
 
 Agents may stop only on:
 
-- `FINAL`
+- `FINAL` with `STOP_FOR_REVIEW`
 - `BLOCKED_BY_GATE`
 - `BLOCKED_NO_ALLOWED_NEXT_ACTION`
 - `BLOCKED_BY_FORBIDDEN_WRITE`

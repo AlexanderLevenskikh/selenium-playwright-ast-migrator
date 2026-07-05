@@ -26,7 +26,7 @@ selenium-pw-migrator start --input ./OldTests --agent opencode --workspace migra
 selenium-pw-migrator pilot --input ./OldTests --max-tests 10 --out migration/pilot
 ```
 
-`start` writes a profile skeleton and next command chain. `pilot` chooses a representative small slice before the first full migration batch.
+`start` writes a profile skeleton, `current-ticket.md`, and a no-menu dispatch state for `/supervised-task`. `pilot` chooses a representative small slice, copies it to `selected-input/`, and points next commands at that bounded input before the first full migration batch.
 
 ## Basic usage
 

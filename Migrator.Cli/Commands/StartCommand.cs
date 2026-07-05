@@ -62,6 +62,8 @@ internal static class StartCommand
         WriteProfileSkeleton(profilePath, report);
         WriteWorkspaceReadme(fullWorkspace, report);
         WriteNextCommands(Path.Combine(fullWorkspace, "next-commands.md"), report);
+        WriteCurrentTicket(fullWorkspace, report);
+        WriteStartDispatchState(fullWorkspace, report);
         WriteStartSummary(outPath, report, format);
 
         Console.WriteLine("=== Migrator Start ===");
@@ -94,22 +96,29 @@ internal static class StartCommand
 
     static string[] BuildNextCommands(string sourcePath, string workspace, string agent, string target, string framework, string policy, string? targetProjectPath)
     {
+        var source = ToCommandPath(sourcePath);
+        var ws = ToCommandPath(workspace);
         var commands = new List<string>
         {
             "selenium-pw-migrator doctor install",
-            $"selenium-pw-migrator pilot --input {Quote(sourcePath)} --max-tests 10 --out {Quote(Path.Combine(workspace, "pilot"))}",
-            $"selenium-pw-migrator --mode doctor --input {Quote(sourcePath)} --out {Quote(Path.Combine(workspace, "doctor"))}",
         };
 
         if (!string.Equals(agent, "manual", StringComparison.OrdinalIgnoreCase) && !string.Equals(agent, "none", StringComparison.OrdinalIgnoreCase))
-            commands.Add($"selenium-pw-migrator kit bootstrap-agent --agent {agent} --workspace {Quote(workspace)} --source {Quote(sourcePath)}");
+            commands.Add($"selenium-pw-migrator kit bootstrap-agent --agent {agent} --workspace {Quote(ws)} --source {Quote(source)}");
+
+        commands.Add($"selenium-pw-migrator pilot --input {Quote(source)} --max-tests 10 --out {Quote(ToCommandPath(Path.Combine(workspace, "pilot")))}");
+        commands.Add($"selenium-pw-migrator --mode doctor --input {Quote(source)} --out {Quote(ToCommandPath(Path.Combine(workspace, "doctor")))}");
+
+        if (string.Equals(agent, "manual", StringComparison.OrdinalIgnoreCase) || string.Equals(agent, "none", StringComparison.OrdinalIgnoreCase))
+            commands.Add($"selenium-pw-migrator --mode migrate --input {Quote(source)} --config {Quote(ToCommandPath(Path.Combine(workspace, "profiles", "adapter-config.start.json")))} --target {target} --target-test-framework {framework} --generation-policy {policy} --out {Quote(ToCommandPath(Path.Combine(workspace, "run-001")))}");
         else
-            commands.Add($"selenium-pw-migrator --mode migrate --input {Quote(sourcePath)} --config {Quote(Path.Combine(workspace, "profiles", "adapter-config.start.json"))} --target {target} --target-test-framework {framework} --generation-policy {policy} --out {Quote(Path.Combine(workspace, "run-001"))}");
+            commands.Add("# After bootstrap, open the agent environment and run /supervised-task. It should use migration/current-ticket.md instead of asking what to do.");
 
         if (!string.IsNullOrWhiteSpace(targetProjectPath))
-            commands.Add($"selenium-pw-migrator --mode discover-target --input {Quote(targetProjectPath!)} --out {Quote(Path.Combine(workspace, "target-discovery"))}");
+            commands.Add($"selenium-pw-migrator --mode discover-target --input {Quote(ToCommandPath(targetProjectPath!))} --out {Quote(ToCommandPath(Path.Combine(workspace, "target-discovery")))}");
 
-        commands.Add($"selenium-pw-migrator report serve --input {Quote(workspace)} --out {Quote(Path.Combine(workspace, "dashboard", "latest"))} --static-only");
+        commands.Add($"# After a migrate/agent run exists, open the dashboard from run artifacts:");
+        commands.Add($"selenium-pw-migrator report serve --input {Quote(ToCommandPath(Path.Combine(workspace, "runs", "latest")))} --out {Quote(ToCommandPath(Path.Combine(workspace, "dashboard", "latest")))} --static-only");
         return commands.ToArray();
     }
 
@@ -161,7 +170,7 @@ internal static class StartCommand
         sb.AppendLine("## Next commands");
         sb.AppendLine();
         foreach (var command in report.NextCommands)
-            sb.AppendLine($"```bash\n{command}\n```");
+            sb.AppendLine($"```shell\n{command}\n```");
         File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
     }
 
@@ -176,7 +185,7 @@ internal static class StartCommand
         {
             sb.AppendLine($"## {i + 1}. Step");
             sb.AppendLine();
-            sb.AppendLine("```bash");
+            sb.AppendLine("```shell");
             sb.AppendLine(report.NextCommands[i]);
             sb.AppendLine("```");
             sb.AppendLine();
@@ -220,11 +229,63 @@ internal static class StartCommand
         sb.AppendLine();
         foreach (var command in report.NextCommands)
         {
-            sb.AppendLine("```bash");
+            sb.AppendLine("```shell");
             sb.AppendLine(command);
             sb.AppendLine("```");
         }
         return sb.ToString();
+    }
+
+
+    static void WriteCurrentTicket(string workspace, StartWizardReport report)
+    {
+        var path = Path.Combine(workspace, "current-ticket.md");
+        if (File.Exists(path))
+            return;
+
+        var sb = new StringBuilder();
+        sb.AppendLine("# Current Ticket");
+        sb.AppendLine();
+        sb.AppendLine("Auto-selected by `selenium-pw-migrator start`.");
+        sb.AppendLine();
+        sb.AppendLine("## Goal");
+        sb.AppendLine();
+        sb.AppendLine("Create a bounded pilot slice, inspect the first migration evidence, and fix only the highest-impact mapping/scaffold issue before scaling.");
+        sb.AppendLine();
+        sb.AppendLine("## First safe actions");
+        sb.AppendLine();
+        sb.AppendLine("1. Run `selenium-pw-migrator doctor install`.");
+        if (!string.Equals(report.Agent, "manual", StringComparison.OrdinalIgnoreCase))
+            sb.AppendLine($"2. Ensure the agent handoff is bootstrapped for `{report.Agent}` with `kit bootstrap-agent` if `AGENT_CONTRACT.md` is missing.");
+        sb.AppendLine("3. Run the pilot command from `next-commands.md` and use `pilot/selected-input` as the first migration input.");
+        sb.AppendLine("4. Do not ask the user to choose among unrelated repository maintenance tasks unless these migration artifacts are missing or contradictory.");
+        sb.AppendLine();
+        sb.AppendLine("## Allowed roots");
+        sb.AppendLine();
+        sb.AppendLine("- `migration/**`");
+        sb.AppendLine("- generated pilot/report artifacts under the configured workspace");
+        sb.AppendLine();
+        sb.AppendLine("## Stop conditions");
+        sb.AppendLine();
+        sb.AppendLine("Stop only for missing source path, denied writes, failed guard/policy checks, missing required credentials/project references, or a contradictory state file.");
+        File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
+    }
+
+    static void WriteStartDispatchState(string workspace, StartWizardReport report)
+    {
+        var path = Path.Combine(workspace, "state", "start-dispatch.json");
+        var json = new
+        {
+            SchemaVersion = "start-dispatch/v1",
+            CreatedBy = "selenium-pw-migrator start",
+            report.Agent,
+            report.SourcePath,
+            report.WorkspacePath,
+            NextAction = "Run doctor install, ensure agent handoff bootstrap exists, then run pilot on the selected slice.",
+            DoNotAskMenu = true,
+            NextCommands = report.NextCommands
+        };
+        File.WriteAllText(path, JsonSerializer.Serialize(json, new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine, new UTF8Encoding(false));
     }
 
     static string NormalizeAgent(string agent)
@@ -264,6 +325,22 @@ internal static class StartCommand
             return choices[index - 1];
         return choices.Contains(value ?? "", StringComparer.OrdinalIgnoreCase) ? value!.Trim().ToLowerInvariant() : fallback;
     }
+
+    static string ToCommandPath(string path)
+    {
+        if (!Path.IsPathRooted(path))
+            return NormalizeSeparators(path);
+
+        var relative = Path.GetRelativePath(Directory.GetCurrentDirectory(), path);
+        if (!relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+            && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal)
+            && !Path.IsPathRooted(relative))
+            return NormalizeSeparators(relative);
+
+        return NormalizeSeparators(path);
+    }
+
+    static string NormalizeSeparators(string path) => path.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
 
     static string Quote(string value) => value.Contains(' ') ? $"\"{value}\"" : value;
 

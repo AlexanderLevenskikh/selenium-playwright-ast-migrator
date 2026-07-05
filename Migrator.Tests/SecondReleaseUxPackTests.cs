@@ -67,6 +67,34 @@ public class SecondReleaseUxPackTests
         Assert.Contains("suggested-config-patch", releaseDoctor);
     }
 
+
+    [Fact]
+    public void PilotNextCommands_UseSelectedInputAndControlArtifactsAreAlwaysWritten()
+    {
+        var pilot = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/PilotCommand.cs"));
+
+        Assert.Contains("selected-input", pilot);
+        Assert.Contains("WriteSelectedInput(fullInput, pilotInputPath, selected)", pilot);
+        Assert.Contains("BuildNextCommands(pilotInputPath, outPath)", pilot);
+        Assert.DoesNotContain("BuildNextCommands(fullInput, outPath", pilot);
+        Assert.Contains("Control artifacts are written for every format", pilot);
+    }
+
+    [Fact]
+    public void StartNextCommands_DoNotServeDashboardFromWorkspaceRootOrAskMenus()
+    {
+        var start = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/StartCommand.cs"));
+        var supervised = File.ReadAllText(FindRepositoryFile("templates/opencode-team/global/.config/opencode/commands/supervised-task.md"));
+
+        Assert.Contains("runs", start);
+        Assert.Contains("latest", start);
+        Assert.DoesNotContain("report serve --input {Quote(workspace)}", start);
+        Assert.Contains("current-ticket.md", start);
+        Assert.Contains("start-dispatch.json", start);
+        Assert.Contains("Start-workspace no-menu fallback", supervised);
+        Assert.Contains("Do not offer options such as README updates", supervised);
+    }
+
     static string FindRepositoryFile(string relativePath)
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

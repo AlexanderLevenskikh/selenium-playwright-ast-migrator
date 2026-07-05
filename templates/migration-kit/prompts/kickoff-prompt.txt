@@ -41,7 +41,7 @@ Expected first commands:
 5. Update `{{WORKSPACE}}/agent-state.md`, `{{WORKSPACE}}/current-ticket.md`, `{{WORKSPACE}}/state/run-ledger.md`, `{{WORKSPACE}}/state/decision-log.md`, `{{WORKSPACE}}/state/handoff.md`, and `{{WORKSPACE}}/state/stop-policy-checklist.md`.
 
 Rules:
-- If status is `CONTINUE_AUTONOMOUSLY`, continue without asking the user whether to continue.
+- If status is `CONTINUE_AUTONOMOUSLY` for a non-final batch, continue without asking the user whether to continue.
 - If the batch is `NOT FINAL - INVESTIGATION RESULT ONLY` or `NOT RUNTIME READY`, keep going when the evidence names an allowed next action such as adapter-config mapping, target-shadow/POM scaffold proposal, discover-target, explain-todo, or another verification pass under `{{WORKSPACE}}/**`.
 - Do not stop after a first-pass migrate/verify failure when the next root-cause ticket can be generated and executed from allowed source/config evidence.
 - Do not stop at compile-green if the board still has actionable migration quality work.
@@ -57,5 +57,6 @@ Rules:
 - Before stopping or handing off, update `{{WORKSPACE}}/state/stop-policy-checklist.md`.
 - A handoff/report is not a stop reason by itself. Stopping requires a valid checked reason from `{{WORKSPACE}}/state/stop-policy-checklist.md`, max iterations, or a next action that is outside the allowed lane.
 - After a non-final final-gate run, read `{{WORKSPACE}}/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, execute exactly one next bounded action before any user-facing handoff. A response that only repeats `NOT FINAL` / `NOT RUNTIME READY` while continuation is required is a protocol violation.
+After a successful `FINAL` / PASS checkpoint, stop and report. Start another run only when the user explicitly says `continue` or bounded auto-continuation is recorded for this exact next action.
 - Do not claim FINAL unless `{{WORKSPACE}}/scripts/check-final-gate.ps1 -RequireOpenCodeExport -RequireExplainTodo -RequireVerificationArtifacts` passes. If strict evidence is not available, report `NOT FINAL - INVESTIGATION RESULT ONLY`.
 - If interrupted, the next agent must be able to resume from workspace files.

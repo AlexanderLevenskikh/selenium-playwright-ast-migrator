@@ -14,7 +14,8 @@ This guide is for users running migrations, reviewing generated output, and deci
 
 ## Common workflows
 
-- Existing Playwright .NET project: run `discover-target`, review the draft config, then run `orchestrate` on a small Selenium pilot.
-- No Playwright infrastructure yet: use `scaffold`, implement auth/routes, then migrate a small pilot.
-- Large suite migration: use `orchestrate`, `explain-todo`, `migration-board`, `index-pom`, and `helper-inventory` to reduce repeated root causes before expanding the batch.
+- Product repo onboarding: run `start`, then `pilot`, then execute `migration/pilot/next-commands.md` against `selected-input/`.
+- Existing Playwright .NET project: run `discover-target`, review the draft config, then run `orchestrate` on the selected pilot.
+- No Playwright infrastructure yet: use `start` and `pilot` first; use `init --wizard` only when you need the legacy `scaffold/` generator.
+- Large suite migration: use `orchestrate`, `explain-todo`, `migration-board`, `index-pom`, and `helper-inventory` to reduce repeated root causes before expanding beyond the pilot.
 - TypeScript preview: run `migrate --target ts`, then `verify-ts-project --ts-project <existing-playwright-ts-project>`.

@@ -26,12 +26,13 @@ Required checks after the batch:
 6. If `{{WORKSPACE}}/state/continuation-decision.json` says `CONTINUE_REQUIRED`, execute one next bounded action before reporting to the user.
 
 Continuation rule:
-- If status is `CONTINUE_AUTONOMOUSLY`, continue without asking the user whether to continue.
+- If status is `CONTINUE_AUTONOMOUSLY` for a non-final batch, continue without asking the user whether to continue.
 - Stop only for a classified blocker, forbidden write requirement, loop/plateau, missing input, or strict final gate result.
 - If the same failure appears twice without new evidence, stop with `LOOP_DETECTED` and write root-cause analysis under `{{WORKSPACE}}/runs/<run-id>/`.
 
 FINAL rule:
 After a non-final final-gate run, read `{{WORKSPACE}}/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, execute exactly one next bounded action before any user-facing handoff. A response that only repeats `NOT FINAL` / `NOT RUNTIME READY` while continuation is required is a protocol violation.
+After a successful `FINAL` / PASS checkpoint, stop and report. Start another run only when the user explicitly says `continue` or bounded auto-continuation is recorded for this exact next action.
 - Do not claim FINAL unless:
 `{{WORKSPACE}}/scripts/check-final-gate.ps1 -RequireOpenCodeExport -RequireExplainTodo -RequireVerificationArtifacts` passes.
 Otherwise report `NOT FINAL - INVESTIGATION RESULT ONLY`.

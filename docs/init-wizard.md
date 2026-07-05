@@ -1,18 +1,53 @@
 # Init wizard and project onboarding
 
-`init --wizard` creates a safe starter workspace for a new Selenium → Playwright migration.
+`start` is the default product-repo onboarding command. It creates a profile skeleton, a current ticket, a no-menu dispatch state for `/supervised-task`, and exact next commands for `doctor install`, `pilot`, agent bootstrap or manual migration, and dashboard review after a run exists.
 
-The wizard is intentionally conservative:
+```shell
+selenium-pw-migrator start --input ./SeleniumTests --agent opencode --workspace migration
+selenium-pw-migrator pilot --input ./SeleniumTests --max-tests 10 --out migration/pilot
+```
 
-- it never edits source tests;
-- it never overwrites a non-empty migration workspace;
-- it writes a reviewable starter config instead of hidden behavior;
-- it prefers exact next commands over vague setup instructions;
-- it asks before installing lightweight agent loop files.
+Use `init --wizard` only when you deliberately want the older manual scaffold/config wizard without the product `start` state. It remains supported for no-agent experiments, local scaffold generation, and tests that need the classic workspace layout.
 
-## Interactive form
+## When to use which command
 
-```bash
+| Need | Preferred command |
+|---|---|
+| Product repo onboarding | `start` |
+| Representative first slice | `pilot` |
+| OpenCode handoff | `kit bootstrap-opencode` |
+| Codex/generic/CI handoff | `kit bootstrap-agent` |
+| Manual starter config/scaffold only | `init --wizard` |
+
+## `start` generated workspace
+
+```text
+migration/
+  current-ticket.md
+  next-commands.md
+  README.start.md
+  profiles/adapter-config.start.json
+  state/start-dispatch.json
+```
+
+`start-dispatch.json` and `current-ticket.md` exist so `/supervised-task` can choose the next bounded action without asking the user broad menu questions.
+
+## `pilot` generated workspace
+
+```text
+migration/pilot/
+  pilot-selection.md
+  pilot-selection.json
+  selected-tests.txt
+  selected-input/
+  next-commands.md
+```
+
+The generated pilot next commands must use `selected-input/`, not the full Selenium suite.
+
+## Legacy manual wizard
+
+```shell
 selenium-pw-migrator init --wizard
 ```
 
@@ -25,9 +60,9 @@ The wizard asks for:
 5. default test id attribute (`data-testid`, `data-test-id`, `data-test`, `data-tid`, or custom);
 6. whether to install lightweight agent loop files.
 
-## Non-interactive form
+## Non-interactive legacy form
 
-```bash
+```shell
 selenium-pw-migrator init --wizard \
   --source ./OldTests \
   --target dotnet \
@@ -39,7 +74,7 @@ selenium-pw-migrator init --wizard \
 
 Mode-compatible form is also supported:
 
-```bash
+```shell
 selenium-pw-migrator --mode init --wizard \
   --input ./OldTests \
   --target dotnet \
@@ -47,7 +82,7 @@ selenium-pw-migrator --mode init --wizard \
   --out migration
 ```
 
-## Generated workspace
+## Legacy generated workspace
 
 ```text
 migration/
@@ -58,14 +93,14 @@ migration/
   next-commands.md
   .gitignore
   scaffold/                 # when no existing target project is selected and target is Playwright .NET
-  opencode-team/  # guarded OpenCode templates, when installed
+  opencode-team/            # guarded OpenCode templates, when installed
 ```
 
 ## Existing target project
 
-When the target Playwright project already exists, use:
+When the target Playwright project already exists and you are using the manual wizard, pass the target project path:
 
-```bash
+```shell
 selenium-pw-migrator init --wizard \
   --source ./OldTests \
   --target dotnet \
@@ -78,9 +113,8 @@ The wizard skips scaffold generation and writes a `discover-target` command into
 
 Always run the generated config through validation before the first migration:
 
-```bash
-dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- \
-  --mode config-validate \
+```shell
+selenium-pw-migrator --mode config-validate \
   --config migration/profiles/adapter-config.json \
   --validation-mode strict \
   --out migration/config-validate

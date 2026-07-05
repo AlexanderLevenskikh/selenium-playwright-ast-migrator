@@ -3,6 +3,8 @@
 The agent may claim `FINAL` only when every applicable item is PASS.
 Otherwise the report must say `NOT FINAL - INVESTIGATION RESULT ONLY`, then follow `state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, the agent must continue before sending a user-facing handoff.
 
+When the gate passes with `FINAL`, the default is a successful checkpoint: stop, report evidence, and name one recommended next command. Do not start another run automatically unless the user explicitly says continue or the decision file grants bounded auto-continuation.
+
 Do not fill this file by hand as proof. Run:
 
 ```powershell

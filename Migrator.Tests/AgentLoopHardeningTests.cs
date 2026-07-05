@@ -793,7 +793,7 @@ public class AgentLoopHardeningTests
 
 
     [Fact]
-    public void OpenCodeSupervisedTask_AutoSelectsNextBoundedTaskWhenNoArguments()
+    public void OpenCodeSupervisedTask_StopsAfterFinalUnlessExplicitContinue()
     {
         var command = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
         var docs = Read("docs/harness-supervised-task-autonext.md");
@@ -807,6 +807,9 @@ public class AgentLoopHardeningTests
             Assert.Contains("If `$ARGUMENTS` is empty", text);
             Assert.Contains("do not ask the user what to do next", text);
             Assert.Contains("FINAL", text);
+            Assert.Contains("stop for review", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("explicit", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("continue", text, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("project-verify structural errors", text);
             Assert.Contains("unmapped UiTargets", text);
             Assert.Contains("syntax-fallback", text);
@@ -816,11 +819,14 @@ public class AgentLoopHardeningTests
 
         Assert.Contains("/supervised-task", docs);
         Assert.Contains("tester-facing", docs);
-        Assert.Contains("auto-selected by `/supervised-task`", docs);
-        Assert.Contains("No extra prompt is required", teamReadme);
-        Assert.Contains("auto-selects the next bounded ticket after FINAL", teamReadme);
+        Assert.Contains("selected by explicit `/supervised-task continue`", docs);
+        Assert.Contains("No extra prompt is required when the user says `continue`", docs);
+        Assert.Contains("stops for review after FINAL", teamReadme);
+        Assert.Contains("`/supervised-task continue ...`", teamReadme);
         Assert.Contains("`/supervised-task` is the normal tester-facing entrypoint", rootAgents);
+        Assert.Contains("stop for review by default", rootAgents);
         Assert.Contains("`/supervised-task` is the normal tester-facing entrypoint", projectAgents);
+        Assert.Contains("stop for review by default", projectAgents);
     }
 
     [Fact]
@@ -1212,6 +1218,46 @@ public class AgentLoopHardeningTests
         }
     }
 
+
+    [Fact]
+    public void FinalGate_PassedCheckpointStopsForReviewAndRequiresExplicitContinue()
+    {
+        var finalGateScript = Read("templates/migration-kit/scripts/check-final-gate.ps1");
+        var continuationContract = Read("templates/migration-kit/state/continuation-contract.md");
+        var supervisedTask = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var docs = Read("docs/harness-continuation-strict.md");
+
+        Assert.Contains("postSuccessPolicy", finalGateScript);
+        Assert.Contains("STOP_FOR_REVIEW", finalGateScript);
+        Assert.Contains("explicit user continue request", finalGateScript);
+        Assert.Contains("SUCCESS checkpoint", continuationContract);
+        Assert.Contains("starting another bounded ticket without explicit continue", continuationContract);
+        Assert.Contains("After every successful `FINAL` / PASS checkpoint, stop and report", supervisedTask);
+        Assert.Contains("SUCCESS checkpoint rule", docs);
+        Assert.Contains("/supervised-task continue", docs);
+
+        using var repo = TemporaryGitRepo.Create();
+        PrepareFinalGateWorkspace(
+            repo,
+            latestRunId: "run-014",
+            explicitStatus: "Status: READY_FOR_ACCEPTANCE\n",
+            includeProjectVerify: true,
+            configPassed: true);
+
+        var result = repo.RunFinalGate();
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("FINAL_GATE_PASS", result.Output);
+        Assert.Contains("HARNESS_CONTINUATION_FINAL", result.Output);
+        Assert.Contains("HARNESS_SUCCESS_STOP_FOR_REVIEW", result.Output);
+
+        var decision = repo.Read("migration/state/continuation-decision.json");
+        Assert.Contains("FINAL", decision);
+        Assert.Contains("STOP_FOR_REVIEW", decision);
+        Assert.Contains("continueCommand", decision);
+        Assert.Contains("/supervised-task continue", decision);
+        Assert.Contains("mustContinueBeforeUserMessage", decision);
+        Assert.Contains("false", decision);
+    }
 
     [Fact]
     public void FinalGate_WritesStrictContinuationDecisionForAllowedNextAction()

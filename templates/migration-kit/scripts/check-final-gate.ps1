@@ -516,10 +516,13 @@ function New-ContinuationDecision([bool]$Passed, $Results, $Candidate, [bool]$Ha
     if ($Passed) {
         return [pscustomobject][ordered]@{
             status = "FINAL"
-            protocol = "Final gate passed; FINAL may be reported with evidence."
+            protocol = "Final gate passed; stop for review. Report evidence and do not start another migration run automatically."
             nextAction = $null
             source = $null
             mustContinueBeforeUserMessage = $false
+            postSuccessPolicy = "STOP_FOR_REVIEW"
+            continueRequires = "explicit user continue request or bounded autoContinuation for the exact next action"
+            continueCommand = "/supervised-task continue <next bounded action>"
         }
     }
 
@@ -800,6 +803,12 @@ $continuationMd = New-Object System.Text.StringBuilder
 [void]$continuationMd.AppendLine("Status: **$($continuation.status)**")
 [void]$continuationMd.AppendLine()
 [void]$continuationMd.AppendLine($continuation.protocol)
+if ($continuation.postSuccessPolicy) {
+    [void]$continuationMd.AppendLine()
+    [void]$continuationMd.AppendLine(("Post-success policy: {0}" -f $continuation.postSuccessPolicy))
+    [void]$continuationMd.AppendLine(("Continue requires: {0}" -f $continuation.continueRequires))
+    [void]$continuationMd.AppendLine(("Continue command: {0}" -f $continuation.continueCommand))
+}
 if ($continuation.nextAction) {
     [void]$continuationMd.AppendLine()
     [void]$continuationMd.AppendLine(("Next action: {0}" -f $continuation.nextAction))
@@ -809,6 +818,10 @@ Set-Content -Path $continuationMdPath -Value $continuationMd.ToString() -Encodin
 
 Write-Host "FINAL_GATE_$($report.status)"
 Write-Host "HARNESS_CONTINUATION_$($continuation.status)"
+if ($continuation.postSuccessPolicy) {
+    Write-Host "HARNESS_SUCCESS_$($continuation.postSuccessPolicy)"
+    Write-Host "Continue command: $($continuation.continueCommand)"
+}
 if ($continuation.nextAction) {
     Write-Host "Next action: $($continuation.nextAction)"
 }
