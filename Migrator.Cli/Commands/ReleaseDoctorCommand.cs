@@ -248,6 +248,11 @@ internal static class ReleaseDoctorCommand
         AddSourceContains(root, checks, "README.md", "Choose your path", "docs", "README starts with three public entry paths");
         AddSourceContains(root, checks, "README.md", "npm update -g selenium-pw-migrator", "docs", "README documents npm update path");
         AddSourceContains(root, checks, "README.md", "doctor install", "docs", "README documents install diagnostics");
+        AddSourceContains(root, checks, "README.md", "selenium-pw-migrator start", "docs", "README documents product-repo onboarding wizard");
+        AddSourceContains(root, checks, "README.md", "selenium-pw-migrator pilot", "docs", "README documents representative pilot selection");
+        AddSourceContains(root, checks, "Migrator.Cli/Commands/StartCommand.cs", "start-wizard/v1", "start-ux", "start wizard writes versioned onboarding reports");
+        AddSourceContains(root, checks, "Migrator.Cli/Commands/PilotCommand.cs", "pilot-selection/v1", "pilot-ux", "pilot selection writes versioned reports");
+        AddSourceContains(root, checks, "Migrator.Cli/Program.cs", "suggested-config-patch", "todo-ux", "explain-todo writes suggested config patch artifacts");
         AddSourceContains(root, checks, "docs/report-serve-dashboard.md", "Open this first", "docs", "dashboard is documented as first review surface");
     }
 

@@ -22,6 +22,13 @@ bash playground/commands.sh
 selenium-pw-migrator playground verify --input playground --out playground-verify --format both
 ```
 
+For a real product repository, start with the onboarding wizard and representative pilot slice:
+
+```bash
+selenium-pw-migrator start --input ./SeleniumTests --agent opencode --workspace migration
+selenium-pw-migrator pilot --input ./SeleniumTests --max-tests 10 --out migration/pilot
+```
+
 For a real agent-assisted migration:
 
 ```bash
@@ -37,7 +44,7 @@ After a run, open the dashboard first:
 selenium-pw-migrator report serve --input migration/runs/latest --static-only --out migration/dashboard/latest --format both
 ```
 
-Open `migration/dashboard/latest/report-dashboard.html` before digging through raw artifacts.
+Open `migration/dashboard/latest/report-dashboard.html` before digging through raw artifacts. When TODOs remain, run `explain-todo`; it now writes `suggested-config-patch.md/json` with grouped root causes, confidence/evidence badges, and draft profile mappings for review.
 
 The stable production path is Selenium C# -> Playwright .NET. Treat Java, Python, and Playwright TypeScript as experimental preview paths until their reports and target-project checks prove readiness.
 

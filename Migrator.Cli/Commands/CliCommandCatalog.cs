@@ -27,6 +27,18 @@ internal static class CliCommandCatalog
             "Writes profiles/adapter-config.json, current-ticket.md, state/run-ledger.md, README.md, next-commands.md, and optional scaffold/agent-loop files. Use direct form `selenium-pw-migrator init --wizard` or mode form `--mode init --wizard`.",
             "Optional source path via --source-path <path> for direct init or --input <path> for mode form.",
             "selenium-pw-migrator init --wizard --source-path ./OldTests --target dotnet --target-test-framework xunit --workspace migration"),
+        StableCommand("start", "start", false, false,
+            "Run the product-repo onboarding wizard and print the next safe command.",
+            "Asks or accepts the minimum project facts: Selenium tests path, target backend, existing Playwright project, and agent choice. Writes start-summary, profile skeleton, and next-commands artifacts, then points to doctor/pilot/agent bootstrap. Use direct form `selenium-pw-migrator start --input ./OldTests --agent codex`.",
+            "Optional source path via --input <path> or --source-path <path>; interactive consoles can provide it when omitted.",
+            "selenium-pw-migrator start --input ./OldTests --agent opencode --workspace migration",
+            "selenium-pw-migrator start --source-path ./OldTests --agent codex --target dotnet --target-project ./PlaywrightTests"),
+        StableCommand("pilot", "pilot", true, true,
+            "Select a representative bounded migration slice before the first real batch.",
+            "Scans Selenium test files and chooses a small set covering simple smoke tests, PageObject-heavy files, table/filter patterns, assertions, waits, and custom helpers. Writes pilot-selection.md/json, selected-tests.txt, and next-commands.md. It does not edit source files.",
+            "Source Selenium test file or directory.",
+            "selenium-pw-migrator pilot --input ./OldTests --max-tests 10 --out migration/pilot",
+            "selenium-pw-migrator --mode pilot --input ./OldTests --max-tests 10 --format both"),
         StableCommand("runbook", "runbook", true, true,
             "Generate a practical migration plan for a project before the first run.",
             "Reads source/project signals, optional config layers, source/target capability metadata, generation policy, and writes runbook.md/json with pilot scope, first command chain, risk map, artifacts to collect, and acceptance checklist. Does not modify source files.",
@@ -380,6 +392,9 @@ internal static class CliCommandCatalog
         sb.AppendLine("                                   Test framework for Playwright .NET output/scaffold/verify defaults.");
         sb.AppendLine("  --generation-policy <conservative|balanced|aggressive>");
         sb.AppendLine("                                   Controls mapped helper risk: more TODOs, current behavior, or more active code.");
+        sb.AppendLine("  --agent <opencode|codex|generic|manual>");
+        sb.AppendLine("                                   Agent handoff preference for start/onboarding.");
+        sb.AppendLine("  --max-tests <number>             Pilot slice budget for `pilot` (default: 10).");
         sb.AppendLine("  --wizard                         Run init in guided/onboarding mode.");
         sb.AppendLine("  --fix                           Add safe doctor repair plan artifacts.");
         sb.AppendLine("  --dry-run                       Preview doctor fixes without writing project/config files.");

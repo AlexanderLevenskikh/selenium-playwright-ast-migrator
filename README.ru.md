@@ -22,6 +22,18 @@ Migrator парсит Selenium-тесты, строит промежуточну
 
 ## Три входа
 
+### Product-repo onboarding wizard
+
+Если ты уже внутри реального продуктового репозитория и не хочешь руками выбирать весь маршрут, начинай отсюда:
+
+```bash
+npm install -g selenium-pw-migrator@preview
+selenium-pw-migrator doctor install
+selenium-pw-migrator start --input ./SeleniumTests --agent opencode --workspace migration
+```
+
+`start` определяет source, создаёт `migration/profiles/adapter-config.start.json`, пишет `migration/next-commands.md` и печатает цепочку: `pilot`, `doctor`, agent bootstrap или ручной режим, затем dashboard. Для другого агента используй `--agent codex`, `--agent generic` или `--agent manual`.
+
 ### 1. Попробовать без агента
 
 ```bash
@@ -45,13 +57,21 @@ selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --s
 selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration --source ./SeleniumTests
 ```
 
+Перед масштабированием реальной миграции дай CLI выбрать маленький репрезентативный pilot-срез:
+
+```bash
+selenium-pw-migrator pilot --input ./SeleniumTests --max-tests 10 --out migration/pilot
+```
+
+`pilot` пишет `pilot-selection.md/json`, `selected-tests.txt` и `next-commands.md`. Он старается покрыть простые smoke tests, PageObjects, table/filter patterns, waits, assertions, custom helpers, XPath и data-driven tests.
+
 После реального run сначала открывай dashboard:
 
 ```bash
 selenium-pw-migrator report serve --input migration/runs/latest --static-only --out migration/dashboard/latest --format both
 ```
 
-Открывай `migration/dashboard/latest/report-dashboard.html` до ручного чтения JSON/TXT артефактов.
+Открывай `migration/dashboard/latest/report-dashboard.html` до ручного чтения JSON/TXT артефактов. Если остались TODO, `explain-todo` дополнительно пишет `suggested-config-patch.md/json` с grouped root causes, “fix this profile mapping first”, confidence/evidence badges и черновиками UiTarget/Method/Table mappings для ревью.
 
 ## Поддерживаемые source и target
 

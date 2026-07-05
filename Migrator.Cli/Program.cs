@@ -274,6 +274,20 @@ if (mode == "release-doctor")
     return releaseDoctorExitCode;
 }
 
+// Handle start mode — product-repo onboarding wizard that chooses the first safe route.
+if (mode == "start")
+{
+    var startExitCode = StartCommand.RunFromOptions(inputPath, outPath, format, opts.Workspace, opts.Agent, target, targetTestFramework, generationPolicy, opts.TargetProjectPath);
+    return startExitCode;
+}
+
+// Handle pilot mode — select a representative bounded slice before the first migration batch.
+if (mode == "pilot")
+{
+    var pilotExitCode = PilotCommand.RunFromOptions(inputPath, outPath, format, opts.MaxTests);
+    return pilotExitCode;
+}
+
 ITestFileParser parser;
 try
 {
@@ -2854,6 +2868,8 @@ static void WriteExplainTodoReport(TodoExplanationReport report, string outPath,
                 WriteAgentNextTaskFallbackMarkdown(report, ex));
         }
     }
+
+    WriteSuggestedConfigPatchArtifacts(report, outPath, format);
 }
 
 static string WriteAgentNextTaskFallbackMarkdown(TodoExplanationReport report, Exception ex)
@@ -3898,6 +3914,192 @@ static string? ReadString(System.Text.Json.JsonElement element, string propertyN
     return p.ValueKind == System.Text.Json.JsonValueKind.String ? p.GetString() : p.ToString();
 }
 
+
+static void WriteSuggestedConfigPatchArtifacts(TodoExplanationReport report, string outPath, string format)
+{
+    if (format is "json" or "both")
+        File.WriteAllText(Path.Combine(outPath, "suggested-config-patch.json"), BuildSuggestedConfigPatchJson(report));
+    if (format is "text" or "both")
+        File.WriteAllText(Path.Combine(outPath, "suggested-config-patch.md"), BuildSuggestedConfigPatchMarkdown(report));
+}
+
+static string BuildSuggestedConfigPatchJson(TodoExplanationReport report)
+{
+    var topUiTargets = report.NormalizedRootCauses
+        .Where(g => g.Category is "MISSING_MAPPING" or "TABLE_MAPPING_REQUIRED" or "WAIT_MAPPING_REQUIRED")
+        .OrderByDescending(g => g.Count)
+        .Take(20)
+        .Select(g => new
+        {
+            SourceExpression = g.GroupKey,
+            SuggestedTarget = SuggestTargetExpression(g.DisplayName),
+            RequiresReview = true,
+            Confidence = SuggestedPatchConfidence(g.Count),
+            Reason = g.SuggestedAction,
+            Evidence = g.Evidence
+        })
+        .ToArray();
+
+    var topMethods = report.NormalizedRootCauses
+        .Where(g => IsMethodLikeRootCause(g.Category, g.DisplayName))
+        .OrderByDescending(g => g.Count)
+        .Take(20)
+        .Select(g => new
+        {
+            SourceMethod = g.GroupKey,
+            TargetStatement = "// TODO: map this helper after inspecting source truth",
+            RequiresReview = true,
+            Confidence = SuggestedPatchConfidence(g.Count),
+            Occurrences = g.Count,
+            Evidence = g.Evidence
+        })
+        .ToArray();
+
+    var tables = report.TableMappingCandidates
+        .OrderByDescending(c => c.Count)
+        .Take(20)
+        .Select(c => new
+        {
+            SourceRoot = c.SourceRoot,
+            SourceExpression = c.SourceExpression,
+            SuggestedUiTargetRoot = c.SuggestedUiTargetRoot,
+            SuggestedConfigHint = c.SuggestedConfigHint,
+            RequiresReview = true,
+            Confidence = SuggestedPatchConfidence(c.Count),
+            Occurrences = c.Count,
+            Evidence = c.Evidence
+        })
+        .ToArray();
+
+    var patch = new
+    {
+        SchemaVersion = "suggested-config-patch/v1",
+        GeneratedAtUtc = DateTimeOffset.UtcNow,
+        ArtifactRoot = report.ArtifactRoot,
+        ReviewRequired = true,
+        Warning = "Draft only. Copy small reviewed entries into adapter-config/profile layers after checking source truth.",
+        FixThisProfileMappingFirst = report.NormalizedRootCauses.OrderByDescending(g => g.Count).FirstOrDefault()?.DisplayName ?? report.NextBestAction,
+        UiTargets = topUiTargets,
+        Methods = topMethods,
+        Tables = tables
+    };
+
+    return System.Text.Json.JsonSerializer.Serialize(patch, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine;
+}
+
+static string BuildSuggestedConfigPatchMarkdown(TodoExplanationReport report)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("# Suggested Config Patch");
+    sb.AppendLine();
+    sb.AppendLine("This is a review-first patch proposal. Do not auto-apply it blindly: check source truth, target POM/API, and generated evidence.");
+    sb.AppendLine();
+    var first = report.NormalizedRootCauses.OrderByDescending(g => g.Count).FirstOrDefault();
+    sb.AppendLine("## Fix this profile mapping first");
+    sb.AppendLine();
+    if (first == null)
+    {
+        sb.AppendLine(report.NextBestAction);
+    }
+    else
+    {
+        sb.AppendLine($"- **Root cause**: `{EscapeMd(first.Category)}` / {EscapeMd(first.DisplayName)}");
+        sb.AppendLine($"- **Impact**: appears in `{first.Count}` generated TODO/action site(s)");
+        sb.AppendLine($"- **Confidence/evidence badge**: `{SuggestedPatchConfidence(first.Count)}` / `{first.Evidence.Length + first.RepresentativeFiles.Length}` evidence link(s)");
+        sb.AppendLine($"- **Suggested action**: {EscapeMd(first.SuggestedAction)}");
+    }
+    sb.AppendLine();
+
+    sb.AppendLine("## UiTarget / mapping drafts");
+    sb.AppendLine();
+    var uiGroups = report.NormalizedRootCauses
+        .Where(g => g.Category is "MISSING_MAPPING" or "TABLE_MAPPING_REQUIRED" or "WAIT_MAPPING_REQUIRED")
+        .OrderByDescending(g => g.Count)
+        .Take(15)
+        .ToArray();
+    if (uiGroups.Length == 0)
+    {
+        sb.AppendLine("No high-confidence UiTarget drafts were inferred from current artifacts.");
+    }
+    else
+    {
+        foreach (var group in uiGroups)
+        {
+            sb.AppendLine($"### {EscapeMd(group.DisplayName)}");
+            sb.AppendLine();
+            sb.AppendLine($"- Occurrences: `{group.Count}`");
+            sb.AppendLine($"- Confidence/evidence badge: `{SuggestedPatchConfidence(group.Count)}` / `{group.Evidence.Length + group.RepresentativeFiles.Length}` evidence link(s)");
+            sb.AppendLine($"- Suggested action: {EscapeMd(group.SuggestedAction)}");
+            sb.AppendLine("```json");
+            sb.AppendLine("{");
+            sb.AppendLine($"  \"SourceExpression\": \"{JsonEscape(group.GroupKey)}\",");
+            sb.AppendLine($"  \"Target\": \"{JsonEscape(SuggestTargetExpression(group.DisplayName))}\",");
+            sb.AppendLine("  \"RequiresReview\": true");
+            sb.AppendLine("}");
+            sb.AppendLine("```");
+            sb.AppendLine();
+        }
+    }
+
+    sb.AppendLine("## Table/list mapping drafts");
+    sb.AppendLine();
+    if (report.TableMappingCandidates.Length == 0)
+    {
+        sb.AppendLine("No table/list drafts were inferred.");
+    }
+    else
+    {
+        foreach (var candidate in report.TableMappingCandidates.OrderByDescending(c => c.Count).Take(15))
+        {
+            sb.AppendLine($"### {EscapeMd(candidate.SourceRoot)}");
+            sb.AppendLine();
+            sb.AppendLine($"- Occurrences: `{candidate.Count}`");
+            sb.AppendLine($"- Confidence/evidence badge: `{SuggestedPatchConfidence(candidate.Count)}` / `{candidate.Evidence.Length}` evidence link(s)");
+            sb.AppendLine($"- Hint: {EscapeMd(candidate.SuggestedConfigHint)}");
+            sb.AppendLine("```json");
+            sb.AppendLine("{");
+            sb.AppendLine($"  \"SourceRoot\": \"{JsonEscape(candidate.SourceRoot)}\",");
+            sb.AppendLine($"  \"RowTarget\": \"{JsonEscape(candidate.SuggestedUiTargetRoot)}\",");
+            sb.AppendLine("  \"RequiresReview\": true");
+            sb.AppendLine("}");
+            sb.AppendLine("```");
+            sb.AppendLine();
+        }
+    }
+
+    sb.AppendLine("## Method/helper drafts");
+    sb.AppendLine();
+    var methodGroups = report.NormalizedRootCauses
+        .Where(g => IsMethodLikeRootCause(g.Category, g.DisplayName))
+        .OrderByDescending(g => g.Count)
+        .Take(15)
+        .ToArray();
+    if (methodGroups.Length == 0)
+    {
+        sb.AppendLine("No helper/method drafts were inferred.");
+    }
+    else
+    {
+        foreach (var group in methodGroups)
+        {
+            sb.AppendLine($"- `{EscapeMd(group.DisplayName)}` appears in `{group.Count}` site(s). Confidence/evidence badge: `{SuggestedPatchConfidence(group.Count)}`. Next: {EscapeMd(group.SuggestedAction)}");
+        }
+    }
+
+    return sb.ToString();
+}
+
+static bool IsMethodLikeRootCause(string category, string displayName) =>
+    category.Contains("HELPER", StringComparison.OrdinalIgnoreCase)
+    || category.Contains("UNSUPPORTED", StringComparison.OrdinalIgnoreCase)
+    || category.Contains("RAW", StringComparison.OrdinalIgnoreCase)
+    || displayName.Contains("helper", StringComparison.OrdinalIgnoreCase)
+    || displayName.Contains("method", StringComparison.OrdinalIgnoreCase);
+
+static string SuggestedPatchConfidence(int occurrences) => occurrences >= 20 ? "high-impact" : occurrences >= 5 ? "medium-impact" : "low-impact";
+
+static string JsonEscape(string value) => value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
+
 static string WriteExplainTodoMarkdown(TodoExplanationReport report)
 {
     var sb = new StringBuilder();
@@ -3926,6 +4128,10 @@ static string WriteExplainTodoMarkdown(TodoExplanationReport report)
     AppendNormalizedRootCausesMarkdown(sb, report.NormalizedRootCauses);
     sb.AppendLine();
     AppendTableMappingCandidatesMarkdown(sb, report.TableMappingCandidates);
+    sb.AppendLine();
+    sb.AppendLine("## Suggested config patch");
+    sb.AppendLine();
+    sb.AppendLine("Draft artifacts are written next to this report as `suggested-config-patch.md` and `suggested-config-patch.json`. Treat them as evidence-backed starting points, not auto-applied config.");
     sb.AppendLine();
     sb.AppendLine("## Что делать дальше");
     sb.AppendLine();
@@ -10457,7 +10663,10 @@ static CliOptions? ParseArgs(string[] args)
     int port = 0;
     bool staticOnly = false;
     bool includeSourceFiles = false;
+    int maxTests = 10;
+    string agent = "opencode";
     var initModeRequested = IsInitModeRequest(args);
+    var startModeRequested = IsStartModeRequest(args);
 
     for (int i = 0; i < args.Length; i++)
     {
@@ -10588,6 +10797,24 @@ static CliOptions? ParseArgs(string[] args)
             case "--include-source-files":
                 includeSourceFiles = true;
                 break;
+            case "--max-tests":
+                if (i + 1 < args.Length && int.TryParse(args[++i], out var parsedMaxTests) && parsedMaxTests > 0)
+                    maxTests = parsedMaxTests;
+                else
+                {
+                    Console.Error.WriteLine("--max-tests requires a positive integer");
+                    return null;
+                }
+                break;
+            case "--agent":
+                if (i + 1 < args.Length)
+                    agent = args[++i].Trim().ToLowerInvariant();
+                else
+                {
+                    Console.Error.WriteLine("--agent requires a value: opencode|codex|generic|manual");
+                    return null;
+                }
+                break;
             case "--wizard":
                 wizard = true;
                 break;
@@ -10647,9 +10874,9 @@ static CliOptions? ParseArgs(string[] args)
             case "--source-path":
                 if (i + 1 < args.Length)
                 {
-                    if (!initModeRequested)
+                    if (!initModeRequested && !startModeRequested)
                     {
-                        Console.Error.WriteLine("--source-path is only supported for init --wizard. Use --input for other modes.");
+                        Console.Error.WriteLine("--source-path is only supported for init --wizard or start. Use --input for other modes.");
                         return null;
                     }
 
@@ -10657,7 +10884,7 @@ static CliOptions? ParseArgs(string[] args)
                 }
                 else
                 {
-                    Console.Error.WriteLine("--source-path requires a source path for init --wizard");
+                    Console.Error.WriteLine("--source-path requires a source path for init --wizard or start");
                     return null;
                 }
                 break;
@@ -10894,7 +11121,13 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
-    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, source, sourceExplicit, tsProject, recursiveArtifacts, irVersion, renderIr, validationMode, targetTestFramework, generationPolicy, wizard, installAgentKit, targetProjectExists, targetProjectPath, defaultTestIdAttribute, targetNamespace, targetBaseClass, fix, apply, dryRun, port, staticOnly, includeSourceFiles);
+    if (!new[] { "opencode", "codex", "generic", "manual", "none" }.Contains(agent, StringComparer.OrdinalIgnoreCase))
+    {
+        Console.Error.WriteLine("Invalid --agent. Use: opencode|codex|generic|manual");
+        return null;
+    }
+
+    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, source, sourceExplicit, tsProject, recursiveArtifacts, irVersion, renderIr, validationMode, targetTestFramework, generationPolicy, wizard, installAgentKit, targetProjectExists, targetProjectPath, defaultTestIdAttribute, targetNamespace, targetBaseClass, fix, apply, dryRun, port, staticOnly, includeSourceFiles, maxTests, agent);
 }
 
 static string[] NormalizeDirectCommand(string[] args)
@@ -10904,6 +11137,12 @@ static string[] NormalizeDirectCommand(string[] args)
 
     if (string.Equals(args[0], "init", StringComparison.OrdinalIgnoreCase))
         return new[] { "--mode", "init" }.Concat(args.Skip(1)).ToArray();
+
+    if (string.Equals(args[0], "start", StringComparison.OrdinalIgnoreCase))
+        return new[] { "--mode", "start" }.Concat(args.Skip(1)).ToArray();
+
+    if (string.Equals(args[0], "pilot", StringComparison.OrdinalIgnoreCase))
+        return new[] { "--mode", "pilot" }.Concat(args.Skip(1)).ToArray();
 
     if (string.Equals(args[0], "runbook", StringComparison.OrdinalIgnoreCase))
         return new[] { "--mode", "runbook" }.Concat(args.Skip(1)).ToArray();
@@ -11021,6 +11260,21 @@ static bool IsInitModeRequest(string[] args)
     {
         if (string.Equals(args[i], "--mode", StringComparison.OrdinalIgnoreCase)
             && string.Equals(args[i + 1], "init", StringComparison.OrdinalIgnoreCase))
+            return true;
+    }
+
+    return false;
+}
+
+static bool IsStartModeRequest(string[] args)
+{
+    if (args.Length > 0 && string.Equals(args[0], "start", StringComparison.OrdinalIgnoreCase))
+        return true;
+
+    for (var i = 0; i < args.Length - 1; i++)
+    {
+        if (string.Equals(args[i], "--mode", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(args[i + 1], "start", StringComparison.OrdinalIgnoreCase))
             return true;
     }
 

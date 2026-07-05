@@ -19,6 +19,15 @@ selenium-pw-migrator self update --print-command
 npm update -g selenium-pw-migrator
 ```
 
+## Product-repo onboarding
+
+```bash
+selenium-pw-migrator start --input ./OldTests --agent opencode --workspace migration
+selenium-pw-migrator pilot --input ./OldTests --max-tests 10 --out migration/pilot
+```
+
+`start` writes a profile skeleton and next command chain. `pilot` chooses a representative small slice before the first full migration batch.
+
 ## Basic usage
 
 ```bash
@@ -58,6 +67,8 @@ Commands are grouped as stable public, experimental preview, and internal/mainta
 - `kit init/update/doctor/next-ticket` — install, update, check, and continue the migration workspace.
 - `kit bootstrap-opencode` / `kit bootstrap-agent --agent codex|generic` — create an agent-ready workspace for OpenCode or a non-OpenCode handoff pack.
 - `runbook` — generate pilot scope, command chain, risk map, artifacts, and acceptance checklist before the first migration run.
+- `start` — product-repo onboarding wizard that writes a profile skeleton and next command chain.
+- `pilot` — select a representative bounded migration slice before scaling.
 - `doctor install` / `install-doctor` — explain the active install channel and update command.
 - `doctor` — preflight input, config, tooling, and source-truth hints.
 - `analyze` — inspect Selenium tests without generating target files.
@@ -66,7 +77,7 @@ Commands are grouped as stable public, experimental preview, and internal/mainta
 - `verify-ts-project` — experimental TypeScript project-aware type-checking.
 - `index-pom` — extract Selenium POM selector evidence plus target-side Playwright/Kontur POM facts.
 - `helper-inventory` — scan Selenium helper/POM method bodies and infer MethodSemantics candidates.
-- `explain-todo`, `smoke-plan`, `runtime-classify`, `selector-evidence`, `migration-board`, `report-serve` — prioritize follow-up work from migration artifacts/runtime logs, classify runtime root causes, score readiness, explain selector provenance, and export triage decisions.
+- `explain-todo`, `smoke-plan`, `runtime-classify`, `selector-evidence`, `migration-board`, `report-serve` — prioritize follow-up work from migration artifacts/runtime logs, classify runtime root causes, write `suggested-config-patch.md/json`, score readiness, explain selector provenance, and export triage decisions.
 - `pr-pack` — create a PR/review bundle with before/after metrics, changed/generated files list, risk summary, reviewer checklist, evidence references, and suggested PR description.
 - `config-validate`, `config-diff`, `guard` — keep human and agent changes safe.
 - `capabilities` — list built-in source frontend and target backend support matrices.

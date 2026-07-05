@@ -50,6 +50,38 @@ selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration -
 
 `bootstrap-agent` writes `migration/AGENT_HANDOFF.md` so Codex/CI/generic agents no longer need to use `bootstrap-opencode --opencode-install ci` as a workaround.
 
+
+## Product-repo onboarding wizard
+
+For a real product repository, users can now start with one command instead of picking the whole route manually:
+
+```bash
+selenium-pw-migrator start --input ./SeleniumTests --agent opencode --workspace migration
+```
+
+The wizard writes:
+
+- `start-summary.md/json`;
+- `migration/profiles/adapter-config.start.json`;
+- `migration/README.start.md`;
+- `migration/next-commands.md`.
+
+It prints the next safe chain: `doctor install`, `pilot`, `doctor`, agent bootstrap or manual migrate, optional `discover-target`, and dashboard generation. Agent values are `opencode`, `codex`, `generic`, and `manual`.
+
+## Representative pilot slice
+
+Before the first real batch, users can let the CLI choose a bounded representative slice:
+
+```bash
+selenium-pw-migrator pilot --input ./SeleniumTests --max-tests 10 --out migration/pilot
+```
+
+The command writes `pilot-selection.md/json`, `selected-tests.txt`, and `next-commands.md`. It scores Selenium-like files and tries to cover simple smoke tests, PageObject-heavy files, table/filter patterns, assertions, waits, custom helpers, XPath selectors, data-driven tests, and base fixtures.
+
+## TODO root causes and suggested config patch
+
+`explain-todo` now writes `suggested-config-patch.md/json` next to `explain-todo.md/json`. The patch is deliberately review-first: it highlights “fix this profile mapping first”, adds confidence/evidence badges, and drafts UiTarget/Method/Table entries without applying them automatically.
+
 ## Dashboard-first review
 
 After a run, open this first:

@@ -22,6 +22,18 @@ The goal is not magic conversion. The goal is to make migration uncertainty visi
 
 ## Choose your path
 
+### Product-repo onboarding wizard
+
+If you are inside a real product repository and do not want to choose the workflow by hand, start here:
+
+```bash
+npm install -g selenium-pw-migrator@preview
+selenium-pw-migrator doctor install
+selenium-pw-migrator start --input ./SeleniumTests --agent opencode --workspace migration
+```
+
+`start` detects the source, creates `migration/profiles/adapter-config.start.json`, writes `migration/next-commands.md`, and points you to `pilot`, `doctor`, agent bootstrap, and the dashboard. Use `--agent codex`, `--agent generic`, or `--agent manual` to choose the handoff route.
+
 ### 1. Try it without an agent
 
 ```bash
@@ -54,13 +66,21 @@ selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration -
 
 This writes `migration/AGENT_HANDOFF.md`, `migration/AGENT_CONTRACT.md`, and the kickoff prompts without pretending the workflow is OpenCode-specific.
 
+Before scaling a real migration, let the CLI choose a small representative pilot slice:
+
+```bash
+selenium-pw-migrator pilot --input ./SeleniumTests --max-tests 10 --out migration/pilot
+```
+
+`pilot` writes `pilot-selection.md/json`, `selected-tests.txt`, and `next-commands.md`. The selection tries to cover simple smoke tests, PageObjects, table/filter patterns, waits, assertions, custom helpers, XPath, and data-driven tests.
+
 After any real run, open the dashboard first:
 
 ```bash
 selenium-pw-migrator report serve --input migration/runs/latest --static-only --out migration/dashboard/latest --format both
 ```
 
-Open `migration/dashboard/latest/report-dashboard.html` before digging through raw JSON/TXT artifacts.
+Open `migration/dashboard/latest/report-dashboard.html` before digging through raw JSON/TXT artifacts. When TODOs remain, `explain-todo` also writes `suggested-config-patch.md/json` with grouped root causes, “fix this profile mapping first”, confidence/evidence badges, and draft UiTarget/Method/Table entries for review.
 
 ## Supported sources and targets
 
@@ -184,7 +204,14 @@ bash playground/commands.sh
 selenium-pw-migrator playground verify --input playground --out playground-verify --format both
 ```
 
-For a real project, bootstrap the guarded workspace once and then let the agent own the run lifecycle:
+For a real project, start with onboarding and a representative pilot slice:
+
+```bash
+selenium-pw-migrator start --input ./SeleniumTests --agent opencode --workspace migration
+selenium-pw-migrator pilot --input ./SeleniumTests --max-tests 10 --out migration/pilot
+```
+
+Then bootstrap the guarded workspace once and let the agent own the run lifecycle:
 
 ```bash
 selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --opencode-install auto
