@@ -823,6 +823,53 @@ Fix only the current ticket.
         WriteTextFileSafe(Path.Combine(workspacePath, "QUICKSTART.md"), quickStart, workspacePath, options, neverOverwrite: false);
     }
 
+    static bool ExistingJsonEqualsIgnoringProperties(string path, IReadOnlyDictionary<string, object?> payload, params string[] ignoredProperties)
+    {
+        if (!File.Exists(path))
+            return false;
+
+        try
+        {
+            using var existing = JsonDocument.Parse(File.ReadAllText(path));
+            if (existing.RootElement.ValueKind != JsonValueKind.Object)
+                return false;
+
+            var ignored = new HashSet<string>(ignoredProperties, StringComparer.OrdinalIgnoreCase);
+            var existingComparable = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var property in existing.RootElement.EnumerateObject())
+            {
+                if (!ignored.Contains(property.Name))
+                    existingComparable[property.Name] = JsonSerializer.Serialize(property.Value);
+            }
+
+            var nextComparable = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in payload)
+            {
+                if (!ignored.Contains(pair.Key))
+                    nextComparable[pair.Key] = JsonSerializer.Serialize(pair.Value);
+            }
+
+            return JsonSerializer.Serialize(existingComparable) == JsonSerializer.Serialize(nextComparable);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    static void WriteJsonFileIfSemanticChanged(string path, SortedDictionary<string, object?> payload, params string[] volatileProperties)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        if (ExistingJsonEqualsIgnoringProperties(path, payload, volatileProperties))
+        {
+            Console.WriteLine($"unchanged: {path}");
+            return;
+        }
+
+        File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine($"write: {path}");
+    }
+
     static void WriteVersionFile(string workspacePath, KitOptions options, bool updateMode)
     {
         var path = Path.Combine(workspacePath, ".migration-kit", "version.json");
@@ -856,8 +903,7 @@ Fix only the current ticket.
             ["toolCommand"] = options.ToolCommand,
             ["installer"] = "cli-kit-command"
         };
-        File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
-        Console.WriteLine($"write: {path}");
+        WriteJsonFileIfSemanticChanged(path, payload, "updatedAtUtc");
     }
 
     static void WriteGuardChecksums(string workspacePath)
@@ -894,9 +940,7 @@ Fix only the current ticket.
         };
 
         var path = Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json");
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
-        Console.WriteLine($"write: {path}");
+        WriteJsonFileIfSemanticChanged(path, payload, "generatedAtUtc");
     }
 
     static string? FindLatestRunDirectory(string workspacePath)

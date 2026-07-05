@@ -105,7 +105,7 @@ Update rules:
 
 Use `scripts/new-harness-run.ps1` to create a resumable run workspace under `runs/<run-id>/` with `Prompt.md`, `Plan.md`, `Implement.md`, `Documentation.md`, and `trace.jsonl`.
 
-Use `state/harness-policy.json` as the machine-readable autopilot policy. `scripts/check-harness-policy.ps1` verifies policy presence, active run files, OpenCode edit policy, and guard-sensitive changes. Guard-sensitive kit files changed by a trusted `kit update` are accepted only when the changed guard scripts match `.migration-kit/guard-checksums.json`; checksum mismatches still fail.
+Use `state/harness-policy.json` as the machine-readable autopilot policy. `scripts/check-harness-policy.ps1` verifies policy presence, active run files, OpenCode edit policy, and guard-sensitive changes. Guard-sensitive kit files changed by a trusted `kit update` are accepted only when the changed guard scripts match `.migration-kit/guard-checksums.json`; checksum mismatches still fail. Metadata-only checksum timestamp churn is ignored when all guard file hashes still match the checksum baseline.
 
 Public docs are English-first. Russian docs are secondary localization (`*.ru.md`). Machine-readable event/status codes stay language-neutral.
 

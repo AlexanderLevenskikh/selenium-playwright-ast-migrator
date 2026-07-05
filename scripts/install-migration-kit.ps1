@@ -219,6 +219,61 @@ function Copy-RootAgentDirectorySafe([string]$SourceDirectory, [string]$Destinat
     }
 }
 
+function ConvertTo-ComparableJsonMap([object]$Value, [string[]]$IgnoredProperties) {
+    $ignored = @{}
+    foreach ($propertyName in @($IgnoredProperties)) {
+        if (-not [string]::IsNullOrWhiteSpace($propertyName)) {
+            $ignored[$propertyName] = $true
+        }
+    }
+
+    $map = [ordered]@{}
+    if ($Value -is [System.Collections.IDictionary]) {
+        foreach ($key in @($Value.Keys | Sort-Object)) {
+            $name = [string]$key
+            if (-not $ignored.ContainsKey($name)) {
+                $map[$name] = ($Value[$key] | ConvertTo-Json -Depth 20 -Compress)
+            }
+        }
+    }
+    else {
+        foreach ($property in @($Value.PSObject.Properties | Sort-Object Name)) {
+            if (-not $ignored.ContainsKey($property.Name)) {
+                $map[$property.Name] = ($property.Value | ConvertTo-Json -Depth 20 -Compress)
+            }
+        }
+    }
+
+    return ($map | ConvertTo-Json -Depth 20 -Compress)
+}
+
+function Test-JsonEquivalentIgnoringProperties([string]$Path, [object]$Payload, [string[]]$IgnoredProperties) {
+    if (-not (Test-Path $Path)) {
+        return $false
+    }
+
+    try {
+        $existing = Get-Content -Raw -Path $Path | ConvertFrom-Json
+        $existingComparable = ConvertTo-ComparableJsonMap -Value $existing -IgnoredProperties $IgnoredProperties
+        $payloadComparable = ConvertTo-ComparableJsonMap -Value $Payload -IgnoredProperties $IgnoredProperties
+        return ($existingComparable -eq $payloadComparable)
+    }
+    catch {
+        return $false
+    }
+}
+
+function Write-JsonFileIfSemanticChanged([string]$Path, [object]$Payload, [string[]]$IgnoredProperties) {
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Path) | Out-Null
+    if (Test-JsonEquivalentIgnoringProperties -Path $Path -Payload $Payload -IgnoredProperties $IgnoredProperties) {
+        Write-Host "unchanged: $Path"
+        return
+    }
+
+    $Payload | ConvertTo-Json -Depth 20 | Set-Content -Path $Path -Encoding UTF8
+    Write-Host "write: $Path"
+}
+
 function Write-KitVersionFile([string]$WorkspacePath, [hashtable]$Tokens, [string]$Version, [bool]$UpdateMode) {
     $metadataDir = Join-Path $WorkspacePath ".migration-kit"
     New-Item -ItemType Directory -Force -Path $metadataDir | Out-Null
@@ -243,9 +298,7 @@ function Write-KitVersionFile([string]$WorkspacePath, [hashtable]$Tokens, [strin
         toolCommand = [string]$Tokens["TOOL"]
     }
 
-    $json = $payload | ConvertTo-Json -Depth 5
-    Set-Content -Path $versionPath -Value $json -Encoding UTF8
-    Write-Host "write: $versionPath"
+    Write-JsonFileIfSemanticChanged -Path $versionPath -Payload $payload -IgnoredProperties @("updatedAtUtc")
 }
 
 
@@ -280,8 +333,7 @@ function Write-GuardChecksums([string]$WorkspacePath) {
         files = $entries
     }
 
-    $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $checksumPath -Encoding UTF8
-    Write-Host "write: $checksumPath"
+    Write-JsonFileIfSemanticChanged -Path $checksumPath -Payload $payload -IgnoredProperties @("generatedAtUtc")
 }
 
 $kitRoot = Resolve-RepoRootFromScript

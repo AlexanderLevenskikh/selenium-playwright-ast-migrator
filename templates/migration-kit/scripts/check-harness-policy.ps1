@@ -72,6 +72,49 @@ function Read-GuardChecksumIndex([string]$WorkspacePath) {
     return $expected
 }
 
+function Get-RequiredGuardChecksumFiles {
+    return @(
+        "scripts/check-scope.ps1",
+        "scripts/check-scope.sh",
+        "scripts/check-final-gate.ps1",
+        "scripts/check-final-gate.sh",
+        "scripts/check-harness-policy.ps1",
+        "scripts/check-harness-policy.sh",
+        "scripts/build-harness-dashboard.ps1",
+        "scripts/build-harness-dashboard.sh"
+    )
+}
+
+function Test-GuardChecksumIndexMatchesCurrentFiles([string]$WorkspacePath, [hashtable]$Expected, [ref]$Detail) {
+    $mismatches = New-Object System.Collections.Generic.List[string]
+    foreach ($required in @(Get-RequiredGuardChecksumFiles)) {
+        if (-not $Expected.ContainsKey($required)) {
+            $mismatches.Add("$required missing checksum baseline") | Out-Null
+        }
+    }
+
+    foreach ($relative in @($Expected.Keys | Sort-Object)) {
+        $fullPath = Join-Path $WorkspacePath $relative
+        if (-not (Test-Path $fullPath)) {
+            $mismatches.Add("$relative missing on disk") | Out-Null
+            continue
+        }
+
+        $actual = (Get-FileHash -Algorithm SHA256 -Path $fullPath).Hash.ToUpperInvariant()
+        if ($actual -ne $Expected[$relative]) {
+            $mismatches.Add("$relative checksum mismatch") | Out-Null
+        }
+    }
+
+    if ($mismatches.Count -gt 0) {
+        $Detail.Value = $mismatches -join "; "
+        return $false
+    }
+
+    $Detail.Value = "all guard file hashes match guard-checksums baseline"
+    return $true
+}
+
 function Test-GuardSensitiveChangesMatchChecksumBaseline([string]$WorkspacePath, [string]$WorkspaceRootName, [string[]]$GuardChanges, [ref]$Detail) {
     if ($null -eq $GuardChanges -or $GuardChanges.Count -eq 0) {
         $Detail.Value = "no guard-sensitive changes"
@@ -91,16 +134,27 @@ function Test-GuardSensitiveChangesMatchChecksumBaseline([string]$WorkspacePath,
         $guardFileChanges.Add($normalized) | Out-Null
     }
 
-    if ($checksumChanged -and $guardFileChanges.Count -eq 0) {
-        $Detail.Value = "guard-checksums.json changed without changed guard scripts"
-        return $false
-    }
-
     try {
         $expected = Read-GuardChecksumIndex $WorkspacePath
     }
     catch {
         $Detail.Value = $_.Exception.Message
+        return $false
+    }
+
+    if ($checksumChanged -and $guardFileChanges.Count -eq 0) {
+        $currentBaselineDetail = ""
+        $currentBaselineOk = Test-GuardChecksumIndexMatchesCurrentFiles `
+            -WorkspacePath $WorkspacePath `
+            -Expected $expected `
+            -Detail ([ref]$currentBaselineDetail)
+
+        if ($currentBaselineOk) {
+            $Detail.Value = "guard-checksums.json metadata-only change accepted; $currentBaselineDetail"
+            return $true
+        }
+
+        $Detail.Value = "guard-checksums.json changed without changed guard scripts; $currentBaselineDetail"
         return $false
     }
 

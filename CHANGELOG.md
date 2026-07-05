@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Fixed `kit update` timestamp churn so `.migration-kit/version.json` and `.migration-kit/guard-checksums.json` are not rewritten when only volatile timestamps change; harness policy now accepts checksum metadata-only changes when guard file hashes still match.
+
 - Added state-aware zero-argument `/supervised-task` auto-next dispatch for tester-friendly follow-up migration tasks after FINAL checkpoints.
 
 - Standalone Windows installer now moves `%USERPROFILE%\.selenium-pw-migrator\bin` to the front of user/current-session `PATH` even when it was already present later, and supports `-RemoveDotnetTool` to remove an older global dotnet tool channel.

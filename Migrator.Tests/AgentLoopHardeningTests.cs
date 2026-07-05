@@ -346,6 +346,15 @@ public class AgentLoopHardeningTests
         var harnessPolicyScript = Read("templates/migration-kit/scripts/check-harness-policy.ps1");
         Assert.Contains("Test-GuardSensitiveChangesMatchChecksumBaseline", harnessPolicyScript);
         Assert.Contains("guard-sensitive changes match guard-checksums baseline", harnessPolicyScript);
+        Assert.Contains("Test-GuardChecksumIndexMatchesCurrentFiles", harnessPolicyScript);
+        Assert.Contains("Get-RequiredGuardChecksumFiles", harnessPolicyScript);
+        Assert.Contains("metadata-only change accepted", harnessPolicyScript);
+        Assert.Contains("WriteJsonFileIfSemanticChanged", kitCommand);
+        Assert.Contains("ExistingJsonEqualsIgnoringProperties", kitCommand);
+        Assert.Contains("updatedAtUtc", kitCommand);
+        Assert.Contains("generatedAtUtc", kitCommand);
+        Assert.Contains("Write-JsonFileIfSemanticChanged", psInstall);
+        Assert.Contains("Test-JsonEquivalentIgnoringProperties", psInstall);
         Assert.Contains("scripts/check-scope.sh", Read("Migrator.Cli/Commands/KitCommand.cs"));
         Assert.Contains("scripts/check-harness-policy.sh", Read("scripts/install-migration-kit.ps1"));
         Assert.Contains("check-harness-policy.ps1", finalGateScript);
