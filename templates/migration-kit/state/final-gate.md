@@ -1,7 +1,7 @@
 # Final Gate
 
 The agent may claim `FINAL` only when every applicable item is PASS.
-Otherwise the report must say `NOT FINAL - INVESTIGATION RESULT ONLY`.
+Otherwise the report must say `NOT FINAL - INVESTIGATION RESULT ONLY`, then follow `state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, the agent must continue before sending a user-facing handoff.
 
 Do not fill this file by hand as proof. Run:
 
@@ -9,7 +9,7 @@ Do not fill this file by hand as proof. Run:
 ./migration/scripts/check-final-gate.ps1 -Workspace migration
 ```
 
-The script writes `state/final-gate-result.md/json`; those files are the gate evidence.
+The script writes `state/final-gate-result.md/json` and `state/continuation-decision.md/json`; those files are the gate evidence and continuation decision.
 
 For strict forensic final checks, add optional switches:
 
@@ -38,3 +38,4 @@ For strict forensic final checks, add optional switches:
 - Project verify:
 - Board / explain TODO:
 - OpenCode export:
+- Continuation decision:

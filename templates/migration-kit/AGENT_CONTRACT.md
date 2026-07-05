@@ -11,3 +11,4 @@ Before each major action, restate which rule allows the action.
 6. If blocked, write a classified blocker/proposal artifact; do not ask vague continuation questions.
 7. Runtime-ready/final claims require project verify evidence, or the report must say `NOT RUNTIME READY`.
 8. The agent final answer is only another artifact until `state/final-gate.md` is PASS.
+9. After a non-final final gate, read `state/continuation-decision.json`; if it says `CONTINUE_REQUIRED`, execute exactly one next bounded action before any user-facing handoff.

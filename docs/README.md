@@ -105,3 +105,7 @@ docs/guarded-opencode-desktop-runbook.ru.md
 or create a deep-dive/reference doc that links back to that runbook.
 
 - [OpenCode low-noise permissions](opencode-low-noise-permissions.md) - permission profile for low-interruption migration runs.
+
+- [OpenCode TrustedProject permissions](opencode-trusted-project-permissions.md)
+
+- [Harness continuation strict protocol](harness-continuation-strict.md)

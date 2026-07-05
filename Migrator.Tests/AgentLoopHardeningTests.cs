@@ -412,12 +412,16 @@ public class AgentLoopHardeningTests
     {
         var config = Read("templates/opencode-team/global/.config/opencode/opencode.jsonc");
         var autopilotPatch = Read("templates/opencode-team/global/.config/opencode/opencode.autopilot.patch.jsonc");
+        var trustedProject = Read("templates/opencode-team/global/.config/opencode/opencode.trusted-project.jsonc");
         var orchestrator = Read("templates/opencode-team/global/.config/opencode/agents/orchestrator.md");
         var executor = Read("templates/opencode-team/global/.config/opencode/agents/executor.md");
         var reviewer = Read("templates/opencode-team/global/.config/opencode/agents/reviewer.md");
         var watchdog = Read("templates/opencode-team/global/.config/opencode/agents/watchdog.md");
         var teamReadme = Read("templates/opencode-team/README.md");
         var docs = Read("docs/opencode-low-noise-permissions.md");
+        var trustedDocs = Read("docs/opencode-trusted-project-permissions.md");
+        var installWindows = Read("templates/opencode-team/scripts/install-windows.ps1");
+        var installUnix = Read("templates/opencode-team/scripts/install-unix.sh");
 
         foreach (var text in new[] { config, autopilotPatch })
         {
@@ -458,6 +462,17 @@ public class AgentLoopHardeningTests
         Assert.Contains("Do not ask for permission for routine allowed inspection", Read("AGENTS.md"));
         Assert.Contains("git status --short --untracked-files=all", docs);
         Assert.Contains("Known migration subagents", docs);
+        Assert.Contains("\"dotnet tool list*\": \"allow\"", config);
+        Assert.Contains("\"where *\": \"allow\"", config);
+        Assert.Contains("\"cmd /c where *\": \"allow\"", config);
+        Assert.Contains("\"npm list -g *\": \"allow\"", config);
+        Assert.Contains("\"edit\": \"allow\"", trustedProject);
+        Assert.Contains("\"bash\": \"allow\"", trustedProject);
+        Assert.Contains("\"task\": \"allow\"", trustedProject);
+        Assert.Contains("\"external_directory\": \"deny\"", trustedProject);
+        Assert.Contains("PermissionProfile TrustedProject", trustedDocs);
+        Assert.Contains("-PermissionProfile TrustedProject", installWindows);
+        Assert.Contains("--permission-profile TrustedProject", installUnix);
     }
 
     [Fact]
@@ -1045,6 +1060,48 @@ public class AgentLoopHardeningTests
             Assert.Contains("pwsh", shell);
             Assert.Contains($"{script}.ps1", shell);
         }
+    }
+
+
+    [Fact]
+    public void FinalGate_WritesStrictContinuationDecisionForAllowedNextAction()
+    {
+        var finalGateScript = Read("templates/migration-kit/scripts/check-final-gate.ps1");
+        var finalGate = Read("templates/migration-kit/state/final-gate.md");
+        var continuationContract = Read("templates/migration-kit/state/continuation-contract.md");
+        var supervisedTask = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var docs = Read("docs/harness-continuation-strict.md");
+
+        Assert.Contains("continuation-decision.json", finalGateScript);
+        Assert.Contains("HARNESS_CONTINUATION_", finalGateScript);
+        Assert.Contains("CONTINUE_REQUIRED", finalGateScript);
+        Assert.Contains("BLOCKED_NO_ALLOWED_NEXT_ACTION", finalGateScript);
+        Assert.Contains("mustContinueBeforeUserMessage", finalGateScript);
+        Assert.Contains("NOT FINAL is not a reportable terminal state", finalGateScript);
+        Assert.Contains("continuation-decision.json", finalGate);
+        Assert.Contains("CONTINUE_REQUIRED", continuationContract);
+        Assert.Contains("A response that only repeats NOT FINAL / NOT RUNTIME READY", continuationContract);
+        Assert.Contains("continuation-decision.json", supervisedTask);
+        Assert.Contains("protocol violation", supervisedTask);
+        Assert.Contains("CONTINUE_REQUIRED", docs);
+
+        using var repo = TemporaryGitRepo.Create();
+        PrepareFinalGateWorkspace(
+            repo,
+            latestRunId: "run-013",
+            explicitStatus: "Status: NOT RUNTIME READY\n\nNext action: run migration/scripts/explain-todo.ps1 under migration/** and update migration/current-ticket.md\n",
+            includeProjectVerify: false,
+            configPassed: true);
+
+        var result = repo.RunFinalGate();
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("HARNESS_CONTINUATION_CONTINUE_REQUIRED", result.Output);
+
+        var decision = repo.Read("migration/state/continuation-decision.json");
+        Assert.Contains("CONTINUE_REQUIRED", decision);
+        Assert.Contains("mustContinueBeforeUserMessage", decision);
+        Assert.Contains("true", decision);
+        Assert.Contains("explain-todo.ps1", decision);
     }
 
     static string Read(string relativePath) => File.ReadAllText(FindRepositoryFile(relativePath));

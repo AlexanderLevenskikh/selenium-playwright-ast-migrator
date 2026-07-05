@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# TrustedProject example:
+#   --permission-profile TrustedProject
+#   install-unix.sh --mode ProjectLocal --permission-profile TrustedProject
+
 MODE="ProjectLocal"
 TARGET=""
+PERMISSION_PROFILE="LowNoise"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -14,8 +19,12 @@ while [[ $# -gt 0 ]]; do
       TARGET="${2:?--target requires a path}"
       shift 2
       ;;
+    --permission-profile)
+      PERMISSION_PROFILE="${2:?--permission-profile requires LowNoise or TrustedProject}"
+      shift 2
+      ;;
     --help|-h)
-      echo "Usage: install-unix.sh [--mode ProjectLocal|Global] [--target PATH]"
+      echo "Usage: install-unix.sh [--mode ProjectLocal|Global] [--target PATH] [--permission-profile LowNoise|TrustedProject]"
       exit 0
       ;;
     *)
@@ -27,6 +36,11 @@ done
 
 if [[ "$MODE" != "ProjectLocal" && "$MODE" != "Global" ]]; then
   echo "--mode must be ProjectLocal or Global" >&2
+  exit 2
+fi
+
+if [[ "$PERMISSION_PROFILE" != "LowNoise" && "$PERMISSION_PROFILE" != "TrustedProject" ]]; then
+  echo "--permission-profile must be LowNoise or TrustedProject" >&2
   exit 2
 fi
 
@@ -44,6 +58,7 @@ echo "Installing OpenCode agent team template..."
 echo "Mode:   $MODE"
 echo "Source: $SOURCE"
 echo "Target: $TARGET"
+echo "Permission profile: $PERMISSION_PROFILE"
 echo
 
 if [[ "$MODE" == "Global" ]]; then
@@ -54,10 +69,20 @@ fi
 
 mkdir -p "$TARGET"
 cp -R "$SOURCE"/. "$TARGET"/
+if [[ "$PERMISSION_PROFILE" == "TrustedProject" ]]; then
+  cp "$SOURCE/opencode.trusted-project.jsonc" "$TARGET/opencode.jsonc"
+else
+  cp "$SOURCE/opencode.jsonc" "$TARGET/opencode.jsonc"
+fi
 
 echo
 echo "Done."
 echo
+if [[ "$PERMISSION_PROFILE" == "TrustedProject" ]]; then
+  echo "TrustedProject profile disables routine approval prompts inside this project; external directories remain blocked."
+  echo
+fi
+
 echo "Next:"
 echo "1. Copy project-template/AGENTS.md to the root of your repository if needed."
 if [[ "$MODE" == "ProjectLocal" ]]; then

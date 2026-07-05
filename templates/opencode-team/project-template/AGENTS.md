@@ -106,3 +106,15 @@ git diff
 ```
 
 Known migration subagents (`executor`, `watchdog`, `reviewer`) are allowed by the OpenCode profile. If OpenCode asks for a routine read-only command, prefer using the documented low-noise permission profile rather than changing the migration plan.
+
+
+## OpenCode permission profile note
+
+Default user runs should work with the `LowNoise` profile. Do not rely on only `dotnet tool list`; diagnose the effective CLI with `Get-Command selenium-pw-migrator -All`, `where.exe selenium-pw-migrator`, and `selenium-pw-migrator --version` first.
+
+Maintainer dogfood runs may use `TrustedProject` to suppress routine approval prompts inside the repository. Even in that mode, keep `external_directory: deny` and run the final scope/harness gates before accepting results.
+
+
+## Harness continuation strict protocol
+
+After a non-final final gate, read `migration/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, `NOT FINAL` is not a stopping point: execute exactly one next bounded action under `migration/**` before a user-facing handoff. Stop only for `FINAL`, guard/scope/policy blocker, missing input, loop/plateau, or max autonomous budget.

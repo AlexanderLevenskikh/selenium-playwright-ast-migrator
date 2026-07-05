@@ -74,6 +74,33 @@ Invoke-Step "Bash syntax checks" {
     }
 }
 
+Invoke-Step "PowerShell parser checks" {
+    $parseFailures = @()
+    Get-ChildItem -Path . -Recurse -File -Filter "*.ps1" |
+        Where-Object {
+            $normalizedPath = $_.FullName -replace '\\', '/'
+            $normalizedPath -notmatch '/(bin|obj|artifacts|node_modules|\.git)/' -and
+                $normalizedPath -notmatch '/migration/runs/'
+        } |
+        ForEach-Object {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors -and $errors.Count -gt 0) {
+                foreach ($error in $errors) {
+                    $parseFailures += "{0}:{1}:{2}: {3}" -f $_.FullName, $error.Extent.StartLineNumber, $error.Extent.StartColumnNumber, $error.Message
+                }
+            }
+        }
+
+    if ($parseFailures.Count -gt 0) {
+        $parseFailures | ForEach-Object { Write-Host "PowerShell parse error: $_" }
+        throw "One or more PowerShell scripts have parser errors."
+    }
+
+    Write-Host "All tracked PowerShell scripts parse successfully."
+}
+
 if (-not $SkipDotnetTests) {
     Invoke-Step "dotnet test" {
         dotnet test Migrator.sln -c $Configuration

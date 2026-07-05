@@ -9,6 +9,8 @@ Read first:
 - `{{WORKSPACE}}/state/handoff.md`
 - `{{WORKSPACE}}/state/stop-policy-checklist.md`
 - `{{WORKSPACE}}/state/final-gate.md`
+- `{{WORKSPACE}}/state/continuation-contract.md`, if present
+- `{{WORKSPACE}}/state/continuation-decision.json`, if present
 
 Mode: migration-artifact
 
@@ -24,4 +26,5 @@ Rules:
 - Do not edit migrator source code in migration-artifact mode.
 - Do not add suppressions, weaken assertions, empty tests, add dummy known identifiers, or edit target/POM project to reduce TODO.
 - Before stopping or handing off, update `{{WORKSPACE}}/state/stop-policy-checklist.md`.
+- After a non-final final-gate run, read `{{WORKSPACE}}/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, execute exactly one next bounded action before any user-facing handoff. A response that only repeats `NOT FINAL` / `NOT RUNTIME READY` while continuation is required is a protocol violation.
 - Do not claim FINAL unless `{{WORKSPACE}}/scripts/check-final-gate.ps1 -RequireOpenCodeExport -RequireExplainTodo -RequireVerificationArtifacts` passes; otherwise report `NOT FINAL - INVESTIGATION RESULT ONLY`.

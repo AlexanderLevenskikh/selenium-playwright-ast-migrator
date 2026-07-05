@@ -159,3 +159,20 @@ The bundled `opencode.jsonc` is intentionally low-noise for migration runs:
 
 This keeps autopilot runs from asking for approval on every slightly different `git diff` or `git status` command while preserving the `migration/**` edit boundary and final scope guards.
 
+
+
+## Permission profiles
+
+Default installs use `LowNoise`: routine repository inspection is allowed, known migration subagents are allowed, external directories are denied, and writes are still migration-artifact scoped.
+
+For trusted local dogfood runs, use `TrustedProject` to remove almost all approval prompts inside the project while still denying external directories:
+
+```powershell
+.\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop -PermissionProfile TrustedProject -Force
+```
+
+```bash
+migration/opencode-team/scripts/install-unix.sh --mode ProjectLocal --permission-profile TrustedProject
+```
+
+Restart OpenCode after switching profiles.

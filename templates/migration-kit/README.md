@@ -170,3 +170,8 @@ The dashboard is English-first and includes a `languageSelect` control for Russi
 
 
 Windows OpenCode Desktop shortcut: `--project-desktop` remains an alias for `--opencode-install project-desktop`.
+
+
+## Harness continuation strict protocol
+
+After a non-final final gate, read `migration/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, `NOT FINAL` is not a stopping point: execute exactly one next bounded action under `migration/**` before a user-facing handoff. Stop only for `FINAL`, guard/scope/policy blocker, missing input, loop/plateau, or max autonomous budget.

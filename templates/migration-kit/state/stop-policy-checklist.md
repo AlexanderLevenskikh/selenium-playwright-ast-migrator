@@ -10,6 +10,7 @@ Fill this before stopping or handing off a migration batch. This file is `state/
 - Allowed input paths inspected:
 - Allowed write paths used:
 - Commands run:
+- Continuation decision status: <FINAL | CONTINUE_REQUIRED | BLOCKED_BY_GATE | BLOCKED_NO_ALLOWED_NEXT_ACTION>
 - Artifacts inspected:
 - Files changed:
 - Scope guard command/result:
@@ -37,6 +38,7 @@ At least one must be checked before stopping:
 ## Must not be true
 
 - [ ] I am not asking the user whether to continue.
+- [ ] I am not stopping while `state/continuation-decision.json` says `CONTINUE_REQUIRED`.
 - [ ] I am not stopping only because the latest report says `NOT FINAL - INVESTIGATION RESULT ONLY` or `NOT RUNTIME READY` while an allowed next config/scaffold/evidence action exists.
 - [ ] I am not stopping only because compile/project verify is green while actionable migration work remains.
 - [ ] I did not edit migrator source code in `migration-artifact` mode.

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "orchestrator",
+  // TrustedProject is an opt-in low-friction profile for local dogfood runs.
+  // It allows all normal tools and shell commands inside the project working directory,
+  // while still blocking paths outside the project and network/publish actions by default.
+  "permission": {
+    "read": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
+    "lsp": "allow",
+    "todowrite": "allow",
+    "edit": "allow",
+    "bash": "allow",
+    "task": "allow",
+    "question": "deny",
+    "external_directory": "deny",
+    "doom_loop": "allow",
+    "webfetch": "deny",
+    "websearch": "deny"
+  }
+}

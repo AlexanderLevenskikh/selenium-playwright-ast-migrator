@@ -1,3 +1,5 @@
+- Added optional OpenCode `TrustedProject` permission profile for local dogfood runs and expanded default install diagnostics allowlist.
+
 # Changelog
 
 All notable changes to Selenium Playwright Migrator are documented here.

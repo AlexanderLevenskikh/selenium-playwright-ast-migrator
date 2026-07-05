@@ -166,7 +166,11 @@ if ($policy -ne $null) {
         $text = Read-TextIfExists $openCodeConfig
         $hasDenyAllEdit = $text -match '"edit"\s*:\s*\{[\s\S]*?"\*"\s*:\s*"deny"'
         $hasMigrationAllow = $text -match '"migration/\*\*"\s*:\s*"allow"'
-        Add-Result $results "opencode-edit-policy" ($hasDenyAllEdit -and $hasMigrationAllow) "config=$openCodeConfig; denyAllEdit=$hasDenyAllEdit; migrationAllow=$hasMigrationAllow"
+        $hasTrustedProjectProfile = ($text -match '"edit"\s*:\s*"allow"') -and
+            ($text -match '"bash"\s*:\s*"allow"') -and
+            ($text -match '"external_directory"\s*:\s*"deny"')
+        $policyOk = ($hasDenyAllEdit -and $hasMigrationAllow) -or $hasTrustedProjectProfile
+        Add-Result $results "opencode-edit-policy" $policyOk "config=$openCodeConfig; denyAllEdit=$hasDenyAllEdit; migrationAllow=$hasMigrationAllow; trustedProject=$hasTrustedProjectProfile"
     } else {
         Add-Result $results "opencode-edit-policy" $true "no project OpenCode config found; skip template-level check"
     }

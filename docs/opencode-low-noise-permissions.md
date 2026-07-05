@@ -9,6 +9,9 @@ The agent should not ask for permission for routine read-only diagnostics, inclu
 ```powershell
 Get-Command selenium-pw-migrator -All
 where.exe selenium-pw-migrator
+dotnet tool list --global
+dotnet tool list --local
+npm list -g selenium-pw-migrator --depth=0
 git status --short --untracked-files=all
 git diff --stat
 git diff
@@ -59,3 +62,10 @@ migration/scripts/check-final-gate.ps1
 Default allowed edits are still limited to `migration/**`. Guard scripts, checksum manifests, OpenCode permissions, and `AGENTS.md` remain protected.
 
 Do not weaken the profile during a migration run. If a task requires broader writes, write a proposal under `migration/proposals/**` and stop with a blocker.
+
+
+## Optional TrustedProject mode
+
+For local dogfood runs, maintainers can opt into `TrustedProject` permissions. That profile allows `edit`, `bash`, and known subagents inside the project directory to eliminate approval noise, while keeping `external_directory: deny`.
+
+See `docs/opencode-trusted-project-permissions.md`.

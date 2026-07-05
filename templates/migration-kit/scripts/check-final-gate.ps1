@@ -360,9 +360,205 @@ function Test-TextLooksPassed([string]$Text) {
     return $Text -match '(?i)\b(pass|passed|success|succeeded|ok)\b' -and $Text -notmatch '(?i)\b(fail|failed|error)\b'
 }
 
+
+function Test-AllowedContinuationActionText([string]$Text) {
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return $false
+    }
+
+    return $Text -match '(?i)(migration[\\/]|adapter-config|target-shadow|generated-pom|proposals?[\/]|discover-target|explain-todo|config-validate|verify|migration-board|quality-dashboard|current-ticket\.md|handoff\.md)'
+}
+
+function New-ContinuationCandidate([string]$Source, [string]$Action, [string]$Evidence) {
+    [pscustomobject][ordered]@{
+        source = $Source
+        action = $Action.Trim()
+        evidence = $Evidence.Trim()
+    }
+}
+
+function Find-ExplicitContinuationCandidateInText([string]$Source, [string]$Text) {
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return $null
+    }
+
+    # Keep the newline regex escaped as text. A previous patch accidentally wrote a
+    # physical newline inside the PowerShell string, which made parser errors report
+    # absolute temp paths instead of reaching the continuation marker.
+    foreach ($line in @($Text -split "\r?\n")) {
+        $match = [regex]::Match($line, '(?i)^\s*(?:[-*]\s*)?(?:next action|one concrete next action|next bounded action|next_action_command|continue command|continuation command)\s*[:：]\s*(.+?)\s*$')
+        if ($match.Success) {
+            $action = $match.Groups[1].Value.Trim()
+            if (Test-AllowedContinuationActionText $action) {
+                return New-ContinuationCandidate $Source $action $line
+            }
+        }
+    }
+
+    if (Test-AllowedContinuationActionText $Text) {
+        return New-ContinuationCandidate $Source "Review status files and execute the named allowed next config/scaffold/evidence action under migration/**." $Text
+    }
+
+    return $null
+}
+
+function Find-ContinuationCandidate($Sources) {
+    # Normalize sources manually instead of relying on @($Sources): Windows PowerShell
+    # can throw "argument types do not match" when wrapping some generic lists.
+    $sourceItems = New-Object System.Collections.ArrayList
+    if ($null -ne $Sources) {
+        if ($Sources -is [System.Collections.IEnumerable] -and -not ($Sources -is [string])) {
+            foreach ($item in $Sources) {
+                [void]$sourceItems.Add($item)
+            }
+        }
+        else {
+            [void]$sourceItems.Add($Sources)
+        }
+    }
+
+    foreach ($sourceInfo in $sourceItems) {
+        if ($null -eq $sourceInfo) {
+            continue
+        }
+
+        $sourcePath = $null
+        $sourceName = $null
+        if ($sourceInfo -is [string]) {
+            $sourcePath = $sourceInfo
+            $sourceName = $sourceInfo
+        }
+        elseif ($sourceInfo -is [System.IO.FileInfo]) {
+            $sourcePath = $sourceInfo.FullName
+            $sourceName = $sourceInfo.Name
+        }
+        else {
+            $sourcePath = [string]$sourceInfo.path
+            $sourceName = [string]$sourceInfo.name
+        }
+
+        if ([string]::IsNullOrWhiteSpace($sourcePath) -or -not (Test-Path $sourcePath)) {
+            continue
+        }
+        if ([string]::IsNullOrWhiteSpace($sourceName)) {
+            $sourceName = $sourcePath
+        }
+
+        $text = Read-TextIfExists $sourcePath
+        if ([string]::IsNullOrWhiteSpace($text)) {
+            continue
+        }
+
+        $lines = @($text -split '\r?\n')
+        $captureHeader = $null
+        for ($index = 0; $index -lt $lines.Count; $index++) {
+            $line = $lines[$index]
+            $trimmed = $line.Trim()
+            if ([string]::IsNullOrWhiteSpace($trimmed)) {
+                continue
+            }
+
+            $inline = [regex]::Match($line, '(?i)^\s*(?:[-*]\s*)?(?:next action|one concrete next action|next bounded action|next_action_command|continue command|continuation command)\s*[:：]\s*(.+?)\s*$')
+            if ($inline.Success) {
+                $action = $inline.Groups[1].Value.Trim()
+                if (Test-AllowedContinuationActionText $action) {
+                    return New-ContinuationCandidate $sourceName $action $line
+                }
+            }
+
+            if ($captureHeader -ne $null -and $trimmed -notmatch '^#+\s' -and $trimmed -notmatch '^```') {
+                $candidate = $trimmed.TrimStart('-', '*', ' ')
+                if (Test-AllowedContinuationActionText $candidate) {
+                    return New-ContinuationCandidate $sourceName $candidate $line
+                }
+            }
+
+            if ($trimmed -match '(?i)^#+\s*(one concrete next action|next action|next bounded action|continuation command)\s*$') {
+                $captureHeader = $trimmed
+            }
+        }
+
+        $statusMatch = [regex]::Match($text, '(?is)(NOT FINAL - INVESTIGATION RESULT ONLY|NOT RUNTIME READY).{0,160}(migration[\\/][^\r\n`]+|adapter-config|target-shadow|generated-pom|discover-target|explain-todo|config-validate|verify)')
+        if ($statusMatch.Success) {
+            $action = "Review $sourceName and execute the named allowed next config/scaffold/evidence action under migration/**."
+            return New-ContinuationCandidate $sourceName $action $statusMatch.Value
+        }
+    }
+
+    return $null
+}
+
+function New-ContinuationDecision([bool]$Passed, $Results, $Candidate, [bool]$HasNonFinalStatus) {
+    if ($HasNonFinalStatus -and $Candidate -ne $null) {
+        return [pscustomobject][ordered]@{
+            status = "CONTINUE_REQUIRED"
+            protocol = "NOT FINAL is not a reportable terminal state when an allowed next action exists. Execute the next bounded action before sending a user-facing handoff."
+            nextAction = $Candidate.action
+            source = $Candidate.source
+            evidence = $Candidate.evidence
+            mustContinueBeforeUserMessage = $true
+        }
+    }
+
+    $terminalGateNames = @("guard-checksums", "harness-policy", "scope-guard")
+    $terminalFailures = @($Results | Where-Object { (-not $_.passed) -and ($terminalGateNames -contains $_.name) })
+
+    if ($terminalFailures.Count -gt 0) {
+        return [pscustomobject][ordered]@{
+            status = "BLOCKED_BY_GATE"
+            protocol = "Do not continue until guard/scope/harness-policy failures are fixed or reverted."
+            nextAction = $null
+            source = ($terminalFailures | ForEach-Object { $_.name }) -join ", "
+            mustContinueBeforeUserMessage = $false
+        }
+    }
+
+    if ($Passed) {
+        return [pscustomobject][ordered]@{
+            status = "FINAL"
+            protocol = "Final gate passed; FINAL may be reported with evidence."
+            nextAction = $null
+            source = $null
+            mustContinueBeforeUserMessage = $false
+        }
+    }
+
+    if ($Candidate -ne $null) {
+        return [pscustomobject][ordered]@{
+            status = "CONTINUE_REQUIRED"
+            protocol = "NOT FINAL is not a reportable terminal state when an allowed next action exists. Execute the next bounded action before sending a user-facing handoff."
+            nextAction = $Candidate.action
+            source = $Candidate.source
+            evidence = $Candidate.evidence
+            mustContinueBeforeUserMessage = $true
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        status = "BLOCKED_NO_ALLOWED_NEXT_ACTION"
+        protocol = "No allowed next config/scaffold/evidence action was found. Stop only after writing a classified blocker and one concrete next action request."
+        nextAction = $null
+        source = $null
+        mustContinueBeforeUserMessage = $false
+    }
+}
+
 $workspacePath = if ([System.IO.Path]::IsPathRooted($Workspace)) { $Workspace } else { Join-Path $RepoRoot $Workspace }
 $workspacePath = [System.IO.Path]::GetFullPath($workspacePath)
 $results = New-Object System.Collections.Generic.List[object]
+
+# Project-local OpenCode bootstrap files are intentionally created at repository root.
+# They are migration harness/config files, not product source edits, so routine scope/harness
+# checks must not fail just because AGENTS.md/opencode.jsonc/.opencode/** are untracked.
+$projectLocalOpenCodeAllowedRoots = @(
+    "AGENTS.md",
+    "opencode.jsonc",
+    ".opencode",
+    ".opencode/**",
+    ".opencode-migrator",
+    ".opencode-migrator/**"
+)
+$effectiveAllowedRoots = @($AllowedRoots) + $projectLocalOpenCodeAllowedRoots
 
 $checksumDetail = ""
 $guardFiles = @(
@@ -375,7 +571,7 @@ Add-Result $results "guard-checksums" $checksumOk $checksumDetail
 
 $harnessPolicyScript = Join-Path $workspacePath "scripts/check-harness-policy.ps1"
 if (Test-Path $harnessPolicyScript) {
-    $harnessArgs = @("-Workspace", $Workspace, "-RepoRoot", $RepoRoot, "-AllowedRoots") + @($AllowedRoots)
+    $harnessArgs = @("-Workspace", $Workspace, "-RepoRoot", $RepoRoot, "-AllowedRoots") + @($effectiveAllowedRoots)
 
     $harnessExitCode = Invoke-PowerShellScript $harnessPolicyScript $harnessArgs
     Add-Result $results "harness-policy" ($harnessExitCode -eq 0) "check-harness-policy.ps1 exit code $harnessExitCode"
@@ -386,7 +582,7 @@ else {
 
 $scopeScript = Join-Path $workspacePath "scripts/check-scope.ps1"
 if (Test-Path $scopeScript) {
-    $scopeArgs = @("-RepoRoot", $RepoRoot, "-AllowedRoots") + @($AllowedRoots)
+    $scopeArgs = @("-RepoRoot", $RepoRoot, "-AllowedRoots") + @($effectiveAllowedRoots)
 
     $scopeExitCode = Invoke-PowerShellScript $scopeScript $scopeArgs
     Add-Result $results "scope-guard" ($scopeExitCode -eq 0) "check-scope.ps1 exit code $scopeExitCode"
@@ -492,6 +688,8 @@ $actualStatusTexts = @(
     Read-TextIfExists (Join-Path $workspacePath "state/stop-policy-checklist.md")
 ) -join "`n"
 $notRuntimeReady = Test-ExplicitStatus -Text $actualStatusTexts -Statuses @("NOT RUNTIME READY")
+$notFinalStatus = Test-ExplicitStatus -Text $actualStatusTexts -Statuses @("NOT FINAL", "NOT FINAL - INVESTIGATION RESULT ONLY")
+$hasNonFinalStatus = $notRuntimeReady -or $notFinalStatus
 $configBlocked = Test-ExplicitStatus -Text $actualStatusTexts -Statuses @("NOT RUNTIME READY", "BLOCKED_BY_CONFIG", "BLOCKED_BY_DIAGNOSTICS")
 
 $configReport = Find-LatestFile -Root $workspacePath -Names @("config-validate-report.json", "config-validate-report.md")
@@ -516,23 +714,77 @@ else {
 }
 
 $passed = @($results | Where-Object { -not $_.passed }).Count -eq 0
+$continuationSources = @()
+foreach ($candidatePath in @(
+    (Join-Path $workspacePath "current-ticket.md"),
+    (Join-Path $workspacePath "state/handoff.md"),
+    (Join-Path $workspacePath "state/stop-policy-checklist.md"),
+    (Join-Path $workspacePath "agent-state.md")
+)) {
+    if (Test-Path $candidatePath) {
+        $continuationSources += [pscustomobject]@{ name = (Get-RelativePathCompat $workspacePath $candidatePath); path = $candidatePath }
+    }
+}
+foreach ($latestEvidence in @(
+    (Find-LatestFile -Root $workspacePath -Names @("explain-todo.md", "explain-todo.json")),
+    (Find-LatestFile -Root $workspacePath -Names @("verify-report.md", "verify-report.json", "project-verify-report.md", "project-verify-report.json")),
+    (Find-LatestFile -Root $workspacePath -Names @("config-validate-report.md", "config-validate-report.json")),
+    (Find-LatestFile -Root $workspacePath -Names @("migration-board.md", "migration-board.json"))
+)) {
+    if ($latestEvidence -ne $null) {
+        $continuationSources += [pscustomobject]@{ name = (Get-RelativePathCompat $workspacePath $latestEvidence.FullName); path = $latestEvidence.FullName }
+    }
+}
+$continuationCandidate = Find-ContinuationCandidate $continuationSources
+if ($null -eq $continuationCandidate -and $hasNonFinalStatus) {
+    $continuationCandidate = Find-ExplicitContinuationCandidateInText "status-files" $actualStatusTexts
+}
+
+# Last-resort strict continuation fallback. Keep this deliberately simple and
+# duplicated from the richer parser above: several tests and real agent handoffs
+# use plain "Status: NOT RUNTIME READY" + "Next action: ..." text, and that
+# must never degrade into FINAL just because a formatting variant escaped the
+# richer parser.
+if ($null -eq $continuationCandidate) {
+    $plainNextActionMatch = [regex]::Match($actualStatusTexts, '(?im)^\s*(?:[-*]\s*)?Next action\s*[:：]\s*(.+?)\s*$')
+    $plainNonFinalStatus = $actualStatusTexts -match '(?im)^\s*(?:Status|Final status|Runtime-ready|Runtime ready|Project verify)\s*[:：]\s*(NOT FINAL|NOT FINAL - INVESTIGATION RESULT ONLY|NOT RUNTIME READY)\s*$'
+    if ($plainNonFinalStatus -and $plainNextActionMatch.Success) {
+        $plainAction = $plainNextActionMatch.Groups[1].Value.Trim()
+        if (Test-AllowedContinuationActionText $plainAction) {
+            $continuationCandidate = New-ContinuationCandidate "status-files" $plainAction $plainNextActionMatch.Value
+            $hasNonFinalStatus = $true
+        }
+    }
+}
+
+$continuation = New-ContinuationDecision $passed $results $continuationCandidate $hasNonFinalStatus
+
 $report = [ordered]@{
     generatedAtUtc = [DateTimeOffset]::UtcNow.ToString("o")
-    status = if ($passed) { "PASS" } else { "FAIL" }
+    status = if ($passed -and $continuation.status -ne "CONTINUE_REQUIRED") { "PASS" } else { "FAIL" }
+    continuationStatus = $continuation.status
     workspace = $workspacePath
     checks = $results
+    continuation = $continuation
 }
 
 $stateDir = Join-Path $workspacePath "state"
 New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
 $jsonPath = Join-Path $stateDir "final-gate-result.json"
 $mdPath = Join-Path $stateDir "final-gate-result.md"
+$continuationJsonPath = Join-Path $stateDir "continuation-decision.json"
+$continuationMdPath = Join-Path $stateDir "continuation-decision.md"
 $report | ConvertTo-Json -Depth 20 | Set-Content -Path $jsonPath -Encoding UTF8
+$continuation | ConvertTo-Json -Depth 20 | Set-Content -Path $continuationJsonPath -Encoding UTF8
 
 $md = New-Object System.Text.StringBuilder
 [void]$md.AppendLine("# Final Gate Result")
 [void]$md.AppendLine()
 [void]$md.AppendLine("Status: **$($report.status)**")
+[void]$md.AppendLine("Continuation: **$($continuation.status)**")
+if ($continuation.nextAction) {
+    [void]$md.AppendLine("Next action: $($continuation.nextAction)")
+}
 [void]$md.AppendLine()
 foreach ($check in $results) {
     $status = if ($check.passed) { "PASS" } else { "FAIL" }
@@ -540,10 +792,28 @@ foreach ($check in $results) {
 }
 Set-Content -Path $mdPath -Value $md.ToString() -Encoding UTF8
 
-Write-Host "FINAL_GATE_$($report.status)"
-Write-Host "Report: $mdPath"
+$continuationMd = New-Object System.Text.StringBuilder
+[void]$continuationMd.AppendLine("# Harness Continuation Decision")
+[void]$continuationMd.AppendLine()
+[void]$continuationMd.AppendLine("Status: **$($continuation.status)**")
+[void]$continuationMd.AppendLine()
+[void]$continuationMd.AppendLine($continuation.protocol)
+if ($continuation.nextAction) {
+    [void]$continuationMd.AppendLine()
+    [void]$continuationMd.AppendLine(("Next action: {0}" -f $continuation.nextAction))
+    [void]$continuationMd.AppendLine(("Source: {0}" -f $continuation.source))
+}
+Set-Content -Path $continuationMdPath -Value $continuationMd.ToString() -Encoding UTF8
 
-if ($passed) {
+Write-Host "FINAL_GATE_$($report.status)"
+Write-Host "HARNESS_CONTINUATION_$($continuation.status)"
+if ($continuation.nextAction) {
+    Write-Host "Next action: $($continuation.nextAction)"
+}
+Write-Host "Report: $mdPath"
+Write-Host "Continuation: $continuationMdPath"
+
+if ($passed -and $continuation.status -ne "CONTINUE_REQUIRED") {
     exit 0
 }
 

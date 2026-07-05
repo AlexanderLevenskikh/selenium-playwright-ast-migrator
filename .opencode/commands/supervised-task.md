@@ -31,10 +31,8 @@ Use the supervised Harness Kit workflow:
 13. Stop after at most 2 fix-review cycles unless the user asks to continue.
 14. Do not ask routine continuation questions when the next action is allowed by harness-policy and OpenCode permissions.
 15. Do not issue FINAL unless `migration/scripts/check-final-gate.ps1 -RequireOpenCodeExport -RequireExplainTodo -RequireVerificationArtifacts` passes and migration/state/final-gate.md can be marked PASS with evidence. Otherwise say NOT FINAL - INVESTIGATION RESULT ONLY.
-16. After every non-final final-gate run, read `migration/state/continuation-decision.json` and `migration/state/continuation-decision.md`.
-17. If continuation status is `CONTINUE_REQUIRED`, do not send a user-facing handoff yet. Execute exactly one next bounded action named by the decision/current ticket/handoff, then rerun scope, harness policy, verification, and final gate. A response that only repeats NOT FINAL / NOT RUNTIME READY while `CONTINUE_REQUIRED` exists is a protocol violation.
-18. Do not stop just because the report is NOT FINAL / NOT RUNTIME READY if `current-ticket.md`, verify output, handoff, or `continuation-decision.json` names an allowed next config/scaffold/evidence action under `migration/**`. Stop only when `state/stop-policy-checklist.md` has a valid blocker, max iterations were reached, or the next action is denied by policy.
-19. Final report:
+16. Do not stop just because the report is NOT FINAL / NOT RUNTIME READY if `current-ticket.md`, verify output, or handoff names an allowed next config/scaffold/evidence action under `migration/**`. Continue with that next bounded action. Stop only when `state/stop-policy-checklist.md` has a valid blocker, max iterations were reached, or the next action is denied by policy.
+17. Final report:
    - active run id;
    - changed files;
    - verification result;
@@ -44,6 +42,3 @@ Use the supervised Harness Kit workflow:
    - trace/events status;
    - remaining risks;
    - anything intentionally not fixed.
-
-
-Continuation rule: Continue with that next bounded action when `migration/state/continuation-decision.json` reports `CONTINUE_REQUIRED`.

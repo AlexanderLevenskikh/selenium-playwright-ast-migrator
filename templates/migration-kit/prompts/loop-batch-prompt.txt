@@ -4,6 +4,8 @@ This prompt runs one bounded batch under `{{WORKSPACE}}/AGENT_CONTRACT.md`; it m
 Read first:
 - `{{WORKSPACE}}/AGENT_CONTRACT.md`
 - `{{WORKSPACE}}/state/final-gate.md`
+- `{{WORKSPACE}}/state/continuation-contract.md`, if present
+- `{{WORKSPACE}}/state/continuation-decision.json`, if present
 - `{{WORKSPACE}}/state/stop-policy-checklist.md`
 - latest `{{WORKSPACE}}/agent-state.md`, `{{WORKSPACE}}/current-ticket.md`, and `{{WORKSPACE}}/state/run-ledger.md`
 
@@ -21,6 +23,7 @@ Required checks after the batch:
 3. Run the smallest relevant migrate/verify command.
 4. Update workspace state files.
 5. Run `{{WORKSPACE}}/scripts/check-final-gate.ps1`; use strict flags only when claiming FINAL.
+6. If `{{WORKSPACE}}/state/continuation-decision.json` says `CONTINUE_REQUIRED`, execute one next bounded action before reporting to the user.
 
 Continuation rule:
 - If status is `CONTINUE_AUTONOMOUSLY`, continue without asking the user whether to continue.
@@ -28,6 +31,7 @@ Continuation rule:
 - If the same failure appears twice without new evidence, stop with `LOOP_DETECTED` and write root-cause analysis under `{{WORKSPACE}}/runs/<run-id>/`.
 
 FINAL rule:
-Do not claim FINAL unless:
+After a non-final final-gate run, read `{{WORKSPACE}}/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, execute exactly one next bounded action before any user-facing handoff. A response that only repeats `NOT FINAL` / `NOT RUNTIME READY` while continuation is required is a protocol violation.
+- Do not claim FINAL unless:
 `{{WORKSPACE}}/scripts/check-final-gate.ps1 -RequireOpenCodeExport -RequireExplainTodo -RequireVerificationArtifacts` passes.
 Otherwise report `NOT FINAL - INVESTIGATION RESULT ONLY`.

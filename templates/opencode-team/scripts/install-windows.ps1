@@ -2,12 +2,21 @@ param(
     [ValidateSet("ProjectLocal", "ProjectDesktop", "Global")]
     [string]$Mode = "ProjectLocal",
     [string]$Target = "",
-    [switch]$Force
+    [switch]$Force,
+    [ValidateSet("LowNoise", "TrustedProject")]
+    [string]$PermissionProfile = "LowNoise"
 )
+
+
+<#
+Example trusted-project install:
+  .\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop -PermissionProfile TrustedProject -Force
+#>
 
 $ErrorActionPreference = "Stop"
 
 $Source = Join-Path $PSScriptRoot "..\global\.config\opencode"
+$ConfigFileName = if ($PermissionProfile -eq "TrustedProject") { "opencode.trusted-project.jsonc" } else { "opencode.jsonc" }
 
 function Get-FullPathCompat([string]$PathValue) {
     if ([string]::IsNullOrWhiteSpace($PathValue)) {
@@ -106,6 +115,7 @@ Write-Host "Installing OpenCode agent team template..."
 Write-Host "Mode:   $Mode"
 Write-Host "Source: $Source"
 Write-Host "Target: $Target"
+Write-Host "Permission profile: $PermissionProfile"
 Write-Host ""
 
 if ($Mode -eq "Global") {
@@ -140,7 +150,7 @@ if ($Mode -eq "ProjectDesktop") {
         Backup-PathIfExists (Join-Path $Target ".opencode\commands") $backupRoot
     }
 
-    Copy-Item -Path (Join-Path $Source "opencode.jsonc") -Destination (Join-Path $Target "opencode.jsonc") -Force
+    Copy-Item -Path (Join-Path $Source $ConfigFileName) -Destination (Join-Path $Target "opencode.jsonc") -Force
 
     $ProjectOpenCode = Join-Path $Target ".opencode"
     New-Item -ItemType Directory -Force -Path (Join-Path $ProjectOpenCode "agents") | Out-Null
@@ -151,6 +161,8 @@ if ($Mode -eq "ProjectDesktop") {
 else {
     New-Item -ItemType Directory -Force -Path $Target | Out-Null
     Copy-Item -Path (Join-Path $Source "*") -Destination $Target -Recurse -Force
+    # Copy selected permission profile into opencode.jsonc. Keep other profiles available as references.
+    Copy-Item -Path (Join-Path $Source $ConfigFileName) -Destination (Join-Path $Target "opencode.jsonc") -Force
 }
 
 Write-Host ""
@@ -158,6 +170,9 @@ Write-Host "Done."
 Write-Host ""
 Write-Host "Next:"
 Write-Host "1. Copy project-template\AGENTS.md to the root of your repository if needed."
+if ($PermissionProfile -eq "TrustedProject") {
+    Write-Host "TrustedProject profile disables routine approval prompts inside this project; external directories remain blocked."
+}
 if ($Mode -eq "ProjectDesktop") {
     Write-Host "2. Open this repository folder in OpenCode Desktop:"
     Write-Host "   $Target"

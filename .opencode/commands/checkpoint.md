@@ -19,8 +19,7 @@ Check:
 - hallucinated claims;
 - whether the executor/orchestrator is drifting;
 - whether routine continuation questions were asked despite an allowed next action;
-- whether it is safe to continue;
-- whether `migration/state/continuation-decision.json` says `CONTINUE_REQUIRED` and the agent tried to stop anyway.
+- whether it is safe to continue.
 - if the task involves CLI installation, whether diagnostics started with PATH resolution (`Get-Command`/`where.exe`/`which -a`) rather than `dotnet tool list` only.
 
 Return PASS / WARN / BLOCK.
