@@ -31,7 +31,7 @@ Then dispatch:
 
 1. If `migration/state/continuation-decision.json` says `CONTINUE_REQUIRED`, Continue with that next bounded action. Do not produce a user-facing handoff first.
 2. If the latest final gate is non-final and current-ticket, verify output, handoff, or continuation decision names an allowed next config/scaffold/evidence action under `migration/**`, execute exactly one next bounded action.
-3. If the latest final gate is `FINAL` / `HARNESS_CONTINUATION_FINAL` and `$ARGUMENTS` does not explicitly request `continue`, stop for review: summarize the completed checkpoint, final-gate evidence, changed artifacts, remaining risks, and one recommended continue command. Do not start another run/ticket and do not show a broad menu.
+3. If the latest final gate is `FINAL` / `HARNESS_CONTINUATION_FINAL` and `$ARGUMENTS` does not explicitly request `continue`, stop for review: summarize the completed checkpoint, final-gate evidence, changed artifacts, remaining risks, and one recommended continue command. Explicitly say: "I stopped because the SUCCESS checkpoint requires review before another bounded ticket." Do not start another run/ticket and do not show a broad menu.
 Do not show a broad menu after a successful checkpoint; give one recommended continue command instead.
 4. If `$ARGUMENTS` explicitly requests `continue` after a `FINAL` checkpoint, start exactly one new bounded ticket from the recommended remaining risks. This is the explicit continue path.
 5. If `continuation-decision.json` contains bounded auto-continuation for the exact next action, obey that budget; otherwise `FINAL` always means stop-for-review.
@@ -91,7 +91,9 @@ Do not offer options such as README updates, package maintenance, broad refactor
    - final gate result;
    - trace/events status;
    - remaining risks;
-   - one recommended continue command;
+   - one recommended continue command in the form `To continue, run: /supervised-task continue <next bounded action>`;
    - anything intentionally not fixed.
+
+After a SUCCESS checkpoint report, never leave the user guessing why no work was done: state that the run is complete, `harness-run.json` should be `FINAL_STOPPED_FOR_REVIEW` when present, and provide exactly one `To continue, run: /supervised-task continue ...` command.
 
 Continuation rule: Continue with the next bounded action only when `migration/state/continuation-decision.json` reports `CONTINUE_REQUIRED`, the user explicitly requested `continue`, or bounded auto-continuation allows this exact action.

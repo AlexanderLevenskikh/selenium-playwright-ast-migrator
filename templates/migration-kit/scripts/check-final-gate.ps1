@@ -787,6 +787,11 @@ $md = New-Object System.Text.StringBuilder
 [void]$md.AppendLine()
 [void]$md.AppendLine("Status: **$($report.status)**")
 [void]$md.AppendLine("Continuation: **$($continuation.status)**")
+if ($continuation.postSuccessPolicy) {
+    [void]$md.AppendLine("Post-success policy: **$($continuation.postSuccessPolicy)**")
+    [void]$md.AppendLine("Stopped because SUCCESS checkpoint requires review before starting another bounded ticket.")
+    [void]$md.AppendLine(("To continue, run: {0}" -f $continuation.continueCommand))
+}
 if ($continuation.nextAction) {
     [void]$md.AppendLine("Next action: $($continuation.nextAction)")
 }
@@ -816,10 +821,43 @@ if ($continuation.nextAction) {
 }
 Set-Content -Path $continuationMdPath -Value $continuationMd.ToString() -Encoding UTF8
 
+if ($passed -and $continuation.status -eq "FINAL" -and $continuation.postSuccessPolicy -eq "STOP_FOR_REVIEW") {
+    $harnessRunPath = Join-Path $stateDir "harness-run.json"
+    if (Test-Path $harnessRunPath) {
+        try {
+            $existingHarnessRun = Get-Content -Raw -Path $harnessRunPath | ConvertFrom-Json
+            $harnessRunState = [ordered]@{}
+            foreach ($property in $existingHarnessRun.PSObject.Properties) {
+                $harnessRunState[$property.Name] = $property.Value
+            }
+
+            $previousHarnessStatus = $null
+            if ($harnessRunState.Contains("status")) {
+                $previousHarnessStatus = [string]$harnessRunState["status"]
+            }
+
+            $harnessRunState["status"] = "FINAL_STOPPED_FOR_REVIEW"
+            $harnessRunState["previousStatus"] = $previousHarnessStatus
+            $harnessRunState["finalizedAtUtc"] = [DateTimeOffset]::UtcNow.ToString("o")
+            $harnessRunState["continuationStatus"] = $continuation.status
+            $harnessRunState["postSuccessPolicy"] = $continuation.postSuccessPolicy
+            $harnessRunState["continueCommand"] = $continuation.continueCommand
+
+            ($harnessRunState | ConvertTo-Json -Depth 20) | Set-Content -Path $harnessRunPath -Encoding UTF8
+        }
+        catch {
+            Write-Warning "Could not update harness-run.json with FINAL_STOPPED_FOR_REVIEW: $($_.Exception.Message)"
+        }
+    }
+}
+
 Write-Host "FINAL_GATE_$($report.status)"
 Write-Host "HARNESS_CONTINUATION_$($continuation.status)"
 if ($continuation.postSuccessPolicy) {
     Write-Host "HARNESS_SUCCESS_$($continuation.postSuccessPolicy)"
+    Write-Host "Harness run status: FINAL_STOPPED_FOR_REVIEW"
+    Write-Host "Stopped because SUCCESS checkpoint requires review before starting another bounded ticket."
+    Write-Host "To continue, run: $($continuation.continueCommand)"
     Write-Host "Continue command: $($continuation.continueCommand)"
 }
 if ($continuation.nextAction) {

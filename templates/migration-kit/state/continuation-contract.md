@@ -18,7 +18,7 @@ Allowed statuses in `state/continuation-decision.json`:
 
 ## SUCCESS checkpoint
 
-A SUCCESS checkpoint is a `FINAL` / PASS result. After it, the default policy is to stop for review and require explicit continue before starting another bounded ticket.
+A SUCCESS checkpoint is a `FINAL` / PASS result. After it, the default policy is to stop for review and require explicit continue before starting another bounded ticket. When `state/harness-run.json` exists, `check-final-gate.ps1` records this as `FINAL_STOPPED_FOR_REVIEW` so the old `CONTINUE_AUTONOMOUSLY` status cannot mislead the next session.
 
 
 After `FINAL`, do not start another migration run or new ticket automatically. Continue only when one of these is true:

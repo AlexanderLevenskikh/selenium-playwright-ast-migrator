@@ -90,3 +90,6 @@ with one of:
 - `CONTINUE_REQUIRED`
 - `BLOCKED_BY_GATE`
 - `BLOCKED_NO_ALLOWED_NEXT_ACTION`
+
+When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts only with `To continue, run: /supervised-task continue <next bounded action>`.
+

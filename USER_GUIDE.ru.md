@@ -950,3 +950,5 @@ pwsh .\scripts\run-kitroot-shadow-smoke.ps1 -Clean
 
 Smoke создаёт временный product repo с теневой папкой `templates/migration-kit` и падает, если она используется как kit root.
 
+When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts only with `To continue, run: /supervised-task continue <next bounded action>`.
+

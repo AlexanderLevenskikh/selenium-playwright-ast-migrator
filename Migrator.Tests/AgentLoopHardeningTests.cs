@@ -1229,6 +1229,7 @@ public class AgentLoopHardeningTests
 
         Assert.Contains("postSuccessPolicy", finalGateScript);
         Assert.Contains("STOP_FOR_REVIEW", finalGateScript);
+        Assert.Contains("FINAL_STOPPED_FOR_REVIEW", finalGateScript);
         Assert.Contains("explicit user continue request", finalGateScript);
         Assert.Contains("SUCCESS checkpoint", continuationContract);
         Assert.Contains("starting another bounded ticket without explicit continue", continuationContract);
@@ -1243,12 +1244,20 @@ public class AgentLoopHardeningTests
             explicitStatus: "Status: READY_FOR_ACCEPTANCE\n",
             includeProjectVerify: true,
             configPassed: true);
+        repo.Write("migration/state/harness-run.json", "{ \"schemaVersion\": 1, \"runId\": \"run-014\", \"status\": \"CONTINUE_AUTONOMOUSLY\" }");
 
         var result = repo.RunFinalGate();
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("FINAL_GATE_PASS", result.Output);
         Assert.Contains("HARNESS_CONTINUATION_FINAL", result.Output);
         Assert.Contains("HARNESS_SUCCESS_STOP_FOR_REVIEW", result.Output);
+        Assert.Contains("Harness run status: FINAL_STOPPED_FOR_REVIEW", result.Output);
+        Assert.Contains("To continue, run: /supervised-task continue", result.Output);
+
+        var harnessRun = repo.Read("migration/state/harness-run.json");
+        Assert.Contains("FINAL_STOPPED_FOR_REVIEW", harnessRun);
+        Assert.Contains("CONTINUE_AUTONOMOUSLY", harnessRun);
+        Assert.Contains("continueCommand", harnessRun);
 
         var decision = repo.Read("migration/state/continuation-decision.json");
         Assert.Contains("FINAL", decision);

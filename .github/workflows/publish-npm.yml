@@ -152,7 +152,7 @@ jobs:
 
           if [[ -z "${NODE_AUTH_TOKEN:-}" && "$USE_PROVENANCE" != "true" ]]; then
             echo "NPM_TOKEN is not set and use_provenance=false."
-            echo "For publish/retag, create an npm token with package publish rights and save it as the NPM_TOKEN secret."
+            echo "For the first publish, create an npm token with package publish rights and save it as the NPM_TOKEN secret. The same token is also used for retag-only dist-tag promotion."
             echo "Alternatively configure npm Trusted Publishing for this package/workflow and rerun with use_provenance=true."
             exit 2
           fi
