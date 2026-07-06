@@ -47,6 +47,7 @@ internal static class MemoryCommand
             "explain" => RunExplain(options),
             "doctor" => RunDoctor(options),
             "summarize" => RunSummarize(options),
+            "recall" => RunRecall(options),
             _ => UnknownCommand(command)
         };
     }
@@ -166,6 +167,32 @@ internal static class MemoryCommand
         var summary = BuildExplain(memoryDir, memory, includeInactive: true);
         WriteOptionalOutputs(options.Out, options.Format, summary, BuildExplainJson(memoryDir, memory));
         Console.Write(summary);
+        return 0;
+    }
+
+
+    static int RunRecall(MemoryOptions options)
+    {
+        var memoryDir = EnsureMemoryDirectory(options.Workspace);
+        var memory = LoadMemory(memoryDir);
+        var targetFile = string.IsNullOrWhiteSpace(options.File) ? string.Empty : NormalizePathToken(options.File);
+        var targetName = string.IsNullOrWhiteSpace(targetFile) ? string.Empty : Path.GetFileName(targetFile);
+        var relevant = memory.Entries
+            .Where(e => e.IsActive)
+            .Where(e => IsGlobalMemoryEntry(e)
+                || (!string.IsNullOrWhiteSpace(targetFile) && NormalizePathToken(e.Scope).Contains(targetFile, StringComparison.OrdinalIgnoreCase))
+                || (!string.IsNullOrWhiteSpace(targetFile) && NormalizePathToken(e.Text).Contains(targetFile, StringComparison.OrdinalIgnoreCase))
+                || (!string.IsNullOrWhiteSpace(targetName) && e.Text.Contains(targetName, StringComparison.OrdinalIgnoreCase))
+                || (!string.IsNullOrWhiteSpace(targetName) && e.Scope.Contains(targetName, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(e => RecallPriority(e))
+            .ThenBy(e => e.Kind, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(e => e.File, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(e => e.Line)
+            .ToArray();
+
+        var report = BuildRecall(memoryDir, options.File, relevant);
+        WriteOptionalOutputs(options.Out, options.Format, report, BuildRecallJson(memoryDir, options.File, relevant));
+        Console.Write(report);
         return 0;
     }
 
@@ -398,6 +425,58 @@ internal static class MemoryCommand
             entries = memory.Entries.Select(e => new { e.Id, e.Kind, e.Text, e.Scope, e.Source, e.Status, e.File, e.Line }).ToArray()
         };
 
+    static string BuildRecall(string memoryDir, string file, IReadOnlyList<MemoryEntry> entries)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# Migration memory recall");
+        sb.AppendLine();
+        sb.AppendLine($"Memory: `{memoryDir}`");
+        sb.AppendLine(string.IsNullOrWhiteSpace(file) ? "File: `<not specified>`" : $"File: `{file}`");
+        sb.AppendLine();
+        if (entries.Count == 0)
+        {
+            sb.AppendLine("No active project-local memory entries matched this file. Use global decisions carefully and inspect the current wave artifacts.");
+        }
+        else
+        {
+            foreach (var entry in entries)
+                sb.AppendLine($"- [{entry.Kind}/{entry.Status}] {entry.Text} _(scope: {entry.Scope}; source: {entry.Source}; id: {entry.Id})_");
+        }
+        sb.AppendLine();
+        sb.AppendLine("Safety reminders:");
+        sb.AppendLine("- Memory is guidance, not authority.");
+        sb.AppendLine("- Apply an entry only when its scope and conditions match the current file/wave.");
+        sb.AppendLine("- Reviewer, Watchdog, and Final Gate can reject any memory-backed shortcut.");
+        return sb.ToString();
+    }
+
+    static object BuildRecallJson(string memoryDir, string file, IReadOnlyList<MemoryEntry> entries)
+        => new
+        {
+            schemaVersion = 1,
+            memory = memoryDir,
+            file,
+            entries = entries.Select(e => new { e.Id, e.Kind, e.Text, e.Scope, e.Source, e.Status, e.File, e.Line }).ToArray()
+        };
+
+    static bool IsGlobalMemoryEntry(MemoryEntry entry)
+        => entry.Kind is "antipattern" or "warning" or "constraint"
+           || entry.Scope.Equals("project", StringComparison.OrdinalIgnoreCase)
+           || entry.Scope.Equals("global", StringComparison.OrdinalIgnoreCase);
+
+    static int RecallPriority(MemoryEntry entry) => entry.Kind switch
+    {
+        "antipattern" => 0,
+        "warning" => 1,
+        "constraint" => 2,
+        "decision" => 3,
+        "preference" => 4,
+        _ => 5
+    };
+
+    static string NormalizePathToken(string value)
+        => value.Replace('\\', '/').Trim();
+
     static string BuildDoctorReport(string memoryDir, IReadOnlyList<MemoryDoctorCheck> checks, bool passed)
     {
         var sb = new StringBuilder();
@@ -564,6 +643,7 @@ Usage:
   selenium-pw-migrator memory explain [--workspace migration] [--out memory-report]
   selenium-pw-migrator memory doctor [--workspace migration] [--out memory-doctor]
   selenium-pw-migrator memory summarize [--workspace migration] [--run migration/runs/run-001]
+  selenium-pw-migrator memory recall --file Tests/LoginTests.cs [--workspace migration]
 
 Commands:
   init          Create project-local memory files under migration/state/memory.
@@ -571,6 +651,7 @@ Commands:
   explain       Print active migration memory for humans and agents.
   doctor        Validate memory invariants for final gate / watchdog use.
   summarize     Refresh memory-summary.md and optionally record a run lesson.
+  recall        Print active memory that is relevant to one file or wave scope.
 
 Kinds:
   decision | warning | antipattern | final-gate-lesson | user-note | preference | constraint
@@ -583,6 +664,7 @@ Examples:
   selenium-pw-migrator memory add --kind decision "Keep POM unresolved until target mapping exists"
   selenium-pw-migrator memory add --kind antipattern "Do not suppress assertions to reduce TODO count"
   selenium-pw-migrator memory explain --workspace migration
+  selenium-pw-migrator memory recall --file Tests/Auth/LoginTests.cs --workspace migration
   selenium-pw-migrator memory doctor --workspace migration --format both --out migration/memory-doctor
 """);
     }
@@ -598,6 +680,7 @@ Examples:
         string Out,
         string Format,
         string Run,
+        string File,
         bool IncludeInactive)
     {
         public static MemoryOptions? Parse(string[] args, out string error)
@@ -611,6 +694,7 @@ Examples:
             var outPath = string.Empty;
             var format = "text";
             var run = string.Empty;
+            var file = string.Empty;
             var includeInactive = false;
             var textParts = new List<string>();
 
@@ -655,6 +739,10 @@ Examples:
                         if (i + 1 >= args.Length) { error = "--run requires a value"; return null; }
                         run = args[++i];
                         break;
+                    case "--file":
+                        if (i + 1 >= args.Length) { error = "--file requires a value"; return null; }
+                        file = args[++i];
+                        break;
                     case "--include-inactive":
                         includeInactive = true;
                         break;
@@ -670,7 +758,7 @@ Examples:
             }
 
             error = string.Empty;
-            return new MemoryOptions(workspace, kind, string.Join(" ", textParts), scope, source, evidence, status, outPath, format, run, includeInactive);
+            return new MemoryOptions(workspace, kind, string.Join(" ", textParts), scope, source, evidence, status, outPath, format, run, file, includeInactive);
         }
     }
 

@@ -20,7 +20,8 @@ Before each major action, restate which rule allows the action.
 Before planning a bounded action:
 
 - Read `state/memory/memory-summary.md`.
-- If files in scope are known, run `selenium-pw-migrator memory explain --workspace migration` or inspect `state/memory/decisions.jsonl`, `warnings.jsonl`, `antipatterns.jsonl`, and `final-gate-lessons.jsonl`.
+- Read `plan/plan.md`, `plan/waves.json`, and `plan/memory-recall.md` when a divide-and-conquer wave plan exists.
+- If files in scope are known, run `selenium-pw-migrator memory explain --workspace migration` and `selenium-pw-migrator memory recall --file <file> --workspace migration`, or inspect `state/memory/decisions.jsonl`, `warnings.jsonl`, `antipatterns.jsonl`, and `final-gate-lessons.jsonl`.
 - Treat memory as guidance, not authority: apply a remembered rule only when its scope/conditions match the current evidence.
 
 After implementation/review:

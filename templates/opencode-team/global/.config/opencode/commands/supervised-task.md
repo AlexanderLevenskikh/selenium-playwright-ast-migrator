@@ -31,11 +31,15 @@ Before planning, always read:
 - migration/state/memory/warnings.jsonl, if it exists
 - migration/state/memory/antipatterns.jsonl, if it exists
 - migration/state/memory/final-gate-lessons.jsonl, if it exists
+- migration/plan/plan.md, if it exists
+- migration/plan/waves.json, if it exists
+- migration/plan/memory-recall.md, if it exists
 
 Then dispatch:
 
 1. If `migration/state/continuation-decision.json` says `CONTINUE_REQUIRED`, Continue with that next bounded action. Do not produce a user-facing handoff first.
 2. If the latest final gate is non-final and current-ticket, verify output, handoff, or continuation decision names an allowed next config/scaffold/evidence action under `migration/**`, execute exactly one next bounded action.
+2a. If no current ticket exists but `migration/plan/waves.json` exists, choose the next uncompleted wave as a bounded ticket. Before implementation, run `selenium-pw-migrator memory explain --workspace migration`, `selenium-pw-migrator memory doctor --workspace migration`, and `selenium-pw-migrator memory recall --file <file> --workspace migration` for files in the wave. Treat the wave plan as guidance, not permission to edit outside `migration/**`.
 3. If the latest final gate is `FINAL` / `HARNESS_CONTINUATION_FINAL` and `$ARGUMENTS` does not explicitly request `continue`, stop for review: summarize the completed checkpoint, final-gate evidence, changed artifacts, remaining risks, and one recommended continue command. Explicitly say: "I stopped because the SUCCESS checkpoint requires review before another bounded ticket." Do not start another run/ticket and do not show a broad menu.
 Do not show a broad menu after a successful checkpoint; give one recommended continue command instead.
 4. If `$ARGUMENTS` explicitly requests `continue` after a `FINAL` checkpoint, start exactly one new bounded ticket from the recommended remaining risks. This is the explicit continue path.

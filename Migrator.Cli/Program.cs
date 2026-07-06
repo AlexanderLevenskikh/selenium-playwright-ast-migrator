@@ -30,6 +30,9 @@ if (args.Length > 0 && string.Equals(args[0], "self", StringComparison.OrdinalIg
 if (args.Length > 0 && string.Equals(args[0], "memory", StringComparison.OrdinalIgnoreCase))
     return MemoryCommand.Run(args.Skip(1).ToArray());
 
+if (args.Length > 0 && string.Equals(args[0], "migration", StringComparison.OrdinalIgnoreCase))
+    return MigrationCommand.Run(args.Skip(1).ToArray());
+
 args = NormalizeDirectCommand(args);
 
 if (IsVersionRequest(args))

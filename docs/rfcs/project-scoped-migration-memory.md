@@ -97,3 +97,30 @@ Final gate must validate project memory when present:
 ## Future: divide-and-conquer wavefront
 
 A later iteration can add `migration plan --strategy wavefront`, `run-wave`, config deltas, merge conflicts, and trust promotion. This RFC is the foundation: project-local memory first, progressive migration second.
+
+## Iteration 3: read-only divide-and-conquer wave planning
+
+The next local-only step is a read-only `migration` command family. It does not run migration waves yet; it creates a bounded plan that agents can use as state instead of asking the user what to do next.
+
+```bash
+selenium-pw-migrator migration inventory --input ./SeleniumTests --out migration/plan
+selenium-pw-migrator migration cluster --input ./SeleniumTests --out migration/plan
+selenium-pw-migrator migration plan --strategy wavefront --input ./SeleniumTests --workspace migration --out migration/plan
+selenium-pw-migrator migration plan show --plan migration/plan
+```
+
+Artifacts:
+
+- `inventory.json` / `inventory.md` — Selenium-like test methods, files, clusters, tags, risks, and representative scores.
+- `clusters.json` / `clusters.md` — project-local clusters such as Auth, Table, SearchFilter, Modal, POM-heavy, Wait-heavy.
+- `waves.json` / `plan.md` — representative waves followed by cluster expansion waves.
+- `selected-tests.txt` — deterministic list of tests in planned wave order.
+- `memory-recall.md` — instructions to run `memory explain`, `memory doctor`, and `memory recall --file` before turning a wave into a bounded agent task.
+- `next-commands.md` — safe next commands.
+
+Safety boundary:
+
+- `migration plan` is read-only.
+- `run-wave` is intentionally future work.
+- Wave planning cannot promote memory entries or change adapter config.
+- Any future wave execution must emit `config-delta`, `memory-delta`, reviewer findings, watchdog findings, and final-gate evidence.

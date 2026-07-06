@@ -340,7 +340,9 @@ This creates a fake product repository that contains its own `templates/migratio
 | `runbook` | Stable | Generate a practical migration plan with pilot scope, command chain, risk map, artifacts, and acceptance checklist. |
 | `playground` | Stable | Create a five-minute public demo workspace with ready commands, expected outputs, dashboard sample, and PR pack sample. |
 | `playground-verify` | Stable | Verify that the generated playground still has the manifest, command chain, demo input, expected output, and safety wording. |
-| `memory` | Stable | Manage project-scoped migration memory (`init/add/explain/doctor/summarize`) under `migration/state/memory/**` for supervised runs. |
+| `memory` | Stable | Manage project-scoped migration memory (`init/add/explain/doctor/summarize/recall`) under `migration/state/memory/**` for supervised runs. |
+| `migration` | Stable | Build read-only divide-and-conquer wave plans (`inventory/cluster/plan/plan show`) before bounded agent migration waves. |
+| `migration` | Stable | Build read-only divide-and-conquer wave plans (`inventory/cluster/plan/plan show`) before bounded agent migration waves. |
 | `doctor` | Stable | Preflight checks plus safe `--fix` repair plans for inputs, config layers, project files, and workspace hygiene. |
 | `release-doctor` | Stable | Check NuGet preview readiness: package metadata, docs, scripts, workflow dry-run, secret references, and release hygiene. |
 | `analyze` | Stable | Parse Selenium files and produce reports without generating target files. |
@@ -426,4 +428,16 @@ The test suite covers parser behavior, adapter mappings, snapshots, compile-smok
 This project is currently prepared as a public preview. Stable commands are intended for external users; experimental commands may change between preview releases. See [CHANGELOG.md](CHANGELOG.md), [SECURITY.md](SECURITY.md), and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts only with `To continue, run: /supervised-task continue <next bounded action>`.
+
+
+## Divide-and-conquer wave planning
+
+For larger projects, generate a read-only wavefront plan before asking an agent to migrate a broad scope:
+
+```bash
+selenium-pw-migrator migration plan --input ./SeleniumTests --strategy wavefront --workspace migration --out migration/plan
+selenium-pw-migrator migration plan show --plan migration/plan
+```
+
+The planner writes `inventory.json`, `clusters.json`, `waves.json`, `plan.md`, `selected-tests.txt`, `memory-recall.md`, and `next-commands.md`. It does not migrate files. The first wave contains representative tests, later waves expand by cluster. Agents should run `memory explain`, `memory doctor`, and `memory recall --file` before turning a wave into a bounded task.
 

@@ -32,7 +32,7 @@ This index keeps the current workflow short and avoids legacy agent-launch noise
 - [Migration learning pack](migration-learning-pack.md) — guided learning material for users adopting the migrator.
 - [Migration PR pack](migration-pr-pack.md) — Migration PR pack for reviewable migration pull requests.
 - [Config Authoring Assistant](config-authoring-assistant.md) — helper workflow for generating and normalizing project config.
-- [Project-scoped Migration Memory RFC](rfcs/project-scoped-migration-memory.md) — project-local memory for decisions, warnings, final-gate lessons, and future divide-and-conquer waves.
+- [Project-scoped Migration Memory RFC](rfcs/project-scoped-migration-memory.md) — project-local memory for decisions, warnings, final-gate lessons, and read-only divide-and-conquer wave planning.
 
 ## Examples and demos
 

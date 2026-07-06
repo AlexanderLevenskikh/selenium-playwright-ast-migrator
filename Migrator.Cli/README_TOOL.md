@@ -69,6 +69,8 @@ Commands are grouped as stable public, experimental preview, and internal/mainta
 - `runbook` — generate pilot scope, command chain, risk map, artifacts, and acceptance checklist before the first migration run.
 - `start` — product-repo onboarding wizard that writes a profile skeleton and next command chain.
 - `pilot` — select a representative bounded migration slice before scaling.
+- `migration` — build read-only wavefront plans for divide-and-conquer supervised migration.
+- `migration` — build read-only wavefront plans for divide-and-conquer supervised migration.
 - `doctor install` / `install-doctor` — explain the active install channel and update command.
 - `doctor` — preflight input, config, tooling, and source-truth hints.
 - `analyze` — inspect Selenium tests without generating target files.
@@ -160,3 +162,13 @@ selenium-pw-migrator doctor release --out release-doctor --format both
 ```
 
 The release doctor checks PackageId/version metadata, README_TOOL packaging docs, release scripts, publish workflow dry-run support, NuGet/npm/standalone smoke coverage, install diagnostics, agent handoff UX, changelog consistency, and basic repository hygiene.
+
+## Wavefront planning
+
+```bash
+selenium-pw-migrator migration plan --input ./OldTests --strategy wavefront --workspace migration --out migration/plan
+selenium-pw-migrator migration plan show --plan migration/plan
+```
+
+This is a read-only divide-and-conquer planner. It writes inventory, clusters, waves, selected tests, memory recall guidance, and next commands. `run-wave` is intentionally future work; use the plan as a bounded agent ticket and keep config changes as reviewed deltas.
+
