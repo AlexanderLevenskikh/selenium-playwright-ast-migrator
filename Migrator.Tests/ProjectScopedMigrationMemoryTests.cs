@@ -77,6 +77,7 @@ public class ProjectScopedMigrationMemoryTests
         Assert.Contains("memory-doctor", finalGate);
         Assert.Contains("active memory appears to allow assertion suppression", finalGate);
         Assert.Contains("selector-map.json selector[$index] requires sourceExpression, targetLocator, and evidence[]", finalGate);
+        Assert.Contains("Write-Output -NoEnumerate $property.Value", finalGate);
     }
 
     [Fact]

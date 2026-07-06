@@ -204,7 +204,11 @@ function Get-ObjectProperty($Object, [string[]]$Names) {
             Where-Object { $_.Name.Equals($name, [StringComparison]::OrdinalIgnoreCase) } |
             Select-Object -First 1
         if ($property -ne $null) {
-            return $property.Value
+            # Preserve empty arrays from ConvertFrom-Json. A plain `return $property.Value`
+            # enumerates arrays through the pipeline; an empty `selectors: []` then
+            # becomes `$null` at the caller and is misreported as a missing property.
+            Write-Output -NoEnumerate $property.Value
+            return
         }
     }
 

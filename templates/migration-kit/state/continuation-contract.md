@@ -30,7 +30,7 @@ Starting another bounded implementation ticket without explicit continue, review
 
 ## Non-final continuation rule
 
-If status is `CONTINUE_REQUIRED`, a response that only repeats `NOT FINAL` / `NOT RUNTIME READY` is a protocol violation.
+If status is `CONTINUE_REQUIRED`, do not stop with a restatement. A response that only repeats NOT FINAL / NOT RUNTIME READY is a protocol violation.
 
 ## Final stop rule
 
