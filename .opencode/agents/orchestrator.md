@@ -102,6 +102,11 @@ Before planning any migration-artifact/autopilot task, read these files when the
 - `migration/state/harness-run.json`
 - `migration/state/handoff.md`
 - `migration/state/run-ledger.md`
+- `migration/state/memory/memory-summary.md`
+- `migration/state/memory/decisions.jsonl`
+- `migration/state/memory/warnings.jsonl`
+- `migration/state/memory/antipatterns.jsonl`
+- `migration/state/memory/final-gate-lessons.jsonl`
 - the latest run files under `migration/runs/<run-id>/`:
   - `Prompt.md`
   - `Plan.md`
@@ -123,6 +128,7 @@ Treat `migration/state/harness-policy.json` as the action policy:
 1. Understand the user's task and restate the concrete goal.
 2. Create or resume the current Harness Kit run.
 3. Read `Prompt.md`, `Plan.md`, `Implement.md`, `Documentation.md`, and `trace.jsonl` for the active run.
+4. Read project-scoped memory before planning; use it as guidance, not authority, and never use it to justify assertion suppression or over-suppressed user interactions.
 4. Inspect relevant files yourself when needed.
 5. Produce or update a short implementation plan in terms of the active run.
 6. Write or request a `plan-written` event in `migration/state/harness-events.jsonl` with `migration/scripts/write-harness-event.ps1` when the plan materially changes.

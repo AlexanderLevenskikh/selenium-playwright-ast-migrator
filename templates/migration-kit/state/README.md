@@ -48,3 +48,7 @@ Prefer small batches:
 - one verification loop.
 
 Do not mix unrelated engine/config/runtime-readiness work in the same batch.
+
+## Project-scoped migration memory
+
+The kit includes `state/memory/**` as an inspectable project-local memory. Agents should read `state/memory/memory-summary.md` before planning, record durable decisions/warnings/final-gate lessons after bounded actions, and run `selenium-pw-migrator memory doctor --workspace migration` before final-gate handoff when the CLI is available. Memory is guidance, not authority: it cannot justify assertion suppression, over-suppressed user interactions, or selectors without evidence.

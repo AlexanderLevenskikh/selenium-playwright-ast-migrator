@@ -1,6 +1,6 @@
 # Public demo migration dashboard
 
-This is a static sample of the dashboard produced by:
+This is a static sample of the dashboard produced by `selenium-pw-migrator report serve`. It documents the lightweight public demo contract: `app/index.html` is the static fake web app, and the optional **Playwright proof** opens it through `file://` to exercise the same `data-testid` selectors used by generated output.
 
 ```bash
 selenium-pw-migrator report serve --input migration/runs/public-demo-nunit --static-only --out migration/dashboard/public-demo
@@ -35,12 +35,16 @@ selenium-pw-migrator report serve --input migration/runs/public-demo-nunit --sta
 
 | Source text | Likely owner |
 |---|---|
-| `Navigation.OpenLoginPage()` | config/profile |
-| `page.Loader.ValidateLoading()` | config/profile |
+| `Navigation.OpenDemoShop()` | config/profile or proof fixture |
+| `app.Loader.ValidateLoading()` | config/profile |
 
 ## Unmapped targets
 
 No unmapped UI targets in this demo. All field interactions use reviewed adapter config entries.
+
+## Runtime proof
+
+The optional Playwright proof project lives in `examples/public-demo/playwright-dotnet-proof`. It opens `examples/public-demo/app/index.html` through `file://` and runs the login/catalog/cart/orders flow against the static fake app.
 
 ## What good looks like
 
@@ -49,5 +53,7 @@ A good first migration run does not need to be TODO-free. It should make uncerta
 - no invented selectors;
 - field interactions mapped from config/source evidence;
 - setup/navigation uncertainty isolated as TODOs;
+- runtime controls backed by `app/index.html`;
+- optional Playwright proof available for the generated selector flow;
 - generated output compiles after scaffold-specific package restore;
 - next ticket is obvious and small.

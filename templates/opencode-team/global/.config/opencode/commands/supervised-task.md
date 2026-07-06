@@ -26,6 +26,11 @@ Before planning, always read:
 - migration/current-ticket.md, if it exists
 - migration/agent-state.md, if it exists
 - migration/state/stop-policy-checklist.md
+- migration/state/memory/memory-summary.md, if it exists
+- migration/state/memory/decisions.jsonl, if it exists
+- migration/state/memory/warnings.jsonl, if it exists
+- migration/state/memory/antipatterns.jsonl, if it exists
+- migration/state/memory/final-gate-lessons.jsonl, if it exists
 
 Then dispatch:
 
@@ -67,22 +72,24 @@ Do not offer options such as README updates, package maintenance, broad refactor
    - if no matching active run exists, run `migration/scripts/new-harness-run.ps1` with the task title and goal;
    - if a matching run exists, read its `Prompt.md`, `Plan.md`, `Implement.md`, `Documentation.md`, and `trace.jsonl`.
 2. Before each major action, state which AGENT_CONTRACT or harness-policy rule allows it.
-3. Make or update a short plan in the active run context.
-4. Record important lifecycle events when practical with `migration/scripts/write-harness-event.ps1`, especially `plan-written`, `explicit-continue-ticket-selected`, `scope-check-pass`, `tests-pass`, `tests-failed`, `final-gate-pass`, and `handoff-written`.
-5. Ask watchdog to check the plan.
-6. Delegate implementation to executor only if needed, and include the active run id.
-7. Ask watchdog to check the result.
-8. Ask reviewer to review the diff and active run evidence.
-9. Run `migration/scripts/check-scope.ps1` after any patch.
-10. Run `migration/scripts/check-harness-policy.ps1` after any patch.
-11. Apply only minimal fixes if needed.
-12. Stop after at most 2 fix-review cycles unless the user asks to continue.
-13. Do not ask routine continuation questions when the next action is allowed by harness-policy and OpenCode permissions.
-14. Do not issue FINAL unless `migration/scripts/check-final-gate.ps1 -RequireOpenCodeExport -RequireExplainTodo -RequireVerificationArtifacts` passes and migration/state/final-gate.md can be marked PASS with evidence. Otherwise say NOT FINAL - INVESTIGATION RESULT ONLY.
-15. After every non-final final-gate run, read `migration/state/continuation-decision.json` and `migration/state/continuation-decision.md`.
-16. If continuation status is `CONTINUE_REQUIRED`, do not send a user-facing handoff yet. Execute exactly one next bounded action named by the decision/current ticket/handoff, then rerun scope, harness policy, verification, and final gate. A response that only repeats NOT FINAL / NOT RUNTIME READY while `CONTINUE_REQUIRED` exists is a protocol violation.
-17. After every successful `FINAL` / PASS checkpoint, stop and report. Starting another run/ticket requires explicit user `continue` or bounded auto-continuation in `continuation-decision.json`.
-18. Final report:
+3. Read project-scoped memory before planning: `migration/state/memory/memory-summary.md` when present, plus `selenium-pw-migrator memory explain --workspace migration` when the next bounded action depends on prior decisions.
+4. Make or update a short plan in the active run context.
+5. Record important lifecycle events when practical with `migration/scripts/write-harness-event.ps1`, especially `plan-written`, `explicit-continue-ticket-selected`, `scope-check-pass`, `tests-pass`, `tests-failed`, `final-gate-pass`, and `handoff-written`.
+6. Ask watchdog to check the plan.
+7. Delegate implementation to executor only if needed, and include the active run id.
+8. Ask watchdog to check the result.
+9. Ask reviewer to review the diff and active run evidence.
+10. Run `migration/scripts/check-scope.ps1` after any patch.
+11. Run `migration/scripts/check-harness-policy.ps1` after any patch.
+12. Run `selenium-pw-migrator memory doctor --workspace migration` before final-gate handoff when the CLI is available.
+13. Apply only minimal fixes if needed.
+14. Stop after at most 2 fix-review cycles unless the user asks to continue.
+15. Do not ask routine continuation questions when the next action is allowed by harness-policy and OpenCode permissions.
+16. Do not issue FINAL unless `migration/scripts/check-final-gate.ps1 -RequireOpenCodeExport -RequireExplainTodo -RequireVerificationArtifacts` passes and migration/state/final-gate.md can be marked PASS with evidence. Otherwise say NOT FINAL - INVESTIGATION RESULT ONLY.
+17. After every non-final final-gate run, read `migration/state/continuation-decision.json` and `migration/state/continuation-decision.md`.
+18. If continuation status is `CONTINUE_REQUIRED`, do not send a user-facing handoff yet. Execute exactly one next bounded action named by the decision/current ticket/handoff, then rerun scope, harness policy, verification, and final gate. A response that only repeats NOT FINAL / NOT RUNTIME READY while `CONTINUE_REQUIRED` exists is a protocol violation.
+19. After every successful `FINAL` / PASS checkpoint, stop and report. Starting another run/ticket requires explicit user `continue` or bounded auto-continuation in `continuation-decision.json`.
+20. Final report:
    - active run id;
    - changed files;
    - verification result;

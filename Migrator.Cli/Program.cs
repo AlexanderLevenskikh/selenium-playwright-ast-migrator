@@ -27,6 +27,9 @@ if (args.Length > 0 && string.Equals(args[0], "kit", StringComparison.OrdinalIgn
 if (args.Length > 0 && string.Equals(args[0], "self", StringComparison.OrdinalIgnoreCase))
     return SelfCommand.Run(args.Skip(1).ToArray());
 
+if (args.Length > 0 && string.Equals(args[0], "memory", StringComparison.OrdinalIgnoreCase))
+    return MemoryCommand.Run(args.Skip(1).ToArray());
+
 args = NormalizeDirectCommand(args);
 
 if (IsVersionRequest(args))
@@ -74,6 +77,13 @@ string renderIr = opts.RenderIr;
 string validationMode = opts.ValidationMode;
 string? targetTestFramework = opts.TargetTestFramework;
 string generationPolicy = GenerationPolicy.NormalizeOrDefault(opts.GenerationPolicy);
+
+if (mode == "memory")
+{
+    Console.WriteLine("Use the direct memory command family: selenium-pw-migrator memory init|add|explain|doctor|summarize");
+    MemoryCommand.Run(Array.Empty<string>());
+    return 0;
+}
 
 // Agent-safety modes operate on config/report artifacts and do not process source files.
 if (mode == "config-validate")

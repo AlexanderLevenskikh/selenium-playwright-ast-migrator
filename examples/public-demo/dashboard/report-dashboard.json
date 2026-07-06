@@ -34,5 +34,11 @@
       "nextAction": "Add method mapping or target setup fixture."
     }
   ],
-  "unmappedTargets": []
+  "unmappedTargets": [],
+  "runtimeProof": {
+    "app": "examples/public-demo/app/index.html",
+    "proof": "examples/public-demo/playwright-dotnet-proof",
+    "transport": "file://",
+    "description": "Playwright proof opens the static fake app and exercises generated data-testid selectors."
+  }
 }

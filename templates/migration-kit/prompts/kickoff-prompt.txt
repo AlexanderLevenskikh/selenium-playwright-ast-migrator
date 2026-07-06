@@ -11,6 +11,8 @@ Read first:
 - `{{WORKSPACE}}/state/continuation-decision.json`, if present
 - `{{WORKSPACE}}/state/stop-policy-checklist.md`
 - all files under `{{WORKSPACE}}/state/`
+- `{{WORKSPACE}}/state/memory/memory-summary.md`, if present
+- `{{WORKSPACE}}/state/memory/decisions.jsonl`, `warnings.jsonl`, `antipatterns.jsonl`, and `final-gate-lessons.jsonl`, if present
 
 Start a guarded Selenium → Playwright migration run.
 
@@ -37,7 +39,7 @@ Expected first commands:
 1. Run doctor/config validation for the scope.
 2. Run the smallest useful migrate/verify/orchestrate command.
 3. Build a migration board / explain TODO report if available.
-4. Choose the next root-cause ticket from evidence, not from memory.
+4. Choose the next root-cause ticket from evidence and project-scoped memory; memory is guidance, not authority.
 5. Update `{{WORKSPACE}}/agent-state.md`, `{{WORKSPACE}}/current-ticket.md`, `{{WORKSPACE}}/state/run-ledger.md`, `{{WORKSPACE}}/state/decision-log.md`, `{{WORKSPACE}}/state/handoff.md`, and `{{WORKSPACE}}/state/stop-policy-checklist.md`.
 
 Rules:
@@ -54,7 +56,8 @@ Rules:
 - `0 TODO` is valid only when config-validate/quality gates show no dangerous suppression, no empty meaningful tests, no suppressed side-effect dependency, no forbidden writes, and generated tests still contain source-backed actions/assertions.
 - Prefer config fixes for project-specific selectors/helper mappings.
 - Use engine fixes only in migrator-code mode for generic migrator limitations and add regression tests.
-- Before stopping or handing off, update `{{WORKSPACE}}/state/stop-policy-checklist.md`.
+- Before stopping or handing off, run `selenium-pw-migrator memory doctor --workspace {{WORKSPACE}}` when available and update `{{WORKSPACE}}/state/stop-policy-checklist.md`.
+- Record durable decisions, warnings, rejected approaches, and final-gate lessons in `{{WORKSPACE}}/state/memory/**`; never use memory to justify assertion suppression or over-suppressed user interactions.
 - A handoff/report is not a stop reason by itself. Stopping requires a valid checked reason from `{{WORKSPACE}}/state/stop-policy-checklist.md`, max iterations, or a next action that is outside the allowed lane.
 - After a non-final final-gate run, read `{{WORKSPACE}}/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, execute exactly one next bounded action before any user-facing handoff. A response that only repeats `NOT FINAL` / `NOT RUNTIME READY` while continuation is required is a protocol violation.
 After a successful `FINAL` / PASS checkpoint, stop and report. Start another run only when the user explicitly says `continue` or bounded auto-continuation is recorded for this exact next action.

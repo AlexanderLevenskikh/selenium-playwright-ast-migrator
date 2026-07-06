@@ -8,26 +8,194 @@
   },
   "UiTargets": [
     {
-      "SourceExpression": "page.Username",
+      "SourceExpression": "app.Login.Username",
       "TargetExpression": "GetByTestId(\"login-username\")",
-      "TargetKind": "TestId"
+      "TargetKind": "TestId",
+      "SourceTruth": "examples/public-demo/app/index.html: data-testid=\"login-username\"",
+      "Confidence": "high"
     },
     {
-      "SourceExpression": "page.Password",
+      "SourceExpression": "app.Login.Password",
       "TargetExpression": "GetByTestId(\"login-password\")",
-      "TargetKind": "TestId"
+      "TargetKind": "TestId",
+      "SourceTruth": "examples/public-demo/app/index.html: data-testid=\"login-password\"",
+      "Confidence": "high"
     },
     {
-      "SourceExpression": "page.SubmitButton",
+      "SourceExpression": "app.Login.SubmitButton",
       "TargetExpression": "GetByTestId(\"login-submit\")",
-      "TargetKind": "TestId"
+      "TargetKind": "TestId",
+      "SourceTruth": "examples/public-demo/app/index.html: data-testid=\"login-submit\"",
+      "Confidence": "high"
     },
     {
-      "SourceExpression": "page.Toast",
+      "SourceExpression": "app.Login.SuccessToast",
       "TargetExpression": "GetByTestId(\"login-success-toast\")",
-      "TargetKind": "TestId"
+      "TargetKind": "TestId",
+      "SourceTruth": "examples/public-demo/app/index.html: data-testid=\"login-success-toast\"",
+      "Confidence": "high"
+    },
+    {
+      "SourceExpression": "app.Catalog.Search",
+      "TargetExpression": "GetByTestId(\"catalog-search\")",
+      "TargetKind": "TestId",
+      "SourceTruth": "examples/public-demo/app/index.html: data-testid=\"catalog-search\"",
+      "Confidence": "high"
+    },
+    {
+      "SourceExpression": "app.Catalog.ResultCount",
+      "TargetExpression": "GetByTestId(\"catalog-result-count\")",
+      "TargetKind": "TestId",
+      "SourceTruth": "examples/public-demo/app/index.html: data-testid=\"catalog-result-count\"",
+      "Confidence": "high"
+    },
+    {
+      "SourceExpression": "app.Catalog.AddMugButton",
+      "TargetExpression": "GetByTestId(\"catalog-add-mug\")",
+      "TargetKind": "TestId",
+      "SourceTruth": "examples/public-demo/app/index.html: data-testid=\"catalog-add-mug\"",
+      "Confidence": "high"
+    },
+    {
+      "SourceExpression": "app.Cart.Count",
+      "TargetExpression": "GetByTestId(\"cart-count\")",
+      "TargetKind": "TestId",
+      "SourceTruth": "examples/public-demo/app/index.html: data-testid=\"cart-count\"",
+      "Confidence": "high"
+    },
+    {
+      "SourceExpression": "app.Cart.OpenButton",
+      "TargetExpression": "GetByTestId(\"cart-open\")",
+      "TargetKind": "TestId",
+      "SourceTruth": "examples/public-demo/app/index.html: data-testid=\"cart-open\"",
+      "Confidence": "high"
+    },
+    {
+      "SourceExpression": "app.Cart.Total",
+      "TargetExpression": "GetByTestId(\"cart-total\")",
+      "TargetKind": "TestId",
+      "SourceTruth": "examples/public-demo/app/index.html: data-testid=\"cart-total\"",
+      "Confidence": "high"
+    },
+    {
+      "SourceExpression": "app.Cart.CheckoutButton",
+      "TargetExpression": "GetByTestId(\"checkout\")",
+      "TargetKind": "TestId",
+      "SourceTruth": "examples/public-demo/app/index.html: data-testid=\"checkout\"",
+      "Confidence": "high"
+    },
+    {
+      "SourceExpression": "app.Orders.Status",
+      "TargetExpression": "GetByTestId(\"orders-status\")",
+      "TargetKind": "TestId",
+      "SourceTruth": "examples/public-demo/app/index.html: data-testid=\"orders-status\"",
+      "Confidence": "high"
     }
   ],
-  "Methods": [],
-  "PageObjects": []
+  "Methods": [
+    {
+      "SourceMethod": "app.Login.Username.InputText(\"admin@example.test\")",
+      "Description": "Public demo mapping: login email input.",
+      "TargetStatements": [
+        "await Page.GetByTestId(\"login-username\").FillAsync(\"admin@example.test\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "app.Login.Password.InputText(\"correct-horse-battery-staple\")",
+      "Description": "Public demo mapping: password input.",
+      "TargetStatements": [
+        "await Page.GetByTestId(\"login-password\").FillAsync(\"correct-horse-battery-staple\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "app.Login.SubmitButton.Click()",
+      "Description": "Public demo mapping: submit login.",
+      "TargetStatements": [
+        "await Page.GetByTestId(\"login-submit\").ClickAsync();"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "app.Login.SuccessToast.ShouldBeVisible()",
+      "Description": "Public demo mapping: login toast visibility.",
+      "TargetStatements": [
+        "await Expect(Page.GetByTestId(\"login-success-toast\")).ToBeVisibleAsync();"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "app.Catalog.Search.InputText(\"mug\")",
+      "Description": "Public demo mapping: catalog search.",
+      "TargetStatements": [
+        "await Page.GetByTestId(\"catalog-search\").FillAsync(\"mug\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "app.Catalog.ResultCount.ShouldHaveText(\"1 item\")",
+      "Description": "Public demo mapping: result count assertion.",
+      "TargetStatements": [
+        "await Expect(Page.GetByTestId(\"catalog-result-count\")).ToHaveTextAsync(\"1 item\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "app.Catalog.AddMugButton.Click()",
+      "Description": "Public demo mapping: add mug to cart.",
+      "TargetStatements": [
+        "await Page.GetByTestId(\"catalog-add-mug\").ClickAsync();"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "app.Cart.Count.ShouldHaveText(\"1\")",
+      "Description": "Public demo mapping: cart count assertion.",
+      "TargetStatements": [
+        "await Expect(Page.GetByTestId(\"cart-count\")).ToHaveTextAsync(\"1\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "app.Cart.OpenButton.Click()",
+      "Description": "Public demo mapping: open cart.",
+      "TargetStatements": [
+        "await Page.GetByTestId(\"cart-open\").ClickAsync();"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "app.Cart.Total.ShouldHaveText(\"$12.00\")",
+      "Description": "Public demo mapping: cart total assertion.",
+      "TargetStatements": [
+        "await Expect(Page.GetByTestId(\"cart-total\")).ToHaveTextAsync(\"$12.00\");"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "app.Cart.CheckoutButton.Click()",
+      "Description": "Public demo mapping: checkout.",
+      "TargetStatements": [
+        "await Page.GetByTestId(\"checkout\").ClickAsync();"
+      ],
+      "RequiresReview": false
+    },
+    {
+      "SourceMethod": "app.Orders.Status.ShouldContainText(\"Order demo-1001 created\")",
+      "Description": "Public demo mapping: order status assertion.",
+      "TargetStatements": [
+        "await Expect(Page.GetByTestId(\"orders-status\")).ToContainTextAsync(\"Order demo-1001 created\");"
+      ],
+      "RequiresReview": false
+    }
+  ],
+  "PageObjects": [
+    {
+      "SourceType": "DemoShopApp",
+      "TargetType": "Page",
+      "VariableName": "app",
+      "ConstructorStrategy": "ExistingPage"
+    }
+  ]
 }

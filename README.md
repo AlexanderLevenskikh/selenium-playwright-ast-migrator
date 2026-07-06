@@ -340,6 +340,7 @@ This creates a fake product repository that contains its own `templates/migratio
 | `runbook` | Stable | Generate a practical migration plan with pilot scope, command chain, risk map, artifacts, and acceptance checklist. |
 | `playground` | Stable | Create a five-minute public demo workspace with ready commands, expected outputs, dashboard sample, and PR pack sample. |
 | `playground-verify` | Stable | Verify that the generated playground still has the manifest, command chain, demo input, expected output, and safety wording. |
+| `memory` | Stable | Manage project-scoped migration memory (`init/add/explain/doctor/summarize`) under `migration/state/memory/**` for supervised runs. |
 | `doctor` | Stable | Preflight checks plus safe `--fix` repair plans for inputs, config layers, project files, and workspace hygiene. |
 | `release-doctor` | Stable | Check NuGet preview readiness: package metadata, docs, scripts, workflow dry-run, secret references, and release hygiene. |
 | `analyze` | Stable | Parse Selenium files and produce reports without generating target files. |

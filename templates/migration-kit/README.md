@@ -176,3 +176,7 @@ Windows OpenCode Desktop shortcut: `--project-desktop` remains an alias for `--o
 ## Harness continuation strict protocol
 
 After a non-final final gate, read `migration/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, `NOT FINAL` is not a stopping point: execute exactly one next bounded action under `migration/**` before a user-facing handoff. After `FINAL`, stop for review and report evidence; start another run only on explicit `continue` or bounded auto-continuation. Stop for guard/scope/policy blocker, missing input, loop/plateau, or max autonomous budget.
+
+## Project-scoped migration memory
+
+The kit includes `state/memory/**` as an inspectable project-local memory. Agents should read `state/memory/memory-summary.md` before planning, record durable decisions/warnings/final-gate lessons after bounded actions, and run `selenium-pw-migrator memory doctor --workspace migration` before final-gate handoff when the CLI is available. Memory is guidance, not authority: it cannot justify assertion suppression, over-suppressed user interactions, or selectors without evidence.

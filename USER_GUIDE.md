@@ -454,6 +454,17 @@ Checks that a generated playground still contains the public demo contract: mani
 dotnet tool run selenium-pw-migrator -- playground verify --input playground --out playground-verify
 ```
 
+`memory`
+
+Creates and validates project-scoped migration memory under `migration/state/memory/**`. Use it during supervised runs so later bounded actions can reuse decisions, warnings, final-gate lessons, and selector evidence without relying on chat memory.
+
+```bash
+dotnet tool run selenium-pw-migrator -- memory init --workspace migration
+dotnet tool run selenium-pw-migrator -- memory add --kind decision "Keep POM unresolved until target mapping exists"
+dotnet tool run selenium-pw-migrator -- memory explain --workspace migration
+dotnet tool run selenium-pw-migrator -- memory doctor --workspace migration
+```
+
 `release-doctor`
 
 Checks NuGet preview readiness from the repository root: package metadata, version/changelog consistency, release scripts, README_TOOL packaging docs, publish workflow dry-run support, NuGet secret references, and repository hygiene.

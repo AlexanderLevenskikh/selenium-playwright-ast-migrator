@@ -29,10 +29,13 @@ public class DocumentationPublicReadinessTests
             "examples/teaching-demo/expected/LoginTeachingTestPlaywright.generated.cs",
             "examples/teaching-demo/reports/ast-action-map.md",
             "examples/public-demo/README.md",
+            "examples/public-demo/app/index.html",
             "examples/public-demo/selenium-csharp-nunit/LoginSmokeTest.cs",
             "examples/public-demo/selenium-csharp-xunit/LoginSmokeFacts.cs",
             "examples/public-demo/playwright-dotnet-nunit/LoginSmokeTestPlaywright.generated.cs",
             "examples/public-demo/playwright-dotnet-xunit/LoginSmokeFactsPlaywright.generated.cs",
+            "examples/public-demo/playwright-dotnet-proof/PublicDemo.PlaywrightProof.csproj",
+            "examples/public-demo/playwright-dotnet-proof/StaticAppSmokeTests.cs",
             "examples/public-demo/dashboard/report-dashboard.html",
         };
 
@@ -184,6 +187,8 @@ public class DocumentationPublicReadinessTests
         Assert.Contains("playwright-dotnet-nunit", demoReadme);
         Assert.Contains("playwright-dotnet-xunit", demoReadme);
         Assert.Contains("what-good-looks-like.md", demoReadme);
+        Assert.Contains("app/index.html", demoReadme);
+        Assert.Contains("playwright-dotnet-proof", demoReadme);
 
         Assert.Contains("Microsoft.Playwright.NUnit", nunitOutput);
         Assert.Contains("NUnit.Framework", nunitOutput);
@@ -196,6 +201,8 @@ public class DocumentationPublicReadinessTests
         Assert.Contains("Quality trend", dashboard);
         Assert.Contains("What good looks like", dashboard);
         Assert.Contains("MIGRATOR:UNSUPPORTED_ACTION", dashboard);
+        Assert.Contains("app/index.html", dashboard);
+        Assert.Contains("Playwright proof", dashboard);
     }
 
 

@@ -211,6 +211,95 @@ function Get-ObjectProperty($Object, [string[]]$Names) {
     return $null
 }
 
+function Test-UnsafeAssertionSuppressionMemoryText([string]$Text) {
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return $false
+    }
+
+    $lower = $Text.ToLowerInvariant()
+    $mentionsAssertion = $lower.Contains("assert") -or $lower.Contains("fluentassertions") -or $lower.Contains("nunit")
+    $mentionsSuppress = $lower.Contains("suppress") -or $lower.Contains("hide") -or $lower.Contains("skip") -or $lower.Contains("remove")
+    if (-not ($mentionsAssertion -and $mentionsSuppress)) {
+        return $false
+    }
+
+    $forbids = $lower.Contains("do not") -or $lower.Contains("don't") -or $lower.Contains("never") -or $lower.Contains("cannot") -or $lower.Contains("must not") -or $lower.Contains("forbid") -or $lower.Contains("block") -or $lower.Contains("refuse") -or $lower.Contains("no assertion") -or $lower.Contains("zero assertions suppressed")
+    return -not $forbids
+}
+
+function Test-MigrationMemory([string]$WorkspacePath, [ref]$Detail) {
+    $memoryDir = Join-Path $WorkspacePath "state/memory"
+    if (-not (Test-Path $memoryDir)) {
+        $Detail.Value = "project-scoped memory is optional and missing"
+        return $true
+    }
+
+    $problems = New-Object System.Collections.Generic.List[string]
+
+    foreach ($jsonl in @("decisions.jsonl", "warnings.jsonl", "antipatterns.jsonl", "final-gate-lessons.jsonl", "user-notes.jsonl")) {
+        $path = Join-Path $memoryDir $jsonl
+        if (-not (Test-Path $path)) {
+            continue
+        }
+
+        $lineNumber = 0
+        foreach ($line in Get-Content -Path $path) {
+            $lineNumber++
+            if ([string]::IsNullOrWhiteSpace($line)) {
+                continue
+            }
+
+            try {
+                $entry = $line | ConvertFrom-Json
+                foreach ($required in @("kind", "text", "source", "status")) {
+                    if ($null -eq (Get-ObjectProperty $entry @($required))) {
+                        $problems.Add("${jsonl}:$lineNumber missing $required")
+                    }
+                }
+
+                $status = Get-ObjectProperty $entry @("status")
+                $text = [string](Get-ObjectProperty $entry @("text"))
+                if ($status -ne $null -and $status.ToString().Equals("active", [StringComparison]::OrdinalIgnoreCase) -and (Test-UnsafeAssertionSuppressionMemoryText $text)) {
+                    $problems.Add("${jsonl}:$lineNumber active memory appears to allow assertion suppression")
+                }
+            }
+            catch {
+                $problems.Add("${jsonl}:$lineNumber invalid JSONL: $($_.Exception.Message)")
+            }
+        }
+    }
+
+    $selectorMap = Join-Path $memoryDir "selector-map.json"
+    if (Test-Path $selectorMap) {
+        try {
+            $selectorJson = Get-Content -Raw -Path $selectorMap | ConvertFrom-Json
+            $selectors = Get-ObjectProperty $selectorJson @("selectors")
+            if ($null -eq $selectors) {
+                $problems.Add("selector-map.json missing selectors array")
+            }
+            else {
+                $index = 0
+                foreach ($selector in @($selectors)) {
+                    $index++
+                    $sourceExpression = Get-ObjectProperty $selector @("sourceExpression")
+                    $targetLocator = Get-ObjectProperty $selector @("targetLocator")
+                    $evidence = Get-ObjectProperty $selector @("evidence")
+                    if ([string]::IsNullOrWhiteSpace([string]$sourceExpression) -or [string]::IsNullOrWhiteSpace([string]$targetLocator) -or $null -eq $evidence -or @($evidence).Count -eq 0) {
+                        $problems.Add("selector-map.json selector[$index] requires sourceExpression, targetLocator, and evidence[]")
+                    }
+                }
+            }
+        }
+        catch {
+            $problems.Add("selector-map.json invalid JSON: $($_.Exception.Message)")
+        }
+    }
+
+    $Detail.Value = if ($problems.Count -eq 0) { "project-scoped memory doctor checks passed" } else { $problems -join "; " }
+    return $problems.Count -eq 0
+}
+
+
 function Find-DangerousQualityHitsFromJson($Node, [string[]]$DangerousPatterns, $Hits, [ref]$StructuredSeen) {
     if ($null -eq $Node) {
         return
@@ -650,6 +739,10 @@ else {
         }
     }
 }
+
+$memoryDetail = ""
+$memoryOk = Test-MigrationMemory $workspacePath ([ref]$memoryDetail)
+Add-Result $results "memory-doctor" $memoryOk $memoryDetail
 
 $dashboard = Find-LatestFile -Root $workspacePath -Names @("migration-quality-dashboard.json", "migration-board.json")
 if ($dashboard -eq $null) {

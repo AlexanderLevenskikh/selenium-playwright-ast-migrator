@@ -8,27 +8,38 @@ using System.Threading.Tasks;
 
 namespace Migrator.PublicDemo.Playwright.Xunit;
 
-// WARNING: some actions need manual review. See TODO comments below.
+// Public demo expected output. The setup TODOs are intentionally visible: the
+// checked-in Playwright proof test opens examples/public-demo/app/index.html and
+// verifies that every generated data-testid maps to source-truth in a real static control.
 
 public class LoginSmokeFactsPlaywright : PageTest, IAsyncLifetime
 {
     public async Task InitializeAsync()
     {
-        // TODO: UNSUPPORTED [MIGRATOR:UNSUPPORTED_ACTION] page = Navigation.OpenLoginPage();
-        // TODO: UNSUPPORTED [MIGRATOR:UNSUPPORTED_ACTION] page.Loader.ValidateLoading();
-        // Safe next action: add a navigation/setup mapping or target PageObject fixture.
+        // TODO: UNSUPPORTED [MIGRATOR:UNSUPPORTED_ACTION] app = Navigation.OpenDemoShop();
+        // TODO: UNSUPPORTED [MIGRATOR:UNSUPPORTED_ACTION] app.Loader.ValidateLoading();
+        // Safe next action: map demo navigation to examples/public-demo/app/index.html or use the proof fixture.
         await Task.CompletedTask;
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
 
     [Trait("Category", "Smoke")]
-    [Fact(DisplayName = "LoginWithValidCredentials")]
-    public async Task LoginWithValidCredentials()
+    [Fact(DisplayName = "LoginFilterCartAndCheckout")]
+    public async Task LoginFilterCartAndCheckout()
     {
         await Page.GetByTestId("login-username").FillAsync("admin@example.test");
         await Page.GetByTestId("login-password").FillAsync("correct-horse-battery-staple");
         await Page.GetByTestId("login-submit").ClickAsync();
         await Expect(Page.GetByTestId("login-success-toast")).ToBeVisibleAsync();
+
+        await Page.GetByTestId("catalog-search").FillAsync("mug");
+        await Expect(Page.GetByTestId("catalog-result-count")).ToHaveTextAsync("1 item");
+        await Page.GetByTestId("catalog-add-mug").ClickAsync();
+        await Expect(Page.GetByTestId("cart-count")).ToHaveTextAsync("1");
+        await Page.GetByTestId("cart-open").ClickAsync();
+        await Expect(Page.GetByTestId("cart-total")).ToHaveTextAsync("$12.00");
+        await Page.GetByTestId("checkout").ClickAsync();
+        await Expect(Page.GetByTestId("orders-status")).ToContainTextAsync("Order demo-1001 created");
     }
 }

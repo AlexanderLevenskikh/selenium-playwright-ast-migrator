@@ -18,9 +18,11 @@ It writes a self-contained sample migration folder with:
 
 - `README.md` and `try-this-first.md`;
 - `commands.sh` and `commands.ps1`;
+- `app/index.html`;
 - `selenium-csharp-nunit/LoginSmokeTest.cs`;
 - `configs/adapter-config.json`;
 - `expected-playwright-dotnet/`;
+- `playwright-dotnet-proof/`;
 - `sample-artifacts/dashboard/`;
 - `sample-artifacts/pr-pack/`;
 - `playground-manifest.json`.
@@ -50,13 +52,14 @@ The ready command chain demonstrates:
 3. running the sample migration;
 4. creating a static dashboard;
 5. preparing a PR pack;
-6. creating an evidence pack.
+6. creating an evidence pack;
+7. optionally running a Playwright proof against the static fake app.
 
 ## Safety
 
 The playground is read-only with respect to real projects. It writes only inside the chosen output directory.
 
-The playground never edits source tests and never invents selectors. Any risky selector or generated-code behavior should still go through the normal selector evidence, config diff, verification, PR pack, and evidence pack flow.
+The playground never edits source tests and never invents selectors. The fake web app is a static HTML file with checked-in `data-testid` controls, so selector proof stays local and lightweight. Any risky selector or generated-code behavior should still go through the normal selector evidence, config diff, verification, PR pack, and evidence pack flow.
 
 ## Expected outputs
 
@@ -65,7 +68,9 @@ The generated `expected-outputs.md` describes what good looks like:
 - `runs/playground-run/report.txt` exists;
 - `runs/playground-dashboard/report-dashboard.html` opens locally;
 - `runs/playground-pr-pack/suggested-pr-description.md` is reviewable;
-- `runs/playground-evidence.zip` contains a manifest and checksums.
+- `runs/playground-evidence.zip` contains a manifest and checksums;
+- `app/index.html` opens directly in a browser;
+- optional `dotnet test playground/playwright-dotnet-proof/PublicDemo.PlaywrightProof.csproj` proves the Playwright selectors against the fake app.
 
 ## Relationship to existing demos
 

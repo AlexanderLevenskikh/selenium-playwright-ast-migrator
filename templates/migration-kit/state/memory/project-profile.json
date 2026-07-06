@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "sourceFramework": "Selenium",
+  "targetFramework": "Playwright",
+  "testFramework": "unknown",
+  "pomStyle": "unknown",
+  "knownRiskAreas": [
+    "POM",
+    "custom-waits",
+    "assertions",
+    "selector-mapping"
+  ],
+  "createdBy": "migration-kit template"
+}

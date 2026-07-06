@@ -645,6 +645,7 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
 - `migration/state/decision-log.md`
 - `migration/state/run-ledger.md`
 - `migration/state/stop-policy-checklist.md`
+- `migration/state/memory/**`
 """;
     }
 
@@ -1166,6 +1167,7 @@ Fix only the current ticket.
             || normalized.StartsWith("state/final-gate.md", StringComparison.Ordinal)
             || normalized.StartsWith("state/harness-run.json", StringComparison.Ordinal)
             || normalized.StartsWith("state/harness-events.jsonl", StringComparison.Ordinal)
+            || normalized.StartsWith("state/memory/", StringComparison.Ordinal)
             || normalized.StartsWith("state/harness-policy-result.", StringComparison.Ordinal);
     }
 

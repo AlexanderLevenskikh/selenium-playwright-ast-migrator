@@ -6,11 +6,12 @@ Demo folder: [`examples/public-demo/`](../examples/public-demo/README.md)
 
 ## What you will see
 
+- A tiny static fake web app in `examples/public-demo/app/index.html`.
 - Selenium C# NUnit input and generated Playwright .NET NUnit output.
 - Selenium C# xUnit input and generated Playwright .NET xUnit output.
 - `init --wizard` onboarding into a safe migration workspace.
 - A static `report serve` dashboard sample.
-- A short checklist for what a healthy first migration run looks like.
+- An optional Playwright proof that opens the fake app through `file://` and checks the migrated selectors.
 
 ## Step 1: create a starter workspace with the wizard
 
@@ -35,7 +36,17 @@ migration/public-demo-xunit/state/run-ledger.md
 
 The wizard should not silently overwrite an existing non-empty workspace. Delete or rename the demo workspace before re-running the command.
 
-## Step 2: run a NUnit migration slice
+## Step 2: inspect the fake app
+
+Open this file directly in a browser:
+
+```text
+examples/public-demo/app/index.html
+```
+
+It contains a small Demo Shop flow: login, catalog search, add to cart, checkout, and order status. The important part is not the UI design; it is the stable `data-testid` contract that the adapter config and generated Playwright output both use.
+
+## Step 3: run a NUnit migration slice
 
 ```bash
 selenium-pw-migrator --mode migrate \
@@ -53,7 +64,7 @@ Compare the generated file with:
 examples/public-demo/playwright-dotnet-nunit/LoginSmokeTestPlaywright.generated.cs
 ```
 
-## Step 3: run a xUnit migration slice
+## Step 4: run a xUnit migration slice
 
 ```bash
 selenium-pw-migrator --mode migrate \
@@ -71,7 +82,15 @@ Compare the generated file with:
 examples/public-demo/playwright-dotnet-xunit/LoginSmokeFactsPlaywright.generated.cs
 ```
 
-## Step 4: open a dashboard
+## Step 5: optionally prove the UI selectors with Playwright
+
+```bash
+dotnet test examples/public-demo/playwright-dotnet-proof/PublicDemo.PlaywrightProof.csproj
+```
+
+This is optional because it may require Playwright browser installation. It is intentionally not a Selenium proof: the public demo keeps runtime verification on the target Playwright side and avoids ChromeDriver setup.
+
+## Step 6: open a dashboard
 
 The checked-in dashboard sample is here:
 
@@ -88,7 +107,7 @@ selenium-pw-migrator report serve \
   --out migration/public-demo-dashboard
 ```
 
-## Step 5: package evidence for review
+## Step 7: package evidence for review
 
 ```bash
 selenium-pw-migrator evidence pack \
@@ -106,6 +125,7 @@ A good first run should have:
 
 - zero invented selectors;
 - config-backed locator mappings;
+- source-truth ids present in `app/index.html`;
 - TODOs grouped by `MIGRATOR:*` code;
 - setup/navigation uncertainty isolated into a follow-up ticket;
 - a dashboard and evidence pack that are safe to attach to a PR or issue.
