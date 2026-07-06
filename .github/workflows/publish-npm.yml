@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Package version to publish, for example 0.0.0-preview.8'
+        description: 'Package version to publish or retag, for example 0.0.1-preview.1'
         required: true
         type: string
       registry:
@@ -18,12 +18,27 @@ on:
         default: ''
         type: string
       publish_tag:
-        description: 'npm dist-tag. Use preview for prereleases and latest only for stable releases.'
+        description: 'npm dist-tag used by npm publish. Use preview for prereleases and latest only for stable releases.'
         required: true
         default: 'preview'
         type: string
+      promote_latest:
+        description: 'Also move the latest dist-tag to this version after publish/retag. Useful while preview is the default install path.'
+        required: true
+        default: false
+        type: boolean
+      ensure_preview_tag:
+        description: 'Ensure the preview dist-tag also points to this version.'
+        required: true
+        default: true
+        type: boolean
+      retag_only:
+        description: 'Only update npm dist-tags for an already published version. Do not download or publish the package.'
+        required: true
+        default: false
+        type: boolean
       dry_run:
-        description: 'Run npm publish --dry-run only. Do not publish.'
+        description: 'Run npm publish --dry-run or print retag commands only. Do not publish or change dist-tags.'
         required: true
         default: true
         type: boolean
@@ -58,18 +73,29 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
           NPM_TAG: ${{ inputs.publish_tag }}
+          PROMOTE_LATEST: ${{ inputs.promote_latest }}
+          RETAG_ONLY: ${{ inputs.retag_only }}
         run: |
           set -euo pipefail
-          if [[ "$VERSION" == *-* && "$NPM_TAG" == "latest" ]]; then
+
+          if [[ "$VERSION" == *-* && "$NPM_TAG" == "latest" && "$RETAG_ONLY" != "true" ]]; then
             echo "Prerelease versions must not be published with the latest dist-tag. Use publish_tag=preview."
+            echo "If you intentionally want default npm install to resolve to this prerelease, keep publish_tag=preview and set promote_latest=true."
             exit 2
           fi
-          if [[ "$VERSION" != *-* && "$NPM_TAG" != "latest" ]]; then
+
+          if [[ "$VERSION" == *-* && "$PROMOTE_LATEST" == "true" ]]; then
+            echo "Warning: promote_latest=true will move the latest dist-tag to prerelease version '$VERSION'."
+            echo "This is acceptable while the package has no stable release, but should be revisited before a stable release."
+          fi
+
+          if [[ "$VERSION" != *-* && "$NPM_TAG" != "latest" && "$RETAG_ONLY" != "true" ]]; then
             echo "Stable version is being published with non-latest dist-tag '$NPM_TAG'."
             echo "This is allowed for staged testing, but stable releases should normally use publish_tag=latest."
           fi
 
       - name: Download GitHub Release npm package
+        if: ${{ inputs.retag_only == false }}
         shell: bash
         env:
           VERSION: ${{ inputs.version }}
@@ -87,6 +113,7 @@ jobs:
           test -s "artifacts/npm/selenium-pw-migrator-${VERSION}.tgz"
 
       - name: Inspect npm package
+        if: ${{ inputs.retag_only == false }}
         shell: bash
         env:
           VERSION: ${{ inputs.version }}
@@ -104,13 +131,14 @@ jobs:
           NPM_REGISTRY: ${{ inputs.registry }}
         run: |
           set -euo pipefail
+
           if [[ -n "${NODE_AUTH_TOKEN:-}" ]]; then
             registry_host="$(node -e 'console.log(new URL(process.env.NPM_REGISTRY).host)')"
             npm config set "//${registry_host}/:_authToken" "${NODE_AUTH_TOKEN}"
             echo "Configured npm auth token for ${registry_host}."
             npm whoami --registry "$NPM_REGISTRY" || true
           else
-            echo "NPM_TOKEN is not set. Real publish must use npm trusted publishing/provenance."
+            echo "NPM_TOKEN is not set. Real publish/retag must use npm trusted publishing/provenance or a token."
           fi
 
       - name: Validate publish authentication mode
@@ -121,15 +149,24 @@ jobs:
           USE_PROVENANCE: ${{ inputs.use_provenance }}
         run: |
           set -euo pipefail
+
           if [[ -z "${NODE_AUTH_TOKEN:-}" && "$USE_PROVENANCE" != "true" ]]; then
             echo "NPM_TOKEN is not set and use_provenance=false."
-            echo "For the first publish, create an npm token with package creation/publish rights and save it as the NPM_TOKEN secret."
+            echo "For publish/retag, create an npm token with package publish rights and save it as the NPM_TOKEN secret."
             echo "Alternatively configure npm Trusted Publishing for this package/workflow and rerun with use_provenance=true."
             exit 2
           fi
 
+      - name: Current npm dist-tags
+        shell: bash
+        env:
+          NPM_REGISTRY: ${{ inputs.registry }}
+        run: |
+          set -euo pipefail
+          npm dist-tag ls selenium-pw-migrator --registry "$NPM_REGISTRY" || true
+
       - name: Publish npm package
-        if: ${{ inputs.dry_run == false }}
+        if: ${{ inputs.dry_run == false && inputs.retag_only == false }}
         shell: bash
         env:
           VERSION: ${{ inputs.version }}
@@ -144,7 +181,7 @@ jobs:
           bash scripts/publish-npm-wrapper.sh "$VERSION" "artifacts/npm/selenium-pw-migrator-${VERSION}.tgz"
 
       - name: Dry-run publish summary
-        if: ${{ inputs.dry_run == true }}
+        if: ${{ inputs.dry_run == true && inputs.retag_only == false }}
         shell: bash
         env:
           VERSION: ${{ inputs.version }}
@@ -155,3 +192,53 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/publish-npm-wrapper.sh "$VERSION" "artifacts/npm/selenium-pw-migrator-${VERSION}.tgz"
+
+      - name: Retag dry-run summary
+        if: ${{ inputs.dry_run == true }}
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          NPM_REGISTRY: ${{ inputs.registry }}
+          PROMOTE_LATEST: ${{ inputs.promote_latest }}
+          ENSURE_PREVIEW_TAG: ${{ inputs.ensure_preview_tag }}
+        run: |
+          set -euo pipefail
+
+          echo "Dry-run: npm dist-tags would be updated for selenium-pw-migrator@$VERSION"
+
+          if [[ "$ENSURE_PREVIEW_TAG" == "true" ]]; then
+            echo "Would run: npm dist-tag add selenium-pw-migrator@$VERSION preview --registry $NPM_REGISTRY"
+          fi
+
+          if [[ "$PROMOTE_LATEST" == "true" ]]; then
+            echo "Would run: npm dist-tag add selenium-pw-migrator@$VERSION latest --registry $NPM_REGISTRY"
+          fi
+
+      - name: Ensure npm dist-tags
+        if: ${{ inputs.dry_run == false }}
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          NPM_REGISTRY: ${{ inputs.registry }}
+          PROMOTE_LATEST: ${{ inputs.promote_latest }}
+          ENSURE_PREVIEW_TAG: ${{ inputs.ensure_preview_tag }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$ENSURE_PREVIEW_TAG" == "true" ]]; then
+            echo "Ensuring preview -> selenium-pw-migrator@$VERSION"
+            npm dist-tag add "selenium-pw-migrator@$VERSION" preview --registry "$NPM_REGISTRY"
+          fi
+
+          if [[ "$PROMOTE_LATEST" == "true" ]]; then
+            echo "Promoting latest -> selenium-pw-migrator@$VERSION"
+            npm dist-tag add "selenium-pw-migrator@$VERSION" latest --registry "$NPM_REGISTRY"
+          fi
+
+      - name: Final npm dist-tags
+        shell: bash
+        env:
+          NPM_REGISTRY: ${{ inputs.registry }}
+        run: |
+          set -euo pipefail
+          npm dist-tag ls selenium-pw-migrator --registry "$NPM_REGISTRY" || true
