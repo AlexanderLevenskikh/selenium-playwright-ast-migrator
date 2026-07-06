@@ -69,9 +69,15 @@ permission:
     "@watchdog*": allow
     "reviewer*": allow
     "@reviewer*": allow
+    "migration-researcher*": allow
+    "@migration-researcher*": allow
+    "migration-change-reviewer*": allow
+    "@migration-change-reviewer*": allow
     "executor": allow
     "watchdog": allow
     "reviewer": allow
+    "migration-researcher": allow
+    "migration-change-reviewer": allow
   question: deny
   external_directory: deny
   doom_loop: allow
@@ -122,6 +128,22 @@ Treat `migration/state/harness-policy.json` as the action policy:
 - Do not ask routine continuation questions when an allowed next action exists.
 - For ambiguous task intent, dangerous actions, network/package updates, permission-policy edits, or writes outside the allowed workspace, stop with a concrete blocker instead of waiting for an interactive approval.
 - Never weaken guard scripts or `harness-policy.json` during a normal run.
+
+
+## Post-final research flow
+
+When the active run is `FINAL_STOPPED_FOR_REVIEW` and the latest final gate/continuation decision is `FINAL` with `postSuccessPolicy: STOP_FOR_REVIEW`, a plain explicit continue request means post-final research, not another implementation ticket.
+
+For `/supervised-task continue` with no extra bounded action:
+
+1. Do not ask the user to write a more detailed prompt.
+2. Invoke `migration-researcher` for the active run.
+3. The researcher may write only under `migration/runs/<active-run-id>/research/**` plus lifecycle continuation/trace files.
+4. Do not let the researcher edit source, migrated output, adapter config, policy, guard scripts, or current-ticket.
+5. After research completes, invoke `migration-change-reviewer` on the research artifacts before any executor implementation task.
+6. Only after reviewer approval may a later bounded implementation ticket be selected and delegated to executor.
+
+If the user names a specific test/helper/TODO in the continue request, pass that as the research topic. If they only say `continue`, default to `pattern-scout` over the active run's remaining TODOs and ask no follow-up.
 
 ## Default workflow
 

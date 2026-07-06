@@ -558,6 +558,8 @@ public class AgentLoopHardeningTests
             Assert.Contains("\"rg *\": \"allow\"", text);
             Assert.Contains("\"executor*\": \"allow\"", text);
             Assert.Contains("\"@executor*\": \"allow\"", text);
+            Assert.Contains("\"migration-researcher*\": \"allow\"", text);
+            Assert.Contains("\"@migration-change-reviewer*\": \"allow\"", text);
             Assert.Contains("\"general\": \"deny\"", text);
             Assert.Contains("\"external_directory\": \"deny\"", text);
         }
@@ -576,6 +578,8 @@ public class AgentLoopHardeningTests
 
         Assert.Contains("\"executor*\": allow", orchestrator);
         Assert.Contains("\"@executor*\": allow", orchestrator);
+        Assert.Contains("\"migration-researcher*\": allow", orchestrator);
+        Assert.Contains("\"@migration-change-reviewer*\": allow", orchestrator);
         Assert.Contains("routine git inspection", teamReadme);
         Assert.Contains("Do not ask for permission for routine allowed inspection", Read("AGENTS.md"));
         Assert.Contains("git status --short --untracked-files=all", docs);
@@ -819,10 +823,10 @@ public class AgentLoopHardeningTests
 
         Assert.Contains("/supervised-task", docs);
         Assert.Contains("tester-facing", docs);
-        Assert.Contains("selected by explicit `/supervised-task continue`", docs);
+        Assert.Contains("selected from post-final research or explicit `/supervised-task continue <task>`", docs);
         Assert.Contains("No extra prompt is required when the user says `continue`", docs);
         Assert.Contains("stops for review after FINAL", teamReadme);
-        Assert.Contains("`/supervised-task continue ...`", teamReadme);
+        Assert.Contains("plain `/supervised-task continue` starts post-final research", teamReadme);
         Assert.Contains("`/supervised-task` is the normal tester-facing entrypoint", rootAgents);
         Assert.Contains("stop for review by default", rootAgents);
         Assert.Contains("`/supervised-task` is the normal tester-facing entrypoint", projectAgents);
@@ -1230,9 +1234,9 @@ public class AgentLoopHardeningTests
         Assert.Contains("postSuccessPolicy", finalGateScript);
         Assert.Contains("STOP_FOR_REVIEW", finalGateScript);
         Assert.Contains("FINAL_STOPPED_FOR_REVIEW", finalGateScript);
-        Assert.Contains("explicit user continue request", finalGateScript);
+        Assert.Contains("explicit /supervised-task continue", finalGateScript);
         Assert.Contains("SUCCESS checkpoint", continuationContract);
-        Assert.Contains("starting another bounded ticket without explicit continue", continuationContract);
+        Assert.Contains("Starting another bounded implementation ticket without explicit continue", continuationContract);
         Assert.Contains("After every successful `FINAL` / PASS checkpoint, stop and report", supervisedTask);
         Assert.Contains("SUCCESS checkpoint rule", docs);
         Assert.Contains("/supervised-task continue", docs);
@@ -1253,6 +1257,7 @@ public class AgentLoopHardeningTests
         Assert.Contains("HARNESS_SUCCESS_STOP_FOR_REVIEW", result.Output);
         Assert.Contains("Harness run status: FINAL_STOPPED_FOR_REVIEW", result.Output);
         Assert.Contains("To continue, run: /supervised-task continue", result.Output);
+        Assert.Contains("POST_FINAL_RESEARCH", result.Output + repo.Read("migration/state/continuation-decision.json"));
 
         var harnessRun = repo.Read("migration/state/harness-run.json");
         Assert.Contains("FINAL_STOPPED_FOR_REVIEW", harnessRun);
@@ -1266,6 +1271,36 @@ public class AgentLoopHardeningTests
         Assert.Contains("/supervised-task continue", decision);
         Assert.Contains("mustContinueBeforeUserMessage", decision);
         Assert.Contains("false", decision);
+    }
+
+    [Fact]
+    public void OpenCodeTeam_PostFinalResearchFlowIsPromptLightAndSandboxed()
+    {
+        var supervisedTask = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var orchestrator = Read("templates/opencode-team/global/.config/opencode/agents/orchestrator.md");
+        var researcher = Read("templates/opencode-team/global/.config/opencode/agents/migration-researcher.md");
+        var researchReviewer = Read("templates/opencode-team/global/.config/opencode/agents/migration-change-reviewer.md");
+        var config = Read("templates/opencode-team/global/.config/opencode/opencode.jsonc");
+        var continuationContract = Read("templates/migration-kit/state/continuation-contract.md");
+        var finalGateScript = Read("templates/migration-kit/scripts/check-final-gate.ps1");
+
+        Assert.Contains("migration-researcher", supervisedTask);
+        Assert.Contains("migration-change-reviewer", supervisedTask);
+        Assert.Contains("do not ask the user for a more detailed prompt", supervisedTask);
+        Assert.Contains("FINAL_STOPPED_FOR_REVIEW", supervisedTask);
+        Assert.Contains("POST_FINAL_RESEARCH", finalGateScript);
+        Assert.Contains("/supervised-task continue", finalGateScript);
+        Assert.Contains("migration-researcher", orchestrator);
+        Assert.Contains("post-final research flow", orchestrator);
+        Assert.Contains("migration/runs/*/research/**", researcher);
+        Assert.Contains("must not edit", researcher);
+        Assert.Contains("migrated output", researcher);
+        Assert.Contains("adapter config", researcher);
+        Assert.Contains("FINAL_RESEARCH_COMPLETED", researcher);
+        Assert.Contains("edit: deny", researchReviewer);
+        Assert.True(continuationContract.Contains("reviewed research", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("migration-researcher*", config);
+        Assert.Contains("migration-change-reviewer*", config);
     }
 
     [Fact]

@@ -57,7 +57,7 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Sel
 
 Then run `/supervised-task` in OpenCode. The harness creates or resumes `migration/runs/<run-id>`; do not create run folders by hand.
 
-After a successful FINAL/PASS checkpoint, the supervised agent stops for review and reports evidence. To continue from the recommended next action, run `/supervised-task continue ...`.
+After a successful FINAL/PASS checkpoint, the supervised agent stops for review and reports evidence. To continue into post-final research without writing a long prompt, run `/supervised-task continue`.
 
 ### 3. Migrate with another agent
 
@@ -427,7 +427,7 @@ The test suite covers parser behavior, adapter mappings, snapshots, compile-smok
 
 This project is currently prepared as a public preview. Stable commands are intended for external users; experimental commands may change between preview releases. See [CHANGELOG.md](CHANGELOG.md), [SECURITY.md](SECURITY.md), and [CONTRIBUTING.md](CONTRIBUTING.md).
 
-When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts only with `To continue, run: /supervised-task continue <next bounded action>`.
+When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts with `To continue, run: /supervised-task continue`, which triggers post-final research by default.
 
 
 ## Divide-and-conquer wave planning

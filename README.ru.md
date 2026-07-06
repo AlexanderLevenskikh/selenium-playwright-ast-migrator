@@ -217,7 +217,7 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Sel
 
 Потом запускаем `/supervised-task` в OpenCode или передаём другому агенту `migration/AGENT_CONTRACT.md` и `migration/prompts/kickoff-prompt.txt`. `migration/runs/<run-id>` руками не создаём — это делает harness.
 
-После успешного FINAL/PASS checkpoint агент останавливается для review и показывает evidence. Для продолжения используйте явный `/supervised-task continue ...`.
+После успешного FINAL/PASS checkpoint агент останавливается для review и показывает evidence. Для перехода в post-final research без длинного prompt используйте `/supervised-task continue`.
 
 Java, Python и Playwright TypeScript — experimental-направления. В release/demo/marketing основной production promise остаётся Selenium C# -> Playwright .NET.
 
@@ -399,5 +399,5 @@ dotnet test --no-restore
 
 Windows OpenCode Desktop shortcut: `--project-desktop` остаётся alias для `--opencode-install project-desktop`.
 
-When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts only with `To continue, run: /supervised-task continue <next bounded action>`.
+When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts with `To continue, run: /supervised-task continue`, which triggers post-final research by default.
 

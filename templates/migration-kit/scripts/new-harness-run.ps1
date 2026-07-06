@@ -157,7 +157,7 @@ Set-Utf8NoBom (Join-Path $runPath "Implement.md") @"
 - Prefer config/source-truth fixes over generated-code patching.
 - Write blockers as artifacts instead of asking vague continuation questions.
 - After a non-final final gate, read continuation-decision.json.
-- If continuation-decision.json says CONTINUE_REQUIRED, continue with exactly one next bounded action before user-facing handoff. If it says FINAL, stop for review and include one recommended `/supervised-task continue ...` command.
+- If continuation-decision.json says CONTINUE_REQUIRED, continue with exactly one next bounded action before user-facing handoff. If it says FINAL, stop for review and include one recommended `/supervised-task continue` command; plain continue starts post-final research first.
 - Update trace and state files after meaningful progress.
 
 ## Ask/stop triggers

@@ -105,7 +105,7 @@ git diff --stat
 git diff
 ```
 
-Known migration subagents (`executor`, `watchdog`, `reviewer`) are allowed by the OpenCode profile. If OpenCode asks for a routine read-only command, prefer using the documented low-noise permission profile rather than changing the migration plan.
+Known migration subagents (`executor`, `watchdog`, `reviewer`, `migration-researcher`, `migration-change-reviewer`) are allowed by the OpenCode profile. If OpenCode asks for a routine read-only command, prefer using the documented low-noise permission profile rather than changing the migration plan.
 
 
 ## OpenCode permission profile note
@@ -122,7 +122,7 @@ After a non-final final gate, read `migration/state/continuation-decision.json`.
 
 ## `/supervised-task` auto-next UX
 
-`/supervised-task` is the normal tester-facing entrypoint and must work with no arguments. Do not ask the user what to do next just because the previous run is `FINAL`. Read `migration/state/continuation-decision.json`, `migration/state/final-gate-result.json`, `migration/current-ticket.md`, and `migration/state/handoff.md`; if continuation is required, execute the named bounded action. If the previous state is FINAL, stop for review by default: report evidence, remaining risks, and one recommended `/supervised-task continue ...` command. Start a new bounded ticket only when the user explicitly says `continue` or bounded auto-continuation is recorded for that exact next action. If `migration/state/start-dispatch.json` or `migration/next-commands.md` exists after `selenium-pw-migrator start`, treat it as the active ticket: run install diagnostics, bootstrap the selected agent handoff if needed, then run pilot. Do not ask a broad menu of repository tasks unless start state is missing or contradictory.
+`/supervised-task` is the normal tester-facing entrypoint and must work with no arguments. Do not ask the user what to do next just because the previous run is `FINAL`. Read `migration/state/continuation-decision.json`, `migration/state/final-gate-result.json`, `migration/current-ticket.md`, and `migration/state/handoff.md`; if continuation is required, execute the named bounded action. If the previous state is FINAL, stop for review by default: report evidence, remaining risks, and one recommended `/supervised-task continue` command. When the user explicitly says `continue` after `FINAL_STOPPED_FOR_REVIEW` without a concrete implementation task, launch post-final research via `migration-researcher` instead of asking for a long supervisor prompt or starting implementation immediately. Start implementation only after reviewed research, a concrete implementation request, or bounded auto-continuation. If `migration/state/start-dispatch.json` or `migration/next-commands.md` exists after `selenium-pw-migrator start`, treat it as the active ticket: run install diagnostics, bootstrap the selected agent handoff if needed, then run pilot. Do not ask a broad menu of repository tasks unless start state is missing or contradictory.
 
-When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts only with `To continue, run: /supervised-task continue <next bounded action>`.
+When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts with `To continue, run: /supervised-task continue`, which triggers post-final research by default.
 

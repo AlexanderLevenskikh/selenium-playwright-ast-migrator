@@ -42,13 +42,10 @@ then the agent must stop and report:
 - final gate evidence;
 - changed artifacts;
 - remaining risks/TODO root causes;
-- one recommended next bounded action;
-- exact continue command, for example `/supervised-task continue fix remaining unmapped targets`.
+- one recommended next step;
+- exact continue command: `/supervised-task continue`.
 
-The agent may start a new run/ticket after `FINAL` only when:
-
-1. the user explicitly requests continuation; or
-2. the decision file records bounded auto-continuation for this exact next action.
+The agent may start post-final research after `FINAL` when the user explicitly requests continuation. A plain `/supervised-task continue` launches `migration-researcher`; it does not require the user to write a detailed prompt. Implementation starts only after `migration-change-reviewer` validates the research, the user names a concrete implementation task, or the decision file records bounded auto-continuation for that exact action.
 
 A zero-argument `/supervised-task` after FINAL must not show a broad menu and must not silently mutate the completed run.
 
@@ -58,6 +55,7 @@ Agents may stop only on:
 
 - `FINAL` with `STOP_FOR_REVIEW`
 - `BLOCKED_BY_GATE`
+- `FINAL_RESEARCH_COMPLETED`
 - `BLOCKED_NO_ALLOWED_NEXT_ACTION`
 - `BLOCKED_BY_FORBIDDEN_WRITE`
 - `BLOCKED_BY_MISSING_INPUT`
@@ -89,7 +87,8 @@ with one of:
 - `FINAL`
 - `CONTINUE_REQUIRED`
 - `BLOCKED_BY_GATE`
+- `FINAL_RESEARCH_COMPLETED`
 - `BLOCKED_NO_ALLOWED_NEXT_ACTION`
 
-When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts only with `To continue, run: /supervised-task continue <next bounded action>`.
+When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts with `To continue, run: /supervised-task continue`, which triggers post-final research by default.
 

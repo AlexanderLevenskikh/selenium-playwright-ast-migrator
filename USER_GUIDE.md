@@ -204,7 +204,7 @@ For OpenCode, install the agent team after `start`:
 selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./OldTests --config migration/profiles/adapter-config.start.json --opencode-install auto
 ```
 
-Then run `/supervised-task`. After a successful FINAL/PASS checkpoint, `/supervised-task` stops for review by default. Use `/supervised-task continue ...` to start exactly one next bounded ticket from the reported recommendation. The supervised agent should read `current-ticket.md` and `state/start-dispatch.json`, create or resume `migration/runs/<run-id>/`, and avoid asking the user broad menu questions when the state is clear.
+Then run `/supervised-task`. After a successful FINAL/PASS checkpoint, `/supervised-task` stops for review by default. Use `/supervised-task continue` to start post-final TODO/source-truth research without writing a detailed supervisor prompt. The supervised agent should read `current-ticket.md` and `state/start-dispatch.json`, create or resume `migration/runs/<run-id>/`, and avoid asking the user broad menu questions when the state is clear.
 
 For Codex, CI, or another agent, use the explicit handoff path:
 
@@ -987,7 +987,7 @@ pwsh .\scripts\run-kitroot-shadow-smoke.ps1 -Clean
 
 The smoke creates a fake product repo with a shadow `templates/migration-kit` directory and fails if that directory is used as the kit root.
 
-When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts only with `To continue, run: /supervised-task continue <next bounded action>`.
+When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts with `To continue, run: /supervised-task continue`, which triggers post-final research by default.
 
 
 ### Wavefront / memory / config-merge snapshot

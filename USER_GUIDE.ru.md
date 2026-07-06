@@ -198,7 +198,7 @@ selenium-pw-migrator pilot --input ./OldTests --max-tests 10 --out migration/pil
 selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./OldTests --config migration/profiles/adapter-config.start.json --opencode-install auto
 ```
 
-Потом запустите `/supervised-task`. После успешного FINAL/PASS checkpoint `/supervised-task` по умолчанию останавливается для review. Используйте `/supervised-task continue ...`, чтобы запустить ровно один следующий bounded ticket из рекомендации. Supervised agent должен прочитать `current-ticket.md` и `state/start-dispatch.json`, создать или возобновить `migration/runs/<run-id>/` и не задавать пользователю широкие вопросы, если state понятен.
+Потом запустите `/supervised-task`. После успешного FINAL/PASS checkpoint `/supervised-task` по умолчанию останавливается для review. Используйте `/supervised-task continue`, чтобы запустить post-final TODO/source-truth research без подробного prompt для supervisor. Supervised agent должен прочитать `current-ticket.md` и `state/start-dispatch.json`, создать или возобновить `migration/runs/<run-id>/` и не задавать пользователю широкие вопросы, если state понятен.
 
 Для Codex, CI или другого агента используйте явный handoff:
 
@@ -950,5 +950,5 @@ pwsh .\scripts\run-kitroot-shadow-smoke.ps1 -Clean
 
 Smoke создаёт временный product repo с теневой папкой `templates/migration-kit` и падает, если она используется как kit root.
 
-When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts only with `To continue, run: /supervised-task continue <next bounded action>`.
+When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts with `To continue, run: /supervised-task continue`, which triggers post-final research by default.
 

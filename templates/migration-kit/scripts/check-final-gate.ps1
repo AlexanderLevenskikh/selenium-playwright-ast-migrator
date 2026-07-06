@@ -650,13 +650,17 @@ function New-ContinuationDecision([bool]$Passed, $Results, $Candidate, [bool]$Ha
     if ($Passed) {
         return [pscustomobject][ordered]@{
             status = "FINAL"
-            protocol = "Final gate passed; stop for review. Report evidence and do not start another migration run automatically."
+            protocol = "Final gate passed; stop for review. Report evidence and do not start another migration run automatically. A plain explicit continue starts post-final research first."
             nextAction = $null
             source = $null
             mustContinueBeforeUserMessage = $false
             postSuccessPolicy = "STOP_FOR_REVIEW"
-            continueRequires = "explicit user continue request or bounded autoContinuation for the exact next action"
-            continueCommand = "/supervised-task continue <next bounded action>"
+            continueRequires = "explicit /supervised-task continue request starts post-final research; implementation needs reviewed research, a concrete implementation task, or bounded autoContinuation"
+            continueCommand = "/supervised-task continue"
+            postFinalContinueAction = "POST_FINAL_RESEARCH"
+            postFinalResearchAgent = "migration-researcher"
+            postFinalReviewAgent = "migration-change-reviewer"
+            postFinalResearchRoot = "migration/runs/<active-run-id>/research/**"
         }
     }
 
@@ -931,8 +935,11 @@ $md = New-Object System.Text.StringBuilder
 [void]$md.AppendLine("Continuation: **$($continuation.status)**")
 if ($continuation.postSuccessPolicy) {
     [void]$md.AppendLine("Post-success policy: **$($continuation.postSuccessPolicy)**")
-    [void]$md.AppendLine("Stopped because SUCCESS checkpoint requires review before starting another bounded ticket.")
+    [void]$md.AppendLine("Stopped because SUCCESS checkpoint requires review before post-final research or another bounded ticket.")
     [void]$md.AppendLine(("To continue, run: {0}" -f $continuation.continueCommand))
+    if ($continuation.postFinalContinueAction) {
+        [void]$md.AppendLine(("Post-final continue action: {0}" -f $continuation.postFinalContinueAction))
+    }
 }
 if ($continuation.nextAction) {
     [void]$md.AppendLine("Next action: $($continuation.nextAction)")
@@ -955,6 +962,11 @@ if ($continuation.postSuccessPolicy) {
     [void]$continuationMd.AppendLine(("Post-success policy: {0}" -f $continuation.postSuccessPolicy))
     [void]$continuationMd.AppendLine(("Continue requires: {0}" -f $continuation.continueRequires))
     [void]$continuationMd.AppendLine(("Continue command: {0}" -f $continuation.continueCommand))
+    if ($continuation.postFinalContinueAction) {
+        [void]$continuationMd.AppendLine(("Post-final continue action: {0}" -f $continuation.postFinalContinueAction))
+        [void]$continuationMd.AppendLine(("Research agent: {0}" -f $continuation.postFinalResearchAgent))
+        [void]$continuationMd.AppendLine(("Review agent: {0}" -f $continuation.postFinalReviewAgent))
+    }
 }
 if ($continuation.nextAction) {
     [void]$continuationMd.AppendLine()
@@ -984,6 +996,9 @@ if ($passed -and $continuation.status -eq "FINAL" -and $continuation.postSuccess
             $harnessRunState["continuationStatus"] = $continuation.status
             $harnessRunState["postSuccessPolicy"] = $continuation.postSuccessPolicy
             $harnessRunState["continueCommand"] = $continuation.continueCommand
+            $harnessRunState["postFinalContinueAction"] = $continuation.postFinalContinueAction
+            $harnessRunState["postFinalResearchAgent"] = $continuation.postFinalResearchAgent
+            $harnessRunState["postFinalReviewAgent"] = $continuation.postFinalReviewAgent
 
             ($harnessRunState | ConvertTo-Json -Depth 20) | Set-Content -Path $harnessRunPath -Encoding UTF8
         }
@@ -998,9 +1013,12 @@ Write-Host "HARNESS_CONTINUATION_$($continuation.status)"
 if ($continuation.postSuccessPolicy) {
     Write-Host "HARNESS_SUCCESS_$($continuation.postSuccessPolicy)"
     Write-Host "Harness run status: FINAL_STOPPED_FOR_REVIEW"
-    Write-Host "Stopped because SUCCESS checkpoint requires review before starting another bounded ticket."
+    Write-Host "Stopped because SUCCESS checkpoint requires review before post-final research or another bounded ticket."
     Write-Host "To continue, run: $($continuation.continueCommand)"
     Write-Host "Continue command: $($continuation.continueCommand)"
+    if ($continuation.postFinalContinueAction) {
+        Write-Host "Post-final continue action: $($continuation.postFinalContinueAction)"
+    }
 }
 if ($continuation.nextAction) {
     Write-Host "Next action: $($continuation.nextAction)"
