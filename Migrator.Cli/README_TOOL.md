@@ -170,5 +170,29 @@ selenium-pw-migrator migration plan --input ./OldTests --strategy wavefront --wo
 selenium-pw-migrator migration plan show --plan migration/plan
 ```
 
-This is a read-only divide-and-conquer planner. It writes inventory, clusters, waves, selected tests, memory recall guidance, and next commands. `run-wave` is intentionally future work; use the plan as a bounded agent ticket and keep config changes as reviewed deltas.
+This is a read-only divide-and-conquer planner. It writes inventory, clusters, waves, selected tests, memory recall guidance, and next commands. Use `migration run-wave` to materialize a selected wave as a bounded workspace without editing the original project.
 
+## Wave run workspace
+
+```bash
+selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001
+selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001 --execute-migrate true
+```
+
+`run-wave` writes `source-scope/`, `generated/`, `input-scope.json`, `config-delta.json`, `memory-delta.jsonl`, `run-summary.md`, `wave-status.json`, `run-migrate.sh`, and `run-migrate.ps1`. The default mode prepares the workspace and scripts. `--execute-migrate true` additionally invokes the existing `--mode migrate` pipeline against `source-scope/`.
+
+Safety boundary: `run-wave` does not promote memory, does not merge config, and does not publish any cross-project/org knowledge pack. `config-delta.json` is an observed/reviewable placeholder until Reviewer, Watchdog, and Final Gate evidence exists.
+
+## Config delta merge
+
+```bash
+selenium-pw-migrator config merge-deltas --base migration/adapter-config.json --deltas migration/state/memory/config-deltas --out migration/config-merge
+selenium-pw-migrator config validate-merge --base migration/adapter-config.json --candidate migration/config-merge/adapter-config.merged.json --out migration/config-merge
+```
+
+`config merge-deltas` creates a candidate `adapter-config.merged.json` plus `merge-report.md/json` and `conflicts.jsonl`. `config validate-merge` writes `validate-merge-report.md/json` and checks duplicate/conflicting stable keys, removed base entries, assertion-like suppressions, and broad POM suppression warnings. The candidate is not promoted automatically.
+
+
+### Dashboard/evidence polish for project-scoped memory
+
+`report serve` detects nearby project-scoped migration state and adds a **Wavefront / memory / config-merge snapshot** to `report-dashboard.html/md/json`. The generated `report-dashboard-evidence.zip` can include workspace entries for `state/memory`, `plan/waves.json`, `memory-recall.md`, `adapter-config.merged.json`, `validate-merge-report.md/json`, and `conflicts.jsonl`. The evidence manifest marks this with `ProjectScopedMemoryAndWavefrontArtifactsIncluded`.

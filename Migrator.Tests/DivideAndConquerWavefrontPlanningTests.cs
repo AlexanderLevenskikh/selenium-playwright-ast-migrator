@@ -20,8 +20,11 @@ public class DivideAndConquerWavefrontPlanningTests
         Assert.Contains("migration cluster", command);
         Assert.Contains("migration plan --strategy wavefront", command);
         Assert.Contains("migration plan show", command);
-        Assert.Contains("This iteration is read-only", command);
-        Assert.Contains("run-wave` is intentionally not implemented", command);
+        Assert.Contains("Planning is read-only", command);
+        Assert.Contains("run-wave materializes", command);
+        Assert.Contains("migration-wave-input-scope/v1", command);
+        Assert.Contains("migration-config-delta/v1", command);
+        Assert.Contains("memory-delta.jsonl", command);
     }
 
     [Fact]
@@ -36,6 +39,10 @@ public class DivideAndConquerWavefrontPlanningTests
         Assert.Contains("selected-tests.txt", command);
         Assert.Contains("memory-recall.md", command);
         Assert.Contains("next-commands.md", command);
+        Assert.Contains("run-summary.md", command);
+        Assert.Contains("input-scope.json", command);
+        Assert.Contains("source-scope", command);
+        Assert.Contains("generated", command);
         Assert.Contains("representatives", command);
         Assert.Contains("cluster-expansion", command);
         Assert.Contains("RepresentativeScore", command);
@@ -90,7 +97,8 @@ public class DivideAndConquerWavefrontPlanningTests
 
         Assert.Contains("Iteration 3: read-only divide-and-conquer wave planning", rfc);
         Assert.Contains("No cross-project/org knowledge pack", rfc);
-        Assert.Contains("run-wave` is intentionally future work", rfc);
+        Assert.Contains("run-wave", rfc);
+        Assert.Contains("config-delta", rfc);
         Assert.Contains("Divide-and-conquer wave planning", readme);
         Assert.Contains("migration plan --input", readme);
         Assert.Contains("Wavefront planning", toolReadme);

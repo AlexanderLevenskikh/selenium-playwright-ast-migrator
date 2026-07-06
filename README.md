@@ -341,8 +341,8 @@ This creates a fake product repository that contains its own `templates/migratio
 | `playground` | Stable | Create a five-minute public demo workspace with ready commands, expected outputs, dashboard sample, and PR pack sample. |
 | `playground-verify` | Stable | Verify that the generated playground still has the manifest, command chain, demo input, expected output, and safety wording. |
 | `memory` | Stable | Manage project-scoped migration memory (`init/add/explain/doctor/summarize/recall`) under `migration/state/memory/**` for supervised runs. |
-| `migration` | Stable | Build read-only divide-and-conquer wave plans (`inventory/cluster/plan/plan show`) before bounded agent migration waves. |
-| `migration` | Stable | Build read-only divide-and-conquer wave plans (`inventory/cluster/plan/plan show`) before bounded agent migration waves. |
+| `migration` | Stable | Build divide-and-conquer wave plans (`inventory/cluster/plan/plan show`) and prepare bounded wave run workspaces (`run-wave`) with project-scoped memory deltas. |
+| `config merge-deltas` / `config validate-merge` | Stable | Merge wave-local `config-delta.json` files into a reviewable candidate config and validate conflicts before promotion. |
 | `doctor` | Stable | Preflight checks plus safe `--fix` repair plans for inputs, config layers, project files, and workspace hygiene. |
 | `release-doctor` | Stable | Check NuGet preview readiness: package metadata, docs, scripts, workflow dry-run, secret references, and release hygiene. |
 | `analyze` | Stable | Parse Selenium files and produce reports without generating target files. |
@@ -441,3 +441,30 @@ selenium-pw-migrator migration plan show --plan migration/plan
 
 The planner writes `inventory.json`, `clusters.json`, `waves.json`, `plan.md`, `selected-tests.txt`, `memory-recall.md`, and `next-commands.md`. It does not migrate files. The first wave contains representative tests, later waves expand by cluster. Agents should run `memory explain`, `memory doctor`, and `memory recall --file` before turning a wave into a bounded task.
 
+Prepare a bounded wave run workspace:
+
+```bash
+selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001
+```
+
+`migration run-wave` materializes `source-scope/`, `generated/`, `input-scope.json`, `config-delta.json`, `memory-delta.jsonl`, `run-summary.md`, `wave-status.json`, and migrate scripts. It is project-scoped only: it does not promote memory, does not merge config, and does not publish cross-project/org knowledge packs. Use `--execute-migrate true` only when you want the command to invoke the existing `--mode migrate` pipeline for the wave scope immediately.
+
+Merge reviewed wave-local config deltas into a candidate config only after the wave has evidence:
+
+```bash
+selenium-pw-migrator config merge-deltas --base migration/adapter-config.json --deltas migration/state/memory/config-deltas --out migration/config-merge
+selenium-pw-migrator config validate-merge --base migration/adapter-config.json --candidate migration/config-merge/adapter-config.merged.json --out migration/config-merge
+```
+
+`config merge-deltas` writes `adapter-config.merged.json`, `merge-report.md/json`, and `conflicts.jsonl`. `config validate-merge` writes `validate-merge-report.md/json`. Neither command promotes the candidate automatically; Reviewer, Watchdog, and Final Gate must accept the merge, and `conflicts.jsonl` must be empty.
+
+
+### Wavefront / memory / config-merge snapshot
+
+After using project-scoped memory, wavefront planning, `migration run-wave`, or `config merge-deltas`, open the normal dashboard:
+
+```bash
+selenium-pw-migrator report serve --input migration/runs/latest --static-only --out migration/dashboard/latest --format both
+```
+
+The dashboard includes a **Wavefront / memory / config-merge snapshot** with project-scoped memory counts, wave progress, next wave candidates, config-merge status, and suggested next commands. The generated `report-dashboard-evidence.zip` also carries nearby `state/memory`, `plan`, and `config-merge` artifacts as review evidence.

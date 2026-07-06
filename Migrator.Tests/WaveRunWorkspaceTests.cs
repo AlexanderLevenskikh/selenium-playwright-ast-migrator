@@ -1,0 +1,75 @@
+using Xunit;
+
+namespace Migrator.Tests;
+
+public class WaveRunWorkspaceTests
+{
+    [Fact]
+    public void MigrationRunWave_PreparesBoundedWorkspaceAndDeltas()
+    {
+        var command = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/MigrationCommand.cs"));
+
+        Assert.Contains("\"run-wave\" => RunWave", command);
+        Assert.Contains("MIGRATION_WAVE_RUN_READY", command);
+        Assert.Contains("migration-wave-input-scope/v1", command);
+        Assert.Contains("migration-wave-run/v1", command);
+        Assert.Contains("migration-wave-status/v1", command);
+        Assert.Contains("migration-config-delta/v1", command);
+        Assert.Contains("input-scope.json", command);
+        Assert.Contains("source-scope", command);
+        Assert.Contains("generated", command);
+        Assert.Contains("config-delta.json", command);
+        Assert.Contains("memory-delta.jsonl", command);
+        Assert.Contains("run-summary.md", command);
+        Assert.Contains("run-migrate.sh", command);
+        Assert.Contains("run-migrate.ps1", command);
+        Assert.Contains("--execute-migrate", command);
+    }
+
+    [Fact]
+    public void MigrationRunWave_KeepsSafetyBoundaryExplicit()
+    {
+        var command = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/MigrationCommand.cs"));
+        var contract = File.ReadAllText(FindRepositoryFile("templates/migration-kit/AGENT_CONTRACT.md"));
+        var supervised = File.ReadAllText(FindRepositoryFile("templates/opencode-team/global/.config/opencode/commands/supervised-task.md"));
+
+        Assert.Contains("assertionSuppressionAllowed", command);
+        Assert.Contains("overSuppressionAllowed", command);
+        Assert.Contains("autoPromotionAllowed", command);
+        Assert.Contains("requiresReviewerBeforeMerge", command);
+        Assert.Contains("Memory is guidance, not authority", command);
+        Assert.Contains("Do not suppress assertions", command);
+        Assert.Contains("migration run-wave --plan migration/plan --wave <wave-id>", contract);
+        Assert.Contains("run-wave", supervised);
+        Assert.Contains("config-delta.json", supervised);
+        Assert.Contains("memory-delta.jsonl", supervised);
+    }
+
+    [Fact]
+    public void Docs_DescribeWaveRunIterationWithoutOrgKnowledgePacks()
+    {
+        var rfc = File.ReadAllText(FindRepositoryFile("docs/rfcs/project-scoped-migration-memory.md"));
+        var readme = File.ReadAllText(FindRepositoryFile("README.md"));
+        var toolReadme = File.ReadAllText(FindRepositoryFile("Migrator.Cli/README_TOOL.md"));
+
+        Assert.Contains("Iteration 4: bounded wave run workspace", rfc);
+        Assert.Contains("Project-scoped only", rfc);
+        Assert.Contains("migration run-wave", readme);
+        Assert.Contains("Wave run workspace", toolReadme);
+        Assert.Contains("No cross-project/org knowledge pack", rfc);
+    }
+
+    static string FindRepositoryFile(string relativePath)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine(dir.FullName, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(candidate))
+                return candidate;
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not find repository file: {relativePath}");
+    }
+}

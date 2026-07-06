@@ -87,3 +87,18 @@ Decision meaning:
 - `accept` — known/acceptable risk with evidence.
 
 The current implementation deliberately does not persist browser edits. That keeps the command safe for public use and CI artifacts. A future server-backed mode can add authenticated decision writes if needed.
+
+## Wavefront / memory / config-merge snapshot
+
+When `report serve` is opened for a run inside a migration workspace, it also renders a **Wavefront / memory / config-merge snapshot**. This keeps the divide-and-conquer iteration visible on the same dashboard as TODO/root-cause/runtime data.
+
+The snapshot is project-scoped only. It looks for nearby workspace artifacts such as:
+
+- `migration/state/memory/memory-summary.md`, `decisions.jsonl`, `warnings.jsonl`, `antipatterns.jsonl`, and `final-gate-lessons.jsonl`;
+- `migration/plan/waves.json`, `plan.md`, `selected-tests.txt`, and `memory-recall.md`;
+- `migration/state/memory/config-deltas/*.json`;
+- `migration/config-merge/adapter-config.merged.json`, `merge-report.md/json`, `validate-merge-report.md/json`, and `conflicts.jsonl`.
+
+The dashboard does not promote or apply any rule. It only shows the current state, next wave candidates, suggested next commands, and whether config merge validation still has conflicts.
+
+`report-dashboard-evidence.zip` now includes these project-scoped memory, wavefront, and config-merge artifacts under `workspace/` entries when they are near the source run. The zip manifest marks this with `ProjectScopedMemoryAndWavefrontArtifactsIncluded` so reviewers can tell that the pack contains migration-state evidence, not only run-local reports.

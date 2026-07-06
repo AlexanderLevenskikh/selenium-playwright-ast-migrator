@@ -465,6 +465,18 @@ dotnet tool run selenium-pw-migrator -- memory explain --workspace migration
 dotnet tool run selenium-pw-migrator -- memory doctor --workspace migration
 ```
 
+
+`config-merge`
+
+Merges reviewed wave-local `config-delta.json` files into a candidate config and validates the result before any promotion. This is the safe bridge between divide-and-conquer wave runs and the main `adapter-config.json`.
+
+```bash
+dotnet tool run selenium-pw-migrator -- config merge-deltas --base migration/adapter-config.json --deltas migration/state/memory/config-deltas --out migration/config-merge
+dotnet tool run selenium-pw-migrator -- config validate-merge --base migration/adapter-config.json --candidate migration/config-merge/adapter-config.merged.json --out migration/config-merge
+```
+
+The command writes `adapter-config.merged.json`, `merge-report.md/json`, `validate-merge-report.md/json`, and `conflicts.jsonl`. The candidate is not promoted automatically; Reviewer, Watchdog, and Final Gate must accept the merge and `conflicts.jsonl` must be empty.
+
 `release-doctor`
 
 Checks NuGet preview readiness from the repository root: package metadata, version/changelog consistency, release scripts, README_TOOL packaging docs, publish workflow dry-run support, NuGet secret references, and repository hygiene.
@@ -977,3 +989,13 @@ The smoke creates a fake product repo with a shadow `templates/migration-kit` di
 
 When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts only with `To continue, run: /supervised-task continue <next bounded action>`.
 
+
+### Wavefront / memory / config-merge snapshot
+
+When you are using project-scoped memory and divide-and-conquer waves, still start review from the dashboard:
+
+```bash
+selenium-pw-migrator report serve --input migration/runs/latest --static-only --out migration/dashboard/latest --format both
+```
+
+The report includes a **Wavefront / memory / config-merge snapshot**. It summarizes project-scoped memory, wavefront progress, next wave candidates, candidate config status, and open `conflicts.jsonl` items. This is read-only: it does not promote memory, merge config into the active adapter config, or mark a wave complete.

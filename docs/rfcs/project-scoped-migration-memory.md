@@ -94,9 +94,13 @@ Final gate must validate project memory when present:
 - selector-map entries have `sourceExpression`, `targetLocator`, and `evidence[]`;
 - memory doctor output can be attached as evidence.
 
+## Project-scoped only
+
+This feature deliberately stops at project-local migration memory. There is no cross-project/org knowledge pack, no shared registry, and no automatic promotion outside the current `migration/**` workspace.
+
 ## Future: divide-and-conquer wavefront
 
-A later iteration can add `migration plan --strategy wavefront`, `run-wave`, config deltas, merge conflicts, and trust promotion. This RFC is the foundation: project-local memory first, progressive migration second.
+Project-local memory is the foundation for divide-and-conquer wavefront migration. The wavefront feature remains scoped to the same migration workspace: planned waves may read project memory, emit config/memory deltas, and produce evidence, but they do not publish org-wide knowledge packs.
 
 ## Iteration 3: read-only divide-and-conquer wave planning
 
@@ -121,6 +125,74 @@ Artifacts:
 Safety boundary:
 
 - `migration plan` is read-only.
-- `run-wave` is intentionally future work.
 - Wave planning cannot promote memory entries or change adapter config.
-- Any future wave execution must emit `config-delta`, `memory-delta`, reviewer findings, watchdog findings, and final-gate evidence.
+- Wave execution must emit `config-delta`, `memory-delta`, and reviewable evidence before anything is promoted.
+
+## Iteration 4: bounded wave run workspace
+
+`migration run-wave` materializes one planned wave as a bounded workspace. It copies only the files touched by the selected wave into `source-scope/`, prepares an isolated `generated/` folder, writes project-local deltas, and emits scripts for the existing migration pipeline.
+
+```bash
+selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001
+```
+
+Artifacts:
+
+- `input-scope.json` — exact wave id, files, tests, copied files, missing files, source scope, generated output path.
+- `source-scope/` — copied source files for this bounded wave only.
+- `generated/` — placeholder or generated output if `--execute-migrate true` was used.
+- `config-delta.json` — observed/reviewable delta shell with safety invariants; never merged automatically.
+- `memory-delta.jsonl` — wave-local lessons/warnings; guidance, not authority.
+- `run-summary.md` / `run-summary.json` — human-readable wave summary and review checklist.
+- `run-migrate.sh` / `run-migrate.ps1` — explicit migrate command for this wave.
+- `wave-status.json` — prepared/completed/failed/incomplete status.
+
+Safety boundary:
+
+- `run-wave` never promotes memory automatically.
+- `run-wave` never edits the original source tree.
+- `run-wave` never merges `config-delta.json` into `adapter-config.json`.
+- `config-delta.json` starts as `observed` and `requiresReviewerBeforeMerge`.
+- Assertions must not be suppressed.
+- POM uncertainty must remain reviewable until target mapping exists.
+
+
+## Iteration 5: config delta merge and validation
+
+Wave-local `config-delta.json` files are not applied directly to `adapter-config.json`. They are merged into a candidate config and validated as a separate, reviewable step:
+
+```bash
+selenium-pw-migrator config merge-deltas --base migration/adapter-config.json --deltas migration/state/memory/config-deltas --out migration/config-merge
+selenium-pw-migrator config validate-merge --base migration/adapter-config.json --candidate migration/config-merge/adapter-config.merged.json --out migration/config-merge
+```
+
+Artifacts:
+
+- `migration/config-merge/adapter-config.merged.json` — candidate config only.
+- `merge-report.md` / `merge-report.json` — applied changes, skipped duplicates, warnings, and conflicts.
+- `validate-merge-report.md` / `validate-merge-report.json` — validation status and safety findings.
+- `conflicts.jsonl` — machine-readable conflict list for Reviewer/Watchdog.
+
+Safety boundary:
+
+- `config merge-deltas` never edits the base `adapter-config.json`.
+- `config validate-merge` never promotes the candidate automatically.
+- Assertion suppression and over-suppression are forbidden shortcuts.
+- Same stable key with different content is a conflict, not an automatic overwrite.
+- POM-like broad suppression is at least a warning and should remain reviewable until target mapping exists.
+- Final Gate checks `config-delta-merge` when a `migration/config-merge` candidate exists.
+
+## Iteration 6: dashboard and evidence polish
+
+The final MVP polish connects the project-scoped memory and divide-and-conquer artifacts to the existing `report serve` review surface.
+
+`report serve` now exposes a **Wavefront / memory / config-merge snapshot**:
+
+- project-scoped memory presence and entry counts;
+- wavefront plan presence, total waves, completed wave runs, and next wave candidates;
+- config merge status, including whether `validate-merge-report` exists and whether `conflicts.jsonl` is non-empty;
+- suggested next commands such as `memory doctor`, `migration run-wave`, `config merge-deltas`, or `config validate-merge`.
+
+The dashboard remains read-only. It does not promote memory entries, apply candidate config, mark waves complete, or write decisions from the browser.
+
+The dashboard evidence zip can include nearby workspace artifacts from `state/memory`, `plan`, and `config-merge`. The manifest includes `ProjectScopedMemoryAndWavefrontArtifactsIncluded` so reviewers can see that the evidence pack contains project-local migration state.

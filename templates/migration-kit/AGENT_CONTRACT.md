@@ -21,14 +21,18 @@ Before planning a bounded action:
 
 - Read `state/memory/memory-summary.md`.
 - Read `plan/plan.md`, `plan/waves.json`, and `plan/memory-recall.md` when a divide-and-conquer wave plan exists.
+- If no wave run workspace exists for the selected wave, prepare it with `selenium-pw-migrator migration run-wave --plan migration/plan --wave <wave-id> --workspace migration --out migration/runs/<wave-id>` before implementation.
 - If files in scope are known, run `selenium-pw-migrator memory explain --workspace migration` and `selenium-pw-migrator memory recall --file <file> --workspace migration`, or inspect `state/memory/decisions.jsonl`, `warnings.jsonl`, `antipatterns.jsonl`, and `final-gate-lessons.jsonl`.
 - Treat memory as guidance, not authority: apply a remembered rule only when its scope/conditions match the current evidence.
 
 After implementation/review:
 
 - Record durable decisions, warnings, rejected approaches, and final-gate lessons with `selenium-pw-migrator memory add ...` or by writing JSONL under `state/memory/**`.
-- Emit config deltas under `state/memory/config-deltas/`; do not silently rewrite the global adapter config as a memory side effect.
-- Run `selenium-pw-migrator memory doctor --workspace migration` before final-gate handoff.
+- Emit or update wave-local `config-delta.json` and `memory-delta.jsonl`; do not silently rewrite the global adapter config as a memory side effect.
+- To combine reviewed wave deltas, run `selenium-pw-migrator config merge-deltas --base migration/adapter-config.json --deltas migration/state/memory/config-deltas --out migration/config-merge`, then `selenium-pw-migrator config validate-merge --base migration/adapter-config.json --candidate migration/config-merge/adapter-config.merged.json --out migration/config-merge`.
+- Treat `migration/config-merge/adapter-config.merged.json` as a candidate only; do not replace the active adapter config until Reviewer, Watchdog, and Final Gate accept `merge-report.md`, `validate-merge-report.md`, and empty `conflicts.jsonl`.
+- Keep `migration/runs/<wave-id>/input-scope.json`, `run-summary.md`, and `wave-status.json` as evidence for the bounded wave.
+- Run `selenium-pw-migrator memory doctor --workspace migration` and ensure `config-delta-merge` final-gate check is clean before final-gate handoff.
 
 Memory safety rules:
 

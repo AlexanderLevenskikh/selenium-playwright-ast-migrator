@@ -300,6 +300,51 @@ function Test-MigrationMemory([string]$WorkspacePath, [ref]$Detail) {
 }
 
 
+function Test-ConfigDeltaMerge($WorkspaceRoot, [ref]$Detail) {
+    $problems = New-Object System.Collections.Generic.List[string]
+    $mergeDir = Join-Path $WorkspaceRoot "config-merge"
+    if (-not (Test-Path $mergeDir)) {
+        $Detail.Value = "no config-merge candidate present; merge-deltas not required"
+        return $true
+    }
+
+    $candidate = Join-Path $mergeDir "adapter-config.merged.json"
+    $validateReport = Join-Path $mergeDir "validate-merge-report.json"
+    $conflicts = Join-Path $mergeDir "conflicts.jsonl"
+
+    if ((Test-Path $candidate) -and -not (Test-Path $validateReport)) {
+        $problems.Add("adapter-config.merged.json exists without validate-merge-report.json; run config validate-merge")
+    }
+
+    if (Test-Path $validateReport) {
+        try {
+            $report = Get-Content -Raw -Path $validateReport | ConvertFrom-Json
+            $status = Get-ObjectProperty $report @("status")
+            if ($status -ne $null -and $status.ToString().Equals("invalid", [StringComparison]::OrdinalIgnoreCase)) {
+                $problems.Add("config validate-merge status is invalid")
+            }
+            $reportConflicts = Get-ObjectProperty $report @("conflicts")
+            if ($reportConflicts -ne $null -and @($reportConflicts).Count -gt 0) {
+                $problems.Add("config validate-merge has conflicts: $(@($reportConflicts).Count)")
+            }
+        }
+        catch {
+            $problems.Add("validate-merge-report.json invalid JSON: $($_.Exception.Message)")
+        }
+    }
+
+    if (Test-Path $conflicts) {
+        $activeConflicts = @(Get-Content -Path $conflicts | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        if ($activeConflicts.Count -gt 0) {
+            $problems.Add("config merge conflicts are present in conflicts.jsonl: $($activeConflicts.Count)")
+        }
+    }
+
+    $Detail.Value = if ($problems.Count -eq 0) { "config delta merge checks passed" } else { $problems -join "; " }
+    return $problems.Count -eq 0
+}
+
+
 function Find-DangerousQualityHitsFromJson($Node, [string[]]$DangerousPatterns, $Hits, [ref]$StructuredSeen) {
     if ($null -eq $Node) {
         return
@@ -743,6 +788,10 @@ else {
 $memoryDetail = ""
 $memoryOk = Test-MigrationMemory $workspacePath ([ref]$memoryDetail)
 Add-Result $results "memory-doctor" $memoryOk $memoryDetail
+
+$configMergeDetail = ""
+$configMergeOk = Test-ConfigDeltaMerge $workspacePath ([ref]$configMergeDetail)
+Add-Result $results "config-delta-merge" $configMergeOk $configMergeDetail
 
 $dashboard = Find-LatestFile -Root $workspacePath -Names @("migration-quality-dashboard.json", "migration-board.json")
 if ($dashboard -eq $null) {
