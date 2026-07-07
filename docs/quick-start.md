@@ -72,7 +72,7 @@ Then open the repository in OpenCode and run:
 
 `start` writes `migration/current-ticket.md` and `migration/state/start-dispatch.json`. `/supervised-task` must use those files as the active bounded task and must not ask the user to choose from a broad menu when the state is clear.
 
-After a FINAL/PASS checkpoint, `/supervised-task` stops for review and prints one recommended `/supervised-task continue` command. Run that explicit continue command to start post-final TODO/source-truth research; implementation follows only after reviewed research or a concrete implementation request.
+After a FINAL/PASS checkpoint, `/supervised-task` stops for review and prints one recommended `/supervised-task continue` command. Run that explicit continue command to start post-final TODO/source-truth research, research-lead review, and task slicing; implementation follows only after approved research/current-ticket or a concrete implementation request.
 
 ### 3. Migrate with Codex, CI, or another agent
 

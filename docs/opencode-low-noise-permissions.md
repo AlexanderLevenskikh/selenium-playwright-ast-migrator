@@ -47,6 +47,8 @@ The orchestrator may call known migration subagents without asking each time:
 - `watchdog`
 - `reviewer`
 - `migration-researcher`
+- `migration-research-lead`
+- `migration-task-slicer`
 - `migration-change-reviewer`
 
 The `general` subagent remains denied because the migration harness expects named roles with scoped responsibilities.

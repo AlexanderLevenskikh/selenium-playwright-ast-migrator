@@ -400,6 +400,57 @@ function Find-DangerousQualityHitsFromJson($Node, [string[]]$DangerousPatterns, 
     }
 }
 
+function Find-DangerousQualityHitsFromText([string]$Text, [string[]]$DangerousPatterns) {
+    $hits = New-Object System.Collections.Generic.List[string]
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return @()
+    }
+
+    foreach ($pattern in $DangerousPatterns) {
+        $escaped = [regex]::Escape($pattern)
+        $countSeenForPattern = $false
+
+        # Count-aware fallback for JSON/YAML/Markdown snippets. A plain text
+        # match on the category name is too conservative for structured
+        # dashboards: `{ "category": "ASSERTION_SUPPRESSION_BLOCKED", "count": 0 }`
+        # must be a clean PASS, not a dangerous hit. Only positive numeric
+        # counts are structural hits.
+        $propertyMatches = [regex]::Matches(
+            $Text,
+            '"?' + $escaped + '"?\s*[:=]\s*(?<count>-?\d+)',
+            [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        foreach ($match in $propertyMatches) {
+            $count = Convert-ToIntOrNull $match.Groups["count"].Value
+            if ($count -ne $null) {
+                $countSeenForPattern = $true
+                if ($count -gt 0) {
+                    $hits.Add("${pattern}:$count")
+                }
+            }
+        }
+
+        $categoryObjectMatches = [regex]::Matches(
+            $Text,
+            '"?(?:category|name|id|key)"?\s*[:=]\s*"?' + $escaped + '"?[\s\S]{0,240}?"?(?:count|total|value)"?\s*[:=]\s*(?<count>-?\d+)',
+            [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        foreach ($match in $categoryObjectMatches) {
+            $count = Convert-ToIntOrNull $match.Groups["count"].Value
+            if ($count -ne $null) {
+                $countSeenForPattern = $true
+                if ($count -gt 0) {
+                    $hits.Add("${pattern}:$count")
+                }
+            }
+        }
+
+        if ((-not $countSeenForPattern) -and ($Text -match $escaped)) {
+            $hits.Add("${pattern}:present")
+        }
+    }
+
+    return @($hits | Sort-Object -Unique)
+}
+
 function Find-DangerousQualityHits([string]$Path, [string]$Text, [string[]]$DangerousPatterns) {
     $hits = New-Object System.Collections.Generic.List[string]
     if ([System.IO.Path]::GetExtension($Path).Equals(".json", [StringComparison]::OrdinalIgnoreCase)) {
@@ -412,11 +463,11 @@ function Find-DangerousQualityHits([string]$Path, [string]$Text, [string[]]$Dang
             }
         }
         catch {
-            # Fall back to text matching below.
+            # Fall back to count-aware text matching below.
         }
     }
 
-    return @($DangerousPatterns | Where-Object { $Text -match [regex]::Escape($_) })
+    return @(Find-DangerousQualityHitsFromText $Text $DangerousPatterns)
 }
 
 function Test-PathMatchesAnyPattern([string]$RelativePath, [string[]]$Patterns) {
@@ -654,17 +705,27 @@ function New-ContinuationDecision([bool]$Passed, $Results, $Candidate, [bool]$Ha
     if ($Passed) {
         return [pscustomobject][ordered]@{
             status = "FINAL"
-            protocol = "Final gate passed; stop for review. Report evidence and do not start another migration run automatically. A plain explicit continue starts post-final research first."
+            protocol = "Final gate passed; stop for review. Report evidence and do not start another migration run automatically. A plain explicit continue starts the closed post-final research, research-lead review, task-slicing, and bounded executor loop."
             nextAction = $null
             source = $null
             mustContinueBeforeUserMessage = $false
             postSuccessPolicy = "STOP_FOR_REVIEW"
-            continueRequires = "explicit /supervised-task continue request starts post-final research; implementation needs reviewed research, a concrete implementation task, or bounded autoContinuation"
+            continueRequires = "explicit /supervised-task continue request starts post-final research; implementation needs approved research, task slicing into current-ticket.md, a concrete implementation task, or bounded autoContinuation"
             continueCommand = "/supervised-task continue"
             postFinalContinueAction = "POST_FINAL_RESEARCH"
+            postFinalWorkflow = @(
+                "POST_FINAL_RESEARCH",
+                "REVIEW_POST_FINAL_RESEARCH_WITH_RESEARCH_LEAD",
+                "SLICE_RESEARCH_INTO_BOUNDED_TASKS",
+                "RUN_NEXT_BOUNDED_TASK"
+            )
             postFinalResearchAgent = "migration-researcher"
+            postFinalResearchLeadAgent = "migration-research-lead"
             postFinalReviewAgent = "migration-change-reviewer"
+            postFinalTaskSlicerAgent = "migration-task-slicer"
+            postFinalExecutorAgent = "executor"
             postFinalResearchRoot = "migration/runs/<active-run-id>/research/**"
+            postFinalBacklogRoot = "migration/state/backlog/**"
         }
     }
 
@@ -969,7 +1030,9 @@ if ($continuation.postSuccessPolicy) {
     if ($continuation.postFinalContinueAction) {
         [void]$continuationMd.AppendLine(("Post-final continue action: {0}" -f $continuation.postFinalContinueAction))
         [void]$continuationMd.AppendLine(("Research agent: {0}" -f $continuation.postFinalResearchAgent))
-        [void]$continuationMd.AppendLine(("Review agent: {0}" -f $continuation.postFinalReviewAgent))
+        [void]$continuationMd.AppendLine(("Research lead agent: {0}" -f $continuation.postFinalResearchLeadAgent))
+        [void]$continuationMd.AppendLine(("Compatibility review agent: {0}" -f $continuation.postFinalReviewAgent))
+        [void]$continuationMd.AppendLine(("Task slicer agent: {0}" -f $continuation.postFinalTaskSlicerAgent))
     }
 }
 if ($continuation.nextAction) {
@@ -1003,6 +1066,9 @@ if ($passed -and $continuation.status -eq "FINAL" -and $continuation.postSuccess
             $harnessRunState["postFinalContinueAction"] = $continuation.postFinalContinueAction
             $harnessRunState["postFinalResearchAgent"] = $continuation.postFinalResearchAgent
             $harnessRunState["postFinalReviewAgent"] = $continuation.postFinalReviewAgent
+            $harnessRunState["postFinalResearchLeadAgent"] = $continuation.postFinalResearchLeadAgent
+            $harnessRunState["postFinalTaskSlicerAgent"] = $continuation.postFinalTaskSlicerAgent
+            $harnessRunState["postFinalWorkflow"] = $continuation.postFinalWorkflow
 
             ($harnessRunState | ConvertTo-Json -Depth 20) | Set-Content -Path $harnessRunPath -Encoding UTF8
         }

@@ -73,11 +73,17 @@ permission:
     "@migration-researcher*": allow
     "migration-change-reviewer*": allow
     "@migration-change-reviewer*": allow
+    "migration-research-lead*": allow
+    "@migration-research-lead*": allow
+    "migration-task-slicer*": allow
+    "@migration-task-slicer*": allow
     "executor": allow
     "watchdog": allow
     "reviewer": allow
     "migration-researcher": allow
     "migration-change-reviewer": allow
+    "migration-research-lead": allow
+    "migration-task-slicer": allow
   question: deny
   external_directory: deny
   doom_loop: allow
@@ -97,6 +103,7 @@ You coordinate other agents and own the Harness Kit lifecycle. You do not edit f
 - "Write POM" means generated POM proposal/scaffold under `migration/**`, not editing the real POM project.
 - If a real project change seems necessary, create a proposal under `migration/proposals/**` and stop with a forbidden-write blocker.
 - A run is failed if `migration/scripts/check-scope.ps1` reports changed files outside the allowed artifact workspace.
+- The post-final research flow is a closed development loop: researcher → migration-research-lead → migration-task-slicer → executor. Do not hand generic `Developer action` items to the user while they can become bounded agent tasks.
 
 ## Harness Kit startup
 
@@ -137,11 +144,14 @@ When the active run is `FINAL_STOPPED_FOR_REVIEW` and the latest final gate/cont
 For `/supervised-task continue` with no extra bounded action:
 
 1. Do not ask the user to write a more detailed prompt.
-2. Invoke `migration-researcher` for the active run.
+2. Invoke `migration-researcher` for the active run and require `research-summary.md` plus `todo-inventory.json`.
 3. The researcher may write only under `migration/runs/<active-run-id>/research/**` plus lifecycle continuation/trace files.
 4. Do not let the researcher edit source, migrated output, adapter config, policy, guard scripts, or current-ticket.
-5. After research completes, invoke `migration-change-reviewer` on the research artifacts before any executor implementation task.
-6. Only after reviewer approval may a later bounded implementation ticket be selected and delegated to executor.
+5. Invoke `migration-research-lead` as the scientific supervisor. If it returns `REQUEST_CHANGES`, send exactly one bounded revision back to `migration-researcher` instead of handing weak research to the user.
+6. When research is approved, invoke `migration-task-slicer` to create `migration/state/backlog/post-final-tasks.jsonl`, `migration/state/backlog/post-final-backlog.md`, and `migration/current-ticket.md`.
+7. If `continuation-decision.json` grants bounded auto-continuation for `RUN_NEXT_BOUNDED_TASK`, delegate exactly one selected current ticket to `executor`; otherwise report the selected ticket/backlog evidence.
+
+`migration-change-reviewer` is a compatibility reviewer for older flows; prefer `migration-research-lead` + `migration-task-slicer` for new post-final work.
 
 If the user names a specific test/helper/TODO in the continue request, pass that as the research topic. If they only say `continue`, default to `pattern-scout` over the active run's remaining TODOs and ask no follow-up.
 

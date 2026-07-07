@@ -18,8 +18,10 @@ This README only describes the reusable OpenCode team template. Do not use it as
 - `executor` — исполнитель, делает маленькие scoped-правки.
 - `watchdog` — контролёр правил/политик/дисциплины, read-only.
 - `reviewer` — ревьюер качества текущего diff, read-only.
-- `migration-researcher` — post-final исследователь TODO/source truth, пишет только research-артефакты.
-- `migration-change-reviewer` — read-only валидатор research-выводов перед implementation.
+- `migration-researcher` — post-final исследователь TODO/source truth, пишет только research-артефакты и `todo-inventory.json`.
+- `migration-research-lead` — “научный руководитель” research-а: проверяет counts/evidence/actionability и отправляет слабый research на bounded revision.
+- `migration-task-slicer` — превращает approved research в backlog/current-ticket для следующего executor task.
+- `migration-change-reviewer` — compatibility read-only валидатор старого research-flow.
 - `/supervised-task` — zero-argument state-aware команда для следующей bounded-задачи через orchestrator + watchdog + reviewer.
 - `/checkpoint` — ручная команда для проверки текущего состояния watchdog'ом.
 - `/dogfood-harness` — bounded Harness Kit dogfood command for docs/template/evidence-only validation inside the Migrator repository.
@@ -86,7 +88,9 @@ For guarded migration runs, open the product repo root in OpenCode Desktop and r
 /supervised-task
 ```
 
-No extra prompt is required for the normal path. `/supervised-task` is state-aware: if continuation is required, it executes the next allowed bounded action; after `FINAL_STOPPED_FOR_REVIEW`, plain `/supervised-task continue` starts post-final research instead of requiring a detailed supervisor prompt.
+plain `/supervised-task continue` starts post-final research; the new default then continues through research-lead review and task slicing when safe.
+
+No extra prompt is required for the normal path. `/supervised-task` is state-aware: if continuation is required, it executes the next allowed bounded action; after `FINAL_STOPPED_FOR_REVIEW`, plain `/supervised-task continue` starts the closed post-final research → research-lead → task-slicer flow instead of requiring a detailed supervisor prompt.
 
 Manual control:
 
@@ -135,7 +139,7 @@ Do not approve shell commands that write:
 For migration-artifact/autopilot work, start with `/harness-run` or `/supervised-task`. For repository-level Harness Kit validation, use `/dogfood-harness`.
 
 - `/harness-run` creates or resumes `migration/runs/<run-id>/` and reads `Prompt.md`, `Plan.md`, `Implement.md`, `Documentation.md`, and `trace.jsonl`.
-- `/supervised-task` runs the full orchestrator/watchdog/reviewer loop and can be invoked with no arguments. It reads continuation/final-gate state, stops for review after FINAL, and plain `/supervised-task continue` starts `migration-researcher` for post-final TODO/source-truth investigation. Implementation starts only after research review, a concrete implementation request, or bounded auto-continuation. It still requires `check-scope.ps1`, `check-harness-policy.ps1`, and final gate evidence before FINAL.
+- `/supervised-task` runs the full orchestrator/watchdog/reviewer loop and can be invoked with no arguments. It reads continuation/final-gate state, stops for review after FINAL, and plain `/supervised-task continue` starts `migration-researcher` for post-final TODO/source-truth investigation, then `migration-research-lead`, then `migration-task-slicer`. Implementation starts only after approved research, task slicing, a concrete implementation request, or bounded auto-continuation. It still requires `check-scope.ps1`, `check-harness-policy.ps1`, and final gate evidence before FINAL.
 - `/dogfood-harness` follows `docs/migrator-agent-harness-dogfood.md` and uses explicit dogfood allowed roots for Migrator-repo validation.
 - Agents should not ask routine continuation questions when the next action is allowed by `migration/state/harness-policy.json` and OpenCode permissions.
 
@@ -155,7 +159,7 @@ The bundled `opencode.jsonc` is intentionally low-noise for migration runs:
 - routine read/navigation tools (`read`, `glob`, `grep`, `list`, `lsp`) are allowed;
 - routine git inspection (`git status*`, `git diff*`, `git show*`, `git log*`, `git ls-files*`) is allowed;
 - PowerShell/source inspection commands (`Get-ChildItem*`, `Get-Content*`, `Test-Path*`, `Select-String*`, `rg *`) are allowed;
-- known subagents (`executor`, `watchdog`, `reviewer`, `migration-researcher`, `migration-change-reviewer`) are allowed;
+- known subagents (`executor`, `watchdog`, `reviewer`, `migration-researcher`, `migration-research-lead`, `migration-task-slicer`, `migration-change-reviewer`) are allowed;
 - `general` remains denied;
 - destructive VCS, delete, publish, network fetch, and external-directory operations remain denied.
 
@@ -179,4 +183,4 @@ migration/opencode-team/scripts/install-unix.sh --mode ProjectLocal --permission
 
 Restart OpenCode after switching profiles.
 
-After a successful FINAL/PASS checkpoint, the agent reports status and stops for review. The tester can simply run `/supervised-task continue`; no detailed supervisor prompt is needed for the post-final research step.
+After a successful FINAL/PASS checkpoint, the agent reports status and stops for review. The tester can simply run `/supervised-task continue`; no detailed supervisor prompt is needed for the post-final research/review/task-slicing step.

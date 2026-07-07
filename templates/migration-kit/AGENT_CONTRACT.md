@@ -15,6 +15,9 @@ Before each major action, restate which rule allows the action.
 
 10. After a successful FINAL/PASS checkpoint, stop and report. Do not start another run or ticket unless the user explicitly says continue or state/continuation-decision.json grants bounded auto-continuation for that exact next action.
 
+11. Post-final research is not a terminal human handoff. `MANUAL_REVIEW` and `Developer action` mean “needs source-backed review and task slicing” until `migration-research-lead` and `migration-task-slicer` classify the work as non-agent-executable.
+12. After reviewed post-final research, create bounded tickets before asking the user to manually continue: researcher → research lead → task slicer → supervisor/executor is the default closed loop when writes stay under `migration/**`.
+
 ## Project-scoped migration memory
 
 Before planning a bounded action:

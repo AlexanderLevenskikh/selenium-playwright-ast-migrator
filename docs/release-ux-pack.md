@@ -107,7 +107,7 @@ The release doctor verifies package metadata, publish workflows, npm/standalone 
 
 ## SUCCESS checkpoint / explicit continue
 
-SUCCESS checkpoints default to stop-for-review. After FINAL/PASS, `/supervised-task` reports evidence, remaining risks, and one recommended `/supervised-task continue` command. Plain continue starts post-final research first; implementation requires reviewed research, a concrete implementation request, or bounded auto-continuation.
+SUCCESS checkpoints default to stop-for-review. After FINAL/PASS, `/supervised-task` reports evidence, remaining risks, and one recommended `/supervised-task continue` command. Plain continue starts the closed post-final research/research-lead/task-slicing loop; implementation requires approved research/current-ticket, a concrete implementation request, or bounded auto-continuation.
 
 When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts with `To continue, run: /supervised-task continue`, which triggers post-final research by default.
 

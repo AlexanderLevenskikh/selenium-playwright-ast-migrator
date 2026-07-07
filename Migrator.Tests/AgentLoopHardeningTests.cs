@@ -560,6 +560,8 @@ public class AgentLoopHardeningTests
             Assert.Contains("\"@executor*\": \"allow\"", text);
             Assert.Contains("\"migration-researcher*\": \"allow\"", text);
             Assert.Contains("\"@migration-change-reviewer*\": \"allow\"", text);
+            Assert.Contains("\"migration-research-lead*\": \"allow\"", text);
+            Assert.Contains("\"@migration-task-slicer*\": \"allow\"", text);
             Assert.Contains("\"general\": \"deny\"", text);
             Assert.Contains("\"external_directory\": \"deny\"", text);
         }
@@ -580,6 +582,8 @@ public class AgentLoopHardeningTests
         Assert.Contains("\"@executor*\": allow", orchestrator);
         Assert.Contains("\"migration-researcher*\": allow", orchestrator);
         Assert.Contains("\"@migration-change-reviewer*\": allow", orchestrator);
+        Assert.Contains("\"migration-research-lead*\": allow", orchestrator);
+        Assert.Contains("\"@migration-task-slicer*\": allow", orchestrator);
         Assert.Contains("routine git inspection", teamReadme);
         Assert.Contains("Do not ask for permission for routine allowed inspection", Read("AGENTS.md"));
         Assert.Contains("git status --short --untracked-files=all", docs);
@@ -1085,7 +1089,8 @@ public class AgentLoopHardeningTests
                 """);
 
             var result = repo.RunFinalGate();
-            Assert.Equal(0, result.ExitCode);
+            var report = repo.Read("migration/state/final-gate-result.json");
+            Assert.True(result.ExitCode == 0, result.Output + Environment.NewLine + report);
         }
 
         using (var repo = TemporaryGitRepo.Create())
@@ -1280,27 +1285,44 @@ public class AgentLoopHardeningTests
         var orchestrator = Read("templates/opencode-team/global/.config/opencode/agents/orchestrator.md");
         var researcher = Read("templates/opencode-team/global/.config/opencode/agents/migration-researcher.md");
         var researchReviewer = Read("templates/opencode-team/global/.config/opencode/agents/migration-change-reviewer.md");
+        var researchLead = Read("templates/opencode-team/global/.config/opencode/agents/migration-research-lead.md");
+        var taskSlicer = Read("templates/opencode-team/global/.config/opencode/agents/migration-task-slicer.md");
         var config = Read("templates/opencode-team/global/.config/opencode/opencode.jsonc");
         var continuationContract = Read("templates/migration-kit/state/continuation-contract.md");
         var finalGateScript = Read("templates/migration-kit/scripts/check-final-gate.ps1");
 
         Assert.Contains("migration-researcher", supervisedTask);
+        Assert.Contains("migration-research-lead", supervisedTask);
+        Assert.Contains("migration-task-slicer", supervisedTask);
         Assert.Contains("migration-change-reviewer", supervisedTask);
         Assert.Contains("do not ask the user for a more detailed prompt", supervisedTask);
         Assert.Contains("FINAL_STOPPED_FOR_REVIEW", supervisedTask);
         Assert.Contains("POST_FINAL_RESEARCH", finalGateScript);
+        Assert.Contains("REVIEW_POST_FINAL_RESEARCH_WITH_RESEARCH_LEAD", finalGateScript);
+        Assert.Contains("SLICE_RESEARCH_INTO_BOUNDED_TASKS", finalGateScript);
         Assert.Contains("/supervised-task continue", finalGateScript);
         Assert.Contains("migration-researcher", orchestrator);
+        Assert.Contains("migration-research-lead", orchestrator);
+        Assert.Contains("migration-task-slicer", orchestrator);
         Assert.Contains("post-final research flow", orchestrator);
         Assert.Contains("migration/runs/*/research/**", researcher);
+        Assert.Contains("todo-inventory.json", researcher);
         Assert.Contains("must not edit", researcher);
         Assert.Contains("migrated output", researcher);
         Assert.Contains("adapter config", researcher);
         Assert.Contains("FINAL_RESEARCH_COMPLETED", researcher);
+        Assert.Contains("REQUEST_CHANGES", researchLead);
+        Assert.Contains("POST_FINAL_RESEARCH_APPROVED", researchLead);
+        Assert.Contains("SLICE_RESEARCH_INTO_BOUNDED_TASKS", researchLead);
+        Assert.Contains("post-final-tasks.jsonl", taskSlicer);
+        Assert.Contains("RUN_NEXT_BOUNDED_TASK", taskSlicer);
+        Assert.Contains("boundedAutoContinuation", taskSlicer);
         Assert.Contains("edit: deny", researchReviewer);
-        Assert.True(continuationContract.Contains("reviewed research", StringComparison.OrdinalIgnoreCase));
+        Assert.True(continuationContract.Contains("approved research", StringComparison.OrdinalIgnoreCase));
         Assert.Contains("migration-researcher*", config);
         Assert.Contains("migration-change-reviewer*", config);
+        Assert.Contains("migration-research-lead*", config);
+        Assert.Contains("migration-task-slicer*", config);
     }
 
     [Fact]

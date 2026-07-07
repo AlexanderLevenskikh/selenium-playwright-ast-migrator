@@ -175,7 +175,7 @@ Windows OpenCode Desktop shortcut: `--project-desktop` remains an alias for `--o
 
 ## Harness continuation strict protocol
 
-After a non-final final gate, read `migration/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, `NOT FINAL` is not a stopping point: execute exactly one next bounded action under `migration/**` before a user-facing handoff. After `FINAL`, stop for review and report evidence; start another run only on explicit `continue` or bounded auto-continuation. Stop for guard/scope/policy blocker, missing input, loop/plateau, or max autonomous budget.
+After a non-final final gate, read `migration/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, `NOT FINAL` is not a stopping point: execute exactly one next bounded action under `migration/**` before a user-facing handoff. After `FINAL`, stop for review and report evidence; start another run only on explicit `continue` or bounded auto-continuation. Plain `continue` enters the closed post-final loop: researcher → research lead → task slicer → one bounded executor task when allowed. Stop for guard/scope/policy blocker, missing input, loop/plateau, or max autonomous budget.
 
 ## Project-scoped migration memory
 

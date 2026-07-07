@@ -178,9 +178,17 @@
     "successCheckpoint": {
       "defaultAfterFinal": "STOP_FOR_REVIEW",
       "zeroArgumentAfterFinal": "REPORT_STATUS_AND_RECOMMENDED_CONTINUE_COMMAND",
-      "continueRequires": "plain explicit /supervised-task continue starts post-final research; implementation needs reviewed research, a concrete implementation task, or bounded autoContinuation",
+      "continueRequires": "plain explicit /supervised-task continue starts post-final research/research-lead/task-slicing; implementation needs approved research/current-ticket, a concrete implementation task, or bounded autoContinuation",
       "plainContinueAfterFinal": "POST_FINAL_RESEARCH",
+      "postFinalWorkflow": [
+        "POST_FINAL_RESEARCH",
+        "REVIEW_POST_FINAL_RESEARCH_WITH_RESEARCH_LEAD",
+        "SLICE_RESEARCH_INTO_BOUNDED_TASKS",
+        "RUN_NEXT_BOUNDED_TASK"
+      ],
       "postFinalResearchAgent": "migration-researcher",
+      "postFinalResearchLeadAgent": "migration-research-lead",
+      "postFinalTaskSlicerAgent": "migration-task-slicer",
       "postFinalReviewAgent": "migration-change-reviewer",
       "forbidSilentNextRunAfterFinal": true
     }

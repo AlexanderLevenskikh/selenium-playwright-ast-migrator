@@ -45,7 +45,7 @@ then the agent must stop and report:
 - one recommended next step;
 - exact continue command: `/supervised-task continue`.
 
-The agent may start post-final research after `FINAL` when the user explicitly requests continuation. A plain `/supervised-task continue` launches `migration-researcher`; it does not require the user to write a detailed prompt. Implementation starts only after `migration-change-reviewer` validates the research, the user names a concrete implementation task, or the decision file records bounded auto-continuation for that exact action.
+The agent may start post-final research after `FINAL` when the user explicitly requests continuation. A plain `/supervised-task continue` launches the closed loop: `migration-researcher` writes research plus `todo-inventory.json`, `migration-research-lead` validates or requests one revision, and `migration-task-slicer` creates backlog/current-ticket. Implementation starts only after approved research, task slicing, a concrete implementation task, or the decision file records bounded auto-continuation for that exact action.
 
 A zero-argument `/supervised-task` after FINAL must not show a broad menu and must not silently mutate the completed run.
 
@@ -92,3 +92,11 @@ with one of:
 
 When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts with `To continue, run: /supervised-task continue`, which triggers post-final research by default.
 
+
+
+## Research is reviewable work
+
+Post-final research must not end with unclassified `Developer action` handoff items. Each recommendation is classified before handoff. `MANUAL_REVIEW` means an agent must inspect source truth and selector evidence; it becomes a human blocker only after task slicing proves the work is not agent-executable under the allowed scope.
+
+
+Compatibility note: older docs/tests may say “reviewed research”; in the closed loop this means research approved by `migration-research-lead` and sliced by `migration-task-slicer` before executor work.

@@ -152,7 +152,7 @@ After a non-final final gate, read `migration/state/continuation-decision.json`.
 
 `/supervised-task` is intended to be the tester-facing button for migration work. It can be invoked with no arguments. The command reads `continuation-decision.json`, `final-gate-result.json`, `current-ticket.md`, and the latest run evidence, then continues a required non-final action or stops for review after a FINAL checkpoint.
 
-After FINAL, the command must not ask the tester to choose from a broad menu and must not start a new ticket silently. It reports the completed checkpoint and one recommended `/supervised-task continue` command. Plain explicit continue starts post-final research first; implementation starts only after reviewed research, a concrete implementation request, or bounded auto-continuation.
+After FINAL, the command must not ask the tester to choose from a broad menu and must not start a new ticket silently. It reports the completed checkpoint and one recommended `/supervised-task continue` command. Plain explicit continue starts the closed post-final research/research-lead/task-slicing loop; implementation starts only after approved research, `migration/current-ticket.md`, a concrete implementation request, or bounded auto-continuation.
 
 When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts with `To continue, run: /supervised-task continue`, which triggers post-final research by default.
 

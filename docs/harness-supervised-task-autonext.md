@@ -32,8 +32,8 @@ Then it dispatches:
 | `CONTINUE_REQUIRED` | Execute the named next bounded action before any user-facing handoff. |
 | Non-final with allowed next action | Execute exactly one next config/scaffold/evidence action under `migration/**`. |
 | `FINAL` / `HARNESS_CONTINUATION_FINAL` and no explicit `continue` | Stop for review: report status, evidence, artifacts, remaining risks, and one recommended continue command. Do not mutate the completed run. |
-| `FINAL_STOPPED_FOR_REVIEW` plus plain explicit `continue` | Invoke `migration-researcher` for post-final TODO/source-truth research. Do not ask for a long supervisor prompt. |
-| `FINAL_RESEARCH_COMPLETED` | Invoke `migration-change-reviewer` to validate research and extract one bounded implementation ticket recommendation. |
+| `FINAL_STOPPED_FOR_REVIEW` plus plain explicit `continue` | Run the closed post-final loop: `migration-researcher` → `migration-research-lead` → `migration-task-slicer` → one bounded `executor` task only when auto-continuation allows it. Do not ask for a long supervisor prompt. |
+| `FINAL_RESEARCH_COMPLETED` | Invoke `migration-research-lead`; weak research is revised once, approved research is sliced into backlog/current-ticket by `migration-task-slicer`. |
 
 Do not show a broad menu when state is clear. After `FINAL`, stop for review unless the user explicitly requests continue. Plain `continue` means research first, not immediate implementation.
 | Blocked or missing user input | Stop with an explicit `BLOCKED_*` reason and exact user actions. |
@@ -56,9 +56,9 @@ The agent may continue past a successful checkpoint only when:
 1. the user explicitly asks to continue; or
 2. `migration/state/continuation-decision.json` grants bounded auto-continuation for this exact next action.
 
-No extra prompt is required when the user says `continue`; the agent should invoke `migration-researcher` first. The researcher writes `migration/runs/<active-run>/research/**`, then `migration-change-reviewer` validates findings before implementation.
+No extra prompt is required when the user says `continue`; the agent should invoke `migration-researcher` first. The researcher writes `migration/runs/<active-run>/research/**` and `todo-inventory.json`, then `migration-research-lead` validates counts/evidence/actionability. Approved research goes to `migration-task-slicer`, which writes `migration/state/backlog/post-final-tasks.jsonl` and `migration/current-ticket.md` before implementation.
 
-## Ticket priority after research review
+## Ticket priority after research review and task slicing
 
 After research is reviewed, choose the next bounded implementation task using this priority order unless the user names a more specific task:
 
@@ -84,3 +84,11 @@ If external assemblies, credentials, package installs, network access, or produc
 
 When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts with `To continue, run: /supervised-task continue`, which triggers post-final research by default.
 
+
+
+## Closed post-final research loop
+
+`MANUAL_REVIEW` and generic `Developer action` findings are not terminal human handoffs. The research lead must either request a bounded revision or approve source-backed findings. The task slicer then classifies each action as `AGENT_EXECUTABLE`, `AGENT_EXECUTABLE_AFTER_RESEARCH`, `HUMAN_DECISION_REQUIRED`, `BLOCKED_BY_SCOPE`, or `BLOCKED_BY_MISSING_SOURCE_TRUTH`. Only `AGENT_EXECUTABLE` tickets may be selected for executor, and each selected ticket must name exact scope, allowed roots, forbidden writes, stop conditions, and verification evidence.
+
+
+Compatibility note: older docs/tests may say “reviewed research”; in the closed loop this means research approved by `migration-research-lead` and sliced by `migration-task-slicer` before executor work.
