@@ -77,7 +77,7 @@ dotnet tool run selenium-pw-migrator -- kit doctor --workspace migration
 ./migration/scripts/apply-opencode-project-config.sh --repo-root . --workspace migration
 ```
 
-`bootstrap-opencode` normally copies `opencode.jsonc`, `.opencode/agents/*`, `.opencode/commands/*`, and `AGENTS.md` into the repository root with backups under `.migration-kit/opencode-backups/`. The apply script is a repair fallback for old/skipped workspaces. Then open the product repo root in OpenCode Desktop and run `/supervised-task waves` for a fresh divide-and-conquer start. The orchestrator creates or resumes the active run with `scripts/new-harness-run.ps1`.
+`bootstrap-opencode` normally copies `opencode.jsonc`, `.opencode/agents/*`, `.opencode/commands/*`, and `AGENTS.md` into the repository root with backups under `migration/.migration-kit/opencode-backups/`. The apply script is a repair fallback for old/skipped workspaces. Then open the product repo root in OpenCode Desktop and run `/supervised-task waves` for a fresh divide-and-conquer start. The orchestrator creates or resumes the active run with `scripts/new-harness-run.ps1`.
 
 ## First run
 

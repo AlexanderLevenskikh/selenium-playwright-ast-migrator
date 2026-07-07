@@ -96,7 +96,7 @@ if (-not (Test-Path $configSource)) {
 $targetOpenCode = Join-Path $repoRootFull ".opencode"
 $targetAgents = Join-Path $targetOpenCode "agents"
 $targetCommands = Join-Path $targetOpenCode "commands"
-$backupRoot = Join-Path $repoRootFull (".migration-kit/opencode-backups/" + (Get-Date -Format "yyyyMMdd-HHmmss"))
+$backupRoot = Join-Path $workspaceFull (".migration-kit/opencode-backups/" + (Get-Date -Format "yyyyMMdd-HHmmss"))
 
 Write-Host "Applying OpenCode project config to repository root..."
 Write-Host "Repo root:          $repoRootFull"

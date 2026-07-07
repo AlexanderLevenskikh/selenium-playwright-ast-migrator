@@ -106,6 +106,10 @@ public class DivideAndConquerWavefrontPlanningTests
         Assert.Contains("OPENCODE_PROJECT_CONFIG_APPLIED", kitCommand);
         Assert.Contains("--skip-project-config", kitCommand);
         Assert.Contains("opencode-project-config/v1", kitCommand);
+        Assert.Contains(@"Path.Combine(workspacePath, "".migration-kit"", ""opencode-backups""", kitCommand);
+        Assert.Contains(@"Path.Combine(workspacePath, "".migration-kit"", ""opencode-project-config.json"")", kitCommand);
+        Assert.DoesNotContain(@"Path.Combine(projectRoot, "".migration-kit"", ""opencode-backups""", kitCommand);
+        Assert.DoesNotContain(@"Path.Combine(projectRoot, "".migration-kit"", ""opencode-project-config.json"")", kitCommand);
         Assert.Contains("/supervised-task waves", readme);
     }
 

@@ -160,7 +160,7 @@ fi
 TARGET_OPENCODE="$REPO_ROOT_FULL/.opencode"
 TARGET_AGENTS="$TARGET_OPENCODE/agents"
 TARGET_COMMANDS="$TARGET_OPENCODE/commands"
-BACKUP_ROOT="$REPO_ROOT_FULL/.migration-kit/opencode-backups/$(date +%Y%m%d-%H%M%S)"
+BACKUP_ROOT="$WORKSPACE_FULL/.migration-kit/opencode-backups/$(date +%Y%m%d-%H%M%S)"
 
 echo "Applying OpenCode project config to repository root..."
 echo "Repo root:          $REPO_ROOT_FULL"

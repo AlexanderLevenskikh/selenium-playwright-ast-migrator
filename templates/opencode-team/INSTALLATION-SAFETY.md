@@ -34,7 +34,7 @@ If inference is not possible, pass the repository root explicitly:
 ```
 
 `ProjectDesktop` backs up existing `opencode.jsonc`, `.opencode\agents`, and
-`.opencode\commands` under `.migration-kit\opencode-backups\<timestamp>` before
+`.opencode\commands` under `migration\.migration-kit\opencode-backups\<timestamp>` before
 overwriting them. Use `-Force` only when overwriting without a backup is intended.
 
 This copies:

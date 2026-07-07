@@ -241,7 +241,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
             return 2;
         }
 
-        var backupRoot = Path.Combine(projectRoot, ".migration-kit", "opencode-backups", DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+        var backupRoot = Path.Combine(workspacePath, ".migration-kit", "opencode-backups", DateTime.Now.ToString("yyyyMMdd-HHmmss"));
         Console.WriteLine("Applying repository-root OpenCode project config...");
         Console.WriteLine($"Source:             {sourceRoot}");
         Console.WriteLine($"Repo root:          {projectRoot}");
@@ -261,7 +261,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
                 Console.WriteLine($"keeping existing: {rootAgents}");
         }
 
-        WriteOpenCodeProjectConfigMetadata(projectRoot, options);
+        WriteOpenCodeProjectConfigMetadata(workspacePath, options);
         Console.WriteLine("OPENCODE_PROJECT_CONFIG_APPLIED");
         Console.WriteLine("OpenCode commands are installed in the repository root. Next: open the repo in OpenCode and run /supervised-task waves.");
         return 0;
@@ -322,9 +322,9 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         Console.WriteLine($"backup: {destination}");
     }
 
-    static void WriteOpenCodeProjectConfigMetadata(string projectRoot, KitOptions options)
+    static void WriteOpenCodeProjectConfigMetadata(string workspacePath, KitOptions options)
     {
-        var path = Path.Combine(projectRoot, ".migration-kit", "opencode-project-config.json");
+        var path = Path.Combine(workspacePath, ".migration-kit", "opencode-project-config.json");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var payload = new SortedDictionary<string, object?>
         {

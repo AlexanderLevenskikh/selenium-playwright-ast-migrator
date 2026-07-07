@@ -144,7 +144,7 @@ function Backup-PathIfExists([string]$PathToBackup, [string]$BackupRoot) {
 
 if ($Mode -eq "ProjectDesktop") {
     New-Item -ItemType Directory -Force -Path $Target | Out-Null
-    $backupRoot = Join-Path $Target (".migration-kit\opencode-backups\" + (Get-Date -Format "yyyyMMdd-HHmmss"))
+    $backupRoot = Join-Path (Join-Path $Target "migration") (".migration-kit\opencode-backups\" + (Get-Date -Format "yyyyMMdd-HHmmss"))
     if (-not $Force) {
         Backup-PathIfExists (Join-Path $Target "opencode.jsonc") $backupRoot
         Backup-PathIfExists (Join-Path $Target ".opencode\agents") $backupRoot
