@@ -8,6 +8,33 @@ $ARGUMENTS
 
 Use the supervised Harness Kit workflow.
 
+## One-command wavefront start (`/supervised-task waves`)
+
+When `$ARGUMENTS` is exactly `waves`, `wave`, `wavefront`, `start waves`, or contains a clear request to start divide-and-conquer migration, enter **wavefront bootstrap mode**. This mode is the preferred user-facing start path: the user should not need to run `kit init`, `bootstrap-opencode`, `kit doctor`, `migration plan`, or `migration run-wave` manually after installing/updating the tool.
+
+In wavefront bootstrap mode:
+
+1. Do **not** run `selenium-pw-migrator --mode migrate` against the full source project before a wave workspace exists. A full-source migrate from a fresh workspace is a protocol violation when `waves` was requested.
+2. Inspect the repository and auto-detect, in this order:
+   - source Selenium test project/path: prefer `.csproj` files or directories containing Selenium/WebDriver references and test attributes; ignore `bin/`, `obj/`, `migration/`, generated reports, and archived workspaces;
+   - target backend/framework: prefer existing Playwright .NET projects with `Microsoft.Playwright`, `Microsoft.Playwright.NUnit`, or xUnit/MSTest equivalents; otherwise infer `playwright-dotnet` and the source test framework (`nunit`, `xunit`, `mstest`) from package references/usings/attributes;
+   - target project/output path if present; otherwise keep it as generated migration proposals under `migration/**`;
+   - desired strategy: default to `wavefront`, `--max-wave-size 8`, `--representatives-per-cluster 1`, and low-risk-first.
+3. Ask the user **only** when detection is missing or ambiguous. Ask one compact question with concrete options, for example: “I found two Selenium test projects: A and B. Which one should be migrated?” Do not ask broad preference questions when a safe default exists.
+4. If `migration/AGENT_CONTRACT.md` or `migration/opencode-team/**` is missing, run:
+   `selenium-pw-migrator kit bootstrap-opencode --workspace migration --source <detected-source> --target-path <detected-target-or-placeholder> --opencode-install none`
+   The CLI bootstrap is expected to apply repository-root `opencode.jsonc`, `.opencode/agents`, `.opencode/commands`, and `AGENTS.md` automatically. If it does not, run `migration/scripts/apply-opencode-project-config.ps1` or `.sh` as a repair step and report that as a tool defect.
+5. Run `selenium-pw-migrator kit doctor --workspace migration`. If doctor reports only non-blocking warnings, continue. If source/config/workspace is missing, ask the smallest exact question needed.
+6. If `migration/plan/waves.json` is missing or stale relative to the detected source, run:
+   `selenium-pw-migrator migration plan --input <detected-source> --strategy wavefront --workspace migration --out migration/plan --max-wave-size 8 --representatives-per-cluster 1 --prefer-low-risk-first true`
+7. If no active wave run exists, materialize the first pending wave before implementation:
+   `selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001`
+8. Treat `migration/runs/<wave-id>/input-scope.json` as the active bounded scope. If generated output is still a placeholder, run the wave-local migrate script (`migration/runs/<wave-id>/run-migrate.ps1` or `.sh`) or rerun `migration run-wave --execute-migrate true` for that wave only.
+9. Create/resume the Harness run and continue through the normal lifecycle using the wave workspace as the active ticket. All implementation writes remain under `migration/**` unless a later explicit policy grants more.
+
+If the repository is fresh and `/supervised-task waves` has enough information to auto-detect the source path, the expected first meaningful actions are: bootstrap/update kit → doctor → wavefront plan → materialize `wave-001` → wave-local migration. Returning a generic “no task was provided” or running full-source migration is not allowed in this mode.
+
+
 Compatibility wording: a fresh `FINAL` checkpoint must **stop for review** once; a persisted `FINAL_STOPPED_FOR_REVIEW` checkpoint is not a terminal stop and must resume the closed post-final development loop.
 
 ## State-aware zero-argument dispatch
@@ -50,7 +77,7 @@ Then dispatch:
 Do not show a broad menu after a successful checkpoint; give one recommended continue command instead: `/supervised-task continue`.
 4. If `$ARGUMENTS` explicitly requests `continue` after a `FINAL` / `FINAL_STOPPED_FOR_REVIEW` checkpoint, use the same low-prompt closed loop as step 1a. Explicit `continue` is still supported, but it is no longer required once the persisted run status is `FINAL_STOPPED_FOR_REVIEW`; zero-argument `/supervised-task` must also resume that loop. If the user names a specific test/helper/TODO, pass that as the research topic. If the user names a concrete implementation task, first require approved research/task slicing when research artifacts exist; otherwise start the smallest safe bounded implementation ticket from the recommended remaining risks.
 5. If `continuation-decision.json` contains bounded auto-continuation for the exact next action, obey that budget. Otherwise a fresh `FINAL` checkpoint stops once for review, while a persisted `FINAL_STOPPED_FOR_REVIEW` status always resumes the closed post-final loop; plain `continue` and zero-argument `/supervised-task` both mean post-final research/review/task slicing first.
-6. If there is no active run, create the first bounded migration run.
+6. If there is no active run and wavefront bootstrap mode is not requested, create the first bounded migration run. If wavefront bootstrap mode is requested or `migration/plan/waves.json` exists, create/materialize the first bounded wave first and never start a full-source migration run.
 7. Stop only for a fresh `FINAL` stop-for-review, explicit `BLOCKED_*`, missing required user input, denied writes, or autonomous budget/plateau limits. Persisted `FINAL_STOPPED_FOR_REVIEW` is not a stop condition; it is the closed-loop dispatch state.
 
 When the persisted active run is `FINAL_STOPPED_FOR_REVIEW`, prefer the closed post-final loop over immediate implementation whether `$ARGUMENTS` is empty or explicitly says `continue`, unless the user names a concrete implementation task. Use this priority order:

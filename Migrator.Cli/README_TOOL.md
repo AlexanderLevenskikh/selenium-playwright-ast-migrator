@@ -165,12 +165,27 @@ The release doctor checks PackageId/version metadata, README_TOOL packaging docs
 
 ## Wavefront planning
 
+Install/update the guarded OpenCode project config before the first agent run:
+
+```bash
+selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./OldTests --opencode-install auto
+```
+
+`bootstrap-opencode` copies the repository-root OpenCode command pack automatically. After that, the most user-friendly path is to open the repository in OpenCode and run:
+
+```text
+/supervised-task waves
+```
+
+That mode should run the wavefront setup itself. Manual plan commands remain available for debugging or CI:
+
+
 ```bash
 selenium-pw-migrator migration plan --input ./OldTests --strategy wavefront --workspace migration --out migration/plan
 selenium-pw-migrator migration plan show --plan migration/plan
 ```
 
-This is a read-only divide-and-conquer planner. It writes inventory, clusters, waves, selected tests, memory recall guidance, and next commands. Use `migration run-wave` to materialize a selected wave as a bounded workspace without editing the original project.
+This is a read-only divide-and-conquer planner. It writes inventory, clusters, waves, selected tests, memory recall guidance, and next commands. `/supervised-task waves` should run this automatically. Use `migration run-wave` manually only when debugging or CI needs to materialize a selected wave as a bounded workspace without editing the original project.
 
 ## Wave run workspace
 

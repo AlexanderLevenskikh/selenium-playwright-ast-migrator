@@ -16,6 +16,7 @@ Example trusted-project install:
 $ErrorActionPreference = "Stop"
 
 $Source = Join-Path $PSScriptRoot "..\global\.config\opencode"
+$ProjectAgentsTemplate = Join-Path $PSScriptRoot "..\project-template\AGENTS.md"
 $ConfigFileName = if ($PermissionProfile -eq "TrustedProject") { "opencode.trusted-project.jsonc" } else { "opencode.jsonc" }
 
 function Get-FullPathCompat([string]$PathValue) {
@@ -157,7 +158,14 @@ if ($Mode -eq "ProjectDesktop") {
     New-Item -ItemType Directory -Force -Path (Join-Path $ProjectOpenCode "commands") | Out-Null
     Copy-Item -Path (Join-Path $Source "agents\*") -Destination (Join-Path $ProjectOpenCode "agents") -Recurse -Force
     Copy-Item -Path (Join-Path $Source "commands\*") -Destination (Join-Path $ProjectOpenCode "commands") -Recurse -Force
+
+    $TargetAgentsFile = Join-Path $Target "AGENTS.md"
+    if ((Test-Path $ProjectAgentsTemplate) -and (-not (Test-Path $TargetAgentsFile))) {
+        Copy-Item -Path $ProjectAgentsTemplate -Destination $TargetAgentsFile -Force
+        Write-Host "Installed AGENTS.md into the project root."
+    }
 }
+
 else {
     New-Item -ItemType Directory -Force -Path $Target | Out-Null
     Copy-Item -Path (Join-Path $Source "*") -Destination $Target -Recurse -Force
@@ -169,14 +177,14 @@ Write-Host ""
 Write-Host "Done."
 Write-Host ""
 Write-Host "Next:"
-Write-Host "1. Copy project-template\AGENTS.md to the root of your repository if needed."
+Write-Host "1. AGENTS.md is copied automatically for ProjectDesktop when missing; existing files are preserved."
 if ($PermissionProfile -eq "TrustedProject") {
     Write-Host "TrustedProject profile disables routine approval prompts inside this project; external directories remain blocked."
 }
 if ($Mode -eq "ProjectDesktop") {
     Write-Host "2. Open this repository folder in OpenCode Desktop:"
     Write-Host "   $Target"
-    Write-Host "3. Use /supervised-task with migration/prompts/kickoff-prompt.txt."
+    Write-Host "3. Use /supervised-task waves for a fresh wavefront start, or /supervised-task for existing workspace state."
     Write-Host "4. Existing OpenCode project config is backed up unless -Force is used."
 }
 elseif ($Mode -eq "ProjectLocal") {
@@ -186,5 +194,5 @@ elseif ($Mode -eq "ProjectLocal") {
 }
 else {
     Write-Host "2. In opencode, try:"
-    Write-Host "   /supervised-task inspect the current repository and report the safest first task"
+    Write-Host "   /supervised-task waves"
 }

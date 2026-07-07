@@ -55,9 +55,15 @@ selenium-pw-migrator doctor install
 selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --opencode-install auto
 ```
 
-Then run `/supervised-task` in OpenCode. The harness creates or resumes `migration/runs/<run-id>`; do not create run folders by hand.
+`bootstrap-opencode` now also copies the project command pack into the repository root (`opencode.jsonc`, `.opencode/agents`, `.opencode/commands`, and `AGENTS.md` when missing). Then open the repository in OpenCode and run:
 
-After a successful FINAL/PASS checkpoint, the supervised agent stops for review and reports evidence. To continue into post-final research without writing a long prompt, run `/supervised-task continue`.
+```text
+/supervised-task waves
+```
+
+The `waves` mode is the recommended divide-and-conquer start: it auto-detects source/target/framework when possible, asks only for missing required inputs, runs kit doctor, creates the wavefront plan, materializes the first wave, and runs only the wave-local migration. It must not run a full-source migration before a wave workspace exists.
+
+For an existing workspace, plain `/supervised-task` resumes the next bounded action. After a successful FINAL/PASS checkpoint, the supervised agent stops once for review and reports evidence. To continue into post-final research without writing a long prompt, run `/supervised-task continue` or plain `/supervised-task` after `FINAL_STOPPED_FOR_REVIEW`.
 
 ### 3. Migrate with another agent
 
@@ -432,7 +438,19 @@ When a final gate passes, `check-final-gate.ps1` updates `migration/state/harnes
 
 ## Divide-and-conquer wave planning
 
-For larger projects, generate a read-only wavefront plan before asking an agent to migrate a broad scope:
+For larger projects, prefer the OpenCode one-command wavefront start. Install/update the guarded project command pack once, then let `/supervised-task waves` run the setup chain:
+
+```bash
+selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --opencode-install auto
+```
+
+Open the repository in OpenCode and run:
+
+```text
+/supervised-task waves
+```
+
+That command should auto-detect source/target/framework when possible, run doctor, create the plan, materialize the first wave, and run only the wave-local migration. Manual commands remain available for debugging/CI:
 
 ```bash
 selenium-pw-migrator migration plan --input ./SeleniumTests --strategy wavefront --workspace migration --out migration/plan
@@ -441,7 +459,7 @@ selenium-pw-migrator migration plan show --plan migration/plan
 
 The planner writes `inventory.json`, `clusters.json`, `waves.json`, `plan.md`, `selected-tests.txt`, `memory-recall.md`, and `next-commands.md`. It does not migrate files. The first wave contains representative tests, later waves expand by cluster. Agents should run `memory explain`, `memory doctor`, and `memory recall --file` before turning a wave into a bounded task.
 
-Prepare a bounded wave run workspace:
+Prepare a bounded wave run workspace manually only when you are debugging the agent setup or running CI:
 
 ```bash
 selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001

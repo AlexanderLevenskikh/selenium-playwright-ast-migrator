@@ -179,12 +179,25 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         };
 
         Console.WriteLine("Bootstrapping guarded OpenCode migration workspace");
-        Console.WriteLine("This command installs/updates the migration kit, installs OpenCode team templates, runs kit doctor, and can install an OpenCode config for Windows Desktop, Unix/WSL CLI, CI, or manual agent handoff.");
+        Console.WriteLine("This command installs/updates the migration kit, copies the OpenCode command pack into the repository root, runs kit doctor, and can additionally install OpenCode config for Windows Desktop, Unix/WSL CLI, CI, or manual agent handoff.");
         Console.WriteLine();
 
         var initExitCode = RunInit(bootstrapOptions);
         if (initExitCode != 0)
             return initExitCode;
+
+        if (!options.SkipProjectConfig)
+        {
+            Console.WriteLine();
+            var projectConfigExitCode = ApplyOpenCodeProjectConfig(workspacePath, projectRoot, options);
+            if (projectConfigExitCode != 0)
+                return projectConfigExitCode;
+        }
+        else
+        {
+            Console.WriteLine();
+            Console.WriteLine("Skipping repository-root OpenCode project config because --skip-project-config was provided.");
+        }
 
         Console.WriteLine();
         Console.WriteLine("Running kit doctor after bootstrap...");
@@ -202,10 +215,129 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         Console.WriteLine();
         Console.WriteLine("BOOTSTRAP_OPENCODE_READY");
         Console.WriteLine("Next:");
-        Console.WriteLine("  1. Start the selected agent environment using the instructions printed above or migration/QUICKSTART.md.");
-        Console.WriteLine("  2. Run /supervised-task or give the agent migration/prompts/kickoff-prompt.txt.");
-        Console.WriteLine("  3. Let the orchestrator create or resume the active harness run; do not hand-create migration/runs/<run-id>.");
+        Console.WriteLine("  1. Open the repository root in OpenCode.");
+        Console.WriteLine("  2. Run /supervised-task waves for one-command wavefront planning and the first bounded wave.");
+        Console.WriteLine("  3. Let the orchestrator ask only for missing source/target/framework details; do not hand-create migration/runs/<run-id>.");
         return 0;
+    }
+
+    static int ApplyOpenCodeProjectConfig(string workspacePath, string projectRoot, KitOptions options)
+    {
+        var sourceRoot = Path.Combine(workspacePath, "opencode-team", "global", ".config", "opencode");
+        if (!Directory.Exists(sourceRoot))
+        {
+            Console.Error.WriteLine($"OpenCode team template was not found: {sourceRoot}");
+            Console.Error.WriteLine("Run bootstrap-opencode without --no-team support, or install the kit with --with-team first.");
+            return 2;
+        }
+
+        var configFileName = options.PermissionProfile == "TrustedProject"
+            ? "opencode.trusted-project.jsonc"
+            : "opencode.jsonc";
+        var configSource = Path.Combine(sourceRoot, configFileName);
+        if (!File.Exists(configSource))
+        {
+            Console.Error.WriteLine($"OpenCode config profile was not found: {configSource}");
+            return 2;
+        }
+
+        var backupRoot = Path.Combine(projectRoot, ".migration-kit", "opencode-backups", DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+        Console.WriteLine("Applying repository-root OpenCode project config...");
+        Console.WriteLine($"Source:             {sourceRoot}");
+        Console.WriteLine($"Repo root:          {projectRoot}");
+        Console.WriteLine($"Permission profile: {options.PermissionProfile}");
+
+        CopyRootFileWithBackup(configSource, Path.Combine(projectRoot, "opencode.jsonc"), backupRoot, overwrite: true);
+        CopyRootDirectoryWithBackup(Path.Combine(sourceRoot, "agents"), Path.Combine(projectRoot, ".opencode", "agents"), backupRoot);
+        CopyRootDirectoryWithBackup(Path.Combine(sourceRoot, "commands"), Path.Combine(projectRoot, ".opencode", "commands"), backupRoot);
+
+        var agentsTemplate = Path.Combine(workspacePath, "opencode-team", "project-template", "AGENTS.md");
+        var rootAgents = Path.Combine(projectRoot, "AGENTS.md");
+        if (File.Exists(agentsTemplate))
+        {
+            if (!File.Exists(rootAgents) || options.Force)
+                CopyRootFileWithBackup(agentsTemplate, rootAgents, backupRoot, overwrite: options.Force);
+            else
+                Console.WriteLine($"keeping existing: {rootAgents}");
+        }
+
+        WriteOpenCodeProjectConfigMetadata(projectRoot, options);
+        Console.WriteLine("OPENCODE_PROJECT_CONFIG_APPLIED");
+        Console.WriteLine("OpenCode commands are installed in the repository root. Next: open the repo in OpenCode and run /supervised-task waves.");
+        return 0;
+    }
+
+    static void CopyRootFileWithBackup(string source, string destination, string backupRoot, bool overwrite)
+    {
+        if (File.Exists(destination))
+        {
+            var existing = File.ReadAllText(destination);
+            var next = File.ReadAllText(source);
+            if (existing == next)
+            {
+                Console.WriteLine($"unchanged: {destination}");
+                return;
+            }
+
+            if (!overwrite)
+            {
+                Console.WriteLine($"keeping existing: {destination}");
+                return;
+            }
+
+            BackupRootPath(destination, backupRoot);
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        File.Copy(source, destination, overwrite: true);
+        Console.WriteLine(File.Exists(destination) ? $"write: {destination}" : $"write: {destination}");
+    }
+
+    static void CopyRootDirectoryWithBackup(string source, string destination, string backupRoot)
+    {
+        if (!Directory.Exists(source))
+        {
+            Console.WriteLine($"skip missing directory: {source}");
+            return;
+        }
+
+        if (Directory.Exists(destination))
+        {
+            BackupRootPath(destination, backupRoot);
+            Directory.Delete(destination, recursive: true);
+        }
+
+        CopyFileSystemEntry(source, destination);
+        Console.WriteLine($"sync: {destination}");
+    }
+
+    static void BackupRootPath(string path, string backupRoot)
+    {
+        if (!File.Exists(path) && !Directory.Exists(path))
+            return;
+
+        Directory.CreateDirectory(backupRoot);
+        var destination = Path.Combine(backupRoot, Path.GetFileName(path));
+        CopyFileSystemEntry(path, destination);
+        Console.WriteLine($"backup: {destination}");
+    }
+
+    static void WriteOpenCodeProjectConfigMetadata(string projectRoot, KitOptions options)
+    {
+        var path = Path.Combine(projectRoot, ".migration-kit", "opencode-project-config.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var payload = new SortedDictionary<string, object?>
+        {
+            ["schemaVersion"] = "opencode-project-config/v1",
+            ["installedAtUtc"] = DateTimeOffset.UtcNow.ToString("o"),
+            ["workspace"] = options.Workspace,
+            ["source"] = options.Source,
+            ["permissionProfile"] = options.PermissionProfile,
+            ["command"] = "kit bootstrap-opencode",
+            ["nextCommand"] = "/supervised-task waves"
+        };
+        File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine($"write: {path}");
     }
 
     static int RunOpenCodeInstall(string workspacePath, string projectRoot, KitOptions options)
@@ -356,8 +488,8 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
     static void PrintManualAgentBootstrapInstructions(KitOptions options, string mode)
     {
         Console.WriteLine(mode == "ci"
-            ? "CI/manual-agent mode selected: no OpenCode config was installed."
-            : "No OpenCode config install was requested.");
+            ? "CI/manual-agent mode selected: no additional OpenCode launcher install was requested."
+            : "No additional OpenCode launcher install was requested; the repository-root OpenCode command pack was already applied unless --skip-project-config was used.");
         Console.WriteLine("Use the installed migration workspace with any agent by giving it these entrypoints:");
         Console.WriteLine($"  Contract: {Path.Combine(options.Workspace, "AGENT_CONTRACT.md")}");
         Console.WriteLine($"  Kickoff:  {Path.Combine(options.Workspace, "prompts", "kickoff-prompt.txt")}");
@@ -375,7 +507,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         if (mode == "ProjectDesktop")
         {
             Console.WriteLine("  Open the repository root in OpenCode Desktop.");
-            Console.WriteLine("  Run /supervised-task or /harness-run.");
+            Console.WriteLine("  Run /supervised-task waves for a fresh wavefront start, or /supervised-task for an existing workspace.");
         }
         else if (mode == "ProjectLocal")
         {
@@ -383,11 +515,11 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
             Console.WriteLine(RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
                 ? $"  $env:OPENCODE_CONFIG = {ProcessQuote(Path.Combine(target, "opencode.jsonc"))}; opencode"
                 : $"  OPENCODE_CONFIG={ProcessQuote(Path.Combine(target, "opencode.jsonc"))} opencode");
-            Console.WriteLine("  Then run /supervised-task or /harness-run.");
+            Console.WriteLine("  Then run /supervised-task waves for a fresh wavefront start, or /supervised-task for an existing workspace.");
         }
         else
         {
-            Console.WriteLine("  Open OpenCode and run /supervised-task or /harness-run.");
+            Console.WriteLine("  Open OpenCode and run /supervised-task waves for a fresh wavefront start, or /supervised-task for an existing workspace.");
         }
     }
 
@@ -848,8 +980,18 @@ Install modes:
 --opencode-install auto             Windows => project-desktop, macOS/Linux/WSL => project-local
 --opencode-install project-desktop  Windows OpenCode Desktop project config
 --opencode-install project-local    Portable OpenCode CLI config in .opencode-migrator
---opencode-install ci               CI/Codex/manual agents; no OpenCode config install
---opencode-install none             Only install/update the migration workspace and run doctor
+--opencode-install ci               CI/Codex/manual agents; no additional OpenCode launcher install
+--opencode-install none             Apply repository-root command pack only, then run doctor
+--skip-project-config               Do not copy opencode.jsonc/.opencode/AGENTS.md into repo root
+```
+
+`bootstrap-opencode` applies the repository-root command pack by default:
+
+```text
+opencode.jsonc
+.opencode/agents/*
+.opencode/commands/*
+AGENTS.md, when missing
 ```
 
 The legacy shortcut remains available on Windows:
@@ -867,7 +1009,23 @@ For non-OpenCode agents, prefer the explicit handoff command instead of using an
 
 This writes `{{Path.Combine(options.Workspace, "AGENT_HANDOFF.md")}}`, then gives the agent `{{Path.Combine(options.Workspace, "AGENT_CONTRACT.md")}}`, `{{Path.Combine(options.Workspace, "prompts", "kickoff-prompt.txt")}}`, and `{{Path.Combine(options.Workspace, "harness", "README.md")}}`.
 
-Then run `/supervised-task` in OpenCode, or give the same kickoff prompt to Codex/CI/another agent. The agent should create or resume the active harness run itself with `{{Path.Combine(options.Workspace, "scripts", "new-harness-run.sh")}}` from bash or `{{Path.Combine(options.Workspace, "scripts", "new-harness-run.ps1")}}` from PowerShell; you should not manually create `{{Path.Combine(options.Workspace, "runs", "run-001")}}`.
+After bootstrap, open the repository in OpenCode and start the user-friendly wavefront mode:
+
+```text
+/supervised-task waves
+```
+
+That mode should auto-detect the source/target/framework, run `kit doctor`, create `migration/plan`, materialize `wave-001`, and run only the wave-local migration. Manual repair scripts remain available if project config was skipped or an older workspace is being repaired:
+
+```powershell
+.\{{Path.Combine(options.Workspace, "scripts", "apply-opencode-project-config.ps1")}} -RepoRoot . -Workspace "{{options.Workspace}}"
+```
+
+```bash
+./{{Path.Combine(options.Workspace, "scripts", "apply-opencode-project-config.sh")}} --repo-root . --workspace "{{options.Workspace}}"
+```
+
+For non-OpenCode agents, give the same kickoff prompt to Codex/CI/another agent. The agent should create or resume the active harness run itself with `{{Path.Combine(options.Workspace, "scripts", "new-harness-run.sh")}}` from bash or `{{Path.Combine(options.Workspace, "scripts", "new-harness-run.ps1")}}` from PowerShell; you should not manually create `{{Path.Combine(options.Workspace, "runs", "run-001")}}`.
 
 ## Open this first after a run
 
@@ -1031,6 +1189,7 @@ Fix only the current ticket.
             ["config"] = options.Config,
             ["output"] = options.Output,
             ["toolCommand"] = options.ToolCommand,
+            ["opencodeProjectConfig"] = options.WithTeam ? (options.SkipProjectConfig ? "skipped" : "available-for-bootstrap-opencode") : "not-installed",
             ["installer"] = "cli-kit-command"
         };
         WriteJsonFileIfSemanticChanged(path, payload, "updatedAtUtc");
@@ -1227,6 +1386,17 @@ Fix only the current ticket.
         }
     }
 
+    static string NormalizePermissionProfile(string value)
+    {
+        var normalized = value.Trim();
+        return normalized.ToLowerInvariant() switch
+        {
+            "lownoise" or "low-noise" => "LowNoise",
+            "trustedproject" or "trusted-project" => "TrustedProject",
+            _ => throw new ArgumentException($"--permission-profile must be one of: LowNoise, TrustedProject. Got: {value}")
+        };
+    }
+
     static string NormalizeOpenCodeInstallMode(string value)
     {
         var normalized = value.Trim().ToLowerInvariant();
@@ -1256,7 +1426,7 @@ Commands:
   doctor        Validate workspace health and cross-platform prerequisites.
   next-ticket   Generate a bounded prompt for deriving the next actionable ticket.
   bootstrap-opencode
-                Install/update the kit, include OpenCode team files, run doctor, and optionally install ProjectDesktop config.
+                Install/update the kit, copy repository-root OpenCode commands, run doctor, and optionally install Desktop/CLI config.
   bootstrap-agent
                 Install/update the kit and write an explicit handoff pack for Codex, generic agents, or OpenCode.
 
@@ -1272,6 +1442,8 @@ Common options:
   --with-team               Install optional OpenCode team templates.
   --project-desktop         Shortcut for --opencode-install project-desktop.
   --opencode-install <mode> For kit bootstrap-opencode: auto, none, manual, ci, project-local, project-desktop, global.
+  --permission-profile <p>  OpenCode permission profile: LowNoise or TrustedProject. Default: LowNoise.
+  --skip-project-config     Do not copy opencode.jsonc/.opencode/AGENTS.md into the repository root.
   --agent <name>            For kit bootstrap-agent: codex, generic, opencode. Default: generic.
   --no-codex-files          Do not install migration/codex files.
   --input <path>            Artifact directory for kit next-ticket.
@@ -1301,7 +1473,9 @@ Examples:
         bool NoCodexFiles,
         bool WithTeam,
         bool ProjectDesktop,
+        bool SkipProjectConfig,
         string OpenCodeInstall,
+        string PermissionProfile,
         string Agent,
         string? Input)
     {
@@ -1320,7 +1494,9 @@ Examples:
                 NoCodexFiles: false,
                 WithTeam: false,
                 ProjectDesktop: false,
+                SkipProjectConfig: false,
                 OpenCodeInstall: "manual",
+                PermissionProfile: "LowNoise",
                 Agent: "generic",
                 Input: null);
 
@@ -1354,6 +1530,8 @@ Examples:
                         "--with-team" => options with { WithTeam = true },
                         "--project-desktop" => options with { ProjectDesktop = true, OpenCodeInstall = "project-desktop" },
                         "--opencode-install" => options with { OpenCodeInstall = NormalizeOpenCodeInstallMode(ReadValue()) },
+                        "--permission-profile" => options with { PermissionProfile = NormalizePermissionProfile(ReadValue()) },
+                        "--skip-project-config" => options with { SkipProjectConfig = true },
                         "--agent" => options with { Agent = NormalizeAgent(ReadValue()) },
                         "--help" or "-h" => options,
                         _ when arg.StartsWith("-", StringComparison.Ordinal) => throw new ArgumentException($"Unknown option: {arg}"),

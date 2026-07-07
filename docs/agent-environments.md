@@ -27,7 +27,7 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Sel
 |---|---|---|
 | Windows + OpenCode Desktop | `project-desktop` | You open the repository folder directly in OpenCode Desktop. |
 | macOS/Linux/WSL + OpenCode CLI | `project-local` | You start OpenCode CLI with `OPENCODE_CONFIG=.opencode-migrator/opencode.jsonc`. |
-| CI / non-OpenCode | Use `bootstrap-agent` instead | The agent reads handoff docs/contracts but no OpenCode config is installed. |
+| CI / non-OpenCode | Use `bootstrap-agent` instead | The agent reads handoff docs/contracts; repository-root OpenCode command pack is only for OpenCode sessions. |
 
 The legacy Windows shortcut is still supported:
 
@@ -35,13 +35,13 @@ The legacy Windows shortcut is still supported:
 selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.start.json --project-desktop
 ```
 
-Then open the product repository root in OpenCode and run:
+Then open the product repository root in OpenCode and run the one-command wavefront start:
 
 ```text
-/supervised-task
+/supervised-task waves
 ```
 
-The orchestrator must create or resume `migration/runs/<run-id>/` with `migration/scripts/new-harness-run.ps1` or `.sh`; the user should not create run folders manually.
+`bootstrap-opencode` applies the repository-root command pack (`opencode.jsonc`, `.opencode/agents`, `.opencode/commands`, and `AGENTS.md` when missing) before OpenCode starts. The orchestrator must auto-detect source/target/framework when possible, run doctor, create the wavefront plan, materialize the first wave, and run the wave-local migration. It must create or resume `migration/runs/<run-id>/` with `migration/scripts/new-harness-run.ps1` or `.sh`; the user should not create run folders manually. For existing workspaces, plain `/supervised-task` resumes the active bounded state.
 
 ## Codex, CI, or another coding agent
 
@@ -93,8 +93,8 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Sel
 --opencode-install auto             Windows => project-desktop; macOS/Linux/WSL => project-local
 --opencode-install project-desktop  Windows OpenCode Desktop project config in the repository root
 --opencode-install project-local    Portable OpenCode CLI config in .opencode-migrator
---opencode-install ci               Legacy compatibility: workspace only; no OpenCode config
---opencode-install none             Same idea as ci/manual for non-OpenCode agents
+--opencode-install ci               Legacy compatibility: no additional OpenCode launcher install; bootstrap-agent is preferred for non-OpenCode agents
+--opencode-install none             Apply repository-root command pack only; no Desktop/global/project-local launcher install
 --opencode-install global --force   Global OpenCode config; intentionally hard to call by accident
 ```
 

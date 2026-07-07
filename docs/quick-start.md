@@ -64,13 +64,13 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Sel
 selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --project-desktop
 ```
 
-Then open the repository in OpenCode and run:
+Then open the repository in OpenCode and run the one-command wavefront start:
 
 ```text
-/supervised-task
+/supervised-task waves
 ```
 
-`start` writes `migration/current-ticket.md` and `migration/state/start-dispatch.json`. `/supervised-task` must use those files as the active bounded task and must not ask the user to choose from a broad menu when the state is clear.
+`bootstrap-opencode` applies `opencode.jsonc`, `.opencode/agents`, `.opencode/commands`, and `AGENTS.md` into the repository root. `/supervised-task waves` must auto-detect the Selenium source path, target backend/framework, and existing Playwright target when possible; ask only for missing required inputs; run kit doctor, `migration plan --strategy wavefront`, `migration run-wave`, and then the wave-local migration. It must not start a full-source migration before a wave workspace exists. For existing workspaces, plain `/supervised-task` resumes the active bounded task from `migration/current-ticket.md` or continuation state.
 
 After a fresh FINAL/PASS checkpoint, `/supervised-task` stops once for review and prints one recommended `/supervised-task continue` command. On any later `/supervised-task` invocation where the workspace is already `FINAL_STOPPED_FOR_REVIEW`, it resumes post-final TODO/source-truth research, research-lead review, task slicing, change review, and one bounded executor task automatically; explicit continue remains supported but is not required. Implementation follows only after approved research/current-ticket, change-review approval, or a concrete implementation request.
 

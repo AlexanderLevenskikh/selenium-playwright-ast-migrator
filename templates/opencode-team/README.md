@@ -82,7 +82,15 @@ Do not use global mode for normal migration experiments unless you intentionally
 
 ## How to use inside OpenCode
 
-For guarded migration runs, open the product repo root in OpenCode Desktop and run:
+For a fresh divide-and-conquer migration, open the product repo root in OpenCode Desktop and run:
+
+```text
+/supervised-task waves
+```
+
+That mode is allowed to auto-detect the Selenium source project, ask only for missing target/framework details, run kit bootstrap/doctor, create the wavefront plan, materialize `wave-001`, and run the wave-local migration script. It must not start a full-source migration before the wave workspace exists.
+
+For existing workspaces, run:
 
 ```text
 /supervised-task

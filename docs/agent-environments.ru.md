@@ -38,7 +38,7 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Sel
 После этого откройте корень product repo в OpenCode и запустите:
 
 ```text
-/supervised-task
+/supervised-task waves
 ```
 
 Orchestrator должен сам создать или возобновить `migration/runs/<run-id>/` через `migration/scripts/new-harness-run.ps1` или `.sh`; пользователь не должен руками создавать run folders.
@@ -93,8 +93,8 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Sel
 --opencode-install auto             Windows => project-desktop; macOS/Linux/WSL => project-local
 --opencode-install project-desktop  Windows OpenCode Desktop project config в корне репозитория
 --opencode-install project-local    Portable OpenCode CLI config в .opencode-migrator
---opencode-install ci               Legacy compatibility: только workspace; без OpenCode config
---opencode-install none             То же направление для ci/manual non-OpenCode agents
+--opencode-install ci               Legacy compatibility: без дополнительной OpenCode launcher установки; для non-OpenCode агентов лучше bootstrap-agent
+--opencode-install none             Только применить command pack в корень repo; без Desktop/global/project-local launcher установки
 --opencode-install global --force   Global OpenCode config; специально сложно вызвать случайно
 ```
 

@@ -84,11 +84,11 @@ if [[ "$PERMISSION_PROFILE" == "TrustedProject" ]]; then
 fi
 
 echo "Next:"
-echo "1. Copy project-template/AGENTS.md to the root of your repository if needed."
+echo "1. For repository-root config, prefer: selenium-pw-migrator kit bootstrap-opencode --opencode-install auto (it copies AGENTS.md when missing)."
 if [[ "$MODE" == "ProjectLocal" ]]; then
   echo "2. Use this config only for migration sessions, for example:"
   echo "   OPENCODE_CONFIG=\"$TARGET/opencode.jsonc\" opencode"
 else
   echo "2. In opencode, try:"
-  echo "   /supervised-task inspect the current repository and report the safest first task"
+  echo "   /supervised-task waves"
 fi

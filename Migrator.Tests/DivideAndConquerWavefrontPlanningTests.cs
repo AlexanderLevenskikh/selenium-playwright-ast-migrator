@@ -88,6 +88,27 @@ public class DivideAndConquerWavefrontPlanningTests
         Assert.Contains("memory recall --file <file> --workspace migration", supervised);
     }
 
+
+    [Fact]
+    public void SupervisedTask_WavesModeAutoBootstrapsPlanAndFirstWave()
+    {
+        var supervised = File.ReadAllText(FindRepositoryFile("templates/opencode-team/global/.config/opencode/commands/supervised-task.md"));
+        var kitCommand = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/KitCommand.cs"));
+        var readme = File.ReadAllText(FindRepositoryFile("README.md"));
+
+        Assert.Contains("/supervised-task waves", supervised);
+        Assert.Contains("wavefront bootstrap mode", supervised);
+        Assert.Contains("auto-detect", supervised);
+        Assert.Contains("kit bootstrap-opencode", supervised);
+        Assert.Contains("migration plan --input", supervised);
+        Assert.Contains("migration run-wave --plan", supervised);
+        Assert.Contains("full-source migration is not allowed", supervised);
+        Assert.Contains("OPENCODE_PROJECT_CONFIG_APPLIED", kitCommand);
+        Assert.Contains("--skip-project-config", kitCommand);
+        Assert.Contains("opencode-project-config/v1", kitCommand);
+        Assert.Contains("/supervised-task waves", readme);
+    }
+
     [Fact]
     public void Docs_DescribeLocalOnlyWavefrontPlanningBoundary()
     {
