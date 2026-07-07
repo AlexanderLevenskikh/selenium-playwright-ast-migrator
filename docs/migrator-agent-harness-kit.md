@@ -145,14 +145,14 @@ Windows OpenCode Desktop shortcut: `--project-desktop` remains an alias for `--o
 
 ## Harness continuation strict protocol
 
-After a non-final final gate, read `migration/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, `NOT FINAL` is not a stopping point: execute exactly one next bounded action under `migration/**` before a user-facing handoff. After `FINAL`, stop for review and report evidence; start another run only on explicit `continue` or bounded auto-continuation. Stop for guard/scope/policy blocker, missing input, loop/plateau, or max autonomous budget.
+After a non-final final gate, read `migration/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, `NOT FINAL` is not a stopping point: execute exactly one next bounded action under `migration/**` before a user-facing handoff. A fresh `FINAL` checkpoint stops once for review and reports evidence; any later `/supervised-task` where `harness-run.json` is already `FINAL_STOPPED_FOR_REVIEW` resumes the closed post-final loop automatically. Stop for guard/scope/policy blocker, missing input, loop/plateau, or max autonomous budget.
 
 
 ## `/supervised-task` auto-next dispatch
 
 `/supervised-task` is intended to be the tester-facing button for migration work. It can be invoked with no arguments. The command reads `continuation-decision.json`, `final-gate-result.json`, `current-ticket.md`, and the latest run evidence, then continues a required non-final action or stops for review after a FINAL checkpoint.
 
-After FINAL, the command must not ask the tester to choose from a broad menu and must not start a new ticket silently. It reports the completed checkpoint and one recommended `/supervised-task continue` command. Plain explicit continue starts the closed post-final research/research-lead/task-slicing loop; implementation starts only after approved research, `migration/current-ticket.md`, a concrete implementation request, or bounded auto-continuation.
+After a fresh FINAL, the command must not ask the tester to choose from a broad menu and must not start a new ticket in the same checkpoint. It reports the completed checkpoint and one recommended `/supervised-task continue` command. On any later invocation where the workspace is already `FINAL_STOPPED_FOR_REVIEW`, zero-argument `/supervised-task` starts/resumes the closed post-final research/research-lead/task-slicing/change-review loop; implementation starts only after approved research, `migration/current-ticket.md`, change-review approval, a concrete implementation request, or bounded auto-continuation.
 
 When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts with `To continue, run: /supervised-task continue`, which triggers post-final research by default.
 

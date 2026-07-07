@@ -31,18 +31,18 @@ Then it dispatches:
 | No active run | Create the first bounded migration run. |
 | `CONTINUE_REQUIRED` | Execute the named next bounded action before any user-facing handoff. |
 | Non-final with allowed next action | Execute exactly one next config/scaffold/evidence action under `migration/**`. |
-| `FINAL` / `HARNESS_CONTINUATION_FINAL` and no explicit `continue` | Stop for review: report status, evidence, artifacts, remaining risks, and one recommended continue command. Do not mutate the completed run. |
-| `FINAL_STOPPED_FOR_REVIEW` plus plain explicit `continue` | Run the closed post-final loop: `migration-researcher` → `migration-research-lead` → `migration-task-slicer` → one bounded `executor` task only when auto-continuation allows it. Do not ask for a long supervisor prompt. |
+| Fresh `FINAL` / `HARNESS_CONTINUATION_FINAL` produced in the current run | Stop once for review: report status, evidence, artifacts, remaining risks, and one recommended continue command. Do not mutate the completed run. |
+| Persisted `FINAL_STOPPED_FOR_REVIEW` with zero args or plain explicit `continue` | Run the closed post-final loop: `migration-researcher` → `migration-research-lead` → `migration-task-slicer` → `migration-change-reviewer` → one bounded `executor` task when the ticket is approved. Do not ask for a long supervisor prompt. |
 | `FINAL_RESEARCH_COMPLETED` | Invoke `migration-research-lead`; weak research is revised once, approved research is sliced into backlog/current-ticket by `migration-task-slicer`. |
 
-Do not show a broad menu when state is clear. After `FINAL`, stop for review unless the user explicitly requests continue. Plain `continue` means research first, not immediate implementation.
+Do not show a broad menu when state is clear. A fresh `FINAL` must stop for review once; a persisted `FINAL_STOPPED_FOR_REVIEW` resumes the closed loop automatically. Plain `continue` means research/review/task-slicing first, not immediate implementation.
 | Blocked or missing user input | Stop with an explicit `BLOCKED_*` reason and exact user actions. |
 
 ## Explicit continue after SUCCESS
 
 A successful iteration is a checkpoint, not permission to keep migrating forever.
 
-After `FINAL`, zero-argument `/supervised-task` must not start a new ticket. It should print a compact handoff like:
+Immediately after a fresh `FINAL`, the current supervised-task run should print a compact handoff like:
 
 ```text
 run-002 is FINAL/PASS. I stopped for review.

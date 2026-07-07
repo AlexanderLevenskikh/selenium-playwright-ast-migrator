@@ -95,8 +95,11 @@ Read when present:
 - `migration/runs/<active-run-id>/research/todo-inventory.json` when present
 - `migration/runs/<active-run-id>/research/research-review.md`
 - `migration/runs/<active-run-id>/research/research-review.json`
+- latest compatible research/review under `migration/runs/*/research/**`, including legacy `post-final-analysis.md` only when a research review explicitly approves or requests slicing from it
 
 If the research review is missing or not approved, stop with `BLOCKED_RESEARCH_NOT_APPROVED`.
+
+Do not stop because the report says `Developer action`, `manual work`, or `post-final research complete`. Those phrases are inputs to slicing. Stop only when the research review is missing/not approved or when every candidate is classified non-agent-executable with evidence.
 
 ## Slicing rules
 
@@ -110,7 +113,7 @@ If the research review is missing or not approved, stop with `BLOCKED_RESEARCH_N
    - assertion conversion per file;
    - input helper conversion per file;
    - documentation/evidence fixes.
-5. Do not create tickets that require product source edits, package installation, network access, credentials, or business/product decisions unless the ticket is explicitly classified `HUMAN_DECISION_REQUIRED` and not selected for executor.
+5. Do not select tickets that require product source edits, package installation, network access, credentials, or business/product decisions. Still create non-selected `HUMAN_DECISION_REQUIRED`, `BLOCKED_BY_SCOPE`, or `BLOCKED_BY_MISSING_SOURCE_TRUTH` tickets for auditability. Artifact-only mode still permits selected tickets that edit only `migration/**` artifacts.
 6. Do not select a ticket whose success criteria require assertion suppression or weakening.
 
 ## Output artifacts

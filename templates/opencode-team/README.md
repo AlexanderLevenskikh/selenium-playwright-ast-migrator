@@ -183,4 +183,6 @@ migration/opencode-team/scripts/install-unix.sh --mode ProjectLocal --permission
 
 Restart OpenCode after switching profiles.
 
-After a successful FINAL/PASS checkpoint, the agent reports status and stops for review. The tester can simply run `/supervised-task continue`; no detailed supervisor prompt is needed for the post-final research/review/task-slicing step.
+After a fresh successful FINAL/PASS checkpoint, the agent reports status and stops for review. Once that status is persisted as `FINAL_STOPPED_FOR_REVIEW`, a later zero-argument `/supervised-task` resumes the same post-final research/review/task-slicing loop automatically; the tester can still run `/supervised-task continue`, but no detailed supervisor prompt is needed.
+
+Compatibility note: `/supervised-task` still stops for review after FINAL on the fresh checkpoint, but persisted FINAL_STOPPED_FOR_REVIEW auto-resumes the closed post-final loop.

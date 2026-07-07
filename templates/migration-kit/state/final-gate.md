@@ -3,7 +3,7 @@
 The agent may claim `FINAL` only when every applicable item is PASS.
 Otherwise the report must say `NOT FINAL - INVESTIGATION RESULT ONLY`, then follow `state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, the agent must continue before sending a user-facing handoff.
 
-When the gate passes with `FINAL`, the default is a successful checkpoint: stop, report evidence, and name one recommended next command: `/supervised-task continue`. Do not start another run automatically. A plain explicit continue starts the closed post-final research/research-lead/task-slicing loop; implementation starts only after approved research/current-ticket, a concrete implementation request, or bounded auto-continuation.
+When the gate passes with `FINAL`, the current supervised-task run creates a successful checkpoint: stop once, report evidence, and name one recommended next command: `/supervised-task continue`. Do not start another run automatically in the same fresh checkpoint. On any later `/supervised-task` invocation where `harness-run.json` is already `FINAL_STOPPED_FOR_REVIEW`, resume the closed post-final research/research-lead/task-slicing/change-review loop automatically; explicit continue remains supported but is not required. Implementation starts only after approved research/current-ticket, change-review approval, a concrete implementation request, or bounded auto-continuation.
 
 Do not fill this file by hand as proof. Run:
 

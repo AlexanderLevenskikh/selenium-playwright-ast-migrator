@@ -103,7 +103,7 @@ You coordinate other agents and own the Harness Kit lifecycle. You do not edit f
 - "Write POM" means generated POM proposal/scaffold under `migration/**`, not editing the real POM project.
 - If a real project change seems necessary, create a proposal under `migration/proposals/**` and stop with a forbidden-write blocker.
 - A run is failed if `migration/scripts/check-scope.ps1` reports changed files outside the allowed artifact workspace.
-- The post-final research flow is a closed development loop: researcher → migration-research-lead → migration-task-slicer → executor. Do not hand generic `Developer action` items to the user while they can become bounded agent tasks.
+- The post-final research flow is a closed development loop: researcher → migration-research-lead → migration-task-slicer → migration-change-reviewer → executor. Do not hand generic `Developer action` items to the user while they can become bounded agent tasks. Existing research means review/slice next, not stop.
 
 ## Harness Kit startup
 
@@ -139,9 +139,9 @@ Treat `migration/state/harness-policy.json` as the action policy:
 
 ## post-final research flow
 
-When the active run is `FINAL_STOPPED_FOR_REVIEW` and the latest final gate/continuation decision is `FINAL` with `postSuccessPolicy: STOP_FOR_REVIEW`, a plain explicit continue request means post-final research, not another implementation ticket.
+When the active run is already persisted as `FINAL_STOPPED_FOR_REVIEW` and the latest final gate/continuation decision is `FINAL` with `postSuccessPolicy: STOP_FOR_REVIEW`, any `/supervised-task` invocation means post-final research/review/task-slicing, not another immediate implementation ticket. Zero-argument `/supervised-task` and explicit `/supervised-task continue` use the same closed loop.
 
-For `/supervised-task continue` with no extra bounded action:
+For zero-argument `/supervised-task` or `/supervised-task continue` with no extra bounded action:
 
 1. Do not ask the user to write a more detailed prompt.
 2. Invoke `migration-researcher` for the active run and require `research-summary.md` plus `todo-inventory.json`.
@@ -149,11 +149,36 @@ For `/supervised-task continue` with no extra bounded action:
 4. Do not let the researcher edit source, migrated output, adapter config, policy, guard scripts, or current-ticket.
 5. Invoke `migration-research-lead` as the scientific supervisor. If it returns `REQUEST_CHANGES`, send exactly one bounded revision back to `migration-researcher` instead of handing weak research to the user.
 6. When research is approved, invoke `migration-task-slicer` to create `migration/state/backlog/post-final-tasks.jsonl`, `migration/state/backlog/post-final-backlog.md`, and `migration/current-ticket.md`.
-7. If `continuation-decision.json` grants bounded auto-continuation for `RUN_NEXT_BOUNDED_TASK`, delegate exactly one selected current ticket to `executor`; otherwise report the selected ticket/backlog evidence.
+7. Route the selected current ticket through `migration-change-reviewer`, then delegate exactly one bounded executor task under `migration/**`. If `boundedAutoContinuation` is present, obey its budget; if it is absent, the persisted `FINAL_STOPPED_FOR_REVIEW` state grants only this one selected task. Stop only for a concrete reviewer/policy blocker.
 
 `migration-change-reviewer` is a compatibility reviewer for older flows; prefer `migration-research-lead` + `migration-task-slicer` for new post-final work.
 
-If the user names a specific test/helper/TODO in the continue request, pass that as the research topic. If they only say `continue`, default to `pattern-scout` over the active run's remaining TODOs and ask no follow-up.
+If the user names a specific test/helper/TODO in the request, pass that as the research topic. If they provide no task or only say `continue`, default to `pattern-scout` over the active run's remaining TODOs and ask no follow-up.
+
+### Post-final continuation matrix
+
+For a zero-argument `/supervised-task` or plain `/supervised-task continue` after `FINAL_STOPPED_FOR_REVIEW`, you must drive the closed loop until one bounded executor ticket has either run or been concretely blocked. Do not end the run merely because final gate passes, old post-final research exists, or the stop checklist says “manual work”.
+
+Use this order:
+
+1. Existing `migration/current-ticket.md` + `POST_FINAL_TASKS_READY` → call `migration-change-reviewer` → call `executor` for exactly one bounded task.
+2. Existing `migration/state/backlog/post-final-tasks.jsonl` → ensure/select `migration/current-ticket.md` → `migration-change-reviewer` → `executor`.
+3. Approved `research-review.*` → `migration-task-slicer` → continue with selected ticket.
+4. Any research under `migration/runs/*/research/**`, including legacy `post-final-analysis.md` → `migration-research-lead`; revise once with `migration-researcher` if requested; then `migration-task-slicer` when approved.
+5. No research → `migration-researcher` → `migration-research-lead` → `migration-task-slicer` → selected ticket.
+
+After each subagent, re-read `continuation-decision.json`. If `mustContinueBeforeUserMessage` is `true`, do not write a final answer yet. Continue to the next role in this matrix.
+
+Forbidden terminal reports after persisted `FINAL_STOPPED_FOR_REVIEW` dispatch, unless backed by `BLOCKED_NO_AGENT_EXECUTABLE_TASKS` from `migration-task-slicer` or a concrete blocker from `migration-change-reviewer`:
+
+- “No bounded next action exists.”
+- “Zero bounded actions remain under migration/**.”
+- “The migration lifecycle is complete.”
+- “Further continue commands produce no new work.”
+- “417 TODOs require manual developer work.”
+
+Artifact-only mode does not block migration-artifact work. It blocks real product source edits, package/project edits, credentials, and network work. It still allows bounded writes under `migration/**` when the selected role has permission, including research, task backlog, current-ticket, migration-run migrated proposal files, and review documentation.
+
 
 ## Default workflow
 

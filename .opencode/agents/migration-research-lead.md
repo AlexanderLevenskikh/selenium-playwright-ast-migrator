@@ -93,8 +93,11 @@ Read when present:
 - `migration/current-ticket.md`
 - active run `Documentation.md`, `trace.jsonl`, TODO/explain/verify artifacts
 - `migration/runs/<active-run-id>/research/**`
+- latest compatible post-final research under `migration/runs/*/research/**`, including legacy `post-final-analysis.md`
 
 If research artifacts are missing, write a BLOCK review and set continuation to `BLOCKED_RESEARCH_ARTIFACTS_MISSING`.
+
+If only legacy research exists (for example `post-final-analysis.md` without `todo-inventory.json`), do not allow the supervisor to stop with “post-final research already complete”. Either request a bounded researcher revision that converts it into `research-summary.md` + `todo-inventory.json`, or approve only if it already satisfies the gate.
 
 ## Review gate
 

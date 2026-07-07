@@ -45,9 +45,9 @@ then the agent must stop and report:
 - one recommended next step;
 - exact continue command: `/supervised-task continue`.
 
-The agent may start post-final research after `FINAL` when the user explicitly requests continuation. A plain `/supervised-task continue` launches the closed loop: `migration-researcher` writes research plus `todo-inventory.json`, `migration-research-lead` validates or requests one revision, and `migration-task-slicer` creates backlog/current-ticket. Implementation starts only after approved research, task slicing, a concrete implementation task, or the decision file records bounded auto-continuation for that exact action.
+The agent stops once after a fresh `FINAL` checkpoint. On the next `/supervised-task` invocation, if `migration/state/harness-run.json` is already `FINAL_STOPPED_FOR_REVIEW`, the agent must launch the closed loop even with zero arguments: `migration-researcher` writes research plus `todo-inventory.json`, `migration-research-lead` validates or requests one revision, `migration-task-slicer` creates backlog/current-ticket, `migration-change-reviewer` reviews the selected ticket, and executor runs exactly one bounded task when approved. Explicit `/supervised-task continue` remains supported, but is not required for persisted `FINAL_STOPPED_FOR_REVIEW`. Implementation starts only after approved research, task slicing, change-review approval, a concrete implementation task, or the decision file records bounded auto-continuation for that exact action.
 
-A zero-argument `/supervised-task` after FINAL must not show a broad menu and must not silently mutate the completed run.
+A zero-argument `/supervised-task` immediately after a fresh FINAL report must not show a broad menu. A zero-argument `/supervised-task` when the workspace is already persisted as `FINAL_STOPPED_FOR_REVIEW` must resume the post-final closed loop and may mutate only allowed `migration/**` artifacts.
 
 ## Stop states
 
@@ -90,7 +90,7 @@ with one of:
 - `FINAL_RESEARCH_COMPLETED`
 - `BLOCKED_NO_ALLOWED_NEXT_ACTION`
 
-When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts with `To continue, run: /supervised-task continue`, which triggers post-final research by default.
+When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports for the fresh checkpoint should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts with `To continue, run: /supervised-task continue`. After that state is persisted as `FINAL_STOPPED_FOR_REVIEW`, zero-argument `/supervised-task` also triggers post-final research/review/task-slicing by default.
 
 
 

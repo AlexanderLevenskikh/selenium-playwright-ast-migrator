@@ -82,6 +82,8 @@ Your job is to turn vague final-review TODOs into evidence-backed next steps tha
 
 Research is iterative: a weak report is not a human handoff. If the research lead requests changes, revise the research once with tighter counts, stronger evidence, and clearer actionability instead of returning generic `Developer action` items to the user.
 
+If a previous post-final report already exists, treat it as draft evidence, not a terminal state. Convert or revise it into `research-summary.md` and `todo-inventory.json`; do not answer that research is already complete.
+
 ## Hard boundaries
 
 You may write only research and lifecycle evidence:

@@ -705,14 +705,16 @@ function New-ContinuationDecision([bool]$Passed, $Results, $Candidate, [bool]$Ha
     if ($Passed) {
         return [pscustomobject][ordered]@{
             status = "FINAL"
-            protocol = "Final gate passed; stop for review. Report evidence and do not start another migration run automatically. A plain explicit continue starts the closed post-final research, research-lead review, task-slicing, and bounded executor loop."
+            protocol = "Final gate passed; stop once for review. Report evidence and do not start another migration run in the same fresh checkpoint. On the next supervised-task invocation, persisted FINAL_STOPPED_FOR_REVIEW resumes the closed post-final research, research-lead review, task-slicing, change-review, and bounded executor loop automatically; explicit continue remains supported but is not required."
             nextAction = $null
             source = $null
             mustContinueBeforeUserMessage = $false
             postSuccessPolicy = "STOP_FOR_REVIEW"
-            continueRequires = "explicit /supervised-task continue request starts post-final research; implementation needs approved research, task slicing into current-ticket.md, a concrete implementation task, or bounded autoContinuation"
+            continueRequires = "persisted FINAL_STOPPED_FOR_REVIEW starts or resumes the closed post-final loop on zero-argument /supervised-task or explicit /supervised-task continue; existing research must be reviewed/sliced, and one bounded migration-artifact executor task may run under migration/** unless reviewer or policy blocks it"
             continueCommand = "/supervised-task continue"
-            postFinalContinueAction = "POST_FINAL_RESEARCH"
+            postFinalContinueAction = "RESUME_OR_START_POST_FINAL_LOOP"
+            postFinalDispatch = "existing current-ticket/backlog -> change-reviewer -> executor; else approved research -> task-slicer; else existing research -> research-lead; else researcher"
+            postFinalStopRule = "Do not report no bounded action after persisted FINAL_STOPPED_FOR_REVIEW dispatch until task-slicer writes BLOCKED_NO_AGENT_EXECUTABLE_TASKS or change-reviewer writes a concrete blocker."
             postFinalWorkflow = @(
                 "POST_FINAL_RESEARCH",
                 "REVIEW_POST_FINAL_RESEARCH_WITH_RESEARCH_LEAD",

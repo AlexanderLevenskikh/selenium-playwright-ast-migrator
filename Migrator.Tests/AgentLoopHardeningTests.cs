@@ -1239,10 +1239,10 @@ public class AgentLoopHardeningTests
         Assert.Contains("postSuccessPolicy", finalGateScript);
         Assert.Contains("STOP_FOR_REVIEW", finalGateScript);
         Assert.Contains("FINAL_STOPPED_FOR_REVIEW", finalGateScript);
-        Assert.Contains("explicit /supervised-task continue", finalGateScript);
+        Assert.Contains("persisted FINAL_STOPPED_FOR_REVIEW starts or resumes", finalGateScript);
         Assert.Contains("SUCCESS checkpoint", continuationContract);
-        Assert.Contains("Starting another bounded implementation ticket without explicit continue", continuationContract);
-        Assert.Contains("After every successful `FINAL` / PASS checkpoint, stop and report", supervisedTask);
+        Assert.Contains("Starting another bounded implementation ticket without a persisted `FINAL_STOPPED_FOR_REVIEW` loop", continuationContract);
+        Assert.Contains("After every fresh successful `FINAL` / PASS checkpoint produced in the current run, stop once and report", supervisedTask);
         Assert.Contains("SUCCESS checkpoint rule", docs);
         Assert.Contains("/supervised-task continue", docs);
 
@@ -1297,6 +1297,9 @@ public class AgentLoopHardeningTests
         Assert.Contains("migration-change-reviewer", supervisedTask);
         Assert.Contains("do not ask the user for a more detailed prompt", supervisedTask);
         Assert.Contains("FINAL_STOPPED_FOR_REVIEW", supervisedTask);
+        Assert.Contains("even when `$ARGUMENTS` is empty", supervisedTask);
+        Assert.Contains("zero-argument `/supervised-task` must also resume that loop", supervisedTask);
+        Assert.Contains("persisted `FINAL_STOPPED_FOR_REVIEW` state", supervisedTask);
         Assert.Contains("POST_FINAL_RESEARCH", finalGateScript);
         Assert.Contains("REVIEW_POST_FINAL_RESEARCH_WITH_RESEARCH_LEAD", finalGateScript);
         Assert.Contains("SLICE_RESEARCH_INTO_BOUNDED_TASKS", finalGateScript);

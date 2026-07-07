@@ -177,9 +177,10 @@
     ],
     "successCheckpoint": {
       "defaultAfterFinal": "STOP_FOR_REVIEW",
-      "zeroArgumentAfterFinal": "REPORT_STATUS_AND_RECOMMENDED_CONTINUE_COMMAND",
-      "continueRequires": "plain explicit /supervised-task continue starts post-final research/research-lead/task-slicing; implementation needs approved research/current-ticket, a concrete implementation task, or bounded autoContinuation",
-      "plainContinueAfterFinal": "POST_FINAL_RESEARCH",
+      "zeroArgumentAfterFinal": "REPORT_STATUS_FOR_FRESH_FINAL_ONLY; RESUME_POST_FINAL_LOOP_WHEN_STATUS_ALREADY_FINAL_STOPPED_FOR_REVIEW",
+      "continueRequires": "persisted FINAL_STOPPED_FOR_REVIEW starts or resumes the post-final loop on zero-argument /supervised-task or explicit /supervised-task continue: existing current-ticket/backlog -> change-reviewer -> executor; approved research -> task-slicer; existing research -> research-lead; otherwise researcher. One bounded executor task under migration/** is allowed unless reviewer/policy blocks it.",
+      "plainContinueAfterFinal": "RESUME_OR_START_POST_FINAL_LOOP",
+      "zeroArgumentWhenFinalStoppedForReview": "RESUME_OR_START_POST_FINAL_LOOP",
       "postFinalWorkflow": [
         "POST_FINAL_RESEARCH",
         "REVIEW_POST_FINAL_RESEARCH_WITH_RESEARCH_LEAD",
@@ -190,7 +191,10 @@
       "postFinalResearchLeadAgent": "migration-research-lead",
       "postFinalTaskSlicerAgent": "migration-task-slicer",
       "postFinalReviewAgent": "migration-change-reviewer",
-      "forbidSilentNextRunAfterFinal": true
+      "forbidSilentNextRunAfterFinal": true,
+      "postFinalDispatch": "existing current-ticket/backlog -> change-reviewer -> executor; approved research -> task-slicer; existing research -> research-lead; otherwise researcher",
+      "forbidNoWorkReportAfterContinue": true,
+      "postFinalStopRule": "No no-work terminal report after persisted FINAL_STOPPED_FOR_REVIEW dispatch until task-slicer writes BLOCKED_NO_AGENT_EXECUTABLE_TASKS or change-reviewer writes a concrete blocker."
     }
   },
   "requiredFiles": [

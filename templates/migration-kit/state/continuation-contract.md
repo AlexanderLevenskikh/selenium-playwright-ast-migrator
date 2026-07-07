@@ -4,7 +4,7 @@ This contract separates three states that agents must not blur together:
 
 1. non-final continuation work;
 2. final stop-for-review;
-3. post-final research after the user explicitly says `continue`.
+3. post-final research/development after a run has already been persisted as `FINAL_STOPPED_FOR_REVIEW` (explicit `continue` remains supported but is not required).
 
 Allowed statuses in `state/continuation-decision.json`:
 
@@ -13,7 +13,7 @@ Allowed statuses in `state/continuation-decision.json`:
 - `FINAL_RESEARCH_COMPLETED` — post-final research artifacts exist and must be reviewed by `migration-research-lead` (or compatibility `migration-change-reviewer`) before task slicing.
 - `RESEARCH_REVISION_REQUIRED` — research lead found weak counts/evidence/actionability; send exactly one bounded revision back to `migration-researcher` before handoff.
 - `POST_FINAL_RESEARCH_APPROVED` — research lead approved findings; invoke `migration-task-slicer` to create backlog/current-ticket.
-- `POST_FINAL_TASKS_READY` — task slicer wrote backlog/current-ticket; supervisor may delegate exactly one selected ticket to `executor` when bounded auto-continuation allows `RUN_NEXT_BOUNDED_TASK`.
+- `POST_FINAL_TASKS_READY` — task slicer wrote backlog/current-ticket; when the active run is `FINAL_STOPPED_FOR_REVIEW` (with or without explicit `/supervised-task continue`), supervisor routes the selected ticket through `migration-change-reviewer` and delegates exactly one bounded `executor` task under `migration/**` unless reviewer or policy blocks it. Bounded auto-continuation may further constrain this budget.
 - `BLOCKED_NO_AGENT_EXECUTABLE_TASKS` — task slicer found no safe agent-executable work; stop with exact human decisions or missing evidence required.
 - `BLOCKED_BY_GATE` — guard/scope/harness-policy failure. Do not continue until fixed or reverted.
 - `BLOCKED_NO_ALLOWED_NEXT_ACTION` — no allowed next action was found. Stop with a classified blocker and one concrete request.
@@ -22,18 +22,18 @@ Allowed statuses in `state/continuation-decision.json`:
 
 A SUCCESS checkpoint is a `FINAL` / PASS result. After it, the default policy is to stop for review. When `state/harness-run.json` exists, `check-final-gate.ps1` records this as `FINAL_STOPPED_FOR_REVIEW` so the old `CONTINUE_AUTONOMOUSLY` status cannot mislead the next session.
 
-After `FINAL`, do not start another migration run or implementation ticket automatically. A plain explicit continue request, for example `/supervised-task continue`, starts the closed post-final development loop:
+After a fresh `FINAL` in the current run, stop once for review. On the next `/supervised-task` invocation, if `harness-run.json` is already `FINAL_STOPPED_FOR_REVIEW`, start or resume the closed post-final development loop automatically. A plain explicit continue request, for example `/supervised-task continue`, is still supported but is no longer required once the persisted state is `FINAL_STOPPED_FOR_REVIEW`:
 
 1. `migration-researcher` investigates the active run's TODOs/source truth and writes only under `runs/<active-run>/research/**` plus lifecycle continuation/trace files. It must produce `research-summary.md` and machine-readable `todo-inventory.json`.
 2. `migration-research-lead` acts as the scientific supervisor: it validates counts, evidence, contradictions, and actionability. Weak research goes back for one bounded revision instead of becoming a human handoff.
 3. `migration-task-slicer` converts approved findings into `state/backlog/post-final-tasks.jsonl`, `state/backlog/post-final-backlog.md`, and `current-ticket.md`.
-4. The supervisor delegates exactly one selected ticket to `executor` only when the ticket is bounded, source-backed, under allowed scope, and bounded auto-continuation grants `RUN_NEXT_BOUNDED_TASK`.
+4. The supervisor delegates exactly one selected ticket to `executor` only when the ticket is bounded, source-backed, under allowed scope, and either the persisted active run is `FINAL_STOPPED_FOR_REVIEW`, explicit `/supervised-task continue` requested the post-final loop, or bounded auto-continuation grants `RUN_NEXT_BOUNDED_TASK`.
 
 This keeps the tester-facing prompt short: the user does not need to write a detailed supervisor prompt just to move from `FINAL_STOPPED_FOR_REVIEW` to investigation, research review, task slicing, and the next safe executor task.
 
 `MANUAL_REVIEW` and `Developer action` are not terminal human handoffs by default. They must first be classified as `AGENT_EXECUTABLE`, `AGENT_EXECUTABLE_AFTER_RESEARCH`, `HUMAN_DECISION_REQUIRED`, `BLOCKED_BY_SCOPE`, or `BLOCKED_BY_MISSING_SOURCE_TRUTH`.
 
-Starting another bounded implementation ticket without explicit continue, approved research, task slicing, a concrete implementation request, or bounded auto-continuation is a protocol violation.
+Starting another bounded implementation ticket without a persisted `FINAL_STOPPED_FOR_REVIEW` loop, approved research, task slicing, a concrete implementation request, or bounded auto-continuation is a protocol violation.
 
 ## Non-final continuation rule
 
@@ -41,7 +41,7 @@ If status is `CONTINUE_REQUIRED`, do not stop with a restatement. A response tha
 
 ## Final stop rule
 
-If status is `FINAL` and the user did not explicitly continue, starting post-final research or another bounded ticket is a protocol violation. Report the checkpoint and exactly one command:
+If status is freshly `FINAL` in the current run and the workspace has not yet been resumed from persisted `FINAL_STOPPED_FOR_REVIEW`, starting post-final research or another bounded ticket is a protocol violation. Report the checkpoint and exactly one command:
 
 ```text
 /supervised-task continue
@@ -49,3 +49,7 @@ If status is `FINAL` and the user did not explicitly continue, starting post-fin
 
 
 Compatibility note: older docs/tests may say “reviewed research”; in the closed loop this means research approved by `migration-research-lead` and sliced by `migration-task-slicer` before executor work.
+
+## Existing research is not terminal
+
+Existing post-final research is not terminal. Whenever the active run is already `FINAL_STOPPED_FOR_REVIEW`, the supervisor must route existing `migration/runs/*/research/**` through `migration-research-lead`, then `migration-task-slicer`, then `migration-change-reviewer`, then one bounded executor task when the selected ticket stays under `migration/**`, even for zero-argument `/supervised-task`. A terminal “no bounded action exists” report is valid only after task slicing writes `BLOCKED_NO_AGENT_EXECUTABLE_TASKS` or the change reviewer writes a concrete blocker.
