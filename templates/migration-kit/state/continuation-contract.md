@@ -15,8 +15,13 @@ Allowed statuses in `state/continuation-decision.json`:
 - `POST_FINAL_RESEARCH_APPROVED` — research lead approved findings; invoke `migration-task-slicer` to create backlog/current-ticket.
 - `POST_FINAL_TASKS_READY` — task slicer wrote backlog/current-ticket; when the active run is `FINAL_STOPPED_FOR_REVIEW` (with or without explicit `/supervised-task continue`), supervisor routes the selected ticket through `migration-change-reviewer` and delegates exactly one bounded `executor` task under `migration/**` unless reviewer or policy blocks it. Bounded auto-continuation may further constrain this budget.
 - `BLOCKED_NO_AGENT_EXECUTABLE_TASKS` — task slicer found no safe agent-executable work; stop with exact human decisions or missing evidence required.
-- `BLOCKED_BY_GATE` — guard/scope/harness-policy failure. Do not continue until fixed or reverted.
+- `BLOCKED_BY_GATE` — guard/scope/harness-policy failure. Do not start another wave until fixed or reverted. If no bounded ticket exists yet, `slice-gate-followups` may run first to create `gate-followup-tasks.jsonl`, `gate-followup-backlog.md`, and `current-ticket.md`.
 - `BLOCKED_NO_ALLOWED_NEXT_ACTION` — no allowed next action was found. Stop with a classified blocker and one concrete request.
+
+
+## Gate follow-up slicing
+
+When final gate or sentinel diagnostics are blocking but no bounded `current-ticket.md` exists, run `migration/scripts/slice-gate-followups.ps1` / `.sh`. The slicer writes `state/backlog/gate-followup-tasks.jsonl`, `state/backlog/gate-followup-backlog.md`, and a selected `current-ticket.md`. This is not permission to edit product source; tasks that require writes outside `migration/**` must become `BLOCKED_NO_AGENT_EXECUTABLE_TASKS` or a concrete human cleanup request.
 
 ## SUCCESS checkpoint rule
 

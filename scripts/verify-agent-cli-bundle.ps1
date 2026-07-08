@@ -25,6 +25,8 @@ $requiredFiles = @(
     "templates/migration-kit/scripts/write-agent-skill-usage.sh",
     "templates/migration-kit/scripts/record-agent-skill-profile.ps1",
     "templates/migration-kit/scripts/record-agent-skill-profile.sh",
+    "templates/migration-kit/scripts/slice-gate-followups.ps1",
+    "templates/migration-kit/scripts/slice-gate-followups.sh",
     "scripts/install-migration-kit.ps1",
     "scripts/install-migration-kit.sh"
 )

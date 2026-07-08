@@ -234,6 +234,8 @@ scripts/build-harness-dashboard.ps1
 scripts/build-harness-dashboard.sh
 scripts/export-opencode-session.ps1
 scripts/export-opencode-session.sh
+scripts/slice-gate-followups.ps1
+scripts/slice-gate-followups.sh
 scripts/write-sentinel-finding.ps1
 scripts/write-sentinel-finding.sh
 scripts/complete-sentinel-inspection.ps1

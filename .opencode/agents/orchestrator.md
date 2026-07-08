@@ -318,3 +318,8 @@ Treat machine ledgers as controlled state, not free-form text:
 
 
 Sentinel inspections must be finalized with `migration/scripts/complete-sentinel-inspection.ps1` or `.sh`; final gate treats a missing active-run `sentinel-inspection.json` as a process defect.
+
+
+## Gate follow-up slicing
+
+When final gate or harness-sentinel reports blocking diagnostics and no bounded `migration/current-ticket.md` exists, run `migration/scripts/slice-gate-followups.ps1` / `.sh`. This writes `state/backlog/gate-followup-tasks.jsonl`, `state/backlog/gate-followup-backlog.md`, and `current-ticket.md`; route that ticket through `migration-change-reviewer` before executor work.

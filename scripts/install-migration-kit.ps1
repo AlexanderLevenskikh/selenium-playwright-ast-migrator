@@ -164,6 +164,8 @@ function Test-AutoUpdatedKitOwnedFile([string]$RelativePath) {
         $normalized -eq "scripts/write-agent-skill-usage.sh" -or
         $normalized -eq "scripts/record-agent-skill-profile.ps1" -or
         $normalized -eq "scripts/record-agent-skill-profile.sh" -or
+        $normalized -eq "scripts/slice-gate-followups.ps1" -or
+        $normalized -eq "scripts/slice-gate-followups.sh" -or
         $normalized -eq "state/continuation-contract.md" -or
         $normalized.StartsWith("prompts/") -or
         $normalized.StartsWith("agent-skills/")
@@ -323,7 +325,9 @@ function Write-GuardChecksums([string]$WorkspacePath) {
         "scripts/write-agent-skill-usage.ps1",
         "scripts/write-agent-skill-usage.sh",
         "scripts/record-agent-skill-profile.ps1",
-        "scripts/record-agent-skill-profile.sh"
+        "scripts/record-agent-skill-profile.sh",
+        "scripts/slice-gate-followups.ps1",
+        "scripts/slice-gate-followups.sh"
     )
 
     $entries = @()

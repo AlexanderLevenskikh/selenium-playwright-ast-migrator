@@ -25,7 +25,9 @@
     "migration/scripts/write-sentinel-finding.ps1",
     "migration/scripts/write-sentinel-finding.sh",
     "migration/scripts/complete-sentinel-inspection.ps1",
-    "migration/scripts/complete-sentinel-inspection.sh"
+    "migration/scripts/complete-sentinel-inspection.sh",
+    "migration/scripts/slice-gate-followups.ps1",
+    "migration/scripts/slice-gate-followups.sh"
   ],
   "deniedWrites": [
     ".git/**",
@@ -155,7 +157,17 @@
     "./migration/scripts/complete-sentinel-inspection.sh*",
     "bash migration/scripts/complete-sentinel-inspection.sh*",
     "migration/scripts/complete-sentinel-inspection.sh*",
-    "bash ./migration/scripts/complete-sentinel-inspection.sh*"
+    "bash ./migration/scripts/complete-sentinel-inspection.sh*",
+    "pwsh *slice-gate-followups.ps1*",
+    "powershell *slice-gate-followups.ps1*",
+    "pwsh -NoProfile -ExecutionPolicy Bypass -File migration/scripts/slice-gate-followups.ps1*",
+    "powershell -NoProfile -ExecutionPolicy Bypass -File migration/scripts/slice-gate-followups.ps1*",
+    "./migration/scripts/slice-gate-followups.ps1*",
+    ".\\migration\\scripts\\slice-gate-followups.ps1*",
+    "./migration/scripts/slice-gate-followups.sh*",
+    "bash migration/scripts/slice-gate-followups.sh*",
+    "migration/scripts/slice-gate-followups.sh*",
+    "bash ./migration/scripts/slice-gate-followups.sh*"
   ],
   "deniedCommands": [
     "git commit*",
@@ -267,5 +279,9 @@
     "requiredBeforeFinalAnswer": true,
     "finalStatusFile": "state/final-gate-result.json",
     "shellWrapper": "scripts/check-final-gate.sh"
-  }
+  },
+  "guardedScripts": [
+    "scripts/slice-gate-followups.ps1",
+    "scripts/slice-gate-followups.sh"
+  ]
 }

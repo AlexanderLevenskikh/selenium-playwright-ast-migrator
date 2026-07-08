@@ -218,3 +218,8 @@ Also write `migration/state/task-slice-result.json` with the same status and upd
 ## Final response
 
 Report only the backlog artifacts, selected ticket id/title, and whether the supervisor should delegate it to `executor`. Do not claim implementation progress.
+
+
+## Gate/sentinel follow-up input
+
+If `migration/state/backlog/gate-followup-tasks.jsonl` exists, treat it like approved diagnostic input. Select exactly one agent-executable bounded task, refresh `migration/current-ticket.md`, and preserve the source evidence. If every remaining gate follow-up requires product-tree writes outside `migration/**`, write `BLOCKED_NO_AGENT_EXECUTABLE_TASKS` with evidence instead of broadening scope.

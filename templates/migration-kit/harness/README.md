@@ -48,3 +48,8 @@ This harness does not guarantee that generated tests are correct. It guarantees 
 
 
 Applied skills are recorded with `scripts/record-agent-skill-profile.ps1` / `.sh` for common role profiles, or `scripts/write-agent-skill-usage.ps1` / `.sh` for custom one-off decisions, into `state/agent-skill-usage.jsonl` and `runs/<run-id>/skills/applied-skills.md`.
+
+
+## Gate follow-up slicer
+
+`migration/scripts/slice-gate-followups.ps1` / `.sh` converts final-gate and sentinel diagnostics into `state/backlog/gate-followup-tasks.jsonl`, `state/backlog/gate-followup-backlog.md`, and `current-ticket.md` before another wave starts.

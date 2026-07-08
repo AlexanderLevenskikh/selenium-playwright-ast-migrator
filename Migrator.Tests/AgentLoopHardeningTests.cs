@@ -825,7 +825,14 @@ public class AgentLoopHardeningTests
         var newRun = Read("templates/migration-kit/scripts/new-harness-run.ps1");
         var sessionExport = Read("templates/migration-kit/scripts/export-opencode-session.ps1");
         var sentinelFinding = Read("templates/migration-kit/scripts/write-sentinel-finding.ps1");
+        var gateFollowupSlicer = Read("templates/migration-kit/scripts/slice-gate-followups.ps1");
+        var gateFollowupSlicerSh = Read("templates/migration-kit/scripts/slice-gate-followups.sh");
         var sentinelAgent = Read("templates/opencode-team/global/.config/opencode/agents/harness-sentinel.md");
+        var supervisedTask = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var orchestrator = Read("templates/opencode-team/global/.config/opencode/agents/orchestrator.md");
+        var taskSlicer = Read("templates/opencode-team/global/.config/opencode/agents/migration-task-slicer.md");
+        var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
+        var installScript = Read("scripts/install-migration-kit.ps1");
         var program = Read("Migrator.Cli/Program.cs");
 
         Assert.Contains("Update-HarnessRunStateFromFinalGate", finalGate);
@@ -842,6 +849,18 @@ public class AgentLoopHardeningTests
         Assert.Contains("pathEvidence", sentinelFinding);
         Assert.Contains("STALE_GATE_EVIDENCE", sentinelFinding);
         Assert.Contains("high or critical findings must be evidence-backed", sentinelAgent, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("slice-gate-followups.ps1", finalGate);
+        Assert.Contains("gate-followup-slicer", finalGate);
+        Assert.Contains("gate-followup-slicer/v1", gateFollowupSlicer);
+        Assert.Contains("GATE_FOLLOWUP_TASKS_SLICED", gateFollowupSlicer);
+        Assert.Contains("gate-followup-tasks.jsonl", gateFollowupSlicer);
+        Assert.Contains("current-ticket.md", gateFollowupSlicer);
+        Assert.Contains("pwsh", gateFollowupSlicerSh);
+        Assert.Contains("slice-gate-followups", supervisedTask);
+        Assert.Contains("gate-followup-tasks.jsonl", taskSlicer);
+        Assert.Contains("slice-gate-followups.ps1", orchestrator);
+        Assert.Contains("gate-followup-slicer", kitCommand);
+        Assert.Contains("scripts/slice-gate-followups.ps1", installScript);
         Assert.Contains("ManagePackageVersionsCentrally", program);
         Assert.Contains("NU1008", Read("docs/project-verification.md"));
     }
@@ -1837,7 +1856,9 @@ public class AgentLoopHardeningTests
             "scripts/write-agent-skill-usage.ps1",
             "scripts/write-agent-skill-usage.sh",
             "scripts/record-agent-skill-profile.ps1",
-            "scripts/record-agent-skill-profile.sh"
+            "scripts/record-agent-skill-profile.sh",
+            "scripts/slice-gate-followups.ps1",
+            "scripts/slice-gate-followups.sh"
         };
 
     static string BuildGuardChecksumsJson(string workspacePath)

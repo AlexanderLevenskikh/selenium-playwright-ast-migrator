@@ -159,7 +159,7 @@ For migration-artifact/autopilot work, start with `/harness-run` or `/supervised
 
 Use `/supervised-task sentinel` or `/supervised-task inspect` to run the process tester. The command should export or update `migration/runs/<run-id>/opencode-session-export.md` via `migration/scripts/export-opencode-session.*`, then invoke `harness-sentinel`. Sentinel reads the session export, trace, harness events, state files, prompts, and OpenCode config to detect permission-bypass attempts, append-only JSONL violations, state contradictions, premature DONE, stale root config, and wave/full-migration drift.
 
-Sentinel does not directly fix defects. It writes `migration/runs/<run-id>/sentinel/sentinel-report.md` and machine-readable findings. High/critical agent-executable findings are routed to `migration-task-slicer` as bounded process-hardening tasks before a final handoff.
+Sentinel does not directly fix defects. It writes `migration/runs/<run-id>/sentinel/sentinel-report.md` and machine-readable findings. High/critical agent-executable findings are routed to `migration-task-slicer` as bounded process-hardening tasks before a final handoff. When there is no ticket yet, `migration/scripts/slice-gate-followups.ps1` / `.sh` converts final-gate/sentinel diagnostics into `state/backlog/gate-followup-tasks.jsonl`, `state/backlog/gate-followup-backlog.md`, and `current-ticket.md`.
 
 ## Harness dashboard command
 

@@ -324,3 +324,8 @@ Final gate reconciles `migration/state/harness-run.json` after every run: gate f
 
 
 Wave scope is file-based, not single-test-based: report `sourceFiles`, estimated/actual test count, migrated action count, and TODO count explicitly. Do not describe a wave as “3 tests” when the input scope is 3 files containing more tests.
+
+
+## Gate follow-up slicing
+
+When final gate or harness-sentinel reports blocking diagnostics and no bounded `migration/current-ticket.md` exists, run `migration/scripts/slice-gate-followups.ps1` / `.sh`. This writes `state/backlog/gate-followup-tasks.jsonl`, `state/backlog/gate-followup-backlog.md`, and `current-ticket.md`; route that ticket through `migration-change-reviewer` before executor work.

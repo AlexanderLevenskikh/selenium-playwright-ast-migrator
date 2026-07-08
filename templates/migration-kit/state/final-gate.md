@@ -11,7 +11,7 @@ Do not fill this file by hand as proof. Run:
 ./migration/scripts/check-final-gate.ps1 -Workspace migration
 ```
 
-The script writes `state/final-gate-result.md/json` and `state/continuation-decision.md/json`; those files are the gate evidence and continuation decision.
+The script writes `state/final-gate-result.md/json` and `state/continuation-decision.md/json`; those files are the gate evidence and continuation decision. If the gate/sentinel diagnostics are blocking and there is no bounded ticket yet, the continuation decision may name `migration/scripts/slice-gate-followups.ps1`; run it to create `state/backlog/gate-followup-tasks.jsonl`, `state/backlog/gate-followup-backlog.md`, and `current-ticket.md` before another wave.
 
 For strict forensic final checks, add optional switches:
 

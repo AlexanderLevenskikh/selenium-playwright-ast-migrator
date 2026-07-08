@@ -227,7 +227,7 @@ The kit includes a forensic session export path for process debugging:
 
 The generated artifact lives at `migration/runs/<run-id>/opencode-session-export.md`. When native OpenCode transcript export is unavailable, the script creates a best-effort export so `harness-sentinel` can still inspect traces, state, and observations without pretending a transcript exists.
 
-`harness-sentinel` is the process tester. It writes `migration/runs/<run-id>/sentinel/sentinel-report.md` and records findings with `migration/scripts/write-sentinel-finding.*`. High/critical agent-executable findings are routed back into bounded hardening tasks instead of being handed to the user as vague advice.
+`harness-sentinel` is the process tester. It writes `migration/runs/<run-id>/sentinel/sentinel-report.md` and records findings with `migration/scripts/write-sentinel-finding.*`. High/critical agent-executable findings are routed back into bounded hardening tasks instead of being handed to the user as vague advice. `migration/scripts/slice-gate-followups.ps1` / `.sh` turns final-gate and sentinel diagnostics into `state/backlog/gate-followup-tasks.jsonl`, `state/backlog/gate-followup-backlog.md`, and `current-ticket.md` before another wave starts.
 
 
 Sentinel inspections must be finalized with `migration/scripts/complete-sentinel-inspection.ps1` or `.sh`; final gate treats a missing active-run `sentinel-inspection.json` as a process defect.

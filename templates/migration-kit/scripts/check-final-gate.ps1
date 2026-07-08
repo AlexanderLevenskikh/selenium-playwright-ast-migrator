@@ -1098,6 +1098,19 @@ function Find-ContinuationCandidate($Sources) {
     return $null
 }
 
+
+function New-GateFollowupSlicerCandidate([string]$WorkspacePath, $Results) {
+    $failed = @($Results | Where-Object { -not $_.passed })
+    if ($failed.Count -eq 0) { return $null }
+
+    $slicerPs = Join-Path $WorkspacePath "scripts/slice-gate-followups.ps1"
+    $slicerSh = Join-Path $WorkspacePath "scripts/slice-gate-followups.sh"
+    if (-not (Test-Path $slicerPs) -and -not (Test-Path $slicerSh)) { return $null }
+
+    $failedNames = ($failed | ForEach-Object { $_.name }) -join ", "
+    return New-ContinuationCandidate "gate-followup-slicer" "Run migration/scripts/slice-gate-followups.ps1 -Workspace migration to convert failed final-gate/sentinel diagnostics into migration/current-ticket.md before the next wave." "failed checks: $failedNames"
+}
+
 function New-ContinuationDecision([bool]$Passed, $Results, $Candidate, [bool]$HasNonFinalStatus) {
     if ($HasNonFinalStatus -and $Candidate -ne $null) {
         return [pscustomobject][ordered]@{
@@ -1114,6 +1127,18 @@ function New-ContinuationDecision([bool]$Passed, $Results, $Candidate, [bool]$Ha
     $terminalFailures = @($Results | Where-Object { (-not $_.passed) -and ($terminalGateNames -contains $_.name) })
 
     if ($terminalFailures.Count -gt 0) {
+        if ($Candidate -ne $null -and [string]$Candidate.source -eq "gate-followup-slicer") {
+            return [pscustomobject][ordered]@{
+                status = "CONTINUE_REQUIRED"
+                protocol = "Guard/scope/harness-policy failures are terminal for migration execution, but they must first be sliced into bounded gate follow-up tasks before a user-facing handoff. Do not start another wave."
+                nextAction = $Candidate.action
+                source = $Candidate.source
+                evidence = $Candidate.evidence
+                mustContinueBeforeUserMessage = $true
+                gateFollowupSlicer = "migration/scripts/slice-gate-followups.ps1"
+            }
+        }
+
         return [pscustomobject][ordered]@{
             status = "BLOCKED_BY_GATE"
             protocol = "Do not continue until guard/scope/harness-policy failures are fixed or reverted."
@@ -1200,6 +1225,8 @@ $guardFiles = @(
     "scripts/write-agent-skill-usage.sh",
     "scripts/record-agent-skill-profile.ps1",
     "scripts/record-agent-skill-profile.sh",
+    "scripts/slice-gate-followups.ps1",
+    "scripts/slice-gate-followups.sh",
     "scripts/export-opencode-session.ps1",
     "scripts/export-opencode-session.sh",
     "scripts/write-sentinel-finding.ps1",
@@ -1436,6 +1463,10 @@ if ($null -eq $continuationCandidate) {
             $hasNonFinalStatus = $true
         }
     }
+}
+
+if ($null -eq $continuationCandidate -and -not $passed) {
+    $continuationCandidate = New-GateFollowupSlicerCandidate $workspacePath $results
 }
 
 $continuation = New-ContinuationDecision $passed $results $continuationCandidate $hasNonFinalStatus

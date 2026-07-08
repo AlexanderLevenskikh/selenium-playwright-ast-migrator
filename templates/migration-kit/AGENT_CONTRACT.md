@@ -65,7 +65,7 @@ Memory safety rules:
 
 17. Each supervised run should produce a forensic session artifact at `runs/<run-id>/opencode-session-export.md`. Use `scripts/export-opencode-session.ps1`/`.sh`; if a native OpenCode transcript is unavailable, create a best-effort export and preserve observable session excerpts in `runs/<run-id>/session-observations.jsonl`. Do not invent transcript content.
 18. `harness-sentinel` is the process tester. It scans session exports, trace/events, machine-readable state, prompts, and OpenCode config for process bugs such as `PERMISSION_BYPASS_ATTEMPT`, `APPEND_ONLY_VIOLATION`, `STATE_CONTRADICTION`, `PREMATURE_DONE`, `HUMAN_HANDOFF_WITHOUT_BLOCKER`, `FULL_MIGRATION_IN_WAVE_MODE`, and `STALE_ROOT_OPENCODE_CONFIG`.
-19. Open high/critical sentinel findings that are agent-executable must be routed to `migration-task-slicer` as bounded process-hardening tasks before a final handoff. Sentinel recommendations are not vague advice to the user unless they are explicitly non-agent-executable.
+19. Open high/critical sentinel findings that are agent-executable must be routed to `migration-task-slicer` as bounded process-hardening tasks before a final handoff. Sentinel recommendations are not vague advice to the user unless they are explicitly non-agent-executable. If final gate/sentinel diagnostics exist but no bounded ticket exists yet, run `migration/scripts/slice-gate-followups.ps1` / `.sh` to create `state/backlog/gate-followup-tasks.jsonl`, `state/backlog/gate-followup-backlog.md`, and `current-ticket.md`.
 
 
 Sentinel inspections must be finalized with `migration/scripts/complete-sentinel-inspection.ps1` or `.sh`; final gate treats a missing active-run `sentinel-inspection.json` as a process defect.
