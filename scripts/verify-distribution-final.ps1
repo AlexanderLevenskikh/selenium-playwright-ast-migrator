@@ -63,11 +63,27 @@ Invoke-Step "Node syntax checks" {
 
 Invoke-Step "Bash syntax checks" {
     if (Get-Command bash -ErrorAction SilentlyContinue) {
-        bash -n scripts/pack-npm-wrapper.sh
-        bash -n scripts/publish-npm-wrapper.sh
-        bash -n scripts/smoke-npm-registry-install.sh
-        bash -n scripts/diagnose-install.sh
-        bash -n scripts/verify-distribution-final.sh
+        $bashScripts = @(
+            "scripts/pack-npm-wrapper.sh",
+            "scripts/publish-npm-wrapper.sh",
+            "scripts/smoke-npm-registry-install.sh",
+            "scripts/diagnose-install.sh",
+            "scripts/verify-distribution-final.sh"
+        )
+
+        $trackedShellScripts = git ls-files -- "*.sh"
+        foreach ($script in $trackedShellScripts) {
+            if ($bashScripts -notcontains $script) {
+                $bashScripts += $script
+            }
+        }
+
+        foreach ($script in $bashScripts) {
+            bash -n $script
+            if ($LASTEXITCODE -ne 0) {
+                throw "bash -n failed for $script with exit code $LASTEXITCODE"
+            }
+        }
     }
     else {
         Write-Host "bash not found; skipping bash -n checks."

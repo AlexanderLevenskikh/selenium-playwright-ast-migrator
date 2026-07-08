@@ -86,6 +86,13 @@ The smoke installs the package into a temporary local tool manifest, runs `--hel
 ./scripts/verify-agent-cli-bundle.ps1 -BundleDirectory artifacts/agent-cli-bundle/tool -RunHelp
 ```
 
+Bash/Linux/macOS/WSL pair:
+
+```bash
+scripts/package-agent-cli-bundle.sh -Runtime linux-x64 -Output artifacts/agent-cli-bundle -NoSelfContained
+scripts/verify-agent-cli-bundle.sh -BundleDirectory artifacts/agent-cli-bundle/tool -RunHelp
+```
+
 For Linux CI smoke, use a framework-dependent bundle:
 
 ```powershell
@@ -100,6 +107,12 @@ For Linux CI smoke, use a framework-dependent bundle:
   -Version 0.0.0-preview.1
 ```
 
+Bash/Linux/macOS/WSL pair:
+
+```bash
+scripts/package-standalone.sh -Version 0.0.0-preview.1
+```
+
 The release directory must contain the versioned and latest-alias archives for `win-x64`, `linux-x64`, `osx-x64`, and `osx-arm64`, plus `checksums.sha256` and `standalone-release-manifest.json`.
 
 Verify the complete release artifact set before uploading it:
@@ -107,6 +120,12 @@ Verify the complete release artifact set before uploading it:
 ```powershell
 ./scripts/verify-release-artifacts.ps1 `
   -Version 0.0.0-preview.1
+```
+
+Bash/Linux/macOS/WSL pair:
+
+```bash
+scripts/verify-release-artifacts.sh -Version 0.0.0-preview.1
 ```
 
 9. Pack the npm wrapper and verify that the `.tgz` is attached to GitHub Release assets:
@@ -129,6 +148,15 @@ The npm package is a thin wrapper that downloads the standalone release archives
 ./scripts/verify-standalone-package.ps1 `
   -ArchivePath artifacts/release/selenium-pw-migrator-0.0.0-preview.1-win-x64.zip `
   -ChecksumsPath artifacts/release/checksums.sha256 `
+  -RunHelp
+```
+
+Bash/Linux/macOS/WSL pair:
+
+```bash
+scripts/verify-standalone-package.sh \
+  -ArchivePath artifacts/release/selenium-pw-migrator-0.0.0-preview.1-linux-x64.tar.gz \
+  -ChecksumsPath artifacts/release/checksums.sha256 \
   -RunHelp
 ```
 

@@ -209,6 +209,102 @@ function Test-OpenSentinelBlockingFindings([string]$WorkspacePath, [ref]$Detail)
     return $true
 }
 
+
+function Test-AgentSkillUsageEvidence([string]$WorkspacePath, [string]$LatestRunId, [ref]$Detail) {
+    $skillMap = Join-Path $WorkspacePath "agent-skills/skill-map.md"
+    $manifest = Join-Path $WorkspacePath "agent-skills/manifest.json"
+    if (-not (Test-Path $skillMap) -and -not (Test-Path $manifest)) {
+        $Detail.Value = "agent skill layer not installed"
+        return $true
+    }
+
+    if ([string]::IsNullOrWhiteSpace($LatestRunId)) {
+        $Detail.Value = "latest run id unavailable; cannot verify agent skill usage evidence"
+        return $false
+    }
+
+    $runSkillDir = Join-Path $WorkspacePath "runs/$LatestRunId/skills"
+    $summaryPath = Join-Path $runSkillDir "applied-skills.md"
+    $runLedger = Join-Path $runSkillDir "agent-skill-usage.jsonl"
+    $stateLedger = Join-Path $WorkspacePath "state/agent-skill-usage.jsonl"
+
+    if (-not (Test-Path $summaryPath)) {
+        $Detail.Value = "missing $summaryPath; run scripts/write-agent-skill-usage.ps1 before final handoff"
+        return $false
+    }
+
+    $paths = @()
+    if (Test-Path $runLedger) { $paths += $runLedger }
+    if (Test-Path $stateLedger) { $paths += $stateLedger }
+    if ($paths.Count -eq 0) {
+        $Detail.Value = "missing agent skill usage ledger for $LatestRunId; run scripts/write-agent-skill-usage.ps1"
+        return $false
+    }
+
+    $skills = New-Object System.Collections.Generic.List[string]
+    $invalid = New-Object System.Collections.Generic.List[string]
+    foreach ($path in ($paths | Sort-Object -Unique)) {
+        $lineNumber = 0
+        foreach ($line in (Get-Content -Path $path -ErrorAction SilentlyContinue)) {
+            $lineNumber += 1
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            try {
+                $entry = $line | ConvertFrom-Json -ErrorAction Stop
+            }
+            catch {
+                $invalid.Add("${path}:$lineNumber")
+                continue
+            }
+
+            if ([string]$entry.runId -ne $LatestRunId) { continue }
+            $skillName = [string]$entry.skillName
+            $schemaVersion = [string]$entry.schemaVersion
+            if ([string]::IsNullOrWhiteSpace($skillName)) {
+                $invalid.Add("${path}:$lineNumber missing skillName")
+                continue
+            }
+            if ($schemaVersion -ne "agent-skill-usage/v1") {
+                $invalid.Add("${path}:$lineNumber unexpected schemaVersion '$schemaVersion'")
+                continue
+            }
+            if ($skillName -notmatch '^[a-z0-9][a-z0-9._-]*$') {
+                $invalid.Add("${path}:$lineNumber invalid skillName '$skillName'")
+                continue
+            }
+
+            $skillFile = Join-Path $WorkspacePath "agent-skills/$skillName/SKILL.md"
+            if (-not (Test-Path $skillFile)) {
+                $invalid.Add("${path}:$lineNumber unknown skill '$skillName'")
+                continue
+            }
+
+            $skills.Add($skillName)
+        }
+    }
+
+    if ($invalid.Count -gt 0) {
+        $Detail.Value = "invalid agent skill usage evidence: " + ($invalid -join "; ")
+        return $false
+    }
+
+    $uniqueSkills = @($skills | Sort-Object -Unique)
+    if ($uniqueSkills.Count -eq 0) {
+        $Detail.Value = "no latest-run agent skill usage evidence for $LatestRunId; run scripts/write-agent-skill-usage.ps1"
+        return $false
+    }
+
+    $summaryText = Read-TextIfExists $summaryPath
+    foreach ($skill in $uniqueSkills) {
+        if ($summaryText -notmatch [regex]::Escape($skill)) {
+            $Detail.Value = "applied-skills.md does not mention recorded skill '$skill'"
+            return $false
+        }
+    }
+
+    $Detail.Value = "applied agent skill evidence for ${LatestRunId}: " + ($uniqueSkills -join ", ")
+    return $true
+}
+
 function Find-RunIds([string]$Text) {
     if ([string]::IsNullOrWhiteSpace($Text)) {
         return @()
@@ -917,7 +1013,9 @@ $checksumDetail = ""
 $guardFiles = @(
     "scripts/check-scope.ps1",
     "scripts/check-final-gate.ps1",
-    "scripts/check-harness-policy.ps1"
+    "scripts/check-harness-policy.ps1",
+    "scripts/write-agent-skill-usage.ps1",
+    "scripts/write-agent-skill-usage.sh"
 )
 $checksumOk = Test-GuardChecksums $workspacePath $guardFiles ([ref]$checksumDetail)
 Add-Result $results "guard-checksums" $checksumOk $checksumDetail
@@ -1085,6 +1183,10 @@ Add-Result $results "sentinel-inspection-present" $sentinelInspectionOk $sentine
 $sentinelDetail = ""
 $sentinelOk = Test-OpenSentinelBlockingFindings $workspacePath ([ref]$sentinelDetail)
 Add-Result $results "sentinel-open-critical-findings" $sentinelOk $sentinelDetail
+
+$skillUsageDetail = ""
+$skillUsageOk = Test-AgentSkillUsageEvidence $workspacePath $latestRunId ([ref]$skillUsageDetail)
+Add-Result $results "agent-skill-usage-evidence" $skillUsageOk $skillUsageDetail
 
 $passed = @($results | Where-Object { -not $_.passed }).Count -eq 0
 $continuationSources = @()

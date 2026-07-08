@@ -42,6 +42,9 @@ try {
         '^templates/migration-kit/README\.md$',
         '^templates/migration-kit/prompts/kickoff-prompt\.txt$',
         '^templates/migration-kit/agent-skills/skill-map\.md$',
+        '^templates/migration-kit/agent-skills/manifest\.json$',
+        '^templates/migration-kit/scripts/write-agent-skill-usage\.ps1$',
+        '^templates/migration-kit/scripts/write-agent-skill-usage\.sh$',
         '^scripts/install-migration-kit\.ps1$'
     )
 

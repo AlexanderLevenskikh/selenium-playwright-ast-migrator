@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "migration-agent-skills/v1",
+  "description": "Reusable behavior contracts installed with the Harness Kit. Skills guide agents but never grant permissions.",
+  "coreSkills": [
+    {
+      "name": "plow-ahead",
+      "path": "agent-skills/plow-ahead/SKILL.md",
+      "requiredFor": ["autonomous continuation", "routine ambiguity"]
+    },
+    {
+      "name": "read-the-damn-docs",
+      "path": "agent-skills/read-the-damn-docs/SKILL.md",
+      "requiredFor": ["dependency/API/SDK/CLI/framework/browser/CI/auth changes"]
+    },
+    {
+      "name": "agent-watchdog",
+      "path": "agent-skills/agent-watchdog/SKILL.md",
+      "requiredFor": ["claim audit", "handoff review"]
+    },
+    {
+      "name": "efficient-frontier",
+      "path": "agent-skills/efficient-frontier/SKILL.md",
+      "requiredFor": ["broad wave/TODO/log decomposition"]
+    },
+    {
+      "name": "quick-recap",
+      "path": "agent-skills/quick-recap/SKILL.md",
+      "requiredFor": ["user-facing handoff"]
+    },
+    {
+      "name": "plan-arbiter",
+      "path": "agent-skills/plan-arbiter/SKILL.md",
+      "requiredFor": ["competing plans"]
+    }
+  ],
+  "usageLedger": {
+    "global": "state/agent-skill-usage.jsonl",
+    "perRun": "runs/<run-id>/skills/agent-skill-usage.jsonl",
+    "humanSummary": "runs/<run-id>/skills/applied-skills.md",
+    "writer": "scripts/write-agent-skill-usage.ps1"
+  },
+  "invariants": [
+    "Skills never override AGENT_CONTRACT.md, harness-policy.json, scope guard, OpenCode permissions, or final gate.",
+    "A skill that materially changes planning, implementation, review, or handoff must be recorded with write-agent-skill-usage.",
+    "Final handoff must include quick-recap status and evidence, not only a cheerful summary."
+  ]
+}

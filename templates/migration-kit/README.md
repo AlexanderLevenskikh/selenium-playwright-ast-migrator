@@ -18,6 +18,9 @@ It is intentionally file-based so an AI agent can resume after context loss.
 
 Reusable behavior contracts live under `agent-skills/`:
 
+Applied skills are recorded with `scripts/write-agent-skill-usage.ps1` / `.sh` into `state/agent-skill-usage.jsonl` and `runs/<run-id>/skills/applied-skills.md`; final gate checks this evidence in skill-enabled workspaces.
+
+
 - `agent-skills/skill-map.md` tells each role which skill to load.
 - `agent-skills/plow-ahead/SKILL.md` keeps bounded autopilot work moving through routine ambiguity.
 - `agent-skills/read-the-damn-docs/SKILL.md` prevents dependency/API work from relying on stale model memory.

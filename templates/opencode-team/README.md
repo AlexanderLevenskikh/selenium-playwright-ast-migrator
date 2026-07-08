@@ -17,7 +17,7 @@ This README only describes the reusable OpenCode team template. Do not use it as
 - `orchestrator` — главный агент/тимлид, сам не редактирует файлы.
 - `executor` — исполнитель, делает маленькие scoped-правки.
 - `watchdog` — контролёр правил/политик/дисциплины, read-only.
-- `migration/agent-skills/*/SKILL.md` — маленькие переиспользуемые контракты поведения: автономность, docs-first, recap, read-the-damn-docs, plow-ahead, agent-watchdog, efficient-frontier, quick-recap и plan-arbiter.
+- `migration/agent-skills/*/SKILL.md` — маленькие переиспользуемые контракты поведения: `plow-ahead`, `read-the-damn-docs`, `agent-watchdog`, `efficient-frontier`, `quick-recap` и `plan-arbiter`.
 - `reviewer` — ревьюер качества текущего diff, read-only.
 - `migration-researcher` — post-final исследователь TODO/source truth, пишет только research-артефакты и `todo-inventory.json`.
 - `migration-research-lead` — “научный руководитель” research-а: проверяет counts/evidence/actionability и отправляет слабый research на bounded revision.

@@ -93,6 +93,7 @@ if ((Test-Path $runPath) -and -not (Test-DirectoryEmpty $runPath) -and -not $For
 }
 
 New-Item -ItemType Directory -Force -Path $runPath | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $runPath "skills") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $workspacePath "state") | Out-Null
 
 $createdAt = [DateTimeOffset]::UtcNow.ToString("o")
@@ -135,8 +136,9 @@ Set-Utf8NoBom (Join-Path $runPath "Plan.md") @"
 5. Run scope guard.
 6. Run relevant verification.
 7. Update handoff and run ledger.
-8. Run final gate only when claiming FINAL.
-9. If final gate writes continuation-decision.json with CONTINUE_REQUIRED, execute one next bounded action before handoff. If it writes FINAL, stop for review unless the user explicitly requested continue.
+8. Record any materially applied skill with `scripts/write-agent-skill-usage.ps1` / `.sh`.
+9. Run final gate only when claiming FINAL.
+10. If final gate writes continuation-decision.json with CONTINUE_REQUIRED, execute one next bounded action before handoff. If it writes FINAL, stop for review unless the user explicitly requested continue.
 
 ## Validation commands
 
@@ -159,6 +161,7 @@ Set-Utf8NoBom (Join-Path $runPath "Implement.md") @"
 - After a non-final final gate, read continuation-decision.json.
 - If continuation-decision.json says CONTINUE_REQUIRED, continue with exactly one next bounded action before user-facing handoff. If it says FINAL, stop for review and include one recommended `/supervised-task continue` command; plain continue starts post-final research first.
 - Update trace and state files after meaningful progress.
+- Record applied skills with `migration/scripts/write-agent-skill-usage.ps1` / `.sh` before final handoff.
 
 ## Ask/stop triggers
 
@@ -232,7 +235,10 @@ $runState = [ordered]@{
         implement = "runs/$RunId/Implement.md"
         documentation = "runs/$RunId/Documentation.md"
         trace = "runs/$RunId/trace.jsonl"
+        appliedSkills = "runs/$RunId/skills/applied-skills.md"
+        skillUsage = "runs/$RunId/skills/agent-skill-usage.jsonl"
     }
+    appliedSkills = @()
     latestChecks = [ordered]@{
         scope = "UNKNOWN"
         harnessPolicy = "UNKNOWN"
@@ -241,6 +247,21 @@ $runState = [ordered]@{
 }
 
 Set-Utf8NoBom (Join-Path $workspacePath "state/harness-run.json") ($runState | ConvertTo-Json -Depth 10)
+
+Set-Utf8NoBom (Join-Path $runPath "skills/applied-skills.md") @"
+# Applied Agent Skills
+
+Run id: $RunId
+Status: PENDING
+
+Record each material skill with:
+
+```powershell
+.\migration\scripts\write-agent-skill-usage.ps1 -SkillName plow-ahead -Trigger "autonomous continuation" -Phase planning -Detail "Why this skill mattered."
+```
+
+Final gate checks latest-run skill usage evidence when `migration/agent-skills/skill-map.md` is installed.
+"@
 
 Set-Utf8NoBom (Join-Path $workspacePath "agent-state.md") @"
 # Agent State
@@ -290,7 +311,7 @@ Updated: $createdAt
 
 ## Next autonomous step
 
-Run/check harness policy, then execute the first bounded batch step.
+Run/check harness policy, select the relevant agent skill from migration/agent-skills/skill-map.md, record it with write-agent-skill-usage, then execute the first bounded batch step.
 "@
 
 $ledgerPath = Join-Path $workspacePath "state/run-ledger.md"

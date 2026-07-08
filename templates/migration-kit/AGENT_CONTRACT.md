@@ -14,6 +14,8 @@ Before each major action, restate which rule allows the action.
 9. After a non-final final gate, read `state/continuation-decision.json`; if it says `CONTINUE_REQUIRED`, execute exactly one next bounded action before any user-facing handoff.
 
 9a. Before planning or reviewing a supervised task, read `agent-skills/skill-map.md` and load only the relevant `SKILL.md` contracts. Skills guide behavior; they never override allowed writes, OpenCode permissions, scope guard, harness policy, or final gate.
+9b. If a skill materially affects planning, implementation, review, or handoff, record it with `scripts/write-agent-skill-usage.ps1` / `.sh`; final gate treats missing latest-run skill evidence as a broken handoff for skill-enabled workspaces.
+9c. Keep script changes paired across platforms: any new or changed migration-kit `.ps1` lifecycle script needs a same-name `.sh` companion. A thin Unix wrapper around PowerShell is acceptable when the PowerShell script remains the source of truth.
 
 10. After a successful FINAL/PASS checkpoint, stop and report. Do not start another run or ticket unless the user explicitly says continue or state/continuation-decision.json grants bounded auto-continuation for that exact next action.
 
@@ -54,7 +56,7 @@ Memory safety rules:
 ## Permission and state-integrity rules
 
 14. OpenCode permission denials are authoritative. If an edit/write tool is denied, do not retry the same write through `bash`, PowerShell, Python, `sed`, `tee`, shell redirection, or any other alternate tool. Stop with `BLOCKED_BY_OPENCODE_PERMISSION_DENIED` and report the denied path and intended change.
-15. JSONL ledgers are controlled append-only state; treat them as append-only JSONL ledgers. Do not manually overwrite `state/harness-events.jsonl`, `runs/*/trace.jsonl`, `state/memory/*.jsonl`, or `state/backlog/*.jsonl` with ad-hoc shell writes. Use `write-harness-event` for events/traces, `selenium-pw-migrator memory add` or `write-memory-entry` for memory additions, and `repair-memory-jsonl` only for explicit JSONL repair with backup.
+15. JSONL ledgers are controlled append-only state; treat them as append-only JSONL ledgers. Do not manually overwrite `state/harness-events.jsonl`, `runs/*/trace.jsonl`, `state/memory/*.jsonl`, or `state/backlog/*.jsonl` with ad-hoc shell writes. Use `write-harness-event` for events/traces, `write-agent-skill-usage` for applied skill evidence, `selenium-pw-migrator memory add` or `write-memory-entry` for memory additions, and `repair-memory-jsonl` only for explicit JSONL repair with backup.
 16. Machine-readable state must be consistent before handoff. If `task-slice-result` or reviewer/gate evidence says `BLOCKED_NO_AGENT_EXECUTABLE_TASKS`, `state/continuation-decision.json` must not remain `CONTINUE_REQUIRED`.
 
 

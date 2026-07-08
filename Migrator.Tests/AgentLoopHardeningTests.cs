@@ -398,6 +398,7 @@ public class AgentLoopHardeningTests
             "check-harness-policy",
             "check-scope",
             "new-harness-run",
+            "run-loop-batch",
             "write-harness-event",
         };
 
@@ -458,9 +459,16 @@ public class AgentLoopHardeningTests
 
         var rootPowerShellWrappers = new[]
         {
+            "install-local-tool",
+            "package-agent-cli-bundle",
             "package-standalone",
+            "publish-standalone",
             "run-harness-dashboard-smoke",
             "run-harness-dogfood-smoke",
+            "smoke-npm-wrapper",
+            "verify-agent-cli-bundle",
+            "verify-release-artifacts",
+            "verify-standalone-package",
         };
 
         foreach (var scriptName in rootPowerShellWrappers)
@@ -471,6 +479,37 @@ public class AgentLoopHardeningTests
             Assert.Contains("set -", sh);
             Assert.Contains($"{scriptName}.ps1", sh);
             Assert.Contains("pwsh", sh);
+        }
+
+        var runMigratorTemplateSh = Read("templates/migration-kit/run-migrator-template.sh");
+        Assert.Contains("#!/usr/bin/env", runMigratorTemplateSh);
+        Assert.Contains("set -", runMigratorTemplateSh);
+        Assert.Contains("run-migrator-template.ps1", runMigratorTemplateSh);
+        Assert.Contains("pwsh", runMigratorTemplateSh);
+    }
+
+    [Fact]
+    public void PowerShellLifecycleScripts_HaveShellCompanions()
+    {
+        var repoRoot = Path.GetDirectoryName(FindRepositoryFile("Migrator.sln"))!;
+
+        foreach (var directory in new[] { "scripts", "templates/migration-kit" })
+        {
+            var absoluteDirectory = Path.Combine(repoRoot, directory.Replace('/', Path.DirectorySeparatorChar));
+            var searchOption = directory == "scripts" ? SearchOption.TopDirectoryOnly : SearchOption.AllDirectories;
+
+            foreach (var ps1 in Directory.EnumerateFiles(absoluteDirectory, "*.ps1", searchOption))
+            {
+                var sh = Path.ChangeExtension(ps1, ".sh");
+                var relativePs1 = Path.GetRelativePath(repoRoot, ps1).Replace(Path.DirectorySeparatorChar, '/');
+                var relativeSh = Path.GetRelativePath(repoRoot, sh).Replace(Path.DirectorySeparatorChar, '/');
+
+                Assert.True(File.Exists(sh), $"Missing shell companion for {relativePs1}. Expected {relativeSh}.");
+
+                var shell = File.ReadAllText(sh);
+                Assert.Contains("#!/usr/bin/env", shell);
+                Assert.Contains("set -", shell);
+            }
         }
     }
 
@@ -486,6 +525,11 @@ public class AgentLoopHardeningTests
         var efficientFrontier = Read("templates/migration-kit/agent-skills/efficient-frontier/SKILL.md");
         var quickRecap = Read("templates/migration-kit/agent-skills/quick-recap/SKILL.md");
         var planArbiter = Read("templates/migration-kit/agent-skills/plan-arbiter/SKILL.md");
+        var manifest = Read("templates/migration-kit/agent-skills/manifest.json");
+        var usageWriterPs = Read("templates/migration-kit/scripts/write-agent-skill-usage.ps1");
+        var usageWriterSh = Read("templates/migration-kit/scripts/write-agent-skill-usage.sh");
+        var finalGate = Read("templates/migration-kit/scripts/check-final-gate.ps1");
+        var newHarnessRun = Read("templates/migration-kit/scripts/new-harness-run.ps1");
         var contract = Read("templates/migration-kit/AGENT_CONTRACT.md");
         var kitReadme = Read("templates/migration-kit/README.md");
         var harnessReadme = Read("templates/migration-kit/harness/README.md");
@@ -529,6 +573,13 @@ public class AgentLoopHardeningTests
         Assert.Contains("bounded work packets", efficientFrontier);
         Assert.Contains("Status: GREEN", quickRecap);
         Assert.Contains("HYBRID_PLAN", planArbiter);
+        Assert.Contains("agent-skill-usage/v1", manifest);
+        Assert.Contains("write-agent-skill-usage", usageWriterPs);
+        Assert.Contains("AGENT_SKILL_USAGE_RECORDED", usageWriterPs);
+        Assert.Contains("pwsh", usageWriterSh);
+        Assert.Contains("agent-skill-usage-evidence", finalGate);
+        Assert.Contains("Test-AgentSkillUsageEvidence", finalGate);
+        Assert.Contains("runs/$RunId/skills/applied-skills.md", newHarnessRun);
 
         Assert.Contains("migration/agent-skills/skill-map.md", orchestrator);
         Assert.Contains("migration/agent-skills/plow-ahead/SKILL.md", orchestrator);
@@ -697,6 +748,7 @@ public class AgentLoopHardeningTests
         Assert.Contains("sentinel-open-critical-findings", finalGate);
         Assert.Contains("Test-SentinelInspectionPresent", finalGate);
         Assert.Contains("Test-OpenSentinelBlockingFindings", finalGate);
+        Assert.Contains("agent-skill-usage-evidence", finalGate);
         Assert.Contains("nested-migration-workspace", finalGate);
     }
 
@@ -1375,6 +1427,48 @@ public class AgentLoopHardeningTests
 
 
     [Fact]
+    public void FinalGate_RequiresLatestRunAgentSkillUsageEvidenceWhenSkillLayerInstalled()
+    {
+        using (var repo = TemporaryGitRepo.Create())
+        {
+            PrepareFinalGateWorkspace(repo, latestRunId: "run-014", explicitStatus: "Final status: NOT RUNTIME READY", includeProjectVerify: false, configPassed: true);
+            repo.CopyRepositoryFile("templates/migration-kit/agent-skills/skill-map.md", "migration/agent-skills/skill-map.md");
+            repo.CopyRepositoryFile("templates/migration-kit/agent-skills/plow-ahead/SKILL.md", "migration/agent-skills/plow-ahead/SKILL.md");
+            repo.Git("add migration/agent-skills");
+            repo.Git("commit -m add-agent-skills");
+
+            var result = repo.RunFinalGate();
+            var report = repo.Read("migration/state/final-gate-result.json");
+            var compact = CompactJsonLike(report);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("\"name\":\"agent-skill-usage-evidence\"", compact);
+            Assert.Contains("\"passed\":false", compact);
+            Assert.Contains("write-agent-skill-usage", report);
+        }
+
+        using (var repo = TemporaryGitRepo.Create())
+        {
+            PrepareFinalGateWorkspace(repo, latestRunId: "run-015", explicitStatus: "Final status: NOT RUNTIME READY", includeProjectVerify: false, configPassed: true);
+            repo.CopyRepositoryFile("templates/migration-kit/agent-skills/skill-map.md", "migration/agent-skills/skill-map.md");
+            repo.CopyRepositoryFile("templates/migration-kit/agent-skills/plow-ahead/SKILL.md", "migration/agent-skills/plow-ahead/SKILL.md");
+            repo.Write("migration/runs/run-015/skills/agent-skill-usage.jsonl", "{ \"schemaVersion\": \"agent-skill-usage/v1\", \"runId\": \"run-015\", \"skillName\": \"plow-ahead\" }\n");
+            repo.Write("migration/runs/run-015/skills/applied-skills.md", "# Applied Agent Skills\n\nRun id: run-015\n\n- `plow-ahead`\n");
+            repo.Git("add migration");
+            repo.Git("commit -m add-agent-skill-usage");
+
+            var result = repo.RunFinalGate();
+            var report = repo.Read("migration/state/final-gate-result.json");
+            var compact = CompactJsonLike(report);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Contains("\"name\":\"agent-skill-usage-evidence\"", compact);
+            Assert.Contains("applied agent skill evidence for run-015: plow-ahead", report);
+        }
+    }
+
+
+    [Fact]
     public void PublicDocsKeepStableHappyPathAndExperimentalPathsSeparated()
     {
         var readme = Read("README.md");
@@ -1409,6 +1503,7 @@ public class AgentLoopHardeningTests
             "new-harness-run",
             "write-harness-event",
             "write-memory-entry",
+            "write-agent-skill-usage",
             "repair-memory-jsonl",
             "build-harness-dashboard"
         })
@@ -1644,7 +1739,9 @@ public class AgentLoopHardeningTests
             "scripts/write-sentinel-finding.ps1",
             "scripts/write-sentinel-finding.sh",
             "scripts/complete-sentinel-inspection.ps1",
-            "scripts/complete-sentinel-inspection.sh"
+            "scripts/complete-sentinel-inspection.sh",
+            "scripts/write-agent-skill-usage.ps1",
+            "scripts/write-agent-skill-usage.sh"
         };
 
     static string BuildGuardChecksumsJson(string workspacePath)

@@ -45,3 +45,6 @@ The agent must stop with a concrete blocker when an action touches a denied cate
 ## Non-goal
 
 This harness does not guarantee that generated tests are correct. It guarantees that the agent's work is scoped, inspectable, resumable, and gated.
+
+
+Applied skills are recorded with `scripts/write-agent-skill-usage.ps1` / `.sh` into `state/agent-skill-usage.jsonl` and `runs/<run-id>/skills/applied-skills.md`.

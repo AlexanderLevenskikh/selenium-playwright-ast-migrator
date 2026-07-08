@@ -19,7 +19,8 @@ Use this map to load only the skill that matches the current situation. Do not p
 2. Read the active run files: `Prompt.md`, `Plan.md`, `Implement.md`, `Documentation.md`, and `trace.jsonl`.
 3. Select one or two skills from this map based on the task.
 4. Apply the skill only inside the current Harness Kit permissions and allowed writes.
-5. Record material decisions in run documentation or harness events.
+5. Record the applied skill with `migration/scripts/write-agent-skill-usage.ps1` or `.sh` whenever it materially changes planning, execution, review, or handoff.
+6. Record material decisions in run documentation or harness events.
 
 ## Non-goals
 
@@ -27,3 +28,4 @@ Use this map to load only the skill that matches the current situation. Do not p
 - Skills are not a reason to skip watchdog/reviewer/final gate.
 - Skills are not a replacement for source truth.
 - Skills must not turn migration-artifact work into real project edits.
+- Skills must be evidence-backed: no final handoff should claim skill-driven behavior without `runs/<run-id>/skills/applied-skills.md`.

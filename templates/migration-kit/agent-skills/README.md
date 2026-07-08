@@ -26,3 +26,17 @@ Skills never override:
 - explicit user constraints.
 
 If a skill and a gate disagree, the gate wins.
+## Usage evidence
+
+A skill is useful only when the run can prove it was actually applied. When a skill materially changes planning, execution, review, or handoff, record it with the kit-owned writer:
+
+```powershell
+.\migration\scripts\write-agent-skill-usage.ps1 -SkillName plow-ahead -Trigger "autonomous continuation" -Phase planning -Detail "Chose the smallest bounded wave instead of asking the user."
+```
+
+```bash
+./migration/scripts/write-agent-skill-usage.sh -SkillName quick-recap -Trigger "final handoff" -Phase handoff -Detail "Prepared GREEN/YELLOW/RED recap with gate evidence."
+```
+
+This appends JSONL evidence to `state/agent-skill-usage.jsonl` and `runs/<run-id>/skills/agent-skill-usage.jsonl`, updates `runs/<run-id>/skills/applied-skills.md`, and emits a harness trace event. In skill-enabled workspaces, final gate requires latest-run skill usage evidence before a final handoff.
+

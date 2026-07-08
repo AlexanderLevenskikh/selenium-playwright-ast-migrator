@@ -2,15 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PS_SCRIPT="$SCRIPT_DIR/package-standalone.ps1"
-
-if [[ $# -eq 0 ]]; then
-  set -- -Version "0.0.0-preview.1"
-elif [[ "${1:-}" != -* ]]; then
-  version="$1"
-  shift
-  set -- -Version "$version" "$@"
-fi
+PS_SCRIPT="$SCRIPT_DIR/run-loop-batch.ps1"
 
 if command -v pwsh >/dev/null 2>&1; then
   exec pwsh -NoProfile -ExecutionPolicy Bypass -File "$PS_SCRIPT" "$@"
@@ -20,5 +12,5 @@ if command -v powershell >/dev/null 2>&1; then
   exec powershell -NoProfile -ExecutionPolicy Bypass -File "$PS_SCRIPT" "$@"
 fi
 
-echo "PowerShell 7 (pwsh) or Windows PowerShell is required to run package-standalone.ps1 from bash." >&2
+echo "PowerShell 7 (pwsh) or Windows PowerShell is required to run run-loop-batch.ps1 from bash." >&2
 exit 127

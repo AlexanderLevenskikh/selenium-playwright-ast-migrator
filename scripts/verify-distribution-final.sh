@@ -72,11 +72,28 @@ else
 fi
 
 step "Bash syntax checks"
-bash -n scripts/pack-npm-wrapper.sh
-bash -n scripts/publish-npm-wrapper.sh
-bash -n scripts/smoke-npm-registry-install.sh
-bash -n scripts/diagnose-install.sh
-bash -n scripts/verify-distribution-final.sh
+bash_scripts=(
+  scripts/pack-npm-wrapper.sh
+  scripts/publish-npm-wrapper.sh
+  scripts/smoke-npm-registry-install.sh
+  scripts/diagnose-install.sh
+  scripts/verify-distribution-final.sh
+)
+while IFS= read -r script; do
+  found=false
+  for known in "${bash_scripts[@]}"; do
+    if [[ "$known" == "$script" ]]; then
+      found=true
+      break
+    fi
+  done
+  if [[ "$found" == "false" ]]; then
+    bash_scripts+=("$script")
+  fi
+done < <(git ls-files '*.sh')
+for script in "${bash_scripts[@]}"; do
+  bash -n "$script"
+done
 
 if [[ "$skip_dotnet_tests" != "true" ]]; then
   step "dotnet test"
@@ -88,13 +105,13 @@ scripts/diagnose-install.sh --skip-package-managers || true
 
 if [[ "$run_packaging_smoke" == "true" ]]; then
   step "Standalone + npm wrapper local packaging smoke"
-  pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/package-standalone.ps1 -Version "$version" -Runtimes win-x64
-  pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-npm-wrapper.ps1 \
+  scripts/package-standalone.sh -Version "$version" -Runtimes win-x64
+  scripts/smoke-npm-wrapper.sh \
     -Version "$version" \
     -Runtime win-x64 \
     -ArchivePath "artifacts/release/selenium-pw-migrator-$version-win-x64.zip" \
     -ChecksumsPath "artifacts/release/checksums.sha256"
-  pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/pack-npm-wrapper.ps1 -Version "$version"
+  scripts/pack-npm-wrapper.sh "$version"
 fi
 
 if [[ "$run_npm_registry_smoke" == "true" ]]; then
