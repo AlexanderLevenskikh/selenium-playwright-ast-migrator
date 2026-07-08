@@ -281,14 +281,15 @@ internal static class MigrationCommand
             MissingFiles: missingFiles.ToArray());
 
         File.WriteAllText(Path.Combine(outPath, "input-scope.json"), JsonSerializer.Serialize(scope, JsonOptions));
-        File.WriteAllLines(Path.Combine(outPath, "selected-tests.txt"), wave.Tests.Select(t => t.File + "::" + t.TestId));
+        var selectedTestsPath = Path.Combine(outPath, "selected-tests.txt");
+        File.WriteAllLines(selectedTestsPath, wave.Tests.Select(t => t.File + "::" + t.TestId));
         WriteWaveConfigDelta(outPath, options.Workspace, wave, options);
         WriteWaveMemoryDelta(outPath, wave, copiedFiles.Count, missingFiles);
-        WriteWaveCommands(outPath, sourceScopeDir, generatedDir, options);
-        WriteWaveSummary(outPath, wave, scope, options, copiedFiles.Count, missingFiles);
+        WriteWaveCommands(outPath, sourceScopeDir, generatedDir, options, selectedTestsPath);
+        WriteWaveSummary(outPath, wave, scope, options, copiedFiles.Count, missingFiles, selectedTestsPath);
 
         var execution = options.ExecuteMigrate
-            ? TryExecuteMigrate(outPath, sourceScopeDir, generatedDir, options)
+            ? TryExecuteMigrate(outPath, sourceScopeDir, generatedDir, options, selectedTestsPath)
             : new WaveMigrateExecution("prepared", "--execute-migrate false; generated/ contains a README placeholder until migrate is run.", 0);
         WriteWaveStatus(outPath, wave, execution, missingFiles);
 
@@ -673,15 +674,15 @@ internal static class MigrationCommand
         File.WriteAllLines(Path.Combine(outPath, "memory-delta.jsonl"), lines);
     }
 
-    static void WriteWaveCommands(string outPath, string sourceScopeDir, string generatedDir, MigrationOptions options)
+    static void WriteWaveCommands(string outPath, string sourceScopeDir, string generatedDir, MigrationOptions options, string selectedTestsPath)
     {
-        var migrateArgs = BuildMigrateCommand(sourceScopeDir, generatedDir, options);
+        var migrateArgs = BuildMigrateCommand(sourceScopeDir, generatedDir, options, selectedTestsPath);
         File.WriteAllText(Path.Combine(outPath, "run-migrate.sh"), "#!/usr/bin/env bash\nset -euo pipefail\n" + migrateArgs + "\n");
         File.WriteAllText(Path.Combine(outPath, "run-migrate.ps1"), "$ErrorActionPreference = 'Stop'\n" + migrateArgs + "\n");
         File.WriteAllText(Path.Combine(generatedDir, "README.md"), "# Generated output placeholder\n\nRun `../run-migrate.sh` or `../run-migrate.ps1`, or rerun `migration run-wave --execute-migrate true`, to generate this wave.\n");
     }
 
-    static string BuildMigrateCommand(string sourceScopeDir, string generatedDir, MigrationOptions options)
+    static string BuildMigrateCommand(string sourceScopeDir, string generatedDir, MigrationOptions options, string? selectedTestsPath = null)
     {
         var parts = new List<string>
         {
@@ -707,10 +708,15 @@ internal static class MigrationCommand
             parts.Add("--generation-policy");
             parts.Add(options.GenerationPolicy);
         }
+        if (!string.IsNullOrWhiteSpace(selectedTestsPath))
+        {
+            parts.Add("--selected-tests");
+            parts.Add(QuoteForShell(Path.GetFullPath(selectedTestsPath)));
+        }
         return string.Join(" ", parts);
     }
 
-    static void WriteWaveSummary(string outPath, MigrationWave wave, MigrationWaveInputScope scope, MigrationOptions options, int copiedFiles, IReadOnlyList<string> missingFiles)
+    static void WriteWaveSummary(string outPath, MigrationWave wave, MigrationWaveInputScope scope, MigrationOptions options, int copiedFiles, IReadOnlyList<string> missingFiles, string selectedTestsPath)
     {
         var sb = new StringBuilder();
         sb.AppendLine("# Migration wave run");
@@ -726,6 +732,7 @@ internal static class MigrationCommand
         sb.AppendLine("## Safety boundary");
         sb.AppendLine();
         sb.AppendLine("- This wave is bounded to `source-scope/` and `generated/`.");
+        sb.AppendLine("- `run-migrate` passes `--selected-tests selected-tests.txt`, so files copied into `source-scope/` cannot silently expand the wave to every test in those files.");
         sb.AppendLine("- `config-delta.json` is observed/reviewable only; do not merge it directly.");
         sb.AppendLine("- `memory-delta.jsonl` is guidance, not authority.");
         sb.AppendLine("- Assertions must not be suppressed.");
@@ -734,7 +741,7 @@ internal static class MigrationCommand
         sb.AppendLine("## Execute migration for this wave");
         sb.AppendLine();
         sb.AppendLine("```bash");
-        sb.AppendLine(BuildMigrateCommand(scope.SourceScopePath, scope.GeneratedOutputPath, options));
+        sb.AppendLine(BuildMigrateCommand(scope.SourceScopePath, scope.GeneratedOutputPath, options, selectedTestsPath));
         sb.AppendLine("```");
         sb.AppendLine();
         sb.AppendLine("Or rerun the wave with execution enabled:");
@@ -779,7 +786,7 @@ internal static class MigrationCommand
         File.WriteAllText(Path.Combine(outPath, "run-summary.json"), JsonSerializer.Serialize(json, JsonOptions));
     }
 
-    static WaveMigrateExecution TryExecuteMigrate(string outPath, string sourceScopeDir, string generatedDir, MigrationOptions options)
+    static WaveMigrateExecution TryExecuteMigrate(string outPath, string sourceScopeDir, string generatedDir, MigrationOptions options, string selectedTestsPath)
     {
         try
         {
@@ -798,6 +805,8 @@ internal static class MigrationCommand
                 args.AddRange(new[] { "--target-test-framework", options.TargetTestFramework });
             if (!string.IsNullOrWhiteSpace(options.GenerationPolicy))
                 args.AddRange(new[] { "--generation-policy", options.GenerationPolicy });
+            if (!string.IsNullOrWhiteSpace(selectedTestsPath))
+                args.AddRange(new[] { "--selected-tests", Path.GetFullPath(selectedTestsPath) });
 
             var psi = new ProcessStartInfo(processPath)
             {

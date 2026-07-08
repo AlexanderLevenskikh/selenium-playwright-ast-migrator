@@ -417,6 +417,7 @@ internal static class CliCommandCatalog
         sb.AppendLine("  --agent <opencode|codex|generic|manual>");
         sb.AppendLine("                                   Agent handoff preference for start/onboarding.");
         sb.AppendLine("  --max-tests <number>             Pilot slice budget for `pilot` (default: 10).");
+        sb.AppendLine("  --selected-tests <file>          Limit analyze/migrate/verify/verify-project to file::Class.Test entries.");
         sb.AppendLine("  --wizard                         Run init in guided/onboarding mode.");
         sb.AppendLine("  --fix                           Add safe doctor repair plan artifacts.");
         sb.AppendLine("  --dry-run                       Preview doctor fixes without writing project/config files.");

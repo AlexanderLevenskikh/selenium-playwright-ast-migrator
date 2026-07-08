@@ -16,6 +16,7 @@ using Migrator.Core;
 using Migrator.Core.Profiles;
 using Migrator.Core.SourceFrontends;
 using Migrator.Core.Models;
+using Migrator.Core.Models.Ir;
 using Migrator.PlaywrightDotNet;
 using Migrator.PlaywrightTypeScript;
 using Migrator.Roslyn;
@@ -79,6 +80,7 @@ string? afterPath = opts.After;
 string target = opts.Target;
 string source = opts.Source;
 bool sourceExplicit = opts.SourceExplicit;
+string? selectedTestsFile = opts.SelectedTestsFile;
 string? tsProjectPath = opts.TsProject;
 bool recursiveArtifacts = opts.RecursiveArtifacts;
 string irVersion = opts.IrVersion;
@@ -535,6 +537,25 @@ catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
 }
 
 var resultsList = results.ToList();
+if (!string.IsNullOrWhiteSpace(selectedTestsFile) && !File.Exists(selectedTestsFile))
+{
+    Console.Error.WriteLine($"Selected-tests file not found: {selectedTestsFile}");
+    return 2;
+}
+
+var unfilteredResultsCount = resultsList.Count;
+resultsList = ApplySelectedTestsFilter(resultsList, selectedTestsFile, inputPath, renderer, targetBackend, renderIr, sourceFrontend.Source);
+if (!string.IsNullOrWhiteSpace(selectedTestsFile))
+{
+    if (resultsList.Count == 0)
+    {
+        Console.Error.WriteLine($"Selected-tests filter matched no parsed tests: {selectedTestsFile}");
+        return 2;
+    }
+
+    Console.WriteLine($"Selected-tests filter: {resultsList.Sum(r => r.SourceModel.Tests.Count())} test(s) across {resultsList.Count} file(s); parsed files before filter: {unfilteredResultsCount}.");
+}
+
 var summary = BuildSummary(resultsList, out var allUnmapped) with
 {
     GenerationPolicy = new GenerationPolicyReport(generationPolicy, GenerationPolicy.Description(generationPolicy), GenerationPolicy.RiskAnnotations(generationPolicy))
@@ -575,6 +596,150 @@ switch (mode)
 
 int exitCode = ApplyQualityGate(summary, failOnUnsupported, failOnTodo);
 return exitCode;
+
+
+static List<PipelineResult> ApplySelectedTestsFilter(
+    List<PipelineResult> results,
+    string? selectedTestsFile,
+    string inputPath,
+    IRenderer renderer,
+    ITargetBackend targetBackend,
+    string renderIr,
+    SourceSpec? sourceSpec)
+{
+    if (string.IsNullOrWhiteSpace(selectedTestsFile))
+        return results;
+
+    var selectedByFile = ReadSelectedTestsFilter(selectedTestsFile!);
+    if (selectedByFile.Count == 0)
+        return results;
+
+    var baseDir = Directory.Exists(inputPath)
+        ? Path.GetFullPath(inputPath)
+        : (Path.GetDirectoryName(Path.GetFullPath(inputPath)) ?? Directory.GetCurrentDirectory());
+
+    var filtered = new List<PipelineResult>();
+    foreach (var result in results)
+    {
+        var selectedForFile = FindSelectedTestsForResultFile(selectedByFile, baseDir, result.SourceModel.FilePath);
+        if (selectedForFile == null || selectedForFile.Count == 0)
+            continue;
+
+        var sourceTests = result.SourceModel.Tests
+            .Where(test => IsSelectedTest(selectedForFile, result.SourceModel.ClassName, test.Name))
+            .ToArray();
+        if (sourceTests.Length == 0)
+            continue;
+
+        var selectedNames = new HashSet<string>(sourceTests.Select(test => test.Name), StringComparer.OrdinalIgnoreCase);
+        var targetTests = result.TargetModel.Tests
+            .Where(test => selectedNames.Contains(test.Name) || IsSelectedTest(selectedForFile, result.TargetModel.ClassName, test.Name))
+            .ToArray();
+        if (targetTests.Length == 0)
+            continue;
+
+        var sourceModel = result.SourceModel with { Tests = sourceTests };
+        var targetModel = result.TargetModel with { Tests = targetTests };
+        var generated = RenderTargetModelForCli(targetModel, renderer, targetBackend, renderIr, sourceSpec);
+        var report = ReportBuilder.Build(targetModel, generated);
+        filtered.Add(new PipelineResult(sourceModel, targetModel, generated, report));
+    }
+
+    return filtered;
+}
+
+static Dictionary<string, HashSet<string>> ReadSelectedTestsFilter(string selectedTestsFile)
+{
+    var selectedByFile = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+    foreach (var rawLine in File.ReadLines(selectedTestsFile))
+    {
+        var line = rawLine.Trim();
+        if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#", StringComparison.Ordinal))
+            continue;
+
+        var separator = line.IndexOf("::", StringComparison.Ordinal);
+        if (separator <= 0 || separator >= line.Length - 2)
+            continue;
+
+        var file = NormalizeSelectedTestFileKey(line[..separator]);
+        var test = line[(separator + 2)..].Trim();
+        if (string.IsNullOrWhiteSpace(file) || string.IsNullOrWhiteSpace(test))
+            continue;
+
+        if (!selectedByFile.TryGetValue(file, out var tests))
+        {
+            tests = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            selectedByFile[file] = tests;
+        }
+
+        tests.Add(test);
+    }
+
+    return selectedByFile;
+}
+
+static HashSet<string>? FindSelectedTestsForResultFile(Dictionary<string, HashSet<string>> selectedByFile, string baseDir, string sourceFilePath)
+{
+    var fullPath = Path.IsPathRooted(sourceFilePath)
+        ? Path.GetFullPath(sourceFilePath)
+        : Path.GetFullPath(Path.Combine(baseDir, sourceFilePath));
+    var relative = NormalizeSelectedTestFileKey(Path.GetRelativePath(baseDir, fullPath));
+    if (selectedByFile.TryGetValue(relative, out var direct))
+        return direct;
+
+    var fileName = Path.GetFileName(relative);
+    foreach (var entry in selectedByFile)
+    {
+        var candidate = NormalizeSelectedTestFileKey(entry.Key);
+        if (candidate.Equals(relative, StringComparison.OrdinalIgnoreCase)
+            || relative.EndsWith("/" + candidate, StringComparison.OrdinalIgnoreCase)
+            || candidate.EndsWith("/" + relative, StringComparison.OrdinalIgnoreCase)
+            || Path.GetFileName(candidate).Equals(fileName, StringComparison.OrdinalIgnoreCase))
+        {
+            return entry.Value;
+        }
+    }
+
+    return null;
+}
+
+static bool IsSelectedTest(HashSet<string> selectedTests, string className, string methodName)
+{
+    var fullName = $"{className}.{methodName}";
+    foreach (var selected in selectedTests)
+    {
+        var value = selected.Trim();
+        if (value.Equals("*", StringComparison.OrdinalIgnoreCase)
+            || value.Equals(methodName, StringComparison.OrdinalIgnoreCase)
+            || value.Equals(fullName, StringComparison.OrdinalIgnoreCase)
+            || value.EndsWith("." + fullName, StringComparison.OrdinalIgnoreCase)
+            || value.EndsWith("." + methodName, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static string NormalizeSelectedTestFileKey(string path)
+{
+    var normalized = path.Replace('\\', '/').Trim();
+    while (normalized.StartsWith("./", StringComparison.Ordinal))
+        normalized = normalized[2..];
+    return normalized.Trim('/');
+}
+
+static string RenderTargetModelForCli(TestFileModel targetModel, IRenderer renderer, ITargetBackend targetBackend, string renderIr, SourceSpec? sourceSpec)
+{
+    if (renderIr.Equals("v2", StringComparison.OrdinalIgnoreCase))
+    {
+        var document = LegacyIrBridge.ToDocument(targetModel, source: sourceSpec, target: targetBackend.Target);
+        return targetBackend.RenderDocument(document);
+    }
+
+    return renderer.Render(targetModel);
+}
 
 // --- Quality gate ---
 
@@ -1510,6 +1675,7 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
     var projectReferences = projectDiscovery.Select(x => x.Path).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     var assemblyReferences = ResolvePathList(verification.AssemblyReferences, baseDir).ToList();
     var discoveredBuildFiles = DiscoverBuildFiles(verification, baseDir, projectReferences).ToList();
+    var localDirectoryPackagesPropsShimPath = WriteLocalDirectoryPackagesPropsShim(harnessDir, discoveredBuildFiles);
     var targetFramework = ResolveVerificationTargetFramework(verification, projectReferences);
     var packageReferences = BuildPackageReferences(verification, projectReferences, config).ToList();
     var buildWorkingDirectory = ResolveBuildWorkingDirectory(verification, baseDir, solutionPath);
@@ -1531,7 +1697,8 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
         harnessSnapshotPath,
         csprojText,
         discoveredBuildFiles,
-        packageReferences);
+        packageReferences,
+        localDirectoryPackagesPropsShimPath);
 
     var buildResult = RunDotnetBuild(csprojPath, verification, buildWorkingDirectory);
     var rawDiagnostics = ExtractBuildDiagnostics(buildResult.StdOut + "\n" + buildResult.StdErr);
@@ -1907,6 +2074,24 @@ static IEnumerable<PackageReferenceConfig> ReadPackageReferences(IEnumerable<str
     }
 }
 
+static string? WriteLocalDirectoryPackagesPropsShim(string harnessDir, IReadOnlyList<string> buildFiles)
+{
+    var cpmDetected = buildFiles.Any(x => Path.GetFileName(x).Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase));
+    if (!cpmDetected)
+        return null;
+
+    var shimPath = Path.Combine(harnessDir, "Directory.Packages.props");
+    var shim = """
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>
+""";
+    File.WriteAllText(shimPath, shim);
+    return shimPath;
+}
+
 static HashSet<string> ReadCentralPackageNames(IEnumerable<string> buildFiles)
 {
     var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1969,6 +2154,8 @@ static string BuildVerificationCsproj(
     {
         sb.AppendLine("    <!-- verify-project is an isolated temporary harness; keep inline PackageReference versions legal even when the source repo uses Central Package Management. -->");
         sb.AppendLine("    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>");
+        sb.AppendLine("    <DirectoryPackagesPropsPath>$(MSBuildProjectDirectory)/Directory.Packages.props</DirectoryPackagesPropsPath>");
+        sb.AppendLine("    <ImportDirectoryPackagesProps>true</ImportDirectoryPackagesProps>");
     }
     sb.AppendLine("    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>");
     sb.AppendLine("  </PropertyGroup>");
@@ -2029,7 +2216,8 @@ static ProjectVerifyHarnessEvidence BuildProjectVerifyHarnessEvidence(
     string harnessSnapshotPath,
     string csprojText,
     IReadOnlyList<string> buildFiles,
-    IReadOnlyList<PackageReferenceConfig> packageReferences)
+    IReadOnlyList<PackageReferenceConfig> packageReferences,
+    string? localDirectoryPackagesPropsShimPath)
 {
     var centralPackageFiles = buildFiles
         .Where(x => Path.GetFileName(x).Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase))
@@ -2047,6 +2235,7 @@ static ProjectVerifyHarnessEvidence BuildProjectVerifyHarnessEvidence(
 
     var cpmDetected = centralPackageFiles.Length > 0;
     var cpmDisabled = csprojText.Contains("<ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>", StringComparison.OrdinalIgnoreCase);
+    var directoryPackagesPropsPathPinned = csprojText.Contains("<DirectoryPackagesPropsPath>", StringComparison.OrdinalIgnoreCase);
     var inlineVersionCount = packageReferences.Count(p => !string.IsNullOrWhiteSpace(p.Version));
     var packageVersionMode = cpmDetected
         ? "isolated-temporary-harness-with-inline-versions"
@@ -2055,8 +2244,9 @@ static ProjectVerifyHarnessEvidence BuildProjectVerifyHarnessEvidence(
     var notes = new List<string>();
     if (cpmDetected)
     {
-        notes.Add("Directory.Packages.props was detected as a CPM signal but intentionally not imported into the temporary verify-project harness.");
-        notes.Add("ManagePackageVersionsCentrally=false keeps inline PackageReference Version attributes legal inside the isolated temporary harness and prevents NU1008.");
+        notes.Add("Directory.Packages.props was detected as a CPM signal and intentionally isolated from the source repo inside the temporary verify-project harness.");
+        notes.Add("ManagePackageVersionsCentrally=false keeps inline PackageReference Version attributes legal inside the isolated temporary harness.");
+        notes.Add("DirectoryPackagesPropsPath is pinned to a local shim next to the harness so parent repo CPM auto-discovery cannot re-enable NU1008.");
     }
     else
     {
@@ -2073,11 +2263,13 @@ static ProjectVerifyHarnessEvidence BuildProjectVerifyHarnessEvidence(
         CentralPackageManagementMode: cpmDetected ? "isolated" : "not-detected",
         CentralPackageFiles: centralPackageFiles,
         ManagePackageVersionsCentrallyDisabled: cpmDisabled,
+        DirectoryPackagesPropsPathPinned: directoryPackagesPropsPathPinned,
+        LocalDirectoryPackagesPropsShim: string.IsNullOrWhiteSpace(localDirectoryPackagesPropsShimPath) ? null : Path.GetFullPath(localDirectoryPackagesPropsShimPath),
         ImportedBuildFiles: importedBuildFiles,
         SkippedBuildFiles: centralPackageFiles,
         PackageVersionMode: packageVersionMode,
         Nu1008Mitigation: cpmDetected
-            ? "Directory.Packages.props skipped + ManagePackageVersionsCentrally=false in temporary harness"
+            ? "Directory.Packages.props skipped, local shim pinned via DirectoryPackagesPropsPath, and ManagePackageVersionsCentrally=false in temporary harness"
             : "not-required",
         Notes: notes.ToArray());
 }
@@ -2266,6 +2458,9 @@ static string WriteProjectVerifyMarkdown(ProjectVerifyReport report)
     sb.AppendLine($"- CPM detected: `{report.HarnessEvidence.CentralPackageManagementDetected}`");
     sb.AppendLine($"- CPM mode: `{report.HarnessEvidence.CentralPackageManagementMode}`");
     sb.AppendLine($"- ManagePackageVersionsCentrally disabled: `{report.HarnessEvidence.ManagePackageVersionsCentrallyDisabled}`");
+    sb.AppendLine($"- Directory.Packages.props path pinned: `{report.HarnessEvidence.DirectoryPackagesPropsPathPinned}`");
+    if (!string.IsNullOrWhiteSpace(report.HarnessEvidence.LocalDirectoryPackagesPropsShim))
+        sb.AppendLine($"- Local Directory.Packages.props shim: `{report.HarnessEvidence.LocalDirectoryPackagesPropsShim}`");
     sb.AppendLine($"- Package version mode: `{report.HarnessEvidence.PackageVersionMode}`");
     sb.AppendLine($"- NU1008 mitigation: `{report.HarnessEvidence.Nu1008Mitigation}`");
     sb.AppendLine();
@@ -3940,6 +4135,8 @@ static ProjectVerifyHarnessEvidence ReadProjectVerifyHarnessEvidence(System.Text
             CentralPackageManagementMode: ReadString(prop, "CentralPackageManagementMode") ?? "unknown",
             CentralPackageFiles: ReadStringArray(prop, "CentralPackageFiles"),
             ManagePackageVersionsCentrallyDisabled: ReadBool(prop, "ManagePackageVersionsCentrallyDisabled"),
+            DirectoryPackagesPropsPathPinned: ReadBool(prop, "DirectoryPackagesPropsPathPinned"),
+            LocalDirectoryPackagesPropsShim: ReadString(prop, "LocalDirectoryPackagesPropsShim"),
             ImportedBuildFiles: ReadStringArray(prop, "ImportedBuildFiles"),
             SkippedBuildFiles: ReadStringArray(prop, "SkippedBuildFiles"),
             PackageVersionMode: ReadString(prop, "PackageVersionMode") ?? "unknown",
@@ -3963,6 +4160,8 @@ static ProjectVerifyHarnessEvidence ReadProjectVerifyHarnessEvidence(System.Text
         CentralPackageManagementMode: centralPackageFiles.Length > 0 ? "legacy-detected" : "not-detected",
         CentralPackageFiles: centralPackageFiles,
         ManagePackageVersionsCentrallyDisabled: false,
+        DirectoryPackagesPropsPathPinned: false,
+        LocalDirectoryPackagesPropsShim: null,
         ImportedBuildFiles: importedBuildFiles,
         SkippedBuildFiles: centralPackageFiles,
         PackageVersionMode: "legacy-report",
@@ -11101,6 +11300,7 @@ static CliOptions? ParseArgs(string[] args)
     int port = 0;
     bool staticOnly = false;
     bool includeSourceFiles = false;
+    string? selectedTestsFile = null;
     int maxTests = 10;
     string agent = "opencode";
     var initModeRequested = IsInitModeRequest(args);
@@ -11234,6 +11434,16 @@ static CliOptions? ParseArgs(string[] args)
             case "--include-source":
             case "--include-source-files":
                 includeSourceFiles = true;
+                break;
+            case "--selected-tests":
+            case "--include-tests":
+                if (i + 1 < args.Length)
+                    selectedTestsFile = args[++i];
+                else
+                {
+                    Console.Error.WriteLine("--selected-tests requires a file path");
+                    return null;
+                }
                 break;
             case "--max-tests":
                 if (i + 1 < args.Length && int.TryParse(args[++i], out var parsedMaxTests) && parsedMaxTests > 0)
@@ -11559,13 +11769,20 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
+    if (!string.IsNullOrWhiteSpace(selectedTestsFile)
+        && !new[] { "analyze", "dump-ir", "migrate", "verify", "verify-project" }.Contains(mode, StringComparer.OrdinalIgnoreCase))
+    {
+        Console.Error.WriteLine("--selected-tests is only supported for analyze, dump-ir, migrate, verify, and verify-project.");
+        return null;
+    }
+
     if (!new[] { "opencode", "codex", "generic", "manual", "none" }.Contains(agent, StringComparer.OrdinalIgnoreCase))
     {
         Console.Error.WriteLine("Invalid --agent. Use: opencode|codex|generic|manual");
         return null;
     }
 
-    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, source, sourceExplicit, tsProject, recursiveArtifacts, irVersion, renderIr, validationMode, targetTestFramework, generationPolicy, wizard, installAgentKit, targetProjectExists, targetProjectPath, defaultTestIdAttribute, targetNamespace, targetBaseClass, fix, apply, dryRun, port, staticOnly, includeSourceFiles, maxTests, agent);
+    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, source, sourceExplicit, tsProject, recursiveArtifacts, irVersion, renderIr, validationMode, targetTestFramework, generationPolicy, wizard, installAgentKit, targetProjectExists, targetProjectPath, defaultTestIdAttribute, targetNamespace, targetBaseClass, fix, apply, dryRun, port, staticOnly, includeSourceFiles, selectedTestsFile, maxTests, agent);
 }
 
 static string[] NormalizeDirectCommand(string[] args)

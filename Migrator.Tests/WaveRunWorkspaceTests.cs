@@ -24,6 +24,8 @@ public class WaveRunWorkspaceTests
         Assert.Contains("run-migrate.sh", command);
         Assert.Contains("run-migrate.ps1", command);
         Assert.Contains("--execute-migrate", command);
+        Assert.Contains("--selected-tests", command);
+        Assert.Contains("selected-tests.txt", command);
     }
 
     [Fact]

@@ -1094,14 +1094,19 @@ public class AgentLoopHardeningTests
         Assert.Contains("CentralPackageManagementDetected", program);
         Assert.Contains("CentralPackageManagementMode", program);
         Assert.Contains("ManagePackageVersionsCentrallyDisabled", program);
+        Assert.Contains("DirectoryPackagesPropsPathPinned", program);
+        Assert.Contains("LocalDirectoryPackagesPropsShim", program);
         Assert.Contains("SkippedBuildFiles", program);
-        Assert.Contains("Directory.Packages.props skipped + ManagePackageVersionsCentrally=false", program);
+        Assert.Contains("DirectoryPackagesPropsPath", program);
+        Assert.Contains("local shim pinned", program);
         Assert.Contains("central-package-management", program);
         Assert.Contains("NU1008", program);
         Assert.Contains(@"\b(CS|NU|MSB)\d{4}\b", program);
 
         Assert.Contains("record ProjectVerifyHarnessEvidence", models);
         Assert.Contains("ProjectVerifyHarnessEvidence HarnessEvidence", models);
+        Assert.Contains("DirectoryPackagesPropsPathPinned", models);
+        Assert.Contains("LocalDirectoryPackagesPropsShim", models);
 
         Assert.Contains("verify-project-harness/v1", projectVerificationDoc);
         Assert.Contains("project-verify-harness.csproj", projectVerificationDoc);

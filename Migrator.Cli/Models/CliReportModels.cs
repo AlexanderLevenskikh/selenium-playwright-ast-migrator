@@ -75,6 +75,8 @@ record ProjectVerifyHarnessEvidence(
     string CentralPackageManagementMode,
     string[] CentralPackageFiles,
     bool ManagePackageVersionsCentrallyDisabled,
+    bool DirectoryPackagesPropsPathPinned,
+    string? LocalDirectoryPackagesPropsShim,
     string[] ImportedBuildFiles,
     string[] SkippedBuildFiles,
     string PackageVersionMode,
@@ -204,7 +206,7 @@ record DoctorReport(DateTimeOffset GeneratedAtUtc, string Status, string InputPa
 record DoctorCheck(string Status, string Code, string Message, string? Location, string SuggestedAction);
 record SimpleProcessResult(int ExitCode, string StdOut, string StdErr);
 
-record CliOptions(string Mode, string Input, string Out, string? Config, string[] Configs, string Format, bool FailOnUnsupported, bool FailOnTodo, string Workspace, string? Before, string? After, string Target, string Source, bool SourceExplicit, string? TsProject, bool RecursiveArtifacts, string IrVersion, string RenderIr, string ValidationMode, string? TargetTestFramework, string? GenerationPolicy, bool Wizard, bool? InstallAgentKit, bool? TargetProjectExists, string? TargetProjectPath, string? DefaultTestIdAttribute, string? TargetNamespace, string? TargetBaseClass, bool Fix, bool Apply, bool DryRun, int Port, bool StaticOnly, bool IncludeSourceFiles, int MaxTests, string Agent);
+record CliOptions(string Mode, string Input, string Out, string? Config, string[] Configs, string Format, bool FailOnUnsupported, bool FailOnTodo, string Workspace, string? Before, string? After, string Target, string Source, bool SourceExplicit, string? TsProject, bool RecursiveArtifacts, string IrVersion, string RenderIr, string ValidationMode, string? TargetTestFramework, string? GenerationPolicy, bool Wizard, bool? InstallAgentKit, bool? TargetProjectExists, string? TargetProjectPath, string? DefaultTestIdAttribute, string? TargetNamespace, string? TargetBaseClass, bool Fix, bool Apply, bool DryRun, int Port, bool StaticOnly, bool IncludeSourceFiles, string? SelectedTestsFile, int MaxTests, string Agent);
 
 record MigrationPrPackReport(string SchemaVersion, DateTimeOffset GeneratedAtUtc, string InputPath, string ArtifactRoot, string ReviewStatus, string Summary, MigrationPrPackMetrics BeforeAfterMetrics, MigrationPrPackChangedFile[] ChangedFiles, MigrationPrPackRisk[] RiskSummary, string[] ReviewerChecklist, MigrationPrPackEvidenceLink[] Evidence, string SuggestedPrDescription, string[] Warnings);
 record MigrationPrPackMetrics(MigrationPrPackMetric[] Before, MigrationPrPackMetric[] After, MigrationPrPackMetric[] Delta);

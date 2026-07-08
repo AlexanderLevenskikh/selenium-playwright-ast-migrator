@@ -483,7 +483,7 @@ selenium-pw-migrator migration plan --input ./SeleniumTests --strategy wavefront
 selenium-pw-migrator migration plan show --plan migration/plan
 ```
 
-The planner writes `inventory.json`, `clusters.json`, `waves.json`, `plan.md`, `selected-tests.txt`, `memory-recall.md`, and `next-commands.md`. It does not migrate files. When `kit bootstrap-opencode --source ...` has configured a source, that source is the hard wavefront boundary; sibling functional-test projects must not be discovered, planned, copied, or suggested. The first wave contains representative tests, later waves expand by cluster. Agents should run `memory explain`, `memory doctor`, and `memory recall --file` before turning a wave into a bounded task.
+The planner writes `inventory.json`, `clusters.json`, `waves.json`, `plan.md`, `selected-tests.txt`, `memory-recall.md`, and `next-commands.md`. It does not migrate files. When `kit bootstrap-opencode --source ...` has configured a source, that source is the hard wavefront boundary; sibling functional-test projects must not be discovered, planned, copied, or suggested. The first wave contains representative tests, later waves expand by cluster. `run-wave` passes `--selected-tests selected-tests.txt` to the migrate pipeline, so execution remains test-selected instead of migrating every test in each copied file. Agents should run `memory explain`, `memory doctor`, and `memory recall --file` before turning a wave into a bounded task.
 
 Prepare a bounded wave run workspace manually only when you are debugging the agent setup or running CI:
 

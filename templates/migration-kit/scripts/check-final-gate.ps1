@@ -1309,6 +1309,179 @@ function Find-ContinuationCandidate($Sources) {
 }
 
 
+
+function Read-JsonObjectIfExists([string]$Path) {
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path $Path)) {
+        return $null
+    }
+
+    try {
+        return Get-Content -Raw -Path $Path -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        return $null
+    }
+}
+
+function Get-JsonStringValue($Object, [string[]]$Names) {
+    if ($null -eq $Object) {
+        return $null
+    }
+
+    foreach ($name in $Names) {
+        $prop = $Object.PSObject.Properties[$name]
+        if ($null -eq $prop -or $null -eq $prop.Value) {
+            continue
+        }
+
+        if (-not ($prop.Value -is [string])) {
+            continue
+        }
+
+        $value = [string]$prop.Value
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            return $value.Trim()
+        }
+    }
+
+    return $null
+}
+
+function Get-JsonArrayCount($Object, [string[]]$Names) {
+    if ($null -eq $Object) {
+        return 0
+    }
+
+    foreach ($name in $Names) {
+        $prop = $Object.PSObject.Properties[$name]
+        if ($null -eq $prop -or $null -eq $prop.Value) {
+            continue
+        }
+
+        if ($prop.Value -is [System.Collections.IEnumerable] -and -not ($prop.Value -is [string])) {
+            return @($prop.Value).Count
+        }
+    }
+
+    return 0
+}
+
+function New-StructuredContinuationCandidateFromJson([string]$SourceName, [string]$Path, $Json) {
+    if ($null -eq $Json) {
+        return $null
+    }
+
+    $fileName = [System.IO.Path]::GetFileName($Path)
+    $status = Get-JsonStringValue $Json @("status", "Status", "continuationStatus", "ContinuationStatus", "result", "outcome")
+    $statusText = if ($status -eq $null) { "" } else { $status }
+    $nextAction = Get-JsonStringValue $Json @("nextAction", "NextAction", "next", "recommendedNextAction", "RecommendedNextAction", "suggestedAction", "SuggestedAction")
+
+    if ($fileName -ieq "current-ticket-status.json") {
+        if ($statusText -match '(?i)ready|in[-_ ]?progress|blocked|review|continue|pending') {
+            $action = if ([string]::IsNullOrWhiteSpace($nextAction)) { "Review migration/current-ticket.md and execute the current bounded ticket under migration/**." } else { $nextAction }
+            if (Test-AllowedContinuationActionText $action) {
+                return New-ContinuationCandidate $SourceName $action ("structured status: $statusText")
+            }
+        }
+    }
+
+    if ($fileName -imatch 'wave-quality-budget\.json$') {
+        $blocked = $statusText -match '(?i)blocked|failed|needs|exceeded|continue|required'
+        $findingCount = Get-JsonArrayCount $Json @("violations", "Violations", "blockingFindings", "BlockingFindings", "failures", "Failures")
+        if ($blocked -or $findingCount -gt 0) {
+            $action = if ([string]::IsNullOrWhiteSpace($nextAction)) { "Run migration-board/explain-todo for the latest wave artifacts under migration/**, then create a bounded config-author or research ticket." } else { $nextAction }
+            if (Test-AllowedContinuationActionText $action) {
+                return New-ContinuationCandidate $SourceName $action ("structured wave quality budget: status=$statusText; findings=$findingCount")
+            }
+        }
+    }
+
+    if ($fileName -imatch 'mapping-research-memory\.json$') {
+        $recommended = Get-JsonArrayCount $Json @("recommendedNextTickets", "RecommendedNextTickets", "candidates", "Candidates", "items", "Items")
+        if ($recommended -gt 0 -or $statusText -match '(?i)ready|continue|research|blocked') {
+            $action = if ([string]::IsNullOrWhiteSpace($nextAction)) { "Review migration mapping-research-memory and turn one recommendedNextTickets item into current-ticket.md before continuing." } else { $nextAction }
+            if (Test-AllowedContinuationActionText $action) {
+                return New-ContinuationCandidate $SourceName $action ("structured mapping research memory: status=$statusText; candidates=$recommended")
+            }
+        }
+    }
+
+    if ($fileName -imatch '(project-verify-report|verify-report)\.json$') {
+        if ($statusText -match '(?i)fail|error|blocked') {
+            $diagnostics = Get-JsonArrayCount $Json @("diagnostics", "Diagnostics", "classifiedDiagnostics", "ClassifiedDiagnostics")
+            $action = if ([string]::IsNullOrWhiteSpace($nextAction)) { "Review project-verify-report.json diagnostics under migration/**, then run explain-todo/config-author or update verification config before finalizing." } else { $nextAction }
+            if (Test-AllowedContinuationActionText $action) {
+                return New-ContinuationCandidate $SourceName $action ("structured verify status: $statusText; diagnostics=$diagnostics")
+            }
+        }
+    }
+
+    if ($fileName -imatch 'config-validate-report\.json$') {
+        if ($statusText -match '(?i)fail|error|blocked|warning') {
+            $issues = Get-JsonArrayCount $Json @("issues", "Issues", "errors", "Errors", "warnings", "Warnings")
+            $action = if ([string]::IsNullOrWhiteSpace($nextAction)) { "Review config-validate-report.json and fix adapter-config/config delta under migration/** before finalizing." } else { $nextAction }
+            if (Test-AllowedContinuationActionText $action) {
+                return New-ContinuationCandidate $SourceName $action ("structured config validation status: $statusText; issues=$issues")
+            }
+        }
+    }
+
+    if ($fileName -imatch 'migration-board\.json$') {
+        $recommended = Get-JsonArrayCount $Json @("recommendedNextActions", "RecommendedNextActions")
+        if ($recommended -gt 0 -and $statusText -notmatch '(?i)^pass|passed|success|ok$') {
+            $action = "Review migration-board.json recommendedNextActions under migration/** and execute one bounded evidence/config action before finalizing."
+            return New-ContinuationCandidate $SourceName $action ("structured migration board recommended actions: $recommended")
+        }
+    }
+
+    return $null
+}
+
+function Find-StructuredContinuationCandidate($Sources) {
+    $sourceItems = New-Object System.Collections.ArrayList
+    if ($null -ne $Sources) {
+        if ($Sources -is [System.Collections.IEnumerable] -and -not ($Sources -is [string])) {
+            foreach ($item in $Sources) { [void]$sourceItems.Add($item) }
+        }
+        else {
+            [void]$sourceItems.Add($Sources)
+        }
+    }
+
+    foreach ($sourceInfo in $sourceItems) {
+        if ($null -eq $sourceInfo) { continue }
+
+        $sourcePath = $null
+        $sourceName = $null
+        if ($sourceInfo -is [string]) {
+            $sourcePath = $sourceInfo
+            $sourceName = $sourceInfo
+        }
+        elseif ($sourceInfo -is [System.IO.FileInfo]) {
+            $sourcePath = $sourceInfo.FullName
+            $sourceName = $sourceInfo.Name
+        }
+        else {
+            $sourcePath = [string]$sourceInfo.path
+            $sourceName = [string]$sourceInfo.name
+        }
+
+        if ([string]::IsNullOrWhiteSpace($sourcePath) -or -not (Test-Path $sourcePath)) { continue }
+        if ([string]::IsNullOrWhiteSpace($sourceName)) { $sourceName = $sourcePath }
+        if ([System.IO.Path]::GetExtension($sourcePath) -ne ".json") { continue }
+
+        $json = Read-JsonObjectIfExists $sourcePath
+        $candidate = New-StructuredContinuationCandidateFromJson $sourceName $sourcePath $json
+        if ($candidate -ne $null) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
+
+
 function New-GateFollowupSlicerCandidate([string]$WorkspacePath, $Results) {
     $failed = @($Results | Where-Object { -not $_.passed })
     if ($failed.Count -eq 0) { return $null }
@@ -1666,6 +1839,7 @@ $passed = @($results | Where-Object { -not $_.passed }).Count -eq 0
 $continuationSources = @()
 foreach ($candidatePath in @(
     (Join-Path $workspacePath "current-ticket.md"),
+    (Join-Path $workspacePath "state/current-ticket-status.json"),
     (Join-Path $workspacePath "state/handoff.md"),
     (Join-Path $workspacePath "state/stop-policy-checklist.md"),
     (Join-Path $workspacePath "agent-state.md")
@@ -1686,7 +1860,10 @@ foreach ($latestEvidence in @(
         $continuationSources += [pscustomobject]@{ name = (Get-RelativePathCompat $workspacePath $latestEvidence.FullName); path = $latestEvidence.FullName }
     }
 }
-$continuationCandidate = Find-ContinuationCandidate $continuationSources
+$continuationCandidate = Find-StructuredContinuationCandidate $continuationSources
+if ($null -eq $continuationCandidate) {
+    $continuationCandidate = Find-ContinuationCandidate $continuationSources
+}
 if ($null -eq $continuationCandidate -and $hasNonFinalStatus) {
     $continuationCandidate = Find-ExplicitContinuationCandidateInText "status-files" $actualStatusTexts
 }
