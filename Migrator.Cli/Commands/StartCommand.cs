@@ -33,7 +33,10 @@ internal static class StartCommand
         target = NormalizeTarget(target);
         var framework = string.IsNullOrWhiteSpace(targetTestFramework) ? "nunit" : targetTestFramework!.Trim().ToLowerInvariant();
         var policy = string.IsNullOrWhiteSpace(generationPolicy) ? "balanced" : generationPolicy!.Trim().ToLowerInvariant();
-        var fullWorkspace = Path.GetFullPath(string.IsNullOrWhiteSpace(workspace) ? "migration" : workspace);
+        var repoRoot = ResolveProjectRoot();
+        var fullWorkspace = Path.GetFullPath(Path.IsPathRooted(string.IsNullOrWhiteSpace(workspace) ? "migration" : workspace)
+            ? (string.IsNullOrWhiteSpace(workspace) ? "migration" : workspace)
+            : Path.Combine(repoRoot, string.IsNullOrWhiteSpace(workspace) ? "migration" : workspace));
         Directory.CreateDirectory(fullWorkspace);
         Directory.CreateDirectory(outPath);
         Directory.CreateDirectory(Path.Combine(fullWorkspace, "profiles"));
@@ -303,6 +306,19 @@ internal static class StartCommand
             "playwright-typescript" => "ts",
             _ => target
         };
+    }
+
+    static string ResolveProjectRoot()
+    {
+        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+        while (dir != null)
+        {
+            if (Directory.Exists(Path.Combine(dir.FullName, ".git")))
+                return dir.FullName;
+            dir = dir.Parent;
+        }
+
+        return Directory.GetCurrentDirectory();
     }
 
     static bool IsInteractiveConsole() => !Console.IsInputRedirected && !Console.IsOutputRedirected;

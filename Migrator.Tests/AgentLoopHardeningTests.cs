@@ -526,6 +526,117 @@ public class AgentLoopHardeningTests
 
 
     [Fact]
+    public void OpenCodeTeam_BlocksPermissionBypassAndAppendOnlyLedgerOverwrites()
+    {
+        var config = Read("templates/opencode-team/global/.config/opencode/opencode.jsonc");
+        var executor = Read("templates/opencode-team/global/.config/opencode/agents/executor.md");
+        var orchestrator = Read("templates/opencode-team/global/.config/opencode/agents/orchestrator.md");
+        var reviewer = Read("templates/opencode-team/global/.config/opencode/agents/reviewer.md");
+        var changeReviewer = Read("templates/opencode-team/global/.config/opencode/agents/migration-change-reviewer.md");
+        var supervisedTask = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var contract = Read("templates/migration-kit/AGENT_CONTRACT.md");
+        var writeMemory = Read("templates/migration-kit/scripts/write-memory-entry.ps1");
+        var repairMemory = Read("templates/migration-kit/scripts/repair-memory-jsonl.ps1");
+        var taskSlicer = Read("templates/opencode-team/global/.config/opencode/agents/migration-task-slicer.md");
+
+        foreach (var text in new[] { config, executor, orchestrator })
+        {
+            Assert.Contains("*Set-Content*", text);
+            Assert.Contains("*Add-Content*", text);
+            Assert.Contains("*Out-File*", text);
+            Assert.Contains("sed -i *", text);
+            Assert.Contains("tee *", text);
+        }
+
+        foreach (var text in new[] { executor, orchestrator, supervisedTask, contract })
+        {
+            Assert.Contains("OpenCode permission denials are authoritative", text);
+            Assert.Contains("BLOCKED_BY_OPENCODE_PERMISSION_DENIED", text);
+            Assert.Contains("do not retry", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("append-only JSONL", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("write-memory-entry", text);
+            Assert.Contains("repair-memory-jsonl", text);
+        }
+
+        foreach (var text in new[] { reviewer, changeReviewer })
+        {
+            Assert.Contains("Permission-bypass", text);
+            Assert.Contains("Reject", text);
+            Assert.Contains("append-only ledgers", text);
+        }
+
+        Assert.Contains("Add-Content", writeMemory);
+        Assert.Contains("MEMORY_ENTRY_APPENDED", writeMemory);
+        Assert.Contains(".repair-backups", repairMemory);
+        Assert.Contains("MEMORY_JSONL_REPAIRED", repairMemory);
+        Assert.Contains("migration/state/task-slice-result.json", taskSlicer);
+        Assert.Contains("Do not leave `continuation-decision.json` as `CONTINUE_REQUIRED`", taskSlicer);
+    }
+
+
+    [Fact]
+    public void OpenCodeTeam_ExportsSessionAndRunsHarnessSentinel()
+    {
+        var config = Read("templates/opencode-team/global/.config/opencode/opencode.jsonc");
+        var supervisedTask = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var orchestrator = Read("templates/opencode-team/global/.config/opencode/agents/orchestrator.md");
+        var sentinel = Read("templates/opencode-team/global/.config/opencode/agents/harness-sentinel.md");
+        var agents = Read("templates/opencode-team/project-template/AGENTS.md");
+        var contract = Read("templates/migration-kit/AGENT_CONTRACT.md");
+        var teamReadme = Read("templates/opencode-team/README.md");
+        var exportScript = Read("templates/migration-kit/scripts/export-opencode-session.ps1");
+        var exportShell = Read("templates/migration-kit/scripts/export-opencode-session.sh");
+        var findingScript = Read("templates/migration-kit/scripts/write-sentinel-finding.ps1");
+        var completeScript = Read("templates/migration-kit/scripts/complete-sentinel-inspection.ps1");
+        var finalGate = Read("templates/migration-kit/scripts/check-final-gate.ps1");
+
+        Assert.Contains("harness-sentinel", config);
+        Assert.Contains("harness-sentinel", orchestrator);
+        Assert.Contains("harness-sentinel", supervisedTask);
+        Assert.Contains("harness-sentinel", agents);
+        Assert.Contains("harness-sentinel", teamReadme);
+        Assert.Contains("opencode-session-export.md", supervisedTask);
+        Assert.Contains("opencode-session-export.md", orchestrator);
+        Assert.Contains("export-opencode-session", supervisedTask);
+        Assert.Contains("export-opencode-session", orchestrator);
+        Assert.Contains("session-observations.jsonl", supervisedTask);
+        Assert.Contains("sentinel-findings.jsonl", supervisedTask);
+        Assert.Contains("open high/critical agent-executable", supervisedTask);
+        Assert.Contains("migration-task-slicer", supervisedTask);
+
+        Assert.Contains("Process tester", sentinel, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("PERMISSION_BYPASS_ATTEMPT", sentinel);
+        Assert.Contains("APPEND_ONLY_VIOLATION", sentinel);
+        Assert.Contains("STATE_CONTRADICTION", sentinel);
+        Assert.Contains("PREMATURE_DONE", sentinel);
+        Assert.Contains("FULL_MIGRATION_IN_WAVE_MODE", sentinel);
+        Assert.Contains("MISSING_SESSION_EXPORT", sentinel);
+        Assert.Contains("NESTED_MIGRATION_WORKSPACE", sentinel);
+        Assert.Contains("Web/**/migration", sentinel);
+        Assert.Contains("write-sentinel-finding", sentinel);
+        Assert.Contains("sentinel-report.md", sentinel);
+        Assert.Contains("edit:", sentinel);
+        Assert.Contains("migration/runs/*/sentinel/**", sentinel);
+
+        Assert.Contains("OPENCODE_SESSION_EXPORTED", exportScript);
+        Assert.Contains("opencode-session-export.json", exportScript);
+        Assert.Contains("session-observations.jsonl", exportScript);
+        Assert.Contains("pwsh", exportShell);
+        Assert.Contains("SENTINEL_FINDING_RECORDED", findingScript);
+        Assert.Contains("sentinel-ledger.jsonl", findingScript);
+        Assert.Contains("sentinel-findings.jsonl", findingScript);
+        Assert.Contains("SENTINEL_INSPECTION_COMPLETED", completeScript);
+        Assert.Contains("sentinel-inspection.json", completeScript);
+        Assert.Contains("Session export and sentinel rules", contract);
+        Assert.Contains("sentinel-inspection-present", finalGate);
+        Assert.Contains("sentinel-open-critical-findings", finalGate);
+        Assert.Contains("Test-SentinelInspectionPresent", finalGate);
+        Assert.Contains("Test-OpenSentinelBlockingFindings", finalGate);
+        Assert.Contains("nested-migration-workspace", finalGate);
+    }
+
+
+    [Fact]
     public void OpenCodeTeam_AllowsLowNoiseReadOnlyDiagnosticsAndKnownSubagents()
     {
         var config = Read("templates/opencode-team/global/.config/opencode/opencode.jsonc");
@@ -952,6 +1063,22 @@ public class AgentLoopHardeningTests
         Assert.Equal(0, absolute.ExitCode);
     }
 
+
+    [Fact]
+    public void FinalGate_RequiresSentinelInspectionForLatestRun()
+    {
+        using var repo = TemporaryGitRepo.Create();
+        PrepareFinalGateWorkspace(repo, latestRunId: "run-013", explicitStatus: "Final status: NOT RUNTIME READY", includeProjectVerify: false, configPassed: true);
+
+        File.Delete(Path.Combine(repo.Path, "migration", "runs", "run-013", "sentinel", "sentinel-inspection.json"));
+
+        var result = repo.RunFinalGate();
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("sentinel-inspection-present", result.Output);
+        Assert.Contains("sentinel-inspection.json", result.Output);
+    }
+
     [Fact]
     public void FinalGate_DoesNotUseFinalGateTemplateAsNotRuntimeReadyEvidence()
     {
@@ -1216,6 +1343,8 @@ public class AgentLoopHardeningTests
             "check-harness-policy",
             "new-harness-run",
             "write-harness-event",
+            "write-memory-entry",
+            "repair-memory-jsonl",
             "build-harness-dashboard"
         })
         {
@@ -1389,16 +1518,13 @@ public class AgentLoopHardeningTests
 
     static void PrepareFinalGateWorkspace(TemporaryGitRepo repo, string latestRunId, string? explicitStatus, bool includeProjectVerify, bool configPassed)
     {
-        repo.CopyRepositoryFile("templates/migration-kit/scripts/check-scope.ps1", "migration/scripts/check-scope.ps1");
-        repo.CopyRepositoryFile("templates/migration-kit/scripts/check-final-gate.ps1", "migration/scripts/check-final-gate.ps1");
-        repo.CopyRepositoryFile("templates/migration-kit/scripts/check-harness-policy.ps1", "migration/scripts/check-harness-policy.ps1");
-        repo.CopyRepositoryFile("templates/migration-kit/scripts/check-scope.sh", "migration/scripts/check-scope.sh");
-        repo.CopyRepositoryFile("templates/migration-kit/scripts/check-final-gate.sh", "migration/scripts/check-final-gate.sh");
-        repo.CopyRepositoryFile("templates/migration-kit/scripts/check-harness-policy.sh", "migration/scripts/check-harness-policy.sh");
+        foreach (var guardFile in RequiredGuardChecksumFiles())
+        {
+            repo.CopyRepositoryFile($"templates/migration-kit/{guardFile}", $"migration/{guardFile}");
+        }
+
         repo.CopyRepositoryFile("templates/migration-kit/scripts/new-harness-run.sh", "migration/scripts/new-harness-run.sh");
         repo.CopyRepositoryFile("templates/migration-kit/scripts/write-harness-event.sh", "migration/scripts/write-harness-event.sh");
-        repo.CopyRepositoryFile("templates/migration-kit/scripts/build-harness-dashboard.ps1", "migration/scripts/build-harness-dashboard.ps1");
-        repo.CopyRepositoryFile("templates/migration-kit/scripts/build-harness-dashboard.sh", "migration/scripts/build-harness-dashboard.sh");
         repo.CopyRepositoryFile("templates/migration-kit/state/final-gate.md", "migration/state/final-gate.md");
         repo.CopyRepositoryFile("templates/migration-kit/AGENT_CONTRACT.md", "migration/AGENT_CONTRACT.md");
         repo.CopyRepositoryFile("templates/migration-kit/state/harness-policy.json", "migration/state/harness-policy.json");
@@ -1420,6 +1546,8 @@ public class AgentLoopHardeningTests
         repo.Write($"migration/runs/{latestRunId}/trace.jsonl", "");
         repo.Write($"migration/runs/{latestRunId}/migration-board.md", $"# Board\n\nLatest run: {latestRunId}\n");
         repo.Write($"migration/runs/{latestRunId}/migration-quality-dashboard.json", "{ \"status\": \"passed\", \"EMPTY_TEST_AFTER_SUPPRESSION\": 0, \"categories\": [] }");
+        repo.Write($"migration/runs/{latestRunId}/sentinel/sentinel-report.md", $"# Harness Sentinel Report\n\nStatus: PASS\nRun: {latestRunId}\n");
+        repo.Write($"migration/runs/{latestRunId}/sentinel/sentinel-inspection.json", $"{{ \"schemaVersion\": 1, \"runId\": \"{latestRunId}\", \"status\": \"PASS\", \"inspectedAtUtc\": \"2026-07-07T00:00:00Z\" }}");
         repo.Write("migration/state/handoff.md", explicitStatus ?? "Status: READY_FOR_ACCEPTANCE\n");
         repo.Write("migration/state/stop-policy-checklist.md", "Status: READY_FOR_ACCEPTANCE\n");
 
@@ -1435,6 +1563,25 @@ public class AgentLoopHardeningTests
         repo.Git("commit -m prepare-final-gate-workspace");
     }
 
+    static string[] RequiredGuardChecksumFiles()
+        => new[]
+        {
+            "scripts/check-scope.ps1",
+            "scripts/check-scope.sh",
+            "scripts/check-final-gate.ps1",
+            "scripts/check-final-gate.sh",
+            "scripts/check-harness-policy.ps1",
+            "scripts/check-harness-policy.sh",
+            "scripts/build-harness-dashboard.ps1",
+            "scripts/build-harness-dashboard.sh",
+            "scripts/export-opencode-session.ps1",
+            "scripts/export-opencode-session.sh",
+            "scripts/write-sentinel-finding.ps1",
+            "scripts/write-sentinel-finding.sh",
+            "scripts/complete-sentinel-inspection.ps1",
+            "scripts/complete-sentinel-inspection.sh"
+        };
+
     static string BuildGuardChecksumsJson(string workspacePath)
     {
         string Entry(string relativePath)
@@ -1444,15 +1591,8 @@ public class AgentLoopHardeningTests
             return $"{{ \"path\": \"{relativePath}\", \"sha256\": \"{hash}\" }}";
         }
 
-        return "{ \"schemaVersion\": \"guard-checksums/v1\", \"files\": [" +
-            Entry("scripts/check-scope.ps1") + ", " +
-            Entry("scripts/check-scope.sh") + ", " +
-            Entry("scripts/check-final-gate.ps1") + ", " +
-            Entry("scripts/check-final-gate.sh") + ", " +
-            Entry("scripts/check-harness-policy.ps1") + ", " +
-            Entry("scripts/check-harness-policy.sh") + ", " +
-            Entry("scripts/build-harness-dashboard.ps1") + ", " +
-            Entry("scripts/build-harness-dashboard.sh") + "] }";
+        var entries = RequiredGuardChecksumFiles().Select(Entry);
+        return "{ \"schemaVersion\": \"guard-checksums/v1\", \"files\": [" + string.Join(", ", entries) + "] }";
     }
 
     static string FindRepositoryFile(string relativePath)

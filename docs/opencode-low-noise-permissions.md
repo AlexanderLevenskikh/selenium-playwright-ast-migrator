@@ -50,6 +50,9 @@ The orchestrator may call known migration subagents without asking each time:
 - `migration-research-lead`
 - `migration-task-slicer`
 - `migration-change-reviewer`
+- `harness-sentinel`
+
+Sentinel is allowed so `/supervised-task sentinel` can inspect session exports, trace/events, state, prompts, and OpenCode config for process-smell findings before final handoff.
 
 The `general` subagent remains denied because the migration harness expects named roles with scoped responsibilities.
 

@@ -27,6 +27,33 @@ public class WaveRunWorkspaceTests
     }
 
     [Fact]
+    public void MigrationRunWave_AnchorsWorkspaceAndArtifactsToRepositoryRoot()
+    {
+        var command = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/MigrationCommand.cs"));
+        var kitCommand = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/KitCommand.cs"));
+        var supervised = File.ReadAllText(FindRepositoryFile("templates/opencode-team/global/.config/opencode/commands/supervised-task.md"));
+        var contract = File.ReadAllText(FindRepositoryFile("templates/migration-kit/AGENT_CONTRACT.md"));
+        var finalGate = File.ReadAllText(FindRepositoryFile("templates/migration-kit/scripts/check-final-gate.ps1"));
+
+        Assert.Contains("ResolveRepositoryRoot", command);
+        Assert.Contains("ResolveProjectRoot", kitCommand);
+        Assert.Contains("HasNestedMigrationWorkspace", kitCommand);
+        Assert.Contains("nested-workspace", kitCommand);
+        Assert.Contains("NormalizeProjectPaths", command);
+        Assert.Contains("ResolveProjectArtifactPath", command);
+        Assert.Contains("IsMigrationRelativePath", command);
+        Assert.Contains("ContainsMigrationSegment", command);
+        Assert.Contains("NESTED_MIGRATION_WORKSPACE_BLOCKED", command);
+        Assert.Contains("<repo-root>/migration/**", supervised);
+        Assert.Contains("NESTED_MIGRATION_WORKSPACE", supervised);
+        Assert.Contains("Do not `cd` into the Selenium source", supervised);
+        Assert.Contains("repository-root artifacts", contract);
+        Assert.Contains("Test-NestedMigrationWorkspace", finalGate);
+        Assert.Contains("nested-migration-workspace", finalGate);
+    }
+
+
+    [Fact]
     public void MigrationRunWave_KeepsSafetyBoundaryExplicit()
     {
         var command = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/MigrationCommand.cs"));

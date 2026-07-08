@@ -61,7 +61,7 @@ internal static class KitCommand
         if (agent == "opencode")
             return RunBootstrapOpenCode(options with { OpenCodeInstall = string.IsNullOrWhiteSpace(options.OpenCodeInstall) || options.OpenCodeInstall == "manual" ? "auto" : options.OpenCodeInstall });
 
-        var projectRoot = Directory.GetCurrentDirectory();
+        var projectRoot = ResolveProjectRoot();
         var workspacePath = ToAbsolutePath(options.Workspace, projectRoot);
         var updateMode = Directory.Exists(workspacePath);
         var bootstrapOptions = options with
@@ -168,7 +168,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
 
     static int RunBootstrapOpenCode(KitOptions options)
     {
-        var projectRoot = Directory.GetCurrentDirectory();
+        var projectRoot = ResolveProjectRoot();
         var workspacePath = ToAbsolutePath(options.Workspace, projectRoot);
         var updateMode = Directory.Exists(workspacePath);
         var bootstrapOptions = options with
@@ -537,7 +537,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
 
     static int RunInit(KitOptions options)
     {
-        var projectRoot = Directory.GetCurrentDirectory();
+        var projectRoot = ResolveProjectRoot();
         var kitRoot = ResolveKitRoot();
         var templateRoot = Path.Combine(kitRoot, "templates", "migration-kit");
         if (!Directory.Exists(templateRoot))
@@ -626,7 +626,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
 
     static int RunDoctor(KitOptions options)
     {
-        var projectRoot = Directory.GetCurrentDirectory();
+        var projectRoot = ResolveProjectRoot();
         var workspacePath = ToAbsolutePath(options.Workspace, projectRoot);
         var checks = new List<KitDoctorCheck>();
 
@@ -657,6 +657,8 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         AddCheck(checks, "harness-dashboard-i18n-ru", File.Exists(Path.Combine(workspacePath, "dashboard", "i18n", "ru.json")), Path.Combine(workspacePath, "dashboard", "i18n", "ru.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "guard-checksums", File.Exists(Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json")), Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json"), "Run `migrator kit update --backup`.");
 
+        AddCheck(checks, "nested-workspace", !HasNestedMigrationWorkspace(projectRoot, workspacePath, out var nestedWorkspaceDetail), nestedWorkspaceDetail, "Remove nested migration workspaces such as Web/**/migration/** and run kit/wave commands from the repository root.");
+
         var dotnet = RunProcess("dotnet", "--version");
         AddCheck(checks, "dotnet", dotnet.ExitCode == 0, dotnet.ExitCode == 0 ? dotnet.StdOut.Trim() : dotnet.StdErr.Trim(), "Install .NET SDK or use a self-contained migrator bundle.");
 
@@ -676,7 +678,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
 
     static int RunNextTicket(KitOptions options)
     {
-        var projectRoot = Directory.GetCurrentDirectory();
+        var projectRoot = ResolveProjectRoot();
         var workspacePath = ToAbsolutePath(options.Workspace, projectRoot);
         if (!Directory.Exists(workspacePath))
         {
@@ -904,6 +906,12 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
             "scripts/new-harness-run.sh" or
             "scripts/write-harness-event.ps1" or
             "scripts/write-harness-event.sh" or
+            "scripts/export-opencode-session.ps1" or
+            "scripts/export-opencode-session.sh" or
+            "scripts/write-sentinel-finding.ps1" or
+            "scripts/write-sentinel-finding.sh" or
+            "scripts/complete-sentinel-inspection.ps1" or
+            "scripts/complete-sentinel-inspection.sh" or
             "state/continuation-contract.md"
             || normalized.StartsWith("prompts/", StringComparison.Ordinal);
     }
@@ -1206,7 +1214,13 @@ Fix only the current ticket.
             "scripts/check-harness-policy.ps1",
             "scripts/check-harness-policy.sh",
             "scripts/build-harness-dashboard.ps1",
-            "scripts/build-harness-dashboard.sh"
+            "scripts/build-harness-dashboard.sh",
+            "scripts/export-opencode-session.ps1",
+            "scripts/export-opencode-session.sh",
+            "scripts/write-sentinel-finding.ps1",
+            "scripts/write-sentinel-finding.sh",
+            "scripts/complete-sentinel-inspection.ps1",
+            "scripts/complete-sentinel-inspection.sh"
         };
         var entries = guardFiles.Select(relative =>
         {
@@ -1344,6 +1358,57 @@ Fix only the current ticket.
         }
 
         return Path.GetFileName(path);
+    }
+
+    static bool HasNestedMigrationWorkspace(string projectRoot, string workspacePath, out string detail)
+    {
+        var projectRootFull = Path.GetFullPath(projectRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var workspaceFull = Path.GetFullPath(workspacePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var nested = new List<string>();
+        var ignoredSegments = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".git", "bin", "obj", "node_modules", ".vs", "playwright-report", "TestResults" };
+
+        if (!Directory.Exists(projectRootFull))
+        {
+            detail = $"repo root missing: {projectRootFull}";
+            return true;
+        }
+
+        foreach (var dir in Directory.EnumerateDirectories(projectRootFull, "migration", SearchOption.AllDirectories))
+        {
+            var full = Path.GetFullPath(dir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (full.Equals(workspaceFull, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var relativeParts = Path.GetRelativePath(projectRootFull, full).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (relativeParts.Any(part => ignoredSegments.Contains(part)))
+                continue;
+
+            if (Directory.Exists(Path.Combine(full, "state"))
+                || Directory.Exists(Path.Combine(full, "runs"))
+                || Directory.Exists(Path.Combine(full, "plan"))
+                || File.Exists(Path.Combine(full, "AGENT_CONTRACT.md")))
+            {
+                nested.Add(Path.GetRelativePath(projectRootFull, full).Replace('\\', '/'));
+            }
+        }
+
+        detail = nested.Count == 0
+            ? "no nested migration workspace artifacts outside repo-root workspace"
+            : "nested migration workspace artifacts outside repo-root workspace: " + string.Join("; ", nested);
+        return nested.Count > 0;
+    }
+
+    static string ResolveProjectRoot()
+    {
+        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+        while (dir != null)
+        {
+            if (Directory.Exists(Path.Combine(dir.FullName, ".git")))
+                return dir.FullName;
+            dir = dir.Parent;
+        }
+
+        return Directory.GetCurrentDirectory();
     }
 
     static string ToAbsolutePath(string path, string basePath)

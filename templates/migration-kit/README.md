@@ -77,7 +77,7 @@ dotnet tool run selenium-pw-migrator -- kit doctor --workspace migration
 ./migration/scripts/apply-opencode-project-config.sh --repo-root . --workspace migration
 ```
 
-`bootstrap-opencode` normally copies `opencode.jsonc`, `.opencode/agents/*`, `.opencode/commands/*`, and `AGENTS.md` into the repository root with backups under `migration/.migration-kit/opencode-backups/`. The apply script is a repair fallback for old/skipped workspaces. Then open the product repo root in OpenCode Desktop and run `/supervised-task waves` for a fresh divide-and-conquer start. The orchestrator creates or resumes the active run with `scripts/new-harness-run.ps1`.
+`bootstrap-opencode` normally copies `opencode.jsonc`, `.opencode/agents/*`, `.opencode/commands/*`, and `AGENTS.md` into the repository root with backups under `migration/.migration-kit/opencode-backups/`. The apply script is a repair fallback for old/skipped workspaces. Then open the product repo root in OpenCode Desktop and run `/supervised-task waves` for a fresh divide-and-conquer start. The orchestrator creates or resumes the active run with `scripts/new-harness-run.ps1`. Do not start kit/wave commands from `Web/**` or another source/target subdirectory; a nested `Web/**/migration/**` workspace is a process defect and is blocked by doctor/final-gate/sentinel checks.
 
 ## First run
 
@@ -137,6 +137,13 @@ A new agent should start from `state/handoff.md`, not from chat memory.
 - Keep source truth in source tests, POM/helper code, config, or existing target Playwright code.
 - Fill `state/stop-policy-checklist.md` before stopping, handing off, or reporting a blocker.
 
+
+## Machine-state write safety
+
+Harness state is part of the contract, not scratch text. Agents must not bypass denied OpenCode edit permissions by retrying writes through shell tools such as PowerShell `Set-Content`, `Out-File`, `tee`, `sed -i`, or redirection. A denied write is reported as `BLOCKED_BY_OPENCODE_PERMISSION_DENIED`.
+
+JSONL ledgers are append-only by default. Use `scripts/write-harness-event.ps1`/`.sh` for harness events and traces, `selenium-pw-migrator memory add` or `scripts/write-memory-entry.ps1`/`.sh` for memory entries, and `scripts/repair-memory-jsonl.ps1`/`.sh` only for explicit invalid-JSONL repair with a backup under `state/memory/.repair-backups/`.
+
 ## Artifact-Only Acceptance Rules
 
 - Default writes are artifact-only: keep changes inside `migration/**`.
@@ -188,3 +195,19 @@ After a non-final final gate, read `migration/state/continuation-decision.json`.
 ## Project-scoped migration memory
 
 The kit includes `state/memory/**` as an inspectable project-local memory. Agents should read `state/memory/memory-summary.md` before planning, record durable decisions/warnings/final-gate lessons after bounded actions, and run `selenium-pw-migrator memory doctor --workspace migration` before final-gate handoff when the CLI is available. Memory is guidance, not authority: it cannot justify assertion suppression, over-suppressed user interactions, or selectors without evidence.
+
+
+## Session export and sentinel
+
+The kit includes a forensic session export path for process debugging:
+
+```powershell
+./migration/scripts/export-opencode-session.ps1 -Workspace migration -RunId run-001 -InputPath ./opencode-transcript.md
+```
+
+The generated artifact lives at `migration/runs/<run-id>/opencode-session-export.md`. When native OpenCode transcript export is unavailable, the script creates a best-effort export so `harness-sentinel` can still inspect traces, state, and observations without pretending a transcript exists.
+
+`harness-sentinel` is the process tester. It writes `migration/runs/<run-id>/sentinel/sentinel-report.md` and records findings with `migration/scripts/write-sentinel-finding.*`. High/critical agent-executable findings are routed back into bounded hardening tasks instead of being handed to the user as vague advice.
+
+
+Sentinel inspections must be finalized with `migration/scripts/complete-sentinel-inspection.ps1` or `.sh`; final gate treats a missing active-run `sentinel-inspection.json` as a process defect.

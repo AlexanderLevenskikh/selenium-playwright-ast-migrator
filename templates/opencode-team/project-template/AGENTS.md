@@ -105,7 +105,7 @@ git diff --stat
 git diff
 ```
 
-Known migration subagents (`executor`, `watchdog`, `reviewer`, `migration-researcher`, `migration-research-lead`, `migration-task-slicer`, `migration-change-reviewer`) are allowed by the OpenCode profile. If OpenCode asks for a routine read-only command, prefer using the documented low-noise permission profile rather than changing the migration plan.
+Known migration subagents (`executor`, `watchdog`, `reviewer`, `migration-researcher`, `migration-research-lead`, `migration-task-slicer`, `migration-change-reviewer`, `harness-sentinel`) are allowed by the OpenCode profile. If OpenCode asks for a routine read-only command, prefer using the documented low-noise permission profile rather than changing the migration plan.
 
 
 ## OpenCode permission profile note
@@ -114,6 +114,11 @@ Default user runs should work with the `LowNoise` profile. Do not rely on only `
 
 Maintainer dogfood runs may use `TrustedProject` to suppress routine approval prompts inside the repository. Even in that mode, keep `external_directory: deny` and run the final scope/harness gates before accepting results.
 
+
+
+## Permission and append-only state safety
+
+OpenCode permission denials are authoritative. If an edit/write is denied, do not retry the same write through `bash`, PowerShell, Python, `sed`, `tee`, shell redirection, or another write primitive; report `BLOCKED_BY_OPENCODE_PERMISSION_DENIED`. JSONL ledgers are append-only by default: use `migration/scripts/write-harness-event.*` for events/traces, `selenium-pw-migrator memory add` or `migration/scripts/write-memory-entry.*` for memory, and `migration/scripts/repair-memory-jsonl.*` only for explicit invalid-JSONL repair with a backup.
 
 ## Harness continuation strict protocol
 
@@ -125,7 +130,7 @@ After a non-final final gate, read `migration/state/continuation-decision.json`.
 
 ## `/supervised-task waves` one-command start
 
-When the user starts a fresh migration with `/supervised-task waves`, do not run full-source `selenium-pw-migrator --mode migrate` first. Auto-detect the Selenium source path, target backend/framework, and existing Playwright target when possible; ask only for missing or ambiguous required inputs. Then run the setup chain yourself: `kit bootstrap-opencode` when the workspace/command pack is missing, `kit doctor`, `migration plan --strategy wavefront`, `migration run-wave` for the first pending wave, and the wave-local migrate script. Treat `migration/runs/<wave-id>/input-scope.json` as the active bounded scope.
+When the user starts a fresh migration with `/supervised-task waves`, do not run full-source `selenium-pw-migrator --mode migrate` first. Resolve the repository root first and keep all `migration/**` artifacts under the repository-root `migration/` directory, never under `Web/**/migration/**` or another source/target subdirectory. Auto-detect the Selenium source path, target backend/framework, and existing Playwright target when possible; ask only for missing or ambiguous required inputs. Then run the setup chain yourself: `kit bootstrap-opencode` when the workspace/command pack is missing, `kit doctor`, `migration plan --strategy wavefront`, `migration run-wave` for the first pending wave, and the wave-local migrate script. Treat `migration/runs/<wave-id>/input-scope.json` as the active bounded scope.
 
 ## `/supervised-task` auto-next UX
 
@@ -133,3 +138,13 @@ When the user starts a fresh migration with `/supervised-task waves`, do not run
 
 When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts with `To continue, run: /supervised-task continue`, which triggers post-final research by default.
 
+
+
+## Harness sentinel / process testing
+
+`harness-sentinel` is the process tester and forensic reviewer. It reads `opencode-session-export.md`, `session-observations.jsonl`, trace/events, state files, prompts, and OpenCode config to find process smells such as permission-bypass attempts, append-only ledger overwrites, contradictory continuation state, premature DONE, stale root OpenCode config, or full-source migration in wave mode.
+
+Before final handoff, create/update `migration/runs/<run-id>/opencode-session-export.md` with `migration/scripts/export-opencode-session.*` when possible, then run `harness-sentinel` and complete `migration/runs/<run-id>/sentinel/sentinel-inspection.json`. Open high/critical agent-executable sentinel findings must be routed into bounded hardening tasks; do not hand them to the user as vague advice.
+
+
+Sentinel inspections must be finalized with `migration/scripts/complete-sentinel-inspection.ps1` or `.sh`; final gate treats a missing active-run `sentinel-inspection.json` as a process defect.

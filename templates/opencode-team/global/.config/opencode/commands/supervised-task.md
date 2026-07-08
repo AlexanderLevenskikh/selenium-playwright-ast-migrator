@@ -14,6 +14,7 @@ When `$ARGUMENTS` is exactly `waves`, `wave`, `wavefront`, `start waves`, or con
 
 In wavefront bootstrap mode:
 
+0. First resolve the repository root with `git rev-parse --show-toplevel` when git is available. Treat that directory as the only valid project root for migration harness artifacts. All `migration/**`, `migration/plan/**`, and `migration/runs/**` paths must resolve under `<repo-root>/migration/**`, even if the current shell happens to be inside `Web/**`, a source project, or a target project. Do not `cd` into the Selenium source or Playwright target before running kit/plan/run-wave commands. If a nested workspace such as `Web/**/migration/**` appears, classify it as `NESTED_MIGRATION_WORKSPACE`, stop implementation, and route a cleanup/hardening task instead of continuing from the nested directory.
 1. Do **not** run `selenium-pw-migrator --mode migrate` against the full source project before a wave workspace exists. A full-source migrate from a fresh workspace is a protocol violation when `waves` was requested.
 2. Inspect the repository and auto-detect, in this order:
    - source Selenium test project/path: prefer `.csproj` files or directories containing Selenium/WebDriver references and test attributes; ignore `bin/`, `obj/`, `migration/`, generated reports, and archived workspaces;
@@ -36,6 +37,22 @@ If the repository is fresh and `/supervised-task waves` has enough information t
 
 
 Compatibility wording: a fresh `FINAL` checkpoint must **stop for review** once; a persisted `FINAL_STOPPED_FOR_REVIEW` checkpoint is not a terminal stop and must resume the closed post-final development loop.
+
+
+## Permission and append-only state discipline
+
+OpenCode permission denials are authoritative for every role. If an edit/write is denied, do not bypass it by running `bash`, PowerShell, Python, `sed`, `tee`, shell redirection, or any other shell write primitive. Stop with `BLOCKED_BY_OPENCODE_PERMISSION_DENIED` and report the denied path and intended change.
+
+Do not manually overwrite append-only JSONL ledgers. Use `write-harness-event` for events/traces, `selenium-pw-migrator memory add` or `write-memory-entry` for memory additions, and `repair-memory-jsonl` for the narrow case of repairing invalid memory JSONL with a backup. A final handoff is invalid when machine-readable state is contradictory, for example `task-slice-result` says `BLOCKED_NO_AGENT_EXECUTABLE_TASKS` while `continuation-decision.json` still says `CONTINUE_REQUIRED`.
+
+
+## Session export and harness-sentinel
+
+Every supervised run should leave a forensic session artifact. Before final handoff, create or update `migration/runs/<active-run-id>/opencode-session-export.md` with `migration/scripts/export-opencode-session.ps1` or `.sh`. If a native OpenCode transcript is unavailable, export a best-effort artifact and rely on `trace.jsonl`, `harness-events.jsonl`, and `session-observations.jsonl`; do not invent transcript text.
+
+`harness-sentinel` is the process tester / forensic reviewer. Invoke it after gate failure, permission denial, post-final research approval, and before final handoff. It must finish by writing `migration/runs/<run-id>/sentinel/sentinel-inspection.json` through `migration/scripts/complete-sentinel-inspection.*`. If it records open high/critical agent-executable findings, do not hand them to the user as generic advice. Route them to `migration-task-slicer` for a bounded process-hardening ticket, then continue the normal reviewer/gate loop.
+
+`/supervised-task sentinel`, `/supervised-task inspect`, and `/supervised-task qa` explicitly run this process test: export session evidence if needed, invoke `harness-sentinel`, complete `sentinel-inspection.json`, and report findings or the next bounded hardening task.
 
 ## State-aware zero-argument dispatch
 
@@ -60,12 +77,18 @@ Before planning, always read:
 - migration/state/memory/warnings.jsonl, if it exists
 - migration/state/memory/antipatterns.jsonl, if it exists
 - migration/state/memory/final-gate-lessons.jsonl, if it exists
+- migration/state/sentinel-ledger.jsonl, if it exists
+- migration/runs/<active-run-id>/opencode-session-export.md, if it exists
+- migration/runs/<active-run-id>/session-observations.jsonl, if it exists
+- migration/runs/<active-run-id>/sentinel/sentinel-report.md, if it exists
+- migration/runs/<active-run-id>/sentinel/sentinel-findings.jsonl, if it exists
 - migration/plan/plan.md, if it exists
 - migration/plan/waves.json, if it exists
 - migration/plan/memory-recall.md, if it exists
 
 Then dispatch:
 
+0. If `$ARGUMENTS` is `sentinel`, `inspect`, `qa`, or clearly asks for process testing, export/update `opencode-session-export.md`, invoke `harness-sentinel`, and route open high/critical agent-executable findings to `migration-task-slicer` before any final handoff.
 1. If `migration/state/continuation-decision.json` says `CONTINUE_REQUIRED`, Continue with that next bounded action. Do not produce a user-facing handoff first.
 1a. If the persisted active run is `FINAL_STOPPED_FOR_REVIEW`, always resume the closed post-final development loop, even when `$ARGUMENTS` is empty and even when old research or stop-policy checklist entries already exist. Do not stop again, do not ask the user for a more detailed prompt, and do not claim that no bounded action exists. Start or resume: `migration-researcher` → `migration-research-lead` → `migration-task-slicer` → `migration-change-reviewer` → exactly one bounded `executor` task when a ticket is approved. The researcher writes only under `migration/runs/<active-run-id>/research/**` plus allowed lifecycle continuation/trace files; the research lead may request one bounded revision instead of sending weak research to the user; the task slicer writes backlog/current-ticket artifacts only under `migration/**`; the change reviewer validates scope, evidence, and no assertion suppression before executor work.
 1b. If `continuation-decision.json` says `FINAL_RESEARCH_COMPLETED` or `postFinalStage` is `RESEARCH_COMPLETED`, invoke `migration-research-lead` on `migration/runs/<active-run-id>/research/**`. If the lead returns `REQUEST_CHANGES`, send the revision back to `migration-researcher` once; if it returns `APPROVE`, invoke `migration-task-slicer`.
@@ -167,3 +190,19 @@ Do not offer options such as README updates, package maintenance, broad refactor
 After a SUCCESS checkpoint report, never leave the user guessing why no work was done: state that the run is complete, `harness-run.json` should be `FINAL_STOPPED_FOR_REVIEW` when present, and provide exactly one command: `To continue, run: /supervised-task continue`.
 
 Continuation rule: Continue with the next bounded action when `migration/state/continuation-decision.json` reports `CONTINUE_REQUIRED`, the persisted active run is `FINAL_STOPPED_FOR_REVIEW`, the user explicitly requests plain `continue`, or bounded auto-continuation allows this exact action. A `Developer action` in research is not a terminal human handoff until `migration-task-slicer` classifies it as non-agent-executable.
+
+
+## Final handoff process-test gate
+
+Before any final answer, confirm:
+
+- `migration/runs/<active-run-id>/opencode-session-export.md` exists or the report explains why native transcript export was unavailable;
+- `harness-sentinel` has inspected the latest run after the last material state change and wrote `sentinel-inspection.json`;
+- no open high/critical agent-executable sentinel finding remains untriaged;
+- any sentinel hardening recommendation was either routed to `migration-task-slicer` or explicitly classified as informational/non-blocking.
+
+A sentinel finding is not a license to broaden implementation. It becomes a bounded process-hardening task under `migration/**` and must pass the same change-reviewer/watchdog/final-gate path.
+
+## Permission denial discipline
+
+OpenCode permission denials are authoritative. If an edit/write tool is denied, do not retry the same write through bash, PowerShell, Python, sed, tee, shell redirection, or any alternate shell write primitive. Stop with `BLOCKED_BY_OPENCODE_PERMISSION_DENIED` and report the denied path and intended change. Append-only JSONL files must not be overwritten; use `write-memory-entry` or `repair-memory-jsonl` when applicable.

@@ -38,6 +38,34 @@ permission:
     "Where-Object*": allow
     "rg *": allow
     "findstr *": allow
+
+    "Set-Content*": deny
+    "*Set-Content*": deny
+    "Add-Content*": deny
+    "*Add-Content*": deny
+    "Out-File*": deny
+    "*Out-File*": deny
+    "New-Item*": deny
+    "*New-Item*": deny
+    "Copy-Item*": deny
+    "*Copy-Item*": deny
+    "Move-Item*": deny
+    "*Move-Item*": deny
+    "Set-Content *": deny
+    "Add-Content *": deny
+    "Out-File *": deny
+    "tee *": deny
+    "sed -i *": deny
+    "perl -pi *": deny
+    "bash -lc *Set-Content*": deny
+    "bash -lc *Add-Content*": deny
+    "bash -lc *Out-File*": deny
+    "powershell *Set-Content*": deny
+    "powershell *Add-Content*": deny
+    "powershell *Out-File*": deny
+    "pwsh *Set-Content*": deny
+    "pwsh *Add-Content*": deny
+    "pwsh *Out-File*": deny
     "git commit*": deny
     "git push*": deny
     "git reset --hard*": deny
@@ -161,7 +189,8 @@ If at least one `AGENT_EXECUTABLE` task exists and `current-ticket.md` was writt
   "backlogArtifacts": [
     "migration/state/backlog/post-final-backlog.md",
     "migration/state/backlog/post-final-tasks.jsonl",
-    "migration/current-ticket.md"
+    "migration/current-ticket.md",
+    "migration/state/task-slice-result.json"
   ],
   "boundedAutoContinuation": {
     "allowed": true,
@@ -184,7 +213,7 @@ If no agent-executable task exists, set/add:
 }
 ```
 
-Also update `migration/state/continuation-decision.md` with the same next step.
+Also write `migration/state/task-slice-result.json` with the same status and update `migration/state/continuation-decision.json` plus `migration/state/continuation-decision.md` in the same task-slicer step. Do not leave `continuation-decision.json` as `CONTINUE_REQUIRED` when `task-slice-result.json` says `BLOCKED_NO_AGENT_EXECUTABLE_TASKS`.
 
 ## Final response
 

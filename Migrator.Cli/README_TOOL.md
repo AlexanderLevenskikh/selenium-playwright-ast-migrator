@@ -177,7 +177,7 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Old
 /supervised-task waves
 ```
 
-That mode should run the wavefront setup itself. Manual plan commands remain available for debugging or CI:
+That mode should run the wavefront setup itself from the repository root. Manual plan commands remain available for debugging or CI; `migration/**` paths are repository-root artifacts and must not be created under source subdirectories such as `Web/**/migration/**`:
 
 
 ```bash

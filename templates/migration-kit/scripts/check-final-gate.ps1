@@ -66,6 +66,149 @@ function Find-LatestFile([string]$Root, [string[]]$Names) {
         Select-Object -First 1
 }
 
+function Test-NestedMigrationWorkspace([string]$RepoRootPath, [string]$WorkspacePath, [ref]$Detail) {
+    if (-not (Test-Path $RepoRootPath)) {
+        $Detail.Value = "repo root missing: $RepoRootPath"
+        return $false
+    }
+
+    $repoFull = [System.IO.Path]::GetFullPath($RepoRootPath).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $workspaceFull = [System.IO.Path]::GetFullPath($WorkspacePath).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $nested = New-Object System.Collections.Generic.List[string]
+    $ignoredNames = @(".git", "bin", "obj", "node_modules", ".vs", "playwright-report", "TestResults")
+
+    $candidateDirs = @(Get-ChildItem -Path $repoFull -Directory -Recurse -Filter "migration" -ErrorAction SilentlyContinue)
+    foreach ($dir in $candidateDirs) {
+        $full = $dir.FullName.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+        if ($full.Equals($workspaceFull, [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+
+        $relative = Get-RelativePathCompat $repoFull $full
+        $skip = $false
+        foreach ($ignored in $ignoredNames) {
+            if ($relative -match "(^|[\\/])$([regex]::Escape($ignored))([\\/]|$)") {
+                $skip = $true
+                break
+            }
+        }
+        if ($skip) { continue }
+
+        if ((Test-Path (Join-Path $full "state")) -or
+            (Test-Path (Join-Path $full "runs")) -or
+            (Test-Path (Join-Path $full "plan")) -or
+            (Test-Path (Join-Path $full "AGENT_CONTRACT.md"))) {
+            $nested.Add($relative)
+        }
+    }
+
+    if ($nested.Count -gt 0) {
+        $Detail.Value = "nested migration workspace artifacts outside repo-root workspace: " + ($nested -join "; ")
+        return $false
+    }
+
+    $Detail.Value = "no nested migration workspace artifacts outside repo-root workspace"
+    return $true
+}
+
+
+function Test-SentinelInspectionPresent([string]$WorkspacePath, [string]$LatestRunId, [ref]$Detail) {
+    if ([string]::IsNullOrWhiteSpace($LatestRunId)) {
+        $Detail.Value = "latest run id unavailable; cannot verify sentinel inspection"
+        return $false
+    }
+
+    $runSentinelDir = Join-Path $WorkspacePath "runs/$LatestRunId/sentinel"
+    $inspectionPath = Join-Path $runSentinelDir "sentinel-inspection.json"
+    $reportPath = Join-Path $runSentinelDir "sentinel-report.md"
+
+    if (-not (Test-Path $inspectionPath)) {
+        $Detail.Value = "missing $inspectionPath; run harness-sentinel or complete-sentinel-inspection before final handoff"
+        return $false
+    }
+    if (-not (Test-Path $reportPath)) {
+        $Detail.Value = "missing $reportPath; sentinel inspection must include a human-readable report"
+        return $false
+    }
+
+    try {
+        $inspection = Get-Content -Raw -Path $inspectionPath | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        $Detail.Value = "invalid sentinel inspection JSON: $($_.Exception.Message)"
+        return $false
+    }
+
+    if ([string]$inspection.runId -ne $LatestRunId) {
+        $Detail.Value = "sentinel inspection runId mismatch: expected $LatestRunId, found $($inspection.runId)"
+        return $false
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$inspection.inspectedAtUtc)) {
+        $Detail.Value = "sentinel inspection missing inspectedAtUtc"
+        return $false
+    }
+
+    $status = [string]$inspection.status
+    if ($status -match '^(?i:blocked|failed|error)$') {
+        $Detail.Value = "sentinel inspection status is blocking: $status"
+        return $false
+    }
+
+    $Detail.Value = "sentinel inspection present for ${LatestRunId}: $status"
+    return $true
+}
+
+function Test-OpenSentinelBlockingFindings([string]$WorkspacePath, [ref]$Detail) {
+    $paths = @()
+    $stateLedger = Join-Path $WorkspacePath "state/sentinel-ledger.jsonl"
+    if (Test-Path $stateLedger) { $paths += $stateLedger }
+
+    if (Test-Path (Join-Path $WorkspacePath "runs")) {
+        $paths += @(Get-ChildItem -Path (Join-Path $WorkspacePath "runs") -Recurse -File -Filter "sentinel-findings.jsonl" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+    }
+
+    if ($paths.Count -eq 0) {
+        $Detail.Value = "no sentinel findings found"
+        return $true
+    }
+
+    $blocking = New-Object System.Collections.Generic.List[string]
+    foreach ($path in ($paths | Sort-Object -Unique)) {
+        $lineNumber = 0
+        foreach ($line in (Get-Content -Path $path -ErrorAction SilentlyContinue)) {
+            $lineNumber += 1
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            try {
+                $entry = $line | ConvertFrom-Json -ErrorAction Stop
+            } catch {
+                $blocking.Add("invalid sentinel JSONL: ${path}:$lineNumber")
+                continue
+            }
+
+            $severity = [string]$entry.severity
+            $status = [string]$entry.status
+            $agentExecutable = $true
+            if ($null -ne $entry.agentExecutable) {
+                $agentExecutable = [bool]$entry.agentExecutable
+            }
+
+            $isHigh = $severity -match '^(?i:high|critical)$'
+            $isOpen = -not ($status -match '^(?i:closed|accepted|resolved|triaged|non-blocking)$')
+            if ($isHigh -and $isOpen -and $agentExecutable) {
+                $id = if ($entry.findingId) { [string]$entry.findingId } else { "line-$lineNumber" }
+                $category = if ($entry.category) { [string]$entry.category } else { "UNKNOWN" }
+                $blocking.Add("$id $category $severity in $path")
+            }
+        }
+    }
+
+    if ($blocking.Count -gt 0) {
+        $Detail.Value = "open high/critical agent-executable sentinel findings: " + ($blocking -join "; ")
+        return $false
+    }
+
+    $Detail.Value = "sentinel findings present, no open high/critical agent-executable findings"
+    return $true
+}
+
 function Find-RunIds([string]$Text) {
     if ([string]::IsNullOrWhiteSpace($Text)) {
         return @()
@@ -689,7 +832,7 @@ function New-ContinuationDecision([bool]$Passed, $Results, $Candidate, [bool]$Ha
         }
     }
 
-    $terminalGateNames = @("guard-checksums", "harness-policy", "scope-guard")
+    $terminalGateNames = @("guard-checksums", "harness-policy", "scope-guard", "nested-migration-workspace")
     $terminalFailures = @($Results | Where-Object { (-not $_.passed) -and ($terminalGateNames -contains $_.name) })
 
     if ($terminalFailures.Count -gt 0) {
@@ -800,6 +943,10 @@ if (Test-Path $scopeScript) {
 else {
     Add-Result $results "scope-guard" $false "missing $scopeScript"
 }
+
+$nestedWorkspaceDetail = ""
+$nestedWorkspaceOk = Test-NestedMigrationWorkspace $RepoRoot $workspacePath ([ref]$nestedWorkspaceDetail)
+Add-Result $results "nested-migration-workspace" $nestedWorkspaceOk $nestedWorkspaceDetail
 
 $agentStatePath = Join-Path $workspacePath "agent-state.md"
 $currentTicketPath = Join-Path $workspacePath "current-ticket.md"
@@ -930,6 +1077,14 @@ else {
     $verifyPassed = ($projectVerify.Extension -eq ".json" -and (Test-JsonStatusPassed $projectVerify.FullName)) -or (Test-TextLooksPassed $verifyText)
     Add-Result $results "project-verify-or-runtime-status" ($verifyPassed -or $notRuntimeReady) ("report: $($projectVerify.FullName); passed: $verifyPassed; explicit NOT RUNTIME READY status: $notRuntimeReady")
 }
+
+$sentinelInspectionDetail = ""
+$sentinelInspectionOk = Test-SentinelInspectionPresent $workspacePath $latestRunId ([ref]$sentinelInspectionDetail)
+Add-Result $results "sentinel-inspection-present" $sentinelInspectionOk $sentinelInspectionDetail
+
+$sentinelDetail = ""
+$sentinelOk = Test-OpenSentinelBlockingFindings $workspacePath ([ref]$sentinelDetail)
+Add-Result $results "sentinel-open-critical-findings" $sentinelOk $sentinelDetail
 
 $passed = @($results | Where-Object { -not $_.passed }).Count -eq 0
 $continuationSources = @()
@@ -1095,6 +1250,13 @@ if ($continuation.postSuccessPolicy) {
 if ($continuation.nextAction) {
     Write-Host "Next action: $($continuation.nextAction)"
 }
+
+foreach ($check in $results) {
+    if (-not $check.passed) {
+        Write-Host "Check failed: $($check.name) - $($check.detail)"
+    }
+}
+
 Write-Host "Report: $mdPath"
 Write-Host "Continuation: $continuationMdPath"
 

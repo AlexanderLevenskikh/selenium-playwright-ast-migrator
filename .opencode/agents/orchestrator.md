@@ -31,6 +31,34 @@ permission:
     "Where-Object*": allow
     "rg *": allow
     "findstr *": allow
+
+    "Set-Content*": deny
+    "*Set-Content*": deny
+    "Add-Content*": deny
+    "*Add-Content*": deny
+    "Out-File*": deny
+    "*Out-File*": deny
+    "New-Item*": deny
+    "*New-Item*": deny
+    "Copy-Item*": deny
+    "*Copy-Item*": deny
+    "Move-Item*": deny
+    "*Move-Item*": deny
+    "Set-Content *": deny
+    "Add-Content *": deny
+    "Out-File *": deny
+    "tee *": deny
+    "sed -i *": deny
+    "perl -pi *": deny
+    "bash -lc *Set-Content*": deny
+    "bash -lc *Add-Content*": deny
+    "bash -lc *Out-File*": deny
+    "powershell *Set-Content*": deny
+    "powershell *Add-Content*": deny
+    "powershell *Out-File*": deny
+    "pwsh *Set-Content*": deny
+    "pwsh *Add-Content*": deny
+    "pwsh *Out-File*": deny
     "git commit*": deny
     "git push*": deny
     "git reset --hard*": deny
@@ -77,6 +105,8 @@ permission:
     "@migration-research-lead*": allow
     "migration-task-slicer*": allow
     "@migration-task-slicer*": allow
+    "harness-sentinel*": allow
+    "@harness-sentinel*": allow
     "executor": allow
     "watchdog": allow
     "reviewer": allow
@@ -84,6 +114,7 @@ permission:
     "migration-change-reviewer": allow
     "migration-research-lead": allow
     "migration-task-slicer": allow
+    "harness-sentinel": allow
   question: deny
   external_directory: deny
   doom_loop: allow
@@ -120,12 +151,17 @@ Before planning any migration-artifact/autopilot task, read these files when the
 - `migration/state/memory/warnings.jsonl`
 - `migration/state/memory/antipatterns.jsonl`
 - `migration/state/memory/final-gate-lessons.jsonl`
+- `migration/state/sentinel-ledger.jsonl`, if it exists
 - the latest run files under `migration/runs/<run-id>/`:
   - `Prompt.md`
   - `Plan.md`
   - `Implement.md`
   - `Documentation.md`
   - `trace.jsonl`
+  - `opencode-session-export.md`, if it exists
+  - `session-observations.jsonl`, if it exists
+  - `sentinel/sentinel-report.md`, if it exists
+  - `sentinel/sentinel-findings.jsonl`, if it exists
 
 If no active run exists, create one with `migration/scripts/new-harness-run.ps1` using the user's task as `-TaskTitle` and `-Goal`. If an active run already exists and matches the user's task, resume it instead of creating a duplicate.
 
@@ -135,6 +171,21 @@ Treat `migration/state/harness-policy.json` as the action policy:
 - Do not ask routine continuation questions when an allowed next action exists.
 - For ambiguous task intent, dangerous actions, network/package updates, permission-policy edits, or writes outside the allowed workspace, stop with a concrete blocker instead of waiting for an interactive approval.
 - Never weaken guard scripts or `harness-policy.json` during a normal run.
+
+
+## Session export and sentinel process testing
+
+Before any final user-facing handoff, ensure the active run has a forensic session artifact at `migration/runs/<run-id>/opencode-session-export.md` and a completed sentinel inspection at `migration/runs/<run-id>/sentinel/sentinel-inspection.json`. Use `migration/scripts/export-opencode-session.ps1` or `.sh` to create it. If a native OpenCode transcript is unavailable, export a best-effort session artifact and keep important observable lines in `session-observations.jsonl`; do not pretend that missing transcript text exists.
+
+Invoke `harness-sentinel` as the process tester in these checkpoints:
+
+1. after `FINAL_STOPPED_FOR_REVIEW` before a terminal report;
+2. after `GATE_FAILED`;
+3. after any `BLOCKED_BY_OPENCODE_PERMISSION_DENIED`;
+4. after post-final research is approved and before task slicing is treated as final;
+5. before a final handoff when `opencode-session-export.md`, `trace.jsonl`, or continuation state changed.
+
+Sentinel findings are not user handoff by themselves. If `harness-sentinel` records open high/critical agent-executable findings in `migration/runs/<run-id>/sentinel/sentinel-findings.jsonl` or `migration/state/sentinel-ledger.jsonl`, route them to `migration-task-slicer` as bounded process-hardening tasks before claiming final completion. Informational/low findings may be reported as risks.
 
 
 ## post-final research flow
@@ -195,6 +246,7 @@ Artifact-only mode does not block migration-artifact work. It blocks real produc
 10. If code changed, call reviewer on the current diff and active run evidence.
 11. If watchdog/reviewer finds blockers, ask executor for minimal fixes only.
 12. Run the scope guard and harness-policy gate (`migration/scripts/check-harness-policy.ps1`) after each executor patch and before final answer.
+12a. Export or update `opencode-session-export.md` with `migration/scripts/export-opencode-session.ps1`/`.sh`, then invoke `harness-sentinel` before final handoff.
 13. Stop after at most 2 fix-review cycles unless the user explicitly asks to continue.
 14. Do not issue FINAL unless final gate evidence is present.
 15. If the current result is `NOT FINAL - INVESTIGATION RESULT ONLY` or `NOT RUNTIME READY`, do not stop merely to report that status while `CONTINUE_AUTONOMOUSLY` is still true and a next allowed migration-artifact action exists. Update `current-ticket.md` / `handoff.md`, start or delegate the next bounded config/scaffold/evidence step under `migration/**`, and stop only for a checklist-valid blocker such as missing source truth, forbidden writes, unavailable tools, max iterations, or a denied action.
@@ -232,4 +284,25 @@ Final answer must include:
 - scope guard result;
 - harness-policy gate result;
 - final gate result or exact reason it did not run;
+- OpenCode session export path;
+- sentinel report/findings path and whether high/critical findings remain open;
 - remaining risks and unresolved items.
+
+
+## Permission denial and shell-bypass policy
+
+OpenCode permission denials are authoritative. If an edit/write tool is denied, do not retry the same write through `bash`, PowerShell, Python, `sed`, `tee`, shell redirection, or any other alternate tool. Stop and report `BLOCKED_BY_OPENCODE_PERMISSION_DENIED` with the denied path, the intended change, and the role that needs a different permission/policy. A denied write is a blocker, not an instruction to find a loophole.
+
+
+## Append-only and machine-state safety
+
+Treat machine ledgers as controlled state, not free-form text:
+
+- Do not overwrite append-only JSONL ledgers (`migration/state/harness-events.jsonl`, `migration/runs/*/trace.jsonl`, `migration/state/memory/*.jsonl`, `migration/state/backlog/*.jsonl`) with ad-hoc `Set-Content`, `Out-File`, shell redirection, or manual JSON strings.
+- For harness events and trace lines, use `migration/scripts/write-harness-event.ps1` or `.sh`.
+- For memory entries, prefer `selenium-pw-migrator memory add ...`; if the CLI is unavailable, use `migration/scripts/write-memory-entry.ps1` or `.sh`.
+- If a memory JSONL file is invalid and must be repaired, use `migration/scripts/repair-memory-jsonl.ps1` or `.sh`; the repair script must create a backup under `migration/state/memory/.repair-backups/` and write canonical JSONL.
+- `continuation-decision.json` and `current-ticket.md` may be overwritten only by the role assigned to own that state transition; the update must be consistent with `task-slice-result`/review/gate evidence.
+
+
+Sentinel inspections must be finalized with `migration/scripts/complete-sentinel-inspection.ps1` or `.sh`; final gate treats a missing active-run `sentinel-inspection.json` as a process defect.

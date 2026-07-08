@@ -61,7 +61,7 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Sel
 /supervised-task waves
 ```
 
-The `waves` mode is the recommended divide-and-conquer start: it auto-detects source/target/framework when possible, asks only for missing required inputs, runs kit doctor, creates the wavefront plan, materializes the first wave, and runs only the wave-local migration. It must not run a full-source migration before a wave workspace exists.
+The `waves` mode is the recommended divide-and-conquer start: it auto-detects source/target/framework when possible, asks only for missing required inputs, runs kit doctor, creates the wavefront plan, materializes the first wave, and runs only the wave-local migration. It must not run a full-source migration before a wave workspace exists. All `migration/**` artifacts are repository-root state; nested workspaces such as `Web/**/migration/**` are treated as process defects.
 
 For an existing workspace, plain `/supervised-task` resumes the next bounded action. After a successful FINAL/PASS checkpoint, the supervised agent stops once for review and reports evidence. To continue into post-final research without writing a long prompt, run `/supervised-task continue` or plain `/supervised-task` after `FINAL_STOPPED_FOR_REVIEW`.
 

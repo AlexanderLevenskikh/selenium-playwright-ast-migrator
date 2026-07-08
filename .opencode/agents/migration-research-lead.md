@@ -38,6 +38,34 @@ permission:
     "Where-Object*": allow
     "rg *": allow
     "findstr *": allow
+
+    "Set-Content*": deny
+    "*Set-Content*": deny
+    "Add-Content*": deny
+    "*Add-Content*": deny
+    "Out-File*": deny
+    "*Out-File*": deny
+    "New-Item*": deny
+    "*New-Item*": deny
+    "Copy-Item*": deny
+    "*Copy-Item*": deny
+    "Move-Item*": deny
+    "*Move-Item*": deny
+    "Set-Content *": deny
+    "Add-Content *": deny
+    "Out-File *": deny
+    "tee *": deny
+    "sed -i *": deny
+    "perl -pi *": deny
+    "bash -lc *Set-Content*": deny
+    "bash -lc *Add-Content*": deny
+    "bash -lc *Out-File*": deny
+    "powershell *Set-Content*": deny
+    "powershell *Add-Content*": deny
+    "powershell *Out-File*": deny
+    "pwsh *Set-Content*": deny
+    "pwsh *Add-Content*": deny
+    "pwsh *Out-File*": deny
     "git commit*": deny
     "git push*": deny
     "git reset --hard*": deny

@@ -152,6 +152,14 @@ For migration-artifact/autopilot work, start with `/harness-run` or `/supervised
 - Agents should not ask routine continuation questions when the next action is allowed by `migration/state/harness-policy.json` and OpenCode permissions.
 
 
+
+
+## Harness sentinel and session export
+
+Use `/supervised-task sentinel` or `/supervised-task inspect` to run the process tester. The command should export or update `migration/runs/<run-id>/opencode-session-export.md` via `migration/scripts/export-opencode-session.*`, then invoke `harness-sentinel`. Sentinel reads the session export, trace, harness events, state files, prompts, and OpenCode config to detect permission-bypass attempts, append-only JSONL violations, state contradictions, premature DONE, stale root config, and wave/full-migration drift.
+
+Sentinel does not directly fix defects. It writes `migration/runs/<run-id>/sentinel/sentinel-report.md` and machine-readable findings. High/critical agent-executable findings are routed to `migration-task-slicer` as bounded process-hardening tasks before a final handoff.
+
 ## Harness dashboard command
 
 Use `/dashboard-harness` after a harness run has produced `state/harness-events.jsonl` and `state/harness-policy-result.json`. It generates `migration/dashboard/harness/index.html` with English as the default language and Russian available through the language switch.
@@ -167,9 +175,10 @@ The bundled `opencode.jsonc` is intentionally low-noise for migration runs:
 - routine read/navigation tools (`read`, `glob`, `grep`, `list`, `lsp`) are allowed;
 - routine git inspection (`git status*`, `git diff*`, `git show*`, `git log*`, `git ls-files*`) is allowed;
 - PowerShell/source inspection commands (`Get-ChildItem*`, `Get-Content*`, `Test-Path*`, `Select-String*`, `rg *`) are allowed;
-- known subagents (`executor`, `watchdog`, `reviewer`, `migration-researcher`, `migration-research-lead`, `migration-task-slicer`, `migration-change-reviewer`) are allowed;
+- known subagents (`executor`, `watchdog`, `reviewer`, `migration-researcher`, `migration-research-lead`, `migration-task-slicer`, `migration-change-reviewer`, `harness-sentinel`) are allowed;
 - `general` remains denied;
-- destructive VCS, delete, publish, network fetch, and external-directory operations remain denied.
+- destructive VCS, delete, publish, network fetch, and external-directory operations remain denied;
+- direct shell write primitives (`Set-Content`, `Add-Content`, `Out-File`, `tee`, `sed -i`, redirection-style writes) are denied so agents cannot bypass an OpenCode edit denial through shell.
 
 This keeps autopilot runs from asking for approval on every slightly different `git diff` or `git status` command while preserving the `migration/**` edit boundary and final scope guards.
 
@@ -194,3 +203,6 @@ Restart OpenCode after switching profiles.
 After a fresh successful FINAL/PASS checkpoint, the agent reports status and stops for review. Once that status is persisted as `FINAL_STOPPED_FOR_REVIEW`, a later zero-argument `/supervised-task` resumes the same post-final research/review/task-slicing loop automatically; the tester can still run `/supervised-task continue`, but no detailed supervisor prompt is needed.
 
 Compatibility note: `/supervised-task` still stops for review after FINAL on the fresh checkpoint, but persisted FINAL_STOPPED_FOR_REVIEW auto-resumes the closed post-final loop.
+
+
+Sentinel inspections must be finalized with `migration/scripts/complete-sentinel-inspection.ps1` or `.sh`; final gate treats a missing active-run `sentinel-inspection.json` as a process defect.

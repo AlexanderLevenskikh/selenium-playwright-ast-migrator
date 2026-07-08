@@ -31,6 +31,34 @@ permission:
     "Where-Object*": allow
     "rg *": allow
     "findstr *": allow
+
+    "Set-Content*": deny
+    "*Set-Content*": deny
+    "Add-Content*": deny
+    "*Add-Content*": deny
+    "Out-File*": deny
+    "*Out-File*": deny
+    "New-Item*": deny
+    "*New-Item*": deny
+    "Copy-Item*": deny
+    "*Copy-Item*": deny
+    "Move-Item*": deny
+    "*Move-Item*": deny
+    "Set-Content *": deny
+    "Add-Content *": deny
+    "Out-File *": deny
+    "tee *": deny
+    "sed -i *": deny
+    "perl -pi *": deny
+    "bash -lc *Set-Content*": deny
+    "bash -lc *Add-Content*": deny
+    "bash -lc *Out-File*": deny
+    "powershell *Set-Content*": deny
+    "powershell *Add-Content*": deny
+    "powershell *Out-File*": deny
+    "pwsh *Set-Content*": deny
+    "pwsh *Add-Content*": deny
+    "pwsh *Out-File*": deny
     "git commit*": deny
     "git push*": deny
     "git reset --hard*": deny
@@ -127,3 +155,10 @@ APPROVE / REQUEST_CHANGES / BLOCK
 
 ## What looks good
 - concise positives, only if useful
+
+
+## Permission-bypass and ledger-safety review
+
+Reject the change if implementation evidence shows that a denied OpenCode edit/write was retried through shell commands such as PowerShell `Set-Content`, `Add-Content`, `Out-File`, Python file writes, `sed -i`, `tee`, or shell redirection. Permission bypass is a policy failure even when the resulting files are under `migration/**`.
+
+Reject direct overwrites of append-only ledgers (`harness-events.jsonl`, `trace.jsonl`, `state/memory/*.jsonl`, `state/backlog/*.jsonl`) unless the diff was produced by the dedicated repair script with a backup and a documented repair reason.

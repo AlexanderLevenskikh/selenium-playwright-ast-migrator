@@ -109,6 +109,9 @@ internal static class MigrationCommand
 
     static int RunPlan(MigrationOptions options)
     {
+        var repoRoot = ResolveRepositoryRoot();
+        options = NormalizeProjectPaths(options, repoRoot, normalizeInput: true);
+
         if (!string.Equals(options.Strategy, "wavefront", StringComparison.OrdinalIgnoreCase))
         {
             Console.Error.WriteLine("migration plan currently supports --strategy wavefront only.");
@@ -146,9 +149,11 @@ internal static class MigrationCommand
 
     static int RunPlanShow(MigrationOptions options)
     {
-        var planRoot = string.IsNullOrWhiteSpace(options.Plan) ? options.Out : options.Plan;
-        if (string.IsNullOrWhiteSpace(planRoot))
-            planRoot = "migration/plan";
+        var repoRoot = ResolveRepositoryRoot();
+        var rawPlanRoot = string.IsNullOrWhiteSpace(options.Plan) ? options.Out : options.Plan;
+        if (string.IsNullOrWhiteSpace(rawPlanRoot))
+            rawPlanRoot = "migration/plan";
+        var planRoot = ResolveProjectArtifactPath(rawPlanRoot, repoRoot);
 
         var planMd = Directory.Exists(planRoot) ? Path.Combine(planRoot, "plan.md") : planRoot;
         if (!File.Exists(planMd))
@@ -162,16 +167,17 @@ internal static class MigrationCommand
         if (!text.EndsWith(Environment.NewLine, StringComparison.Ordinal))
             Console.WriteLine();
 
-        if (!string.IsNullOrWhiteSpace(options.Out) && !Path.GetFullPath(options.Out).Equals(Path.GetFullPath(planRoot), StringComparison.OrdinalIgnoreCase))
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        if (!string.IsNullOrWhiteSpace(outPath) && !Path.GetFullPath(outPath).Equals(Path.GetFullPath(planRoot), StringComparison.OrdinalIgnoreCase))
         {
-            Directory.CreateDirectory(options.Out);
+            Directory.CreateDirectory(outPath);
             if (options.Format is "text" or "both")
-                File.WriteAllText(Path.Combine(options.Out, "wave-plan-show.md"), text);
+                File.WriteAllText(Path.Combine(outPath, "wave-plan-show.md"), text);
             if (options.Format is "json" or "both")
             {
                 var sourceJson = Directory.Exists(planRoot) ? Path.Combine(planRoot, "waves.json") : Path.ChangeExtension(planRoot, ".json");
                 if (File.Exists(sourceJson))
-                    File.Copy(sourceJson, Path.Combine(options.Out, "waves.json"), overwrite: true);
+                    File.Copy(sourceJson, Path.Combine(outPath, "waves.json"), overwrite: true);
             }
         }
 
@@ -181,7 +187,17 @@ internal static class MigrationCommand
 
     static int RunWave(MigrationOptions options)
     {
-        var planRoot = string.IsNullOrWhiteSpace(options.Plan) ? "migration/plan" : options.Plan;
+        var repoRoot = ResolveRepositoryRoot();
+        var outWasDefault = IsDefaultPlanOut(options.Out);
+        var rawPlanRoot = string.IsNullOrWhiteSpace(options.Plan) ? "migration/plan" : options.Plan;
+        options = NormalizeProjectPaths(options with { Plan = rawPlanRoot }, repoRoot, normalizeInput: false);
+        var planRoot = options.Plan;
+        if (!EnsureProjectWorkspaceBoundary(options.Workspace, options.Out, outWasDefault, repoRoot, out var boundaryError))
+        {
+            Console.Error.WriteLine(boundaryError);
+            return 2;
+        }
+
         if (!TryReadWavePlan(planRoot, out var plan, out var planError))
         {
             Console.Error.WriteLine(planError);
@@ -205,7 +221,7 @@ internal static class MigrationCommand
             return 2;
         }
 
-        var outPath = IsDefaultPlanOut(options.Out) ? Path.Combine(options.Workspace, "runs", wave.Id) : options.Out;
+        var outPath = outWasDefault ? Path.Combine(options.Workspace, "runs", wave.Id) : options.Out;
         Directory.CreateDirectory(outPath);
         var sourceScopeDir = Path.Combine(outPath, "source-scope");
         var generatedDir = Path.Combine(outPath, "generated");
@@ -278,7 +294,109 @@ internal static class MigrationCommand
         return 0;
     }
 
-    static bool IsDefaultPlanOut(string outPath) => string.IsNullOrWhiteSpace(outPath) || outPath.Equals("migration/plan", StringComparison.OrdinalIgnoreCase);
+    static bool IsDefaultPlanOut(string outPath) => string.IsNullOrWhiteSpace(outPath) || NormalizeSlashes(outPath).Equals("migration/plan", StringComparison.OrdinalIgnoreCase);
+
+    static MigrationOptions NormalizeProjectPaths(MigrationOptions options, string repoRoot, bool normalizeInput)
+    {
+        return options with
+        {
+            Input = normalizeInput ? ResolveInputPath(options.Input, repoRoot) : options.Input,
+            Workspace = ResolveProjectArtifactPath(options.Workspace, repoRoot),
+            Out = ResolveProjectArtifactPath(options.Out, repoRoot),
+            Plan = string.IsNullOrWhiteSpace(options.Plan) ? options.Plan : ResolveProjectArtifactPath(options.Plan, repoRoot),
+            Config = string.IsNullOrWhiteSpace(options.Config) ? options.Config : ResolveProjectArtifactPath(options.Config, repoRoot)
+        };
+    }
+
+    static string ResolveRepositoryRoot()
+    {
+        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+        while (dir != null)
+        {
+            if (Directory.Exists(Path.Combine(dir.FullName, ".git")))
+                return dir.FullName;
+            dir = dir.Parent;
+        }
+
+        return Directory.GetCurrentDirectory();
+    }
+
+    static string ResolveInputPath(string path, string repoRoot)
+    {
+        if (string.IsNullOrWhiteSpace(path) || Path.IsPathRooted(path))
+            return path;
+
+        var currentRelative = Path.GetFullPath(path);
+        if (File.Exists(currentRelative) || Directory.Exists(currentRelative))
+            return currentRelative;
+
+        var repoRelative = Path.GetFullPath(Path.Combine(repoRoot, path));
+        if (File.Exists(repoRelative) || Directory.Exists(repoRelative))
+            return repoRelative;
+
+        return currentRelative;
+    }
+
+    static string ResolveProjectArtifactPath(string path, string repoRoot)
+    {
+        if (string.IsNullOrWhiteSpace(path) || Path.IsPathRooted(path))
+            return string.IsNullOrWhiteSpace(path) ? path : Path.GetFullPath(path);
+
+        // Migration workspaces and wave artifacts are project-level state.
+        // Even when the agent accidentally runs from Web/<project> or another source subdirectory,
+        // `migration/**` must resolve to <repo-root>/migration/**, never to <cwd>/migration/**.
+        if (IsMigrationRelativePath(path))
+            return Path.GetFullPath(Path.Combine(repoRoot, path));
+
+        return Path.GetFullPath(path);
+    }
+
+    static bool EnsureProjectWorkspaceBoundary(string workspacePath, string outPath, bool outWasDefault, string repoRoot, out string error)
+    {
+        var workspaceFull = Path.GetFullPath(workspacePath);
+        var expectedWorkspace = Path.GetFullPath(Path.Combine(repoRoot, "migration"));
+        if (Path.GetFileName(workspaceFull).Equals("migration", StringComparison.OrdinalIgnoreCase)
+            && !workspaceFull.Equals(expectedWorkspace, StringComparison.OrdinalIgnoreCase))
+        {
+            error = "NESTED_MIGRATION_WORKSPACE_BLOCKED: --workspace migration resolved outside the repository-root migration directory. Run migration commands from the repository root or pass an absolute repo-root workspace.";
+            return false;
+        }
+
+        var outFull = Path.GetFullPath(outPath);
+        if (outWasDefault && !IsPathWithin(outFull, expectedWorkspace))
+        {
+            error = "NESTED_MIGRATION_WORKSPACE_BLOCKED: default wave output must be under the repository-root migration/runs directory.";
+            return false;
+        }
+
+        if (!IsPathWithin(outFull, expectedWorkspace) && ContainsMigrationSegment(outFull))
+        {
+            error = "NESTED_MIGRATION_WORKSPACE_BLOCKED: explicit wave output points at a migration directory outside the repository-root migration workspace.";
+            return false;
+        }
+
+        error = string.Empty;
+        return true;
+    }
+
+    static bool IsMigrationRelativePath(string path)
+    {
+        var normalized = NormalizeSlashes(path).TrimStart('.', '/');
+        return normalized.Equals("migration", StringComparison.OrdinalIgnoreCase)
+            || normalized.StartsWith("migration/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    static bool ContainsMigrationSegment(string path)
+        => NormalizeSlashes(path).Split('/', StringSplitOptions.RemoveEmptyEntries).Any(segment => segment.Equals("migration", StringComparison.OrdinalIgnoreCase));
+
+    static bool IsPathWithin(string path, string root)
+    {
+        var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase);
+    }
+
+    static string NormalizeSlashes(string path) => path.Replace('\\', '/');
 
     static string ResolveSourceRoot(string inputPath)
     {

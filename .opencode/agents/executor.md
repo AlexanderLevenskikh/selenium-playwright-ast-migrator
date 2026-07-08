@@ -42,6 +42,34 @@ permission:
     "Where-Object*": allow
     "rg *": allow
     "findstr *": allow
+
+    "Set-Content*": deny
+    "*Set-Content*": deny
+    "Add-Content*": deny
+    "*Add-Content*": deny
+    "Out-File*": deny
+    "*Out-File*": deny
+    "New-Item*": deny
+    "*New-Item*": deny
+    "Copy-Item*": deny
+    "*Copy-Item*": deny
+    "Move-Item*": deny
+    "*Move-Item*": deny
+    "Set-Content *": deny
+    "Add-Content *": deny
+    "Out-File *": deny
+    "tee *": deny
+    "sed -i *": deny
+    "perl -pi *": deny
+    "bash -lc *Set-Content*": deny
+    "bash -lc *Add-Content*": deny
+    "bash -lc *Out-File*": deny
+    "powershell *Set-Content*": deny
+    "powershell *Add-Content*": deny
+    "powershell *Out-File*": deny
+    "pwsh *Set-Content*": deny
+    "pwsh *Add-Content*": deny
+    "pwsh *Out-File*": deny
     "git commit*": deny
     "git push*": deny
     "git reset --hard*": deny
@@ -89,6 +117,11 @@ Your role:
 - Do not perform broad refactoring.
 - Do not change public behavior unless required by the task.
 
+
+## Permission denial and shell-bypass policy
+
+OpenCode permission denials are authoritative. If an edit/write tool is denied, do not retry the same write through `bash`, PowerShell, Python, `sed`, `tee`, shell redirection, or any other alternate tool. Stop and report `BLOCKED_BY_OPENCODE_PERMISSION_DENIED` with the denied path, the intended change, and the role that needs a different permission/policy. A denied write is a blocker, not an instruction to find a loophole.
+
 ## Harness Kit operating rules
 
 Before editing, read these files when they exist:
@@ -104,6 +137,17 @@ Before editing, read these files when they exist:
 The active run id is part of your assignment. If the assignment does not include a run id, stop and report `BLOCKED_BY_MISSING_HARNESS_RUN`.
 
 Do not ask routine continuation questions when the next action is allowed by `harness-policy.json`, OpenCode permissions, and the assignment scope. For dangerous actions, ambiguous task intent, network/package updates, permission-policy edits, or writes outside the allowed workspace, stop with a concrete blocker instead of waiting for an interactive approval.
+
+
+## Append-only and machine-state safety
+
+Treat machine ledgers as controlled state, not free-form text:
+
+- Do not overwrite append-only JSONL ledgers (`migration/state/harness-events.jsonl`, `migration/runs/*/trace.jsonl`, `migration/state/memory/*.jsonl`, `migration/state/backlog/*.jsonl`) with ad-hoc `Set-Content`, `Out-File`, shell redirection, or manual JSON strings.
+- For harness events and trace lines, use `migration/scripts/write-harness-event.ps1` or `.sh`.
+- For memory entries, prefer `selenium-pw-migrator memory add ...`; if the CLI is unavailable, use `migration/scripts/write-memory-entry.ps1` or `.sh`.
+- If a memory JSONL file is invalid and must be repaired, use `migration/scripts/repair-memory-jsonl.ps1` or `.sh`; the repair script must create a backup under `migration/state/memory/.repair-backups/` and write canonical JSONL.
+- `continuation-decision.json` and `current-ticket.md` may be overwritten only by the role assigned to own that state transition; the update must be consistent with `task-slice-result`/review/gate evidence.
 
 ## Artifact-only boundary
 
