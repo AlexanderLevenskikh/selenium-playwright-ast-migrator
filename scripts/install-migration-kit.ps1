@@ -160,6 +160,10 @@ function Test-AutoUpdatedKitOwnedFile([string]$RelativePath) {
         $normalized -eq "scripts/new-harness-run.sh" -or
         $normalized -eq "scripts/write-harness-event.ps1" -or
         $normalized -eq "scripts/write-harness-event.sh" -or
+        $normalized -eq "scripts/write-agent-skill-usage.ps1" -or
+        $normalized -eq "scripts/write-agent-skill-usage.sh" -or
+        $normalized -eq "scripts/record-agent-skill-profile.ps1" -or
+        $normalized -eq "scripts/record-agent-skill-profile.sh" -or
         $normalized -eq "state/continuation-contract.md" -or
         $normalized.StartsWith("prompts/") -or
         $normalized.StartsWith("agent-skills/")
@@ -315,7 +319,11 @@ function Write-GuardChecksums([string]$WorkspacePath) {
         "scripts/check-harness-policy.ps1",
         "scripts/check-harness-policy.sh",
         "scripts/build-harness-dashboard.ps1",
-        "scripts/build-harness-dashboard.sh"
+        "scripts/build-harness-dashboard.sh",
+        "scripts/write-agent-skill-usage.ps1",
+        "scripts/write-agent-skill-usage.sh",
+        "scripts/record-agent-skill-profile.ps1",
+        "scripts/record-agent-skill-profile.sh"
     )
 
     $entries = @()

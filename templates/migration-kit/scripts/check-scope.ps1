@@ -1,6 +1,7 @@
 param(
     [string]$RepoRoot = ".",
     [string[]]$AllowedRoots = @("migration"),
+    [string]$ScopeBaselinePath = "",
     [switch]$AllowNoGit
 )
 
@@ -104,6 +105,82 @@ function Get-ChangedPathsFromPorcelainZ([string]$Status) {
     return $paths
 }
 
+function Resolve-ScopeBaselinePath([string]$GitRoot, [string[]]$AllowedRootPatterns, [string]$ExplicitPath) {
+    if (-not [string]::IsNullOrWhiteSpace($ExplicitPath)) {
+        if ([System.IO.Path]::IsPathRooted($ExplicitPath)) { return $ExplicitPath }
+        return Join-Path $GitRoot $ExplicitPath
+    }
+
+    foreach ($rootPattern in $AllowedRootPatterns) {
+        $normalized = Normalize-GitPath (Convert-ToGitRelativePath -GitRoot $GitRoot -Path $rootPattern)
+        if ([string]::IsNullOrWhiteSpace($normalized) -or $normalized.Contains("*") -or $normalized.Contains("?")) { continue }
+        return Join-Path $GitRoot (Join-Path $normalized "state/scope-baseline.json")
+    }
+
+    return Join-Path $GitRoot "migration/state/scope-baseline.json"
+}
+
+function Read-ScopeBaseline([string]$Path) {
+    $map = @{}
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path $Path)) {
+        return $map
+    }
+
+    try {
+        $json = Get-Content -Raw -Path $Path | ConvertFrom-Json -ErrorAction Stop
+        foreach ($entry in @($json.entries)) {
+            $pathValue = [string]$entry.path
+            if ([string]::IsNullOrWhiteSpace($pathValue)) { continue }
+            $map[(Normalize-GitPath $pathValue)] = [ordered]@{
+                status = [string]$entry.status
+                fingerprint = [string]$entry.fingerprint
+            }
+        }
+    }
+    catch {
+        Write-Warning "Could not read scope baseline ${Path}: $($_.Exception.Message)"
+    }
+
+    return $map
+}
+
+function Get-FileFingerprint([string]$GitRoot, [string]$RelativePath) {
+    $full = Join-Path $GitRoot $RelativePath
+    if (-not (Test-Path -LiteralPath $full)) { return "missing" }
+    try {
+        $item = Get-Item -LiteralPath $full -ErrorAction Stop
+        if ($item.PSIsContainer) { return "directory" }
+        return (Get-FileHash -Algorithm SHA256 -LiteralPath $full).Hash.ToUpperInvariant()
+    }
+    catch {
+        return "unavailable"
+    }
+}
+
+function Get-StatusEntriesFromPorcelainZ([string]$Status) {
+    $tokens = $Status -split [char]0
+    $entries = New-Object System.Collections.Generic.List[object]
+    for ($i = 0; $i -lt $tokens.Length; $i++) {
+        $entry = $tokens[$i]
+        if ([string]::IsNullOrEmpty($entry) -or $entry.Length -lt 4) { continue }
+
+        $xy = $entry.Substring(0, 2)
+        $path = $entry.Substring(3)
+        if (-not [string]::IsNullOrWhiteSpace($path)) {
+            $entries.Add([pscustomobject]@{ status = $xy; path = $path })
+        }
+
+        if ($xy.Contains("R") -or $xy.Contains("C")) {
+            if ($i + 1 -lt $tokens.Length -and -not [string]::IsNullOrEmpty($tokens[$i + 1])) {
+                $entries.Add([pscustomobject]@{ status = $xy; path = $tokens[$i + 1] })
+                $i++
+            }
+        }
+    }
+
+    return $entries
+}
+
 Push-Location $RepoRoot
 try {
     $gitRoot = (& git rev-parse --show-toplevel 2>$null)
@@ -138,19 +215,43 @@ try {
     $normalizedRoots = @($normalizedRoots) + $projectLocalOpenCodeAllowedRoots
 
     $status = Read-GitStatusPorcelainZ
-    $changedPaths = Get-ChangedPathsFromPorcelainZ $status
+    $statusEntries = @(Get-StatusEntriesFromPorcelainZ $status)
+    $baselinePath = Resolve-ScopeBaselinePath $gitRoot $AllowedRoots $ScopeBaselinePath
+    $baseline = Read-ScopeBaseline $baselinePath
 
     $violations = New-Object System.Collections.Generic.List[string]
-    foreach ($path in $changedPaths) {
-        if (-not (Test-AllowedPath -Path $path -AllowedRootPatterns $normalizedRoots)) {
-            $violations.Add((Normalize-GitPath $path))
+    $baselineIgnored = New-Object System.Collections.Generic.List[string]
+    foreach ($entry in $statusEntries) {
+        $normalizedPath = Normalize-GitPath $entry.path
+        if (Test-AllowedPath -Path $normalizedPath -AllowedRootPatterns $normalizedRoots) {
+            continue
         }
+
+        if ($baseline.ContainsKey($normalizedPath)) {
+            $currentFingerprint = Get-FileFingerprint $gitRoot $normalizedPath
+            $baselineEntry = $baseline[$normalizedPath]
+            $sameStatus = ([string]$baselineEntry.status).Equals([string]$entry.status, [StringComparison]::Ordinal)
+            $sameFingerprint = [string]::IsNullOrWhiteSpace([string]$baselineEntry.fingerprint) -or ([string]$baselineEntry.fingerprint).Equals($currentFingerprint, [StringComparison]::OrdinalIgnoreCase)
+            if ($sameStatus -and $sameFingerprint) {
+                $baselineIgnored.Add($normalizedPath)
+                continue
+            }
+        }
+
+        $violations.Add($normalizedPath)
     }
 
     if ($violations.Count -gt 0) {
         Write-Host "SCOPE_GUARD_FAILED: changed files outside allowed roots:"
         foreach ($violation in ($violations | Sort-Object -Unique)) {
             Write-Host "  $violation"
+        }
+        if ($baselineIgnored.Count -gt 0) {
+            Write-Host ""
+            Write-Host "Pre-existing unchanged out-of-scope paths ignored by baseline ${baselinePath}:"
+            foreach ($ignored in ($baselineIgnored | Sort-Object -Unique)) {
+                Write-Host "  $ignored"
+            }
         }
         Write-Host ""
         Write-Host "Allowed roots:"
@@ -160,7 +261,14 @@ try {
         exit 1
     }
 
-    Write-Host "SCOPE_GUARD_PASSED: all changed files are inside allowed roots: $($AllowedRoots -join ', ')"
+    if ($baselineIgnored.Count -gt 0) {
+        Write-Host "SCOPE_GUARD_WARNING: ignored pre-existing unchanged out-of-scope paths from baseline ${baselinePath}:"
+        foreach ($ignored in ($baselineIgnored | Sort-Object -Unique)) {
+            Write-Host "  $ignored"
+        }
+    }
+
+    Write-Host "SCOPE_GUARD_PASSED: all new/changed files are inside allowed roots: $($AllowedRoots -join ', ')"
     exit 0
 }
 catch {

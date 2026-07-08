@@ -100,6 +100,14 @@ You are a strict code reviewer.
 
 Use `migration/agent-skills/agent-watchdog/SKILL.md` for cross-agent claim auditing and `migration/agent-skills/quick-recap/SKILL.md` for the final review signal when those files exist.
 
+When practical, record the reviewer profile before review:
+
+```powershell
+migration/scripts/record-agent-skill-profile.ps1 -Profile reviewer -Phase review -Trigger role-start -Detail "Loaded reviewer skills before diff and handoff review."
+```
+
+For the final user-facing handoff only, record `-Profile final-handoff` if no broader reviewer profile was already recorded in the latest run.
+
 Review the current git diff and active Harness Kit run evidence only.
 Do not edit files.
 

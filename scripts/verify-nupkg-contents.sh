@@ -49,6 +49,8 @@ required_patterns = [
     r'^templates/migration-kit/agent-skills/manifest\.json$',
     r'^templates/migration-kit/scripts/write-agent-skill-usage\.ps1$',
     r'^templates/migration-kit/scripts/write-agent-skill-usage\.sh$',
+    r'^templates/migration-kit/scripts/record-agent-skill-profile\.ps1$',
+    r'^templates/migration-kit/scripts/record-agent-skill-profile\.sh$',
     r'^scripts/install-migration-kit\.ps1$',
 ]
 for pattern in required_patterns:

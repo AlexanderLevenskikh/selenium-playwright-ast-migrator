@@ -165,6 +165,14 @@ Before planning any migration-artifact/autopilot task, read these files when the
 
 If no active run exists, create one with `migration/scripts/new-harness-run.ps1` using the user's task as `-TaskTitle` and `-Goal`. If an active run already exists and matches the user's task, resume it instead of creating a duplicate.
 
+Once a run is active, record the orchestration skill profile when practical:
+
+```powershell
+migration/scripts/record-agent-skill-profile.ps1 -Profile orchestrator -Phase planning -Trigger role-start -Detail "Loaded orchestration skills before dispatch."
+```
+
+Use the `.sh` companion on Unix-like shells. For a broad wave/TODO decomposition, record `-Profile wave`; for competing plans, record `-Profile plan-arbiter`.
+
 Treat `migration/state/harness-policy.json` as the action policy:
 
 - Continue autonomously for actions allowed by `harness-policy.json` and OpenCode permissions.
@@ -175,7 +183,7 @@ Treat `migration/state/harness-policy.json` as the action policy:
 
 ## Session export and sentinel process testing
 
-Before any final user-facing handoff, ensure the active run has a forensic session artifact at `migration/runs/<run-id>/opencode-session-export.md` and a completed sentinel inspection at `migration/runs/<run-id>/sentinel/sentinel-inspection.json`. Use `migration/scripts/export-opencode-session.ps1` or `.sh` to create it. If a native OpenCode transcript is unavailable, export a best-effort session artifact and keep important observable lines in `session-observations.jsonl`; do not pretend that missing transcript text exists.
+Before any final user-facing handoff, ensure the active run has a forensic session artifact at `migration/runs/<run-id>/opencode-session-export.md` and a completed sentinel inspection at `migration/runs/<run-id>/sentinel/sentinel-inspection.json`. Use `migration/scripts/export-opencode-session.ps1` or `.sh` to create it. If a native OpenCode transcript is unavailable, export an explicit `UNAVAILABLE_WITH_REASON` session artifact and keep important observable lines in `session-observations.jsonl`; do not pretend that missing transcript text exists.
 
 Invoke `harness-sentinel` as the process tester in these checkpoints:
 
@@ -310,3 +318,9 @@ Treat machine ledgers as controlled state, not free-form text:
 
 
 Sentinel inspections must be finalized with `migration/scripts/complete-sentinel-inspection.ps1` or `.sh`; final gate treats a missing active-run `sentinel-inspection.json` as a process defect.
+
+
+Final gate reconciles `migration/state/harness-run.json` after every run: gate failure writes `BLOCKED_BY_GATE`/the concrete continuation status and real `latestChecks`; a supervisor must not continue from stale `CONTINUE_AUTONOMOUSLY` state after a failed gate.
+
+
+Wave scope is file-based, not single-test-based: report `sourceFiles`, estimated/actual test count, migrated action count, and TODO count explicitly. Do not describe a wave as “3 tests” when the input scope is 3 files containing more tests.

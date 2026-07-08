@@ -146,6 +146,7 @@ Use one of these categories unless a more precise project-specific one already e
 - `STALE_ROOT_OPENCODE_CONFIG`
 - `MISSING_SESSION_EXPORT`
 - `NESTED_MIGRATION_WORKSPACE`
+- `STALE_GATE_EVIDENCE`
 - `SENTINEL_RECOMMENDED_HARDENING`
 
 Severity values: `info`, `low`, `medium`, `high`, `critical`.
@@ -225,6 +226,10 @@ Each finding must include:
 - summary;
 - whether it is agent-executable;
 - recommended bounded action.
+
+For filesystem/path claims, high or critical findings must be evidence-backed with current path evidence (`data.path`, `data.paths`, or `data.pathEvidence`). If a gate mentions `Web/**/migration` but the path no longer exists, record `STALE_GATE_EVIDENCE` or lower severity instead of claiming a live `NESTED_MIGRATION_WORKSPACE`.
+
+If the summary must mention denied shell-write tokens such as `Set-Content`, avoid fighting permission filters by passing a JSON finding through `-FindingJsonPath` or `-ReadFindingJsonFromStdin` to `write-sentinel-finding`; do not manually edit JSONL ledgers.
 
 ## Routing rule
 

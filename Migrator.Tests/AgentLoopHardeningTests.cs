@@ -574,6 +574,8 @@ public class AgentLoopHardeningTests
         var manifest = Read("templates/migration-kit/agent-skills/manifest.json");
         var usageWriterPs = Read("templates/migration-kit/scripts/write-agent-skill-usage.ps1");
         var usageWriterSh = Read("templates/migration-kit/scripts/write-agent-skill-usage.sh");
+        var profileRecorderPs = Read("templates/migration-kit/scripts/record-agent-skill-profile.ps1");
+        var profileRecorderSh = Read("templates/migration-kit/scripts/record-agent-skill-profile.sh");
         var finalGate = Read("templates/migration-kit/scripts/check-final-gate.ps1");
         var newHarnessRun = Read("templates/migration-kit/scripts/new-harness-run.ps1");
         var contract = Read("templates/migration-kit/AGENT_CONTRACT.md");
@@ -620,19 +622,34 @@ public class AgentLoopHardeningTests
         Assert.Contains("Status: GREEN", quickRecap);
         Assert.Contains("HYBRID_PLAN", planArbiter);
         Assert.Contains("agent-skill-usage/v1", manifest);
+        Assert.Contains("recommendedProfiles", manifest);
+        Assert.Contains("executor-docs-first", manifest);
+        Assert.Contains("record-agent-skill-profile", manifest);
         Assert.Contains("write-agent-skill-usage", usageWriterPs);
         Assert.Contains("AGENT_SKILL_USAGE_RECORDED", usageWriterPs);
         Assert.Contains("pwsh", usageWriterSh);
+        Assert.Contains("record-agent-skill-profile", profileRecorderPs);
+        Assert.Contains("AGENT_SKILL_PROFILE_RECORDED", profileRecorderPs);
+        Assert.Contains("executor-docs-first", profileRecorderPs);
+        Assert.Contains("pwsh", profileRecorderSh);
         Assert.Contains("agent-skill-usage-evidence", finalGate);
         Assert.Contains("Test-AgentSkillUsageEvidence", finalGate);
+        Assert.Contains("record-agent-skill-profile.ps1", finalGate);
         Assert.Contains("runs/$RunId/skills/applied-skills.md", newHarnessRun);
+        Assert.Contains("record-agent-skill-profile.ps1", newHarnessRun);
 
         Assert.Contains("migration/agent-skills/skill-map.md", orchestrator);
         Assert.Contains("migration/agent-skills/plow-ahead/SKILL.md", orchestrator);
+        Assert.Contains("record-agent-skill-profile.ps1 -Profile orchestrator", orchestrator);
         Assert.Contains("migration/agent-skills/read-the-damn-docs/SKILL.md", executor);
+        Assert.Contains("record-agent-skill-profile.ps1 -Profile executor", executor);
+        Assert.Contains("executor-docs-first", executor);
         Assert.Contains("migration/agent-skills/agent-watchdog/SKILL.md", watchdog);
+        Assert.Contains("record-agent-skill-profile.ps1 -Profile watchdog", watchdog);
         Assert.Contains("migration/agent-skills/quick-recap/SKILL.md", reviewer);
+        Assert.Contains("record-agent-skill-profile.ps1 -Profile reviewer", reviewer);
         Assert.Contains("migration/agent-skills/efficient-frontier/SKILL.md", supervisedTask);
+        Assert.Contains("record-agent-skill-profile.ps1 -Profile supervised-task", supervisedTask);
         Assert.Contains("GREEN/YELLOW/RED", supervisedTask);
     }
 
@@ -796,6 +813,37 @@ public class AgentLoopHardeningTests
         Assert.Contains("Test-OpenSentinelBlockingFindings", finalGate);
         Assert.Contains("agent-skill-usage-evidence", finalGate);
         Assert.Contains("nested-migration-workspace", finalGate);
+    }
+
+
+    [Fact]
+    public void HarnessHardening_ReconcilesGateStateAndRequiresEvidenceBackedSentinelFindings()
+    {
+        var finalGate = Read("templates/migration-kit/scripts/check-final-gate.ps1");
+        var scopeGuard = Read("templates/migration-kit/scripts/check-scope.ps1");
+        var harnessPolicy = Read("templates/migration-kit/scripts/check-harness-policy.ps1");
+        var newRun = Read("templates/migration-kit/scripts/new-harness-run.ps1");
+        var sessionExport = Read("templates/migration-kit/scripts/export-opencode-session.ps1");
+        var sentinelFinding = Read("templates/migration-kit/scripts/write-sentinel-finding.ps1");
+        var sentinelAgent = Read("templates/opencode-team/global/.config/opencode/agents/harness-sentinel.md");
+        var program = Read("Migrator.Cli/Program.cs");
+
+        Assert.Contains("Update-HarnessRunStateFromFinalGate", finalGate);
+        Assert.Contains("latestChecks", finalGate);
+        Assert.Contains("FIX_GATE_FAILURES", finalGate);
+        Assert.Contains("scope-baseline/v1", newRun);
+        Assert.Contains("ScopeBaselinePath", scopeGuard);
+        Assert.Contains("ignored pre-existing unchanged out-of-scope paths", scopeGuard);
+        Assert.Contains("Read-ScopeBaselinePathSet", harnessPolicy);
+        Assert.Contains("UNAVAILABLE_WITH_REASON", sessionExport);
+        Assert.Contains("exportStatus", sessionExport);
+        Assert.Contains("FindingJsonPath", sentinelFinding);
+        Assert.Contains("ReadFindingJsonFromStdin", sentinelFinding);
+        Assert.Contains("pathEvidence", sentinelFinding);
+        Assert.Contains("STALE_GATE_EVIDENCE", sentinelFinding);
+        Assert.Contains("high or critical findings must be evidence-backed", sentinelAgent, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ManagePackageVersionsCentrally", program);
+        Assert.Contains("NU1008", Read("docs/project-verification.md"));
     }
 
 
@@ -1787,7 +1835,9 @@ public class AgentLoopHardeningTests
             "scripts/complete-sentinel-inspection.ps1",
             "scripts/complete-sentinel-inspection.sh",
             "scripts/write-agent-skill-usage.ps1",
-            "scripts/write-agent-skill-usage.sh"
+            "scripts/write-agent-skill-usage.sh",
+            "scripts/record-agent-skill-profile.ps1",
+            "scripts/record-agent-skill-profile.sh"
         };
 
     static string BuildGuardChecksumsJson(string workspacePath)

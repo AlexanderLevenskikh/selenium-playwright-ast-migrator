@@ -49,7 +49,7 @@ Do not manually overwrite append-only JSONL ledgers. Use `write-harness-event` f
 
 ## Session export and harness-sentinel
 
-Every supervised run should leave a forensic session artifact. Before final handoff, create or update `migration/runs/<active-run-id>/opencode-session-export.md` with `migration/scripts/export-opencode-session.ps1` or `.sh`. If a native OpenCode transcript is unavailable, export a best-effort artifact and rely on `trace.jsonl`, `harness-events.jsonl`, and `session-observations.jsonl`; do not invent transcript text.
+Every supervised run should leave a forensic session artifact. Before final handoff, create or update `migration/runs/<active-run-id>/opencode-session-export.md` with `migration/scripts/export-opencode-session.ps1` or `.sh`. If a native OpenCode transcript is unavailable, export an explicit `UNAVAILABLE_WITH_REASON` artifact and rely on `trace.jsonl`, `harness-events.jsonl`, and `session-observations.jsonl`; do not create an empty transcript template or invent transcript text.
 
 `harness-sentinel` is the process tester / forensic reviewer. Invoke it after gate failure, permission denial, post-final research approval, and before final handoff. It must finish by writing `migration/runs/<run-id>/sentinel/sentinel-inspection.json` through `migration/scripts/complete-sentinel-inspection.*`. If it records open high/critical agent-executable findings, do not hand them to the user as generic advice. Route them to `migration-task-slicer` for a bounded process-hardening ticket, then continue the normal reviewer/gate loop.
 
@@ -59,7 +59,13 @@ Every supervised run should leave a forensic session artifact. Before final hand
 
 `/supervised-task` is the normal tester-facing entrypoint. It must work with no arguments. If `$ARGUMENTS` is empty or only whitespace, inspect workspace state and choose the safe behavior below; do not ask the user what to do next and do not require them to know Harness internals.
 
-Before planning, always read:
+Before planning, record the default dispatch skill profile when practical:
+
+```powershell
+migration/scripts/record-agent-skill-profile.ps1 -Profile supervised-task -Phase dispatch -Trigger supervised-task -Detail "Loaded supervised-task dispatch profile."
+```
+
+Use the `.sh` companion on Unix-like shells. Then read:
 
 - AGENTS.md
 - migration/AGENT_CONTRACT.md
@@ -210,3 +216,9 @@ A sentinel finding is not a license to broaden implementation. It becomes a boun
 ## Permission denial discipline
 
 OpenCode permission denials are authoritative. If an edit/write tool is denied, do not retry the same write through bash, PowerShell, Python, sed, tee, shell redirection, or any alternate shell write primitive. Stop with `BLOCKED_BY_OPENCODE_PERMISSION_DENIED` and report the denied path and intended change. Append-only JSONL files must not be overwritten; use `write-memory-entry` or `repair-memory-jsonl` when applicable.
+
+
+Final gate reconciles `migration/state/harness-run.json` after every run: gate failure writes `BLOCKED_BY_GATE`/the concrete continuation status and real `latestChecks`; a supervisor must not continue from stale `CONTINUE_AUTONOMOUSLY` state after a failed gate.
+
+
+Wave scope is file-based, not single-test-based: report `sourceFiles`, estimated/actual test count, migrated action count, and TODO count explicitly. Do not describe a wave as “3 tests” when the input scope is 3 files containing more tests.

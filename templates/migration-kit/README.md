@@ -18,7 +18,7 @@ It is intentionally file-based so an AI agent can resume after context loss.
 
 Reusable behavior contracts live under `agent-skills/`:
 
-Applied skills are recorded with `scripts/write-agent-skill-usage.ps1` / `.sh` into `state/agent-skill-usage.jsonl` and `runs/<run-id>/skills/applied-skills.md`; final gate checks this evidence in skill-enabled workspaces.
+Applied skills are recorded with `scripts/record-agent-skill-profile.ps1` / `.sh` for common role profiles, or `scripts/write-agent-skill-usage.ps1` / `.sh` for custom one-off decisions, into `state/agent-skill-usage.jsonl` and `runs/<run-id>/skills/applied-skills.md`; final gate checks this evidence in skill-enabled workspaces.
 
 
 - `agent-skills/skill-map.md` tells each role which skill to load.
@@ -231,3 +231,6 @@ The generated artifact lives at `migration/runs/<run-id>/opencode-session-export
 
 
 Sentinel inspections must be finalized with `migration/scripts/complete-sentinel-inspection.ps1` or `.sh`; final gate treats a missing active-run `sentinel-inspection.json` as a process defect.
+
+
+Final gate reconciles `migration/state/harness-run.json` after every run: gate failure writes `BLOCKED_BY_GATE`/the concrete continuation status and real `latestChecks`; a supervisor must not continue from stale `CONTINUE_AUTONOMOUSLY` state after a failed gate.

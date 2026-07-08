@@ -56,12 +56,12 @@ if ($Append -and (Test-Path $sessionPath)) {
     $existing = (Get-Content -Raw -Path $sessionPath).TrimEnd() + "`n`n---`n`n"
 }
 
+$exportStatus = "REAL_EXPORT"
+$unavailableReason = ""
 if ([string]::IsNullOrWhiteSpace($inputText)) {
-    $inputText = @"
-No native OpenCode transcript was provided to export-opencode-session.
-
-This artifact still records that the supervised run attempted to create a forensic session export. Agents should append important observable session excerpts to session-observations.jsonl with write-sentinel-finding or include a copied OpenCode transcript via -InputPath/-Content when available.
-"@
+    $exportStatus = "UNAVAILABLE_WITH_REASON"
+    $unavailableReason = "Native OpenCode transcript was not provided to export-opencode-session. Use trace.jsonl, harness-events.jsonl, session-observations.jsonl, and sentinel findings as forensic evidence; do not treat this file as a transcript."
+    $inputText = "Transcript unavailable. Reason: $unavailableReason"
 }
 
 $timestamp = [DateTimeOffset]::UtcNow.ToString("o")
@@ -72,6 +72,7 @@ $body = @"
 - Workspace: `$Workspace`
 - Source: `$Source`
 - Exported at UTC: `$timestamp`
+- Export status: `$exportStatus`
 
 ## Transcript / observed session content
 
@@ -90,6 +91,8 @@ $manifest = [ordered]@{
     observationsPath = "runs/$RunId/session-observations.jsonl"
     inputPath = $InputPath
     appended = [bool]$Append
+    exportStatus = $exportStatus
+    unavailableReason = $unavailableReason
 }
 $manifest | ConvertTo-Json -Depth 20 | Set-Content -Path $manifestPath -Encoding UTF8
 
@@ -97,4 +100,4 @@ if (-not (Test-Path $observationsPath)) {
     New-Item -ItemType File -Path $observationsPath | Out-Null
 }
 
-Write-Host "OPENCODE_SESSION_EXPORTED: $RunId $sessionPath"
+Write-Host "OPENCODE_SESSION_EXPORTED: $RunId $exportStatus $sessionPath"

@@ -10,7 +10,7 @@ These rules are intended for OpenCode agents working in this repository.
 - Do not change generated files unless the task explicitly says so.
 - Do not solve adjacent problems unless the user asks for them.
 - If the requested task is ambiguous, make a reasonable narrow assumption and state it.
-- For agent-skill-driven migration runs, read `migration/agent-skills/skill-map.md` and only the relevant `SKILL.md` files. The skill layer is a behavior aid, not a permission grant.
+- For agent-skill-driven migration runs, read `migration/agent-skills/skill-map.md` and only the relevant `SKILL.md` files. Record common role profiles with `migration/scripts/record-agent-skill-profile.ps1` / `.sh`; use `write-agent-skill-usage` for one-off decisions. The skill layer is a behavior aid, not a permission grant.
 
 ## Verification
 

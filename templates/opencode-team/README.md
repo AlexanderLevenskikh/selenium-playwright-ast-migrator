@@ -17,7 +17,7 @@ This README only describes the reusable OpenCode team template. Do not use it as
 - `orchestrator` — главный агент/тимлид, сам не редактирует файлы.
 - `executor` — исполнитель, делает маленькие scoped-правки.
 - `watchdog` — контролёр правил/политик/дисциплины, read-only.
-- `migration/agent-skills/*/SKILL.md` — маленькие переиспользуемые контракты поведения: `plow-ahead`, `read-the-damn-docs`, `agent-watchdog`, `efficient-frontier`, `quick-recap` и `plan-arbiter`.
+- `migration/agent-skills/*/SKILL.md` — маленькие переиспользуемые контракты поведения: `plow-ahead`, `read-the-damn-docs`, `agent-watchdog`, `efficient-frontier`, `quick-recap` и `plan-arbiter`; common role profiles are recorded with `migration/scripts/record-agent-skill-profile.ps1` / `.sh`.
 - `reviewer` — ревьюер качества текущего diff, read-only.
 - `migration-researcher` — post-final исследователь TODO/source truth, пишет только research-артефакты и `todo-inventory.json`.
 - `migration-research-lead` — “научный руководитель” research-а: проверяет counts/evidence/actionability и отправляет слабый research на bounded revision.
@@ -148,7 +148,7 @@ Do not approve shell commands that write:
 For migration-artifact/autopilot work, start with `/harness-run` or `/supervised-task`. For repository-level Harness Kit validation, use `/dogfood-harness`.
 
 - `/harness-run` creates or resumes `migration/runs/<run-id>/` and reads `Prompt.md`, `Plan.md`, `Implement.md`, `Documentation.md`, and `trace.jsonl`.
-- `/supervised-task` runs the full orchestrator/watchdog/reviewer loop and can be invoked with no arguments. It also reads `migration/agent-skills/skill-map.md` when present and loads the relevant skill instead of bloating every prompt. It reads continuation/final-gate state, stops for review after FINAL, and plain `/supervised-task continue` starts `migration-researcher` for post-final TODO/source-truth investigation, then `migration-research-lead`, then `migration-task-slicer`. Implementation starts only after approved research, task slicing, a concrete implementation request, or bounded auto-continuation. It still requires `check-scope.ps1`, `check-harness-policy.ps1`, and final gate evidence before FINAL.
+- `/supervised-task` runs the full orchestrator/watchdog/reviewer loop and can be invoked with no arguments. It also reads `migration/agent-skills/skill-map.md` when present, records the matching profile with `migration/scripts/record-agent-skill-profile.ps1` / `.sh`, and loads the relevant skill instead of bloating every prompt. It reads continuation/final-gate state, stops for review after FINAL, and plain `/supervised-task continue` starts `migration-researcher` for post-final TODO/source-truth investigation, then `migration-research-lead`, then `migration-task-slicer`. Implementation starts only after approved research, task slicing, a concrete implementation request, or bounded auto-continuation. It still requires `check-scope.ps1`, `check-harness-policy.ps1`, and final gate evidence before FINAL.
 - `/dogfood-harness` follows `docs/migrator-agent-harness-dogfood.md` and uses explicit dogfood allowed roots for Migrator-repo validation.
 - Agents should not ask routine continuation questions when the next action is allowed by `migration/state/harness-policy.json` and OpenCode permissions.
 

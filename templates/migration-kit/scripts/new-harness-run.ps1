@@ -64,6 +64,70 @@ function Get-CanonicalRunIds([string]$RunsPath) {
         Sort-Object)
 }
 
+function Read-GitStatusPorcelainZOrEmpty([string]$RepoRootPath) {
+    try {
+        Push-Location $RepoRootPath
+        $output = (& git status --porcelain=v1 -z --untracked-files=all 2>$null)
+        if ($LASTEXITCODE -ne 0) { return "" }
+        return [string]$output
+    }
+    catch {
+        return ""
+    }
+    finally {
+        try { Pop-Location } catch { }
+    }
+}
+
+function Normalize-GitPathForBaseline([string]$Path) {
+    return ($Path -replace "\\", "/").TrimStart("./")
+}
+
+function Get-ScopeBaselineEntries([string]$RepoRootPath, [string[]]$AllowedRootPatterns) {
+    $status = Read-GitStatusPorcelainZOrEmpty $RepoRootPath
+    $entries = New-Object System.Collections.Generic.List[object]
+    if ([string]::IsNullOrEmpty($status)) { return $entries }
+
+    $tokens = $status -split [char]0
+    for ($i = 0; $i -lt $tokens.Length; $i++) {
+        $entry = $tokens[$i]
+        if ([string]::IsNullOrEmpty($entry) -or $entry.Length -lt 4) { continue }
+        $xy = $entry.Substring(0, 2)
+        $path = Normalize-GitPathForBaseline $entry.Substring(3)
+        if ([string]::IsNullOrWhiteSpace($path)) { continue }
+
+        $allowed = $false
+        foreach ($root in $AllowedRootPatterns) {
+            $normalizedRoot = Normalize-GitPathForBaseline $root
+            if ([string]::IsNullOrWhiteSpace($normalizedRoot)) { $allowed = $true; break }
+            if ($path.Equals($normalizedRoot.TrimEnd('/'), [StringComparison]::OrdinalIgnoreCase) -or $path.StartsWith($normalizedRoot.TrimEnd('/') + '/', [StringComparison]::OrdinalIgnoreCase)) {
+                $allowed = $true
+                break
+            }
+        }
+        if ($allowed) { continue }
+
+        $fingerprint = ""
+        $full = Join-Path $RepoRootPath $path
+        try {
+            if (Test-Path -LiteralPath $full) {
+                $item = Get-Item -LiteralPath $full -ErrorAction Stop
+                $fingerprint = if ($item.PSIsContainer) { "directory" } else { (Get-FileHash -Algorithm SHA256 -LiteralPath $full).Hash.ToUpperInvariant() }
+            }
+            else { $fingerprint = "missing" }
+        }
+        catch { $fingerprint = "unavailable" }
+
+        $entries.Add([ordered]@{ status = $xy; path = $path; fingerprint = $fingerprint })
+
+        if ($xy.Contains("R") -or $xy.Contains("C")) {
+            if ($i + 1 -lt $tokens.Length -and -not [string]::IsNullOrEmpty($tokens[$i + 1])) { $i++ }
+        }
+    }
+
+    return $entries
+}
+
 function Set-Utf8NoBom([string]$Path, [string]$Value) {
     $dir = Split-Path -Parent $Path
     if (-not [string]::IsNullOrWhiteSpace($dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
@@ -95,6 +159,16 @@ if ((Test-Path $runPath) -and -not (Test-DirectoryEmpty $runPath) -and -not $For
 New-Item -ItemType Directory -Force -Path $runPath | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $runPath "skills") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $workspacePath "state") | Out-Null
+
+$scopeBaselineEntries = @(Get-ScopeBaselineEntries (Get-Location).Path $AllowedRoots)
+$scopeBaseline = [ordered]@{
+    schemaVersion = "scope-baseline/v1"
+    createdAtUtc = [DateTimeOffset]::UtcNow.ToString("o")
+    repoRoot = (Get-Location).Path
+    allowedRoots = @($AllowedRoots)
+    entries = @($scopeBaselineEntries)
+}
+Set-Utf8NoBom (Join-Path $workspacePath "state/scope-baseline.json") ($scopeBaseline | ConvertTo-Json -Depth 20)
 
 $createdAt = [DateTimeOffset]::UtcNow.ToString("o")
 $allowedRootsText = ($AllowedRoots -join ", ")
@@ -136,9 +210,10 @@ Set-Utf8NoBom (Join-Path $runPath "Plan.md") @"
 5. Run scope guard.
 6. Run relevant verification.
 7. Update handoff and run ledger.
-8. Record any materially applied skill with `scripts/write-agent-skill-usage.ps1` / `.sh`.
+8. Record common role skill usage with `scripts/record-agent-skill-profile.ps1` / `.sh`; use `scripts/write-agent-skill-usage.ps1` / `.sh` for custom one-off skill evidence.
 9. Run final gate only when claiming FINAL.
 10. If final gate writes continuation-decision.json with CONTINUE_REQUIRED, execute one next bounded action before handoff. If it writes FINAL, stop for review unless the user explicitly requested continue.
+11. Keep Plan.md clean: do not paste raw shell write commands, helper function bodies, heredoc payloads, or denied write workarounds into plan artifacts.
 
 ## Validation commands
 
@@ -161,7 +236,7 @@ Set-Utf8NoBom (Join-Path $runPath "Implement.md") @"
 - After a non-final final gate, read continuation-decision.json.
 - If continuation-decision.json says CONTINUE_REQUIRED, continue with exactly one next bounded action before user-facing handoff. If it says FINAL, stop for review and include one recommended `/supervised-task continue` command; plain continue starts post-final research first.
 - Update trace and state files after meaningful progress.
-- Record applied skills with `migration/scripts/write-agent-skill-usage.ps1` / `.sh` before final handoff.
+- Record applied skills with `migration/scripts/record-agent-skill-profile.ps1` / `.sh` for role profiles, or `migration/scripts/write-agent-skill-usage.ps1` / `.sh` for custom one-off decisions, before final handoff.
 
 ## Ask/stop triggers
 
@@ -237,6 +312,7 @@ $runState = [ordered]@{
         trace = "runs/$RunId/trace.jsonl"
         appliedSkills = "runs/$RunId/skills/applied-skills.md"
         skillUsage = "runs/$RunId/skills/agent-skill-usage.jsonl"
+        scopeBaseline = "state/scope-baseline.json"
     }
     appliedSkills = @()
     latestChecks = [ordered]@{
@@ -257,7 +333,8 @@ Status: PENDING
 Record each material skill with:
 
 ```powershell
-.\migration\scripts\write-agent-skill-usage.ps1 -SkillName plow-ahead -Trigger "autonomous continuation" -Phase planning -Detail "Why this skill mattered."
+.\migration\scripts\record-agent-skill-profile.ps1 -Profile orchestrator -Phase planning -Detail "Why this profile mattered."
+.\migration\scripts\write-agent-skill-usage.ps1 -SkillName plow-ahead -Trigger "autonomous continuation" -Phase planning -Detail "Custom one-off skill evidence."
 ```
 
 Final gate checks latest-run skill usage evidence when `migration/agent-skills/skill-map.md` is installed.
@@ -311,7 +388,7 @@ Updated: $createdAt
 
 ## Next autonomous step
 
-Run/check harness policy, select the relevant agent skill from migration/agent-skills/skill-map.md, record it with write-agent-skill-usage, then execute the first bounded batch step.
+Run/check harness policy, select the relevant agent skill profile from migration/agent-skills/skill-map.md, record it with record-agent-skill-profile or write-agent-skill-usage, then execute the first bounded batch step.
 "@
 
 $ledgerPath = Join-Path $workspacePath "state/run-ledger.md"
@@ -333,4 +410,5 @@ Add-Content -Path (Join-Path $workspacePath "state/harness-events.jsonl") -Encod
 Add-Content -Path $tracePath -Encoding UTF8 -Value $eventLine
 
 Write-Host "HARNESS_RUN_CREATED: $RunId"
+Write-Host "Scope baseline: $(Join-Path $workspacePath 'state/scope-baseline.json')"
 Write-Host "Run path: $runPath"

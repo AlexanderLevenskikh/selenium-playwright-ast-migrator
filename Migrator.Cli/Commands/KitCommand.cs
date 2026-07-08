@@ -651,7 +651,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         AddCheck(checks, "agent-skills-map", File.Exists(Path.Combine(workspacePath, "agent-skills", "skill-map.md")), Path.Combine(workspacePath, "agent-skills", "skill-map.md"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "agent-skills-manifest", File.Exists(Path.Combine(workspacePath, "agent-skills", "manifest.json")), Path.Combine(workspacePath, "agent-skills", "manifest.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "agent-skills-core", File.Exists(Path.Combine(workspacePath, "agent-skills", "plow-ahead", "SKILL.md")) && File.Exists(Path.Combine(workspacePath, "agent-skills", "agent-watchdog", "SKILL.md")) && File.Exists(Path.Combine(workspacePath, "agent-skills", "read-the-damn-docs", "SKILL.md")), Path.Combine(workspacePath, "agent-skills"), "Run `migrator kit update --backup`.");
-        AddCheck(checks, "agent-skills-usage-writer", File.Exists(Path.Combine(workspacePath, "scripts", "write-agent-skill-usage.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "write-agent-skill-usage.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "agent-skills-usage-writer", File.Exists(Path.Combine(workspacePath, "scripts", "write-agent-skill-usage.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "write-agent-skill-usage.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "record-agent-skill-profile.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "record-agent-skill-profile.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-policy", File.Exists(Path.Combine(workspacePath, "state", "harness-policy.json")), Path.Combine(workspacePath, "state", "harness-policy.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-run-template", File.Exists(Path.Combine(workspacePath, "state", "harness-run-template.json")), Path.Combine(workspacePath, "state", "harness-run-template.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-policy-script", File.Exists(Path.Combine(workspacePath, "scripts", "check-harness-policy.ps1")), Path.Combine(workspacePath, "scripts", "check-harness-policy.ps1"), "Run `migrator kit update --backup`.");
@@ -943,6 +943,10 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
             "scripts/new-harness-run.sh" or
             "scripts/write-harness-event.ps1" or
             "scripts/write-harness-event.sh" or
+            "scripts/write-agent-skill-usage.ps1" or
+            "scripts/write-agent-skill-usage.sh" or
+            "scripts/record-agent-skill-profile.ps1" or
+            "scripts/record-agent-skill-profile.sh" or
             "scripts/export-opencode-session.ps1" or
             "scripts/export-opencode-session.sh" or
             "scripts/write-sentinel-finding.ps1" or
@@ -1340,7 +1344,11 @@ Fix only the current ticket.
             "scripts/write-sentinel-finding.ps1",
             "scripts/write-sentinel-finding.sh",
             "scripts/complete-sentinel-inspection.ps1",
-            "scripts/complete-sentinel-inspection.sh"
+            "scripts/complete-sentinel-inspection.sh",
+            "scripts/write-agent-skill-usage.ps1",
+            "scripts/write-agent-skill-usage.sh",
+            "scripts/record-agent-skill-profile.ps1",
+            "scripts/record-agent-skill-profile.sh"
         };
         var entries = guardFiles.Select(relative =>
         {

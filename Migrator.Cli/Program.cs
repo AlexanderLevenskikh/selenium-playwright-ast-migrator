@@ -1930,9 +1930,18 @@ static string BuildVerificationCsproj(
     IReadOnlyList<string> buildFiles)
 {
     var generatedGlob = Path.Combine(generatedDir, "**", "*.cs");
-    var props = buildFiles.Where(x => x.EndsWith(".props", StringComparison.OrdinalIgnoreCase)).ToArray();
+    var directoryPackageFiles = buildFiles
+        .Where(x => Path.GetFileName(x).Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase))
+        .ToArray();
+    var props = buildFiles
+        .Where(x => x.EndsWith(".props", StringComparison.OrdinalIgnoreCase))
+        .Where(x => !Path.GetFileName(x).Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase))
+        .ToArray();
     var targets = buildFiles.Where(x => x.EndsWith(".targets", StringComparison.OrdinalIgnoreCase)).ToArray();
-    var centralPackageNames = ReadCentralPackageNames(buildFiles);
+    var isolateCentralPackageManagement = directoryPackageFiles.Length > 0;
+    var centralPackageNames = isolateCentralPackageManagement
+        ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        : ReadCentralPackageNames(buildFiles);
 
     var sb = new StringBuilder();
     sb.AppendLine("<Project Sdk=\"Microsoft.NET.Sdk\">");
@@ -1946,6 +1955,11 @@ static string BuildVerificationCsproj(
     sb.AppendLine("    <Nullable>enable</Nullable>");
     sb.AppendLine("    <ImplicitUsings>enable</ImplicitUsings>");
     sb.AppendLine("    <LangVersion>latest</LangVersion>");
+    if (isolateCentralPackageManagement)
+    {
+        sb.AppendLine("    <!-- verify-project is an isolated temporary harness; keep inline PackageReference versions legal even when the source repo uses Central Package Management. -->");
+        sb.AppendLine("    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>");
+    }
     sb.AppendLine("    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>");
     sb.AppendLine("  </PropertyGroup>");
     sb.AppendLine();

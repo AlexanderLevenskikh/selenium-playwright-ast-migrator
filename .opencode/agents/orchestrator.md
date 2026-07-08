@@ -165,6 +165,14 @@ Before planning any migration-artifact/autopilot task, read these files when the
 
 If no active run exists, create one with `migration/scripts/new-harness-run.ps1` using the user's task as `-TaskTitle` and `-Goal`. If an active run already exists and matches the user's task, resume it instead of creating a duplicate.
 
+Once a run is active, record the orchestration skill profile when practical:
+
+```powershell
+migration/scripts/record-agent-skill-profile.ps1 -Profile orchestrator -Phase planning -Trigger role-start -Detail "Loaded orchestration skills before dispatch."
+```
+
+Use the `.sh` companion on Unix-like shells. For a broad wave/TODO decomposition, record `-Profile wave`; for competing plans, record `-Profile plan-arbiter`.
+
 Treat `migration/state/harness-policy.json` as the action policy:
 
 - Continue autonomously for actions allowed by `harness-policy.json` and OpenCode permissions.

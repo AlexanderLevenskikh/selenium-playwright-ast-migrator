@@ -141,6 +141,14 @@ Do not ask routine continuation questions when the next action is allowed by `ha
 
 Use `migration/agent-skills/plow-ahead/SKILL.md` for routine ambiguity. If the task touches third-party APIs, package upgrades, SDK/CLI behavior, framework configuration, CI images, auth, or browser behavior, use `migration/agent-skills/read-the-damn-docs/SKILL.md`; with web access denied, rely on local authoritative evidence or stop with `BLOCKED_BY_DOCS_REQUIRED`.
 
+Before implementation, record the matching execution profile when practical:
+
+```powershell
+migration/scripts/record-agent-skill-profile.ps1 -Profile executor -Phase implementation -Trigger role-start -Detail "Loaded bounded executor skill profile."
+```
+
+If the task touches third-party/API/package/CI/auth/browser behavior, use `-Profile executor-docs-first` instead so `read-the-damn-docs` evidence is captured with the run.
+
 
 ## Append-only and machine-state safety
 

@@ -58,7 +58,13 @@ Every supervised run should leave a forensic session artifact. Before final hand
 
 `/supervised-task` is the normal tester-facing entrypoint. It must work with no arguments. If `$ARGUMENTS` is empty or only whitespace, inspect workspace state and choose the safe behavior below; do not ask the user what to do next and do not require them to know Harness internals.
 
-Before planning, always read:
+Before planning, record the default dispatch skill profile when practical:
+
+```powershell
+migration/scripts/record-agent-skill-profile.ps1 -Profile supervised-task -Phase dispatch -Trigger supervised-task -Detail "Loaded supervised-task dispatch profile."
+```
+
+Use the `.sh` companion on Unix-like shells. Then read:
 
 - AGENTS.md
 - migration/AGENT_CONTRACT.md

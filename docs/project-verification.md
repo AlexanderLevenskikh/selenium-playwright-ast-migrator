@@ -67,7 +67,7 @@ migrate_discounts_project_verify/
 - `AssemblyReferences` — fallback для прямых dll references, использовать только если нельзя через project/package references.
 - `AutoDiscoverNearestProject` — найти ближайший `.csproj` вверх от `--input` и подключить как `ProjectReference`. По умолчанию `true`.
 - `AutoDiscoverProjectReferences` — рекурсивно подключить `ProjectReference` из найденных/заданных `.csproj`. По умолчанию `true`.
-- `AutoDiscoverBuildFiles` — импортировать найденные `Directory.Build.props`, `Directory.Packages.props`, `Directory.Build.targets` во временный проект. По умолчанию `true`.
+- `AutoDiscoverBuildFiles` — импортировать найденные `Directory.Build.props` и `Directory.Build.targets`; `Directory.Packages.props` обнаруживается для отчёта, но временный verify harness изолирует CPM через `ManagePackageVersionsCentrally=false`, чтобы inline `PackageReference Version` не падали с NU1008. По умолчанию `true`.
 - `AutoDiscoverPackageReferences` — зеркалировать `PackageReference` из project references во временный проект. По умолчанию `false`, потому что `ProjectReference` обычно уже тянет пакеты.
 - `NoRestore` — добавить `--no-restore` к `dotnet build`.
 - `Configuration` — конфигурация сборки, по умолчанию `Debug`.
@@ -107,7 +107,7 @@ migration/verify-project-1/
 - если `TargetFramework` не задан, пытается взять его из найденного `.csproj`;
 - если `AutoDiscoverNearestProject=true`, подключает ближайший `.csproj` вверх от `--input`;
 - если `AutoDiscoverProjectReferences=true`, рекурсивно подключает `ProjectReference` из найденных/заданных проектов;
-- если `AutoDiscoverBuildFiles=true`, импортирует найденные `Directory.Build.props`, `Directory.Packages.props`, `Directory.Build.targets` во временный verification project;
+- если `AutoDiscoverBuildFiles=true`, импортирует найденные `Directory.Build.props` и `Directory.Build.targets`; `Directory.Packages.props` учитывается как CPM-сигнал, но temporary project отключает CPM локально, чтобы не конфликтовать с inline versions;
 - `BuildWorkingDirectory` позволяет запускать `dotnet build` из корня исходного repo, чтобы подхватился корпоративный `NuGet.config`;
 - `project-verify-report.md/json` теперь содержит discovery summary и классификацию diagnostics.
 
@@ -141,4 +141,4 @@ migration/verify-project-1/
 
 Так `dotnet build` временного verification project будет запускаться из корня repo и сможет увидеть внутренние package sources.
 
-Если найден `Directory.Packages.props`, temporary project импортирует его. Для пакетов, у которых версия уже задана через `PackageVersion`, `verify-project` не пишет `Version` в `PackageReference`, чтобы не конфликтовать с Central Package Management.
+Если найден `Directory.Packages.props`, `verify-project` считает это признаком Central Package Management и делает temporary harness изолированным: `ManagePackageVersionsCentrally=false`, а `PackageReference` остаются с явными `Version`. Это предотвращает `NU1008` в проектах, где source repo управляет версиями централизованно, но временный verification project должен быть самодостаточным.

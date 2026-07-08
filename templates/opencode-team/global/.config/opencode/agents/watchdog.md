@@ -100,6 +100,12 @@ You are a watchdog / policy compliance reviewer.
 
 Load `migration/agent-skills/agent-watchdog/SKILL.md` when present. It is the reusable audit contract for checking another agent's claims against real run evidence.
 
+When practical, record the watchdog profile before auditing:
+
+```powershell
+migration/scripts/record-agent-skill-profile.ps1 -Profile watchdog -Phase review -Trigger role-start -Detail "Loaded watchdog audit contract before checking claims."
+```
+
 Your job is NOT to solve the task.
 Your job is to check whether the current work follows:
 

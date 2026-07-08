@@ -221,6 +221,24 @@ function Get-ProjectLocalOpenCodePatterns {
     )
 }
 
+function Read-ScopeBaselinePathSet([string]$WorkspacePath) {
+    $paths = @{}
+    $baselinePath = Join-Path $WorkspacePath "state/scope-baseline.json"
+    if (-not (Test-Path $baselinePath)) { return $paths }
+    try {
+        $json = Get-Content -Raw -Path $baselinePath | ConvertFrom-Json -ErrorAction Stop
+        foreach ($entry in @($json.entries)) {
+            $pathValue = [string]$entry.path
+            if ([string]::IsNullOrWhiteSpace($pathValue)) { continue }
+            $paths[$pathValue.Replace("\", "/").TrimStart("./")] = $true
+        }
+    }
+    catch {
+        Write-Warning "Could not read scope baseline ${baselinePath}: $($_.Exception.Message)"
+    }
+    return $paths
+}
+
 function Get-GitChangedPaths([string]$Root, [switch]$AllowNoGit) {
     Push-Location $Root
     try {
@@ -309,8 +327,11 @@ if ($policy -ne $null) {
         if ($changed.Count -gt 0) {
             $projectLocalOpenCodePatterns = @(Get-ProjectLocalOpenCodePatterns)
             $effectiveAllowedWrites = @($policy.allowedWrites) + @(Expand-AllowedRootPatterns $AllowedRoots) + $projectLocalOpenCodePatterns
-            $outsideAllowed = @($changed | Where-Object { -not (Test-AnyPattern $_ @($effectiveAllowedWrites)) })
-            Add-Result $results "changed-paths-allowed" ($outsideAllowed.Count -eq 0) $(if ($outsideAllowed.Count -eq 0) { "all changed paths match allowedWrites/AllowedRoots" } else { "outside allowedWrites/AllowedRoots: " + ($outsideAllowed -join ", ") })
+            $scopeBaselinePaths = Read-ScopeBaselinePathSet $workspacePath
+            $outsideAllowedRaw = @($changed | Where-Object { -not (Test-AnyPattern $_ @($effectiveAllowedWrites)) })
+            $outsideAllowed = @($outsideAllowedRaw | Where-Object { -not $scopeBaselinePaths.ContainsKey($_.Replace("\", "/").TrimStart("./")) })
+            $outsideBaselineIgnored = @($outsideAllowedRaw | Where-Object { $scopeBaselinePaths.ContainsKey($_.Replace("\", "/").TrimStart("./")) })
+            Add-Result $results "changed-paths-allowed" ($outsideAllowed.Count -eq 0) $(if ($outsideAllowed.Count -eq 0) { "all new/changed paths match allowedWrites/AllowedRoots; ignored pre-existing baseline paths: " + ($outsideBaselineIgnored.Count) } else { "outside allowedWrites/AllowedRoots: " + ($outsideAllowed -join ", ") })
 
             $projectLocalOpenCodeChanges = @($changed | Where-Object { Test-AnyPattern $_ $projectLocalOpenCodePatterns })
             $guardChanges = @($changed | Where-Object {

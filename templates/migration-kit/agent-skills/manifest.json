@@ -5,32 +5,46 @@
     {
       "name": "plow-ahead",
       "path": "agent-skills/plow-ahead/SKILL.md",
-      "requiredFor": ["autonomous continuation", "routine ambiguity"]
+      "requiredFor": [
+        "autonomous continuation",
+        "routine ambiguity"
+      ]
     },
     {
       "name": "read-the-damn-docs",
       "path": "agent-skills/read-the-damn-docs/SKILL.md",
-      "requiredFor": ["dependency/API/SDK/CLI/framework/browser/CI/auth changes"]
+      "requiredFor": [
+        "dependency/API/SDK/CLI/framework/browser/CI/auth changes"
+      ]
     },
     {
       "name": "agent-watchdog",
       "path": "agent-skills/agent-watchdog/SKILL.md",
-      "requiredFor": ["claim audit", "handoff review"]
+      "requiredFor": [
+        "claim audit",
+        "handoff review"
+      ]
     },
     {
       "name": "efficient-frontier",
       "path": "agent-skills/efficient-frontier/SKILL.md",
-      "requiredFor": ["broad wave/TODO/log decomposition"]
+      "requiredFor": [
+        "broad wave/TODO/log decomposition"
+      ]
     },
     {
       "name": "quick-recap",
       "path": "agent-skills/quick-recap/SKILL.md",
-      "requiredFor": ["user-facing handoff"]
+      "requiredFor": [
+        "user-facing handoff"
+      ]
     },
     {
       "name": "plan-arbiter",
       "path": "agent-skills/plan-arbiter/SKILL.md",
-      "requiredFor": ["competing plans"]
+      "requiredFor": [
+        "competing plans"
+      ]
     }
   ],
   "usageLedger": {
@@ -38,11 +52,85 @@
     "global": "state/agent-skill-usage.jsonl",
     "perRun": "runs/<run-id>/skills/agent-skill-usage.jsonl",
     "humanSummary": "runs/<run-id>/skills/applied-skills.md",
-    "writer": "scripts/write-agent-skill-usage.ps1"
+    "writer": "scripts/write-agent-skill-usage.ps1",
+    "profileRecorder": "scripts/record-agent-skill-profile.ps1"
   },
   "invariants": [
     "Skills never override AGENT_CONTRACT.md, harness-policy.json, scope guard, OpenCode permissions, or final gate.",
     "A skill that materially changes planning, implementation, review, or handoff must be recorded with write-agent-skill-usage.",
+    "Prefer record-agent-skill-profile for common role profiles; use write-agent-skill-usage for one-off skill decisions.",
     "Final handoff must include quick-recap status and evidence, not only a cheerful summary."
+  ],
+  "recommendedProfiles": [
+    {
+      "name": "orchestrator",
+      "skills": [
+        "plow-ahead",
+        "efficient-frontier",
+        "quick-recap"
+      ],
+      "useWhen": "planning or resuming an autonomous Harness Kit run"
+    },
+    {
+      "name": "supervised-task",
+      "skills": [
+        "plow-ahead",
+        "efficient-frontier",
+        "quick-recap"
+      ],
+      "useWhen": "handling /supervised-task dispatch"
+    },
+    {
+      "name": "executor",
+      "skills": [
+        "plow-ahead"
+      ],
+      "useWhen": "implementing a bounded artifact-only task"
+    },
+    {
+      "name": "executor-docs-first",
+      "skills": [
+        "plow-ahead",
+        "read-the-damn-docs"
+      ],
+      "useWhen": "bounded implementation touches dependencies, SDKs, APIs, browser behavior, CI, or auth"
+    },
+    {
+      "name": "watchdog",
+      "skills": [
+        "agent-watchdog"
+      ],
+      "useWhen": "auditing another agent claim or gate evidence"
+    },
+    {
+      "name": "reviewer",
+      "skills": [
+        "agent-watchdog",
+        "quick-recap"
+      ],
+      "useWhen": "reviewing a diff and preparing a final review signal"
+    },
+    {
+      "name": "wave",
+      "skills": [
+        "efficient-frontier",
+        "plow-ahead"
+      ],
+      "useWhen": "splitting or executing wave/TODO/log work"
+    },
+    {
+      "name": "plan-arbiter",
+      "skills": [
+        "plan-arbiter"
+      ],
+      "useWhen": "comparing competing plans"
+    },
+    {
+      "name": "final-handoff",
+      "skills": [
+        "quick-recap"
+      ],
+      "useWhen": "preparing a user-facing final handoff"
+    }
   ]
 }

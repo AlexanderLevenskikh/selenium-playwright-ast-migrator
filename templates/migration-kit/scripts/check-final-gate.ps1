@@ -229,7 +229,7 @@ function Test-AgentSkillUsageEvidence([string]$WorkspacePath, [string]$LatestRun
     $stateLedger = Join-Path $WorkspacePath "state/agent-skill-usage.jsonl"
 
     if (-not (Test-Path $summaryPath)) {
-        $Detail.Value = "missing $summaryPath; run scripts/write-agent-skill-usage.ps1 before final handoff"
+        $Detail.Value = "missing $summaryPath; run scripts/record-agent-skill-profile.ps1 or scripts/write-agent-skill-usage.ps1 before final handoff"
         return $false
     }
 
@@ -237,7 +237,7 @@ function Test-AgentSkillUsageEvidence([string]$WorkspacePath, [string]$LatestRun
     if (Test-Path $runLedger) { $paths += $runLedger }
     if (Test-Path $stateLedger) { $paths += $stateLedger }
     if ($paths.Count -eq 0) {
-        $Detail.Value = "missing agent skill usage ledger for $LatestRunId; run scripts/write-agent-skill-usage.ps1"
+        $Detail.Value = "missing agent skill usage ledger for $LatestRunId; run scripts/record-agent-skill-profile.ps1 or scripts/write-agent-skill-usage.ps1"
         return $false
     }
 
@@ -289,7 +289,7 @@ function Test-AgentSkillUsageEvidence([string]$WorkspacePath, [string]$LatestRun
 
     $uniqueSkills = @($skills | Sort-Object -Unique)
     if ($uniqueSkills.Count -eq 0) {
-        $Detail.Value = "no latest-run agent skill usage evidence for $LatestRunId; run scripts/write-agent-skill-usage.ps1"
+        $Detail.Value = "no latest-run agent skill usage evidence for $LatestRunId; run scripts/record-agent-skill-profile.ps1 or scripts/write-agent-skill-usage.ps1"
         return $false
     }
 
@@ -303,6 +303,188 @@ function Test-AgentSkillUsageEvidence([string]$WorkspacePath, [string]$LatestRun
 
     $Detail.Value = "applied agent skill evidence for ${LatestRunId}: " + ($uniqueSkills -join ", ")
     return $true
+}
+
+function Test-SessionExportHonest([string]$WorkspacePath, [string]$LatestRunId, [ref]$Detail) {
+    if ([string]::IsNullOrWhiteSpace($LatestRunId)) {
+        $Detail.Value = "latest run id unavailable; cannot verify session export honesty"
+        return $false
+    }
+
+    $runDir = Join-Path $WorkspacePath "runs/$LatestRunId"
+    $sessionPath = Join-Path $runDir "opencode-session-export.md"
+    $manifestPath = Join-Path $runDir "opencode-session-export.json"
+    if (-not (Test-Path $sessionPath)) {
+        $Detail.Value = "missing $sessionPath"
+        return $false
+    }
+    if (-not (Test-Path $manifestPath)) {
+        $Detail.Value = "missing $manifestPath; session export status must be explicit"
+        return $false
+    }
+
+    try {
+        $manifest = Get-Content -Raw -Path $manifestPath | ConvertFrom-Json -ErrorAction Stop
+        $status = [string]$manifest.exportStatus
+        $reason = [string]$manifest.unavailableReason
+        if ($status -eq "REAL_EXPORT") {
+            $text = Read-TextIfExists $sessionPath
+            if ($text -match '(?i)No native OpenCode transcript was provided|Transcript unavailable') {
+                $Detail.Value = "session export claims REAL_EXPORT but contains unavailable/template text"
+                return $false
+            }
+            $Detail.Value = "real session export present for $LatestRunId"
+            return $true
+        }
+        if ($status -eq "UNAVAILABLE_WITH_REASON" -and -not [string]::IsNullOrWhiteSpace($reason)) {
+            $Detail.Value = "session transcript unavailable with explicit reason: $reason"
+            return $true
+        }
+        $Detail.Value = "session export has invalid exportStatus '$status'; expected REAL_EXPORT or UNAVAILABLE_WITH_REASON"
+        return $false
+    }
+    catch {
+        $Detail.Value = "invalid session export manifest: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Test-RunPlanSanitized([string]$WorkspacePath, [string]$LatestRunId, [ref]$Detail) {
+    if ([string]::IsNullOrWhiteSpace($LatestRunId)) {
+        $Detail.Value = "latest run id unavailable; cannot verify Plan.md"
+        return $false
+    }
+    $planPath = Join-Path $WorkspacePath "runs/$LatestRunId/Plan.md"
+    if (-not (Test-Path $planPath)) {
+        $Detail.Value = "missing $planPath"
+        return $false
+    }
+    $text = Read-TextIfExists $planPath
+    $badPatterns = @(
+        '(?im)^\s*function\s+Set-Utf8NoBom\b',
+        '(?im)^\s*Set-Content\b',
+        '(?im)^\s*Add-Content\b',
+        '(?im)^\s*Out-File\b',
+        '(?im)^\s*New-Item\b',
+        '(?im)^\s*cat\s*<<',
+        '(?im)^\s*@"\s*$',
+        '(?im)^\s*"@\s*$'
+    )
+    $hits = New-Object System.Collections.Generic.List[string]
+    foreach ($pattern in $badPatterns) {
+        if ($text -match $pattern) { $hits.Add($pattern) }
+    }
+    if ($hits.Count -gt 0) {
+        $Detail.Value = "Plan.md appears to contain raw shell/write payloads or helper code: " + ($hits -join ", ")
+        return $false
+    }
+    $Detail.Value = "Plan.md is free of raw shell write payloads"
+    return $true
+}
+
+function Test-MemoryResearchThresholds([string]$WorkspacePath, [string]$LatestRunId, [ref]$Detail) {
+    if ([string]::IsNullOrWhiteSpace($LatestRunId)) {
+        $Detail.Value = "latest run id unavailable; cannot evaluate research/memory thresholds"
+        return $true
+    }
+
+    $runRoot = Join-Path $WorkspacePath "runs/$LatestRunId"
+    if (-not (Test-Path $runRoot)) {
+        $Detail.Value = "latest run directory missing; threshold check skipped"
+        return $true
+    }
+
+    $text = ""
+    foreach ($file in Get-ChildItem -Path $runRoot -Recurse -File -Include "*.md", "*.json", "*.jsonl", "*.txt" -ErrorAction SilentlyContinue) {
+        try { $text += "`n" + (Get-Content -Raw -Path $file.FullName -ErrorAction Stop) } catch { }
+    }
+    $todoMatches = [regex]::Matches($text, '(?i)\bTODO\b')
+    $syntaxFallbackMatches = [regex]::Matches($text, '(?i)syntax[- ]fallback')
+    $unresolvedMatches = [regex]::Matches($text, '(?i)UNRESOLVED_SYMBOL|unresolved symbols?')
+    $verifyFailed = $text -match '(?i)verify-project.{0,80}(FAILED|failed)|NU1008|compilation not verified'
+
+    $needsResearch = $todoMatches.Count -ge 25 -or $syntaxFallbackMatches.Count -ge 25 -or $unresolvedMatches.Count -gt 0 -or $verifyFailed
+    if (-not $needsResearch) {
+        $Detail.Value = "research threshold not reached"
+        return $true
+    }
+
+    $memoryDir = Join-Path $WorkspacePath "state/memory"
+    $memoryLines = 0
+    foreach ($jsonlName in @("decisions.jsonl", "warnings.jsonl", "antipatterns.jsonl", "final-gate-lessons.jsonl", "user-notes.jsonl")) {
+        $path = Join-Path $memoryDir $jsonlName
+        if (Test-Path $path) {
+            $memoryLines += @((Get-Content -Path $path -ErrorAction SilentlyContinue) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count
+        }
+    }
+    $researchFiles = @()
+    foreach ($candidate in @((Join-Path $runRoot "research"), (Join-Path $runRoot "explain-todo.md"), (Join-Path $runRoot "generated/explain-todo.md"))) {
+        if (Test-Path $candidate) { $researchFiles += $candidate }
+    }
+
+    if ($memoryLines -eq 0 -and $researchFiles.Count -eq 0) {
+        $Detail.Value = "research/memory threshold reached (TODO=$($todoMatches.Count), syntaxFallback=$($syntaxFallbackMatches.Count), unresolved=$($unresolvedMatches.Count), verifyFailed=$verifyFailed) but no memory/research artifact was recorded"
+        return $false
+    }
+
+    $Detail.Value = "research/memory threshold reached and evidence exists (memoryLines=$memoryLines, researchFiles=$($researchFiles.Count))"
+    return $true
+}
+
+function Update-HarnessRunStateFromFinalGate([string]$WorkspacePath, $Report, $Continuation, $Results) {
+    $stateDir = Join-Path $WorkspacePath "state"
+    $harnessRunPath = Join-Path $stateDir "harness-run.json"
+    if (-not (Test-Path $harnessRunPath)) { return }
+
+    try {
+        $existingHarnessRun = Get-Content -Raw -Path $harnessRunPath | ConvertFrom-Json
+        $harnessRunState = [ordered]@{}
+        foreach ($property in $existingHarnessRun.PSObject.Properties) {
+            $harnessRunState[$property.Name] = $property.Value
+        }
+
+        $previousHarnessStatus = $null
+        if ($harnessRunState.Contains("status")) { $previousHarnessStatus = [string]$harnessRunState["status"] }
+
+        $latestChecks = [ordered]@{}
+        foreach ($check in $Results) {
+            $latestChecks[$check.name] = if ($check.passed) { "PASS" } else { "FAIL" }
+        }
+
+        $harnessRunState["previousStatus"] = $previousHarnessStatus
+        $harnessRunState["finalGateStatus"] = [string]$Report.status
+        $harnessRunState["continuationStatus"] = [string]$Continuation.status
+        $harnessRunState["latestChecks"] = $latestChecks
+        $harnessRunState["lastFinalGateAtUtc"] = [DateTimeOffset]::UtcNow.ToString("o")
+        $harnessRunState["finalGateReport"] = "state/final-gate-result.json"
+        $harnessRunState["continuationDecision"] = "state/continuation-decision.json"
+
+        if ([string]$Report.status -eq "PASS" -and [string]$Continuation.status -eq "FINAL" -and [string]$Continuation.postSuccessPolicy -eq "STOP_FOR_REVIEW") {
+            $harnessRunState["status"] = "FINAL_STOPPED_FOR_REVIEW"
+            $harnessRunState["finalizedAtUtc"] = [DateTimeOffset]::UtcNow.ToString("o")
+            $harnessRunState["postSuccessPolicy"] = $Continuation.postSuccessPolicy
+            $harnessRunState["continueCommand"] = $Continuation.continueCommand
+            $harnessRunState["postFinalContinueAction"] = $Continuation.postFinalContinueAction
+            $harnessRunState["postFinalResearchAgent"] = $Continuation.postFinalResearchAgent
+            $harnessRunState["postFinalReviewAgent"] = $Continuation.postFinalReviewAgent
+            $harnessRunState["postFinalResearchLeadAgent"] = $Continuation.postFinalResearchLeadAgent
+            $harnessRunState["postFinalTaskSlicerAgent"] = $Continuation.postFinalTaskSlicerAgent
+            $harnessRunState["postFinalWorkflow"] = $Continuation.postFinalWorkflow
+        }
+        elseif ([string]$Report.status -eq "FAIL") {
+            $harnessRunState["status"] = [string]$Continuation.status
+            $harnessRunState["allowedNextAction"] = if ($Continuation.nextAction) { [string]$Continuation.nextAction } else { "FIX_GATE_FAILURES" }
+            $harnessRunState["blockedAtUtc"] = [DateTimeOffset]::UtcNow.ToString("o")
+        }
+        else {
+            $harnessRunState["status"] = [string]$Continuation.status
+        }
+
+        ($harnessRunState | ConvertTo-Json -Depth 30) | Set-Content -Path $harnessRunPath -Encoding UTF8
+    }
+    catch {
+        Write-Warning "Could not reconcile harness-run.json with final gate result: $($_.Exception.Message)"
+    }
 }
 
 function Find-RunIds([string]$Text) {
@@ -1015,7 +1197,15 @@ $guardFiles = @(
     "scripts/check-final-gate.ps1",
     "scripts/check-harness-policy.ps1",
     "scripts/write-agent-skill-usage.ps1",
-    "scripts/write-agent-skill-usage.sh"
+    "scripts/write-agent-skill-usage.sh",
+    "scripts/record-agent-skill-profile.ps1",
+    "scripts/record-agent-skill-profile.sh",
+    "scripts/export-opencode-session.ps1",
+    "scripts/export-opencode-session.sh",
+    "scripts/write-sentinel-finding.ps1",
+    "scripts/write-sentinel-finding.sh",
+    "scripts/complete-sentinel-inspection.ps1",
+    "scripts/complete-sentinel-inspection.sh"
 )
 $checksumOk = Test-GuardChecksums $workspacePath $guardFiles ([ref]$checksumDetail)
 Add-Result $results "guard-checksums" $checksumOk $checksumDetail
@@ -1133,6 +1323,22 @@ if ($RequireOpenCodeExport) {
     $hasOpenCodeExport = Test-EvidenceExists $workspacePath @("opencode-session-export.*", "opencode-chat-bundle.*", "opencode-chat-bundle-*", "opencode-review-bundle.*", "opencode-review-bundle-*")
     Add-Result $results "opencode-evidence-export" $hasOpenCodeExport "required: $RequireOpenCodeExport; patterns: opencode-session-export.*, opencode-chat-bundle.*, opencode-chat-bundle-*, opencode-review-bundle.*, opencode-review-bundle-*"
 }
+
+$runSessionExportPath = if (-not [string]::IsNullOrWhiteSpace($latestRunId)) { Join-Path $workspacePath "runs/$latestRunId/opencode-session-export.md" } else { "" }
+$runSessionManifestPath = if (-not [string]::IsNullOrWhiteSpace($latestRunId)) { Join-Path $workspacePath "runs/$latestRunId/opencode-session-export.json" } else { "" }
+if ((Test-Path $runSessionExportPath) -or (Test-Path $runSessionManifestPath)) {
+    $sessionExportDetail = ""
+    $sessionExportOk = Test-SessionExportHonest $workspacePath $latestRunId ([ref]$sessionExportDetail)
+    Add-Result $results "opencode-session-export-honesty" $sessionExportOk $sessionExportDetail
+}
+
+$planSanitizerDetail = ""
+$planSanitizerOk = Test-RunPlanSanitized $workspacePath $latestRunId ([ref]$planSanitizerDetail)
+Add-Result $results "plan-artifact-sanitized" $planSanitizerOk $planSanitizerDetail
+
+$researchThresholdDetail = ""
+$researchThresholdOk = Test-MemoryResearchThresholds $workspacePath $latestRunId ([ref]$researchThresholdDetail)
+Add-Result $results "research-memory-thresholds" $researchThresholdOk $researchThresholdDetail
 
 if ($RequireExplainTodo) {
     $hasExplainTodo = Test-EvidenceExists $workspacePath @("explain-todo.json", "explain-todo.md") $latestRunId -RequireLatestRun
@@ -1301,41 +1507,7 @@ if ($continuation.nextAction) {
 }
 Set-Content -Path $continuationMdPath -Value $continuationMd.ToString() -Encoding UTF8
 
-if ($passed -and $continuation.status -eq "FINAL" -and $continuation.postSuccessPolicy -eq "STOP_FOR_REVIEW") {
-    $harnessRunPath = Join-Path $stateDir "harness-run.json"
-    if (Test-Path $harnessRunPath) {
-        try {
-            $existingHarnessRun = Get-Content -Raw -Path $harnessRunPath | ConvertFrom-Json
-            $harnessRunState = [ordered]@{}
-            foreach ($property in $existingHarnessRun.PSObject.Properties) {
-                $harnessRunState[$property.Name] = $property.Value
-            }
-
-            $previousHarnessStatus = $null
-            if ($harnessRunState.Contains("status")) {
-                $previousHarnessStatus = [string]$harnessRunState["status"]
-            }
-
-            $harnessRunState["status"] = "FINAL_STOPPED_FOR_REVIEW"
-            $harnessRunState["previousStatus"] = $previousHarnessStatus
-            $harnessRunState["finalizedAtUtc"] = [DateTimeOffset]::UtcNow.ToString("o")
-            $harnessRunState["continuationStatus"] = $continuation.status
-            $harnessRunState["postSuccessPolicy"] = $continuation.postSuccessPolicy
-            $harnessRunState["continueCommand"] = $continuation.continueCommand
-            $harnessRunState["postFinalContinueAction"] = $continuation.postFinalContinueAction
-            $harnessRunState["postFinalResearchAgent"] = $continuation.postFinalResearchAgent
-            $harnessRunState["postFinalReviewAgent"] = $continuation.postFinalReviewAgent
-            $harnessRunState["postFinalResearchLeadAgent"] = $continuation.postFinalResearchLeadAgent
-            $harnessRunState["postFinalTaskSlicerAgent"] = $continuation.postFinalTaskSlicerAgent
-            $harnessRunState["postFinalWorkflow"] = $continuation.postFinalWorkflow
-
-            ($harnessRunState | ConvertTo-Json -Depth 20) | Set-Content -Path $harnessRunPath -Encoding UTF8
-        }
-        catch {
-            Write-Warning "Could not update harness-run.json with FINAL_STOPPED_FOR_REVIEW: $($_.Exception.Message)"
-        }
-    }
-}
+Update-HarnessRunStateFromFinalGate $workspacePath $report $continuation $results
 
 Write-Host "FINAL_GATE_$($report.status)"
 Write-Host "HARNESS_CONTINUATION_$($continuation.status)"
