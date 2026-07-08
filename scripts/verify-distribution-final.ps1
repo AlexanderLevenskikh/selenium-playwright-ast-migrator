@@ -63,9 +63,15 @@ Invoke-Step "Node syntax checks" {
 
 Invoke-Step "Bash syntax checks" {
     if (Get-Command bash -ErrorAction SilentlyContinue) {
+        # Keep the npm publishing wrapper check as a literal command: release
+        # packaging tests assert this exact safety check remains visible.
+        bash -n scripts/publish-npm-wrapper.sh
+        if ($LASTEXITCODE -ne 0) {
+            throw "bash -n failed for scripts/publish-npm-wrapper.sh with exit code $LASTEXITCODE"
+        }
+
         $bashScripts = @(
             "scripts/pack-npm-wrapper.sh",
-            "scripts/publish-npm-wrapper.sh",
             "scripts/smoke-npm-registry-install.sh",
             "scripts/diagnose-install.sh",
             "scripts/verify-distribution-final.sh"
@@ -73,6 +79,7 @@ Invoke-Step "Bash syntax checks" {
 
         $trackedShellScripts = git ls-files -- "*.sh"
         foreach ($script in $trackedShellScripts) {
+            if ($script -eq "scripts/publish-npm-wrapper.sh") { continue }
             if ($bashScripts -notcontains $script) {
                 $bashScripts += $script
             }

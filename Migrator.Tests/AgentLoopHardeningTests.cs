@@ -509,10 +509,56 @@ public class AgentLoopHardeningTests
                 var shell = File.ReadAllText(sh);
                 Assert.Contains("#!/usr/bin/env", shell);
                 Assert.Contains("set -", shell);
+
+                if (shell.Contains("PS_SCRIPT=", StringComparison.Ordinal))
+                {
+                    Assert.Contains("Install PowerShell 7:", shell);
+                    Assert.Contains("https://learn.microsoft.com/powershell/scripting/install/installing-powershell", shell);
+                    Assert.Contains("macOS/Linux/WSL", shell);
+                    Assert.Contains("MINGW*|MSYS*|CYGWIN*|Windows_NT", shell);
+                }
             }
         }
     }
 
+    [Fact]
+    public void MigrationKitPowerShell7Prerequisite_IsDocumentedAndChecked()
+    {
+        var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
+        var rootReadme = Read("README.md");
+        var rootReadmeRu = Read("README.ru.md");
+        var userGuide = Read("USER_GUIDE.md");
+        var userGuideRu = Read("USER_GUIDE.ru.md");
+        var kitReadme = Read("templates/migration-kit/README.md");
+        var agents = Read("AGENTS.md");
+        var contributing = Read("CONTRIBUTING.md");
+        var contract = Read("templates/migration-kit/AGENT_CONTRACT.md");
+        var wrapper = Read("templates/migration-kit/scripts/write-agent-skill-usage.sh");
+        var policyShell = Read("templates/migration-kit/scripts/check-harness-policy.sh");
+
+        foreach (var doc in new[] { rootReadme, rootReadmeRu, userGuide, userGuideRu, kitReadme })
+        {
+            Assert.Contains("PowerShell 7", doc);
+            Assert.Contains("powershell-7", doc);
+            Assert.Contains("https://learn.microsoft.com/powershell/scripting/install/installing-powershell", doc);
+        }
+
+        Assert.Contains("AddPowerShell7Check", kitCommand);
+        Assert.Contains("powershell-7", kitCommand);
+        Assert.Contains("Unix `.sh` lifecycle wrappers delegate to PowerShell 7", kitCommand);
+        Assert.Contains("RuntimeInformation.IsOSPlatform(OSPlatform.Windows)", kitCommand);
+
+        Assert.Contains("PowerShell 7 (`pwsh`) install hint", agents);
+        Assert.Contains("PowerShell 7 install hint", contributing);
+        Assert.Contains("PowerShell 7 (`pwsh`) with a clear install hint", contract);
+
+        foreach (var shell in new[] { wrapper, policyShell })
+        {
+            Assert.Contains("Install PowerShell 7:", shell);
+            Assert.Contains("https://learn.microsoft.com/powershell/scripting/install/installing-powershell", shell);
+            Assert.Contains("MINGW*|MSYS*|CYGWIN*|Windows_NT", shell);
+        }
+    }
 
     [Fact]
     public void MigrationKitAgentSkills_AreInstalledAndReferencedByOpenCodeTeam()

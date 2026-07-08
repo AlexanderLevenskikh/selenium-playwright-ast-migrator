@@ -109,6 +109,8 @@ Manual/non-Desktop fallback:
 4. After every batch, keep `agent-state.md`, `current-ticket.md`, and `state/*` up to date.
 5. Run gates before accepting any batch. Bash users can run `scripts/check-harness-policy.sh`, `scripts/check-scope.sh`, and `scripts/check-final-gate.sh`; PowerShell users can call the matching `.ps1` scripts directly.
 
+On macOS/Linux/WSL, the `.sh` lifecycle entrypoints are thin wrappers around the same `.ps1` scripts and require PowerShell 7 (`pwsh`). Run `selenium-pw-migrator kit doctor --workspace migration` and check `powershell-7`; install PowerShell 7 from https://learn.microsoft.com/powershell/scripting/install/installing-powershell if it is missing.
+
 ## Updating the kit
 
 The tool/bundle is disposable. This workspace is persistent.

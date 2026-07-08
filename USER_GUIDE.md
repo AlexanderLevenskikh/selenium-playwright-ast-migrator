@@ -43,6 +43,16 @@ selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --s
 selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration --source ./SeleniumTests
 ```
 
+### PowerShell 7 for migration-kit shell wrappers
+
+The installed CLI does not need PowerShell when using npm or standalone. The migration-kit lifecycle shell wrappers do: `migration/scripts/*.sh` entrypoints call the same `.ps1` implementation through PowerShell 7 (`pwsh`) on macOS/Linux/WSL. Install PowerShell 7 before running those wrappers: https://learn.microsoft.com/powershell/scripting/install/installing-powershell. Then run:
+
+```bash
+selenium-pw-migrator kit doctor --workspace migration
+```
+
+The doctor report includes a `powershell-7` check and points back to the install docs when `pwsh` is missing.
+
 After a run, open the dashboard first:
 
 ```bash

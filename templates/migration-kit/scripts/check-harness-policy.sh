@@ -63,14 +63,21 @@ find_python() {
 PYTHON="$(find_python || true)"
 if [[ -z "$PYTHON" ]]; then
   if command -v pwsh >/dev/null 2>&1; then
-    exec pwsh -NoProfile -File "$PS_SCRIPT" "${ORIGINAL_ARGS[@]}"
+    exec pwsh -NoProfile -ExecutionPolicy Bypass -File "$PS_SCRIPT" "${ORIGINAL_ARGS[@]}"
   fi
 
-  if command -v powershell >/dev/null 2>&1; then
-    exec powershell -NoProfile -ExecutionPolicy Bypass -File "$PS_SCRIPT" "${ORIGINAL_ARGS[@]}"
-  fi
+  case "$(uname -s 2>/dev/null || echo unknown)" in
+    MINGW*|MSYS*|CYGWIN*|Windows_NT)
+      if command -v powershell >/dev/null 2>&1; then
+        exec powershell -NoProfile -ExecutionPolicy Bypass -File "$PS_SCRIPT" "${ORIGINAL_ARGS[@]}"
+      fi
+      ;;
+  esac
 
-  echo "Python 3 or PowerShell 7 (pwsh) is required to run check-harness-policy.sh." >&2
+  cat >&2 <<EOF
+Python 3 or PowerShell 7 (pwsh) is required to run check-harness-policy.sh on macOS/Linux/WSL.
+Install PowerShell 7: https://learn.microsoft.com/powershell/scripting/install/installing-powershell
+EOF
   exit 127
 fi
 

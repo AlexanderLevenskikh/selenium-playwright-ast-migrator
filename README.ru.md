@@ -106,6 +106,10 @@ selenium-pw-migrator self update
 
 `doctor install` / `--mode install-doctor` показывает, что реально запускается из shell: executable, version, channel, runtime, PATH candidates и рекомендуемую команду install/update.
 
+### Кроссплатформенные lifecycle-скрипты
+
+Сам CLI при установке через npm или standalone не требует PowerShell. Но migration-kit lifecycle-скрипты устроены иначе: у каждого `.ps1` есть одноимённый `.sh`, а тонкие Unix-wrapper’ы делегируют выполнение в PowerShell 7 (`pwsh`), чтобы Windows и Unix запускали одну и ту же реализацию. На macOS/Linux/WSL установи PowerShell 7 перед использованием `migration/scripts/*.sh` или release/package shell entrypoints: https://learn.microsoft.com/powershell/scripting/install/installing-powershell. `selenium-pw-migrator kit doctor` показывает это проверкой `powershell-7`.
+
 ### Рекомендуемый вариант: standalone CLI
 
 Для закрытых окружений или release smoke tests standalone остаётся самым прямым install path. npm wrapper выше остаётся самым удобным frontend-friendly вариантом, но standalone-дистрибутив не требует установленного .NET SDK или .NET Runtime на машине пользователя. Используй его, если npm недоступен или нужен прямой GitHub Release install.

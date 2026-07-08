@@ -20,7 +20,7 @@ dotnet test Migrator.sln
 - Keep public CLI behavior documented.
 - Prefer config/profile improvements when a project-specific pattern does not need engine changes.
 - Avoid committing generated migration runs, local profiles, `.agent-state`, package artifacts, logs, screenshots, or private project data.
-- Keep lifecycle scripts paired: new or changed repository `scripts/*.ps1` and migration-kit `templates/migration-kit/**/*.ps1` scripts must have same-name `.sh` companions. Thin Bash wrappers that delegate to `pwsh` are fine when PowerShell remains the implementation source of truth.
+- Keep lifecycle scripts paired: new or changed repository `scripts/*.ps1` and migration-kit `templates/migration-kit/**/*.ps1` scripts must have same-name `.sh` companions. Thin Bash wrappers that delegate to `pwsh` are fine when PowerShell remains the implementation source of truth; they must print a clear PowerShell 7 install hint for macOS/Linux/WSL (`https://learn.microsoft.com/powershell/scripting/install/installing-powershell`) and only use Windows PowerShell as a Windows-like Bash fallback.
 
 ## Pull request checklist
 

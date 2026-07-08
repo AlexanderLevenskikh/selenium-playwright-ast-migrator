@@ -668,6 +668,8 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         var dotnet = RunProcess("dotnet", "--version");
         AddCheck(checks, "dotnet", dotnet.ExitCode == 0, dotnet.ExitCode == 0 ? dotnet.StdOut.Trim() : dotnet.StdErr.Trim(), "Install .NET SDK or use a self-contained migrator bundle.");
 
+        AddPowerShell7Check(checks);
+
         var status = checks.All(c => c.Ok) ? "passed" : "warning";
         var reportDir = Path.Combine(workspacePath, "reports", "kit-doctor");
         Directory.CreateDirectory(reportDir);
@@ -787,6 +789,35 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
 - `migration/state/stop-policy-checklist.md`
 - `migration/state/memory/**`
 """;
+    }
+
+    static void AddPowerShell7Check(List<KitDoctorCheck> checks)
+    {
+        var pwsh = RunProcess("pwsh", "-NoProfile -Command \"$PSVersionTable.PSVersion.ToString()\"", timeoutMs: 5000);
+        if (pwsh.ExitCode == 0)
+        {
+            AddCheck(checks, "powershell-7", true, $"pwsh {pwsh.StdOut.Trim()}", "OK");
+            return;
+        }
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            var windowsPowerShell = RunProcess("powershell", "-NoProfile -Command \"$PSVersionTable.PSVersion.ToString()\"", timeoutMs: 5000);
+            AddCheck(
+                checks,
+                "powershell-7",
+                windowsPowerShell.ExitCode == 0,
+                windowsPowerShell.ExitCode == 0 ? $"Windows PowerShell {windowsPowerShell.StdOut.Trim()} (pwsh recommended for Unix shell wrappers)" : "pwsh not found",
+                "Install PowerShell 7 (`pwsh`) for the cross-platform `.sh` lifecycle wrappers: https://learn.microsoft.com/powershell/scripting/install/installing-powershell");
+            return;
+        }
+
+        AddCheck(
+            checks,
+            "powershell-7",
+            false,
+            "pwsh not found; Unix `.sh` lifecycle wrappers delegate to PowerShell 7",
+            "Install PowerShell 7 (`pwsh`): https://learn.microsoft.com/powershell/scripting/install/installing-powershell");
     }
 
     static void AddCheck(List<KitDoctorCheck> checks, string name, bool ok, string detail, string recommendation)

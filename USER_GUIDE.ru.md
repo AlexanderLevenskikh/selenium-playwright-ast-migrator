@@ -79,6 +79,16 @@ selenium-pw-migrator self update
 
 `self update` печатает channel-specific update command и не мутирует global installs автоматически.
 
+### PowerShell 7 для shell-wrapper’ов migration-kit
+
+Сам установленный CLI не требует PowerShell, если используется npm или standalone. Но lifecycle-wrapper’ы migration-kit требуют: `migration/scripts/*.sh` на macOS/Linux/WSL запускают ту же `.ps1`-реализацию через PowerShell 7 (`pwsh`). Перед использованием этих wrapper’ов установи PowerShell 7: https://learn.microsoft.com/powershell/scripting/install/installing-powershell. Затем проверь окружение:
+
+```bash
+selenium-pw-migrator kit doctor --workspace migration
+```
+
+В отчёте будет проверка `powershell-7`; если `pwsh` не найден, doctor покажет рекомендацию по установке.
+
 ### Быстрая standalone-установка
 
 Используйте standalone, если npm недоступен и не хочется ставить .NET SDK или .NET Runtime:

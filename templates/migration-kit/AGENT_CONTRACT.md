@@ -15,7 +15,7 @@ Before each major action, restate which rule allows the action.
 
 9a. Before planning or reviewing a supervised task, read `agent-skills/skill-map.md` and load only the relevant `SKILL.md` contracts. Skills guide behavior; they never override allowed writes, OpenCode permissions, scope guard, harness policy, or final gate.
 9b. If a skill materially affects planning, implementation, review, or handoff, record it with `scripts/write-agent-skill-usage.ps1` / `.sh`; final gate treats missing latest-run skill evidence as a broken handoff for skill-enabled workspaces.
-9c. Keep script changes paired across platforms: any new or changed migration-kit `.ps1` lifecycle script needs a same-name `.sh` companion. A thin Unix wrapper around PowerShell is acceptable when the PowerShell script remains the source of truth.
+9c. Keep script changes paired across platforms: any new or changed migration-kit `.ps1` lifecycle script needs a same-name `.sh` companion. A thin Unix wrapper around PowerShell is acceptable when the PowerShell script remains the source of truth; on macOS/Linux/WSL it must require PowerShell 7 (`pwsh`) with a clear install hint, while `powershell.exe` fallback is only for Windows-like Bash shells.
 
 10. After a successful FINAL/PASS checkpoint, stop and report. Do not start another run or ticket unless the user explicitly says continue or state/continuation-decision.json grants bounded auto-continuation for that exact next action.
 

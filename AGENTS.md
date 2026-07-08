@@ -16,7 +16,7 @@ This repository no longer uses the legacy root `.agent-loops/` prompt pack as a 
 3. Do not reduce TODO by adding suppressions, weakening assertions, deleting actions, adding dummy known identifiers, or hiding empty tests.
 4. Guard scripts and checksum manifests are security-sensitive. Do not modify them unless the task is explicitly about guardrail implementation and tests are updated.
 5. If a change affects prompts, OpenCode config, scope guard, or final gate behavior, update regression tests in `Migrator.Tests/AgentLoopHardeningTests.cs`.
-6. Keep lifecycle scripts cross-platform: every new or changed repository `scripts/*.ps1` and migration-kit `templates/migration-kit/**/*.ps1` script needs a sibling `.sh` companion, even if the Unix version is a thin `pwsh` wrapper.
+6. Keep lifecycle scripts cross-platform: every new or changed repository `scripts/*.ps1` and migration-kit `templates/migration-kit/**/*.ps1` script needs a sibling `.sh` companion, even if the Unix version is a thin `pwsh` wrapper. Thin wrappers must fail with a clear PowerShell 7 (`pwsh`) install hint on macOS/Linux/WSL and may fall back to `powershell.exe` only for Windows-like Bash shells.
 
 ## Verification
 

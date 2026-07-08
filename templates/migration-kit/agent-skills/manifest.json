@@ -34,6 +34,7 @@
     }
   ],
   "usageLedger": {
+    "schemaVersion": "agent-skill-usage/v1",
     "global": "state/agent-skill-usage.jsonl",
     "perRun": "runs/<run-id>/skills/agent-skill-usage.jsonl",
     "humanSummary": "runs/<run-id>/skills/applied-skills.md",

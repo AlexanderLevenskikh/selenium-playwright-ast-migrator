@@ -123,6 +123,10 @@ selenium-pw-migrator self update
 
 `doctor install` (mode-compatible form: `--mode install-doctor`) shows the resolved executable, version, channel, runtime, PATH candidates, and recommended install/update command. This is the first command to run when global npm, standalone, dotnet tool, or local tool installs may be shadowing each other. Use it to diagnose what your shell actually runs before checking package-manager state.
 
+### Cross-platform lifecycle scripts
+
+The CLI itself does not require PowerShell when installed through npm or standalone. The migration-kit lifecycle scripts are different: every repository `.ps1` script has a same-name `.sh` companion, and thin Unix wrappers delegate to PowerShell 7 (`pwsh`) so Windows and Unix run the same implementation. On macOS/Linux/WSL, install PowerShell 7 before using `migration/scripts/*.sh` wrappers or release/package shell entrypoints: https://learn.microsoft.com/powershell/scripting/install/installing-powershell. `selenium-pw-migrator kit doctor` reports this as the `powershell-7` check.
+
 ### Recommended: standalone CLI
 
 For locked-down environments or release smoke tests, the standalone distribution is still the most direct install path. The npm wrapper remains the default frontend-friendly route above, but standalone does not require the .NET SDK or .NET Runtime on the target machine. Use it when npm is not available or when you want a direct GitHub Release install.
