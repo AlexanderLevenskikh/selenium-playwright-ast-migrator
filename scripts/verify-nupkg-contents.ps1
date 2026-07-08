@@ -49,6 +49,18 @@ try {
         '^templates/migration-kit/scripts/record-agent-skill-profile\.sh$',
         '^templates/migration-kit/scripts/slice-gate-followups\.ps1$',
         '^templates/migration-kit/scripts/slice-gate-followups\.sh$',
+        '^templates/migration-kit/scripts/evaluate-wave-quality-budget\.ps1$',
+        '^templates/migration-kit/scripts/evaluate-wave-quality-budget\.sh$',
+        '^templates/migration-kit/scripts/collect-mapping-research-memory\.ps1$',
+        '^templates/migration-kit/scripts/collect-mapping-research-memory\.sh$',
+        '^templates/migration-kit/scripts/create-feedback-bundle\.ps1$',
+        '^templates/migration-kit/scripts/create-feedback-bundle\.sh$',
+        '^templates/migration-kit/scripts/validate-run-artifacts\.ps1$',
+        '^templates/migration-kit/scripts/validate-run-artifacts\.sh$',
+        '^templates/migration-kit/scripts/update-current-ticket-status\.ps1$',
+        '^templates/migration-kit/scripts/update-current-ticket-status\.sh$',
+        '^templates/migration-kit/scripts/update-sentinel-finding-status\.ps1$',
+        '^templates/migration-kit/scripts/update-sentinel-finding-status\.sh$',
         '^scripts/install-migration-kit\.ps1$'
     )
 

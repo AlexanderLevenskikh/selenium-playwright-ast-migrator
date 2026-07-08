@@ -276,3 +276,8 @@ Report only:
 - next step: `migration-research-lead` review, not human handoff.
 
 Do not claim the migration is fixed.
+
+## Mapping/research memory loop
+
+When `evaluate-wave-quality-budget` reports `BLOCKED_BY_WAVE_QUALITY_BUDGET`, do not select another wave. Run `migration/scripts/collect-mapping-research-memory.ps1` / `.sh` first. Use `mapping-research-memory/v1`, `state/mapping-research-memory.json`, and `state/mapping-research-candidates.jsonl` to route one bounded config/POM/recognizer or verify-harness improvement ticket.
+For user-shareable feedback, run `migration/scripts/create-feedback-bundle.ps1` / `.sh` instead of collecting the repository. The `feedback-bundle/v1` packer excludes project source by default, writes `state/feedback-bundles/*/manifest.json`, and requires manifest review before sharing.

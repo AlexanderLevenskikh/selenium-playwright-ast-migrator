@@ -166,6 +166,18 @@ function Test-AutoUpdatedKitOwnedFile([string]$RelativePath) {
         $normalized -eq "scripts/record-agent-skill-profile.sh" -or
         $normalized -eq "scripts/slice-gate-followups.ps1" -or
         $normalized -eq "scripts/slice-gate-followups.sh" -or
+        $normalized -eq "scripts/evaluate-wave-quality-budget.ps1" -or
+        $normalized -eq "scripts/evaluate-wave-quality-budget.sh" -or
+        $normalized -eq "scripts/collect-mapping-research-memory.ps1" -or
+        $normalized -eq "scripts/collect-mapping-research-memory.sh" -or
+        $normalized -eq "scripts/create-feedback-bundle.ps1" -or
+        $normalized -eq "scripts/create-feedback-bundle.sh" -or
+        $normalized -eq "scripts/validate-run-artifacts.ps1" -or
+        $normalized -eq "scripts/validate-run-artifacts.sh" -or
+        $normalized -eq "scripts/update-current-ticket-status.ps1" -or
+        $normalized -eq "scripts/update-current-ticket-status.sh" -or
+        $normalized -eq "scripts/update-sentinel-finding-status.ps1" -or
+        $normalized -eq "scripts/update-sentinel-finding-status.sh" -or
         $normalized -eq "state/continuation-contract.md" -or
         $normalized.StartsWith("prompts/") -or
         $normalized.StartsWith("agent-skills/")
@@ -327,7 +339,19 @@ function Write-GuardChecksums([string]$WorkspacePath) {
         "scripts/record-agent-skill-profile.ps1",
         "scripts/record-agent-skill-profile.sh",
         "scripts/slice-gate-followups.ps1",
-        "scripts/slice-gate-followups.sh"
+        "scripts/slice-gate-followups.sh",
+        "scripts/evaluate-wave-quality-budget.ps1",
+        "scripts/evaluate-wave-quality-budget.sh",
+        "scripts/collect-mapping-research-memory.ps1",
+        "scripts/collect-mapping-research-memory.sh",
+        "scripts/create-feedback-bundle.ps1",
+        "scripts/create-feedback-bundle.sh",
+        "scripts/validate-run-artifacts.ps1",
+        "scripts/validate-run-artifacts.sh",
+        "scripts/update-current-ticket-status.ps1",
+        "scripts/update-current-ticket-status.sh",
+        "scripts/update-sentinel-finding-status.ps1",
+        "scripts/update-sentinel-finding-status.sh"
     )
 
     $entries = @()

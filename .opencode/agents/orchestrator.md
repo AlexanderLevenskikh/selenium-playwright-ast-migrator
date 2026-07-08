@@ -196,6 +196,11 @@ Invoke `harness-sentinel` as the process tester in these checkpoints:
 Sentinel findings are not user handoff by themselves. If `harness-sentinel` records open high/critical agent-executable findings in `migration/runs/<run-id>/sentinel/sentinel-findings.jsonl` or `migration/state/sentinel-ledger.jsonl`, route them to `migration-task-slicer` as bounded process-hardening tasks before claiming final completion. Informational/low findings may be reported as risks.
 
 
+
+### Current-ticket executor loop
+
+If `migration/current-ticket.md` exists, treat it as the selected bounded work item before looking for another wave. Read `migration/state/current-ticket-status.json` when present. For `READY`, missing, `IN_PROGRESS`, or `REVIEW_READY`, run `migration/scripts/update-current-ticket-status.ps1 -Status IN_PROGRESS -Source orchestrator` / `.sh`, route the ticket through `migration-change-reviewer`, delegate exactly one bounded `executor` task, then update status to `REVIEW_READY` or `BLOCKED` with evidence. Mark `DONE` only after validation/final-gate evidence. Do not start another wave while current-ticket lifecycle is active.
+
 ## post-final research flow
 
 When the active run is already persisted as `FINAL_STOPPED_FOR_REVIEW` and the latest final gate/continuation decision is `FINAL` with `postSuccessPolicy: STOP_FOR_REVIEW`, any `/supervised-task` invocation means post-final research/review/task-slicing, not another immediate implementation ticket. Zero-argument `/supervised-task` and explicit `/supervised-task continue` use the same closed loop.

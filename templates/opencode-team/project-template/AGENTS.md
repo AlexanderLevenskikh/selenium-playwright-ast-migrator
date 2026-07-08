@@ -150,4 +150,23 @@ When a final gate passes, `check-final-gate.ps1` updates `migration/state/harnes
 Before final handoff, create/update `migration/runs/<run-id>/opencode-session-export.md` with `migration/scripts/export-opencode-session.*` when possible, then run `harness-sentinel` and complete `migration/runs/<run-id>/sentinel/sentinel-inspection.json`. Open high/critical agent-executable sentinel findings must be routed into bounded hardening tasks; do not hand them to the user as vague advice.
 
 
-Sentinel inspections must be finalized with `migration/scripts/complete-sentinel-inspection.ps1` or `.sh`; final gate treats a missing active-run `sentinel-inspection.json` as a process defect.
+Sentinel inspections must be finalized with `migration/scripts/complete-sentinel-inspection.ps1` or `.sh`; final gate treats a missing active-run `sentinel-inspection.json` as a process defect. Use `migration/scripts/update-sentinel-finding-status.ps1` / `.sh` for finding lifecycle transitions; do not mutate `sentinel-findings.jsonl` directly.
+
+
+## Current-ticket lifecycle
+
+When `migration/current-ticket.md` exists, route it through reviewer/executor before selecting a new wave. Use `migration/scripts/update-current-ticket-status.ps1` / `.sh` to track `READY`, `IN_PROGRESS`, `REVIEW_READY`, `DONE`, or `BLOCKED` in `migration/state/current-ticket-status.json` and `migration/state/current-ticket-ledger.jsonl`.
+
+
+Wave quality budget: run `migration/scripts/evaluate-wave-quality-budget.ps1` / `.sh` after wave execution. `BLOCKED_BY_WAVE_QUALITY_BUDGET` forbids starting another wave until mapping/research/config improvement is sliced and attempted.
+
+
+## Mapping/research memory
+
+If `BLOCKED_BY_WAVE_QUALITY_BUDGET` appears, run `migration/scripts/collect-mapping-research-memory.ps1` / `.sh` before any next wave. Use `mapping-research-memory/v1` and `mapping-research-candidates.jsonl` to create one bounded config/POM/recognizer or verify-harness ticket.
+
+
+## Artifact hygiene
+
+Before final handoff or another wave after material state changes, run or honor final-gate execution of `migration/scripts/validate-run-artifacts.ps1` / `.sh`. `artifact-hygiene/v1` must pass: Plan.md is sanitized, Documentation.md does not contradict final gate, generated boards carry run/wave identity, and session export status is explicit.
+For user-shareable feedback, run `migration/scripts/create-feedback-bundle.ps1` / `.sh` instead of collecting the repository. The `feedback-bundle/v1` packer excludes project source by default, writes `state/feedback-bundles/*/manifest.json`, and requires manifest review before sharing.

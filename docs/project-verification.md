@@ -109,7 +109,8 @@ migration/verify-project-1/
 - если `AutoDiscoverProjectReferences=true`, рекурсивно подключает `ProjectReference` из найденных/заданных проектов;
 - если `AutoDiscoverBuildFiles=true`, импортирует найденные `Directory.Build.props` и `Directory.Build.targets`; `Directory.Packages.props` учитывается как CPM-сигнал, но temporary project отключает CPM локально, чтобы не конфликтовать с inline versions;
 - `BuildWorkingDirectory` позволяет запускать `dotnet build` из корня исходного repo, чтобы подхватился корпоративный `NuGet.config`;
-- `project-verify-report.md/json` теперь содержит discovery summary и классификацию diagnostics.
+- `project-verify-report.md/json` теперь содержит discovery summary, классификацию diagnostics и `verify-project-harness/v1` evidence.
+- рядом с отчётом сохраняется `project-verify-harness.csproj` snapshot с SHA256, чтобы можно было доказуемо понять, какие props/targets/package references реально попали во временный harness.
 
 ## Классификация diagnostics
 
@@ -122,6 +123,7 @@ migration/verify-project-1/
 | `missing-namespace-member` | namespace найден частично | проверить references и реальный namespace |
 | `missing-member` | тип есть, но метода/свойства нет | проверить mapping и target helper API |
 | `signature-mismatch` | метод найден, но параметры не совпали | проверить `ParameterizedMethodMapping` placeholders |
+| `central-package-management` | `NU1008`: temporary harness унаследовал CPM при inline `PackageReference Version` | открыть `project-verify-harness.csproj` snapshot и `HarnessEvidence`, проверить `Directory.Packages.props` skipped + `ManagePackageVersionsCentrally=false` |
 | `nuget-restore` | restore/package source issue | указать `BuildWorkingDirectory` на repo root с `NuGet.config` |
 | `msbuild-project` | проблема MSBuild/props/targets/project | проверить imports, `TargetFramework`, references |
 
@@ -142,3 +144,20 @@ migration/verify-project-1/
 Так `dotnet build` временного verification project будет запускаться из корня repo и сможет увидеть внутренние package sources.
 
 Если найден `Directory.Packages.props`, `verify-project` считает это признаком Central Package Management и делает temporary harness изолированным: `ManagePackageVersionsCentrally=false`, а `PackageReference` остаются с явными `Version`. Это предотвращает `NU1008` в проектах, где source repo управляет версиями централизованно, но временный verification project должен быть самодостаточным.
+
+
+## Verify harness evidence
+
+Каждый свежий `verify-project` теперь пишет машинно-читаемый блок `HarnessEvidence` со схемой `verify-project-harness/v1` в `project-verify-report.json` и отдельный snapshot `project-verify-harness.csproj` рядом с отчётом.
+
+Ключевые поля:
+
+- `CentralPackageManagementDetected` — найден ли `Directory.Packages.props` около verification anchors;
+- `CentralPackageManagementMode` — `isolated`, если CPM обнаружен и временный harness отключил его локально;
+- `CentralPackageFiles` — найденные CPM-файлы;
+- `ImportedBuildFiles` — фактически импортируемые `Directory.Build.props` / `.targets`;
+- `SkippedBuildFiles` — намеренно пропущенные files, прежде всего `Directory.Packages.props`;
+- `ManagePackageVersionsCentrallyDisabled` — есть ли в snapshot `<ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>`;
+- `Nu1008Mitigation` — краткое объяснение выбранной защиты.
+
+Это нужно для feedback bundles: пользователь может прислать `project-verify-report.json` и `project-verify-harness.csproj` без полного приватного repo, а maintainer сразу увидит, был ли `NU1008` проблемой migrator harness или внешнего package source.

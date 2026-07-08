@@ -38,12 +38,16 @@ permission:
     "migration/scripts/write-sentinel-finding.sh*": allow
     "migration/scripts/complete-sentinel-inspection.ps1*": allow
     "migration/scripts/complete-sentinel-inspection.sh*": allow
+    "migration/scripts/update-sentinel-finding-status.ps1*": allow
+    "migration/scripts/update-sentinel-finding-status.sh*": allow
     "pwsh -NoProfile -File migration/scripts/export-opencode-session.ps1*": allow
     "pwsh -NoProfile -File migration/scripts/write-sentinel-finding.ps1*": allow
     "pwsh -NoProfile -File migration/scripts/complete-sentinel-inspection.ps1*": allow
+    "pwsh -NoProfile -File migration/scripts/update-sentinel-finding-status.ps1*": allow
     "powershell -NoProfile -ExecutionPolicy Bypass -File migration/scripts/export-opencode-session.ps1*": allow
     "powershell -NoProfile -ExecutionPolicy Bypass -File migration/scripts/write-sentinel-finding.ps1*": allow
     "powershell -NoProfile -ExecutionPolicy Bypass -File migration/scripts/complete-sentinel-inspection.ps1*": allow
+    "powershell -NoProfile -ExecutionPolicy Bypass -File migration/scripts/update-sentinel-finding-status.ps1*": allow
 
     "Set-Content*": deny
     "*Set-Content*": deny
@@ -115,6 +119,7 @@ Read these when they exist:
 - `migration/current-ticket.md`
 - `migration/state/harness-events.jsonl`
 - `migration/state/sentinel-ledger.jsonl`
+- `migration/state/sentinel-finding-ledger.jsonl` and `migration/state/sentinel-finding-status.json`, if they exist
 - `migration/state/memory/*.jsonl`
 - latest `migration/runs/<run-id>/trace.jsonl`
 - latest `migration/runs/<run-id>/opencode-session-export.md`
@@ -196,8 +201,15 @@ The helper appends to both:
 
 - `migration/runs/<run-id>/sentinel/sentinel-findings.jsonl`
 - `migration/state/sentinel-ledger.jsonl`
+- `migration/runs/<run-id>/sentinel/sentinel-finding-lifecycle.jsonl`
+- `migration/state/sentinel-finding-ledger.jsonl`
 
 If the helper is unavailable, write only `migration/runs/<run-id>/sentinel/sentinel-report.md` and mark the inspection as `BLOCKED` with `complete-sentinel-inspection`. Do not manually edit `migration/state/sentinel-ledger.jsonl`; that ledger is append-only and must be written by the helper.
+
+
+## Finding lifecycle
+
+Write new findings with `migration/scripts/write-sentinel-finding.ps1` / `.sh`; do not mutate `sentinel-findings.jsonl` after creation. If a finding is routed to a current-ticket, record `ASSIGNED` with `migration/scripts/update-sentinel-finding-status.ps1 -FindingId <id> -Status ASSIGNED -TicketId <ticket>` / `.sh`. After an executor attempts a bounded fix, record `FIX_ATTEMPTED`; after reviewer/final-gate evidence proves the defect is gone, record `VERIFIED` or `CLOSED`. If the finding cannot be fixed by the agent under migration scope, record `NON_AGENT_EXECUTABLE` or `ACCEPTED_RISK` with evidence instead of leaving a misleading open item.
 
 ## Report structure
 

@@ -157,7 +157,7 @@ APPROVE / REQUEST_CHANGES / BLOCK
 ## Risks
 ```
 
-Do not edit files. Do not call executor yourself. The orchestrator decides whether to invoke `migration-task-slicer`, create/update `migration/current-ticket.md`, and delegate implementation.
+Do not edit files. Do not call executor yourself. When reviewing `migration/current-ticket.md`, read `migration/state/current-ticket-status.json` and `migration/state/sentinel-finding-status.json` if present and report whether the ticket can move from `READY`/`IN_PROGRESS` to executor work, must remain blocked, or needs slicing changes. The orchestrator owns `update-current-ticket-status.ps1` and `update-sentinel-finding-status.ps1` transitions and decides whether to invoke `migration-task-slicer`, create/update `migration/current-ticket.md`, and delegate implementation. Reviewer approval may recommend `VERIFIED`/`CLOSED` for a sentinel finding only when validation evidence proves the process defect is gone.
 
 
 ## Permission-bypass and ledger-safety review

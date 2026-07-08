@@ -18,6 +18,7 @@ This project uses preview SemVer-style versions while the public API is still st
 
 ### Added
 
+- Public preview flow docs (`public-preview-flow/v1`) that tie install diagnostics, playground/product start, wave gates, current-ticket follow-ups, mapping research memory, verify harness evidence, artifact hygiene, and safe feedback bundles into one user-facing story.
 - Installation diagnostics scripts and docs that start from PATH resolution before package-manager-specific checks.
 - Final distribution verification scripts/checklist for repository, npm/Nexus, release, and project-pilot readiness.
 - npm Trusted Publishing handoff docs plus Scoop/Homebrew package-manager templates.

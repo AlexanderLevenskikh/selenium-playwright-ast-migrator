@@ -53,3 +53,25 @@ Applied skills are recorded with `scripts/record-agent-skill-profile.ps1` / `.sh
 ## Gate follow-up slicer
 
 `migration/scripts/slice-gate-followups.ps1` / `.sh` converts final-gate and sentinel diagnostics into `state/backlog/gate-followup-tasks.jsonl`, `state/backlog/gate-followup-backlog.md`, and `current-ticket.md` before another wave starts.
+
+
+## Current-ticket lifecycle
+
+Use `migration/scripts/update-sentinel-finding-status.ps1` or `.sh` to record `OPEN`, `ASSIGNED`, `FIX_ATTEMPTED`, `VERIFIED`, `CLOSED`, `BLOCKED`, `NON_AGENT_EXECUTABLE`, or `ACCEPTED_RISK` transitions for sentinel findings. Final gate overlays these lifecycle statuses on top of `sentinel-findings.jsonl` so high/critical findings stop blocking only when they are verified/closed or explicitly classified as non-agent-executable/accepted risk.
+
+Use `migration/scripts/update-current-ticket-status.ps1` or `.sh` to record ticket transitions. The latest status is `state/current-ticket-status.json`; the append-only audit log is `state/current-ticket-ledger.jsonl`. A non-terminal ticket (`READY`, `IN_PROGRESS`, or `REVIEW_READY`) has priority over wave selection.
+
+### Wave quality budget
+
+Run `migration/scripts/evaluate-wave-quality-budget.ps1` or `.sh` after each `runs/wave-*` execution. Final gate checks `wave-quality-budget/v1` evidence and blocks `BLOCKED_BY_WAVE_QUALITY_BUDGET` waves from continuing until mapping/research/config improvement evidence exists.
+
+## Mapping/research memory evidence
+
+If wave quality is blocked, final gate expects `mapping-research-memory/v1` evidence before the next wave. Run `migration/scripts/collect-mapping-research-memory.ps1` / `.sh` to create `state/mapping-research-memory.*` and `state/mapping-research-candidates.jsonl`, then route one bounded config/POM/recognizer or verify-harness ticket.
+
+For sharing a migration gap with the migrator maintainer, run `migration/scripts/create-feedback-bundle.ps1` / `.sh`. The resulting `feedback-bundle/v1` zip is safe by default: it excludes project source and generated C# samples unless `-IncludeGeneratedSamples` is explicitly used.
+
+
+## Artifact hygiene evidence
+
+Run `migration/scripts/validate-run-artifacts.ps1` or `.sh` to create `artifact-hygiene/v1` reports in `state/artifact-hygiene.*` and `runs/<run-id>/artifact-hygiene.*`. Final gate invokes the same check. It cross-checks Plan.md sanitization, Documentation.md versus final gate status, run/wave identity in generated boards/status files, and honest session export status.

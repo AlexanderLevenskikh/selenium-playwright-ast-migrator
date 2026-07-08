@@ -154,6 +154,31 @@ $line = $finding | ConvertTo-Json -Compress -Depth 20
 Add-Content -Path (Join-Path $runSentinelDir "sentinel-findings.jsonl") -Encoding UTF8 -Value $line
 Add-Content -Path (Join-Path $workspacePath "state/sentinel-ledger.jsonl") -Encoding UTF8 -Value $line
 
+# Seed the append-only sentinel finding lifecycle ledger. Later status changes must use
+# update-sentinel-finding-status instead of mutating sentinel-findings.jsonl.
+$lifecycleStatus = ([string]$Status).ToUpperInvariant().Replace("-", "_")
+if ($lifecycleStatus -eq "OPEN" -or $lifecycleStatus -eq "") { $lifecycleStatus = "OPEN" }
+$lifecycleEvent = [pscustomobject][ordered]@{
+    schemaVersion = "sentinel-finding-lifecycle/v1"
+    event = "SENTINEL_FINDING_STATUS_UPDATED"
+    findingId = [string]$finding.findingId
+    runId = $RunId
+    category = $Category
+    severity = $Severity
+    status = $lifecycleStatus
+    previousStatus = $null
+    ticketId = ""
+    source = "write-sentinel-finding"
+    actor = "harness-sentinel"
+    summary = "Initial sentinel finding status."
+    evidence = $Evidence
+    result = "finding-created"
+    updatedAtUtc = [DateTimeOffset]::UtcNow.ToString("o")
+}
+$lifecycleLine = $lifecycleEvent | ConvertTo-Json -Compress -Depth 20
+Add-Content -Path (Join-Path $runSentinelDir "sentinel-finding-lifecycle.jsonl") -Encoding UTF8 -Value $lifecycleLine
+Add-Content -Path (Join-Path $workspacePath "state/sentinel-finding-ledger.jsonl") -Encoding UTF8 -Value $lifecycleLine
+
 $observationPath = Join-Path $workspacePath "runs/$RunId/session-observations.jsonl"
 if (Test-Path (Split-Path -Parent $observationPath)) {
     Add-Content -Path $observationPath -Encoding UTF8 -Value $line

@@ -35,6 +35,7 @@ internal static class MigrationPrPackCommand
         "verify-project-report.md",
         "project-verify-report.json",
         "project-verify-report.md",
+        "project-verify-harness.csproj",
         "report.json",
         "report.txt",
         "migration-board.json",

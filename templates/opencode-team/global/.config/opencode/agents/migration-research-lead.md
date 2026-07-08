@@ -244,3 +244,7 @@ Also update `migration/state/continuation-decision.md` with the same next step.
 ## Final response
 
 Report only the verdict, blocking/revision reasons, accepted findings, and next continuation decision. Do not claim implementation progress.
+
+## Mapping/research memory loop
+
+When `evaluate-wave-quality-budget` reports `BLOCKED_BY_WAVE_QUALITY_BUDGET`, do not select another wave. Run `migration/scripts/collect-mapping-research-memory.ps1` / `.sh` first. Use `mapping-research-memory/v1`, `state/mapping-research-memory.json`, and `state/mapping-research-candidates.jsonl` to route one bounded config/POM/recognizer or verify-harness improvement ticket.

@@ -866,6 +866,551 @@ public class AgentLoopHardeningTests
     }
 
 
+
+    [Fact]
+    public void CurrentTicketExecutorLoop_PrioritizesExistingTicketBeforeNewWave()
+    {
+        var statusScript = Read("templates/migration-kit/scripts/update-current-ticket-status.ps1");
+        var statusShell = Read("templates/migration-kit/scripts/update-current-ticket-status.sh");
+        var gateFollowupSlicer = Read("templates/migration-kit/scripts/slice-gate-followups.ps1");
+        var supervisedTask = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var orchestrator = Read("templates/opencode-team/global/.config/opencode/agents/orchestrator.md");
+        var executor = Read("templates/opencode-team/global/.config/opencode/agents/executor.md");
+        var changeReviewer = Read("templates/opencode-team/global/.config/opencode/agents/migration-change-reviewer.md");
+        var contract = Read("templates/migration-kit/AGENT_CONTRACT.md");
+        var kitReadme = Read("templates/migration-kit/README.md");
+        var continuationContract = Read("templates/migration-kit/state/continuation-contract.md");
+        var harnessReadme = Read("templates/migration-kit/harness/README.md");
+        var policy = Read("templates/migration-kit/state/harness-policy.json");
+        var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
+        var installScript = Read("scripts/install-migration-kit.ps1");
+        var bundleScript = Read("scripts/package-agent-cli-bundle.ps1");
+        var verifyBundle = Read("scripts/verify-agent-cli-bundle.ps1");
+        var verifyNupkg = Read("scripts/verify-nupkg-contents.ps1");
+        var docsIndex = Read("docs/README.md");
+        var feedbackDoc = Read("docs/migration-feedback-bundles.md");
+
+        Assert.Contains("current-ticket-lifecycle/v1", statusScript);
+        Assert.Contains("CURRENT_TICKET_STATUS_UPDATED", statusScript);
+        Assert.Contains("state/current-ticket-status.json", statusScript);
+        Assert.Contains("state/current-ticket-ledger.jsonl", statusScript);
+        Assert.Contains("runs/<run-id>/tickets", statusScript);
+        Assert.Contains("must be completed, blocked, or gate-validated before another wave", statusScript);
+        Assert.Contains("pwsh", statusShell);
+
+        Assert.Contains("current-ticket-lifecycle/v1", gateFollowupSlicer);
+        Assert.Contains("CURRENT_TICKET_STATUS_UPDATED", gateFollowupSlicer);
+        Assert.Contains("current-ticket-status.json", gateFollowupSlicer);
+        Assert.Contains("current-ticket-ledger.jsonl", gateFollowupSlicer);
+
+        Assert.Contains("current-ticket lifecycle is active", supervisedTask);
+        Assert.Contains("update-current-ticket-status.ps1 -Status IN_PROGRESS", supervisedTask);
+        Assert.Contains("migration-change-reviewer", supervisedTask);
+        Assert.Contains("delegate exactly one bounded `executor` task", supervisedTask);
+        Assert.Contains("Do not start another wave while the current-ticket lifecycle is active", supervisedTask);
+        Assert.Contains("current-ticket-status.json", orchestrator);
+        Assert.Contains("update-current-ticket-status.ps1 -Status IN_PROGRESS", orchestrator);
+        Assert.Contains("update-current-ticket-status.ps1 -Status REVIEW_READY", executor);
+        Assert.Contains("current-ticket-status.json", changeReviewer);
+        Assert.Contains("READY", continuationContract);
+        Assert.Contains("IN_PROGRESS", continuationContract);
+        Assert.Contains("REVIEW_READY", continuationContract);
+        Assert.Contains("DONE", continuationContract);
+        Assert.Contains("BLOCKED", continuationContract);
+        Assert.Contains("current-ticket-status.json", contract);
+        Assert.Contains("current-ticket-ledger.jsonl", kitReadme);
+        Assert.Contains("current-ticket-ledger.jsonl", harnessReadme);
+
+        Assert.Contains("update-current-ticket-status.ps1", policy);
+        Assert.Contains("update-current-ticket-status.sh", policy);
+        Assert.Contains("current-ticket-lifecycle", kitCommand);
+        Assert.Contains("scripts/update-current-ticket-status.ps1", installScript);
+        Assert.Contains("templates/migration-kit/scripts/update-current-ticket-status.ps1", bundleScript);
+        Assert.Contains("templates/migration-kit/scripts/update-current-ticket-status.ps1", verifyBundle);
+        Assert.Contains("update-current-ticket-status\\.ps1", verifyNupkg);
+
+        Assert.Contains("migration-feedback-bundles.md", docsIndex);
+        Assert.Contains("Recognizer improvement", feedbackDoc);
+        Assert.Contains("Verify harness improvement", feedbackDoc);
+        Assert.Contains("minimal synthetic fixture", feedbackDoc);
+    }
+
+
+
+    [Fact]
+    public void WaveQualityBudget_BlocksNoisyWavesBeforeNextWave()
+    {
+        var budgetScript = Read("templates/migration-kit/scripts/evaluate-wave-quality-budget.ps1");
+        var budgetShell = Read("templates/migration-kit/scripts/evaluate-wave-quality-budget.sh");
+        var finalGate = Read("templates/migration-kit/scripts/check-final-gate.ps1");
+        var slicer = Read("templates/migration-kit/scripts/slice-gate-followups.ps1");
+        var policy = Read("templates/migration-kit/state/harness-policy.json");
+        var contract = Read("templates/migration-kit/AGENT_CONTRACT.md");
+        var kitReadme = Read("templates/migration-kit/README.md");
+        var finalGateDoc = Read("templates/migration-kit/state/final-gate.md");
+        var continuation = Read("templates/migration-kit/state/continuation-contract.md");
+        var supervisedTask = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var orchestrator = Read("templates/opencode-team/global/.config/opencode/agents/orchestrator.md");
+        var taskSlicer = Read("templates/opencode-team/global/.config/opencode/agents/migration-task-slicer.md");
+        var projectAgents = Read("templates/opencode-team/project-template/AGENTS.md");
+        var teamReadme = Read("templates/opencode-team/README.md");
+        var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
+        var installScript = Read("scripts/install-migration-kit.ps1");
+        var bundleScript = Read("scripts/package-agent-cli-bundle.ps1");
+        var verifyBundle = Read("scripts/verify-agent-cli-bundle.ps1");
+        var verifyNupkg = Read("scripts/verify-nupkg-contents.ps1");
+
+        Assert.Contains("wave-quality-budget/v1", budgetScript);
+        Assert.Contains("BLOCKED_BY_WAVE_QUALITY_BUDGET", budgetScript);
+        Assert.Contains("MaxSyntaxFallbackRatio", budgetScript);
+        Assert.Contains("MaxTodos", budgetScript);
+        Assert.Contains("MinSemanticActions", budgetScript);
+        Assert.Contains("ROUTE_TO_MAPPING_RESEARCH_OR_CONFIG_IMPROVEMENT", budgetScript);
+        Assert.Contains("WAVE_QUALITY_BUDGET_", budgetScript);
+        Assert.Contains("state/wave-quality-budget.json", budgetScript);
+        Assert.Contains("runs/$RunId/wave-quality-budget.json", budgetScript);
+        Assert.Contains("pwsh", budgetShell);
+
+        Assert.Contains("Test-WaveQualityBudget", finalGate);
+        Assert.Contains("wave-quality-budget", finalGate);
+        Assert.Contains("evaluate-wave-quality-budget.ps1", finalGate);
+        Assert.Contains("BLOCKED_BY_WAVE_QUALITY_BUDGET", finalGate);
+        Assert.Contains("wave-quality-budget.md", finalGate);
+        Assert.Contains("wave-quality-budget.json", finalGate);
+
+        Assert.Contains("wave-quality-budget|blocked-by-wave-quality-budget", slicer);
+        Assert.Contains("Switch noisy wave into mapping research", slicer);
+        Assert.Contains("TODO causes", slicer);
+        Assert.Contains("syntax-fallback clusters", slicer);
+
+        Assert.Contains("evaluate-wave-quality-budget.ps1", policy);
+        Assert.Contains("evaluate-wave-quality-budget.sh", policy);
+        Assert.Contains("Wave quality budget", contract);
+        Assert.Contains("BLOCKED_BY_WAVE_QUALITY_BUDGET", kitReadme);
+        Assert.Contains("wave-quality-budget/v1", finalGateDoc);
+        Assert.Contains("Wave budget continuation", continuation);
+        Assert.Contains("evaluate-wave-quality-budget.ps1", supervisedTask);
+        Assert.Contains("BLOCKED_BY_WAVE_QUALITY_BUDGET", supervisedTask);
+        Assert.Contains("evaluate-wave-quality-budget.ps1", orchestrator);
+        Assert.Contains("BLOCKED_BY_WAVE_QUALITY_BUDGET", orchestrator);
+        Assert.Contains("wave-quality-budget", taskSlicer);
+        Assert.Contains("Wave quality budget", projectAgents);
+        Assert.Contains("wave-quality-budget/v1", teamReadme);
+
+        Assert.Contains("wave-quality-budget", kitCommand);
+        Assert.Contains("scripts/evaluate-wave-quality-budget.ps1", installScript);
+        Assert.Contains("templates/migration-kit/scripts/evaluate-wave-quality-budget.ps1", bundleScript);
+        Assert.Contains("templates/migration-kit/scripts/evaluate-wave-quality-budget.ps1", verifyBundle);
+        Assert.Contains("evaluate-wave-quality-budget\\.ps1", verifyNupkg);
+    }
+
+
+
+    [Fact]
+    public void MappingResearchMemory_TurnsNoisyWavesIntoReusableImprovementEvidence()
+    {
+        var researchScript = Read("templates/migration-kit/scripts/collect-mapping-research-memory.ps1");
+        var researchShell = Read("templates/migration-kit/scripts/collect-mapping-research-memory.sh");
+        var finalGate = Read("templates/migration-kit/scripts/check-final-gate.ps1");
+        var budgetScript = Read("templates/migration-kit/scripts/evaluate-wave-quality-budget.ps1");
+        var slicer = Read("templates/migration-kit/scripts/slice-gate-followups.ps1");
+        var policy = Read("templates/migration-kit/state/harness-policy.json");
+        var contract = Read("templates/migration-kit/AGENT_CONTRACT.md");
+        var kitReadme = Read("templates/migration-kit/README.md");
+        var finalGateDoc = Read("templates/migration-kit/state/final-gate.md");
+        var continuation = Read("templates/migration-kit/state/continuation-contract.md");
+        var supervisedTask = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var orchestrator = Read("templates/opencode-team/global/.config/opencode/agents/orchestrator.md");
+        var researcher = Read("templates/opencode-team/global/.config/opencode/agents/migration-researcher.md");
+        var taskSlicer = Read("templates/opencode-team/global/.config/opencode/agents/migration-task-slicer.md");
+        var projectAgents = Read("templates/opencode-team/project-template/AGENTS.md");
+        var teamReadme = Read("templates/opencode-team/README.md");
+        var feedbackDoc = Read("docs/migration-feedback-bundles.md");
+        var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
+        var installScript = Read("scripts/install-migration-kit.ps1");
+        var bundleScript = Read("scripts/package-agent-cli-bundle.ps1");
+        var verifyBundle = Read("scripts/verify-agent-cli-bundle.ps1");
+        var verifyNupkg = Read("scripts/verify-nupkg-contents.ps1");
+
+        Assert.Contains("mapping-research-memory/v1", researchScript);
+        Assert.Contains("MAPPING_RESEARCH_MEMORY_", researchScript);
+        Assert.Contains("state/mapping-research-memory.json", researchScript);
+        Assert.Contains("state/mapping-research-memory.md", researchScript);
+        Assert.Contains("state/mapping-research-candidates.jsonl", researchScript);
+        Assert.Contains("runs/$RunId/research/mapping-research-memory.json", researchScript);
+        Assert.Contains("topUnresolvedSymbols", researchScript);
+        Assert.Contains("topPageObjectSymbols", researchScript);
+        Assert.Contains("topTodoClusters", researchScript);
+        Assert.Contains("topUnmappedTargets", researchScript);
+        Assert.Contains("syntaxFallbackClusters", researchScript);
+        Assert.Contains("verifyBlockers", researchScript);
+        Assert.Contains("recommendedNextTickets", researchScript);
+        Assert.Contains("ROUTE_TO_CONFIG_POM_RECOGNIZER_IMPROVEMENT", researchScript);
+        Assert.Contains("pwsh", researchShell);
+
+        Assert.Contains("collect-mapping-research-memory.ps1", budgetScript);
+        Assert.Contains("Test-MappingResearchMemoryAfterBlockedBudget", finalGate);
+        Assert.Contains("mapping-research-memory", finalGate);
+        Assert.Contains("mapping-research-memory/v1", finalGate);
+        Assert.Contains("collect-mapping-research-memory.ps1", finalGate);
+        Assert.Contains("mapping-research-candidates.jsonl", finalGate);
+
+        Assert.Contains("collect-mapping-research-memory.ps1", slicer);
+        Assert.Contains("mapping-research-memory/v1", slicer);
+        Assert.Contains("collect-mapping-research-memory.ps1", policy);
+        Assert.Contains("collect-mapping-research-memory.sh", policy);
+        Assert.Contains("Mapping/research memory", contract);
+        Assert.Contains("mapping-research-memory/v1", kitReadme);
+        Assert.Contains("mapping-research-memory/v1", finalGateDoc);
+        Assert.Contains("Mapping/research continuation", continuation);
+        Assert.Contains("collect-mapping-research-memory.ps1", supervisedTask);
+        Assert.Contains("collect-mapping-research-memory.ps1", orchestrator);
+        Assert.Contains("collect-mapping-research-memory.ps1", researcher);
+        Assert.Contains("mapping-research-memory/v1", taskSlicer);
+        Assert.Contains("Mapping/research memory", projectAgents);
+        Assert.Contains("collect-mapping-research-memory.ps1", teamReadme);
+        Assert.Contains("mapping-research-memory/v1", feedbackDoc);
+
+        Assert.Contains("mapping-research-memory", kitCommand);
+        Assert.Contains("scripts/collect-mapping-research-memory.ps1", installScript);
+        Assert.Contains("templates/migration-kit/scripts/collect-mapping-research-memory.ps1", bundleScript);
+        Assert.Contains("templates/migration-kit/scripts/collect-mapping-research-memory.ps1", verifyBundle);
+        Assert.Contains("collect-mapping-research-memory\\.ps1", verifyNupkg);
+    }
+
+
+    [Fact]
+    public void VerifyProjectHarnessEvidence_DocumentsCpmIsolationAndNu1008Diagnostics()
+    {
+        var program = Read("Migrator.Cli/Program.cs");
+        var models = Read("Migrator.Cli/Models/CliReportModels.cs");
+        var projectVerificationDoc = Read("docs/project-verification.md");
+        var feedbackDoc = Read("docs/migration-feedback-bundles.md");
+
+        Assert.Contains("project-verify-harness.csproj", program);
+        Assert.Contains("BuildProjectVerifyHarnessEvidence", program);
+        Assert.Contains("verify-project-harness/v1", program);
+        Assert.Contains("HarnessProjectSnapshotSha256", program);
+        Assert.Contains("CentralPackageManagementDetected", program);
+        Assert.Contains("CentralPackageManagementMode", program);
+        Assert.Contains("ManagePackageVersionsCentrallyDisabled", program);
+        Assert.Contains("SkippedBuildFiles", program);
+        Assert.Contains("Directory.Packages.props skipped + ManagePackageVersionsCentrally=false", program);
+        Assert.Contains("central-package-management", program);
+        Assert.Contains("NU1008", program);
+        Assert.Contains(@"\b(CS|NU|MSB)\d{4}\b", program);
+
+        Assert.Contains("record ProjectVerifyHarnessEvidence", models);
+        Assert.Contains("ProjectVerifyHarnessEvidence HarnessEvidence", models);
+
+        Assert.Contains("verify-project-harness/v1", projectVerificationDoc);
+        Assert.Contains("project-verify-harness.csproj", projectVerificationDoc);
+        Assert.Contains("central-package-management", projectVerificationDoc);
+        Assert.Contains("NU1008", projectVerificationDoc);
+
+        Assert.Contains("project-verify-harness.csproj", feedbackDoc);
+        Assert.Contains("HarnessEvidence", feedbackDoc);
+        Assert.Contains("verify-project-harness/v1", feedbackDoc);
+    }
+
+
+    [Fact]
+    public void SentinelFindingLifecycle_TracksStatusTransitionsWithoutMutatingFindings()
+    {
+        var updateScript = Read("templates/migration-kit/scripts/update-sentinel-finding-status.ps1");
+        var updateShell = Read("templates/migration-kit/scripts/update-sentinel-finding-status.sh");
+        var findingScript = Read("templates/migration-kit/scripts/write-sentinel-finding.ps1");
+        var completeScript = Read("templates/migration-kit/scripts/complete-sentinel-inspection.ps1");
+        var finalGate = Read("templates/migration-kit/scripts/check-final-gate.ps1");
+        var slicer = Read("templates/migration-kit/scripts/slice-gate-followups.ps1");
+        var policy = Read("templates/migration-kit/state/harness-policy.json");
+        var contract = Read("templates/migration-kit/AGENT_CONTRACT.md");
+        var supervisedTask = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var executor = Read("templates/opencode-team/global/.config/opencode/agents/executor.md");
+        var reviewer = Read("templates/opencode-team/global/.config/opencode/agents/migration-change-reviewer.md");
+        var sentinel = Read("templates/opencode-team/global/.config/opencode/agents/harness-sentinel.md");
+        var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
+        var installScript = Read("scripts/install-migration-kit.ps1");
+        var bundleScript = Read("scripts/package-agent-cli-bundle.ps1");
+        var verifyBundle = Read("scripts/verify-agent-cli-bundle.ps1");
+        var verifyNupkg = Read("scripts/verify-nupkg-contents.ps1");
+
+        Assert.Contains("sentinel-finding-lifecycle/v1", updateScript);
+        Assert.Contains("SENTINEL_FINDING_STATUS_UPDATED", updateScript);
+        Assert.Contains("state/sentinel-finding-ledger.jsonl", updateScript);
+        Assert.Contains("sentinel-finding-lifecycle.jsonl", updateScript);
+        Assert.Contains("sentinel-finding-status.json", updateScript);
+        Assert.Contains("OPEN", updateScript);
+        Assert.Contains("ASSIGNED", updateScript);
+        Assert.Contains("FIX_ATTEMPTED", updateScript);
+        Assert.Contains("VERIFIED", updateScript);
+        Assert.Contains("CLOSED", updateScript);
+        Assert.Contains("NON_AGENT_EXECUTABLE", updateScript);
+        Assert.Contains("ACCEPTED_RISK", updateScript);
+        Assert.Contains("pwsh", updateShell);
+
+        Assert.Contains("sentinel-finding-lifecycle/v1", findingScript);
+        Assert.Contains("update-sentinel-finding-status instead of mutating sentinel-findings.jsonl", findingScript);
+        Assert.Contains("Read-SentinelFindingLifecycleStatuses", finalGate);
+        Assert.Contains("Test-SentinelLifecycleTerminal", finalGate);
+        Assert.Contains("sentinel-finding-ledger.jsonl", finalGate);
+        Assert.Contains("status=$status", finalGate);
+        Assert.Contains("Read-LifecycleStatuses", completeScript);
+        Assert.Contains("sentinel-finding-lifecycle/v1", slicer);
+        Assert.Contains("Finding id", slicer);
+        Assert.Contains("ASSIGNED", slicer);
+
+        Assert.Contains("update-sentinel-finding-status.ps1", policy);
+        Assert.Contains("update-sentinel-finding-status.sh", policy);
+        Assert.Contains("sentinel-finding-lifecycle", kitCommand);
+        Assert.Contains("scripts/update-sentinel-finding-status.ps1", installScript);
+        Assert.Contains("templates/migration-kit/scripts/update-sentinel-finding-status.ps1", bundleScript);
+        Assert.Contains("templates/migration-kit/scripts/update-sentinel-finding-status.ps1", verifyBundle);
+        Assert.Contains("update-sentinel-finding-status\\.ps1", verifyNupkg);
+
+        Assert.Contains("sentinel-finding-ledger.jsonl", contract);
+        Assert.Contains("update-sentinel-finding-status.ps1 -FindingId", supervisedTask);
+        Assert.Contains("FIX_ATTEMPTED", executor);
+        Assert.Contains("sentinel-finding-status.json", reviewer);
+        Assert.Contains("Finding lifecycle", sentinel);
+    }
+
+    [Fact]
+    public void ArtifactHygiene_RejectsContradictoryOrPollutedRunReports()
+    {
+        var hygieneScript = Read("templates/migration-kit/scripts/validate-run-artifacts.ps1");
+        var hygieneShell = Read("templates/migration-kit/scripts/validate-run-artifacts.sh");
+        var finalGate = Read("templates/migration-kit/scripts/check-final-gate.ps1");
+        var policy = Read("templates/migration-kit/state/harness-policy.json");
+        var contract = Read("templates/migration-kit/AGENT_CONTRACT.md");
+        var kitReadme = Read("templates/migration-kit/README.md");
+        var harnessReadme = Read("templates/migration-kit/harness/README.md");
+        var finalGateDoc = Read("templates/migration-kit/state/final-gate.md");
+        var continuation = Read("templates/migration-kit/state/continuation-contract.md");
+        var supervisedTask = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var orchestrator = Read("templates/opencode-team/global/.config/opencode/agents/orchestrator.md");
+        var projectAgents = Read("templates/opencode-team/project-template/AGENTS.md");
+        var teamReadme = Read("templates/opencode-team/README.md");
+        var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
+        var installScript = Read("scripts/install-migration-kit.ps1");
+        var bundleScript = Read("scripts/package-agent-cli-bundle.ps1");
+        var verifyBundle = Read("scripts/verify-agent-cli-bundle.ps1");
+        var verifyNupkg = Read("scripts/verify-nupkg-contents.ps1");
+        var verifyNupkgSh = Read("scripts/verify-nupkg-contents.sh");
+
+        Assert.Contains("artifact-hygiene/v1", hygieneScript);
+        Assert.Contains("ARTIFACT_HYGIENE_PASS", hygieneScript);
+        Assert.Contains("ARTIFACT_HYGIENE_FAIL", hygieneScript);
+        Assert.Contains("Test-PlanSanitized", hygieneScript);
+        Assert.Contains("Test-DocumentationHonesty", hygieneScript);
+        Assert.Contains("Test-RunAndWaveIdentity", hygieneScript);
+        Assert.Contains("Test-SessionExportStatus", hygieneScript);
+        Assert.Contains("artifact-hygiene.json", hygieneScript);
+        Assert.Contains("artifact-hygiene.md", hygieneScript);
+        Assert.Contains("Documentation.md claims completion/success", hygieneScript);
+        Assert.Contains("Plan.md contains raw shell/write payloads", hygieneScript);
+        Assert.Contains("REAL_EXPORT", hygieneScript);
+        Assert.Contains("UNAVAILABLE_WITH_REASON", hygieneScript);
+        Assert.Contains("pwsh", hygieneShell);
+
+        Assert.Contains("artifact-hygiene", finalGate);
+        Assert.Contains("validate-run-artifacts.ps1", finalGate);
+        Assert.Contains("schema artifact-hygiene/v1", finalGate);
+
+        Assert.Contains("validate-run-artifacts.ps1", policy);
+        Assert.Contains("validate-run-artifacts.sh", policy);
+        Assert.Contains("Artifact hygiene", contract);
+        Assert.Contains("artifact-hygiene/v1", kitReadme);
+        Assert.Contains("artifact-hygiene/v1", harnessReadme);
+        Assert.Contains("artifact-hygiene/v1", finalGateDoc);
+        Assert.Contains("Artifact hygiene continuation", continuation);
+        Assert.Contains("validate-run-artifacts.ps1", supervisedTask);
+        Assert.Contains("validate-run-artifacts.ps1", orchestrator);
+        Assert.Contains("validate-run-artifacts.ps1", projectAgents);
+        Assert.Contains("validate-run-artifacts.ps1", teamReadme);
+
+        Assert.Contains("artifact-hygiene", kitCommand);
+        Assert.Contains("scripts/validate-run-artifacts.ps1", installScript);
+        Assert.Contains("templates/migration-kit/scripts/validate-run-artifacts.ps1", bundleScript);
+        Assert.Contains("templates/migration-kit/scripts/validate-run-artifacts.ps1", verifyBundle);
+        Assert.Contains("validate-run-artifacts\\.ps1", verifyNupkg);
+        Assert.Contains("validate-run-artifacts\\.ps1", verifyNupkgSh);
+    }
+
+
+
+    [Fact]
+    public void FeedbackBundlePacker_CreatesSafeShareableEvidenceBundle()
+    {
+        var packer = Read("templates/migration-kit/scripts/create-feedback-bundle.ps1");
+        var packerShell = Read("templates/migration-kit/scripts/create-feedback-bundle.sh");
+        var policy = Read("templates/migration-kit/state/harness-policy.json");
+        var contract = Read("templates/migration-kit/AGENT_CONTRACT.md");
+        var kitReadme = Read("templates/migration-kit/README.md");
+        var harnessReadme = Read("templates/migration-kit/harness/README.md");
+        var feedbackDoc = Read("docs/migration-feedback-bundles.md");
+        var docsIndex = Read("docs/README.md");
+        var rootReadme = Read("README.md");
+        var rootReadmeRu = Read("README.ru.md");
+        var teamReadme = Read("templates/opencode-team/README.md");
+        var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
+        var installScript = Read("scripts/install-migration-kit.ps1");
+        var bundleScript = Read("scripts/package-agent-cli-bundle.ps1");
+        var verifyBundle = Read("scripts/verify-agent-cli-bundle.ps1");
+        var verifyNupkg = Read("scripts/verify-nupkg-contents.ps1");
+        var verifyNupkgSh = Read("scripts/verify-nupkg-contents.sh");
+        var finalGate = Read("templates/migration-kit/scripts/check-final-gate.ps1");
+        var harnessPolicyScript = Read("templates/migration-kit/scripts/check-harness-policy.ps1");
+
+        Assert.Contains("feedback-bundle/v1", packer);
+        Assert.Contains("FEEDBACK_BUNDLE_CREATED", packer);
+        Assert.Contains("state/feedback-bundles", packer);
+        Assert.Contains("manifest.json", packer);
+        Assert.Contains("safeByDefault", packer);
+        Assert.Contains("includesProjectSourceByDefault", packer);
+        Assert.Contains("IncludeGeneratedSamples", packer);
+        Assert.Contains("MaxGeneratedSamples", packer);
+        Assert.Contains("runs/wave-*/generated/*.cs", packer);
+        Assert.Contains("generated C# samples excluded by default", packer);
+        Assert.Contains("mapping-research-memory.json", packer);
+        Assert.Contains("mapping-research-candidates.jsonl", packer);
+        Assert.Contains("wave-quality-budget.json", packer);
+        Assert.Contains("artifact-hygiene.json", packer);
+        Assert.Contains("project-verify-report.json", packer);
+        Assert.Contains("project-verify-harness.csproj", packer);
+        Assert.Contains("migration-board.md", packer);
+        Assert.Contains("explain-todo.md", packer);
+        Assert.Contains("Test-SensitiveContent", packer);
+        Assert.Contains("Authorization:", packer);
+        Assert.Contains("PRIVATE", packer);
+        Assert.Contains("Compress-Archive", packer);
+        Assert.Contains("pwsh", packerShell);
+
+        Assert.Contains("create-feedback-bundle.ps1", policy);
+        Assert.Contains("create-feedback-bundle.sh", policy);
+        Assert.Contains("create-feedback-bundle.ps1", harnessPolicyScript);
+        Assert.Contains("create-feedback-bundle.ps1", finalGate);
+        Assert.Contains("feedback-bundle-packer", kitCommand);
+        Assert.Contains("scripts/create-feedback-bundle.ps1", installScript);
+        Assert.Contains("templates/migration-kit/scripts/create-feedback-bundle.ps1", bundleScript);
+        Assert.Contains("templates/migration-kit/scripts/create-feedback-bundle.ps1", verifyBundle);
+        Assert.Contains(@"create-feedback-bundle\.ps1", verifyNupkg);
+        Assert.Contains(@"create-feedback-bundle\.ps1", verifyNupkgSh);
+
+        Assert.Contains("feedback-bundle/v1", contract);
+        Assert.Contains("feedback-bundle/v1", kitReadme);
+        Assert.Contains("feedback-bundle/v1", harnessReadme);
+        Assert.Contains("feedback-bundle/v1", teamReadme);
+        Assert.Contains("migration/scripts/create-feedback-bundle.ps1 -Workspace migration", feedbackDoc);
+        Assert.Contains("Project source files and generated `.cs` samples are excluded by default", feedbackDoc);
+        Assert.Contains("manifest.json", feedbackDoc);
+        Assert.Contains("create-feedback-bundle", docsIndex);
+        Assert.Contains("Share a safe feedback bundle", rootReadme);
+        Assert.Contains("feedback-bundle/v1", rootReadme);
+        Assert.Contains("Безопасный feedback bundle", rootReadmeRu);
+    }
+
+    [Fact]
+    public void WaveModeOperatorRunbook_DocumentsBlockedGateAndFeedbackLoops()
+    {
+        var runbook = Read("docs/wave-mode-operator-runbook.md");
+        var runbookRu = Read("docs/wave-mode-operator-runbook.ru.md");
+        var docsIndex = Read("docs/README.md");
+        var rootReadme = Read("README.md");
+        var rootReadmeRu = Read("README.ru.md");
+        var kitReadme = Read("templates/migration-kit/README.md");
+        var teamReadme = Read("templates/opencode-team/README.md");
+        var feedbackDoc = Read("docs/migration-feedback-bundles.md");
+
+        Assert.Contains("Wave mode operator runbook", runbook);
+        Assert.Contains("does not replace the canonical guarded launch procedure", runbook);
+        Assert.Contains("guarded-opencode-desktop-runbook.ru.md", runbook);
+        Assert.Contains("BLOCKED_BY_GATE", runbook);
+        Assert.Contains("migration/current-ticket.md", runbook);
+        Assert.Contains("slice-gate-followups.ps1", runbook);
+        Assert.Contains("update-current-ticket-status.ps1", runbook);
+        Assert.Contains("sentinel-finding-ledger.jsonl", runbook);
+        Assert.Contains("BLOCKED_BY_WAVE_QUALITY_BUDGET", runbook);
+        Assert.Contains("collect-mapping-research-memory.ps1", runbook);
+        Assert.Contains("mapping-research-memory/v1", runbook);
+        Assert.Contains("verify-project-harness/v1", runbook);
+        Assert.Contains("artifact-hygiene/v1", runbook);
+        Assert.Contains("feedback-bundle/v1", runbook);
+        Assert.Contains("create-feedback-bundle.ps1", runbook);
+        Assert.Contains("Operator decision table", runbook);
+        Assert.Contains("Quick health checklist", runbook);
+
+        Assert.Contains("Операторский runbook для wave mode", runbookRu);
+        Assert.Contains("не заменяет канонический guarded launch flow", runbookRu);
+        Assert.Contains("BLOCKED_BY_GATE", runbookRu);
+        Assert.Contains("current-ticket.md", runbookRu);
+        Assert.Contains("BLOCKED_BY_WAVE_QUALITY_BUDGET", runbookRu);
+        Assert.Contains("feedback-bundle/v1", runbookRu);
+
+        Assert.Contains("wave-mode-operator-runbook.md", docsIndex);
+        Assert.Contains("wave-mode-operator-runbook.ru.md", docsIndex);
+        Assert.Contains("Wave mode operator runbook", rootReadme);
+        Assert.Contains("операторский runbook для wave mode", rootReadmeRu);
+        Assert.Contains("wave-mode-operator-runbook.md", kitReadme);
+        Assert.Contains("wave-mode-operator-runbook.md", teamReadme);
+        Assert.Contains("wave-mode-operator-runbook.ru.md", teamReadme);
+        Assert.Contains("wave-mode-operator-runbook.md", feedbackDoc);
+    }
+
+    [Fact]
+    public void PublicPreviewPolish_DocumentsSafeByDefaultReleaseFlow()
+    {
+        var previewFlow = Read("docs/public-preview-flow.md");
+        var previewFlowRu = Read("docs/public-preview-flow.ru.md");
+        var docsIndex = Read("docs/README.md");
+        var rootReadme = Read("README.md");
+        var rootReadmeRu = Read("README.ru.md");
+        var releaseChecklist = Read("docs/release-final-checklist.md");
+        var changelog = Read("CHANGELOG.md");
+        var releaseNotes = Read(".release-notes.md");
+        var kitReadme = Read("templates/migration-kit/README.md");
+        var teamReadme = Read("templates/opencode-team/README.md");
+
+        Assert.Contains("public-preview-flow/v1", previewFlow);
+        Assert.Contains("Safe-by-default story", previewFlow);
+        Assert.Contains("evidence before scale", previewFlow);
+        Assert.Contains("feedback-bundle/v1", previewFlow);
+        Assert.Contains("mapping-research-memory/v1", previewFlow);
+        Assert.Contains("verify-project-harness/v1", previewFlow);
+        Assert.Contains("artifact-hygiene/v1", previewFlow);
+        Assert.Contains("BLOCKED_BY_WAVE_QUALITY_BUDGET", previewFlow);
+        Assert.Contains("Wave mode operator runbook", previewFlow);
+        Assert.Contains("create-feedback-bundle.ps1", previewFlow);
+        Assert.Contains("Release notes", previewFlow);
+
+        Assert.Contains("public-preview-flow/v1", previewFlowRu);
+        Assert.Contains("Safe-by-default story", previewFlowRu);
+        Assert.Contains("evidence before scale", previewFlowRu);
+        Assert.Contains("feedback-bundle/v1", previewFlowRu);
+        Assert.Contains("mapping-research-memory/v1", previewFlowRu);
+        Assert.Contains("verify-project-harness/v1", previewFlowRu);
+        Assert.Contains("artifact-hygiene/v1", previewFlowRu);
+        Assert.Contains("BLOCKED_BY_WAVE_QUALITY_BUDGET", previewFlowRu);
+
+        Assert.Contains("public-preview-flow.md", docsIndex);
+        Assert.Contains("public-preview-flow.ru.md", docsIndex);
+        Assert.Contains("Public preview flow", rootReadme);
+        Assert.Contains("public-preview-flow/v1", rootReadme);
+        Assert.Contains("feedback-bundle/v1", rootReadme);
+        Assert.Contains("Public preview flow", rootReadmeRu);
+        Assert.Contains("public-preview-flow/v1", rootReadmeRu);
+        Assert.Contains("feedback-bundle/v1", rootReadmeRu);
+
+        Assert.Contains("Public preview narrative smoke", releaseChecklist);
+        Assert.Contains("public-preview-flow/v1", releaseChecklist);
+        Assert.Contains("feedback-bundle/v1", releaseChecklist);
+        Assert.Contains("not as guaranteed automatic conversion", releaseChecklist);
+        Assert.Contains("public-preview-flow/v1", changelog);
+        Assert.Contains("public-preview-flow/v1", releaseNotes);
+        Assert.Contains("public-preview-flow/v1", kitReadme);
+        Assert.Contains("public-preview-flow/v1", teamReadme);
+    }
+
     [Fact]
     public void OpenCodeTeam_AllowsLowNoiseReadOnlyDiagnosticsAndKnownSubagents()
     {
@@ -1858,7 +2403,11 @@ public class AgentLoopHardeningTests
             "scripts/record-agent-skill-profile.ps1",
             "scripts/record-agent-skill-profile.sh",
             "scripts/slice-gate-followups.ps1",
-            "scripts/slice-gate-followups.sh"
+            "scripts/slice-gate-followups.sh",
+            "scripts/update-current-ticket-status.ps1",
+            "scripts/update-current-ticket-status.sh",
+            "scripts/update-sentinel-finding-status.ps1",
+            "scripts/update-sentinel-finding-status.sh"
         };
 
     static string BuildGuardChecksumsJson(string workspacePath)

@@ -16,6 +16,7 @@ Allowed statuses in `state/continuation-decision.json`:
 - `POST_FINAL_TASKS_READY` — task slicer wrote backlog/current-ticket; when the active run is `FINAL_STOPPED_FOR_REVIEW` (with or without explicit `/supervised-task continue`), supervisor routes the selected ticket through `migration-change-reviewer` and delegates exactly one bounded `executor` task under `migration/**` unless reviewer or policy blocks it. Bounded auto-continuation may further constrain this budget.
 - `BLOCKED_NO_AGENT_EXECUTABLE_TASKS` — task slicer found no safe agent-executable work; stop with exact human decisions or missing evidence required.
 - `BLOCKED_BY_GATE` — guard/scope/harness-policy failure. Do not start another wave until fixed or reverted. If no bounded ticket exists yet, `slice-gate-followups` may run first to create `gate-followup-tasks.jsonl`, `gate-followup-backlog.md`, and `current-ticket.md`.
+- `CURRENT_TICKET_ACTIVE` — `current-ticket.md` exists and `state/current-ticket-status.json` is missing or non-terminal. Route it through `migration-change-reviewer` and one bounded executor task before selecting another wave.
 - `BLOCKED_NO_ALLOWED_NEXT_ACTION` — no allowed next action was found. Stop with a classified blocker and one concrete request.
 
 
@@ -58,3 +59,22 @@ Compatibility note: older docs/tests may say “reviewed research”; in the clo
 ## Existing research is not terminal
 
 Existing post-final research is not terminal. Whenever the active run is already `FINAL_STOPPED_FOR_REVIEW`, the supervisor must route existing `migration/runs/*/research/**` through `migration-research-lead`, then `migration-task-slicer`, then `migration-change-reviewer`, then one bounded executor task when the selected ticket stays under `migration/**`, even for zero-argument `/supervised-task`. A terminal “no bounded action exists” report is valid only after task slicing writes `BLOCKED_NO_AGENT_EXECUTABLE_TASKS` or the change reviewer writes a concrete blocker.
+
+
+## Current-ticket lifecycle
+
+`state/sentinel-finding-status.json` uses schema `sentinel-finding-lifecycle/v1`; append-only transitions live in `state/sentinel-finding-ledger.jsonl` and `runs/<run-id>/sentinel/sentinel-finding-lifecycle.jsonl`. High/critical agent-executable findings remain blocking until `update-sentinel-finding-status` records `VERIFIED`, `CLOSED`, `NON_AGENT_EXECUTABLE`, or `ACCEPTED_RISK`.
+
+`state/current-ticket-status.json` uses schema `current-ticket-lifecycle/v1`. Statuses: `READY`, `IN_PROGRESS`, `REVIEW_READY`, `DONE`, `BLOCKED`. A non-terminal status prevents wave selection. Use `migration/scripts/update-current-ticket-status.ps1` / `.sh` for transitions so `state/current-ticket-ledger.jsonl` and `runs/<run-id>/tickets/**` remain auditable.
+
+## Wave budget continuation
+
+`BLOCKED_BY_WAVE_QUALITY_BUDGET` is not a terminal handoff. It means the wave produced too many TODOs, too high a syntax-fallback ratio, too many unmapped targets, too many actions/files/tests, or failed verify-project. Do not start another wave; create or execute a bounded mapping/research/config improvement ticket under `migration/**`.
+
+
+## Mapping/research continuation
+
+A blocked wave budget routes to mapping/research memory, not the next wave. Run `migration/scripts/collect-mapping-research-memory.ps1` / `.sh` to write `mapping-research-memory/v1` and `mapping-research-candidates.jsonl`, then slice exactly one bounded config/POM/recognizer or verify-harness improvement ticket.
+
+
+Artifact hygiene continuation: if final gate reports `artifact-hygiene` failure, the next action is a bounded artifact repair under `migration/**` using `validate-run-artifacts.ps1` evidence. Do not start another wave or publish final handoff until `artifact-hygiene/v1` passes or the remaining issue is explicitly classified as non-agent-executable.

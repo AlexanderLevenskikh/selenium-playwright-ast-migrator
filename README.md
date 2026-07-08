@@ -19,6 +19,12 @@ The main production path is **Selenium C# → Playwright .NET** with **NUnit as 
 
 The goal is not magic conversion. The goal is to make migration uncertainty visible and fixable.
 
+## Public preview story: evidence before scale
+
+`public-preview-flow/v1` is the recommended public-preview route: install, run `doctor install`, start with playground or product `start`, migrate through pilot/waves, stop on gates, extract mapping research from noisy waves, and share a safe `feedback-bundle/v1` instead of a private repository dump.
+
+The safe-by-default rule is simple: generated output is a draft until verification, final gate, artifact hygiene, sentinel lifecycle, and wave quality evidence agree. When the run is red, follow `migration/current-ticket.md` and the [Wave mode operator runbook](docs/wave-mode-operator-runbook.md) instead of starting another wave. For the compact end-to-end route, see [Public preview flow](docs/public-preview-flow.md).
+
 
 ## Choose your path
 
@@ -63,7 +69,7 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Sel
 
 The `waves` mode is the recommended divide-and-conquer start: it uses the `kit bootstrap-opencode --source ...` source as the hard scope when configured, auto-detects only missing source/target/framework details, asks only for missing required inputs, runs kit doctor, creates the wavefront plan, materializes the first wave, and runs only the wave-local migration. It must not run a full-source migration or discover sibling functional-test projects before a wave workspace exists. All `migration/**` artifacts are repository-root state; nested workspaces such as `Web/**/migration/**` are treated as process defects.
 
-For an existing workspace, plain `/supervised-task` resumes the next bounded action. After a successful FINAL/PASS checkpoint, the supervised agent stops once for review and reports evidence. To continue into post-final research without writing a long prompt, run `/supervised-task continue` or plain `/supervised-task` after `FINAL_STOPPED_FOR_REVIEW`.
+For an existing workspace, plain `/supervised-task` resumes the next bounded action. After a successful FINAL/PASS checkpoint, the supervised agent stops once for review and reports evidence. To continue into post-final research without writing a long prompt, run `/supervised-task continue` or plain `/supervised-task` after `FINAL_STOPPED_FOR_REVIEW`. For day-to-day operations after a wave is already running, use the [Wave mode operator runbook](docs/wave-mode-operator-runbook.md): it explains `BLOCKED_BY_GATE`, `current-ticket.md`, sentinel finding lifecycle, wave quality budget, mapping research memory, and feedback bundle handoff.
 
 ### 3. Migrate with another agent
 
@@ -92,6 +98,22 @@ selenium-pw-migrator report serve --input migration/runs/latest --static-only --
 ```
 
 Open `migration/dashboard/latest/report-dashboard.html` before digging through raw JSON/TXT artifacts. When TODOs remain, `explain-todo` also writes `suggested-config-patch.md/json` with grouped root causes, “fix this profile mapping first”, confidence/evidence badges, and draft UiTarget/Method/Table entries for review.
+
+### Share a safe feedback bundle
+
+If the migrator produces many TODOs, syntax fallbacks, unresolved symbols, or a `verify-project` failure, you can help improve the tool without sending your private repository. From the product repo root, run:
+
+```powershell
+migration/scripts/create-feedback-bundle.ps1 -Workspace migration
+```
+
+or on macOS/Linux/WSL:
+
+```bash
+migration/scripts/create-feedback-bundle.sh -Workspace migration
+```
+
+The script writes a `feedback-bundle/v1` zip under `migration/state/feedback-bundles/`. It includes reports/evidence such as mapping research memory, wave quality budget, sentinel findings, `project-verify-report.*`, `project-verify-harness.csproj`, `migration-board.*`, and `explain-todo.md`. It excludes project source and generated `.cs` samples by default. Review `manifest.json` before sharing the zip.
 
 ## Supported sources and targets
 

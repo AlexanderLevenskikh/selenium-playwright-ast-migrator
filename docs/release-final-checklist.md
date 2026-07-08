@@ -81,7 +81,24 @@ scripts/diagnose-install.sh
 
 Confirm the first resolved command is the intended install channel and `--version` reports the expected version.
 
-## 5. Product-project pilot
+## 5. Public preview narrative smoke
+
+Before public demo or release notes, verify the user-facing story is coherent:
+
+```text
+public-preview-flow/v1
+install -> doctor install -> playground/start -> pilot/wave -> gates -> current-ticket -> mapping research memory -> feedback-bundle/v1
+```
+
+Checklist:
+
+- `README.md` and `README.ru.md` link to `docs/public-preview-flow.md` / `.ru.md`.
+- `docs/public-preview-flow.md` mentions `feedback-bundle/v1`, `mapping-research-memory/v1`, `verify-project-harness/v1`, `artifact-hygiene/v1`, and `BLOCKED_BY_WAVE_QUALITY_BUDGET`.
+- `docs/wave-mode-operator-runbook.md` remains the operational reference for blocked gates and follow-up loops.
+- Release notes describe the preview as measurable and reviewable, not as guaranteed automatic conversion.
+- The feedback-bundle user path is visible from the root README before users are asked to share artifacts.
+
+## 6. Product-project pilot
 
 Start with a narrow project scope, keep generated files under `migration/**`, and use the guarded OpenCode/Desktop runbook when using agents:
 

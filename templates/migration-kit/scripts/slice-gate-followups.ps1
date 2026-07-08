@@ -4,8 +4,8 @@ Slice final-gate and sentinel diagnostics into bounded follow-up tickets.
 
 .DESCRIPTION
 slice-gate-followups is the bridge from process diagnostics to the next supervised-task action.
-It reads state/final-gate-result.json, state/continuation-decision.json, and active-run
-sentinel findings, then writes a machine-readable backlog and a human-readable current ticket.
+It reads state/final-gate-result.json, state/continuation-decision.json, state/wave-quality-budget.json,
+and active-run sentinel findings, then writes a machine-readable backlog and a human-readable current ticket.
 The generated tasks are migration-artifact tasks by default; anything that requires product-tree
 writes is marked as a non-agent-executable blocker instead of silently broadening permissions.
 #>
@@ -64,8 +64,46 @@ function Get-SeverityRank([string]$Severity) {
     }
 }
 
+function Normalize-SentinelLifecycleStatus([string]$Status) {
+    if ([string]::IsNullOrWhiteSpace($Status)) { return "OPEN" }
+    $normalized = $Status.Trim().ToUpperInvariant().Replace("-", "_")
+    switch ($normalized) {
+        "VERIFIED" { return "VERIFIED" }
+        "CLOSED" { return "CLOSED" }
+        "NON_AGENT" { return "NON_AGENT_EXECUTABLE" }
+        "NON_AGENT_EXECUTABLE" { return "NON_AGENT_EXECUTABLE" }
+        "ACCEPTED" { return "ACCEPTED_RISK" }
+        "ACCEPTED_RISK" { return "ACCEPTED_RISK" }
+        "RESOLVED" { return "CLOSED" }
+        "NON_BLOCKING" { return "ACCEPTED_RISK" }
+        default { return $normalized }
+    }
+}
+
 function Test-OpenStatus([string]$Status) {
-    return -not ($Status -match '^(?i:closed|accepted|resolved|triaged|non-blocking)$')
+    return -not ((Normalize-SentinelLifecycleStatus $Status) -match '^(VERIFIED|CLOSED|NON_AGENT_EXECUTABLE|ACCEPTED_RISK)$')
+}
+
+function Read-SentinelLifecycleStatuses([string]$WorkspacePath, [string]$RunId) {
+    $map = @{}
+    $paths = @()
+    $stateLedger = Join-Path $WorkspacePath "state/sentinel-finding-ledger.jsonl"
+    if (Test-Path $stateLedger) { $paths += $stateLedger }
+    $runLedger = Join-Path $WorkspacePath "runs/$RunId/sentinel/sentinel-finding-lifecycle.jsonl"
+    if (Test-Path $runLedger) { $paths += $runLedger }
+    foreach ($path in ($paths | Sort-Object -Unique)) {
+        foreach ($line in (Get-Content -Path $path -ErrorAction SilentlyContinue)) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            try { $entry = $line | ConvertFrom-Json -ErrorAction Stop } catch { continue }
+            $id = [string]$entry.findingId
+            if ([string]::IsNullOrWhiteSpace($id)) { continue }
+            $updatedAtUtc = [string]$entry.updatedAtUtc
+            if (-not $map.ContainsKey($id) -or [string]::CompareOrdinal($updatedAtUtc, [string]$map[$id].updatedAtUtc) -ge 0) {
+                $map[$id] = [pscustomobject]@{ status = (Normalize-SentinelLifecycleStatus ([string]$entry.status)); updatedAtUtc = $updatedAtUtc; ticketId = [string]$entry.ticketId }
+            }
+        }
+    }
+    return $map
 }
 
 function Get-TaskTemplateForCategory([string]$Category, [string]$Source) {
@@ -127,6 +165,14 @@ function Get-TaskTemplateForCategory([string]$Category, [string]$Source) {
                 validation = "project-verify-report.md/json exists and either passes or explains the exact runtime blocker."
             }
         }
+        'wave-quality-budget|blocked-by-wave-quality-budget|syntax-fallback|todo-budget|mapping-budget' {
+            return [pscustomobject][ordered]@{
+                title = "Switch noisy wave into mapping research"
+                allowedWriteScope = "migration/state/memory/**, migration/runs/**/research/**, migration/config-merge/**, migration/current-ticket.md"
+                objective = "Do not start the next wave. Run migration/scripts/collect-mapping-research-memory.ps1 to summarize the top TODO causes, syntax-fallback clusters, unmapped targets, unresolved symbols, and verify blockers, then slice one bounded mapping/config/POM/recognizer improvement ticket."
+                validation = "mapping-research-memory/v1 exists, then run migration/scripts/evaluate-wave-quality-budget.ps1 and migration/scripts/check-final-gate.ps1; budget evidence must either pass or name a concrete mapping/research next action."
+            }
+        }
         default {
             return [pscustomobject][ordered]@{
                 title = "Resolve $Category gate finding"
@@ -138,7 +184,7 @@ function Get-TaskTemplateForCategory([string]$Category, [string]$Source) {
     }
 }
 
-function New-FollowupTask([string]$Kind, [string]$Category, [string]$Severity, [string]$Summary, [string]$Evidence, [string]$Source, [bool]$AgentExecutable, [string]$RunId, [int]$Index) {
+function New-FollowupTask([string]$Kind, [string]$Category, [string]$Severity, [string]$Summary, [string]$Evidence, [string]$Source, [bool]$AgentExecutable, [string]$RunId, [int]$Index, [string]$FindingId = "") {
     $template = Get-TaskTemplateForCategory $Category $Source
     $rank = Get-SeverityRank $Severity
     if (-not $AgentExecutable) { $rank = [Math]::Min($rank, 20) }
@@ -155,6 +201,7 @@ function New-FollowupTask([string]$Kind, [string]$Category, [string]$Severity, [
         summary = $Summary
         evidence = $Evidence
         source = $Source
+        findingId = $FindingId
         agentExecutable = [bool]$AgentExecutable
         allowedWriteScope = $template.allowedWriteScope
         objective = $template.objective
@@ -172,7 +219,9 @@ $tasks = New-Object System.Collections.Generic.List[object]
 $index = 0
 
 # Sentinel findings first: these are the most actionable process diagnostics.
+$sentinelLifecycleStatuses = Read-SentinelLifecycleStatuses $workspacePath $RunId
 $sentinelPaths = New-Object System.Collections.Generic.List[string]
+$seenSentinelFindingIds = @{}
 $runSentinel = Join-Path $workspacePath "runs/$RunId/sentinel/sentinel-findings.jsonl"
 $stateSentinel = Join-Path $workspacePath "state/sentinel-ledger.jsonl"
 if (Test-Path $runSentinel) { $sentinelPaths.Add($runSentinel) }
@@ -185,7 +234,13 @@ foreach ($path in ($sentinelPaths | Sort-Object -Unique)) {
         try { $entry = $line | ConvertFrom-Json -ErrorAction Stop } catch { continue }
         if ([string]$entry.runId -ne $RunId) { continue }
         $severity = [string]$entry.severity
-        $status = [string]$entry.status
+        $findingId = [string]$entry.findingId
+        if (-not [string]::IsNullOrWhiteSpace($findingId)) {
+            if ($seenSentinelFindingIds.ContainsKey($findingId)) { continue }
+            $seenSentinelFindingIds[$findingId] = $true
+        }
+        $status = Normalize-SentinelLifecycleStatus ([string]$entry.status)
+        if (-not [string]::IsNullOrWhiteSpace($findingId) -and $sentinelLifecycleStatuses.ContainsKey($findingId)) { $status = [string]$sentinelLifecycleStatuses[$findingId].status }
         $agentExecutable = $true
         if ($null -ne $entry.agentExecutable) { $agentExecutable = [bool]$entry.agentExecutable }
         if (-not (Test-OpenStatus $status)) { continue }
@@ -193,7 +248,7 @@ foreach ($path in ($sentinelPaths | Sort-Object -Unique)) {
         $index += 1
         $summary = [string]$entry.summary
         $evidence = if ($entry.evidence) { (@($entry.evidence) -join "; ") } else { "${path}:$lineNumber" }
-        [void]$tasks.Add((New-FollowupTask "sentinel-finding" ([string]$entry.category) $severity $summary $evidence ("sentinel:{0}:{1}" -f (Split-Path -Leaf $path), $lineNumber) $agentExecutable $RunId $index))
+        [void]$tasks.Add((New-FollowupTask "sentinel-finding" ([string]$entry.category) $severity $summary $evidence ("sentinel:{0}:{1}" -f (Split-Path -Leaf $path), $lineNumber) $agentExecutable $RunId $index $findingId))
     }
 }
 
@@ -281,6 +336,7 @@ Schema: `gate-followup-current-ticket/v1`
 Source: `$($task.source)`
 Run: `$RunId`
 Task id: `$($task.id)`
+Finding id: `$($task.findingId)`
 
 ## Objective
 
@@ -311,6 +367,69 @@ migration/scripts/check-final-gate.ps1 -Workspace migration -RepoRoot .
 Then update `migration/state/backlog/gate-followup-tasks.jsonl` or add a sentinel finding status update if the blocker is resolved/non-agent-executable.
 "@
     Set-Content -Path $currentTicketPath -Value $ticket -Encoding UTF8
+
+    # Start the current-ticket lifecycle immediately so /supervised-task continue
+    # routes this ticket through reviewer/executor before another wave.
+    $ticketStatusPath = Join-Path $workspacePath "state/current-ticket-status.json"
+    $ticketLedgerPath = Join-Path $workspacePath "state/current-ticket-ledger.jsonl"
+    $ticketEvent = [pscustomobject][ordered]@{
+        schemaVersion = "current-ticket-lifecycle/v1"
+        event = "CURRENT_TICKET_STATUS_UPDATED"
+        status = "READY"
+        previousStatus = $null
+        runId = $RunId
+        ticketId = [string]$task.id
+        title = [string]$task.title
+        ticketPath = "current-ticket.md"
+        source = "slice-gate-followups"
+        actor = "gate-followup-slicer"
+        summary = "Selected the highest-priority agent-executable gate follow-up task."
+        evidence = [string]$task.evidence
+        result = "current-ticket-created"
+        updatedAtUtc = [DateTimeOffset]::UtcNow.ToString("o")
+    }
+    $ticketStatus = [pscustomobject][ordered]@{
+        schemaVersion = "current-ticket-lifecycle/v1"
+        status = "READY"
+        runId = $RunId
+        ticketId = [string]$task.id
+        title = [string]$task.title
+        ticketPath = "current-ticket.md"
+        ticketSchema = "gate-followup-current-ticket/v1"
+        source = "slice-gate-followups"
+        actor = "gate-followup-slicer"
+        summary = "Selected the highest-priority agent-executable gate follow-up task."
+        evidence = [string]$task.evidence
+        result = "current-ticket-created"
+        updatedAtUtc = $ticketEvent.updatedAtUtc
+    }
+    $ticketStatus | ConvertTo-Json -Depth 20 | Set-Content -Path $ticketStatusPath -Encoding UTF8
+    Add-Content -Path $ticketLedgerPath -Encoding UTF8 -Value ($ticketEvent | ConvertTo-Json -Depth 20 -Compress)
+
+    if (-not [string]::IsNullOrWhiteSpace([string]$task.findingId)) {
+        $findingLifecycle = [pscustomobject][ordered]@{
+            schemaVersion = "sentinel-finding-lifecycle/v1"
+            event = "SENTINEL_FINDING_STATUS_UPDATED"
+            findingId = [string]$task.findingId
+            runId = $RunId
+            category = [string]$task.category
+            severity = [string]$task.severity
+            status = "ASSIGNED"
+            previousStatus = "OPEN"
+            ticketId = [string]$task.id
+            source = "slice-gate-followups"
+            actor = "gate-followup-slicer"
+            summary = "Assigned sentinel finding to current-ticket."
+            evidence = [string]$task.evidence
+            result = "current-ticket-created"
+            updatedAtUtc = [DateTimeOffset]::UtcNow.ToString("o")
+        }
+        $findingLine = $findingLifecycle | ConvertTo-Json -Depth 20 -Compress
+        Add-Content -Path (Join-Path $workspacePath "state/sentinel-finding-ledger.jsonl") -Encoding UTF8 -Value $findingLine
+        $runSentinelDir = Join-Path $workspacePath "runs/$RunId/sentinel"
+        New-Item -ItemType Directory -Force -Path $runSentinelDir | Out-Null
+        Add-Content -Path (Join-Path $runSentinelDir "sentinel-finding-lifecycle.jsonl") -Encoding UTF8 -Value $findingLine
+    }
 }
 
 # Update continuation decision so the next supervised-task invocation has a concrete bridge action.

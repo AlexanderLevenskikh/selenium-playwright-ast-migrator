@@ -64,7 +64,22 @@ record ProjectVerifyReport(
     string StdOut,
     string StdErr,
     string[] Diagnostics,
-    ProjectVerifyDiagnostic[] ClassifiedDiagnostics);
+    ProjectVerifyDiagnostic[] ClassifiedDiagnostics,
+    ProjectVerifyHarnessEvidence HarnessEvidence);
+
+record ProjectVerifyHarnessEvidence(
+    string SchemaVersion,
+    string HarnessProjectSnapshot,
+    string HarnessProjectSnapshotSha256,
+    bool CentralPackageManagementDetected,
+    string CentralPackageManagementMode,
+    string[] CentralPackageFiles,
+    bool ManagePackageVersionsCentrallyDisabled,
+    string[] ImportedBuildFiles,
+    string[] SkippedBuildFiles,
+    string PackageVersionMode,
+    string Nu1008Mitigation,
+    string[] Notes);
 
 record ProjectReferenceDiscovery(string Path, string Source, string Status, string Reason);
 record ProjectVerifyDiagnostic(string Raw, string Code, string Severity, string Category, string? File, int? Line, string LikelyCause, string SuggestedAction);

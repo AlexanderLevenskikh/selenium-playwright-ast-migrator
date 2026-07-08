@@ -156,7 +156,65 @@ function Test-SentinelInspectionPresent([string]$WorkspacePath, [string]$LatestR
     return $true
 }
 
+
+function Normalize-SentinelLifecycleStatus([string]$Status) {
+    if ([string]::IsNullOrWhiteSpace($Status)) { return "OPEN" }
+    $normalized = $Status.Trim().ToUpperInvariant().Replace("-", "_")
+    switch ($normalized) {
+        "OPEN" { return "OPEN" }
+        "ASSIGNED" { return "ASSIGNED" }
+        "FIX_ATTEMPTED" { return "FIX_ATTEMPTED" }
+        "VERIFIED" { return "VERIFIED" }
+        "CLOSED" { return "CLOSED" }
+        "BLOCKED" { return "BLOCKED" }
+        "NON_AGENT_EXECUTABLE" { return "NON_AGENT_EXECUTABLE" }
+        "NON_AGENT" { return "NON_AGENT_EXECUTABLE" }
+        "ACCEPTED_RISK" { return "ACCEPTED_RISK" }
+        "ACCEPTED" { return "ACCEPTED_RISK" }
+        "RESOLVED" { return "CLOSED" }
+        "TRIAGED" { return "ASSIGNED" }
+        "NON_BLOCKING" { return "ACCEPTED_RISK" }
+        default { return $normalized }
+    }
+}
+
+function Test-SentinelLifecycleTerminal([string]$Status) {
+    $normalized = Normalize-SentinelLifecycleStatus $Status
+    return $normalized -match '^(VERIFIED|CLOSED|NON_AGENT_EXECUTABLE|ACCEPTED_RISK)$'
+}
+
+function Read-SentinelFindingLifecycleStatuses([string]$WorkspacePath) {
+    $map = @{}
+    $paths = @()
+    $stateLedger = Join-Path $WorkspacePath "state/sentinel-finding-ledger.jsonl"
+    if (Test-Path $stateLedger) { $paths += $stateLedger }
+    if (Test-Path (Join-Path $WorkspacePath "runs")) {
+        $paths += @(Get-ChildItem -Path (Join-Path $WorkspacePath "runs") -Recurse -File -Filter "sentinel-finding-lifecycle.jsonl" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+    }
+
+    foreach ($path in ($paths | Sort-Object -Unique)) {
+        foreach ($line in (Get-Content -Path $path -ErrorAction SilentlyContinue)) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            try { $entry = $line | ConvertFrom-Json -ErrorAction Stop } catch { continue }
+            $findingId = [string]$entry.findingId
+            if ([string]::IsNullOrWhiteSpace($findingId)) { continue }
+            $status = Normalize-SentinelLifecycleStatus ([string]$entry.status)
+            $updatedAtUtc = [string]$entry.updatedAtUtc
+            if (-not $map.ContainsKey($findingId)) {
+                $map[$findingId] = [pscustomobject]@{ status = $status; updatedAtUtc = $updatedAtUtc; ticketId = [string]$entry.ticketId; evidence = [string]$entry.evidence }
+                continue
+            }
+            $previousTime = [string]$map[$findingId].updatedAtUtc
+            if ([string]::CompareOrdinal($updatedAtUtc, $previousTime) -ge 0) {
+                $map[$findingId] = [pscustomobject]@{ status = $status; updatedAtUtc = $updatedAtUtc; ticketId = [string]$entry.ticketId; evidence = [string]$entry.evidence }
+            }
+        }
+    }
+    return $map
+}
+
 function Test-OpenSentinelBlockingFindings([string]$WorkspacePath, [ref]$Detail) {
+    $lifecycleStatuses = Read-SentinelFindingLifecycleStatuses $WorkspacePath
     $paths = @()
     $stateLedger = Join-Path $WorkspacePath "state/sentinel-ledger.jsonl"
     if (Test-Path $stateLedger) { $paths += $stateLedger }
@@ -184,18 +242,24 @@ function Test-OpenSentinelBlockingFindings([string]$WorkspacePath, [ref]$Detail)
             }
 
             $severity = [string]$entry.severity
-            $status = [string]$entry.status
+            $id = if ($entry.findingId) { [string]$entry.findingId } else { "line-$lineNumber" }
+            $status = Normalize-SentinelLifecycleStatus ([string]$entry.status)
+            $lifecycleStatus = $null
+            if ($lifecycleStatuses.ContainsKey($id)) {
+                $lifecycleStatus = $lifecycleStatuses[$id]
+                $status = Normalize-SentinelLifecycleStatus ([string]$lifecycleStatus.status)
+            }
             $agentExecutable = $true
             if ($null -ne $entry.agentExecutable) {
                 $agentExecutable = [bool]$entry.agentExecutable
             }
 
             $isHigh = $severity -match '^(?i:high|critical)$'
-            $isOpen = -not ($status -match '^(?i:closed|accepted|resolved|triaged|non-blocking)$')
+            $isOpen = -not (Test-SentinelLifecycleTerminal $status)
             if ($isHigh -and $isOpen -and $agentExecutable) {
-                $id = if ($entry.findingId) { [string]$entry.findingId } else { "line-$lineNumber" }
                 $category = if ($entry.category) { [string]$entry.category } else { "UNKNOWN" }
-                $blocking.Add("$id $category $severity in $path")
+                $ticketHint = if ($null -ne $lifecycleStatus -and -not [string]::IsNullOrWhiteSpace([string]$lifecycleStatus.ticketId)) { " ticket=$($lifecycleStatus.ticketId)" } else { "" }
+                $blocking.Add("$id $category $severity status=$status$ticketHint in $path")
             }
         }
     }
@@ -418,7 +482,7 @@ function Test-MemoryResearchThresholds([string]$WorkspacePath, [string]$LatestRu
         }
     }
     $researchFiles = @()
-    foreach ($candidate in @((Join-Path $runRoot "research"), (Join-Path $runRoot "explain-todo.md"), (Join-Path $runRoot "generated/explain-todo.md"))) {
+    foreach ($candidate in @((Join-Path $runRoot "research"), (Join-Path $runRoot "research/mapping-research-memory.json"), (Join-Path $WorkspacePath "state/mapping-research-memory.json"), (Join-Path $WorkspacePath "state/mapping-research-candidates.jsonl"), (Join-Path $runRoot "explain-todo.md"), (Join-Path $runRoot "generated/explain-todo.md"))) {
         if (Test-Path $candidate) { $researchFiles += $candidate }
     }
 
@@ -429,6 +493,123 @@ function Test-MemoryResearchThresholds([string]$WorkspacePath, [string]$LatestRu
 
     $Detail.Value = "research/memory threshold reached and evidence exists (memoryLines=$memoryLines, researchFiles=$($researchFiles.Count))"
     return $true
+}
+
+
+function Test-WaveQualityBudget([string]$WorkspacePath, [string]$LatestRunId, [ref]$Detail) {
+    $waveBudgetFiles = @()
+    if (-not [string]::IsNullOrWhiteSpace($LatestRunId)) {
+        $runBudget = Join-Path $WorkspacePath "runs/$LatestRunId/wave-quality-budget.json"
+        if (Test-Path $runBudget) { $waveBudgetFiles += $runBudget }
+    }
+    $stateBudget = Join-Path $WorkspacePath "state/wave-quality-budget.json"
+    if (Test-Path $stateBudget) { $waveBudgetFiles += $stateBudget }
+
+    if ($waveBudgetFiles.Count -eq 0) {
+        $runsPath = Join-Path $WorkspacePath "runs"
+        $waveDirs = @()
+        if (Test-Path $runsPath) {
+            $waveDirs = @(Get-ChildItem -Path $runsPath -Directory -Filter "wave-*" -ErrorAction SilentlyContinue)
+        }
+        if ($waveDirs.Count -eq 0) {
+            $Detail.Value = "no wave-run artifacts found"
+            return $true
+        }
+
+        $Detail.Value = "wave-run artifacts found but missing wave-quality-budget/v1 evidence; run migration/scripts/evaluate-wave-quality-budget.ps1 -Workspace migration before another wave"
+        return $false
+    }
+
+    $budgetPath = @($waveBudgetFiles | Sort-Object -Unique)[0]
+    try {
+        $budget = Get-Content -Raw -Path $budgetPath | ConvertFrom-Json -ErrorAction Stop
+        $schemaVersion = [string]$budget.schemaVersion
+        if ($schemaVersion -ne "wave-quality-budget/v1") {
+            $Detail.Value = "unexpected wave quality budget schema '$schemaVersion' in $budgetPath"
+            return $false
+        }
+
+        $budgetStatus = [string]$budget.budgetStatus
+        if ([string]::IsNullOrWhiteSpace($budgetStatus)) { $budgetStatus = [string]$budget.status }
+        $violationCount = @($budget.violations).Count
+        $nextAction = [string]$budget.nextAction
+        if ($budgetStatus -eq "PASS") {
+            $Detail.Value = "wave quality budget passed: $budgetPath"
+            return $true
+        }
+
+        if ($budgetStatus -eq "BLOCKED_BY_WAVE_QUALITY_BUDGET" -and -not [string]::IsNullOrWhiteSpace($nextAction)) {
+            $Detail.Value = "wave quality budget blocked next wave (violations=$violationCount): $nextAction"
+            return $false
+        }
+
+        $Detail.Value = "wave quality budget did not pass and has no actionable nextAction: status=$budgetStatus path=$budgetPath"
+        return $false
+    }
+    catch {
+        $Detail.Value = "invalid wave quality budget JSON: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+
+
+function Test-MappingResearchMemoryAfterBlockedBudget([string]$WorkspacePath, [string]$LatestRunId, [ref]$Detail) {
+    $budgetCandidates = @()
+    if (-not [string]::IsNullOrWhiteSpace($LatestRunId)) {
+        $runBudget = Join-Path $WorkspacePath "runs/$LatestRunId/wave-quality-budget.json"
+        if (Test-Path $runBudget) { $budgetCandidates += $runBudget }
+    }
+    $stateBudget = Join-Path $WorkspacePath "state/wave-quality-budget.json"
+    if (Test-Path $stateBudget) { $budgetCandidates += $stateBudget }
+
+    if ($budgetCandidates.Count -eq 0) {
+        $Detail.Value = "no wave-quality-budget/v1 evidence requiring mapping research"
+        return $true
+    }
+
+    $blockedBudget = $false
+    foreach ($budgetPath in @($budgetCandidates | Sort-Object -Unique)) {
+        try {
+            $budget = Get-Content -Raw -Path $budgetPath | ConvertFrom-Json -ErrorAction Stop
+            $schemaVersion = [string]$budget.schemaVersion
+            $budgetStatus = [string]$budget.budgetStatus
+            if ($schemaVersion -eq "wave-quality-budget/v1" -and $budgetStatus -eq "BLOCKED_BY_WAVE_QUALITY_BUDGET") {
+                $blockedBudget = $true
+                break
+            }
+        }
+        catch { }
+    }
+
+    if (-not $blockedBudget) {
+        $Detail.Value = "wave quality budget is not blocked"
+        return $true
+    }
+
+    $memoryCandidates = @((Join-Path $WorkspacePath "state/mapping-research-memory.json"))
+    if (-not [string]::IsNullOrWhiteSpace($LatestRunId)) {
+        $memoryCandidates += (Join-Path $WorkspacePath "runs/$LatestRunId/research/mapping-research-memory.json")
+    }
+
+    foreach ($memoryPath in @($memoryCandidates | Sort-Object -Unique)) {
+        if (-not (Test-Path $memoryPath)) { continue }
+        try {
+            $memory = Get-Content -Raw -Path $memoryPath | ConvertFrom-Json -ErrorAction Stop
+            if ([string]$memory.schemaVersion -eq "mapping-research-memory/v1") {
+                $candidateCount = @($memory.recommendedNextTickets).Count
+                $Detail.Value = "mapping-research-memory/v1 evidence exists: $memoryPath (recommendedNextTickets=$candidateCount)"
+                return $true
+            }
+        }
+        catch {
+            $Detail.Value = "invalid mapping-research-memory JSON: $($_.Exception.Message)"
+            return $false
+        }
+    }
+
+    $Detail.Value = "wave quality budget is BLOCKED_BY_WAVE_QUALITY_BUDGET but missing mapping-research-memory/v1 evidence; run migration/scripts/collect-mapping-research-memory.ps1 -Workspace migration before another wave"
+    return $false
 }
 
 function Update-HarnessRunStateFromFinalGate([string]$WorkspacePath, $Report, $Continuation, $Results) {
@@ -548,15 +729,30 @@ function Test-GuardChecksums([string]$WorkspacePath, [string[]]$GuardFiles, [ref
         }
 
         $mismatches = New-Object System.Collections.Generic.List[string]
+        $checked = New-Object System.Collections.Generic.List[string]
+        $skippedOptional = New-Object System.Collections.Generic.List[string]
         foreach ($guardFile in $GuardFiles) {
             $relative = $guardFile.Replace("\", "/")
             $fullPath = Join-Path $WorkspacePath $guardFile
-            if (-not (Test-Path $fullPath)) {
+            $hasExpectedChecksum = $expected.ContainsKey($relative)
+            $exists = Test-Path $fullPath
+
+            if (-not $hasExpectedChecksum -and -not $exists) {
+                # Version-aware optional guard: newer kit releases may know about scripts
+                # that are not present in older/minimal test workspaces. Do not fail those
+                # workspaces merely because check-final-gate.ps1 is newer than their installed
+                # guard-checksums.json. If a script is installed or listed in the checksum
+                # manifest, it is still validated strictly below.
+                $skippedOptional.Add($relative)
+                continue
+            }
+
+            if (-not $exists) {
                 $mismatches.Add("$relative missing")
                 continue
             }
 
-            if (-not $expected.ContainsKey($relative)) {
+            if (-not $hasExpectedChecksum) {
                 $mismatches.Add("$relative missing expected checksum")
                 continue
             }
@@ -564,10 +760,24 @@ function Test-GuardChecksums([string]$WorkspacePath, [string[]]$GuardFiles, [ref
             $actual = (Get-FileHash -Algorithm SHA256 -Path $fullPath).Hash.ToUpperInvariant()
             if ($actual -ne $expected[$relative]) {
                 $mismatches.Add("$relative checksum mismatch")
+                continue
             }
+
+            $checked.Add($relative)
         }
 
-        $Detail.Value = if ($mismatches.Count -eq 0) { "guard checksums match" } else { $mismatches -join "; " }
+        if ($mismatches.Count -eq 0) {
+            $detailParts = New-Object System.Collections.Generic.List[string]
+            $detailParts.Add("guard checksums match")
+            $detailParts.Add("checked: $($checked.Count)")
+            if ($skippedOptional.Count -gt 0) {
+                $detailParts.Add("optional not installed: " + ($skippedOptional -join ", "))
+            }
+            $Detail.Value = $detailParts -join "; "
+        }
+        else {
+            $Detail.Value = $mismatches -join "; "
+        }
         return $mismatches.Count -eq 0
     }
     catch {
@@ -1227,12 +1437,22 @@ $guardFiles = @(
     "scripts/record-agent-skill-profile.sh",
     "scripts/slice-gate-followups.ps1",
     "scripts/slice-gate-followups.sh",
+    "scripts/evaluate-wave-quality-budget.ps1",
+    "scripts/evaluate-wave-quality-budget.sh",
+    "scripts/collect-mapping-research-memory.ps1",
+    "scripts/collect-mapping-research-memory.sh",
+    "scripts/create-feedback-bundle.ps1",
+    "scripts/create-feedback-bundle.sh",
+    "scripts/update-current-ticket-status.ps1",
+    "scripts/update-current-ticket-status.sh",
     "scripts/export-opencode-session.ps1",
     "scripts/export-opencode-session.sh",
     "scripts/write-sentinel-finding.ps1",
     "scripts/write-sentinel-finding.sh",
     "scripts/complete-sentinel-inspection.ps1",
-    "scripts/complete-sentinel-inspection.sh"
+    "scripts/complete-sentinel-inspection.sh",
+    "scripts/update-sentinel-finding-status.ps1",
+    "scripts/update-sentinel-finding-status.sh"
 )
 $checksumOk = Test-GuardChecksums $workspacePath $guardFiles ([ref]$checksumDetail)
 Add-Result $results "guard-checksums" $checksumOk $checksumDetail
@@ -1363,9 +1583,30 @@ $planSanitizerDetail = ""
 $planSanitizerOk = Test-RunPlanSanitized $workspacePath $latestRunId ([ref]$planSanitizerDetail)
 Add-Result $results "plan-artifact-sanitized" $planSanitizerOk $planSanitizerDetail
 
+$artifactHygieneScript = Join-Path $workspacePath "scripts/validate-run-artifacts.ps1"
+if (Test-Path $artifactHygieneScript) {
+    $artifactHygieneArgs = @("-Workspace", $Workspace, "-RepoRoot", $RepoRoot)
+    if (-not [string]::IsNullOrWhiteSpace($latestRunId)) {
+        $artifactHygieneArgs += @("-RunId", $latestRunId)
+    }
+    $artifactHygieneExitCode = Invoke-PowerShellScript $artifactHygieneScript $artifactHygieneArgs
+    Add-Result $results "artifact-hygiene" ($artifactHygieneExitCode -eq 0) "validate-run-artifacts.ps1 exit code $artifactHygieneExitCode; schema artifact-hygiene/v1"
+}
+else {
+    Add-Result $results "artifact-hygiene" $true "validate-run-artifacts.ps1 not installed in this workspace; artifact-hygiene/v1 skipped for backward-compatible/minimal harness workspace"
+}
+
 $researchThresholdDetail = ""
 $researchThresholdOk = Test-MemoryResearchThresholds $workspacePath $latestRunId ([ref]$researchThresholdDetail)
 Add-Result $results "research-memory-thresholds" $researchThresholdOk $researchThresholdDetail
+
+$waveBudgetDetail = ""
+$waveBudgetOk = Test-WaveQualityBudget $workspacePath $latestRunId ([ref]$waveBudgetDetail)
+Add-Result $results "wave-quality-budget" $waveBudgetOk $waveBudgetDetail
+
+$mappingResearchDetail = ""
+$mappingResearchOk = Test-MappingResearchMemoryAfterBlockedBudget $workspacePath $latestRunId ([ref]$mappingResearchDetail)
+Add-Result $results "mapping-research-memory" $mappingResearchOk $mappingResearchDetail
 
 if ($RequireExplainTodo) {
     $hasExplainTodo = Test-EvidenceExists $workspacePath @("explain-todo.json", "explain-todo.md") $latestRunId -RequireLatestRun
@@ -1437,6 +1678,8 @@ foreach ($latestEvidence in @(
     (Find-LatestFile -Root $workspacePath -Names @("explain-todo.md", "explain-todo.json")),
     (Find-LatestFile -Root $workspacePath -Names @("verify-report.md", "verify-report.json", "project-verify-report.md", "project-verify-report.json")),
     (Find-LatestFile -Root $workspacePath -Names @("config-validate-report.md", "config-validate-report.json")),
+    (Find-LatestFile -Root $workspacePath -Names @("wave-quality-budget.md", "wave-quality-budget.json")),
+    (Find-LatestFile -Root $workspacePath -Names @("mapping-research-memory.md", "mapping-research-memory.json", "mapping-research-candidates.jsonl")),
     (Find-LatestFile -Root $workspacePath -Names @("migration-board.md", "migration-board.json"))
 )) {
     if ($latestEvidence -ne $null) {

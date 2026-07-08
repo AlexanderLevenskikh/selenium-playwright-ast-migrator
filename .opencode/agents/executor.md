@@ -186,6 +186,7 @@ Treat machine ledgers as controlled state, not free-form text:
 - Do not invent APIs.
 - If you discover the plan is wrong, stop and report instead of improvising a broad rewrite.
 - Update `migration/runs/<run-id>/Documentation.md` with decisions, verification evidence, and unresolved risks.
+- When implementing `migration/current-ticket.md`, keep `migration/state/current-ticket-status.json` in sync through `migration/scripts/update-current-ticket-status.ps1` / `.sh`: `IN_PROGRESS` before edits, `REVIEW_READY` after a coherent patch, or `BLOCKED` with a concrete reason. Use `DONE` only after reviewer/gate validation, not immediately after editing.
 - Append important command/evidence notes to `migration/runs/<run-id>/trace.jsonl` when practical.
 - Run or request `migration/scripts/check-scope.ps1` after editing and before handoff.
 - Run or request `migration/scripts/check-harness-policy.ps1` after editing and before handoff.
@@ -198,6 +199,7 @@ Treat machine ledgers as controlled state, not free-form text:
 4. Show scope guard and harness-policy results.
 5. Report unresolved risks.
 6. If practical, write a `handoff-written` event.
+7. For current-ticket work, run `migration/scripts/update-current-ticket-status.ps1 -Status REVIEW_READY -Source executor` / `.sh` after the patch and before handoff; use `-Status BLOCKED` if the ticket cannot be executed safely.
 
 Final report format:
 

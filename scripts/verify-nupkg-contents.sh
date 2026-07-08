@@ -53,6 +53,18 @@ required_patterns = [
     r'^templates/migration-kit/scripts/record-agent-skill-profile\.sh$',
     r'^templates/migration-kit/scripts/slice-gate-followups\.ps1$',
     r'^templates/migration-kit/scripts/slice-gate-followups\.sh$',
+    r'^templates/migration-kit/scripts/evaluate-wave-quality-budget\.ps1$',
+    r'^templates/migration-kit/scripts/evaluate-wave-quality-budget\.sh$',
+    r'^templates/migration-kit/scripts/collect-mapping-research-memory\.ps1$',
+    r'^templates/migration-kit/scripts/collect-mapping-research-memory\.sh$',
+    r'^templates/migration-kit/scripts/create-feedback-bundle\.ps1$',
+    r'^templates/migration-kit/scripts/create-feedback-bundle\.sh$',
+    r'^templates/migration-kit/scripts/validate-run-artifacts\.ps1$',
+    r'^templates/migration-kit/scripts/validate-run-artifacts\.sh$',
+    r'^templates/migration-kit/scripts/update-current-ticket-status\.ps1$',
+    r'^templates/migration-kit/scripts/update-current-ticket-status\.sh$',
+    r'^templates/migration-kit/scripts/update-sentinel-finding-status\.ps1$',
+    r'^templates/migration-kit/scripts/update-sentinel-finding-status\.sh$',
     r'^scripts/install-migration-kit\.ps1$',
 ]
 for pattern in required_patterns:

@@ -236,10 +236,20 @@ scripts/export-opencode-session.ps1
 scripts/export-opencode-session.sh
 scripts/slice-gate-followups.ps1
 scripts/slice-gate-followups.sh
+scripts/evaluate-wave-quality-budget.ps1
+scripts/evaluate-wave-quality-budget.sh
+scripts/collect-mapping-research-memory.ps1
+scripts/collect-mapping-research-memory.sh
+scripts/create-feedback-bundle.ps1
+scripts/create-feedback-bundle.sh
 scripts/write-sentinel-finding.ps1
 scripts/write-sentinel-finding.sh
 scripts/complete-sentinel-inspection.ps1
 scripts/complete-sentinel-inspection.sh
+scripts/update-current-ticket-status.ps1
+scripts/update-current-ticket-status.sh
+scripts/update-sentinel-finding-status.ps1
+scripts/update-sentinel-finding-status.sh
 EOF
 }
 

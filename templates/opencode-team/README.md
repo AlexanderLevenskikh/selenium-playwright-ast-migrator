@@ -10,6 +10,13 @@ For current guarded OpenCode Desktop migration runs, use the canonical runbook:
 docs/guarded-opencode-desktop-runbook.ru.md
 ```
 
+For operating an already bootstrapped wave workspace, use:
+
+```text
+docs/wave-mode-operator-runbook.md
+docs/wave-mode-operator-runbook.ru.md
+```
+
 This README only describes the reusable OpenCode team template. Do not use it as a complete migration launch procedure.
 
 ## Agents
@@ -159,7 +166,7 @@ For migration-artifact/autopilot work, start with `/harness-run` or `/supervised
 
 Use `/supervised-task sentinel` or `/supervised-task inspect` to run the process tester. The command should export or update `migration/runs/<run-id>/opencode-session-export.md` via `migration/scripts/export-opencode-session.*`, then invoke `harness-sentinel`. Sentinel reads the session export, trace, harness events, state files, prompts, and OpenCode config to detect permission-bypass attempts, append-only JSONL violations, state contradictions, premature DONE, stale root config, and wave/full-migration drift.
 
-Sentinel does not directly fix defects. It writes `migration/runs/<run-id>/sentinel/sentinel-report.md` and machine-readable findings. High/critical agent-executable findings are routed to `migration-task-slicer` as bounded process-hardening tasks before a final handoff. When there is no ticket yet, `migration/scripts/slice-gate-followups.ps1` / `.sh` converts final-gate/sentinel diagnostics into `state/backlog/gate-followup-tasks.jsonl`, `state/backlog/gate-followup-backlog.md`, and `current-ticket.md`.
+Sentinel does not directly fix defects. It writes `migration/runs/<run-id>/sentinel/sentinel-report.md` and machine-readable findings. High/critical agent-executable findings are routed to `migration-task-slicer` as bounded process-hardening tasks before a final handoff. When there is no ticket yet, `migration/scripts/slice-gate-followups.ps1` / `.sh` converts final-gate/sentinel diagnostics into `state/backlog/gate-followup-tasks.jsonl`, `state/backlog/gate-followup-backlog.md`, and `current-ticket.md`. Finding status transitions must use `migration/scripts/update-sentinel-finding-status.ps1` / `.sh`, which writes `state/sentinel-finding-ledger.jsonl` without mutating forensic `sentinel-findings.jsonl`.
 
 ## Harness dashboard command
 
@@ -206,4 +213,27 @@ After a fresh successful FINAL/PASS checkpoint, the agent reports status and sto
 Compatibility note: `/supervised-task` still stops for review after FINAL on the fresh checkpoint, but persisted FINAL_STOPPED_FOR_REVIEW auto-resumes the closed post-final loop.
 
 
-Sentinel inspections must be finalized with `migration/scripts/complete-sentinel-inspection.ps1` or `.sh`; final gate treats a missing active-run `sentinel-inspection.json` as a process defect.
+Sentinel inspections must be finalized with `migration/scripts/complete-sentinel-inspection.ps1` or `.sh`; final gate treats a missing active-run `sentinel-inspection.json` as a process defect. Finding lifecycle transitions are `OPEN`, `ASSIGNED`, `FIX_ATTEMPTED`, `VERIFIED`, `CLOSED`, `BLOCKED`, `NON_AGENT_EXECUTABLE`, and `ACCEPTED_RISK`.
+
+
+## Current-ticket lifecycle
+
+When `migration/current-ticket.md` exists, route it through reviewer/executor before selecting a new wave. Use `migration/scripts/update-current-ticket-status.ps1` / `.sh` to track `READY`, `IN_PROGRESS`, `REVIEW_READY`, `DONE`, or `BLOCKED` in `migration/state/current-ticket-status.json` and `migration/state/current-ticket-ledger.jsonl`.
+
+
+Wave quality budget is enforced by `migration/scripts/evaluate-wave-quality-budget.ps1` / `.sh`; it writes `wave-quality-budget/v1` evidence and blocks noisy scaffolding waves with `BLOCKED_BY_WAVE_QUALITY_BUDGET`.
+
+
+- `migration/scripts/collect-mapping-research-memory.ps1` / `.sh` — converts noisy wave evidence into `mapping-research-memory/v1`: top unresolved symbols, TODO clusters, unmapped targets, verify blockers, and bounded improvement candidates.
+
+
+## Artifact hygiene
+
+Before final handoff or another wave after material state changes, run or honor final-gate execution of `migration/scripts/validate-run-artifacts.ps1` / `.sh`. `artifact-hygiene/v1` must pass: Plan.md is sanitized, Documentation.md does not contradict final gate, generated boards carry run/wave identity, and session export status is explicit.
+
+For user-shareable migrator feedback, use `migration/scripts/create-feedback-bundle.ps1` / `.sh` rather than asking for the full repository. It writes `feedback-bundle/v1` to `state/feedback-bundles/`, excludes project source by default, and includes a manifest the user must review before sharing.
+
+
+## Public preview operator story
+
+`public-preview-flow/v1` connects the installed kit to the public documentation: install/doctor, wave mode, gate-followup `current-ticket.md`, sentinel lifecycle, wave quality budget, mapping research memory, and safe `feedback-bundle/v1` handoff. See `docs/public-preview-flow.md` and `docs/wave-mode-operator-runbook.md` in the repository root docs.

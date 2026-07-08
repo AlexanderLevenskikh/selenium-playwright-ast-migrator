@@ -68,10 +68,28 @@ Memory safety rules:
 19. Open high/critical sentinel findings that are agent-executable must be routed to `migration-task-slicer` as bounded process-hardening tasks before a final handoff. Sentinel recommendations are not vague advice to the user unless they are explicitly non-agent-executable. If final gate/sentinel diagnostics exist but no bounded ticket exists yet, run `migration/scripts/slice-gate-followups.ps1` / `.sh` to create `state/backlog/gate-followup-tasks.jsonl`, `state/backlog/gate-followup-backlog.md`, and `current-ticket.md`.
 
 
-Sentinel inspections must be finalized with `migration/scripts/complete-sentinel-inspection.ps1` or `.sh`; final gate treats a missing active-run `sentinel-inspection.json` as a process defect.
+Sentinel inspections must be finalized with `migration/scripts/complete-sentinel-inspection.ps1` or `.sh`; final gate treats a missing active-run `sentinel-inspection.json` as a process defect. Sentinel findings have their own lifecycle: `OPEN -> ASSIGNED -> FIX_ATTEMPTED -> VERIFIED -> CLOSED`, recorded by `migration/scripts/update-sentinel-finding-status.ps1` / `.sh` in `state/sentinel-finding-ledger.jsonl` and `runs/<run-id>/sentinel/sentinel-finding-lifecycle.jsonl`. Do not mutate `sentinel-findings.jsonl`; it is forensic evidence.
 
 
 Final gate reconciles `migration/state/harness-run.json` after every run: gate failure writes `BLOCKED_BY_GATE`/the concrete continuation status and real `latestChecks`; a supervisor must not continue from stale `CONTINUE_AUTONOMOUSLY` state after a failed gate.
 
 
 Wave scope is file-based, not single-test-based: report `sourceFiles`, estimated/actual test count, migrated action count, and TODO count explicitly. Do not describe a wave as “3 tests” when the input scope is 3 files containing more tests.
+
+
+## Current-ticket executor loop
+
+When `migration/current-ticket.md` exists, it is the active bounded task. `/supervised-task` must route it through `migration-change-reviewer` and exactly one bounded `executor` task before selecting another wave. Track state in `migration/state/current-ticket-status.json` and append transitions to `migration/state/current-ticket-ledger.jsonl` with `migration/scripts/update-current-ticket-status.ps1` / `.sh`. Valid statuses are `READY`, `IN_PROGRESS`, `REVIEW_READY`, `DONE`, and `BLOCKED`. Do not start another wave while the current-ticket lifecycle is active unless the ticket is `DONE` with validation evidence or `BLOCKED` with a concrete non-agent-executable reason.
+
+Wave quality budget is mandatory for wave runs: after materializing or executing `runs/wave-*`, run `migration/scripts/evaluate-wave-quality-budget.ps1` / `.sh` before the next wave. If it writes `BLOCKED_BY_WAVE_QUALITY_BUDGET`, do not start another wave; route into mapping/research memory and one bounded config/POM/recognizer improvement ticket.
+
+## Mapping/research memory loop
+
+When `evaluate-wave-quality-budget` reports `BLOCKED_BY_WAVE_QUALITY_BUDGET`, do not start another wave. First run `migration/scripts/collect-mapping-research-memory.ps1` / `.sh`. It writes `mapping-research-memory/v1`, `state/mapping-research-memory.json`, `state/mapping-research-memory.md`, `state/mapping-research-candidates.jsonl`, and `runs/<run-id>/research/mapping-research-memory.*`. Use those artifacts to slice exactly one bounded config/POM/recognizer or verify-harness improvement ticket.
+
+If the user wants to share a failing/noisy migration with the migrator author, run `migration/scripts/create-feedback-bundle.ps1` / `.sh` instead of collecting arbitrary source files. `feedback-bundle/v1` is safe by default: reports/evidence only, generated `.cs` samples opt-in via `-IncludeGeneratedSamples`, and manifest review required before sharing.
+
+
+## Artifact hygiene loop
+
+Before final handoff or another wave after material state changes, ensure `migration/scripts/validate-run-artifacts.ps1` / `.sh` has produced `artifact-hygiene/v1`. Do not publish user-facing reports that claim `complete`, `success`, or green status while `final-gate-result.json` is blocked. `Plan.md` must remain a plan, not raw shell/write transcript; session export status must be explicit; generated boards/status artifacts must include run/wave identity.

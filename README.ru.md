@@ -19,6 +19,12 @@ Migrator парсит Selenium-тесты, строит промежуточну
 
 Идея не в “магической конвертации”, а в том, чтобы вся неопределённость была видимой и проверяемой.
 
+## Public preview story: evidence before scale
+
+`public-preview-flow/v1` — рекомендуемый публичный preview-маршрут: установить инструмент, запустить `doctor install`, начать с playground или product `start`, мигрировать через pilot/waves, останавливаться на gates, извлекать mapping research из шумных волн и отправлять безопасный `feedback-bundle/v1` вместо приватного репозитория.
+
+Safe-by-default правило простое: generated output — черновик, пока `verify-project`, final gate, artifact hygiene, sentinel lifecycle и wave quality evidence не согласованы. Если run красный, сначала выполняй `migration/current-ticket.md` и [операторский runbook для wave mode](docs/wave-mode-operator-runbook.ru.md), а не стартуй новую wave. Короткий end-to-end маршрут: [Public preview flow](docs/public-preview-flow.ru.md).
+
 
 ## Три входа
 
@@ -75,6 +81,24 @@ selenium-pw-migrator report serve --input migration/runs/latest --static-only --
 ```
 
 Открывай `migration/dashboard/latest/report-dashboard.html` до ручного чтения JSON/TXT артефактов. Если остались TODO, `explain-todo` дополнительно пишет `suggested-config-patch.md/json` с grouped root causes, “fix this profile mapping first”, confidence/evidence badges и черновиками UiTarget/Method/Table mappings для ревью.
+
+Для ежедневной эксплуатации уже созданного wave workspace см. [операторский runbook для wave mode](docs/wave-mode-operator-runbook.ru.md): там описаны `BLOCKED_BY_GATE`, `current-ticket.md`, lifecycle sentinel findings, wave quality budget, mapping research memory и безопасная отправка feedback bundle автору мигратора.
+
+### Безопасный feedback bundle для улучшения мигратора
+
+Если мигратор оставил много TODO, syntax fallback, unresolved symbols или упал `verify-project`, можно помочь улучшить инструмент без отправки приватного репозитория. Из корня проекта запустите:
+
+```powershell
+migration/scripts/create-feedback-bundle.ps1 -Workspace migration
+```
+
+или на macOS/Linux/WSL:
+
+```bash
+migration/scripts/create-feedback-bundle.sh -Workspace migration
+```
+
+Скрипт создаёт `feedback-bundle/v1` zip в `migration/state/feedback-bundles/`. По умолчанию туда попадают только отчёты/evidence: mapping research memory, wave quality budget, sentinel findings, `project-verify-report.*`, `project-verify-harness.csproj`, `migration-board.*`, `explain-todo.md`. Исходники проекта и generated `.cs` samples не включаются по умолчанию. Перед отправкой проверьте `manifest.json`.
 
 ## Поддерживаемые source и target
 

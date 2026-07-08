@@ -41,3 +41,22 @@ For strict forensic final checks, add optional switches:
 - Board / explain TODO:
 - OpenCode export:
 - Continuation decision:
+
+
+When gate/sentinel diagnostics create `current-ticket.md`, the next loop must track the ticket with `state/current-ticket-status.json`. A current ticket is considered active until `DONE` with validation evidence or `BLOCKED` with a concrete reason; do not start another wave first.
+
+High/critical sentinel findings are evaluated through the finding lifecycle overlay. `sentinel-findings.jsonl` is immutable evidence; status changes live in `state/sentinel-finding-ledger.jsonl` / `runs/<run-id>/sentinel/sentinel-finding-lifecycle.jsonl`. A high/critical agent-executable finding blocks final gate until `update-sentinel-finding-status` records `VERIFIED`, `CLOSED`, `NON_AGENT_EXECUTABLE`, or `ACCEPTED_RISK` with evidence.
+
+## Wave quality budget
+
+Final gate includes `wave-quality-budget`. If `runs/wave-*` artifacts exist, `state/wave-quality-budget.json` or `runs/<run-id>/wave-quality-budget.json` must exist with schema `wave-quality-budget/v1`. `PASS` means the next wave may be considered after all normal gates pass. `BLOCKED_BY_WAVE_QUALITY_BUDGET` means the supervisor must switch to mapping/research/config improvement before another wave.
+
+
+## Mapping/research memory gate
+
+When `wave-quality-budget/v1` is `BLOCKED_BY_WAVE_QUALITY_BUDGET`, the final gate requires `mapping-research-memory/v1` evidence before another wave. Generate it with `migration/scripts/collect-mapping-research-memory.ps1` / `.sh`; it must summarize TODO clusters, syntax-fallback clusters, unmapped targets, unresolved symbols, verify blockers, and candidate bounded improvements.
+
+
+## Artifact hygiene gate
+
+Final gate includes `artifact-hygiene`. It invokes `migration/scripts/validate-run-artifacts.ps1` when present and expects schema `artifact-hygiene/v1`. The hygiene report blocks final handoff when existing artifacts contradict the gate/state evidence: polluted `Plan.md`, optimistic `Documentation.md` while blocked, missing run/wave identity on generated boards/status reports, or fake session export status.

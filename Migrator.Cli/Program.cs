@@ -1515,14 +1515,23 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
     var buildWorkingDirectory = ResolveBuildWorkingDirectory(verification, baseDir, solutionPath);
 
     var csprojPath = Path.Combine(harnessDir, "Generated.Playwright.Verify.csproj");
-    File.WriteAllText(csprojPath, BuildVerificationCsproj(
+    var csprojText = BuildVerificationCsproj(
         verification,
         generatedDir,
         projectReferences,
         assemblyReferences,
         packageReferences,
         targetFramework,
-        discoveredBuildFiles));
+        discoveredBuildFiles);
+    File.WriteAllText(csprojPath, csprojText);
+
+    var harnessSnapshotPath = Path.Combine(outPath, "project-verify-harness.csproj");
+    File.WriteAllText(harnessSnapshotPath, csprojText);
+    var harnessEvidence = BuildProjectVerifyHarnessEvidence(
+        harnessSnapshotPath,
+        csprojText,
+        discoveredBuildFiles,
+        packageReferences);
 
     var buildResult = RunDotnetBuild(csprojPath, verification, buildWorkingDirectory);
     var rawDiagnostics = ExtractBuildDiagnostics(buildResult.StdOut + "\n" + buildResult.StdErr);
@@ -1546,7 +1555,8 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
         StdOut: buildResult.StdOut,
         StdErr: buildResult.StdErr,
         Diagnostics: rawDiagnostics,
-        ClassifiedDiagnostics: classifiedDiagnostics);
+        ClassifiedDiagnostics: classifiedDiagnostics,
+        HarnessEvidence: harnessEvidence);
 
     File.WriteAllText(Path.Combine(outPath, "project-verify-report.json"),
         System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
@@ -2015,6 +2025,63 @@ static string BuildVerificationCsproj(
     return sb.ToString();
 }
 
+static ProjectVerifyHarnessEvidence BuildProjectVerifyHarnessEvidence(
+    string harnessSnapshotPath,
+    string csprojText,
+    IReadOnlyList<string> buildFiles,
+    IReadOnlyList<PackageReferenceConfig> packageReferences)
+{
+    var centralPackageFiles = buildFiles
+        .Where(x => Path.GetFileName(x).Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase))
+        .Select(Path.GetFullPath)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    var importedBuildFiles = buildFiles
+        .Where(x => !Path.GetFileName(x).Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase))
+        .Select(Path.GetFullPath)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    var cpmDetected = centralPackageFiles.Length > 0;
+    var cpmDisabled = csprojText.Contains("<ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>", StringComparison.OrdinalIgnoreCase);
+    var inlineVersionCount = packageReferences.Count(p => !string.IsNullOrWhiteSpace(p.Version));
+    var packageVersionMode = cpmDetected
+        ? "isolated-temporary-harness-with-inline-versions"
+        : "standard-inline-package-references";
+
+    var notes = new List<string>();
+    if (cpmDetected)
+    {
+        notes.Add("Directory.Packages.props was detected as a CPM signal but intentionally not imported into the temporary verify-project harness.");
+        notes.Add("ManagePackageVersionsCentrally=false keeps inline PackageReference Version attributes legal inside the isolated temporary harness and prevents NU1008.");
+    }
+    else
+    {
+        notes.Add("Central Package Management was not detected for the verification anchors.");
+    }
+
+    notes.Add($"PackageReference entries with explicit versions: {inlineVersionCount}.");
+
+    return new ProjectVerifyHarnessEvidence(
+        SchemaVersion: "verify-project-harness/v1",
+        HarnessProjectSnapshot: Path.GetFullPath(harnessSnapshotPath),
+        HarnessProjectSnapshotSha256: ComputeSha256(harnessSnapshotPath),
+        CentralPackageManagementDetected: cpmDetected,
+        CentralPackageManagementMode: cpmDetected ? "isolated" : "not-detected",
+        CentralPackageFiles: centralPackageFiles,
+        ManagePackageVersionsCentrallyDisabled: cpmDisabled,
+        ImportedBuildFiles: importedBuildFiles,
+        SkippedBuildFiles: centralPackageFiles,
+        PackageVersionMode: packageVersionMode,
+        Nu1008Mitigation: cpmDetected
+            ? "Directory.Packages.props skipped + ManagePackageVersionsCentrally=false in temporary harness"
+            : "not-required",
+        Notes: notes.ToArray());
+}
+
 static DotnetBuildResult RunDotnetBuild(string csprojPath, VerificationConfig verification, string workingDirectory)
 {
     var args = new List<string>
@@ -2069,7 +2136,7 @@ static string[] ExtractBuildDiagnostics(string text)
         .Split('\n')
         .Where(line => line.Contains(": error ", StringComparison.OrdinalIgnoreCase)
                     || line.Contains(": warning ", StringComparison.OrdinalIgnoreCase)
-                    || System.Text.RegularExpressions.Regex.IsMatch(line, @"\bCS\d{4}\b"))
+                    || System.Text.RegularExpressions.Regex.IsMatch(line, @"\b(CS|NU|MSB)\d{4}\b"))
         .Select(line => line.Trim())
         .Where(line => line.Length > 0)
         .Distinct(StringComparer.Ordinal)
@@ -2125,6 +2192,12 @@ static ProjectVerifyDiagnostic ClassifyBuildDiagnostic(string diagnostic)
         category = "async-without-await";
         likelyCause = "Сгенерированный async-тест не содержит await. Обычно не блокер, но может быть сигналом пустой/закомментированной миграции.";
         suggestedAction = "Проверь, не стал ли тест почти полностью TODO.";
+    }
+    else if (code == "NU1008")
+    {
+        category = "central-package-management";
+        likelyCause = "Temporary verify-project harness унаследовал Central Package Management, но PackageReference содержит inline Version. Это означает, что CPM isolation не сработал или external import снова включил ManagePackageVersionsCentrally.";
+        suggestedAction = "Проверь project-verify-harness.csproj snapshot и HarnessEvidence: Directory.Packages.props должен быть skipped, а ManagePackageVersionsCentrally=false должен быть записан в temporary harness.";
     }
     else if (code.StartsWith("NU", StringComparison.OrdinalIgnoreCase))
     {
@@ -2183,6 +2256,30 @@ static string WriteProjectVerifyMarkdown(ProjectVerifyReport report)
     sb.AppendLine($"- Assembly references: `{report.AssemblyReferences.Length}`");
     sb.AppendLine($"- Package references: `{report.PackageReferences.Length}`");
     sb.AppendLine($"- Imported build files: `{report.BuildFilesImported.Length}`");
+    sb.AppendLine();
+
+    sb.AppendLine("## Verify harness evidence");
+    sb.AppendLine();
+    sb.AppendLine($"- Schema: `{report.HarnessEvidence.SchemaVersion}`");
+    sb.AppendLine($"- Snapshot: `{report.HarnessEvidence.HarnessProjectSnapshot}`");
+    sb.AppendLine($"- Snapshot SHA256: `{report.HarnessEvidence.HarnessProjectSnapshotSha256}`");
+    sb.AppendLine($"- CPM detected: `{report.HarnessEvidence.CentralPackageManagementDetected}`");
+    sb.AppendLine($"- CPM mode: `{report.HarnessEvidence.CentralPackageManagementMode}`");
+    sb.AppendLine($"- ManagePackageVersionsCentrally disabled: `{report.HarnessEvidence.ManagePackageVersionsCentrallyDisabled}`");
+    sb.AppendLine($"- Package version mode: `{report.HarnessEvidence.PackageVersionMode}`");
+    sb.AppendLine($"- NU1008 mitigation: `{report.HarnessEvidence.Nu1008Mitigation}`");
+    sb.AppendLine();
+    sb.AppendLine("### Imported build files");
+    foreach (var r in report.HarnessEvidence.ImportedBuildFiles)
+        sb.AppendLine($"- `{r}`");
+    if (report.HarnessEvidence.ImportedBuildFiles.Length == 0)
+        sb.AppendLine("- none");
+    sb.AppendLine();
+    sb.AppendLine("### Skipped build files");
+    foreach (var r in report.HarnessEvidence.SkippedBuildFiles)
+        sb.AppendLine($"- `{r}`");
+    if (report.HarnessEvidence.SkippedBuildFiles.Length == 0)
+        sb.AppendLine("- none");
     sb.AppendLine();
 
     sb.AppendLine("## Project reference discovery");
@@ -3804,7 +3901,8 @@ static ProjectVerifyReport? ReadProjectVerifyReport(string path)
             StdOut: ReadString(root, "StdOut") ?? "",
             StdErr: ReadString(root, "StdErr") ?? "",
             Diagnostics: diagnostics,
-            ClassifiedDiagnostics: classified);
+            ClassifiedDiagnostics: classified,
+            HarnessEvidence: ReadProjectVerifyHarnessEvidence(root));
     }
     catch
     {
@@ -3828,6 +3926,48 @@ static string[] ReadStringArray(System.Text.Json.JsonElement root, string name)
         .Select(x => x.GetString() ?? "")
         .Where(x => !string.IsNullOrWhiteSpace(x))
         .ToArray();
+}
+
+static ProjectVerifyHarnessEvidence ReadProjectVerifyHarnessEvidence(System.Text.Json.JsonElement root)
+{
+    if (root.TryGetProperty("HarnessEvidence", out var prop) && prop.ValueKind == System.Text.Json.JsonValueKind.Object)
+    {
+        return new ProjectVerifyHarnessEvidence(
+            SchemaVersion: ReadString(prop, "SchemaVersion") ?? "verify-project-harness/v1",
+            HarnessProjectSnapshot: ReadString(prop, "HarnessProjectSnapshot") ?? "",
+            HarnessProjectSnapshotSha256: ReadString(prop, "HarnessProjectSnapshotSha256") ?? "",
+            CentralPackageManagementDetected: ReadBool(prop, "CentralPackageManagementDetected"),
+            CentralPackageManagementMode: ReadString(prop, "CentralPackageManagementMode") ?? "unknown",
+            CentralPackageFiles: ReadStringArray(prop, "CentralPackageFiles"),
+            ManagePackageVersionsCentrallyDisabled: ReadBool(prop, "ManagePackageVersionsCentrallyDisabled"),
+            ImportedBuildFiles: ReadStringArray(prop, "ImportedBuildFiles"),
+            SkippedBuildFiles: ReadStringArray(prop, "SkippedBuildFiles"),
+            PackageVersionMode: ReadString(prop, "PackageVersionMode") ?? "unknown",
+            Nu1008Mitigation: ReadString(prop, "Nu1008Mitigation") ?? "unknown",
+            Notes: ReadStringArray(prop, "Notes"));
+    }
+
+    var buildFiles = ReadStringArray(root, "BuildFilesImported");
+    var centralPackageFiles = buildFiles
+        .Where(x => Path.GetFileName(x).Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase))
+        .ToArray();
+    var importedBuildFiles = buildFiles
+        .Where(x => !Path.GetFileName(x).Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase))
+        .ToArray();
+
+    return new ProjectVerifyHarnessEvidence(
+        SchemaVersion: "verify-project-harness/v1",
+        HarnessProjectSnapshot: ReadString(root, "HarnessProject") ?? "",
+        HarnessProjectSnapshotSha256: "",
+        CentralPackageManagementDetected: centralPackageFiles.Length > 0,
+        CentralPackageManagementMode: centralPackageFiles.Length > 0 ? "legacy-detected" : "not-detected",
+        CentralPackageFiles: centralPackageFiles,
+        ManagePackageVersionsCentrallyDisabled: false,
+        ImportedBuildFiles: importedBuildFiles,
+        SkippedBuildFiles: centralPackageFiles,
+        PackageVersionMode: "legacy-report",
+        Nu1008Mitigation: centralPackageFiles.Length > 0 ? "legacy-report-without-explicit-harness-evidence" : "not-required",
+        Notes: Array.Empty<string>());
 }
 
 static PackageReferenceConfig[] ReadPackageReferenceArray(System.Text.Json.JsonElement root)
@@ -3916,6 +4056,20 @@ static void AddArtifactItem(Dictionary<string, (int Count, string File, int Line
     result[name] = (count, file, line);
 }
 
+static bool ReadBool(System.Text.Json.JsonElement element, string propertyName)
+{
+    if (!element.TryGetProperty(propertyName, out var p))
+        return false;
+
+    return p.ValueKind switch
+    {
+        System.Text.Json.JsonValueKind.True => true,
+        System.Text.Json.JsonValueKind.False => false,
+        System.Text.Json.JsonValueKind.String => bool.TryParse(p.GetString(), out var value) && value,
+        _ => false
+    };
+}
+
 static int ReadInt(System.Text.Json.JsonElement element, string propertyName)
 {
     if (!element.TryGetProperty(propertyName, out var p))
@@ -3927,18 +4081,6 @@ static int ReadInt(System.Text.Json.JsonElement element, string propertyName)
     return 0;
 }
 
-static bool ReadBool(System.Text.Json.JsonElement element, string propertyName)
-{
-    if (!element.TryGetProperty(propertyName, out var p))
-        return false;
-    if (p.ValueKind == System.Text.Json.JsonValueKind.True)
-        return true;
-    if (p.ValueKind == System.Text.Json.JsonValueKind.False)
-        return false;
-    if (p.ValueKind == System.Text.Json.JsonValueKind.String && bool.TryParse(p.GetString(), out var value))
-        return value;
-    return false;
-}
 
 static string? ReadString(System.Text.Json.JsonElement element, string propertyName)
 {

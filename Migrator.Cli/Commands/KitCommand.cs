@@ -653,6 +653,12 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         AddCheck(checks, "agent-skills-core", File.Exists(Path.Combine(workspacePath, "agent-skills", "plow-ahead", "SKILL.md")) && File.Exists(Path.Combine(workspacePath, "agent-skills", "agent-watchdog", "SKILL.md")) && File.Exists(Path.Combine(workspacePath, "agent-skills", "read-the-damn-docs", "SKILL.md")), Path.Combine(workspacePath, "agent-skills"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "agent-skills-usage-writer", File.Exists(Path.Combine(workspacePath, "scripts", "write-agent-skill-usage.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "write-agent-skill-usage.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "record-agent-skill-profile.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "record-agent-skill-profile.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "gate-followup-slicer", File.Exists(Path.Combine(workspacePath, "scripts", "slice-gate-followups.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "slice-gate-followups.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "wave-quality-budget", File.Exists(Path.Combine(workspacePath, "scripts", "evaluate-wave-quality-budget.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "evaluate-wave-quality-budget.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "mapping-research-memory", File.Exists(Path.Combine(workspacePath, "scripts", "collect-mapping-research-memory.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "collect-mapping-research-memory.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "feedback-bundle-packer", File.Exists(Path.Combine(workspacePath, "scripts", "create-feedback-bundle.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "create-feedback-bundle.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "artifact-hygiene", File.Exists(Path.Combine(workspacePath, "scripts", "validate-run-artifacts.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "validate-run-artifacts.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "current-ticket-lifecycle", File.Exists(Path.Combine(workspacePath, "scripts", "update-current-ticket-status.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "update-current-ticket-status.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "sentinel-finding-lifecycle", File.Exists(Path.Combine(workspacePath, "scripts", "update-sentinel-finding-status.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "update-sentinel-finding-status.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-policy", File.Exists(Path.Combine(workspacePath, "state", "harness-policy.json")), Path.Combine(workspacePath, "state", "harness-policy.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-run-template", File.Exists(Path.Combine(workspacePath, "state", "harness-run-template.json")), Path.Combine(workspacePath, "state", "harness-run-template.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-policy-script", File.Exists(Path.Combine(workspacePath, "scripts", "check-harness-policy.ps1")), Path.Combine(workspacePath, "scripts", "check-harness-policy.ps1"), "Run `migrator kit update --backup`.");
@@ -950,6 +956,18 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
             "scripts/record-agent-skill-profile.sh" or
             "scripts/slice-gate-followups.ps1" or
             "scripts/slice-gate-followups.sh" or
+            "scripts/evaluate-wave-quality-budget.ps1" or
+            "scripts/evaluate-wave-quality-budget.sh" or
+            "scripts/collect-mapping-research-memory.ps1" or
+            "scripts/collect-mapping-research-memory.sh" or
+            "scripts/create-feedback-bundle.ps1" or
+            "scripts/create-feedback-bundle.sh" or
+            "scripts/validate-run-artifacts.ps1" or
+            "scripts/validate-run-artifacts.sh" or
+            "scripts/update-current-ticket-status.ps1" or
+            "scripts/update-current-ticket-status.sh" or
+            "scripts/update-sentinel-finding-status.ps1" or
+            "scripts/update-sentinel-finding-status.sh" or
             "scripts/export-opencode-session.ps1" or
             "scripts/export-opencode-session.sh" or
             "scripts/write-sentinel-finding.ps1" or
@@ -1353,7 +1371,19 @@ Fix only the current ticket.
             "scripts/record-agent-skill-profile.ps1",
             "scripts/record-agent-skill-profile.sh",
             "scripts/slice-gate-followups.ps1",
-            "scripts/slice-gate-followups.sh"
+            "scripts/slice-gate-followups.sh",
+            "scripts/evaluate-wave-quality-budget.ps1",
+            "scripts/evaluate-wave-quality-budget.sh",
+            "scripts/collect-mapping-research-memory.ps1",
+            "scripts/collect-mapping-research-memory.sh",
+            "scripts/create-feedback-bundle.ps1",
+            "scripts/create-feedback-bundle.sh",
+            "scripts/validate-run-artifacts.ps1",
+            "scripts/validate-run-artifacts.sh",
+            "scripts/update-current-ticket-status.ps1",
+            "scripts/update-current-ticket-status.sh",
+            "scripts/update-sentinel-finding-status.ps1",
+            "scripts/update-sentinel-finding-status.sh"
         };
         var entries = guardFiles.Select(relative =>
         {

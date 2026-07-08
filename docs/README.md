@@ -7,6 +7,7 @@ This index keeps the current workflow short and avoids legacy agent-launch noise
 - [Quick start](quick-start.md) — first successful local run, including guarded agent bootstrap.
 - [Guarded OpenCode Desktop migration runbook](guarded-opencode-desktop-runbook.ru.md) — canonical guarded agent workflow: local tool build/update, `kit bootstrap-opencode`, `/supervised-task`, approve/deny rules, scope/final gates, and forensic export.
 - [Migration runbook](migration-runbook.md) — production migration plan, pilot scope, risks, and command chain.
+- [Wave mode operator runbook](wave-mode-operator-runbook.md) / [RU](wave-mode-operator-runbook.ru.md) — operating guide for an already bootstrapped wave workspace: blocked gates, current tickets, sentinel finding lifecycle, wave quality budget, mapping research memory, and feedback bundle handoff.
 - [Tool installation](tool-installation.md) — install from a packed dotnet tool or run from source.
 - [Standalone installation](standalone-installation.md) / [RU](standalone-installation.ru.md) — install the CLI without .NET SDK/runtime.
 - [npm wrapper](npm-wrapper.md) — install the standalone CLI through npm for frontend-heavy teams.
@@ -57,6 +58,9 @@ This index keeps the current workflow short and avoids legacy agent-launch noise
 - [Migration board](migration-board.md)
 - [Report serve dashboard](report-serve-dashboard.md)
 - [Evidence pack workflow](evidence-pack.md)
+- [Migration feedback bundles](migration-feedback-bundles.md) — `create-feedback-bundle` user flow for redacted `feedback-bundle/v1` artifacts that turn TODO/unresolved-symbol/verify blockers into migrator fixtures and product fixes.
+- [Wave mode operator runbook](wave-mode-operator-runbook.md) — end-to-end operations reference for gate-followup loops, noisy waves, mapping memory, and safe escalation.
+- [Public preview flow](public-preview-flow.md) / [RU](public-preview-flow.ru.md) — `public-preview-flow/v1` end-to-end safe-by-default route from install to wave follow-ups and `feedback-bundle/v1`.
 
 ## Agent/guardrail references
 

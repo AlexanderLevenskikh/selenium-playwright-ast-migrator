@@ -223,3 +223,10 @@ Report only the backlog artifacts, selected ticket id/title, and whether the sup
 ## Gate/sentinel follow-up input
 
 If `migration/state/backlog/gate-followup-tasks.jsonl` exists, treat it like approved diagnostic input. Select exactly one agent-executable bounded task, refresh `migration/current-ticket.md`, and preserve the source evidence. If every remaining gate follow-up requires product-tree writes outside `migration/**`, write `BLOCKED_NO_AGENT_EXECUTABLE_TASKS` with evidence instead of broadening scope.
+
+
+When diagnostics include `wave-quality-budget` or `BLOCKED_BY_WAVE_QUALITY_BUDGET`, slice a mapping/research/config improvement task: summarize TODO causes, syntax-fallback clusters, unmapped targets, unresolved symbols, and verify blockers before any new wave.
+
+## Mapping/research memory loop
+
+When `evaluate-wave-quality-budget` reports `BLOCKED_BY_WAVE_QUALITY_BUDGET`, do not select another wave. Run `migration/scripts/collect-mapping-research-memory.ps1` / `.sh` first. Use `mapping-research-memory/v1`, `state/mapping-research-memory.json`, and `state/mapping-research-candidates.jsonl` to route one bounded config/POM/recognizer or verify-harness improvement ticket.
