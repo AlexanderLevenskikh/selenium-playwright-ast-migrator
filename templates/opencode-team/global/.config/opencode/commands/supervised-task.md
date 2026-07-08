@@ -64,6 +64,7 @@ Before planning, always read:
 - AGENTS.md
 - migration/AGENT_CONTRACT.md
 - migration/state/harness-policy.json
+- migration/agent-skills/skill-map.md, if it exists
 - migration/state/harness-run.json, if it exists
 - migration/state/final-gate-result.json, if it exists
 - migration/state/continuation-decision.json, if it exists
@@ -163,8 +164,10 @@ Do not offer options such as README updates, package maintenance, broad refactor
 4. Make or update a short plan in the active run context.
 5. Record important lifecycle events when practical with `migration/scripts/write-harness-event.ps1`, especially `plan-written`, `post-final-research-started`, `post-final-research-reviewed`, `post-final-research-revision-requested`, `post-final-tasks-sliced`, `explicit-continue-ticket-selected`, `scope-check-pass`, `tests-pass`, `tests-failed`, `final-gate-pass`, and `handoff-written`.
 6. Ask watchdog to check the plan.
+6a. For broad wave/TODO work, apply `migration/agent-skills/efficient-frontier/SKILL.md` to split only bounded independent work packets.
 7. Delegate implementation to executor only if needed, and include the active run id.
 8. Ask watchdog to check the result.
+8a. Before the user-facing handoff, apply `migration/agent-skills/quick-recap/SKILL.md` so the result is GREEN/YELLOW/RED with evidence.
 9. Ask reviewer to review the diff and active run evidence.
 10. Run `migration/scripts/check-scope.ps1` after any patch.
 11. Run `migration/scripts/check-harness-policy.ps1` after any patch.

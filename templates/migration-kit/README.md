@@ -14,6 +14,18 @@ It is intentionally file-based so an AI agent can resume after context loss.
 
 ## Layout
 
+## Agent skills
+
+Reusable behavior contracts live under `agent-skills/`:
+
+- `agent-skills/skill-map.md` tells each role which skill to load.
+- `agent-skills/plow-ahead/SKILL.md` keeps bounded autopilot work moving through routine ambiguity.
+- `agent-skills/read-the-damn-docs/SKILL.md` prevents dependency/API work from relying on stale model memory.
+- `agent-skills/agent-watchdog/SKILL.md` audits another agent's claims against real evidence.
+
+Skills are instructions, not permissions. `AGENT_CONTRACT.md`, `harness-policy.json`, OpenCode policy, scope guard, and final gate still win.
+
+
 ```text
 migration/
   README.md
@@ -42,6 +54,9 @@ migration/
   logs/
   harness/
     README.md
+  agent-skills/
+    skill-map.md
+    */SKILL.md
   dashboard/
     i18n/
       en.json

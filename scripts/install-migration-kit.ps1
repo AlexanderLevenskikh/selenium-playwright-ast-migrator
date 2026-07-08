@@ -161,7 +161,8 @@ function Test-AutoUpdatedKitOwnedFile([string]$RelativePath) {
         $normalized -eq "scripts/write-harness-event.ps1" -or
         $normalized -eq "scripts/write-harness-event.sh" -or
         $normalized -eq "state/continuation-contract.md" -or
-        $normalized.StartsWith("prompts/")
+        $normalized.StartsWith("prompts/") -or
+        $normalized.StartsWith("agent-skills/")
     )
 }
 
@@ -455,6 +456,9 @@ $quickStartLines = @(
     '```',
     "",
     "If you installed the migrator as a local dotnet tool, use:",
+    "Agent skill map: $Workspace/agent-skills/skill-map.md",
+    "Recommended skills: plow-ahead, agent-watchdog, read-the-damn-docs, efficient-frontier, quick-recap, plan-arbiter",
+    "",
     "",
     '```powershell',
     "dotnet tool run selenium-pw-migrator -- --mode doctor --input `"$Source`" --config `"$Config`" --out `"$Output`" --format both",

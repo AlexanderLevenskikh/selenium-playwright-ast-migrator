@@ -563,7 +563,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         foreach (var dir in new[]
         {
             "runs", "reports", "logs", "profiles", "prompts", "schemas", "state",
-            "tickets", "evidence", "proposals", "scripts", "codex", "harness", "dashboard", ".migration-kit"
+            "tickets", "evidence", "proposals", "scripts", "codex", "harness", "dashboard", "agent-skills", ".migration-kit"
         })
         {
             Directory.CreateDirectory(Path.Combine(workspacePath, dir));
@@ -648,6 +648,8 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         AddCheck(checks, "scope-guard-shell", File.Exists(Path.Combine(workspacePath, "scripts", "check-scope.sh")), Path.Combine(workspacePath, "scripts", "check-scope.sh"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "final-gate-shell", File.Exists(Path.Combine(workspacePath, "scripts", "check-final-gate.sh")), Path.Combine(workspacePath, "scripts", "check-final-gate.sh"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-reference", File.Exists(Path.Combine(workspacePath, "harness", "README.md")), Path.Combine(workspacePath, "harness", "README.md"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "agent-skills-map", File.Exists(Path.Combine(workspacePath, "agent-skills", "skill-map.md")), Path.Combine(workspacePath, "agent-skills", "skill-map.md"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "agent-skills-core", File.Exists(Path.Combine(workspacePath, "agent-skills", "plow-ahead", "SKILL.md")) && File.Exists(Path.Combine(workspacePath, "agent-skills", "agent-watchdog", "SKILL.md")) && File.Exists(Path.Combine(workspacePath, "agent-skills", "read-the-damn-docs", "SKILL.md")), Path.Combine(workspacePath, "agent-skills"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-policy", File.Exists(Path.Combine(workspacePath, "state", "harness-policy.json")), Path.Combine(workspacePath, "state", "harness-policy.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-run-template", File.Exists(Path.Combine(workspacePath, "state", "harness-run-template.json")), Path.Combine(workspacePath, "state", "harness-run-template.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-policy-script", File.Exists(Path.Combine(workspacePath, "scripts", "check-harness-policy.ps1")), Path.Combine(workspacePath, "scripts", "check-harness-policy.ps1"), "Run `migrator kit update --backup`.");
@@ -915,7 +917,8 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
             "scripts/complete-sentinel-inspection.ps1" or
             "scripts/complete-sentinel-inspection.sh" or
             "state/continuation-contract.md"
-            || normalized.StartsWith("prompts/", StringComparison.Ordinal);
+            || normalized.StartsWith("prompts/", StringComparison.Ordinal)
+            || normalized.StartsWith("agent-skills/", StringComparison.Ordinal);
     }
 
     static void CreateBackup(string workspacePath, string projectRoot)
@@ -1071,6 +1074,20 @@ Stop-policy checklist before any stop/handoff:
 
 ```text
 {{Path.Combine(options.Workspace, "state", "stop-policy-checklist.md")}}
+```
+
+Agent skill map for reusable behavior contracts:
+
+```text
+{{Path.Combine(options.Workspace, "agent-skills", "skill-map.md")}}
+```
+
+Recommended first skills for OpenCode/Codex-style runs:
+
+```text
+{{Path.Combine(options.Workspace, "agent-skills", "plow-ahead", "SKILL.md")}}
+{{Path.Combine(options.Workspace, "agent-skills", "agent-watchdog", "SKILL.md")}}
+{{Path.Combine(options.Workspace, "agent-skills", "read-the-damn-docs", "SKILL.md")}}
 ```
 
 Harness autopilot run from bash:

@@ -236,6 +236,7 @@ Artifact-only mode does not block migration-artifact work. It blocks real produc
 1. Understand the user's task and restate the concrete goal.
 2. Create or resume the current Harness Kit run.
 3. Read `Prompt.md`, `Plan.md`, `Implement.md`, `Documentation.md`, and `trace.jsonl` for the active run.
+3a. Read `migration/agent-skills/skill-map.md` when present, then load the relevant `SKILL.md` contracts for the current step (`plow-ahead`, `efficient-frontier`, `plan-arbiter`, `read-the-damn-docs`, `quick-recap`).
 4. Read project-scoped memory before planning; use it as guidance, not authority, and never use it to justify assertion suppression or over-suppressed user interactions.
 4. Inspect relevant files yourself when needed.
 5. Produce or update a short implementation plan in terms of the active run.
@@ -271,6 +272,9 @@ Do not fake trace events. If a command did not run, record or report that it did
 - Prefer minimal, reviewable changes over large rewrites.
 - Never commit or push.
 - Do not ask "what should I do next?" when an allowed next step exists.
+- Apply `migration/agent-skills/plow-ahead/SKILL.md` for routine ambiguity, but stop for real blockers.
+- Apply `migration/agent-skills/efficient-frontier/SKILL.md` before broad wave/TODO/log decomposition.
+- Apply `migration/agent-skills/quick-recap/SKILL.md` in the final report.
 - Do not convert `NOT FINAL`, failed verify, or failed final readiness into a user-facing stop when the next evidence-backed config/scaffold/action step is allowed by the contract.
 - Do not treat TODO count reduction as progress if suppressions increased, tests became empty, assertions weakened, or real project files changed.
 

@@ -45,6 +45,7 @@ required_patterns = [
     r'^tools/net10\.0/any/Migrator\.SeleniumCSharp\.dll$',
     r'^templates/migration-kit/README\.md$',
     r'^templates/migration-kit/prompts/kickoff-prompt\.txt$',
+    r'^templates/migration-kit/agent-skills/skill-map\.md$',
     r'^scripts/install-migration-kit\.ps1$',
 ]
 for pattern in required_patterns:

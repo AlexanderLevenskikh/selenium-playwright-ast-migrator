@@ -7,6 +7,7 @@ This repository no longer uses the legacy root `.agent-loops/` prompt pack as a 
 - For guarded OpenCode Desktop Selenium → Playwright migration runs, use `docs/guarded-opencode-desktop-runbook.ru.md`.
 - For installed product-repo runs, the executable contract is copied into `migration/AGENT_CONTRACT.md`, `migration/state/final-gate.md`, and `migration/scripts/check-*.ps1`.
 - For repository development, use normal code-review discipline: small patches, focused tests, and no unrelated refactors.
+- For agent-skill-driven migration runs, read `migration/agent-skills/skill-map.md` and only the relevant `SKILL.md` files. The skill layer is a behavior aid, not a permission grant.
 
 ## Hard rules for this repository
 
@@ -63,6 +64,8 @@ git diff
 ```
 
 Known migration subagents (`executor`, `watchdog`, `reviewer`, `migration-researcher`, `migration-research-lead`, `migration-task-slicer`, `migration-change-reviewer`, `harness-sentinel`) are allowed by the OpenCode profile. If OpenCode asks for a routine read-only command, prefer using the documented low-noise permission profile rather than changing the migration plan.
+
+Reusable migration skills installed by the kit include `plow-ahead`, `read-the-damn-docs`, `agent-watchdog`, `efficient-frontier`, `quick-recap`, and `plan-arbiter`. They should reduce prompt bloat by being loaded only when the current task needs them.
 
 
 ## OpenCode permission profile note

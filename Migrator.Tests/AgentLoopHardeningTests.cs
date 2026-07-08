@@ -474,6 +474,71 @@ public class AgentLoopHardeningTests
         }
     }
 
+
+    [Fact]
+    public void MigrationKitAgentSkills_AreInstalledAndReferencedByOpenCodeTeam()
+    {
+        var skillMap = Read("templates/migration-kit/agent-skills/skill-map.md");
+        var readme = Read("templates/migration-kit/agent-skills/README.md");
+        var plowAhead = Read("templates/migration-kit/agent-skills/plow-ahead/SKILL.md");
+        var docsFirst = Read("templates/migration-kit/agent-skills/read-the-damn-docs/SKILL.md");
+        var watchdogSkill = Read("templates/migration-kit/agent-skills/agent-watchdog/SKILL.md");
+        var efficientFrontier = Read("templates/migration-kit/agent-skills/efficient-frontier/SKILL.md");
+        var quickRecap = Read("templates/migration-kit/agent-skills/quick-recap/SKILL.md");
+        var planArbiter = Read("templates/migration-kit/agent-skills/plan-arbiter/SKILL.md");
+        var contract = Read("templates/migration-kit/AGENT_CONTRACT.md");
+        var kitReadme = Read("templates/migration-kit/README.md");
+        var harnessReadme = Read("templates/migration-kit/harness/README.md");
+        var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
+        var installScript = Read("scripts/install-migration-kit.ps1");
+        var bundleScript = Read("scripts/package-agent-cli-bundle.ps1");
+        var verifyBundle = Read("scripts/verify-agent-cli-bundle.ps1");
+        var verifyNupkg = Read("scripts/verify-nupkg-contents.ps1");
+        var orchestrator = Read("templates/opencode-team/global/.config/opencode/agents/orchestrator.md");
+        var executor = Read("templates/opencode-team/global/.config/opencode/agents/executor.md");
+        var watchdog = Read("templates/opencode-team/global/.config/opencode/agents/watchdog.md");
+        var reviewer = Read("templates/opencode-team/global/.config/opencode/agents/reviewer.md");
+        var supervisedTask = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var projectAgents = Read("templates/opencode-team/project-template/AGENTS.md");
+        var teamReadme = Read("templates/opencode-team/README.md");
+
+        foreach (var skillName in new[] { "plow-ahead", "read-the-damn-docs", "agent-watchdog", "efficient-frontier", "quick-recap", "plan-arbiter" })
+        {
+            Assert.Contains(skillName, skillMap);
+            Assert.Contains(skillName, readme);
+            Assert.Contains(skillName, projectAgents);
+            Assert.Contains(skillName, teamReadme);
+        }
+
+        Assert.Contains("Skills never override", readme);
+        Assert.Contains("load only the relevant", contract);
+        Assert.Contains("skills guide behavior", contract, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Skills are instructions, not permissions", kitReadme);
+        Assert.Contains("skills cannot broaden allowed writes", harnessReadme);
+        Assert.Contains("agent-skills-map", kitCommand);
+        Assert.Contains("agent-skills-core", kitCommand);
+        Assert.Contains("StartsWith(\"agent-skills/\"", kitCommand);
+        Assert.Contains("agent-skills/", installScript);
+        Assert.Contains("templates/migration-kit/agent-skills/skill-map.md", bundleScript);
+        Assert.Contains("templates/migration-kit/agent-skills/skill-map.md", verifyBundle);
+        Assert.Contains("agent-skills/skill-map", verifyNupkg);
+
+        Assert.Contains("routine ambiguity", plowAhead);
+        Assert.Contains("BLOCKED_BY_DOCS_REQUIRED", docsFirst);
+        Assert.Contains("Verdict: PASS|WARN|BLOCK", watchdogSkill);
+        Assert.Contains("bounded work packets", efficientFrontier);
+        Assert.Contains("Status: GREEN", quickRecap);
+        Assert.Contains("HYBRID_PLAN", planArbiter);
+
+        Assert.Contains("migration/agent-skills/skill-map.md", orchestrator);
+        Assert.Contains("migration/agent-skills/plow-ahead/SKILL.md", orchestrator);
+        Assert.Contains("migration/agent-skills/read-the-damn-docs/SKILL.md", executor);
+        Assert.Contains("migration/agent-skills/agent-watchdog/SKILL.md", watchdog);
+        Assert.Contains("migration/agent-skills/quick-recap/SKILL.md", reviewer);
+        Assert.Contains("migration/agent-skills/efficient-frontier/SKILL.md", supervisedTask);
+        Assert.Contains("GREEN/YELLOW/RED", supervisedTask);
+    }
+
     [Fact]
     public void OpenCodeTeam_DeniesBroadEditsAndGeneralSubagentForMigrationRuns()
     {

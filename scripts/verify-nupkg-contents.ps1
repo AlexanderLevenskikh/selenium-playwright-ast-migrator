@@ -41,6 +41,7 @@ try {
         '^tools/net10\.0/any/Migrator\.SeleniumCSharp\.dll$',
         '^templates/migration-kit/README\.md$',
         '^templates/migration-kit/prompts/kickoff-prompt\.txt$',
+        '^templates/migration-kit/agent-skills/skill-map\.md$',
         '^scripts/install-migration-kit\.ps1$'
     )
 

@@ -18,6 +18,13 @@ The harness is the migration agent's fenced workbench: policy, run files, prompt
 
 ## Autopilot behavior
 
+## Agent skills layer
+
+The Harness Kit ships a small skill layer under `agent-skills/`. Use `agent-skills/skill-map.md` to decide whether the current step needs `plow-ahead`, `read-the-damn-docs`, `agent-watchdog`, `efficient-frontier`, `quick-recap`, or `plan-arbiter`.
+
+This keeps common behavior reusable without weakening the fenced workbench: skills cannot broaden allowed writes, bypass permission denials, or replace scope/final-gate evidence.
+
+
 The agent may continue without interactive approvals when all of these are true:
 
 - the write is under `migration/**`;

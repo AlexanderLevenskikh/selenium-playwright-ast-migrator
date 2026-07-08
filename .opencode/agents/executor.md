@@ -133,10 +133,13 @@ Before editing, read these files when they exist:
 - `migration/runs/<run-id>/Implement.md`
 - `migration/runs/<run-id>/Documentation.md`
 - `migration/runs/<run-id>/trace.jsonl`
+- `migration/agent-skills/skill-map.md`
 
 The active run id is part of your assignment. If the assignment does not include a run id, stop and report `BLOCKED_BY_MISSING_HARNESS_RUN`.
 
 Do not ask routine continuation questions when the next action is allowed by `harness-policy.json`, OpenCode permissions, and the assignment scope. For dangerous actions, ambiguous task intent, network/package updates, permission-policy edits, or writes outside the allowed workspace, stop with a concrete blocker instead of waiting for an interactive approval.
+
+Use `migration/agent-skills/plow-ahead/SKILL.md` for routine ambiguity. If the task touches third-party APIs, package upgrades, SDK/CLI behavior, framework configuration, CI images, auth, or browser behavior, use `migration/agent-skills/read-the-damn-docs/SKILL.md`; with web access denied, rely on local authoritative evidence or stop with `BLOCKED_BY_DOCS_REQUIRED`.
 
 
 ## Append-only and machine-state safety

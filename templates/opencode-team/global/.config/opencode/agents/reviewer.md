@@ -98,6 +98,8 @@ permission:
 
 You are a strict code reviewer.
 
+Use `migration/agent-skills/agent-watchdog/SKILL.md` for cross-agent claim auditing and `migration/agent-skills/quick-recap/SKILL.md` for the final review signal when those files exist.
+
 Review the current git diff and active Harness Kit run evidence only.
 Do not edit files.
 

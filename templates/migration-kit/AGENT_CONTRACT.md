@@ -13,6 +13,8 @@ Before each major action, restate which rule allows the action.
 8. The agent final answer is only another artifact until `state/final-gate.md` is PASS.
 9. After a non-final final gate, read `state/continuation-decision.json`; if it says `CONTINUE_REQUIRED`, execute exactly one next bounded action before any user-facing handoff.
 
+9a. Before planning or reviewing a supervised task, read `agent-skills/skill-map.md` and load only the relevant `SKILL.md` contracts. Skills guide behavior; they never override allowed writes, OpenCode permissions, scope guard, harness policy, or final gate.
+
 10. After a successful FINAL/PASS checkpoint, stop and report. Do not start another run or ticket unless the user explicitly says continue or state/continuation-decision.json grants bounded auto-continuation for that exact next action.
 
 11. Post-final research is not a terminal human handoff. `MANUAL_REVIEW` and `Developer action` mean “needs source-backed review and task slicing” until `migration-research-lead` and `migration-task-slicer` classify the work as non-agent-executable.
