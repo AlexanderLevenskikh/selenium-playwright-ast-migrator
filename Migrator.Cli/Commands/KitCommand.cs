@@ -11,6 +11,7 @@ using System.Text.Json;
 internal static class KitCommand
 {
     const string KitVersion = "0.0.0-preview.1";
+    const string SourceScopeSchema = "migration-source-scope/v1";
 
     public static int Run(string[] args)
     {
@@ -612,6 +613,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
 
         WriteQuickStart(workspacePath, options);
         WriteVersionFile(workspacePath, options, updateMode: options.Update);
+        WriteSourceScopeMetadata(workspacePath, projectRoot, options);
         WriteGuardChecksums(workspacePath);
 
         Console.WriteLine();
@@ -1171,6 +1173,7 @@ Fix only the current ticket.
         var path = Path.Combine(workspacePath, ".migration-kit", "version.json");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var previousInstalledAt = DateTimeOffset.UtcNow.ToString("o");
+        var previousSource = string.Empty;
         if (File.Exists(path))
         {
             try
@@ -1178,12 +1181,18 @@ Fix only the current ticket.
                 using var doc = JsonDocument.Parse(File.ReadAllText(path));
                 if (doc.RootElement.TryGetProperty("installedAtUtc", out var installedAt))
                     previousInstalledAt = installedAt.GetString() ?? previousInstalledAt;
+                if (doc.RootElement.TryGetProperty("source", out var source) && source.ValueKind == JsonValueKind.String)
+                    previousSource = source.GetString() ?? string.Empty;
             }
             catch
             {
-                // Keep a fresh installedAt if previous metadata was not valid JSON.
+                // Keep a fresh installedAt/source if previous metadata was not valid JSON.
             }
         }
+
+        var effectiveSource = IsPlaceholderSource(options.Source) && !IsPlaceholderSource(previousSource)
+            ? previousSource
+            : options.Source;
 
         var payload = new SortedDictionary<string, object?>
         {
@@ -1192,7 +1201,7 @@ Fix only the current ticket.
             ["updatedAtUtc"] = DateTimeOffset.UtcNow.ToString("o"),
             ["updateMode"] = updateMode,
             ["workspace"] = options.Workspace,
-            ["source"] = options.Source,
+            ["source"] = effectiveSource,
             ["target"] = options.Target,
             ["config"] = options.Config,
             ["output"] = options.Output,
@@ -1201,6 +1210,67 @@ Fix only the current ticket.
             ["installer"] = "cli-kit-command"
         };
         WriteJsonFileIfSemanticChanged(path, payload, "updatedAtUtc");
+    }
+
+    static void WriteSourceScopeMetadata(string workspacePath, string projectRoot, KitOptions options)
+    {
+        var effectiveSource = options.Source;
+        if (IsPlaceholderSource(effectiveSource) && TryReadVersionSource(workspacePath, out var previousSource) && !IsPlaceholderSource(previousSource))
+            effectiveSource = previousSource;
+
+        if (IsPlaceholderSource(effectiveSource))
+        {
+            Console.WriteLine("skip source-scope metadata: --source was not configured");
+            return;
+        }
+
+        var sourceFullPath = Path.GetFullPath(ToAbsolutePath(effectiveSource, projectRoot));
+        var payload = new SortedDictionary<string, object?>
+        {
+            ["schemaVersion"] = SourceScopeSchema,
+            ["generatedAtUtc"] = DateTimeOffset.UtcNow.ToString("o"),
+            ["configuredBy"] = options.WithTeam ? "kit bootstrap-opencode" : "kit init/bootstrap-agent",
+            ["source"] = effectiveSource,
+            ["sourceRoot"] = effectiveSource,
+            ["sourceFullPath"] = sourceFullPath,
+            ["workspace"] = options.Workspace,
+            ["workspaceFullPath"] = workspacePath,
+            ["projectRoot"] = projectRoot,
+            ["target"] = options.Target,
+            ["config"] = options.Config,
+            ["output"] = options.Output
+        };
+
+        WriteJsonFileIfSemanticChanged(Path.Combine(workspacePath, "state", "source-scope.json"), payload, "generatedAtUtc");
+    }
+
+    static bool IsPlaceholderSource(string? source)
+        => string.IsNullOrWhiteSpace(source)
+            || source.Contains("<SOURCE", StringComparison.OrdinalIgnoreCase)
+            || source.Contains("SOURCE_SELENIUM_PROJECT_PATH", StringComparison.OrdinalIgnoreCase);
+
+    static bool TryReadVersionSource(string workspacePath, out string source)
+    {
+        source = string.Empty;
+        var path = Path.Combine(workspacePath, ".migration-kit", "version.json");
+        if (!File.Exists(path))
+            return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            if (doc.RootElement.TryGetProperty("source", out var property) && property.ValueKind == JsonValueKind.String)
+            {
+                source = property.GetString() ?? string.Empty;
+                return true;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return false;
+        }
+
+        return false;
     }
 
     static void WriteGuardChecksums(string workspacePath)

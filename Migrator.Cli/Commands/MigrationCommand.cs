@@ -12,6 +12,7 @@ internal static class MigrationCommand
     const string InventorySchema = "migration-inventory/v1";
     const string ClustersSchema = "migration-clusters/v1";
     const string WavePlanSchema = "migration-wave-plan/v1";
+    const string SourceScopeSchema = "migration-source-scope/v1";
 
     static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     static readonly string[] IgnoredSegments = { "bin", "obj", ".git", "node_modules", "migration", "playwright-report", "TestResults", ".vs" };
@@ -110,7 +111,7 @@ internal static class MigrationCommand
     static int RunPlan(MigrationOptions options)
     {
         var repoRoot = ResolveRepositoryRoot();
-        options = NormalizeProjectPaths(options, repoRoot, normalizeInput: true);
+        options = NormalizeProjectPaths(options, repoRoot, normalizeInput: false);
 
         if (!string.Equals(options.Strategy, "wavefront", StringComparison.OrdinalIgnoreCase))
         {
@@ -118,9 +119,16 @@ internal static class MigrationCommand
             return 2;
         }
 
-        if (!ValidateInput(options.Input, out var fullInput))
+        if (!TryResolvePlanInput(options, repoRoot, out var resolvedInput, out var inputError))
+        {
+            Console.Error.WriteLine(inputError);
+            return 2;
+        }
+
+        if (!ValidateInput(resolvedInput, out var fullInput))
             return 2;
 
+        options = options with { Input = fullInput };
         var inventory = BuildInventory(fullInput);
         if (inventory.Tests.Length == 0)
         {
@@ -221,6 +229,13 @@ internal static class MigrationCommand
             return 2;
         }
 
+        var sourceRoot = ResolveSourceRoot(plan.InputPath);
+        if (!ValidateWaveSourceScope(plan, wave, sourceRoot, options.Workspace, repoRoot, out var waveScopeError))
+        {
+            Console.Error.WriteLine(waveScopeError);
+            return 2;
+        }
+
         var outPath = outWasDefault ? Path.Combine(options.Workspace, "runs", wave.Id) : options.Out;
         Directory.CreateDirectory(outPath);
         var sourceScopeDir = Path.Combine(outPath, "source-scope");
@@ -230,7 +245,6 @@ internal static class MigrationCommand
         Directory.CreateDirectory(generatedDir);
         Directory.CreateDirectory(evidenceDir);
 
-        var sourceRoot = ResolveSourceRoot(plan.InputPath);
         var copiedFiles = new List<string>();
         var missingFiles = new List<string>();
         foreach (var file in wave.Files.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
@@ -306,6 +320,141 @@ internal static class MigrationCommand
             Plan = string.IsNullOrWhiteSpace(options.Plan) ? options.Plan : ResolveProjectArtifactPath(options.Plan, repoRoot),
             Config = string.IsNullOrWhiteSpace(options.Config) ? options.Config : ResolveProjectArtifactPath(options.Config, repoRoot)
         };
+    }
+
+    static bool TryResolvePlanInput(MigrationOptions options, string repoRoot, out string resolvedInput, out string error)
+    {
+        resolvedInput = string.Empty;
+        error = string.Empty;
+        var hasExplicitInput = !string.IsNullOrWhiteSpace(options.Input);
+        var hasConfiguredSource = TryReadConfiguredSourceRoot(options.Workspace, repoRoot, out var configuredSourceRoot, out var configuredSourceHint);
+
+        if (!hasExplicitInput)
+        {
+            if (hasConfiguredSource)
+            {
+                resolvedInput = configuredSourceRoot;
+                return true;
+            }
+
+            error = $"migration command needs --input <selenium-tests>. No configured bootstrap source was found in {SourceScopeSchema} state (migration/state/source-scope.json or migration/.migration-kit/version.json).";
+            return false;
+        }
+
+        resolvedInput = ResolveInputPath(options.Input, repoRoot);
+        if (hasConfiguredSource && !IsSameOrDescendantPath(ResolveSourceRoot(resolvedInput), configuredSourceRoot))
+        {
+            error = $"WAVE_SOURCE_SCOPE_VIOLATION: --input '{options.Input}' resolves outside the configured bootstrap source '{configuredSourceHint}'. Re-run kit bootstrap-opencode with the intended --source, or plan within the configured source root.";
+            return false;
+        }
+
+        return true;
+    }
+
+    static bool TryReadConfiguredSourceRoot(string workspacePath, string repoRoot, out string sourceRoot, out string sourceHint)
+    {
+        sourceRoot = string.Empty;
+        sourceHint = string.Empty;
+        var workspaceFull = Path.GetFullPath(workspacePath);
+        var candidates = new[]
+        {
+            Path.Combine(workspaceFull, "state", "source-scope.json"),
+            Path.Combine(workspaceFull, ".migration-kit", "version.json"),
+            Path.Combine(workspaceFull, "state", "memory", "project-profile.json")
+        };
+
+        foreach (var path in candidates)
+        {
+            if (!File.Exists(path))
+                continue;
+
+            if (TryReadSourceCandidate(path, repoRoot, out sourceRoot, out sourceHint))
+                return true;
+        }
+
+        return false;
+    }
+
+    static bool TryReadSourceCandidate(string jsonPath, string repoRoot, out string sourceRoot, out string sourceHint)
+    {
+        sourceRoot = string.Empty;
+        sourceHint = string.Empty;
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(jsonPath));
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return false;
+
+            foreach (var propertyName in new[] { "source", "sourceRoot", "configuredSource", "sourcePath", "sourceFullPath", "configuredSourceFullPath" })
+            {
+                if (!doc.RootElement.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.String)
+                    continue;
+
+                var value = property.GetString();
+                if (IsPlaceholderSource(value))
+                    continue;
+
+                var full = ResolveConfiguredSourcePath(value!, repoRoot);
+                sourceRoot = ResolveSourceRoot(full);
+                sourceHint = value!;
+                return true;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return false;
+        }
+
+        return false;
+    }
+
+    static string ResolveConfiguredSourcePath(string source, string repoRoot)
+        => Path.IsPathRooted(source) ? Path.GetFullPath(source) : Path.GetFullPath(Path.Combine(repoRoot, source));
+
+    static bool IsPlaceholderSource(string? source)
+        => string.IsNullOrWhiteSpace(source)
+            || source.Contains("<SOURCE", StringComparison.OrdinalIgnoreCase)
+            || source.Contains("SOURCE_SELENIUM_PROJECT_PATH", StringComparison.OrdinalIgnoreCase);
+
+    static bool ContainsParentTraversal(string relativePath)
+        => NormalizeSlashes(relativePath).Split('/', StringSplitOptions.RemoveEmptyEntries).Any(segment => segment == "..");
+
+    static bool ValidateWaveSourceScope(MigrationWavePlan plan, MigrationWave wave, string sourceRoot, string workspacePath, string repoRoot, out string error)
+    {
+        if (TryReadConfiguredSourceRoot(workspacePath, repoRoot, out var configuredSourceRoot, out var configuredSourceHint)
+            && !IsSameOrDescendantPath(sourceRoot, configuredSourceRoot))
+        {
+            error = $"WAVE_SOURCE_SCOPE_VIOLATION: wave plan input '{plan.InputPath}' is outside the configured bootstrap source '{configuredSourceHint}'. Rebuild the wave plan with --input set to the configured source root.";
+            return false;
+        }
+
+        foreach (var relativeFile in wave.Files.Concat(wave.Tests.Select(t => t.File)).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(relativeFile))
+                continue;
+
+            if (Path.IsPathRooted(relativeFile))
+            {
+                error = $"WAVE_SOURCE_SCOPE_VIOLATION: wave {wave.Id} contains an absolute file path: {relativeFile}";
+                return false;
+            }
+
+            if (ContainsParentTraversal(relativeFile))
+            {
+                error = $"WAVE_SOURCE_SCOPE_VIOLATION: wave {wave.Id} contains a parent-traversal file path: {relativeFile}";
+                return false;
+            }
+
+            var sourceFile = ResolveWaveSourceFile(sourceRoot, plan.InputPath, relativeFile);
+            if (!IsSameOrDescendantPath(sourceFile, sourceRoot))
+            {
+                error = $"WAVE_SOURCE_SCOPE_VIOLATION: wave {wave.Id} contains an out-of-scope file path: {relativeFile}";
+                return false;
+            }
+        }
+
+        error = string.Empty;
+        return true;
     }
 
     static string ResolveRepositoryRoot()
@@ -394,6 +543,15 @@ internal static class MigrationCommand
         var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         return fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase);
+    }
+
+    static bool IsSameOrDescendantPath(string path, string root)
+    {
+        var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return fullPath.Equals(fullRoot, StringComparison.OrdinalIgnoreCase)
+            || fullPath.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            || fullPath.StartsWith(fullRoot + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 
     static string NormalizeSlashes(string path) => path.Replace('\\', '/');

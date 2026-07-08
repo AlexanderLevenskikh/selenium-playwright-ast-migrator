@@ -71,6 +71,31 @@ public class DivideAndConquerWavefrontPlanningTests
         Assert.Contains("POM", command);
     }
 
+
+    [Fact]
+    public void WavefrontPlanner_UsesConfiguredBootstrapSourceAsHardScope()
+    {
+        var command = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/MigrationCommand.cs"));
+        var kitCommand = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/KitCommand.cs"));
+        var supervised = File.ReadAllText(FindRepositoryFile("templates/opencode-team/global/.config/opencode/commands/supervised-task.md"));
+        var projectAgents = File.ReadAllText(FindRepositoryFile("templates/opencode-team/project-template/AGENTS.md"));
+
+        Assert.Contains("migration-source-scope/v1", command);
+        Assert.Contains("migration-source-scope/v1", kitCommand);
+        Assert.Contains("source-scope.json", command);
+        Assert.Contains("source-scope.json", kitCommand);
+        Assert.Contains("TryResolvePlanInput", command);
+        Assert.Contains("TryReadConfiguredSourceRoot", command);
+        Assert.Contains("ValidateWaveSourceScope", command);
+        Assert.Contains("WAVE_SOURCE_SCOPE_VIOLATION", command);
+        Assert.Contains("IsSameOrDescendantPath", command);
+        Assert.Contains("configured bootstrap source", supervised);
+        Assert.Contains("Do not scan sibling `*FunctionalTests*` projects", supervised);
+        Assert.Contains("do not widen the wave plan outside that configured source", supervised);
+        Assert.Contains("configured bootstrap source", projectAgents);
+        Assert.Contains("sourceRoot", kitCommand);
+    }
+
     [Fact]
     public void ProjectMemory_AddsRecallForWaveScopedPlanning()
     {

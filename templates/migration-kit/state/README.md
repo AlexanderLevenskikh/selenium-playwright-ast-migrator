@@ -11,6 +11,7 @@ state/
   decision-log.md
   handoff.md
   safety-checklist.md
+  source-scope.json (written by kit bootstrap/update when --source is configured)
 ```
 
 ## Rule

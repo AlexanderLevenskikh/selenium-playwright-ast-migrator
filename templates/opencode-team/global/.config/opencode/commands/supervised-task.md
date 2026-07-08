@@ -16,24 +16,25 @@ In wavefront bootstrap mode:
 
 0. First resolve the repository root with `git rev-parse --show-toplevel` when git is available. Treat that directory as the only valid project root for migration harness artifacts. All `migration/**`, `migration/plan/**`, and `migration/runs/**` paths must resolve under `<repo-root>/migration/**`, even if the current shell happens to be inside `Web/**`, a source project, or a target project. Do not `cd` into the Selenium source or Playwright target before running kit/plan/run-wave commands. If a nested workspace such as `Web/**/migration/**` appears, classify it as `NESTED_MIGRATION_WORKSPACE`, stop implementation, and route a cleanup/hardening task instead of continuing from the nested directory.
 1. Do **not** run `selenium-pw-migrator --mode migrate` against the full source project before a wave workspace exists. A full-source migrate from a fresh workspace is a protocol violation when `waves` was requested.
-2. Inspect the repository and auto-detect, in this order:
-   - source Selenium test project/path: prefer `.csproj` files or directories containing Selenium/WebDriver references and test attributes; ignore `bin/`, `obj/`, `migration/`, generated reports, and archived workspaces;
+2. Before repository-wide detection, read the configured bootstrap source from `migration/state/source-scope.json`, then `migration/.migration-kit/version.json`, then `migration/state/memory/project-profile.json`. When a non-placeholder source from `kit bootstrap-opencode --source ...` exists and resolves under the repository root, it is the authoritative Selenium source scope. Do not scan sibling `*FunctionalTests*` projects, do not build a table of alternative test projects, and do not widen the wave plan outside that configured source.
+3. Inspect the repository and auto-detect only the missing parts, in this order:
+   - source Selenium test project/path: only when no configured bootstrap source exists or the configured source is missing/placeholder; prefer `.csproj` files or directories containing Selenium/WebDriver references and test attributes; ignore `bin/`, `obj/`, `migration/`, generated reports, and archived workspaces;
    - target backend/framework: prefer existing Playwright .NET projects with `Microsoft.Playwright`, `Microsoft.Playwright.NUnit`, or xUnit/MSTest equivalents; otherwise infer `playwright-dotnet` and the source test framework (`nunit`, `xunit`, `mstest`) from package references/usings/attributes;
    - target project/output path if present; otherwise keep it as generated migration proposals under `migration/**`;
    - desired strategy: default to `wavefront`, `--max-wave-size 8`, `--representatives-per-cluster 1`, and low-risk-first.
-3. Ask the user **only** when detection is missing or ambiguous. Ask one compact question with concrete options, for example: “I found two Selenium test projects: A and B. Which one should be migrated?” Do not ask broad preference questions when a safe default exists.
-4. If `migration/AGENT_CONTRACT.md` or `migration/opencode-team/**` is missing, run:
-   `selenium-pw-migrator kit bootstrap-opencode --workspace migration --source <detected-source> --target-path <detected-target-or-placeholder> --opencode-install none`
+4. Ask the user **only** when the configured source is absent/missing or detection is genuinely ambiguous. Ask one compact question with concrete options, for example: “I found two Selenium test projects and no configured bootstrap source: A and B. Which one should be migrated?” Do not ask broad preference questions when a safe configured source exists.
+5. If `migration/AGENT_CONTRACT.md` or `migration/opencode-team/**` is missing, run:
+   `selenium-pw-migrator kit bootstrap-opencode --workspace migration --source <configured-or-detected-source> --target-path <detected-target-or-placeholder> --opencode-install none`
    The CLI bootstrap is expected to apply repository-root `opencode.jsonc`, `.opencode/agents`, `.opencode/commands`, and `AGENTS.md` automatically. If it does not, run `migration/scripts/apply-opencode-project-config.ps1` or `.sh` as a repair step and report that as a tool defect.
-5. Run `selenium-pw-migrator kit doctor --workspace migration`. If doctor reports only non-blocking warnings, continue. If source/config/workspace is missing, ask the smallest exact question needed.
-6. If `migration/plan/waves.json` is missing or stale relative to the detected source, run:
-   `selenium-pw-migrator migration plan --input <detected-source> --strategy wavefront --workspace migration --out migration/plan --max-wave-size 8 --representatives-per-cluster 1 --prefer-low-risk-first true`
-7. If no active wave run exists, materialize the first pending wave before implementation:
+6. Run `selenium-pw-migrator kit doctor --workspace migration`. If doctor reports only non-blocking warnings, continue. If source/config/workspace is missing, ask the smallest exact question needed.
+7. If `migration/plan/waves.json` is missing or stale relative to the configured-or-detected source, run:
+   `selenium-pw-migrator migration plan --input <configured-or-detected-source> --strategy wavefront --workspace migration --out migration/plan --max-wave-size 8 --representatives-per-cluster 1 --prefer-low-risk-first true`
+8. If no active wave run exists, materialize the first pending wave before implementation:
    `selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001`
-8. Treat `migration/runs/<wave-id>/input-scope.json` as the active bounded scope. If generated output is still a placeholder, run the wave-local migrate script (`migration/runs/<wave-id>/run-migrate.ps1` or `.sh`) or rerun `migration run-wave --execute-migrate true` for that wave only.
-9. Create/resume the Harness run and continue through the normal lifecycle using the wave workspace as the active ticket. All implementation writes remain under `migration/**` unless a later explicit policy grants more.
+9. Treat `migration/runs/<wave-id>/input-scope.json` as the active bounded scope. If generated output is still a placeholder, run the wave-local migrate script (`migration/runs/<wave-id>/run-migrate.ps1` or `.sh`) or rerun `migration run-wave --execute-migrate true` for that wave only.
+10. Create/resume the Harness run and continue through the normal lifecycle using the wave workspace as the active ticket. All implementation writes remain under `migration/**` unless a later explicit policy grants more.
 
-If the repository is fresh and `/supervised-task waves` has enough information to auto-detect the source path, the expected first meaningful actions are: bootstrap/update kit → doctor → wavefront plan → materialize `wave-001` → wave-local migration. Returning a generic “no task was provided” or running full-source migration is not allowed in this mode.
+If the repository is fresh and `/supervised-task waves` has a configured bootstrap source or enough information to auto-detect the source path, the expected first meaningful actions are: bootstrap/update kit → doctor → wavefront plan → materialize `wave-001` → wave-local migration. Returning a generic “no task was provided” or running full-source migration is not allowed in this mode.
 
 
 Compatibility wording: a fresh `FINAL` checkpoint must **stop for review** once; a persisted `FINAL_STOPPED_FOR_REVIEW` checkpoint is not a terminal stop and must resume the closed post-final development loop.

@@ -61,7 +61,7 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Sel
 /supervised-task waves
 ```
 
-The `waves` mode is the recommended divide-and-conquer start: it auto-detects source/target/framework when possible, asks only for missing required inputs, runs kit doctor, creates the wavefront plan, materializes the first wave, and runs only the wave-local migration. It must not run a full-source migration before a wave workspace exists. All `migration/**` artifacts are repository-root state; nested workspaces such as `Web/**/migration/**` are treated as process defects.
+The `waves` mode is the recommended divide-and-conquer start: it uses the `kit bootstrap-opencode --source ...` source as the hard scope when configured, auto-detects only missing source/target/framework details, asks only for missing required inputs, runs kit doctor, creates the wavefront plan, materializes the first wave, and runs only the wave-local migration. It must not run a full-source migration or discover sibling functional-test projects before a wave workspace exists. All `migration/**` artifacts are repository-root state; nested workspaces such as `Web/**/migration/**` are treated as process defects.
 
 For an existing workspace, plain `/supervised-task` resumes the next bounded action. After a successful FINAL/PASS checkpoint, the supervised agent stops once for review and reports evidence. To continue into post-final research without writing a long prompt, run `/supervised-task continue` or plain `/supervised-task` after `FINAL_STOPPED_FOR_REVIEW`.
 
@@ -457,7 +457,7 @@ selenium-pw-migrator migration plan --input ./SeleniumTests --strategy wavefront
 selenium-pw-migrator migration plan show --plan migration/plan
 ```
 
-The planner writes `inventory.json`, `clusters.json`, `waves.json`, `plan.md`, `selected-tests.txt`, `memory-recall.md`, and `next-commands.md`. It does not migrate files. The first wave contains representative tests, later waves expand by cluster. Agents should run `memory explain`, `memory doctor`, and `memory recall --file` before turning a wave into a bounded task.
+The planner writes `inventory.json`, `clusters.json`, `waves.json`, `plan.md`, `selected-tests.txt`, `memory-recall.md`, and `next-commands.md`. It does not migrate files. When `kit bootstrap-opencode --source ...` has configured a source, that source is the hard wavefront boundary; sibling functional-test projects must not be discovered, planned, copied, or suggested. The first wave contains representative tests, later waves expand by cluster. Agents should run `memory explain`, `memory doctor`, and `memory recall --file` before turning a wave into a bounded task.
 
 Prepare a bounded wave run workspace manually only when you are debugging the agent setup or running CI:
 
