@@ -195,33 +195,65 @@ selenium-pw-migrator --help
 
 ## Сборка или локальный запуск из исходников
 
-Из исходников:
+Есть три разных локальных сценария. Лучше выбрать один и не смешивать команды.
+
+### 1. Запуск напрямую из исходников
+
+Подходит, когда ты правишь репозиторий и хочешь просто запустить CLI без установки:
 
 ```bash
 dotnet restore
 dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --help
 ```
 
-Как локально собранный dotnet tool package — команды разделены по shell.
+### 2. Установка локально собранного .NET tool package
+
+Подходит, когда нужно проверить NuGet/dotnet-tool package, собранный из текущей репы. Нужен .NET SDK. Это local tool manifest, поэтому запуск через `dotnet tool run`.
 
 Windows PowerShell:
 
 ```powershell
-.\scripts\pack-tool.ps1 -Version 0.0.0-preview.1
-.\scripts\install-local-tool.ps1 -Version 0.0.0-preview.1
+$version = "0.0.0-preview.18"
+Unblock-File .\scripts\*.ps1
+.\scripts\pack-tool.ps1 -Version $version
+.\scripts\install-local-tool.ps1 -Version $version
 dotnet tool run selenium-pw-migrator -- --help
 ```
 
 macOS/Linux/WSL:
 
 ```bash
-scripts/pack-tool.sh 0.0.0-preview.1
+version="0.0.0-preview.18"
+scripts/pack-tool.sh "$version"
 dotnet new tool-manifest --force
-dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0-preview.1 --add-source ./artifacts/nuget
+dotnet tool install SeleniumPlaywrightMigrator --version "$version" --add-source ./artifacts/nuget
 dotnet tool run selenium-pw-migrator -- --help
 ```
 
-`selenium-pw-migrator --help` используйте только после global install. Для local tool manifest используйте `dotnet tool run selenium-pw-migrator -- ...`.
+Если local manifest уже есть, `install-local-tool.ps1` переиспользует его. `selenium-pw-migrator --help` используй только после global install; для local tool manifest используй `dotnet tool run selenium-pw-migrator -- ...`.
+
+### 3. Сборка и локальная установка standalone `win-x64`
+
+Подходит, когда нужно проверить тот же self-contained standalone layout, который публикуется в GitHub Releases. Это локальный аналог установки release-архива.
+
+Windows PowerShell:
+
+```powershell
+$version = "0.0.0-preview.18"
+Unblock-File .\scripts\*.ps1
+.\scripts\package-standalone.ps1 -Version $version -Runtimes win-x64
+.\scripts\install-standalone.ps1 `
+  -Version $version `
+  -Runtime win-x64 `
+  -ArchivePath ".\artifacts\release\selenium-pw-migrator-$version-win-x64.zip" `
+  -ChecksumsPath ".\artifacts\release\checksums.sha256" `
+  -InstallDir "$env:LOCALAPPDATA\selenium-pw-migrator-dev"
+
+& "$env:LOCALAPPDATA\selenium-pw-migrator-dev\bin\selenium-pw-migrator.exe" --help
+Get-Command selenium-pw-migrator -All
+```
+
+`install-standalone.ps1` по умолчанию обновляет user PATH. Открой новый терминал, если bare-команда `selenium-pw-migrator` видна не сразу. Добавь `-SkipUserPathUpdate`, если хочешь проверить executable только по полному пути.
 
 Подробнее: [Tool installation](docs/tool-installation.md), [Standalone installation](docs/standalone-installation.ru.md), [npm wrapper](docs/npm-wrapper.md) и [Packaging and distribution](docs/packaging-and-distribution.md).
 

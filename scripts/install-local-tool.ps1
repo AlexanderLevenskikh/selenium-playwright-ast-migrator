@@ -15,6 +15,10 @@ function Invoke-DotnetChecked {
     }
 }
 
+function Test-ToolManifestExists {
+    return ((Test-Path ".config/dotnet-tools.json") -or (Test-Path "dotnet-tools.json"))
+}
+
 $root = Split-Path -Parent $PSScriptRoot
 $source = Join-Path $root $PackageDirectory
 
@@ -24,7 +28,7 @@ if (-not (Test-Path $source)) {
 
 Push-Location $root
 try {
-    if (-not (Test-Path ".config/dotnet-tools.json")) {
+    if (-not (Test-ToolManifestExists)) {
         Invoke-DotnetChecked new tool-manifest
     }
 

@@ -199,33 +199,65 @@ Clone the repository only if you want to contribute or build the tool from sourc
 
 ## Build or run locally from source
 
-From source:
+There are three different local workflows. Pick one and do not mix the commands.
+
+### 1. Run directly from source
+
+Use this when you are editing the repository and just want to run the CLI without installing anything:
 
 ```bash
 dotnet restore
 dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --help
 ```
 
-As a locally built dotnet tool package, use commands for your shell.
+### 2. Install a locally packed .NET tool
+
+Use this when you want to test the NuGet/dotnet-tool package produced by this repo. This path requires the .NET SDK and uses a local tool manifest, so run the CLI through `dotnet tool run`.
 
 Windows PowerShell:
 
 ```powershell
-.\scripts\pack-tool.ps1 -Version 0.0.0-preview.1
-.\scripts\install-local-tool.ps1 -Version 0.0.0-preview.1
+$version = "0.0.0-preview.18"
+Unblock-File .\scripts\*.ps1
+.\scripts\pack-tool.ps1 -Version $version
+.\scripts\install-local-tool.ps1 -Version $version
 dotnet tool run selenium-pw-migrator -- --help
 ```
 
 macOS/Linux/WSL:
 
 ```bash
-scripts/pack-tool.sh 0.0.0-preview.1
+version="0.0.0-preview.18"
+scripts/pack-tool.sh "$version"
 dotnet new tool-manifest --force
-dotnet tool install SeleniumPlaywrightMigrator --version 0.0.0-preview.1 --add-source ./artifacts/nuget
+dotnet tool install SeleniumPlaywrightMigrator --version "$version" --add-source ./artifacts/nuget
 dotnet tool run selenium-pw-migrator -- --help
 ```
 
-Use `selenium-pw-migrator --help` only after a global install. For repository-local tool manifests, prefer `dotnet tool run selenium-pw-migrator -- ...`.
+If a local manifest already exists, `install-local-tool.ps1` reuses it. Use `selenium-pw-migrator --help` only after a global install; repository-local tools should be invoked as `dotnet tool run selenium-pw-migrator -- ...`.
+
+### 3. Build and install a local standalone `win-x64` archive
+
+Use this when you want to test the same self-contained standalone layout that is published in GitHub Releases. This is the local equivalent of installing the release artifact.
+
+Windows PowerShell:
+
+```powershell
+$version = "0.0.0-preview.18"
+Unblock-File .\scripts\*.ps1
+.\scripts\package-standalone.ps1 -Version $version -Runtimes win-x64
+.\scripts\install-standalone.ps1 `
+  -Version $version `
+  -Runtime win-x64 `
+  -ArchivePath ".\artifacts\release\selenium-pw-migrator-$version-win-x64.zip" `
+  -ChecksumsPath ".\artifacts\release\checksums.sha256" `
+  -InstallDir "$env:LOCALAPPDATA\selenium-pw-migrator-dev"
+
+& "$env:LOCALAPPDATA\selenium-pw-migrator-dev\bin\selenium-pw-migrator.exe" --help
+Get-Command selenium-pw-migrator -All
+```
+
+`install-standalone.ps1` updates user PATH by default. Open a new terminal if the bare `selenium-pw-migrator` command is not visible immediately. Add `-SkipUserPathUpdate` when you only want to test the executable by full path.
 
 See [Tool installation](docs/tool-installation.md), [Standalone installation](docs/standalone-installation.md), [npm wrapper](docs/npm-wrapper.md), and [Packaging and distribution](docs/packaging-and-distribution.md).
 

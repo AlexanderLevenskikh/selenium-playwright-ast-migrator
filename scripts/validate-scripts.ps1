@@ -83,6 +83,28 @@ function Test-IsSourceScriptPath([string]$RepoPath) {
 }
 
 function Find-Bash {
+    # On Linux/macOS, prefer PATH. In pwsh on GitHub Actions, Get-Command
+    # may populate Path and Source differently, so try both and then plain `bash`.
+    if (-not (Test-IsWindowsPlatform)) {
+        $command = Get-Command bash -ErrorAction SilentlyContinue
+        if ($command) {
+            foreach ($candidate in @($command.Path, $command.Source, 'bash')) {
+                if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+                try {
+                    $version = & $candidate --version 2>&1 | Select-Object -First 1
+                    if ($LASTEXITCODE -eq 0 -and ([string]$version) -match 'bash') {
+                        return $candidate
+                    }
+                }
+                catch {
+                    continue
+                }
+            }
+        }
+
+        return $null
+    }
+
     $candidates = New-Object System.Collections.Generic.List[string]
 
     $programFiles = @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramW6432) |
@@ -95,8 +117,10 @@ function Find-Bash {
     }
 
     foreach ($command in @(Get-Command bash -All -ErrorAction SilentlyContinue)) {
-        if (-not [string]::IsNullOrWhiteSpace($command.Source)) {
-            $candidates.Add($command.Source)
+        foreach ($candidate in @($command.Path, $command.Source)) {
+            if (-not [string]::IsNullOrWhiteSpace($candidate)) {
+                $candidates.Add($candidate)
+            }
         }
     }
 
@@ -104,7 +128,7 @@ function Find-Bash {
         if (-not (Test-Path $candidate)) { continue }
 
         $normalized = $candidate.Replace('/', '\')
-        if ((Test-IsWindowsPlatform) -and ($normalized -like '*\Windows\System32\bash.exe' -or $normalized -like '*\WindowsApps\bash.exe')) {
+        if ($normalized -like '*\Windows\System32\bash.exe' -or $normalized -like '*\WindowsApps\bash.exe') {
             continue
         }
 
@@ -121,7 +145,6 @@ function Find-Bash {
 
     return $null
 }
-
 $rootPath = Resolve-RootPath $Root
 if (-not (Test-Path $rootPath)) {
     throw "Root path not found: $rootPath"
