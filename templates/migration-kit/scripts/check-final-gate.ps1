@@ -542,6 +542,108 @@ function Test-AgentSkillUsageEvidence([string]$WorkspacePath, [string]$LatestRun
     return $true
 }
 
+
+function Test-EventHashChain([string]$EventsPath, [ref]$Detail) {
+    if (-not (Test-Path $EventsPath)) {
+        $Detail.Value = "events.jsonl missing: $EventsPath"
+        return $false
+    }
+
+    $previousHash = $null
+    $lineNumber = 0
+    $hashedEvents = 0
+    foreach ($line in (Get-Content -Path $EventsPath -ErrorAction SilentlyContinue)) {
+        $lineNumber += 1
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        try { $event = $line | ConvertFrom-Json -ErrorAction Stop }
+        catch {
+            $Detail.Value = "invalid JSONL event at ${EventsPath}:$lineNumber"
+            return $false
+        }
+
+        if (-not $event.PSObject.Properties["eventHash"] -or [string]::IsNullOrWhiteSpace([string]$event.eventHash)) {
+            $Detail.Value = "event at ${EventsPath}:$lineNumber has no eventHash"
+            return $false
+        }
+
+        $prevValue = if ($event.PSObject.Properties["prevEventHash"]) { [string]$event.prevEventHash } else { "" }
+        if ($null -eq $previousHash) {
+            if (-not [string]::IsNullOrWhiteSpace($prevValue)) {
+                $Detail.Value = "first event at ${EventsPath}:$lineNumber must not have prevEventHash"
+                return $false
+            }
+        }
+        elseif ($prevValue -ne $previousHash) {
+            $Detail.Value = "event hash chain break at ${EventsPath}:$lineNumber; expected prevEventHash=$previousHash, actual=$prevValue"
+            return $false
+        }
+
+        $previousHash = [string]$event.eventHash
+        $hashedEvents += 1
+    }
+
+    $Detail.Value = "events hash-chain valid; events=$hashedEvents"
+    return $true
+}
+
+function Test-RunEvidenceBundle([string]$WorkspacePath, [string]$LatestRunId, [ref]$Detail) {
+    if ([string]::IsNullOrWhiteSpace($LatestRunId)) {
+        $Detail.Value = "latest run id unavailable; run evidence bundle check skipped"
+        return $true
+    }
+
+    $runDir = Join-Path $WorkspacePath "runs/$LatestRunId"
+    $indexPath = Join-Path $runDir "evidence/index.json"
+    if (-not (Test-Path $indexPath)) {
+        $Detail.Value = "legacy workspace: missing runs/$LatestRunId/evidence/index.json; run scripts/record-run-evidence.ps1 for strict bundle validation"
+        return $true
+    }
+
+    try { $index = Get-Content -Raw -Path $indexPath | ConvertFrom-Json -ErrorAction Stop }
+    catch {
+        $Detail.Value = "invalid evidence index JSON: $indexPath"
+        return $false
+    }
+
+    $problems = New-Object System.Collections.Generic.List[string]
+    $artifactCount = 0
+    foreach ($artifact in @($index.artifacts)) {
+        $artifactCount += 1
+        $relative = [string]$artifact.path
+        if ([string]::IsNullOrWhiteSpace($relative)) {
+            $problems.Add("artifact[$artifactCount] missing path") | Out-Null
+            continue
+        }
+
+        $artifactPath = Join-Path $WorkspacePath $relative
+        if (-not (Test-Path $artifactPath)) {
+            $problems.Add("missing artifact: $relative") | Out-Null
+            continue
+        }
+
+        $expectedHash = [string]$artifact.sha256
+        if (-not [string]::IsNullOrWhiteSpace($expectedHash)) {
+            $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $artifactPath).Hash.ToLowerInvariant()
+            if ($actualHash -ne $expectedHash.ToLowerInvariant()) {
+                $problems.Add("sha256 mismatch for $relative") | Out-Null
+            }
+        }
+    }
+
+    $eventDetail = ""
+    $eventsPath = Join-Path $runDir "events.jsonl"
+    $eventsOk = Test-EventHashChain $eventsPath ([ref]$eventDetail)
+    if (-not $eventsOk) { $problems.Add($eventDetail) | Out-Null }
+
+    if ($problems.Count -gt 0) {
+        $Detail.Value = "evidence bundle invalid: " + ($problems -join "; ")
+        return $false
+    }
+
+    $Detail.Value = "evidence bundle valid; artifacts=$artifactCount; $eventDetail"
+    return $true
+}
+
 function Test-SessionExportHonest([string]$WorkspacePath, [string]$LatestRunId, [ref]$Detail) {
     if ([string]::IsNullOrWhiteSpace($LatestRunId)) {
         $Detail.Value = "latest run id unavailable; cannot verify session export honesty"
@@ -2026,6 +2128,10 @@ Add-Result $results "sentinel-open-critical-findings" $sentinelOk $sentinelDetai
 $skillUsageDetail = ""
 $skillUsageOk = Test-AgentSkillUsageEvidence $workspacePath $latestRunId ([ref]$skillUsageDetail)
 Add-Result $results "agent-skill-usage-evidence" $skillUsageOk $skillUsageDetail
+
+$runEvidenceDetail = ""
+$runEvidenceOk = Test-RunEvidenceBundle $workspacePath $latestRunId ([ref]$runEvidenceDetail)
+Add-Result $results "run-evidence-bundle" $runEvidenceOk $runEvidenceDetail
 
 $passed = @($results | Where-Object { -not $_.passed }).Count -eq 0
 $continuationSources = @()

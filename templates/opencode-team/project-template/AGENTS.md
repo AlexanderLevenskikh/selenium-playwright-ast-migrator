@@ -173,3 +173,12 @@ If `BLOCKED_BY_WAVE_QUALITY_BUDGET` appears, run `migration/scripts/collect-mapp
 
 Before final handoff or another wave after material state changes, run or honor final-gate execution of `migration/scripts/validate-run-artifacts.ps1` / `.sh`. `artifact-hygiene/v1` must pass: Plan.md is sanitized, Documentation.md does not contradict final gate, generated boards carry run/wave identity, and session export status is explicit.
 For user-shareable feedback, run `migration/scripts/create-feedback-bundle.ps1` / `.sh` instead of collecting the repository. The `feedback-bundle/v1` packer excludes project source by default, writes `state/feedback-bundles/*/manifest.json`, and requires manifest review before sharing.
+
+
+## Evidence and command policy rails
+
+- Record material artifacts with `migration/scripts/record-run-evidence.ps1` / `.sh`; do not hand-edit `runs/*/evidence/index.json`.
+- Record material lifecycle events with `migration/scripts/write-harness-event.ps1` / `.sh`; `runs/*/events.jsonl` is hash-chained.
+- For long runs, write compaction receipts with `migration/scripts/write-memory-compaction-receipt.ps1` / `.sh`.
+- Before ambiguous shell execution, classify it with `migration/scripts/evaluate-command-policy.ps1` / `.sh`; stop on `COMMAND_POLICY_FORBIDDEN`.
+- Use `migration/scripts/move-stale-claims.ps1` / `.sh` only after reviewing an expired/abandoned claim.

@@ -133,3 +133,57 @@ migration/scripts/check-loop-guard.ps1 -Workspace migration -RunId run-001 -Tick
 ```
 
 A loop-guard block is a bounded stop condition, not a success report. The final response should cite `migration/state/loop-guard.json` and explain which concrete action is missing or blocked.
+
+## Evidence bundle v2 and event hash-chain
+
+Use `migration/scripts/record-run-evidence.ps1` / `.sh` to add run evidence instead of copying files by hand. The script copies or writes an artifact under `migration/runs/<run-id>/evidence/`, records `sha256`, and updates `evidence/index.json`.
+
+Examples:
+
+```powershell
+migration/scripts/record-run-evidence.ps1 -Workspace migration -RunId run-001 -Kind diff -SourcePath migration/runs/run-001/evidence/diff.patch -Required
+migration/scripts/record-run-evidence.ps1 -Workspace migration -RunId run-001 -Kind test-output -Reason "No scoped tests were applicable; config-only ticket."
+```
+
+`migration/scripts/write-harness-event.ps1` now appends hash-chained events to both `state/harness-events.jsonl` and `runs/<run-id>/events.jsonl`. Final gate validates `runs/<run-id>/evidence/index.json` when present: artifact paths must exist, SHA-256 hashes must match, and the event journal must have a continuous `prevEventHash -> eventHash` chain.
+
+This is a tamper-evident development trail, not a cryptographic HMAC audit log.
+
+## Memory compaction receipts
+
+Long waves can write a compact handoff with:
+
+```powershell
+migration/scripts/write-memory-compaction-receipt.ps1 -Workspace migration -RunId run-001 -Summary "Current bounded task, failing tests, scope, and next action."
+```
+
+It updates:
+
+```text
+migration/state/memory/quick-recap.md
+migration/state/memory/current-ticket.md
+migration/state/memory/last-errors.md
+migration/state/memory/compaction-receipts.jsonl
+```
+
+The JSONL receipt records source artifacts and the facts that must survive context compaction.
+
+## Stale claim recovery
+
+`claim-doctor` only reports expired claims. To move reviewed abandoned claims to `state/claims/stale`, use:
+
+```powershell
+migration/scripts/move-stale-claims.ps1 -Workspace migration -ExpiredOnly -Reason "Reviewed after crash; no owner heartbeat."
+```
+
+This writes `state/claims/stale-ledger.jsonl`. Do not move active claims to stale without a concrete review reason.
+
+## Command policy preflight
+
+Before running a command that is not obviously safe, classify it:
+
+```powershell
+migration/scripts/evaluate-command-policy.ps1 -Workspace migration -Command "dotnet test ."
+```
+
+The classifier returns `COMMAND_POLICY_SAFE`, `COMMAND_POLICY_REVIEW_REQUIRED`, or `COMMAND_POLICY_FORBIDDEN`. Scope guard/final gate still enforce consequences; this preflight is a low-friction early warning.

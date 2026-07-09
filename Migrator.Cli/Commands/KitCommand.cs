@@ -670,7 +670,8 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         AddCheck(checks, "harness-event-script", File.Exists(Path.Combine(workspacePath, "scripts", "write-harness-event.ps1")), Path.Combine(workspacePath, "scripts", "write-harness-event.ps1"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-dashboard-script", File.Exists(Path.Combine(workspacePath, "scripts", "build-harness-dashboard.ps1")), Path.Combine(workspacePath, "scripts", "build-harness-dashboard.ps1"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-shell-wrappers", File.Exists(Path.Combine(workspacePath, "scripts", "new-harness-run.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "check-harness-policy.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "write-harness-event.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "build-harness-dashboard.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
-        AddCheck(checks, "claim-lifecycle-scripts", File.Exists(Path.Combine(workspacePath, "scripts", "new-claim.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "new-claim.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "update-claim-heartbeat.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "update-claim-heartbeat.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "complete-claim.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "complete-claim.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "claim-doctor.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "claim-doctor.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "claim-lifecycle-scripts", File.Exists(Path.Combine(workspacePath, "scripts", "new-claim.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "new-claim.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "update-claim-heartbeat.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "update-claim-heartbeat.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "complete-claim.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "complete-claim.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "claim-doctor.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "claim-doctor.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "move-stale-claims.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "move-stale-claims.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "evidence-bundle-scripts", File.Exists(Path.Combine(workspacePath, "scripts", "record-run-evidence.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "record-run-evidence.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "write-memory-compaction-receipt.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "write-memory-compaction-receipt.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "evaluate-command-policy.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "evaluate-command-policy.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-dashboard-i18n-en", File.Exists(Path.Combine(workspacePath, "dashboard", "i18n", "en.json")), Path.Combine(workspacePath, "dashboard", "i18n", "en.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-dashboard-i18n-ru", File.Exists(Path.Combine(workspacePath, "dashboard", "i18n", "ru.json")), Path.Combine(workspacePath, "dashboard", "i18n", "ru.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "guard-checksums", File.Exists(Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json")), Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json"), "Run `migrator kit update --backup`.");
@@ -955,6 +956,14 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
             "scripts/complete-claim.sh" or
             "scripts/claim-doctor.ps1" or
             "scripts/claim-doctor.sh" or
+            "scripts/move-stale-claims.ps1" or
+            "scripts/move-stale-claims.sh" or
+            "scripts/record-run-evidence.ps1" or
+            "scripts/record-run-evidence.sh" or
+            "scripts/write-memory-compaction-receipt.ps1" or
+            "scripts/write-memory-compaction-receipt.sh" or
+            "scripts/evaluate-command-policy.ps1" or
+            "scripts/evaluate-command-policy.sh" or
             "scripts/check-loop-guard.ps1" or
             "scripts/check-loop-guard.sh" or
             "scripts/check-final-gate.ps1" or
@@ -1488,6 +1497,14 @@ Fix only the current ticket.
             "scripts/complete-claim.sh",
             "scripts/claim-doctor.ps1",
             "scripts/claim-doctor.sh",
+            "scripts/move-stale-claims.ps1",
+            "scripts/move-stale-claims.sh",
+            "scripts/record-run-evidence.ps1",
+            "scripts/record-run-evidence.sh",
+            "scripts/write-memory-compaction-receipt.ps1",
+            "scripts/write-memory-compaction-receipt.sh",
+            "scripts/evaluate-command-policy.ps1",
+            "scripts/evaluate-command-policy.sh",
             "scripts/check-loop-guard.ps1",
             "scripts/check-loop-guard.sh",
             "scripts/build-harness-dashboard.ps1",

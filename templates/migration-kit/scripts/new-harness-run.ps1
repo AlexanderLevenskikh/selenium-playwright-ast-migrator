@@ -353,9 +353,26 @@ $evidenceIndex = [ordered]@{
     runId = $RunId
     generatedAtUtc = [DateTimeOffset]::UtcNow.ToString("o")
     artifacts = @($evidenceArtifacts)
-    notes = "P1 evidence index MVP. Event hash-chain remains future work; events.jsonl is created as the run journal placeholder."
+    notes = "Evidence bundle index with SHA-256 artifacts. Run events.jsonl is hash-chained by write-harness-event.ps1."
 }
 Set-Utf8NoBom (Join-Path $runPath "evidence/index.json") ($evidenceIndex | ConvertTo-Json -Depth 20)
+
+$eventScript = Join-Path $workspacePath "scripts/write-harness-event.ps1"
+if (Test-Path $eventScript) {
+    & $eventScript -Workspace $workspacePath -RunId $RunId -Phase "run" -Action "created" -Status "started" -Detail "Harness run skeleton created." -Artifacts @("runs/$RunId/run.json", "runs/$RunId/evidence/index.json") | Out-Null
+
+    $refreshedArtifacts = New-Object System.Collections.Generic.List[object]
+    foreach ($relative in @("runs/$RunId/run.json", "runs/$RunId/events.jsonl", "runs/$RunId/scope-contract.json", "runs/$RunId/evidence/scope-contract.json")) {
+        $full = Join-Path $workspacePath $relative
+        if (Test-Path $full) {
+            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $full).Hash.ToLowerInvariant()
+            $refreshedArtifacts.Add([ordered]@{ path = $relative; kind = "run-bootstrap"; sha256 = $hash }) | Out-Null
+        }
+    }
+    $evidenceIndex.artifacts = @($refreshedArtifacts)
+    $evidenceIndex.generatedAtUtc = [DateTimeOffset]::UtcNow.ToString("o")
+    Set-Utf8NoBom (Join-Path $runPath "evidence/index.json") ($evidenceIndex | ConvertTo-Json -Depth 20)
+}
 
 Set-Utf8NoBom (Join-Path $runPath "skills/applied-skills.md") @"
 # Applied Agent Skills

@@ -271,3 +271,12 @@ When a migration wave exposes a useful migrator gap, do not zip the whole reposi
 ## Public preview operator story
 
 `public-preview-flow/v1` connects the installed kit to the public documentation: install/doctor, wave mode, gate-followup `current-ticket.md`, sentinel lifecycle, wave quality budget, mapping research memory, and safe `feedback-bundle/v1` handoff. See `docs/public-preview-flow.md` and `docs/wave-mode-operator-runbook.md` in the repository root docs.
+
+
+## Evidence and command policy rails
+
+- Record material artifacts with `migration/scripts/record-run-evidence.ps1` / `.sh`; do not hand-edit `runs/*/evidence/index.json`.
+- Record material lifecycle events with `migration/scripts/write-harness-event.ps1` / `.sh`; `runs/*/events.jsonl` is hash-chained.
+- For long runs, write compaction receipts with `migration/scripts/write-memory-compaction-receipt.ps1` / `.sh`.
+- Before ambiguous shell execution, classify it with `migration/scripts/evaluate-command-policy.ps1` / `.sh`; stop on `COMMAND_POLICY_FORBIDDEN`.
+- Use `migration/scripts/move-stale-claims.ps1` / `.sh` only after reviewing an expired/abandoned claim.

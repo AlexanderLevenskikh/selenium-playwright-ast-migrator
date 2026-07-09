@@ -81,7 +81,7 @@ public class AgentOrchestrationPrimitiveTests
 
         Assert.Contains("runs/$RunId/events.jsonl", run);
         Assert.Contains("runs/$RunId/evidence/index.json", run);
-        Assert.Contains("P1 evidence index MVP", run);
+        Assert.Contains("Evidence bundle index with SHA-256 artifacts", run);
         Assert.Contains("scope-contract.json", run);
     }
 
@@ -140,6 +140,38 @@ public class AgentOrchestrationPrimitiveTests
         Assert.Contains("check-loop-guard.ps1", contract);
         Assert.Contains("check-loop-guard.ps1", policy);
         Assert.Contains("scripts/check-loop-guard.ps1", kitCommand);
+    }
+
+
+
+    [Fact]
+    public void EvidenceBundleAndCompactionScripts_AreInstalledAndFinalGateValidated()
+    {
+        var kitCommand = Read("Migrator.Cli/Commands/KitCommand.cs");
+        var recordEvidence = Read("templates/migration-kit/scripts/record-run-evidence.ps1");
+        var eventWriter = Read("templates/migration-kit/scripts/write-harness-event.ps1");
+        var finalGate = Read("templates/migration-kit/scripts/check-final-gate.ps1");
+        var compaction = Read("templates/migration-kit/scripts/write-memory-compaction-receipt.ps1");
+        var staleClaims = Read("templates/migration-kit/scripts/move-stale-claims.ps1");
+        var commandPolicy = Read("templates/migration-kit/scripts/evaluate-command-policy.ps1");
+        var docs = Read("docs/agent-orchestration.md");
+
+        Assert.Contains("record-run-evidence.ps1", kitCommand);
+        Assert.Contains("write-memory-compaction-receipt.ps1", kitCommand);
+        Assert.Contains("move-stale-claims.ps1", kitCommand);
+        Assert.Contains("evaluate-command-policy.ps1", kitCommand);
+        Assert.Contains("evidence-bundle-scripts", kitCommand);
+        Assert.Contains("evidence/index.json", recordEvidence);
+        Assert.Contains("sha256", recordEvidence);
+        Assert.Contains("EVIDENCE_RECORDED", recordEvidence);
+        Assert.Contains("prevEventHash", eventWriter);
+        Assert.Contains("eventHash", eventWriter);
+        Assert.Contains("Test-RunEvidenceBundle", finalGate);
+        Assert.Contains("run-evidence-bundle", finalGate);
+        Assert.Contains("compaction-receipts.jsonl", compaction);
+        Assert.Contains("state/claims/stale-ledger.jsonl", staleClaims);
+        Assert.Contains("COMMAND_POLICY_FORBIDDEN", commandPolicy);
+        Assert.Contains("Evidence bundle v2", docs);
     }
 
     static string Read(string relativePath)

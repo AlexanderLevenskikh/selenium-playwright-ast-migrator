@@ -247,3 +247,12 @@ For user-shareable feedback, run `migration/scripts/create-feedback-bundle.ps1` 
 - Do not leave `scope-contract.json`: no broad `dotnet test .`, no repo-wide migration scans, and no edits under `Migrator.*` during a migration wave unless a review-backed contract explicitly allows it.
 - If a required action is outside `allowedSourceRoots`/`workspaceRoot`, write a blocker and stop for review instead of silently doing it.
 - Create or resume a claim with `migration/scripts/new-claim.*` before parallel wave execution; heartbeat during long work and complete the claim with evidence.
+
+
+## Evidence and command policy rails
+
+- Record material artifacts with `migration/scripts/record-run-evidence.ps1` / `.sh`; do not hand-edit `runs/*/evidence/index.json`.
+- Record material lifecycle events with `migration/scripts/write-harness-event.ps1` / `.sh`; `runs/*/events.jsonl` is hash-chained.
+- For long runs, write compaction receipts with `migration/scripts/write-memory-compaction-receipt.ps1` / `.sh`.
+- Before ambiguous shell execution, classify it with `migration/scripts/evaluate-command-policy.ps1` / `.sh`; stop on `COMMAND_POLICY_FORBIDDEN`.
+- Use `migration/scripts/move-stale-claims.ps1` / `.sh` only after reviewing an expired/abandoned claim.

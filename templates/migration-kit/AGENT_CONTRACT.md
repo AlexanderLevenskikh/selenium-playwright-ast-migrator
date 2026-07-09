@@ -56,6 +56,11 @@ Memory safety rules:
 
 14. If the same Goal/Progress/Next Steps block would be repeated without a new file change, command result, reviewer decision, or gate result, run `migration/scripts/check-loop-guard.ps1` / `.sh`. If it reports `LOOP_GUARD_BLOCKED`, stop and report the blocker instead of continuing the loop.
 
+14a. Record run evidence with `migration/scripts/record-run-evidence.ps1` / `.sh`; do not hand-edit `runs/*/evidence/index.json`. Evidence index hashes and `runs/*/events.jsonl` hash-chain are checked by final gate when present.
+14b. For long waves or context compaction, write `state/memory/compaction-receipts.jsonl` with `migration/scripts/write-memory-compaction-receipt.ps1` / `.sh`; preserve current ticket, scope contract, failing tests, and blockers.
+14c. Use `migration/scripts/evaluate-command-policy.ps1` / `.sh` before any non-obvious shell command. `COMMAND_POLICY_FORBIDDEN` means stop for review; do not try an equivalent command spelling.
+14d. `claim-doctor` only diagnoses expired leases. Move reviewed abandoned claims with `migration/scripts/move-stale-claims.ps1` / `.sh`, which writes `state/claims/stale-ledger.jsonl`.
+
 
 ## Permission and state-integrity rules
 
