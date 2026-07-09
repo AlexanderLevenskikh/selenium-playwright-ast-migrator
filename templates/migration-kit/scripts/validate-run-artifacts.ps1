@@ -277,7 +277,7 @@ $report = [ordered]@{
     repoRoot = $RepoRoot
     runId = $latestRunId
     checks = $checks
-    nextAction = if ($status -eq "PASS") { "Artifact hygiene passed." } else { "Fix artifact hygiene findings before final handoff or another wave." }
+    nextAction = $nextAction
 }
 
 $stateJson = Join-Path $stateDir "artifact-hygiene.json"
@@ -287,9 +287,9 @@ $report | ConvertTo-Json -Depth 20 | Set-Content -Path $stateJson -Encoding UTF8
 $md = New-Object System.Text.StringBuilder
 [void]$md.AppendLine("# Artifact Hygiene Report")
 [void]$md.AppendLine()
-[void]$md.AppendLine("Schema: `artifact-hygiene/v1`")
+[void]$md.AppendLine("Schema: ``artifact-hygiene/v1``")
 [void]$md.AppendLine("Status: **$status**")
-[void]$md.AppendLine("Run id: `$latestRunId`")
+[void]$md.AppendLine("Run id: ``$latestRunId``")
 [void]$md.AppendLine()
 [void]$md.AppendLine("| Check | Status | Detail |")
 [void]$md.AppendLine("|---|---:|---|")

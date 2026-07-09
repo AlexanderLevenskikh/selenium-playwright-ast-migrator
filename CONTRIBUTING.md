@@ -14,6 +14,14 @@ dotnet build Migrator.sln
 dotnet test Migrator.sln
 ```
 
+Validate repository script syntax before changing kit or packaging scripts:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/validate-scripts.ps1 -Root . -RequireShell
+```
+
+The script intentionally checks source-of-truth locations (`scripts/**`, `templates/**`, `.github/workflows/**`) and skips generated copies under `artifacts/**`, `.dogfood/**`, and `npm/native/**` by default.
+
 ## Good contribution shape
 
 - Add a focused regression test for each migration bug.

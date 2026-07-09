@@ -117,3 +117,5 @@ or create a deep-dive/reference doc that links back to that runbook.
 - [Harness continuation strict protocol](harness-continuation-strict.md)
 
 - [Harness supervised task dispatch](harness-supervised-task-autonext.md) — `/supervised-task` zero-argument dispatcher, persisted `FINAL_STOPPED_FOR_REVIEW` closed loop, and stop-for-review after fresh SUCCESS.
+
+- [Agent orchestration primitives](agent-orchestration.md) — scope contracts, claims/leases, safe autopilot categories, and final-gate scope failures.

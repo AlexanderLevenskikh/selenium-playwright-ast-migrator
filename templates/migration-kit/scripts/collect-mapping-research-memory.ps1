@@ -91,7 +91,11 @@ function Convert-Counts([hashtable]$Table, [int]$Limit) {
     foreach ($key in $Table.Keys) {
         $items.Add([ordered]@{ value = [string]$key; count = [int]$Table[$key] }) | Out-Null
     }
-    return @($items | Sort-Object @{ Expression = { $_.count }; Descending = $true }, @{ Expression = { $_.value }; Descending = $false } | Select-Object -First $Limit)
+    return @(
+        $items |
+            Sort-Object -Property @{ Expression = { $_.count }; Descending = $true }, @{ Expression = { $_.value }; Descending = $false } |
+            Select-Object -First $Limit
+    )
 }
 
 function Add-LineSample([System.Collections.Generic.List[object]]$Samples, [string]$Kind, [string]$FilePath, [int]$LineNumber, [string]$Line, [int]$Limit) {
@@ -232,6 +236,22 @@ if (@($topTodo).Count -gt 0) {
 $status = if (@($recommendedTickets).Count -gt 0) { "RESEARCH_READY" } else { "NO_ACTIONABLE_MAPPING_RESEARCH" }
 $routing = if ($status -eq "RESEARCH_READY") { "ROUTE_TO_CONFIG_POM_RECOGNIZER_IMPROVEMENT" } else { "NO_ACTIONABLE_MAPPING_RESEARCH" }
 
+$waveQualityBudgetReport = $null
+if ($budget -ne $null) {
+    $waveQualityBudgetReport = [ordered]@{
+        status = [string]$budget.budgetStatus
+        routing = [string]$budget.routing
+        metrics = $budget.metrics
+        violations = $budget.violations
+    }
+}
+
+$nextAction = if ($status -eq "RESEARCH_READY") {
+    "Slice one bounded config/POM/recognizer or verify-harness improvement ticket from mapping-research-memory/v1 before another wave."
+} else {
+    "No actionable mapping research was detected; require human review before another wave if the budget is still blocked."
+}
+
 $report = [ordered]@{
     schemaVersion = "mapping-research-memory/v1"
     generatedAtUtc = [DateTimeOffset]::UtcNow.ToString("o")
@@ -241,7 +261,7 @@ $report = [ordered]@{
     status = $status
     routing = $routing
     sourceArtifacts = @($sourceArtifacts | Select-Object -First 200)
-    waveQualityBudget = if ($budget -ne $null) { [ordered]@{ status = [string]$budget.budgetStatus; routing = [string]$budget.routing; metrics = $budget.metrics; violations = $budget.violations } } else { $null }
+    waveQualityBudget = $waveQualityBudgetReport
     topUnresolvedSymbols = @($topUnresolved)
     topPageObjectSymbols = @($topPages)
     topTodoClusters = @($topTodo)
@@ -250,7 +270,7 @@ $report = [ordered]@{
     todoSamples = @($todoSamples)
     verifyBlockers = @($verifyBlockers)
     recommendedNextTickets = @($recommendedTickets)
-    nextAction = if ($status -eq "RESEARCH_READY") { "Slice one bounded config/POM/recognizer or verify-harness improvement ticket from mapping-research-memory/v1 before another wave." } else { "No actionable mapping research was detected; require human review before another wave if the budget is still blocked." }
+    nextAction = $nextAction
 }
 
 $stateJson = Join-Path $stateDir "mapping-research-memory.json"
@@ -281,11 +301,13 @@ foreach ($ticket in @($recommendedTickets)) {
     Add-Content -Path $stateJsonl -Encoding UTF8 -Value $line
 }
 
+$memoryStatus = if ($status -eq "RESEARCH_READY") { "active" } else { "blocked" }
+
 $memoryEntry = [ordered]@{
     kind = "final-gate-lesson"
     text = "Mapping research memory collected for wave '$waveName': $(@($recommendedTickets).Count) candidate improvement tickets."
     source = "collect-mapping-research-memory"
-    status = if ($status -eq "RESEARCH_READY") { "active" } else { "blocked" }
+    status = $memoryStatus
     createdAtUtc = [DateTimeOffset]::UtcNow.ToString("o")
     data = [ordered]@{
         schemaVersion = "mapping-research-memory/v1"
@@ -298,60 +320,68 @@ $memoryEntry = [ordered]@{
 Add-Content -Path (Join-Path $memoryDir "final-gate-lessons.jsonl") -Encoding UTF8 -Value ($memoryEntry | ConvertTo-Json -Compress -Depth 20)
 
 $md = New-Object System.Text.StringBuilder
-[void]$md.AppendLine("# Mapping Research Memory")
+[void]$md.AppendLine('# Mapping Research Memory')
 [void]$md.AppendLine()
-[void]$md.AppendLine("Schema: `mapping-research-memory/v1`")
-[void]$md.AppendLine("Run id: `$RunId`")
-[void]$md.AppendLine("Wave id: `$waveName`")
-[void]$md.AppendLine("Status: **$status**")
-[void]$md.AppendLine("Routing: `$routing`")
+[void]$md.AppendLine('Schema: `mapping-research-memory/v1`')
+[void]$md.AppendLine(('Run id: `{0}`' -f $RunId))
+[void]$md.AppendLine(('Wave id: `{0}`' -f $waveName))
+[void]$md.AppendLine(('Status: **{0}**' -f $status))
+[void]$md.AppendLine(('Routing: `{0}`' -f $routing))
 [void]$md.AppendLine()
-[void]$md.AppendLine("## Top page-object symbols")
-foreach ($item in @($topPages | Select-Object -First 10)) { [void]$md.AppendLine("- `$($item.value)` — $($item.count)") }
-[void]$md.AppendLine()
-[void]$md.AppendLine("## Top unresolved symbols")
-foreach ($item in @($topUnresolved | Select-Object -First 10)) { [void]$md.AppendLine("- `$($item.value)` — $($item.count)") }
-[void]$md.AppendLine()
-[void]$md.AppendLine("## TODO clusters")
-foreach ($item in @($topTodo | Select-Object -First 10)) { [void]$md.AppendLine("- `$($item.value)` — $($item.count)") }
-[void]$md.AppendLine()
-[void]$md.AppendLine("## Verify blockers")
-foreach ($item in @($verifyBlockers | Select-Object -First 10)) { [void]$md.AppendLine("- `$($item.path):$($item.line)` $($item.text)") }
-[void]$md.AppendLine()
-[void]$md.AppendLine("## Recommended next tickets")
-foreach ($ticket in @($recommendedTickets)) {
-    [void]$md.AppendLine("- **$($ticket.title)** (`$($ticket.kind)`) — $($ticket.validation)")
+[void]$md.AppendLine('## Top page-object symbols')
+foreach ($item in @($topPages | Select-Object -First 10)) {
+    [void]$md.AppendLine(('- `{0}` — {1}' -f $item.value, $item.count))
 }
 [void]$md.AppendLine()
-[void]$md.AppendLine("Next action: $($report.nextAction)")
+[void]$md.AppendLine('## Top unresolved symbols')
+foreach ($item in @($topUnresolved | Select-Object -First 10)) {
+    [void]$md.AppendLine(('- `{0}` — {1}' -f $item.value, $item.count))
+}
+[void]$md.AppendLine()
+[void]$md.AppendLine('## TODO clusters')
+foreach ($item in @($topTodo | Select-Object -First 10)) {
+    [void]$md.AppendLine(('- `{0}` — {1}' -f $item.value, $item.count))
+}
+[void]$md.AppendLine()
+[void]$md.AppendLine('## Verify blockers')
+foreach ($item in @($verifyBlockers | Select-Object -First 10)) {
+    [void]$md.AppendLine(('- `{0}:{1}` {2}' -f $item.path, $item.line, $item.text))
+}
+[void]$md.AppendLine()
+[void]$md.AppendLine('## Recommended next tickets')
+foreach ($ticket in @($recommendedTickets)) {
+    [void]$md.AppendLine(('- **{0}** (`{1}`) — {2}' -f $ticket.title, $ticket.kind, $ticket.validation))
+}
+[void]$md.AppendLine()
+[void]$md.AppendLine(('Next action: {0}' -f $report.nextAction))
 Set-Content -Path $stateMd -Value $md.ToString() -Encoding UTF8
 if (-not [string]::IsNullOrWhiteSpace($RunId)) {
     $researchDir = Join-Path $workspacePath "runs/$RunId/research"
-    Set-Content -Path (Join-Path $researchDir "mapping-research-memory.md") -Value $md.ToString() -Encoding UTF8
+    Set-Content -Path (Join-Path $researchDir 'mapping-research-memory.md') -Value $md.ToString() -Encoding UTF8
 }
 
 if ($CreateCurrentTicket -and @($recommendedTickets).Count -gt 0) {
     $ticket = @($recommendedTickets)[0]
-    $ticketText = @"
-# Current Ticket: $($ticket.title)
-
-Source: `mapping-research-memory/v1`
-Run id: `$RunId`
-Wave id: `$waveName`
-Kind: `$($ticket.kind)`
-
-## Objective
-Use `migration/state/mapping-research-memory.json` and `migration/state/mapping-research-candidates.jsonl` to implement exactly one bounded config/POM/recognizer or verify-harness improvement before another wave.
-
-## Evidence
-- `migration/state/mapping-research-memory.md`
-- `migration/state/mapping-research-memory.json`
-- `migration/state/mapping-research-candidates.jsonl`
-
-## Validation
-$($ticket.validation)
-"@
-    Set-Content -Path (Join-Path $workspacePath "current-ticket.md") -Value $ticketText -Encoding UTF8
+    $ticketText = @(
+        ('# Current Ticket: {0}' -f $ticket.title),
+        '',
+        'Source: `mapping-research-memory/v1`',
+        ('Run id: `{0}`' -f $RunId),
+        ('Wave id: `{0}`' -f $waveName),
+        ('Kind: `{0}`' -f $ticket.kind),
+        '',
+        '## Objective',
+        'Use `migration/state/mapping-research-memory.json` and `migration/state/mapping-research-candidates.jsonl` to implement exactly one bounded config/POM/recognizer or verify-harness improvement before another wave.',
+        '',
+        '## Evidence',
+        '- `migration/state/mapping-research-memory.md`',
+        '- `migration/state/mapping-research-memory.json`',
+        '- `migration/state/mapping-research-candidates.jsonl`',
+        '',
+        '## Validation',
+        [string]$ticket.validation
+    ) -join [Environment]::NewLine
+    Set-Content -Path (Join-Path $workspacePath 'current-ticket.md') -Value $ticketText -Encoding UTF8
 }
 
 Write-Host "MAPPING_RESEARCH_MEMORY_$status"

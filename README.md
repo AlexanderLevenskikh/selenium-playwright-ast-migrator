@@ -512,3 +512,8 @@ selenium-pw-migrator report serve --input migration/runs/latest --static-only --
 ```
 
 The dashboard includes a **Wavefront / memory / config-merge snapshot** with project-scoped memory counts, wave progress, next wave candidates, config-merge status, and suggested next commands. The generated `report-dashboard-evidence.zip` also carries nearby `state/memory`, `plan`, and `config-merge` artifacts as review evidence.
+
+
+### Agent orchestration rails
+
+Migrator Kit writes `migration/state/scope-contract.json` during kit bootstrap/init so supervised waves know the allowed source root, workspace root, forbidden roots, and command classes. The final gate reads this contract and fails out-of-scope changes. File-based claim scripts under `migration/scripts/*claim*` provide a lightweight lease/heartbeat MVP for parallel wave agents. See `docs/agent-orchestration.md`.

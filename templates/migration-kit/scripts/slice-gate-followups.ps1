@@ -289,9 +289,9 @@ foreach ($task in $orderedTasks) {
 $md = New-Object System.Text.StringBuilder
 [void]$md.AppendLine("# Gate follow-up backlog")
 [void]$md.AppendLine()
-[void]$md.AppendLine("Schema: `gate-followup-slicer/v1`")
-[void]$md.AppendLine("Run: `$RunId`")
-[void]$md.AppendLine("Generated at: $([DateTimeOffset]::UtcNow.ToString("o"))")
+[void]$md.AppendLine("Schema: ``gate-followup-slicer/v1``")
+[void]$md.AppendLine("Run: ``$RunId``")
+[void]$md.AppendLine("Generated at: $([DateTimeOffset]::UtcNow.ToString('o'))")
 [void]$md.AppendLine()
 if ($orderedTasks.Count -eq 0) {
     [void]$md.AppendLine("No open gate/sentinel follow-up tasks were found.")
@@ -300,11 +300,11 @@ else {
     foreach ($task in $orderedTasks) {
         [void]$md.AppendLine("## $($task.id): $($task.title)")
         [void]$md.AppendLine()
-        [void]$md.AppendLine("- Category: `$($task.category)`")
-        [void]$md.AppendLine("- Severity: `$($task.severity)`")
-        [void]$md.AppendLine("- Agent-executable: `$($task.agentExecutable)`")
-        [void]$md.AppendLine("- Allowed writes: `$($task.allowedWriteScope)`")
-        [void]$md.AppendLine("- Source: `$($task.source)`")
+        [void]$md.AppendLine("- Category: ``$($task.category)``")
+        [void]$md.AppendLine("- Severity: ``$($task.severity)``")
+        [void]$md.AppendLine("- Agent-executable: ``$($task.agentExecutable)``")
+        [void]$md.AppendLine("- Allowed writes: ``$($task.allowedWriteScope)``")
+        [void]$md.AppendLine("- Source: ``$($task.source)``")
         [void]$md.AppendLine()
         [void]$md.AppendLine("Objective: $($task.objective)")
         [void]$md.AppendLine()
@@ -329,43 +329,44 @@ $currentTicketPath = Join-Path $workspacePath "current-ticket.md"
 $selected = @($orderedTasks | Where-Object { [bool]$_.agentExecutable } | Select-Object -First 1)
 if ($selected.Count -gt 0 -and (-not $DoNotOverwriteCurrentTicket -or -not (Test-Path $currentTicketPath))) {
     $task = $selected[0]
-    $ticket = @"
-# Current ticket: $($task.title)
-
-Schema: `gate-followup-current-ticket/v1`
-Source: `$($task.source)`
-Run: `$RunId`
-Task id: `$($task.id)`
-Finding id: `$($task.findingId)`
-
-## Objective
-
-$($task.objective)
-
-## Constraints
-
-- Allowed writes: `$($task.allowedWriteScope)`
-- Do not broaden scope or bypass final-gate/scope/harness-policy checks.
-- If the fix requires product-tree writes outside `migration/**`, stop and mark the task as non-agent-executable with evidence.
-
-## Evidence
-
-$($task.evidence)
-
-## Validation
-
-$($task.validation)
-
-## Completion
-
-After the bounded fix, run:
-
-```powershell
-migration/scripts/check-final-gate.ps1 -Workspace migration -RepoRoot .
-```
-
-Then update `migration/state/backlog/gate-followup-tasks.jsonl` or add a sentinel finding status update if the blocker is resolved/non-agent-executable.
-"@
+    $ticketLines = @(
+        "# Current ticket: $($task.title)",
+        "",
+        "Schema: ``gate-followup-current-ticket/v1``",
+        "Source: ``$($task.source)``",
+        "Run: ``$RunId``",
+        "Task id: ``$($task.id)``",
+        "Finding id: ``$($task.findingId)``",
+        "",
+        "## Objective",
+        "",
+        [string]$task.objective,
+        "",
+        "## Constraints",
+        "",
+        "- Allowed writes: ``$($task.allowedWriteScope)``",
+        "- Do not broaden scope or bypass final-gate/scope/harness-policy checks.",
+        "- If the fix requires product-tree writes outside ``migration/**``, stop and mark the task as non-agent-executable with evidence.",
+        "",
+        "## Evidence",
+        "",
+        [string]$task.evidence,
+        "",
+        "## Validation",
+        "",
+        [string]$task.validation,
+        "",
+        "## Completion",
+        "",
+        "After the bounded fix, run:",
+        "",
+        '```powershell',
+        "migration/scripts/check-final-gate.ps1 -Workspace migration -RepoRoot .",
+        '```',
+        "",
+        "Then update ``migration/state/backlog/gate-followup-tasks.jsonl`` or add a sentinel finding status update if the blocker is resolved/non-agent-executable."
+    )
+    $ticket = $ticketLines -join [Environment]::NewLine
     Set-Content -Path $currentTicketPath -Value $ticket -Encoding UTF8
 
     # Start the current-ticket lifecycle immediately so /supervised-task continue

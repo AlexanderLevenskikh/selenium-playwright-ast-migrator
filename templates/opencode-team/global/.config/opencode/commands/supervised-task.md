@@ -70,6 +70,8 @@ Use the `.sh` companion on Unix-like shells. Then read:
 - AGENTS.md
 - migration/AGENT_CONTRACT.md
 - migration/state/harness-policy.json
+- migration/state/scope-contract.json
+- migration/state/claims/active/*.json, if any exist
 - migration/agent-skills/skill-map.md, if it exists
 - migration/state/harness-run.json, if it exists
 - migration/state/final-gate-result.json, if it exists
@@ -111,7 +113,8 @@ Do not show a broad menu after a successful checkpoint; give one recommended con
 4. If `$ARGUMENTS` explicitly requests `continue` after a `FINAL` / `FINAL_STOPPED_FOR_REVIEW` checkpoint, use the same low-prompt closed loop as step 1a. Explicit `continue` is still supported, but it is no longer required once the persisted run status is `FINAL_STOPPED_FOR_REVIEW`; zero-argument `/supervised-task` must also resume that loop. If the user names a specific test/helper/TODO, pass that as the research topic. If the user names a concrete implementation task, first require approved research/task slicing when research artifacts exist; otherwise start the smallest safe bounded implementation ticket from the recommended remaining risks.
 5. If `continuation-decision.json` contains bounded auto-continuation for the exact next action, obey that budget. Otherwise a fresh `FINAL` checkpoint stops once for review, while a persisted `FINAL_STOPPED_FOR_REVIEW` status always resumes the closed post-final loop; plain `continue` and zero-argument `/supervised-task` both mean post-final research/review/task slicing first.
 6. If there is no active run and wavefront bootstrap mode is not requested, create the first bounded migration run. If wavefront bootstrap mode is requested or `migration/plan/waves.json` exists, create/materialize the first bounded wave first and never start a full-source migration run.
-7. Stop only for a fresh `FINAL` stop-for-review, explicit `BLOCKED_*`, missing required user input, denied writes, or autonomous budget/plateau limits. Persisted `FINAL_STOPPED_FOR_REVIEW` is not a stop condition; it is the closed-loop dispatch state.
+7. Stop only for a fresh `FINAL` stop-for-review, explicit `BLOCKED_*`, missing required user input, denied writes, loop-guard block, or autonomous budget/plateau limits. Persisted `FINAL_STOPPED_FOR_REVIEW` is not a stop condition; it is the closed-loop dispatch state.
+8. Before repeating a post-final/current-ticket dispatch summary with the same Goal/Progress/Next Steps, run `migration/scripts/check-loop-guard.ps1 -Workspace migration -RunId <active-run-id> -TicketId <ticket-id> -Goal <goal> -Stage <research|slice|review|execute> -NextAction <next concrete command-or-agent>` or the `.sh` wrapper. If it prints `LOOP_GUARD_BLOCKED`, stop immediately with that status and do not print another copied lifecycle block. A valid response must either execute one new bounded action, write a concrete blocker, or report `LOOP_GUARD_BLOCKED` with `migration/state/loop-guard.json` evidence.
 
 When the persisted active run is `FINAL_STOPPED_FOR_REVIEW`, prefer the closed post-final loop over immediate implementation whether `$ARGUMENTS` is empty or explicitly says `continue`, unless the user names a concrete implementation task. Use this priority order:
 
@@ -237,3 +240,10 @@ When `evaluate-wave-quality-budget` reports `BLOCKED_BY_WAVE_QUALITY_BUDGET`, do
 
 Before final handoff or another wave after material state changes, run or honor final-gate execution of `migration/scripts/validate-run-artifacts.ps1` / `.sh`. `artifact-hygiene/v1` must pass: Plan.md is sanitized, Documentation.md does not contradict final gate, generated boards carry run/wave identity, and session export status is explicit.
 For user-shareable feedback, run `migration/scripts/create-feedback-bundle.ps1` / `.sh` instead of collecting the repository. The `feedback-bundle/v1` packer excludes project source by default, writes `state/feedback-bundles/*/manifest.json`, and requires manifest review before sharing.
+
+
+## Scope-contract discipline
+
+- Do not leave `scope-contract.json`: no broad `dotnet test .`, no repo-wide migration scans, and no edits under `Migrator.*` during a migration wave unless a review-backed contract explicitly allows it.
+- If a required action is outside `allowedSourceRoots`/`workspaceRoot`, write a blocker and stop for review instead of silently doing it.
+- Create or resume a claim with `migration/scripts/new-claim.*` before parallel wave execution; heartbeat during long work and complete the claim with evidence.

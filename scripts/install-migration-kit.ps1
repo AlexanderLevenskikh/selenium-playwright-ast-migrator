@@ -452,7 +452,7 @@ $quickStart = Join-Path $script:workspacePath "QUICKSTART.md"
 $quickStartLines = @(
     "# Quickstart",
     "",
-    "Workspace installed at: `$Workspace`",
+    "Workspace installed at: ``$Workspace``",
     "Kit version: $KitVersion",
     "",
     "## Install/update",

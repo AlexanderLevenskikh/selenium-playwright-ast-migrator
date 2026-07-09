@@ -85,7 +85,7 @@ OpenCode permission denials are authoritative. If an edit/write is denied, do no
 
 Post-final research is not a terminal human handoff: `MANUAL_REVIEW` / `Developer action` items must be reviewed by `migration-research-lead`, sliced by `migration-task-slicer`, and delegated as bounded executor tickets when source truth and allowed scope make that safe.
 
-After a non-final final gate, read `migration/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, `NOT FINAL` is not a stopping point: execute exactly one next bounded action under `migration/**` before a user-facing handoff. After `FINAL`, stop for review and report evidence; start another run only on explicit `continue` or bounded auto-continuation. Stop for guard/scope/policy blocker, missing input, loop/plateau, or max autonomous budget.
+After a non-final final gate, read `migration/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, `NOT FINAL` is not a stopping point: execute exactly one next bounded action under `migration/**` before a user-facing handoff. After `FINAL`, stop for review and report evidence; start another run only on explicit `continue` or bounded auto-continuation. Stop for guard/scope/policy blocker, missing input, loop/plateau, or max autonomous budget. If the same Goal/Progress/Next Steps would be emitted twice without new evidence, run `migration/scripts/check-loop-guard.ps1` / `.sh` and stop on `LOOP_GUARD_BLOCKED`.
 
 
 

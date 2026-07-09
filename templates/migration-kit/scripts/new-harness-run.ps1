@@ -158,7 +158,14 @@ if ((Test-Path $runPath) -and -not (Test-DirectoryEmpty $runPath) -and -not $For
 
 New-Item -ItemType Directory -Force -Path $runPath | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $runPath "skills") | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $runPath "evidence") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $workspacePath "state") | Out-Null
+
+$scopeContractPath = Join-Path $workspacePath "state/scope-contract.json"
+if (Test-Path $scopeContractPath) {
+    Copy-Item -LiteralPath $scopeContractPath -Destination (Join-Path $runPath "scope-contract.json") -Force
+    Copy-Item -LiteralPath $scopeContractPath -Destination (Join-Path $runPath "evidence/scope-contract.json") -Force
+}
 
 $scopeBaselineEntries = @(Get-ScopeBaselineEntries (Get-Location).Path $AllowedRoots)
 $scopeBaseline = [ordered]@{
@@ -291,6 +298,10 @@ $tracePath = Join-Path $runPath "trace.jsonl"
 if (-not (Test-Path $tracePath) -or $Force) {
     Set-Utf8NoBom $tracePath ""
 }
+$eventsPath = Join-Path $runPath "events.jsonl"
+if (-not (Test-Path $eventsPath) -or $Force) {
+    Set-Utf8NoBom $eventsPath ""
+}
 
 $runState = [ordered]@{
     schemaVersion = 1
@@ -310,9 +321,13 @@ $runState = [ordered]@{
         implement = "runs/$RunId/Implement.md"
         documentation = "runs/$RunId/Documentation.md"
         trace = "runs/$RunId/trace.jsonl"
+        events = "runs/$RunId/events.jsonl"
         appliedSkills = "runs/$RunId/skills/applied-skills.md"
         skillUsage = "runs/$RunId/skills/agent-skill-usage.jsonl"
         scopeBaseline = "state/scope-baseline.json"
+        scopeContract = "runs/$RunId/scope-contract.json"
+        evidence = "runs/$RunId/evidence"
+        evidenceIndex = "runs/$RunId/evidence/index.json"
     }
     appliedSkills = @()
     latestChecks = [ordered]@{
@@ -323,6 +338,24 @@ $runState = [ordered]@{
 }
 
 Set-Utf8NoBom (Join-Path $workspacePath "state/harness-run.json") ($runState | ConvertTo-Json -Depth 10)
+Set-Utf8NoBom (Join-Path $runPath "run.json") ($runState | ConvertTo-Json -Depth 10)
+
+$evidenceArtifacts = New-Object System.Collections.Generic.List[object]
+foreach ($relative in @("runs/$RunId/run.json", "runs/$RunId/events.jsonl", "runs/$RunId/scope-contract.json", "runs/$RunId/evidence/scope-contract.json")) {
+    $full = Join-Path $workspacePath $relative
+    if (Test-Path $full) {
+        $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $full).Hash.ToLowerInvariant()
+        $evidenceArtifacts.Add([ordered]@{ path = $relative; sha256 = $hash }) | Out-Null
+    }
+}
+$evidenceIndex = [ordered]@{
+    schemaVersion = 1
+    runId = $RunId
+    generatedAtUtc = [DateTimeOffset]::UtcNow.ToString("o")
+    artifacts = @($evidenceArtifacts)
+    notes = "P1 evidence index MVP. Event hash-chain remains future work; events.jsonl is created as the run journal placeholder."
+}
+Set-Utf8NoBom (Join-Path $runPath "evidence/index.json") ($evidenceIndex | ConvertTo-Json -Depth 20)
 
 Set-Utf8NoBom (Join-Path $runPath "skills/applied-skills.md") @"
 # Applied Agent Skills

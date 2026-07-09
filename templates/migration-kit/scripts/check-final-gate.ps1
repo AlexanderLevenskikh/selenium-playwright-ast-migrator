@@ -55,6 +55,179 @@ function Read-TextIfExists([string]$Path) {
     return ""
 }
 
+
+function Normalize-ScopeContractPath([string]$Path) {
+    if ([string]::IsNullOrWhiteSpace($Path)) { return "" }
+    $p = $Path.Replace("\", "/")
+    while ($p.StartsWith("./", [StringComparison]::Ordinal)) { $p = $p.Substring(2) }
+    return $p.TrimEnd("/")
+}
+
+function Test-ScopeContractPathUnderRoot([string]$Path, [string]$Root) {
+    $p = Normalize-ScopeContractPath $Path
+    $r = (Normalize-ScopeContractPath $Root).TrimEnd("/")
+    if ([string]::IsNullOrWhiteSpace($r)) { return $false }
+    return $p.Equals($r, [StringComparison]::OrdinalIgnoreCase) -or $p.StartsWith($r + "/", [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Read-ScopeContractOrNull([string]$WorkspacePath) {
+    $contractPath = Join-Path $WorkspacePath "state/scope-contract.json"
+    if (-not (Test-Path $contractPath)) { return $null }
+    try {
+        return Get-Content -Raw -Path $contractPath | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        return [pscustomobject]@{ __invalid = $true; __error = $_.Exception.Message }
+    }
+}
+
+function Get-ScopeContractAllowedRoots([object]$Contract) {
+    $roots = New-Object System.Collections.Generic.List[string]
+    if ($null -eq $Contract -or $Contract.__invalid) { return @() }
+    if (-not [string]::IsNullOrWhiteSpace([string]$Contract.workspaceRoot)) { $roots.Add((Normalize-ScopeContractPath ([string]$Contract.workspaceRoot))) | Out-Null }
+    foreach ($root in @($Contract.allowedSourceRoots)) {
+        $normalized = Normalize-ScopeContractPath ([string]$root)
+        if (-not [string]::IsNullOrWhiteSpace($normalized)) { $roots.Add($normalized) | Out-Null }
+    }
+    return @($roots | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+}
+
+function Get-GitChangedPathsForScopeContract([string]$Root) {
+    Push-Location $Root
+    try {
+        $gitRoot = (& git rev-parse --show-toplevel 2>$null)
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($gitRoot)) { return @() }
+        $status = (& git status --porcelain=v1 -z --untracked-files=all)
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrEmpty($status)) { return @() }
+        $tokens = $status -split [char]0
+        $paths = New-Object System.Collections.Generic.List[string]
+        for ($i = 0; $i -lt $tokens.Length; $i++) {
+            $entry = $tokens[$i]
+            if ([string]::IsNullOrEmpty($entry) -or $entry.Length -lt 4) { continue }
+            $xy = $entry.Substring(0, 2)
+            $path = Normalize-ScopeContractPath $entry.Substring(3)
+            if (-not [string]::IsNullOrWhiteSpace($path)) { $paths.Add($path) | Out-Null }
+            if ($xy.Contains("R") -or $xy.Contains("C")) {
+                if ($i + 1 -lt $tokens.Length -and -not [string]::IsNullOrEmpty($tokens[$i + 1])) {
+                    $paths.Add((Normalize-ScopeContractPath $tokens[$i + 1])) | Out-Null
+                    $i++
+                }
+            }
+        }
+        return @($paths | Sort-Object -Unique)
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+function Test-ScopeContractChangedPaths([string]$WorkspacePath, [string]$RepoRootPath) {
+    $contractPath = Join-Path $WorkspacePath "state/scope-contract.json"
+    if (-not (Test-Path $contractPath)) {
+        return [pscustomobject][ordered]@{
+            status = "SKIPPED"
+            contractPath = $contractPath
+            changedFilesChecked = 0
+            outOfScopeFiles = @()
+            forbiddenRootHits = @()
+            reason = "scope contract is not installed in this workspace"
+        }
+    }
+
+    $contract = Read-ScopeContractOrNull $WorkspacePath
+    if ($null -eq $contract -or $contract.__invalid) {
+        $reason = if ($contract.__error) { [string]$contract.__error } else { "invalid scope contract" }
+        return [pscustomobject][ordered]@{
+            status = "FAIL"
+            contractPath = $contractPath
+            changedFilesChecked = 0
+            outOfScopeFiles = @()
+            forbiddenRootHits = @()
+            reason = $reason
+        }
+    }
+
+    $changed = @(Get-GitChangedPathsForScopeContract $RepoRootPath)
+    $workspaceRoot = Normalize-ScopeContractPath ([string]$contract.workspaceRoot)
+    $allowedSourceRoots = @($contract.allowedSourceRoots | ForEach-Object { Normalize-ScopeContractPath ([string]$_) } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $allowedFiles = @($contract.allowedFiles | ForEach-Object { Normalize-ScopeContractPath ([string]$_) } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $forbiddenRoots = @($contract.forbiddenRoots | ForEach-Object { Normalize-ScopeContractPath ([string]$_) } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $maxChangedFiles = 0
+    try { $maxChangedFiles = [int]$contract.maxChangedFiles } catch { $maxChangedFiles = 0 }
+
+    $outOfScope = New-Object System.Collections.Generic.List[string]
+    $forbiddenHits = New-Object System.Collections.Generic.List[string]
+    foreach ($path in $changed) {
+        $forbidden = $false
+        foreach ($root in $forbiddenRoots) {
+            if (Test-ScopeContractPathUnderRoot $path $root) {
+                $forbiddenHits.Add($path) | Out-Null
+                $forbidden = $true
+                break
+            }
+        }
+        if ($forbidden) { continue }
+
+        $allowed = $false
+        if (-not [string]::IsNullOrWhiteSpace($workspaceRoot) -and (Test-ScopeContractPathUnderRoot $path $workspaceRoot)) { $allowed = $true }
+        elseif ($allowedFiles.Count -gt 0) { $allowed = $allowedFiles -contains $path }
+        else {
+            foreach ($root in $allowedSourceRoots) {
+                if (Test-ScopeContractPathUnderRoot $path $root) { $allowed = $true; break }
+            }
+        }
+
+        if (-not $allowed) { $outOfScope.Add($path) | Out-Null }
+    }
+
+    $tooMany = $maxChangedFiles -gt 0 -and $changed.Count -gt $maxChangedFiles
+    $ok = $outOfScope.Count -eq 0 -and $forbiddenHits.Count -eq 0 -and -not $tooMany
+    $reason = if ($forbiddenHits.Count -gt 0) {
+        "Changed file is under a forbiddenRoot from scope-contract.json."
+    } elseif ($outOfScope.Count -gt 0) {
+        "Changed file is outside allowedSourceRoots/allowedFiles for this migration wave."
+    } elseif ($tooMany) {
+        "Changed file count $($changed.Count) exceeds maxChangedFiles $maxChangedFiles."
+    } else {
+        "All changed files satisfy scope-contract.json."
+    }
+
+    return [pscustomobject][ordered]@{
+        status = if ($ok) { "PASS" } else { "FAIL" }
+        contractPath = $contractPath
+        changedFilesChecked = $changed.Count
+        outOfScopeFiles = @($outOfScope | Sort-Object -Unique)
+        forbiddenRootHits = @($forbiddenHits | Sort-Object -Unique)
+        reason = $reason
+    }
+}
+
+function Test-ClaimStatusForScopeContract([string]$WorkspacePath, [object]$Contract) {
+    if ($null -eq $Contract -or $Contract.__invalid) {
+        return [pscustomobject][ordered]@{ status = "SKIPPED"; reason = "scope contract unavailable" }
+    }
+    $requiresClaim = $false
+    try { $requiresClaim = [bool]$Contract.requiresClaim } catch { $requiresClaim = $false }
+    $ticketId = [string]$Contract.ticketId
+    $runId = [string]$Contract.runId
+    $claimRoots = @((Join-Path $WorkspacePath "state/claims/active"), (Join-Path $WorkspacePath "state/claims/completed"))
+    $matching = New-Object System.Collections.Generic.List[string]
+    foreach ($root in $claimRoots) {
+        if (-not (Test-Path $root)) { continue }
+        foreach ($file in @(Get-ChildItem -Path $root -Filter "*.json" -File -ErrorAction SilentlyContinue)) {
+            try { $claim = Get-Content -Raw -Path $file.FullName | ConvertFrom-Json -ErrorAction Stop } catch { continue }
+            if (([string]$claim.ticketId -eq $ticketId) -and ([string]$claim.runId -eq $runId)) { $matching.Add($file.FullName) | Out-Null }
+        }
+    }
+    $ok = (-not $requiresClaim) -or $matching.Count -gt 0
+    return [pscustomobject][ordered]@{
+        status = if ($ok) { "PASS" } else { "FAIL" }
+        required = $requiresClaim
+        matchingClaims = @($matching | Sort-Object)
+        reason = if ($ok) { "claim requirement satisfied or not required" } else { "missing active/completed claim for scope contract ticket/run" }
+    }
+}
+
 function Find-LatestFile([string]$Root, [string[]]$Names) {
     if (-not (Test-Path $Root)) {
         return $null
@@ -1597,13 +1770,23 @@ $projectLocalOpenCodeAllowedRoots = @(
     "opencode",
     "opencode/**"
 )
-$effectiveAllowedRoots = @($AllowedRoots) + $projectLocalOpenCodeAllowedRoots
+$scopeContractForRoots = Read-ScopeContractOrNull $workspacePath
+$scopeContractAllowedRoots = @(Get-ScopeContractAllowedRoots $scopeContractForRoots)
+$effectiveAllowedRoots = @($AllowedRoots) + $scopeContractAllowedRoots + $projectLocalOpenCodeAllowedRoots
 
 $checksumDetail = ""
 $guardFiles = @(
     "scripts/check-scope.ps1",
     "scripts/check-final-gate.ps1",
     "scripts/check-harness-policy.ps1",
+    "scripts/new-claim.ps1",
+    "scripts/new-claim.sh",
+    "scripts/update-claim-heartbeat.ps1",
+    "scripts/update-claim-heartbeat.sh",
+    "scripts/complete-claim.ps1",
+    "scripts/complete-claim.sh",
+    "scripts/claim-doctor.ps1",
+    "scripts/claim-doctor.sh",
     "scripts/write-agent-skill-usage.ps1",
     "scripts/write-agent-skill-usage.sh",
     "scripts/record-agent-skill-profile.ps1",
@@ -1651,6 +1834,13 @@ if (Test-Path $scopeScript) {
 else {
     Add-Result $results "scope-guard" $false "missing $scopeScript"
 }
+
+$scopeContractResult = Test-ScopeContractChangedPaths $workspacePath $RepoRoot
+$scopeContractOk = $scopeContractResult.status -ne "FAIL"
+Add-Result $results "scope-contract" $scopeContractOk $scopeContractResult.reason
+$scopeContractClaim = Test-ClaimStatusForScopeContract $workspacePath $scopeContractForRoots
+$claimOk = $scopeContractClaim.status -ne "FAIL"
+Add-Result $results "claim-status" $claimOk $scopeContractClaim.reason
 
 $nestedWorkspaceDetail = ""
 $nestedWorkspaceOk = Test-NestedMigrationWorkspace $RepoRoot $workspacePath ([ref]$nestedWorkspaceDetail)
@@ -1746,7 +1936,9 @@ if ($RequireOpenCodeExport) {
 
 $runSessionExportPath = if (-not [string]::IsNullOrWhiteSpace($latestRunId)) { Join-Path $workspacePath "runs/$latestRunId/opencode-session-export.md" } else { "" }
 $runSessionManifestPath = if (-not [string]::IsNullOrWhiteSpace($latestRunId)) { Join-Path $workspacePath "runs/$latestRunId/opencode-session-export.json" } else { "" }
-if ((Test-Path $runSessionExportPath) -or (Test-Path $runSessionManifestPath)) {
+$hasRunSessionExport = (-not [string]::IsNullOrWhiteSpace($runSessionExportPath)) -and (Test-Path $runSessionExportPath)
+$hasRunSessionManifest = (-not [string]::IsNullOrWhiteSpace($runSessionManifestPath)) -and (Test-Path $runSessionManifestPath)
+if ($hasRunSessionExport -or $hasRunSessionManifest) {
     $sessionExportDetail = ""
     $sessionExportOk = Test-SessionExportHonest $workspacePath $latestRunId ([ref]$sessionExportDetail)
     Add-Result $results "opencode-session-export-honesty" $sessionExportOk $sessionExportDetail
@@ -1897,6 +2089,8 @@ $report = [ordered]@{
     continuationStatus = $continuation.status
     workspace = $workspacePath
     checks = $results
+    scopeContract = $scopeContractResult
+    claimStatus = $scopeContractClaim
     continuation = $continuation
 }
 

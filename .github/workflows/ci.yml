@@ -9,6 +9,19 @@ env:
   PACKAGE_VERSION: 0.0.0-preview.${{ github.run_number }}
 
 jobs:
+
+  script-validation:
+    name: Validate repository scripts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate PowerShell and shell scripts
+        shell: pwsh
+        run: ./scripts/validate-scripts.ps1 -Root . -RequireShell
+
   test-fast:
     name: Test fast suite
     runs-on: ubuntu-latest

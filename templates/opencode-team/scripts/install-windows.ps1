@@ -189,7 +189,7 @@ if ($Mode -eq "ProjectDesktop") {
 }
 elseif ($Mode -eq "ProjectLocal") {
     Write-Host "2. Use this config only for migration sessions, for example:"
-    Write-Host "   `$env:OPENCODE_CONFIG = `"$(Join-Path $Target "opencode.jsonc")`""
+    Write-Host ("   `$env:OPENCODE_CONFIG = `"{0}`"" -f (Join-Path $Target "opencode.jsonc"))
     Write-Host "   opencode"
 }
 else {

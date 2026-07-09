@@ -56,6 +56,9 @@ Use these rules for migration-artifact/autopilot tasks:
 - Do not ask routine continuation questions when the next action is allowed by `harness-policy.json` and local permissions.
 - Record important decisions, verification, and risks in `Documentation.md`.
 - Use `migration/state/harness-events.jsonl` / `trace.jsonl` for meaningful events; do not fake command results.
+- Read `migration/state/scope-contract.json` before planning. It defines the only allowed source/workspace roots for waves.
+- Do not run broad tests when a scoped command/filter exists; `dotnet test .` and no-filter repository-wide runs are outside normal wave autopilot.
+- Create or resume a claim with `migration/scripts/new-claim.ps1` / `.sh` before parallel wave execution; update heartbeat and complete it with evidence.
 - Run `migration/scripts/check-scope.ps1` and `migration/scripts/check-harness-policy.ps1` after edits when available.
 - Treat `migration/scripts/check-final-gate.ps1` as the only final acceptance gate for guarded migration runs.
 
@@ -127,7 +130,7 @@ OpenCode permission denials are authoritative. If an edit/write is denied, do no
 
 Post-final research is not a terminal human handoff: `MANUAL_REVIEW` / `Developer action` items must be reviewed by `migration-research-lead`, sliced by `migration-task-slicer`, and delegated as bounded executor tickets when source truth and allowed scope make that safe.
 
-After a non-final final gate, read `migration/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, `NOT FINAL` is not a stopping point: execute exactly one next bounded action under `migration/**` before a user-facing handoff. A fresh `FINAL` checkpoint stops once for review and reports evidence; any later `/supervised-task` where `harness-run.json` is already `FINAL_STOPPED_FOR_REVIEW` resumes the closed post-final loop automatically. Stop for guard/scope/policy blocker, missing input, loop/plateau, or max autonomous budget.
+After a non-final final gate, read `migration/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, `NOT FINAL` is not a stopping point: execute exactly one next bounded action under `migration/**` before a user-facing handoff. A fresh `FINAL` checkpoint stops once for review and reports evidence; any later `/supervised-task` where `harness-run.json` is already `FINAL_STOPPED_FOR_REVIEW` resumes the closed post-final loop automatically. Stop for guard/scope/policy blocker, missing input, loop/plateau, or max autonomous budget. If the same Goal/Progress/Next Steps would be emitted twice without new evidence, run `migration/scripts/check-loop-guard.ps1` / `.sh` and stop on `LOOP_GUARD_BLOCKED`.
 
 
 

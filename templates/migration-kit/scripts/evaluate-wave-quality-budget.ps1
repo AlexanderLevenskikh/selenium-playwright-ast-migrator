@@ -171,6 +171,7 @@ if ($waveDir -eq $null) {
         status = "PASS"
         budgetStatus = "PASS"
         detail = "no wave-run workspace found"
+        routing = "ROUTE_TO_NEXT_WAVE"
         metrics = [ordered]@{}
         budgets = [ordered]@{
             maxSourceFiles = $MaxSourceFiles
@@ -214,6 +215,8 @@ else {
     if ($verifyFailed) { $violations.Add([ordered]@{ metric = "verifyProject"; actual = "FAILED"; budget = "PASS or explicit NOT RUNTIME READY blocker"; severity = "high" }) | Out-Null }
 
     $budgetStatus = if ($violations.Count -eq 0) { "PASS" } else { "BLOCKED_BY_WAVE_QUALITY_BUDGET" }
+    $gateStatus = if ($violations.Count -eq 0) { "PASS" } else { "FAIL" }
+    $routing = if ($violations.Count -eq 0) { "ROUTE_TO_NEXT_WAVE" } else { "ROUTE_TO_MAPPING_RESEARCH_OR_CONFIG_IMPROVEMENT" }
     $nextAction = if ($violations.Count -eq 0) { $null } else { "Run migration/scripts/collect-mapping-research-memory.ps1 before the next wave: summarize top TODO causes, syntax-fallback clusters, unmapped targets, unresolved symbols, and verify-project blockers; then slice a bounded config/POM/recognizer improvement ticket." }
 
     $report = [ordered]@{
@@ -222,7 +225,7 @@ else {
         runId = $RunId
         waveId = $waveDir.Name
         waveRoot = $waveRoot
-        status = if ($violations.Count -eq 0) { "PASS" } else { "FAIL" }
+        status = $gateStatus
         budgetStatus = $budgetStatus
         metrics = [ordered]@{
             sourceFiles = $sourceFiles
@@ -247,7 +250,7 @@ else {
         }
         violations = @($violations)
         nextAction = $nextAction
-        routing = if ($violations.Count -eq 0) { "NEXT_WAVE_ALLOWED" } else { "ROUTE_TO_MAPPING_RESEARCH_OR_CONFIG_IMPROVEMENT" }
+        routing = $routing
     }
 }
 
@@ -264,25 +267,26 @@ if (-not [string]::IsNullOrWhiteSpace($RunId)) {
 $md = New-Object System.Text.StringBuilder
 [void]$md.AppendLine("# Wave Quality Budget")
 [void]$md.AppendLine()
-[void]$md.AppendLine("Schema: `wave-quality-budget/v1`")
-[void]$md.AppendLine("Run id: `$RunId`")
-[void]$md.AppendLine("Wave id: `$($report.waveId)`")
+[void]$md.AppendLine("Schema: ``wave-quality-budget/v1``")
+[void]$md.AppendLine("Run id: ``$RunId``")
+[void]$md.AppendLine("Wave id: ``$($report.waveId)``")
 [void]$md.AppendLine("Status: **$($report.budgetStatus)**")
+if ($report.PSObject.Properties.Name -contains "routing") { [void]$md.AppendLine("Routing: ``$($report.routing)``") }
 [void]$md.AppendLine()
 [void]$md.AppendLine("## Metrics")
 foreach ($property in $report.metrics.Keys) {
-    [void]$md.AppendLine("- ${property}: `$($report.metrics[$property])`")
+    [void]$md.AppendLine("- ${property}: ``$($report.metrics[$property])``")
 }
 [void]$md.AppendLine()
 [void]$md.AppendLine("## Budgets")
 foreach ($property in $report.budgets.Keys) {
-    [void]$md.AppendLine("- ${property}: `$($report.budgets[$property])`")
+    [void]$md.AppendLine("- ${property}: ``$($report.budgets[$property])``")
 }
 [void]$md.AppendLine()
 if (@($report.violations).Count -gt 0) {
     [void]$md.AppendLine("## Violations")
     foreach ($violation in @($report.violations)) {
-        [void]$md.AppendLine("- $($violation.severity): `$($violation.metric)` actual `$($violation.actual)` budget `$($violation.budget)`")
+        [void]$md.AppendLine("- $($violation.severity): ``$($violation.metric)`` actual ``$($violation.actual)`` budget ``$($violation.budget)``")
     }
     [void]$md.AppendLine()
     [void]$md.AppendLine("Next action: $($report.nextAction)")
@@ -296,6 +300,7 @@ if (-not [string]::IsNullOrWhiteSpace($RunId)) {
 }
 
 Write-Host "WAVE_QUALITY_BUDGET_$($report.budgetStatus)"
+if ($report.PSObject.Properties.Name -contains "routing") { Write-Host "Routing: $($report.routing)" }
 Write-Host "Report: $stateMd"
 if ($report.nextAction) { Write-Host "Next action: $($report.nextAction)" }
 

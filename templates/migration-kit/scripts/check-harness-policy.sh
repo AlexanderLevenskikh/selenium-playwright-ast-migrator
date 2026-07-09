@@ -200,6 +200,111 @@ for item in (value or []):
 PY
 }
 
+
+scope_contract_allowed_roots() {
+  local workspace_path="$1"
+  local contract_path="$workspace_path/state/scope-contract.json"
+  [[ -f "$contract_path" ]] || return 0
+  "$PYTHON" - "$contract_path" <<'PY_SCOPE_ROOTS'
+import json
+import sys
+
+
+def norm(value):
+    text = str(value or "").replace("\\", "/").strip()
+    while text.startswith("./"):
+        text = text[2:]
+    return text.strip("/")
+
+with open(sys.argv[1], encoding="utf-8-sig") as f:
+    contract = json.load(f)
+
+roots = []
+for root in contract.get("allowedSourceRoots") or []:
+    normalized = norm(root)
+    if normalized and normalized not in (".", "/"):
+        roots.append(normalized)
+
+if not roots:
+    source_root = norm(contract.get("sourceRoot"))
+    warnings = contract.get("warnings") or []
+    if source_root and source_root not in (".", "/") and not warnings:
+        roots.append(source_root)
+
+for root in sorted(set(roots)):
+    print(root)
+PY_SCOPE_ROOTS
+}
+
+test_scope_contract_changed_paths() {
+  local workspace_path="$1"
+  shift
+  local contract_path="$workspace_path/state/scope-contract.json"
+  if [[ ! -f "$contract_path" ]]; then
+    echo "scope-contract.json not found; skipped for backward compatibility"
+    return 0
+  fi
+
+  "$PYTHON" - "$contract_path" "$@" <<'PY_SCOPE_CHECK'
+import json
+import sys
+
+
+def norm(value):
+    text = str(value or "").replace("\\", "/").strip()
+    while text.startswith("./"):
+        text = text[2:]
+    return text.strip("/")
+
+contract_path = sys.argv[1]
+changed = [norm(p) for p in sys.argv[2:] if norm(p)]
+try:
+    with open(contract_path, encoding="utf-8-sig") as f:
+        contract = json.load(f)
+except Exception as exc:
+    print(f"invalid scope-contract.json: {exc}")
+    sys.exit(1)
+
+workspace_root = norm(contract.get("workspaceRoot") or "migration")
+allowed_files = {norm(p) for p in (contract.get("allowedFiles") or []) if norm(p)}
+allowed_roots = {norm(p) for p in (contract.get("allowedSourceRoots") or []) if norm(p) and norm(p) not in (".", "/")}
+forbidden_roots = {norm(p) for p in (contract.get("forbiddenRoots") or []) if norm(p)}
+max_changed = int(contract.get("maxChangedFiles") or 0)
+
+def under(path, root):
+    return path == root or path.startswith(root + "/")
+
+forbidden_hits = []
+out_of_scope = []
+for changed_path in changed:
+    if any(under(changed_path, root) for root in forbidden_roots):
+        forbidden_hits.append(changed_path)
+        continue
+    if workspace_root and under(changed_path, workspace_root):
+        continue
+    if allowed_files:
+        if changed_path in allowed_files:
+            continue
+    elif any(under(changed_path, root) for root in allowed_roots):
+        continue
+    out_of_scope.append(changed_path)
+
+reasons = []
+if max_changed > 0 and len(changed) > max_changed:
+    reasons.append(f"changed files {len(changed)} exceed maxChangedFiles {max_changed}")
+if forbidden_hits:
+    reasons.append("forbidden root hits: " + ", ".join(forbidden_hits))
+if out_of_scope:
+    reasons.append("out-of-scope files: " + ", ".join(out_of_scope))
+
+if reasons:
+    print("; ".join(reasons))
+    sys.exit(1)
+
+print(f"scope contract passed; changedFilesChecked={len(changed)}")
+PY_SCOPE_CHECK
+}
+
 read_guard_checksum_index() {
   local workspace_path="$1"
   local checksum_path="$workspace_path/.migration-kit/guard-checksums.json"
@@ -230,6 +335,14 @@ scripts/check-final-gate.ps1
 scripts/check-final-gate.sh
 scripts/check-harness-policy.ps1
 scripts/check-harness-policy.sh
+scripts/new-claim.ps1
+scripts/new-claim.sh
+scripts/update-claim-heartbeat.ps1
+scripts/update-claim-heartbeat.sh
+scripts/complete-claim.ps1
+scripts/complete-claim.sh
+scripts/claim-doctor.ps1
+scripts/claim-doctor.sh
 scripts/build-harness-dashboard.ps1
 scripts/build-harness-dashboard.sh
 scripts/export-opencode-session.ps1
@@ -566,6 +679,7 @@ if [[ "$policy_loaded" == true ]]; then
   if [[ "$SkipGitStatus" == true ]]; then
     add_result "git-status-readable" "true" "skipped by -SkipGitStatus"
     add_result "changed-paths-allowed" "true" "skipped by -SkipGitStatus"
+    add_result "scope-contract" "true" "skipped by -SkipGitStatus"
     add_result "guard-sensitive-clean" "true" "skipped by -SkipGitStatus"
   else
     if mapfile -t changed < <(git_changed_paths "$repoRootPath"); then
@@ -577,7 +691,12 @@ if [[ "$policy_loaded" == true ]]; then
 
     if [[ ${#changed[@]} -gt 0 ]]; then
       mapfile -t policy_allowed_writes < <(json_array_lines "$policyPath" "allowedWrites")
-      mapfile -t expanded_allowed_roots < <(expand_allowed_root_patterns "${AllowedRoots[@]:-$Workspace}")
+      mapfile -t scope_contract_roots < <(scope_contract_allowed_roots "$workspacePath")
+      allowed_roots_for_expand=("${AllowedRoots[@]}")
+      if [[ ${#allowed_roots_for_expand[@]} -eq 0 ]]; then
+        allowed_roots_for_expand=("$Workspace")
+      fi
+      mapfile -t expanded_allowed_roots < <(expand_allowed_root_patterns "${allowed_roots_for_expand[@]}" "${scope_contract_roots[@]}")
       mapfile -t project_local_patterns < <(project_local_opencode_patterns)
       effective_allowed=("${policy_allowed_writes[@]}" "${expanded_allowed_roots[@]}" "${project_local_patterns[@]}")
 
@@ -589,9 +708,16 @@ if [[ "$policy_loaded" == true ]]; then
       done
 
       if [[ ${#outside_allowed[@]} -eq 0 ]]; then
-        add_result "changed-paths-allowed" "true" "all changed paths match allowedWrites/AllowedRoots"
+        add_result "changed-paths-allowed" "true" "all changed paths match allowedWrites/AllowedRoots/scope-contract"
       else
-        add_result "changed-paths-allowed" "false" "outside allowedWrites/AllowedRoots: $(IFS=', '; echo "${outside_allowed[*]}")"
+        add_result "changed-paths-allowed" "false" "outside allowedWrites/AllowedRoots/scope-contract: $(IFS=', '; echo "${outside_allowed[*]}")"
+      fi
+
+      scope_contract_detail=""
+      if scope_contract_detail="$(test_scope_contract_changed_paths "$workspacePath" "${changed[@]}")"; then
+        add_result "scope-contract" "true" "$scope_contract_detail"
+      else
+        add_result "scope-contract" "false" "$scope_contract_detail"
       fi
 
       mapfile -t guard_sensitive_writes < <(json_array_lines "$policyPath" "guardSensitiveWrites")
@@ -631,6 +757,7 @@ if [[ "$policy_loaded" == true ]]; then
       fi
     else
       add_result "changed-paths-allowed" "true" "no git changes detected or git skipped"
+      add_result "scope-contract" "true" "no git changes detected or git skipped"
       add_result "guard-sensitive-clean" "true" "no guard-sensitive changed paths detected"
     fi
   fi

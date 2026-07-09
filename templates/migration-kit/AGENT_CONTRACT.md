@@ -3,7 +3,9 @@
 This file is the short operational contract for every migration checkpoint.
 Before each major action, restate which rule allows the action.
 
-1. Allowed writes: `migration/**` only, unless the human gives a stricter workspace.
+1. Allowed writes: `migration/**` only by default. Source/test-file writes are allowed only when `state/scope-contract.json` explicitly grants `allowedSourceRoots` / `allowedFiles`; the scope contract is machine authority, so do not widen it mentally.
+1a. Before planning, read `state/scope-contract.json`. Do not run broad tests or inspect/edit outside its roots. If the contract omits `allowedSourceRoots`, stop for review or regenerate the kit with `--source`.
+1b. Before bounded implementation, create or resume a claim with `scripts/new-claim.ps1` / `.sh` when parallel wave work is possible. Keep heartbeat current and complete the claim with evidence.
 2. POM means generated/shadow/proposal POM under `migration/**`, not the real POM project.
 3. Real target project, production POM, Playwright test project, `.csproj`, `nuget.config`, and root-level generated file edits are forbidden in artifact-only mode.
 4. TODO reduction via suppression is failure, especially FluentAssertions/NUnit/business assertion suppression.
@@ -51,6 +53,8 @@ Memory safety rules:
 
 
 13. Once the active run is persisted as `FINAL_STOPPED_FOR_REVIEW`, `/supervised-task` must resume the closed post-final loop even with zero arguments. It must not stop merely because research already exists, TODOs are marked manual, or the stop checklist names missing source truth. Existing research must be reviewed, revised if needed, sliced into tickets, reviewed, and one bounded migration-artifact executor task must run unless `BLOCKED_NO_AGENT_EXECUTABLE_TASKS` or a concrete reviewer/policy blocker is written. Explicit `/supervised-task continue` remains supported but is not required for this persisted state.
+
+14. If the same Goal/Progress/Next Steps block would be repeated without a new file change, command result, reviewer decision, or gate result, run `migration/scripts/check-loop-guard.ps1` / `.sh`. If it reports `LOOP_GUARD_BLOCKED`, stop and report the blocker instead of continuing the loop.
 
 
 ## Permission and state-integrity rules

@@ -212,6 +212,15 @@ Windows OpenCode Desktop shortcut: `--project-desktop` remains an alias for `--o
 
 After a non-final final gate, read `migration/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, `NOT FINAL` is not a stopping point: execute exactly one next bounded action under `migration/**` before a user-facing handoff. A fresh `FINAL` checkpoint stops once for review and reports evidence; any later `/supervised-task` where `harness-run.json` is already `FINAL_STOPPED_FOR_REVIEW` resumes the closed post-final loop automatically: researcher → research lead → task slicer → change reviewer → one bounded executor task when approved. Stop for guard/scope/policy blocker, missing input, loop/plateau, or max autonomous budget.
 
+
+## Scope contract and claims
+
+`state/scope-contract.json` is written by `kit init/update/bootstrap-*` from `--source`. It is the machine-readable boundary for waves: `workspaceRoot` is migration-owned state/evidence, `allowedSourceRoots` is the Selenium source scope, and `forbiddenRoots` always win. If `--source` was omitted, `allowedSourceRoots` is empty and the agent must stop/regenerate instead of treating the repository root as allowed.
+
+Claim/lease scripts live in `scripts/new-claim.*`, `scripts/update-claim-heartbeat.*`, `scripts/complete-claim.*`, and `scripts/claim-doctor.*`. Use them before parallel wave work. Duplicate active ticket claims and overlapping `claimedFiles` fail deterministically; `claimedSymbols` is a documented placeholder for future Roslyn symbol locks.
+
+Safe autopilot categories are in `state/harness-policy.json`: safe read/scoped-test/state-write actions can proceed; dependency/network/CI/harness-template changes require review; destructive or out-of-scope writes are forbidden.
+
 ## Project-scoped migration memory
 
 The kit includes `state/memory/**` as an inspectable project-local memory. Agents should read `state/memory/memory-summary.md` before planning, record durable decisions/warnings/final-gate lessons after bounded actions, and run `selenium-pw-migrator memory doctor --workspace migration` before final-gate handoff when the CLI is available. Memory is guidance, not authority: it cannot justify assertion suppression, over-suppressed user interactions, or selectors without evidence.

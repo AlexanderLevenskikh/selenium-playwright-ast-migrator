@@ -144,6 +144,47 @@ function Read-ScopeBaseline([string]$Path) {
     return $map
 }
 
+
+function Read-ScopeContractOrNull([string]$GitRoot, [string[]]$AllowedRootPatterns) {
+    $candidates = New-Object System.Collections.Generic.List[string]
+    foreach ($rootPattern in $AllowedRootPatterns) {
+        $normalized = Normalize-GitPath (Convert-ToGitRelativePath -GitRoot $GitRoot -Path $rootPattern)
+        if ([string]::IsNullOrWhiteSpace($normalized) -or $normalized.Contains("*") -or $normalized.Contains("?")) { continue }
+        $candidates.Add((Join-Path $GitRoot (Join-Path $normalized "state/scope-contract.json"))) | Out-Null
+    }
+    $candidates.Add((Join-Path $GitRoot "migration/state/scope-contract.json")) | Out-Null
+    foreach ($candidate in @($candidates | Select-Object -Unique)) {
+        if (-not (Test-Path $candidate)) { continue }
+        try { return Get-Content -Raw -Path $candidate | ConvertFrom-Json -ErrorAction Stop }
+        catch { Write-Warning "Could not read scope contract ${candidate}: $($_.Exception.Message)"; return $null }
+    }
+    return $null
+}
+
+function Get-ScopeContractAllowedRoots([object]$Contract) {
+    $roots = New-Object System.Collections.Generic.List[string]
+    if ($null -eq $Contract) { return @() }
+    if (-not [string]::IsNullOrWhiteSpace([string]$Contract.workspaceRoot)) { $roots.Add((Normalize-GitPath ([string]$Contract.workspaceRoot))) | Out-Null }
+    foreach ($root in @($Contract.allowedSourceRoots)) {
+        $normalized = Normalize-GitPath ([string]$root)
+        if (-not [string]::IsNullOrWhiteSpace($normalized)) { $roots.Add($normalized) | Out-Null }
+    }
+    return @($roots | Sort-Object -Unique)
+}
+
+function Test-ForbiddenScopeContractRoot([string]$Path, [object]$Contract) {
+    if ($null -eq $Contract) { return $false }
+    foreach ($root in @($Contract.forbiddenRoots)) {
+        $normalizedRoot = Normalize-GitPath ([string]$root)
+        if ([string]::IsNullOrWhiteSpace($normalizedRoot)) { continue }
+        if ($Path.Equals($normalizedRoot.TrimEnd('/'), [StringComparison]::OrdinalIgnoreCase) -or
+            $Path.StartsWith($normalizedRoot.TrimEnd('/') + '/', [StringComparison]::OrdinalIgnoreCase)) {
+            return $true
+        }
+    }
+    return $false
+}
+
 function Get-FileFingerprint([string]$GitRoot, [string]$RelativePath) {
     $full = Join-Path $GitRoot $RelativePath
     if (-not (Test-Path -LiteralPath $full)) { return "missing" }
@@ -199,6 +240,9 @@ try {
         Convert-ToGitRelativePath -GitRoot $gitRoot -Path $_
     })
 
+    $scopeContract = Read-ScopeContractOrNull $gitRoot $AllowedRoots
+    $normalizedRoots = @($normalizedRoots) + @(Get-ScopeContractAllowedRoots $scopeContract)
+
     # Project-local OpenCode files are migration harness/config files installed at
     # repository root so OpenCode Desktop/CLI can see them. They are not product
     # source edits and must not make routine scope checks fail.
@@ -223,6 +267,11 @@ try {
     $baselineIgnored = New-Object System.Collections.Generic.List[string]
     foreach ($entry in $statusEntries) {
         $normalizedPath = Normalize-GitPath $entry.path
+        if (Test-ForbiddenScopeContractRoot -Path $normalizedPath -Contract $scopeContract) {
+            $violations.Add("$normalizedPath (forbidden root from scope-contract.json)")
+            continue
+        }
+
         if (Test-AllowedPath -Path $normalizedPath -AllowedRootPatterns $normalizedRoots) {
             continue
         }

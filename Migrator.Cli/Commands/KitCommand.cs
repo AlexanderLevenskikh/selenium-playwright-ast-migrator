@@ -12,6 +12,7 @@ internal static class KitCommand
 {
     const string KitVersion = "0.0.0-preview.1";
     const string SourceScopeSchema = "migration-source-scope/v1";
+    const int ScopeContractSchemaVersion = 1;
 
     public static int Run(string[] args)
     {
@@ -563,6 +564,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         foreach (var dir in new[]
         {
             "runs", "reports", "logs", "profiles", "prompts", "schemas", "state",
+            "state/claims", "state/claims/active", "state/claims/completed", "state/claims/stale",
             "tickets", "evidence", "proposals", "scripts", "codex", "harness", "dashboard", "agent-skills", ".migration-kit"
         })
         {
@@ -614,6 +616,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         WriteQuickStart(workspacePath, options);
         WriteVersionFile(workspacePath, options, updateMode: options.Update);
         WriteSourceScopeMetadata(workspacePath, projectRoot, options);
+        WriteScopeContract(workspacePath, projectRoot, options);
         WriteGuardChecksums(workspacePath);
 
         Console.WriteLine();
@@ -660,12 +663,14 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         AddCheck(checks, "current-ticket-lifecycle", File.Exists(Path.Combine(workspacePath, "scripts", "update-current-ticket-status.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "update-current-ticket-status.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "sentinel-finding-lifecycle", File.Exists(Path.Combine(workspacePath, "scripts", "update-sentinel-finding-status.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "update-sentinel-finding-status.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-policy", File.Exists(Path.Combine(workspacePath, "state", "harness-policy.json")), Path.Combine(workspacePath, "state", "harness-policy.json"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "scope-contract", File.Exists(Path.Combine(workspacePath, "state", "scope-contract.json")), Path.Combine(workspacePath, "state", "scope-contract.json"), "Run `migrator kit update --backup --source <source-root>` or pass --source on bootstrap.");
         AddCheck(checks, "harness-run-template", File.Exists(Path.Combine(workspacePath, "state", "harness-run-template.json")), Path.Combine(workspacePath, "state", "harness-run-template.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-policy-script", File.Exists(Path.Combine(workspacePath, "scripts", "check-harness-policy.ps1")), Path.Combine(workspacePath, "scripts", "check-harness-policy.ps1"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-run-script", File.Exists(Path.Combine(workspacePath, "scripts", "new-harness-run.ps1")), Path.Combine(workspacePath, "scripts", "new-harness-run.ps1"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-event-script", File.Exists(Path.Combine(workspacePath, "scripts", "write-harness-event.ps1")), Path.Combine(workspacePath, "scripts", "write-harness-event.ps1"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-dashboard-script", File.Exists(Path.Combine(workspacePath, "scripts", "build-harness-dashboard.ps1")), Path.Combine(workspacePath, "scripts", "build-harness-dashboard.ps1"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-shell-wrappers", File.Exists(Path.Combine(workspacePath, "scripts", "new-harness-run.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "check-harness-policy.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "write-harness-event.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "build-harness-dashboard.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "claim-lifecycle-scripts", File.Exists(Path.Combine(workspacePath, "scripts", "new-claim.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "new-claim.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "update-claim-heartbeat.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "update-claim-heartbeat.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "complete-claim.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "complete-claim.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "claim-doctor.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "claim-doctor.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-dashboard-i18n-en", File.Exists(Path.Combine(workspacePath, "dashboard", "i18n", "en.json")), Path.Combine(workspacePath, "dashboard", "i18n", "en.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-dashboard-i18n-ru", File.Exists(Path.Combine(workspacePath, "dashboard", "i18n", "ru.json")), Path.Combine(workspacePath, "dashboard", "i18n", "ru.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "guard-checksums", File.Exists(Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json")), Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json"), "Run `migrator kit update --backup`.");
@@ -942,6 +947,16 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
             "scripts/check-scope.sh" or
             "scripts/check-harness-policy.ps1" or
             "scripts/check-harness-policy.sh" or
+            "scripts/new-claim.ps1" or
+            "scripts/new-claim.sh" or
+            "scripts/update-claim-heartbeat.ps1" or
+            "scripts/update-claim-heartbeat.sh" or
+            "scripts/complete-claim.ps1" or
+            "scripts/complete-claim.sh" or
+            "scripts/claim-doctor.ps1" or
+            "scripts/claim-doctor.sh" or
+            "scripts/check-loop-guard.ps1" or
+            "scripts/check-loop-guard.sh" or
             "scripts/check-final-gate.ps1" or
             "scripts/check-final-gate.sh" or
             "scripts/build-harness-dashboard.ps1" or
@@ -1319,6 +1334,113 @@ Fix only the current ticket.
         WriteJsonFileIfSemanticChanged(Path.Combine(workspacePath, "state", "source-scope.json"), payload, "generatedAtUtc");
     }
 
+    static void WriteScopeContract(string workspacePath, string projectRoot, KitOptions options)
+    {
+        var effectiveSource = options.Source;
+        if (IsPlaceholderSource(effectiveSource) && TryReadVersionSource(workspacePath, out var previousSource) && !IsPlaceholderSource(previousSource))
+            effectiveSource = previousSource;
+
+        var warnings = new List<string>();
+        var normalizedSourceRoot = NormalizeContractPath(effectiveSource, projectRoot, allowPlaceholder: true);
+        var allowedSourceRoots = new List<string>();
+        if (IsPlaceholderSource(effectiveSource))
+        {
+            normalizedSourceRoot = string.Empty;
+            warnings.Add("--source was not configured; source writes are forbidden until the scope contract is regenerated with an explicit source root.");
+        }
+        else if (string.IsNullOrWhiteSpace(normalizedSourceRoot) || normalizedSourceRoot == "." || normalizedSourceRoot.StartsWith("../", StringComparison.Ordinal))
+        {
+            warnings.Add($"Source root '{effectiveSource}' does not resolve to a safe repository-relative path; source writes are forbidden by this contract.");
+            normalizedSourceRoot = NormalizePathSeparators(effectiveSource);
+        }
+        else
+        {
+            allowedSourceRoots.Add(normalizedSourceRoot);
+        }
+
+        var normalizedWorkspace = NormalizeContractPath(options.Workspace, projectRoot, allowPlaceholder: false);
+        if (string.IsNullOrWhiteSpace(normalizedWorkspace) || normalizedWorkspace == ".")
+            normalizedWorkspace = NormalizePathSeparators(options.Workspace);
+
+        var payload = new SortedDictionary<string, object?>
+        {
+            ["schemaVersion"] = ScopeContractSchemaVersion,
+            ["runId"] = ExtractRunId(options.Output),
+            ["ticketId"] = "initial-scope",
+            ["createdAtUtc"] = DateTimeOffset.UtcNow.ToString("o"),
+            ["sourceRoot"] = normalizedSourceRoot,
+            ["workspaceRoot"] = normalizedWorkspace,
+            ["allowedSourceRoots"] = allowedSourceRoots.ToArray(),
+            ["allowedFiles"] = Array.Empty<string>(),
+            ["forbiddenRoots"] = new[]
+            {
+                ".git",
+                "node_modules",
+                "bin",
+                "obj",
+                "Migrator.Core",
+                "Migrator.Roslyn",
+                "Migrator.Tests",
+                "Migrator.Cli"
+            },
+            ["allowedCommandKinds"] = new[]
+            {
+                "dotnet-test-scoped",
+                "migrator-verify-project",
+                "migrator-kit-doctor",
+                "git-diff-readonly",
+                "claim-heartbeat",
+                "evidence-write"
+            },
+            ["forbiddenCommandPatterns"] = new[]
+            {
+                "dotnet test .",
+                "dotnet test --no-filter",
+                "git clean -fdx",
+                "rm -rf",
+                "Remove-Item -Recurse -Force"
+            },
+            ["maxChangedFiles"] = 50,
+            ["requiresEvidence"] = true,
+            ["requiresClaim"] = false,
+            ["warnings"] = warnings.ToArray(),
+            ["notes"] = "Agent must not inspect, test, or edit outside this scope-contract unless a new contract explicitly allows it."
+        };
+
+        WriteJsonFileIfSemanticChanged(Path.Combine(workspacePath, "state", "scope-contract.json"), payload, "createdAtUtc");
+    }
+
+    static string ExtractRunId(string outputPath)
+    {
+        var normalized = NormalizePathSeparators(outputPath).TrimEnd('/');
+        var name = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
+        return !string.IsNullOrWhiteSpace(name) && name.StartsWith("run-", StringComparison.OrdinalIgnoreCase) ? name : "run-001";
+    }
+
+    static string NormalizeContractPath(string path, string projectRoot, bool allowPlaceholder)
+    {
+        if (allowPlaceholder && IsPlaceholderSource(path))
+            return string.Empty;
+
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        try
+        {
+            var full = Path.GetFullPath(ToAbsolutePath(path, projectRoot));
+            var root = Path.GetFullPath(projectRoot);
+            var relative = Path.GetRelativePath(root, full);
+            return NormalizePathSeparators(relative).TrimEnd('/');
+        }
+        catch
+        {
+            return NormalizePathSeparators(path).TrimStart("./".ToCharArray()).TrimEnd('/');
+        }
+    }
+
+    static string NormalizePathSeparators(string path)
+        => path.Replace('\\', '/').Trim();
+
     static bool IsPlaceholderSource(string? source)
         => string.IsNullOrWhiteSpace(source)
             || source.Contains("<SOURCE", StringComparison.OrdinalIgnoreCase)
@@ -1358,6 +1480,16 @@ Fix only the current ticket.
             "scripts/check-final-gate.sh",
             "scripts/check-harness-policy.ps1",
             "scripts/check-harness-policy.sh",
+            "scripts/new-claim.ps1",
+            "scripts/new-claim.sh",
+            "scripts/update-claim-heartbeat.ps1",
+            "scripts/update-claim-heartbeat.sh",
+            "scripts/complete-claim.ps1",
+            "scripts/complete-claim.sh",
+            "scripts/claim-doctor.ps1",
+            "scripts/claim-doctor.sh",
+            "scripts/check-loop-guard.ps1",
+            "scripts/check-loop-guard.sh",
             "scripts/build-harness-dashboard.ps1",
             "scripts/build-harness-dashboard.sh",
             "scripts/export-opencode-session.ps1",
@@ -1503,6 +1635,8 @@ Fix only the current ticket.
             || normalized.StartsWith("state/final-gate.md", StringComparison.Ordinal)
             || normalized.StartsWith("state/harness-run.json", StringComparison.Ordinal)
             || normalized.StartsWith("state/harness-events.jsonl", StringComparison.Ordinal)
+            || normalized.StartsWith("state/scope-contract.json", StringComparison.Ordinal)
+            || normalized.StartsWith("state/claims/", StringComparison.Ordinal)
             || normalized.StartsWith("state/memory/", StringComparison.Ordinal)
             || normalized.StartsWith("state/harness-policy-result.", StringComparison.Ordinal);
     }
@@ -1660,7 +1794,7 @@ Commands:
 
 Common options:
   --workspace <path>        Migration workspace root. Default: migration
-  --source <path>           Source Selenium tests/project path.
+  --source <path>           Source Selenium tests/project path; used to write state/scope-contract.json.
   --target-path <path>      Target project/output path metadata.
   --config <path>           Adapter config path. Default: migration/profiles/adapter-config.json
   --out <path>              Default run output path. Default: migration/runs/run-001
@@ -1685,6 +1819,10 @@ Examples:
   selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./OldTests --project-desktop
   selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --source ./OldTests
   selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration --source ./OldTests
+
+Generated orchestration files:
+  migration/state/scope-contract.json fixes allowed source/workspace roots for waves.
+  migration/scripts/new-claim.* and claim-doctor.* provide file-based claim/lease MVP.
 """);
     }
 

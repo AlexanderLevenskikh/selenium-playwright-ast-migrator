@@ -265,41 +265,42 @@ $manifest = [ordered]@{
 $manifestPath = Join-Path $bundleRoot "manifest.json"
 $manifest | ConvertTo-Json -Depth 40 | Set-Content -Path $manifestPath -Encoding UTF8
 
-$readme = @"
-# Migration Feedback Bundle
-
-Schema: `feedback-bundle/v1`
-Generated at UTC: `$($manifest.generatedAtUtc)`
-Run id: `$runId`
-
-This bundle is designed for sharing migrator improvement evidence without sending the whole private project.
-By default it excludes project source files and generated C# samples.
-
-## Review before sharing
-
-1. Open `manifest.json`.
-2. Review every item in `included`.
-3. Check `excluded` for anything the packer intentionally skipped.
-4. Share the zip only after this review.
-
-## Most useful files for the migrator author
-
-- `state/mapping-research-memory.json`
-- `state/mapping-research-candidates.jsonl`
-- `state/wave-quality-budget.json`
-- `runs/*/project-verify-report.json`
-- `runs/*/project-verify-harness.csproj`
-- `runs/wave-*/generated/migration-board.md`
-- `runs/wave-*/generated/explain-todo.md`
-
-## Generated samples
-
-Generated `.cs` samples are excluded by default. To include a small capped set after review, rerun:
-
-```powershell
-migration/scripts/create-feedback-bundle.ps1 -Workspace migration -IncludeGeneratedSamples -MaxGeneratedSamples 3
-```
-"@
+$readmeLines = @(
+    "# Migration Feedback Bundle",
+    "",
+    "Schema: ``feedback-bundle/v1``",
+    "Generated at UTC: ``$($manifest.generatedAtUtc)``",
+    "Run id: ``$runId``",
+    "",
+    "This bundle is designed for sharing migrator improvement evidence without sending the whole private project.",
+    "By default it excludes project source files and generated C# samples.",
+    "",
+    "## Review before sharing",
+    "",
+    "1. Open ``manifest.json``.",
+    "2. Review every item in ``included``.",
+    "3. Check ``excluded`` for anything the packer intentionally skipped.",
+    "4. Share the zip only after this review.",
+    "",
+    "## Most useful files for the migrator author",
+    "",
+    "- ``state/mapping-research-memory.json``",
+    "- ``state/mapping-research-candidates.jsonl``",
+    "- ``state/wave-quality-budget.json``",
+    "- ``runs/*/project-verify-report.json``",
+    "- ``runs/*/project-verify-harness.csproj``",
+    "- ``runs/wave-*/generated/migration-board.md``",
+    "- ``runs/wave-*/generated/explain-todo.md``",
+    "",
+    "## Generated samples",
+    "",
+    "Generated ``.cs`` samples are excluded by default. To include a small capped set after review, rerun:",
+    "",
+    '```powershell',
+    "migration/scripts/create-feedback-bundle.ps1 -Workspace migration -IncludeGeneratedSamples -MaxGeneratedSamples 3",
+    '```'
+)
+$readme = $readmeLines -join [Environment]::NewLine
 Set-Content -Path (Join-Path $bundleRoot "README.md") -Value $readme -Encoding UTF8
 
 $zipPath = Join-Path $outDirFull ($BundleName + ".zip")
@@ -308,12 +309,14 @@ if (-not $NoZip) {
     Compress-Archive -Path (Join-Path $bundleRoot "*") -DestinationPath $zipPath -Force
 }
 
+$bundleZip = if ($NoZip) { $null } else { $zipPath }
+
 $stateSummary = [ordered]@{
     schemaVersion = "feedback-bundle/v1"
     generatedAtUtc = $manifest.generatedAtUtc
     runId = $runId
     bundleDirectory = $bundleRoot
-    bundleZip = if ($NoZip) { $null } else { $zipPath }
+    bundleZip = $bundleZip
     includedCount = @($included).Count
     excludedCount = @($excluded).Count
     includeGeneratedSamples = [bool]$IncludeGeneratedSamples

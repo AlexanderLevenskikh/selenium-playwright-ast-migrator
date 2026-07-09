@@ -44,6 +44,79 @@ function Test-AnyPattern([string]$Path, [object[]]$Patterns) {
 }
 
 
+
+function Normalize-ScopeContractPath([string]$Path) {
+    if ([string]::IsNullOrWhiteSpace($Path)) { return "" }
+    $p = $Path.Replace("\", "/")
+    while ($p.StartsWith("./", [StringComparison]::Ordinal)) { $p = $p.Substring(2) }
+    return $p.TrimEnd("/")
+}
+
+function Test-ScopeContractPathUnderRoot([string]$Path, [string]$Root) {
+    $p = Normalize-ScopeContractPath $Path
+    $r = (Normalize-ScopeContractPath $Root).TrimEnd("/")
+    if ([string]::IsNullOrWhiteSpace($r)) { return $false }
+    return $p.Equals($r, [StringComparison]::OrdinalIgnoreCase) -or $p.StartsWith($r + "/", [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Read-ScopeContractOrNull([string]$WorkspacePath) {
+    $contractPath = Join-Path $WorkspacePath "state/scope-contract.json"
+    if (-not (Test-Path $contractPath)) { return $null }
+    try { return Get-Content -Raw -Path $contractPath | ConvertFrom-Json -ErrorAction Stop }
+    catch { return [pscustomobject]@{ __invalid = $true; __error = $_.Exception.Message } }
+}
+
+function Get-ScopeContractAllowedRoots([object]$Contract) {
+    $roots = New-Object System.Collections.Generic.List[string]
+    if ($null -eq $Contract -or $Contract.__invalid) { return @() }
+    if (-not [string]::IsNullOrWhiteSpace([string]$Contract.workspaceRoot)) { $roots.Add((Normalize-ScopeContractPath ([string]$Contract.workspaceRoot))) | Out-Null }
+    foreach ($root in @($Contract.allowedSourceRoots)) {
+        $normalized = Normalize-ScopeContractPath ([string]$root)
+        if (-not [string]::IsNullOrWhiteSpace($normalized)) { $roots.Add($normalized) | Out-Null }
+    }
+    return @($roots | Sort-Object -Unique)
+}
+
+function Test-ChangedPathsAgainstScopeContract([object]$Contract, [string[]]$Changed, [ref]$Detail) {
+    if ($null -eq $Contract) { $Detail.Value = "scope contract missing; skipped"; return $true }
+    if ($Contract.__invalid) { $Detail.Value = "invalid scope contract: $($Contract.__error)"; return $false }
+
+    $workspaceRoot = Normalize-ScopeContractPath ([string]$Contract.workspaceRoot)
+    $allowedSourceRoots = @($Contract.allowedSourceRoots | ForEach-Object { Normalize-ScopeContractPath ([string]$_) } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $allowedFiles = @($Contract.allowedFiles | ForEach-Object { Normalize-ScopeContractPath ([string]$_) } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $forbiddenRoots = @($Contract.forbiddenRoots | ForEach-Object { Normalize-ScopeContractPath ([string]$_) } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $outOfScope = New-Object System.Collections.Generic.List[string]
+    $forbidden = New-Object System.Collections.Generic.List[string]
+
+    foreach ($raw in @($Changed)) {
+        $path = Normalize-ScopeContractPath $raw
+        $hitForbidden = $false
+        foreach ($root in $forbiddenRoots) {
+            if (Test-ScopeContractPathUnderRoot $path $root) { $forbidden.Add($path) | Out-Null; $hitForbidden = $true; break }
+        }
+        if ($hitForbidden) { continue }
+
+        $allowed = $false
+        if (-not [string]::IsNullOrWhiteSpace($workspaceRoot) -and (Test-ScopeContractPathUnderRoot $path $workspaceRoot)) { $allowed = $true }
+        elseif ($allowedFiles.Count -gt 0) { $allowed = $allowedFiles -contains $path }
+        else {
+            foreach ($root in $allowedSourceRoots) {
+                if (Test-ScopeContractPathUnderRoot $path $root) { $allowed = $true; break }
+            }
+        }
+        if (-not $allowed) { $outOfScope.Add($path) | Out-Null }
+    }
+
+    $maxChangedFiles = 0
+    try { $maxChangedFiles = [int]$Contract.maxChangedFiles } catch { $maxChangedFiles = 0 }
+    $tooMany = $maxChangedFiles -gt 0 -and @($Changed).Count -gt $maxChangedFiles
+    if ($forbidden.Count -gt 0) { $Detail.Value = "forbiddenRoot hits: " + (($forbidden | Sort-Object -Unique) -join ", "); return $false }
+    if ($outOfScope.Count -gt 0) { $Detail.Value = "out-of-scope paths: " + (($outOfScope | Sort-Object -Unique) -join ", "); return $false }
+    if ($tooMany) { $Detail.Value = "changed file count $(@($Changed).Count) exceeds maxChangedFiles $maxChangedFiles"; return $false }
+    $Detail.Value = "scope-contract changed path check passed; checked $(@($Changed).Count) paths"
+    return $true
+}
+
 function Convert-ToWorkspaceRelativePath([string]$Path, [string]$WorkspaceRootName) {
     $normalized = $Path.Replace("\", "/").TrimStart("./")
     $workspacePrefix = $WorkspaceRootName.Replace("\", "/").TrimStart("./").TrimEnd("/")
@@ -80,6 +153,14 @@ function Get-RequiredGuardChecksumFiles {
         "scripts/check-final-gate.sh",
         "scripts/check-harness-policy.ps1",
         "scripts/check-harness-policy.sh",
+        "scripts/new-claim.ps1",
+        "scripts/new-claim.sh",
+        "scripts/update-claim-heartbeat.ps1",
+        "scripts/update-claim-heartbeat.sh",
+        "scripts/complete-claim.ps1",
+        "scripts/complete-claim.sh",
+        "scripts/claim-doctor.ps1",
+        "scripts/claim-doctor.sh",
         "scripts/build-harness-dashboard.ps1",
         "scripts/build-harness-dashboard.sh",
         "scripts/export-opencode-session.ps1",
@@ -310,6 +391,9 @@ if ($policy -ne $null) {
     }
     Add-Result $results "required-files" ($missing.Count -eq 0) $(if ($missing.Count -eq 0) { "all required files exist" } else { "missing: " + ($missing -join ", ") })
 
+    $scopeContract = Read-ScopeContractOrNull $workspacePath
+    $scopeContractAllowedRoots = @(Get-ScopeContractAllowedRoots $scopeContract)
+
     $latestRunId = Find-LatestRunId $workspacePath
     $runPath = if ([string]::IsNullOrWhiteSpace($latestRunId)) { "" } else { Join-Path $workspacePath "runs/$latestRunId" }
     $runFiles = @("Prompt.md", "Plan.md", "Implement.md", "Documentation.md", "trace.jsonl")
@@ -327,6 +411,7 @@ if ($policy -ne $null) {
     if ($SkipGitStatus) {
         Add-Result $results "git-status-readable" $true "skipped by -SkipGitStatus"
         Add-Result $results "changed-paths-allowed" $true "skipped by -SkipGitStatus"
+        Add-Result $results "scope-contract" $true "skipped by -SkipGitStatus"
         Add-Result $results "guard-sensitive-clean" $true "skipped by -SkipGitStatus"
     } else {
         try {
@@ -338,12 +423,15 @@ if ($policy -ne $null) {
 
         if ($changed.Count -gt 0) {
             $projectLocalOpenCodePatterns = @(Get-ProjectLocalOpenCodePatterns)
-            $effectiveAllowedWrites = @($policy.allowedWrites) + @(Expand-AllowedRootPatterns $AllowedRoots) + $projectLocalOpenCodePatterns
+            $effectiveAllowedWrites = @($policy.allowedWrites) + @(Expand-AllowedRootPatterns (@($AllowedRoots) + $scopeContractAllowedRoots)) + $projectLocalOpenCodePatterns
             $scopeBaselinePaths = Read-ScopeBaselinePathSet $workspacePath
             $outsideAllowedRaw = @($changed | Where-Object { -not (Test-AnyPattern $_ @($effectiveAllowedWrites)) })
             $outsideAllowed = @($outsideAllowedRaw | Where-Object { -not $scopeBaselinePaths.ContainsKey($_.Replace("\", "/").TrimStart("./")) })
             $outsideBaselineIgnored = @($outsideAllowedRaw | Where-Object { $scopeBaselinePaths.ContainsKey($_.Replace("\", "/").TrimStart("./")) })
             Add-Result $results "changed-paths-allowed" ($outsideAllowed.Count -eq 0) $(if ($outsideAllowed.Count -eq 0) { "all new/changed paths match allowedWrites/AllowedRoots; ignored pre-existing baseline paths: " + ($outsideBaselineIgnored.Count) } else { "outside allowedWrites/AllowedRoots: " + ($outsideAllowed -join ", ") })
+            $scopeContractDetail = ""
+            $scopeContractOk = Test-ChangedPathsAgainstScopeContract -Contract $scopeContract -Changed @($changed) -Detail ([ref]$scopeContractDetail)
+            Add-Result $results "scope-contract" $scopeContractOk $scopeContractDetail
 
             $projectLocalOpenCodeChanges = @($changed | Where-Object { Test-AnyPattern $_ $projectLocalOpenCodePatterns })
             $guardChanges = @($changed | Where-Object {
@@ -381,6 +469,7 @@ if ($policy -ne $null) {
             Add-Result $results "guard-sensitive-clean" $guardOk $guardDetail
         } else {
             Add-Result $results "changed-paths-allowed" $true "no git changes detected or git skipped"
+            Add-Result $results "scope-contract" $true "no git changes detected or git skipped"
             Add-Result $results "guard-sensitive-clean" $true "no guard-sensitive changed paths detected"
         }
     }

@@ -211,3 +211,8 @@ selenium-pw-migrator config validate-merge --base migration/adapter-config.json 
 ### Dashboard/evidence polish for project-scoped memory
 
 `report serve` detects nearby project-scoped migration state and adds a **Wavefront / memory / config-merge snapshot** to `report-dashboard.html/md/json`. The generated `report-dashboard-evidence.zip` can include workspace entries for `state/memory`, `plan/waves.json`, `memory-recall.md`, `adapter-config.merged.json`, `validate-merge-report.md/json`, and `conflicts.jsonl`. The evidence manifest marks this with `ProjectScopedMemoryAndWavefrontArtifactsIncluded`.
+
+
+## Agent orchestration rails
+
+`kit init` / `kit bootstrap-opencode` write `migration/state/scope-contract.json` from `--source`. Use `migration/scripts/new-claim.*`, `update-claim-heartbeat.*`, `complete-claim.*`, and `claim-doctor.*` for lightweight wave leases before parallel agent work.
