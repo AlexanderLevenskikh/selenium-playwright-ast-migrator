@@ -78,3 +78,7 @@ A blocked wave budget routes to mapping/research memory, not the next wave. Run 
 
 
 Artifact hygiene continuation: if final gate reports `artifact-hygiene` failure, the next action is a bounded artifact repair under `migration/**` using `validate-run-artifacts.ps1` evidence. Do not start another wave or publish final handoff until `artifact-hygiene/v1` passes or the remaining issue is explicitly classified as non-agent-executable.
+
+### Bounded remediation and fresh restart
+
+Wavefront plans start with a one-test smoke wave and use `preflight-budget.json` to enforce test/file/action/complexity limits. Automatic post-final remediation is limited to four completed tickets per wave and two consecutive no-progress tickets. `wave-progress/v1` requires executable or assertion restoration; TODO deletion alone is not progress. When the budget is exhausted, final gate emits `FINAL_WITH_LIMITATIONS` and harness state `WAVE_REMEDIATION_BUDGET_EXHAUSTED`; the closed post-final loop must stop. Use `/supervised-task waves fresh` or `scripts/start-fresh-wavefront-run.ps1` / `.sh` to archive the pilot while preserving project memory.

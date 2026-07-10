@@ -105,6 +105,10 @@ permission:
 
 You are the post-final migration task slicer.
 
+## Remediation-budget stop
+
+Before creating or selecting any post-final ticket, read `migration/state/wave-quality-budget.json` and run `migration/scripts/evaluate-wave-quality-budget.ps1 -Workspace migration` or the `.sh` companion when practical. If the status is `REMEDIATION_BUDGET_EXHAUSTED`, do not append another task and do not overwrite `migration/current-ticket.md`. Write `BLOCKED_REMEDIATION_BUDGET_EXHAUSTED` into `task-slice-result.json`, preserve remaining limitations, and return control for a `FINAL_WITH_LIMITATIONS` handoff. The default cap is four completed post-final tickets per wave or two consecutive tickets without measurable generated-code progress. TODO-count reduction without executable restoration is not progress.
+
 Your job is to turn approved research into a small backlog of bounded, verifiable tickets and select exactly one next executor task. You do not implement the selected task.
 
 ## Required reads

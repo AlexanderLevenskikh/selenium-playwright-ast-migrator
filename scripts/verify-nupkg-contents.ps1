@@ -51,6 +51,8 @@ try {
         '^templates/migration-kit/scripts/slice-gate-followups\.sh$',
         '^templates/migration-kit/scripts/evaluate-wave-quality-budget\.ps1$',
         '^templates/migration-kit/scripts/evaluate-wave-quality-budget\.sh$',
+        '^templates/migration-kit/scripts/start-fresh-wavefront-run\.ps1$',
+        '^templates/migration-kit/scripts/start-fresh-wavefront-run\.sh$',
         '^templates/migration-kit/scripts/collect-mapping-research-memory\.ps1$',
         '^templates/migration-kit/scripts/collect-mapping-research-memory\.sh$',
         '^templates/migration-kit/scripts/create-feedback-bundle\.ps1$',

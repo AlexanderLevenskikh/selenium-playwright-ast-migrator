@@ -10,7 +10,9 @@ Use the supervised Harness Kit workflow.
 
 ## One-command wavefront start (`/supervised-task waves`)
 
-When `$ARGUMENTS` is exactly `waves`, `wave`, `wavefront`, `start waves`, or contains a clear request to start divide-and-conquer migration, enter **wavefront bootstrap mode**. This mode is the preferred user-facing start path: the user should not need to run `kit init`, `bootstrap-opencode`, `kit doctor`, `migration plan`, or `migration run-wave` manually after installing/updating the tool.
+When `$ARGUMENTS` is exactly `waves`, `wave`, `wavefront`, `start waves`, or contains a clear request to start divide-and-conquer migration, enter **wavefront bootstrap mode**. When the arguments contain `waves fresh`, `fresh waves`, or `restart waves`, first enter **fresh-wavefront restart mode**. This mode is the preferred user-facing start path: the user should not need to run `kit init`, `bootstrap-opencode`, `kit doctor`, `migration plan`, or `migration run-wave` manually after installing/updating the tool.
+
+In fresh-wavefront restart mode, run `migration/scripts/start-fresh-wavefront-run.ps1 -Workspace migration -Label pilot` or the `.sh` companion before replanning. The script must archive the current plan/runs/volatile state under `migration/archive/**`, preserve `migration/state/memory/**` and configured source scope, and write `migration/state/wavefront-restart.json`. Never delete an existing pilot without this archive receipt. Then continue in normal wavefront bootstrap mode.
 
 In wavefront bootstrap mode:
 
@@ -21,14 +23,14 @@ In wavefront bootstrap mode:
    - source Selenium test project/path: only when no configured bootstrap source exists or the configured source is missing/placeholder; prefer `.csproj` files or directories containing Selenium/WebDriver references and test attributes; ignore `bin/`, `obj/`, `migration/`, generated reports, and archived workspaces;
    - target backend/framework: prefer existing Playwright .NET projects with `Microsoft.Playwright`, `Microsoft.Playwright.NUnit`, or xUnit/MSTest equivalents; otherwise infer `playwright-dotnet` and the source test framework (`nunit`, `xunit`, `mstest`) from package references/usings/attributes;
    - target project/output path if present; otherwise keep it as generated migration proposals under `migration/**`;
-   - desired strategy: default to `wavefront`, `--max-wave-size 8`, `--representatives-per-cluster 1`, and low-risk-first.
+   - desired strategy: default to `wavefront`, one-test smoke validation, `--max-wave-size 4`, `--max-wave-files 2`, `--max-wave-actions 90`, `--max-wave-complexity 140`, `--smoke-wave-size 1`, `--representatives-per-cluster 1`, and low-risk-first.
 4. Ask the user **only** when the configured source is absent/missing or detection is genuinely ambiguous. Ask one compact question with concrete options, for example: “I found two Selenium test projects and no configured bootstrap source: A and B. Which one should be migrated?” Do not ask broad preference questions when a safe configured source exists.
 5. If `migration/AGENT_CONTRACT.md` or `migration/opencode-team/**` is missing, run:
    `selenium-pw-migrator kit bootstrap-opencode --workspace migration --source <configured-or-detected-source> --target-path <detected-target-or-placeholder> --opencode-install none`
    The CLI bootstrap is expected to apply repository-root `opencode.jsonc`, `.opencode/agents`, `.opencode/commands`, and `AGENTS.md` automatically. If it does not, run `migration/scripts/apply-opencode-project-config.ps1` or `.sh` as a repair step and report that as a tool defect.
 6. Run `selenium-pw-migrator kit doctor --workspace migration`. If doctor reports only non-blocking warnings, continue. If source/config/workspace is missing, ask the smallest exact question needed.
 7. If `migration/plan/waves.json` is missing or stale relative to the configured-or-detected source, run:
-   `selenium-pw-migrator migration plan --input <configured-or-detected-source> --strategy wavefront --workspace migration --out migration/plan --max-wave-size 8 --representatives-per-cluster 1 --prefer-low-risk-first true`
+   `selenium-pw-migrator migration plan --input <configured-or-detected-source> --strategy wavefront --workspace migration --out migration/plan --max-wave-size 4 --max-wave-files 2 --max-wave-actions 90 --max-wave-complexity 140 --smoke-wave-size 1 --representatives-per-cluster 1 --prefer-low-risk-first true`
 8. If no active wave run exists, materialize the first pending wave before implementation:
    `selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001`
 9. Treat `migration/runs/<wave-id>/input-scope.json` as the active bounded scope. If generated output is still a placeholder, run the wave-local migrate script (`migration/runs/<wave-id>/run-migrate.ps1` or `.sh`) or rerun `migration run-wave --execute-migrate true` for that wave only.
@@ -37,7 +39,7 @@ In wavefront bootstrap mode:
 If the repository is fresh and `/supervised-task waves` has a configured bootstrap source or enough information to auto-detect the source path, the expected first meaningful actions are: bootstrap/update kit → doctor → wavefront plan → materialize `wave-001` → wave-local migration. Returning a generic “no task was provided” or running full-source migration is not allowed in this mode.
 
 
-Compatibility wording: a fresh `FINAL` checkpoint must **stop for review** once; a persisted `FINAL_STOPPED_FOR_REVIEW` checkpoint is not a terminal stop and must resume the closed post-final development loop.
+Compatibility wording: a fresh `FINAL` checkpoint must **stop for review** once; a persisted `FINAL_STOPPED_FOR_REVIEW` checkpoint normally resumes the closed post-final development loop. `FINAL_WITH_LIMITATIONS` / `WAVE_REMEDIATION_BUDGET_EXHAUSTED` is different: it is a hard autonomous stop and must not resume post-final work without explicit user approval or `waves fresh`.
 
 
 ## Permission and append-only state discipline
@@ -77,6 +79,8 @@ Use the `.sh` companion on Unix-like shells. Then read:
 - migration/state/final-gate-result.json, if it exists
 - migration/state/continuation-decision.json, if it exists
 - migration/state/continuation-decision.md, if it exists
+- migration/state/wave-quality-budget.json, if it exists
+- migration/state/wavefront-restart.json, if it exists
 - migration/state/final-gate.md
 - migration/state/handoff.md, if it exists
 - migration/current-ticket.md, if it exists
@@ -99,6 +103,7 @@ Use the `.sh` companion on Unix-like shells. Then read:
 Then dispatch:
 
 0. If `$ARGUMENTS` is `sentinel`, `inspect`, `qa`, or clearly asks for process testing, export/update `opencode-session-export.md`, invoke `harness-sentinel`, and route open high/critical agent-executable findings to `migration-task-slicer` before any final handoff. If final-gate/sentinel diagnostics exist but no `current-ticket.md` exists yet, run `migration/scripts/slice-gate-followups.ps1` / `.sh` to write `state/backlog/gate-followup-tasks.jsonl`, `state/backlog/gate-followup-backlog.md`, and `current-ticket.md`.
+0a. If `migration/state/harness-run.json` says `WAVE_REMEDIATION_BUDGET_EXHAUSTED`, `continuation-decision.json` says `FINAL_WITH_LIMITATIONS`, or `wave-quality-budget.json` says `REMEDIATION_BUDGET_EXHAUSTED`, stop and report the remaining limitations. Do not invoke researcher, task slicer, reviewer, or executor automatically. Recommend exactly one command: `/supervised-task waves fresh`, unless the user explicitly authorizes extending the remediation budget.
 1. If `migration/state/continuation-decision.json` says `CONTINUE_REQUIRED`, Continue with that next bounded action. Do not produce a user-facing handoff first.
 1a. If the persisted active run is `FINAL_STOPPED_FOR_REVIEW`, always resume the closed post-final development loop, even when `$ARGUMENTS` is empty and even when old research or stop-policy checklist entries already exist. Do not stop again, do not ask the user for a more detailed prompt, and do not claim that no bounded action exists. Start or resume: `migration-researcher` → `migration-research-lead` → `migration-task-slicer` → `migration-change-reviewer` → exactly one bounded `executor` task when a ticket is approved. The researcher writes only under `migration/runs/<active-run-id>/research/**` plus allowed lifecycle continuation/trace files; the research lead may request one bounded revision instead of sending weak research to the user; the task slicer writes backlog/current-ticket artifacts only under `migration/**`; the change reviewer validates scope, evidence, and no assertion suppression before executor work.
 1b. If `continuation-decision.json` says `FINAL_RESEARCH_COMPLETED` or `postFinalStage` is `RESEARCH_COMPLETED`, invoke `migration-research-lead` on `migration/runs/<active-run-id>/research/**`. If the lead returns `REQUEST_CHANGES`, send the revision back to `migration-researcher` once; if it returns `APPROVE`, invoke `migration-task-slicer`.
@@ -113,8 +118,10 @@ Do not show a broad menu after a successful checkpoint; give one recommended con
 4. If `$ARGUMENTS` explicitly requests `continue` after a `FINAL` / `FINAL_STOPPED_FOR_REVIEW` checkpoint, use the same low-prompt closed loop as step 1a. Explicit `continue` is still supported, but it is no longer required once the persisted run status is `FINAL_STOPPED_FOR_REVIEW`; zero-argument `/supervised-task` must also resume that loop. If the user names a specific test/helper/TODO, pass that as the research topic. If the user names a concrete implementation task, first require approved research/task slicing when research artifacts exist; otherwise start the smallest safe bounded implementation ticket from the recommended remaining risks.
 5. If `continuation-decision.json` contains bounded auto-continuation for the exact next action, obey that budget. Otherwise a fresh `FINAL` checkpoint stops once for review, while a persisted `FINAL_STOPPED_FOR_REVIEW` status always resumes the closed post-final loop; plain `continue` and zero-argument `/supervised-task` both mean post-final research/review/task slicing first.
 6. If there is no active run and wavefront bootstrap mode is not requested, create the first bounded migration run. If wavefront bootstrap mode is requested or `migration/plan/waves.json` exists, create/materialize the first bounded wave first and never start a full-source migration run.
-7. Stop only for a fresh `FINAL` stop-for-review, explicit `BLOCKED_*`, missing required user input, denied writes, loop-guard block, or autonomous budget/plateau limits. Persisted `FINAL_STOPPED_FOR_REVIEW` is not a stop condition; it is the closed-loop dispatch state.
+7. Stop only for a fresh `FINAL` stop-for-review, `FINAL_WITH_LIMITATIONS` / `WAVE_REMEDIATION_BUDGET_EXHAUSTED`, explicit `BLOCKED_*`, missing required user input, denied writes, loop-guard block, or autonomous budget/plateau limits. Persisted `FINAL_STOPPED_FOR_REVIEW` is not a stop condition; it is the closed-loop dispatch state.
 8. Before repeating a post-final/current-ticket dispatch summary with the same Goal/Progress/Next Steps, run `migration/scripts/check-loop-guard.ps1 -Workspace migration -RunId <active-run-id> -TicketId <ticket-id> -Goal <goal> -Stage <research|slice|review|execute> -NextAction <next concrete command-or-agent>` or the `.sh` wrapper. If it prints `LOOP_GUARD_BLOCKED`, stop immediately with that status and do not print another copied lifecycle block. A valid response must either execute one new bounded action, write a concrete blocker, or report `LOOP_GUARD_BLOCKED` with `migration/state/loop-guard.json` evidence.
+
+Before entering or repeating any post-final loop, run `migration/scripts/evaluate-wave-quality-budget.ps1 -Workspace migration` or `.sh`. If it writes `REMEDIATION_BUDGET_EXHAUSTED`, stop with `FINAL_WITH_LIMITATIONS`; do not slice another ticket. The default automatic budget is at most four completed post-final tickets per wave and at most two consecutive tickets without measurable generated-code progress. TODO deletion without executable restoration is not progress.
 
 When the persisted active run is `FINAL_STOPPED_FOR_REVIEW`, prefer the closed post-final loop over immediate implementation whether `$ARGUMENTS` is empty or explicitly says `continue`, unless the user names a concrete implementation task. Use this priority order:
 
@@ -134,7 +141,7 @@ If external assemblies, product project references, credentials, network access,
 
 ### Post-final continue dispatch matrix
 
-When the active run is already `FINAL_STOPPED_FOR_REVIEW`, with or without an explicit `continue` argument, do not produce a terminal “no work available” report until this matrix has been exhausted in order. Re-read `migration/state/continuation-decision.json` and the filesystem after every subagent step. If `mustContinueBeforeUserMessage` is `true`, continue the matrix inside the same supervised-task run instead of handing off to the user.
+When the active run is already `FINAL_STOPPED_FOR_REVIEW`, with or without an explicit `continue` argument, first verify that remediation budget is not exhausted. When it is still available, do not produce a terminal “no work available” report until this matrix has been exhausted in order. Re-read `migration/state/continuation-decision.json` and the filesystem after every subagent step. If `mustContinueBeforeUserMessage` is `true`, continue the matrix inside the same supervised-task run instead of handing off to the user.
 
 1. If `migration/current-ticket.md` exists and `migration/state/continuation-decision.json` says `POST_FINAL_TASKS_READY`, route the current ticket through `migration-change-reviewer`, then delegate exactly one bounded executor task. The persisted `FINAL_STOPPED_FOR_REVIEW` state is sufficient consent for one bounded executor task under `migration/**`; explicit `continue` is helpful but not required for this one task.
 2. Else if `migration/state/backlog/post-final-tasks.jsonl` exists, select or refresh `migration/current-ticket.md`, route it through `migration-change-reviewer`, then delegate exactly one bounded executor task.

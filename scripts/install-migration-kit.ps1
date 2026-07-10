@@ -168,6 +168,8 @@ function Test-AutoUpdatedKitOwnedFile([string]$RelativePath) {
         $normalized -eq "scripts/slice-gate-followups.sh" -or
         $normalized -eq "scripts/evaluate-wave-quality-budget.ps1" -or
         $normalized -eq "scripts/evaluate-wave-quality-budget.sh" -or
+        $normalized -eq "scripts/start-fresh-wavefront-run.ps1" -or
+        $normalized -eq "scripts/start-fresh-wavefront-run.sh" -or
         $normalized -eq "scripts/collect-mapping-research-memory.ps1" -or
         $normalized -eq "scripts/collect-mapping-research-memory.sh" -or
         $normalized -eq "scripts/create-feedback-bundle.ps1" -or
@@ -344,6 +346,8 @@ function Write-GuardChecksums([string]$WorkspacePath) {
         "scripts/slice-gate-followups.sh",
         "scripts/evaluate-wave-quality-budget.ps1",
         "scripts/evaluate-wave-quality-budget.sh",
+        "scripts/start-fresh-wavefront-run.ps1",
+        "scripts/start-fresh-wavefront-run.sh",
         "scripts/collect-mapping-research-memory.ps1",
         "scripts/collect-mapping-research-memory.sh",
         "scripts/create-feedback-bundle.ps1",

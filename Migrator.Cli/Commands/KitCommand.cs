@@ -657,6 +657,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         AddCheck(checks, "agent-skills-usage-writer", File.Exists(Path.Combine(workspacePath, "scripts", "write-agent-skill-usage.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "write-agent-skill-usage.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "record-agent-skill-profile.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "record-agent-skill-profile.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "gate-followup-slicer", File.Exists(Path.Combine(workspacePath, "scripts", "slice-gate-followups.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "slice-gate-followups.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "wave-quality-budget", File.Exists(Path.Combine(workspacePath, "scripts", "evaluate-wave-quality-budget.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "evaluate-wave-quality-budget.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "fresh-wavefront-restart", File.Exists(Path.Combine(workspacePath, "scripts", "start-fresh-wavefront-run.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "start-fresh-wavefront-run.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "mapping-research-memory", File.Exists(Path.Combine(workspacePath, "scripts", "collect-mapping-research-memory.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "collect-mapping-research-memory.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "feedback-bundle-packer", File.Exists(Path.Combine(workspacePath, "scripts", "create-feedback-bundle.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "create-feedback-bundle.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "artifact-hygiene", File.Exists(Path.Combine(workspacePath, "scripts", "validate-run-artifacts.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "validate-run-artifacts.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
@@ -983,6 +984,8 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
             "scripts/slice-gate-followups.sh" or
             "scripts/evaluate-wave-quality-budget.ps1" or
             "scripts/evaluate-wave-quality-budget.sh" or
+            "scripts/start-fresh-wavefront-run.ps1" or
+            "scripts/start-fresh-wavefront-run.sh" or
             "scripts/collect-mapping-research-memory.ps1" or
             "scripts/collect-mapping-research-memory.sh" or
             "scripts/create-feedback-bundle.ps1" or
@@ -1526,6 +1529,8 @@ Fix only the current ticket.
             "scripts/slice-gate-followups.sh",
             "scripts/evaluate-wave-quality-budget.ps1",
             "scripts/evaluate-wave-quality-budget.sh",
+            "scripts/start-fresh-wavefront-run.ps1",
+            "scripts/start-fresh-wavefront-run.sh",
             "scripts/collect-mapping-research-memory.ps1",
             "scripts/collect-mapping-research-memory.sh",
             "scripts/create-feedback-bundle.ps1",

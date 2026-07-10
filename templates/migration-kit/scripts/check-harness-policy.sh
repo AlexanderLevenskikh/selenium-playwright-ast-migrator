@@ -351,6 +351,10 @@ scripts/slice-gate-followups.ps1
 scripts/slice-gate-followups.sh
 scripts/evaluate-wave-quality-budget.ps1
 scripts/evaluate-wave-quality-budget.sh
+scripts/repair-jsonl-ledger.ps1
+scripts/repair-jsonl-ledger.sh
+scripts/start-fresh-wavefront-run.ps1
+scripts/start-fresh-wavefront-run.sh
 scripts/collect-mapping-research-memory.ps1
 scripts/collect-mapping-research-memory.sh
 scripts/create-feedback-bundle.ps1

@@ -518,11 +518,11 @@ Open the repository in OpenCode and run:
 That command should auto-detect source/target/framework when possible, run doctor, create the plan, materialize the first wave, and run only the wave-local migration. Manual commands remain available for debugging/CI:
 
 ```bash
-selenium-pw-migrator migration plan --input ./SeleniumTests --strategy wavefront --workspace migration --out migration/plan
+selenium-pw-migrator migration plan --input ./SeleniumTests --strategy wavefront --workspace migration --out migration/plan --max-wave-size 4 --max-wave-files 2 --max-wave-actions 90 --max-wave-complexity 140 --smoke-wave-size 1
 selenium-pw-migrator migration plan show --plan migration/plan
 ```
 
-The planner writes `inventory.json`, `clusters.json`, `waves.json`, `plan.md`, `selected-tests.txt`, `memory-recall.md`, and `next-commands.md`. It does not migrate files. When `kit bootstrap-opencode --source ...` has configured a source, that source is the hard wavefront boundary; sibling functional-test projects must not be discovered, planned, copied, or suggested. The first wave contains representative tests, later waves expand by cluster. `run-wave` passes `--selected-tests selected-tests.txt` to the migrate pipeline, so execution remains test-selected instead of migrating every test in each copied file. Agents should run `memory explain`, `memory doctor`, and `memory recall --file` for every scoped file before turning a wave into a bounded task. Recall now writes auditable receipts to `state/memory/recall-index.json` and `recall-ledger.jsonl`; the final gate rejects active memory with missing current-wave recall evidence.
+The planner writes `inventory.json`, `clusters.json`, `waves.json`, `plan.md`, `selected-tests.txt`, `memory-recall.md`, and `next-commands.md`. It does not migrate files. When `kit bootstrap-opencode --source ...` has configured a source, that source is the hard wavefront boundary; sibling functional-test projects must not be discovered, planned, copied, or suggested. The first wave is a one-test low-risk smoke validation. Later waves expand by cluster but are packed by test count, distinct files, estimated Selenium actions, and estimated complexity instead of test count alone. `run-wave` passes `--selected-tests selected-tests.txt` to the migrate pipeline, so execution remains test-selected instead of migrating every test in each copied file. Agents should run `memory explain`, `memory doctor`, and `memory recall --file` for every scoped file before turning a wave into a bounded task. Recall now writes auditable receipts to `state/memory/recall-index.json` and `recall-ledger.jsonl`; the final gate rejects active memory with missing current-wave recall evidence.
 
 Prepare a bounded wave run workspace manually only when you are debugging the agent setup or running CI:
 
@@ -532,7 +532,7 @@ selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --
 # the wrapper refreshes wave-status.json automatically
 ```
 
-`migration run-wave` materializes `source-scope/`, `generated/`, `input-scope.json`, `config-delta.json`, `memory-delta.jsonl`, `run-summary.md`, `wave-status.json`, and migrate scripts. It is project-scoped only: it does not promote memory, does not merge config, and does not publish cross-project/org knowledge packs. Use `--execute-migrate true` only when you want the command to invoke the existing `--mode migrate` pipeline for the wave scope immediately. Both generated migrate wrappers call `migration refresh-wave-status`, so a populated `generated/` directory cannot remain falsely marked `prepared`.
+`migration run-wave` materializes `source-scope/`, `generated/`, `input-scope.json`, `preflight-budget.json`, `config-delta.json`, `memory-delta.jsonl`, `run-summary.md`, `wave-status.json`, and migrate scripts. It is project-scoped only: it does not promote memory, does not merge config, and does not publish cross-project/org knowledge packs. Use `--execute-migrate true` only when you want the command to invoke the existing `--mode migrate` pipeline for the wave scope immediately. Both generated migrate wrappers call `migration refresh-wave-status`, so a populated `generated/` directory cannot remain falsely marked `prepared`.
 
 Merge reviewed wave-local config deltas into a candidate config only after the wave has evidence:
 
@@ -545,6 +545,10 @@ selenium-pw-migrator config validate-merge --base migration/adapter-config.json 
 
 
 ### Wavefront / memory / config-merge snapshot
+
+### Fresh bounded restart
+
+When a pilot wave has accumulated too many remediation tickets, use `/supervised-task waves fresh`. It runs `migration/scripts/start-fresh-wavefront-run.ps1` (or `.sh`), archives the current plan/runs/volatile state under `migration/archive/**`, preserves project memory and configured source scope, and replans from a one-test smoke wave. Automatic post-final remediation stops after four completed tickets or two consecutive no-progress tickets with `FINAL_WITH_LIMITATIONS`; deleting TODO text without restoring executable code does not count as progress.
 
 After using project-scoped memory, wavefront planning, `migration run-wave`, or `config merge-deltas`, open the normal dashboard:
 

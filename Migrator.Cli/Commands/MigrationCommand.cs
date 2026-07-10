@@ -287,10 +287,14 @@ internal static class MigrationCommand
         WriteWaveConfigDelta(outPath, options.Workspace, wave, options);
         WriteWaveMemoryDelta(outPath, wave, copiedFiles.Count, missingFiles);
         WriteWaveCommands(outPath, sourceScopeDir, generatedDir, options, selectedTestsPath);
+        WriteWavePreflightBudget(outPath, plan, wave);
 
-        var execution = options.ExecuteMigrate
-            ? TryExecuteMigrate(outPath, sourceScopeDir, generatedDir, options, selectedTestsPath)
-            : new WaveMigrateExecution("prepared", "--execute-migrate false; generated/ contains a README placeholder until migrate is run.", 0);
+        var automaticExecutionBlocked = options.ExecuteMigrate && !string.Equals(wave.BudgetStatus, "PASS", StringComparison.OrdinalIgnoreCase);
+        var execution = automaticExecutionBlocked
+            ? new WaveMigrateExecution("blocked-by-complexity-budget", "Wave exceeds the planning budget. Split it or explicitly revise the plan before migration; automatic execution was not started.", 2)
+            : options.ExecuteMigrate
+                ? TryExecuteMigrate(outPath, sourceScopeDir, generatedDir, options, selectedTestsPath)
+                : new WaveMigrateExecution("prepared", "--execute-migrate false; generated/ contains a README placeholder until migrate is run.", 0);
         WriteWaveSummary(outPath, wave, scope, options, copiedFiles.Count, missingFiles, selectedTestsPath, execution);
         WriteWaveStatus(outPath, wave, execution, missingFiles);
 
@@ -305,7 +309,8 @@ internal static class MigrationCommand
         Console.WriteLine("Next: review run-summary.md, then run memory summarize after migrate/review artifacts exist.");
         if (missingFiles.Count > 0)
             return 1;
-        if (options.ExecuteMigrate && execution.Status.Equals("failed", StringComparison.OrdinalIgnoreCase))
+        if (options.ExecuteMigrate && (execution.Status.Equals("failed", StringComparison.OrdinalIgnoreCase)
+            || execution.Status.Equals("blocked-by-complexity-budget", StringComparison.OrdinalIgnoreCase)))
             return execution.ExitCode == 0 ? 1 : execution.ExitCode;
         return 0;
     }
@@ -764,9 +769,15 @@ internal static class MigrationCommand
     {
         var migrateArgs = BuildMigrateCommand(sourceScopeDir, generatedDir, options, selectedTestsPath);
         var refreshArgs = $"selenium-pw-migrator migration refresh-wave-status --out {QuoteForShell(Path.GetFullPath(outPath))} --migrate-exit-code";
+        var preflightPath = Path.GetFullPath(Path.Combine(outPath, "preflight-budget.json"));
         var sh = new StringBuilder();
         sh.AppendLine("#!/usr/bin/env bash");
         sh.AppendLine("set -uo pipefail");
+        sh.AppendLine($"preflight={QuoteForShell(preflightPath)}");
+        sh.AppendLine("if ! grep -Eq '\"status\"[[:space:]]*:[[:space:]]*\"PASS\"' \"$preflight\"; then");
+        sh.AppendLine("  echo 'WAVE_PREFLIGHT_BUDGET_BLOCKED: split or replan this wave before migration.' >&2");
+        sh.AppendLine("  exit 2");
+        sh.AppendLine("fi");
         sh.AppendLine("migrate_exit_code=0");
         sh.AppendLine(migrateArgs + " || migrate_exit_code=$?");
         sh.AppendLine(refreshArgs + " \"$migrate_exit_code\"");
@@ -775,6 +786,8 @@ internal static class MigrationCommand
 
         var ps = new StringBuilder();
         ps.AppendLine("$ErrorActionPreference = 'Continue'");
+        ps.AppendLine($"$preflight = Get-Content -Raw -Path '{preflightPath.Replace("'", "''")}' | ConvertFrom-Json");
+        ps.AppendLine("if ([string]$preflight.status -ne 'PASS') { Write-Error 'WAVE_PREFLIGHT_BUDGET_BLOCKED: split or replan this wave before migration.'; exit 2 }");
         ps.AppendLine("$migrateExitCode = 0");
         ps.AppendLine(migrateArgs);
         ps.AppendLine("if ($null -ne $LASTEXITCODE) { $migrateExitCode = $LASTEXITCODE }");
@@ -818,6 +831,34 @@ internal static class MigrationCommand
         return string.Join(" ", parts);
     }
 
+    static void WriteWavePreflightBudget(string outPath, MigrationWavePlan plan, MigrationWave wave)
+    {
+        var payload = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["schemaVersion"] = "migration-wave-preflight-budget/v1",
+            ["generatedAtUtc"] = DateTimeOffset.UtcNow.ToString("O"),
+            ["waveId"] = wave.Id,
+            ["status"] = wave.BudgetStatus,
+            ["metrics"] = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["testCount"] = wave.Tests.Length,
+                ["sourceFileCount"] = wave.SourceFileCount,
+                ["estimatedActions"] = wave.EstimatedActions,
+                ["estimatedComplexity"] = wave.EstimatedComplexity
+            },
+            ["budgets"] = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["maxWaveSize"] = plan.MaxWaveSize,
+                ["maxWaveFiles"] = plan.MaxWaveFiles,
+                ["maxWaveActions"] = plan.MaxWaveActions,
+                ["maxWaveComplexity"] = plan.MaxWaveComplexity
+            },
+            ["violations"] = wave.BudgetViolations ?? Array.Empty<string>(),
+            ["automaticExecutionAllowed"] = string.Equals(wave.BudgetStatus, "PASS", StringComparison.OrdinalIgnoreCase)
+        };
+        WriteJsonAtomic(Path.Combine(outPath, "preflight-budget.json"), payload);
+    }
+
     static void WriteWaveSummary(string outPath, MigrationWave wave, MigrationWaveInputScope scope, MigrationOptions options, int copiedFiles, IReadOnlyList<string> missingFiles, string selectedTestsPath, WaveMigrateExecution execution)
     {
         var sb = new StringBuilder();
@@ -828,6 +869,7 @@ internal static class MigrationCommand
         sb.AppendLine($"Cluster: `{wave.Cluster}`");
         sb.AppendLine($"Risk: **{wave.DominantRisk}**");
         sb.AppendLine($"Tests: {wave.Tests.Length}");
+        sb.AppendLine($"Preflight budget: **{wave.BudgetStatus}** (files {wave.SourceFileCount}, actions {wave.EstimatedActions}, complexity {wave.EstimatedComplexity})");
         sb.AppendLine($"Files copied: {copiedFiles}");
         sb.AppendLine($"Missing files: {missingFiles.Count}");
         sb.AppendLine();
@@ -882,10 +924,13 @@ internal static class MigrationCommand
             ["cluster"] = wave.Cluster,
             ["risk"] = wave.DominantRisk,
             ["tests"] = wave.Tests.Length,
+            ["estimatedActions"] = wave.EstimatedActions,
+            ["estimatedComplexity"] = wave.EstimatedComplexity,
+            ["preflightBudgetStatus"] = wave.BudgetStatus,
             ["filesCopied"] = copiedFiles,
             ["missingFiles"] = missingFiles.ToArray(),
             ["placeholderOnly"] = execution.Status.Equals("prepared", StringComparison.OrdinalIgnoreCase),
-            ["artifacts"] = new[] { "input-scope.json", "config-delta.json", "memory-delta.jsonl", "run-summary.md", "run-migrate.sh", "run-migrate.ps1" }
+            ["artifacts"] = new[] { "input-scope.json", "preflight-budget.json", "config-delta.json", "memory-delta.jsonl", "run-summary.md", "run-migrate.sh", "run-migrate.ps1" }
         };
         File.WriteAllText(Path.Combine(outPath, "run-summary.json"), JsonSerializer.Serialize(json, JsonOptions));
     }
@@ -946,6 +991,10 @@ internal static class MigrationCommand
             ["generatedAtUtc"] = DateTimeOffset.UtcNow.ToString("O"),
             ["updatedAtUtc"] = DateTimeOffset.UtcNow.ToString("O"),
             ["waveId"] = wave.Id,
+            ["preflightBudgetStatus"] = wave.BudgetStatus,
+            ["estimatedActions"] = wave.EstimatedActions,
+            ["estimatedComplexity"] = wave.EstimatedComplexity,
+            ["sourceFileCount"] = wave.SourceFileCount,
             ["status"] = missingFiles.Count > 0 ? "incomplete" : execution.Status,
             ["message"] = execution.Message,
             ["migrateExitCode"] = execution.ExitCode,
@@ -1222,7 +1271,7 @@ internal static class MigrationCommand
 
     static int CountPotentialHelpers(string text)
     {
-        var invocations = Regex.Matches(text, @"\b[A-Z][A-Za-z0-9_]*(?:Page|Steps|Helper|Control|Table|Filter)?\.[A-Z][A-Za-z0-9_]*\s*\(");
+        var invocations = Regex.Matches(text, @"\b(?:[A-Za-z_][A-Za-z0-9_]*(?:Page|Steps|Helper|Control|Table|Filter)|[A-Z][A-Za-z0-9_]*)\.[A-Za-z_][A-Za-z0-9_]*\s*\(");
         return invocations.Count;
     }
 
@@ -1325,35 +1374,49 @@ internal static class MigrationCommand
 
         var orderedClusters = clusters.Clusters
             .OrderBy(c => options.PreferLowRiskFirst ? RiskWeight(c.DominantRisk) : -RiskWeight(c.DominantRisk))
-            .ThenByDescending(c => c.Tests)
+            .ThenBy(c => c.Tests)
             .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+        // A production wavefront must prove the lifecycle on one cheap test before it mixes
+        // representatives from several clusters. This keeps the first wave a smoke test rather
+        // than an accidental dependency-closure stress test.
+        var smokeCandidates = clusters.Tests
+            .OrderBy(t => RiskWeight(t.Risk))
+            .ThenBy(EstimateTestComplexity)
+            .ThenBy(t => t.SeleniumActions)
+            .ThenBy(t => t.TestId, StringComparer.OrdinalIgnoreCase)
+            .Take(Math.Max(1, options.SmokeWaveSize))
+            .ToArray();
+        AddBudgetedWaves(waves, used, "smoke-validation", "mixed", smokeCandidates, options);
 
         var representativeBuffer = new List<MigrationTestInventoryItem>();
         foreach (var cluster in orderedClusters)
         {
             var clusterTests = clusters.Tests
                 .Where(t => t.Cluster.Equals(cluster.Name, StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(t => t.RepresentativeScore)
+                .Where(t => !used.Contains(t.TestId))
+                .OrderBy(t => RiskWeight(t.Risk))
+                .ThenBy(EstimateTestComplexity)
+                .ThenByDescending(t => t.RepresentativeScore)
                 .ThenBy(t => t.TestId, StringComparer.OrdinalIgnoreCase)
                 .Take(repsPerCluster);
             representativeBuffer.AddRange(clusterTests);
         }
-
-        foreach (var chunk in Chunk(representativeBuffer, maxWaveSize))
-            AddWave(waves, used, "representatives", "mixed", chunk);
+        AddBudgetedWaves(waves, used, "representatives", "mixed", representativeBuffer, options);
 
         foreach (var cluster in orderedClusters)
         {
             var remaining = clusters.Tests
                 .Where(t => t.Cluster.Equals(cluster.Name, StringComparison.OrdinalIgnoreCase))
                 .Where(t => !used.Contains(t.TestId))
-                .OrderByDescending(t => t.RepresentativeScore)
+                .OrderBy(t => RiskWeight(t.Risk))
+                .ThenBy(EstimateTestComplexity)
+                .ThenByDescending(t => t.RepresentativeScore)
                 .ThenBy(t => t.TestId, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
-            foreach (var chunk in Chunk(remaining, maxWaveSize))
-                AddWave(waves, used, "cluster-expansion", cluster.Name, chunk);
+            AddBudgetedWaves(waves, used, "cluster-expansion", cluster.Name, remaining, options);
         }
 
         return new MigrationWavePlan(
@@ -1363,6 +1426,10 @@ internal static class MigrationCommand
             InputPath: inventory.InputPath,
             Workspace: options.Workspace,
             MaxWaveSize: maxWaveSize,
+            MaxWaveFiles: Math.Max(1, options.MaxWaveFiles),
+            MaxWaveActions: Math.Max(1, options.MaxWaveActions),
+            MaxWaveComplexity: Math.Max(1, options.MaxWaveComplexity),
+            SmokeWaveSize: Math.Max(1, options.SmokeWaveSize),
             RepresentativesPerCluster: repsPerCluster,
             PreferLowRiskFirst: options.PreferLowRiskFirst,
             TotalTests: inventory.Tests.Length,
@@ -1370,11 +1437,83 @@ internal static class MigrationCommand
             Waves: waves.ToArray());
     }
 
-    static void AddWave(List<MigrationWave> waves, HashSet<string> used, string phase, string cluster, IReadOnlyList<MigrationTestInventoryItem> tests)
+    static void AddBudgetedWaves(
+        List<MigrationWave> waves,
+        HashSet<string> used,
+        string phase,
+        string cluster,
+        IEnumerable<MigrationTestInventoryItem> candidates,
+        MigrationOptions options)
+    {
+        var pending = candidates.Where(t => !used.Contains(t.TestId)).ToArray();
+        foreach (var chunk in PackByBudget(pending, options))
+            AddWave(waves, used, phase, cluster, chunk, options);
+    }
+
+    static IReadOnlyList<IReadOnlyList<MigrationTestInventoryItem>> PackByBudget(
+        IReadOnlyList<MigrationTestInventoryItem> items,
+        MigrationOptions options)
+    {
+        var result = new List<IReadOnlyList<MigrationTestInventoryItem>>();
+        var current = new List<MigrationTestInventoryItem>();
+        foreach (var item in items)
+        {
+            if (current.Count > 0 && !FitsWaveBudget(current.Append(item), options))
+            {
+                result.Add(current.ToArray());
+                current.Clear();
+            }
+
+            current.Add(item);
+            if (current.Count >= Math.Max(1, options.MaxWaveSize))
+            {
+                result.Add(current.ToArray());
+                current.Clear();
+            }
+        }
+
+        if (current.Count > 0)
+            result.Add(current.ToArray());
+        return result;
+    }
+
+    static bool FitsWaveBudget(IEnumerable<MigrationTestInventoryItem> tests, MigrationOptions options)
+    {
+        var values = tests.ToArray();
+        return values.Length <= Math.Max(1, options.MaxWaveSize)
+            && values.Select(t => t.File).Distinct(StringComparer.OrdinalIgnoreCase).Count() <= Math.Max(1, options.MaxWaveFiles)
+            && values.Sum(t => t.SeleniumActions) <= Math.Max(1, options.MaxWaveActions)
+            && values.Sum(EstimateTestComplexity) <= Math.Max(1, options.MaxWaveComplexity);
+    }
+
+    static int EstimateTestComplexity(MigrationTestInventoryItem test)
+        => test.SeleniumActions
+            + (test.Assertions * 2)
+            + (test.Waits * 2)
+            + (test.Helpers * 3)
+            + (RiskWeight(test.Risk) * 10);
+
+    static void AddWave(
+        List<MigrationWave> waves,
+        HashSet<string> used,
+        string phase,
+        string cluster,
+        IReadOnlyList<MigrationTestInventoryItem> tests,
+        MigrationOptions options)
     {
         var unique = tests.Where(t => used.Add(t.TestId)).ToArray();
         if (unique.Length == 0)
             return;
+
+        var sourceFileCount = unique.Select(t => t.File).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        var estimatedActions = unique.Sum(t => t.SeleniumActions);
+        var estimatedComplexity = unique.Sum(EstimateTestComplexity);
+        var violations = new List<string>();
+        if (unique.Length > options.MaxWaveSize) violations.Add($"testCount {unique.Length} > {options.MaxWaveSize}");
+        if (sourceFileCount > options.MaxWaveFiles) violations.Add($"sourceFileCount {sourceFileCount} > {options.MaxWaveFiles}");
+        if (estimatedActions > options.MaxWaveActions) violations.Add($"estimatedActions {estimatedActions} > {options.MaxWaveActions}");
+        if (estimatedComplexity > options.MaxWaveComplexity) violations.Add($"estimatedComplexity {estimatedComplexity} > {options.MaxWaveComplexity}");
+        var budgetStatus = violations.Count == 0 ? "PASS" : unique.Length == 1 ? "OVERSIZED_SINGLE_TEST" : "BLOCKED";
 
         var index = waves.Count + 1;
         waves.Add(new MigrationWave(
@@ -1385,15 +1524,17 @@ internal static class MigrationCommand
             Tests: unique,
             Files: unique.Select(t => t.File).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray(),
             DominantRisk: SelectDominantRisk(unique.Select(t => t.Risk)),
-            Rationale: phase == "representatives"
-                ? "Representative wave opens project patterns before scaling the scope."
-                : $"Cluster expansion wave for {cluster}."));
-    }
-
-    static IEnumerable<IReadOnlyList<T>> Chunk<T>(IReadOnlyList<T> items, int size)
-    {
-        for (var i = 0; i < items.Count; i += size)
-            yield return items.Skip(i).Take(size).ToArray();
+            EstimatedActions: estimatedActions,
+            EstimatedComplexity: estimatedComplexity,
+            SourceFileCount: sourceFileCount,
+            BudgetStatus: budgetStatus,
+            BudgetViolations: violations.ToArray(),
+            Rationale: phase switch
+            {
+                "smoke-validation" => "Single low-risk smoke wave validates recall, migration, review, remediation budget, and final-gate lifecycle before expansion.",
+                "representatives" => "Representative wave opens project patterns while staying inside file/action/complexity budgets.",
+                _ => $"Cluster expansion wave for {cluster}, packed by file/action/complexity budget."
+            }));
     }
 
     static void WriteInventoryArtifacts(string outPath, string format, MigrationInventoryReport inventory)
@@ -1477,6 +1618,7 @@ internal static class MigrationCommand
         sb.AppendLine($"Total tests: {plan.TotalTests}");
         sb.AppendLine($"Clusters: {plan.TotalClusters}");
         sb.AppendLine($"Waves: {plan.Waves.Length}");
+        sb.AppendLine($"Budgets: tests <= {plan.MaxWaveSize}, files <= {plan.MaxWaveFiles}, Selenium actions <= {plan.MaxWaveActions}, estimated complexity <= {plan.MaxWaveComplexity}; smoke wave size = {plan.SmokeWaveSize}.");
         sb.AppendLine();
         sb.AppendLine("> This plan is read-only. It does not migrate source files. Run `memory explain` and `memory doctor` before turning any wave into a bounded migration task.");
         sb.AppendLine();
@@ -1485,6 +1627,9 @@ internal static class MigrationCommand
             sb.AppendLine($"## {wave.Id}: {wave.Phase} / {wave.Cluster}");
             sb.AppendLine();
             sb.AppendLine($"Risk: **{wave.DominantRisk}**");
+            sb.AppendLine($"Preflight budget: **{wave.BudgetStatus}**; tests {wave.Tests.Length}, files {wave.SourceFileCount}, actions {wave.EstimatedActions}, complexity {wave.EstimatedComplexity}.");
+            if ((wave.BudgetViolations?.Length ?? 0) > 0)
+                sb.AppendLine($"Budget violations: {string.Join("; ", wave.BudgetViolations ?? Array.Empty<string>())}");
             sb.AppendLine($"Rationale: {wave.Rationale}");
             sb.AppendLine();
             sb.AppendLine("| Test | File | Risk | Tags | Why this test matters |");
@@ -1585,6 +1730,7 @@ internal static class MigrationCommand
                 error = "Wave plan deserialized to null.";
                 return false;
             }
+            plan = NormalizeWavePlan(plan);
             return true;
         }
         catch (Exception ex)
@@ -1592,6 +1738,45 @@ internal static class MigrationCommand
             error = ex.Message;
             return false;
         }
+    }
+
+    static MigrationWavePlan NormalizeWavePlan(MigrationWavePlan plan)
+    {
+        var normalizedPlan = plan with
+        {
+            MaxWaveSize = plan.MaxWaveSize > 0 ? plan.MaxWaveSize : 4,
+            MaxWaveFiles = plan.MaxWaveFiles > 0 ? plan.MaxWaveFiles : 2,
+            MaxWaveActions = plan.MaxWaveActions > 0 ? plan.MaxWaveActions : 90,
+            MaxWaveComplexity = plan.MaxWaveComplexity > 0 ? plan.MaxWaveComplexity : 140,
+            SmokeWaveSize = plan.SmokeWaveSize > 0 ? plan.SmokeWaveSize : 1
+        };
+
+        normalizedPlan = normalizedPlan with
+        {
+            Waves = (plan.Waves ?? Array.Empty<MigrationWave>()).Select(wave =>
+            {
+                var tests = wave.Tests ?? Array.Empty<MigrationTestInventoryItem>();
+                var sourceFileCount = tests.Select(t => t.File).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+                var estimatedActions = tests.Sum(t => t.SeleniumActions);
+                var estimatedComplexity = tests.Sum(EstimateTestComplexity);
+                var violations = new List<string>();
+                if (tests.Length > normalizedPlan.MaxWaveSize) violations.Add($"testCount {tests.Length} > {normalizedPlan.MaxWaveSize}");
+                if (sourceFileCount > normalizedPlan.MaxWaveFiles) violations.Add($"sourceFileCount {sourceFileCount} > {normalizedPlan.MaxWaveFiles}");
+                if (estimatedActions > normalizedPlan.MaxWaveActions) violations.Add($"estimatedActions {estimatedActions} > {normalizedPlan.MaxWaveActions}");
+                if (estimatedComplexity > normalizedPlan.MaxWaveComplexity) violations.Add($"estimatedComplexity {estimatedComplexity} > {normalizedPlan.MaxWaveComplexity}");
+                return wave with
+                {
+                    Tests = tests,
+                    Files = wave.Files ?? tests.Select(t => t.File).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+                    EstimatedActions = estimatedActions,
+                    EstimatedComplexity = estimatedComplexity,
+                    SourceFileCount = sourceFileCount,
+                    BudgetStatus = violations.Count == 0 ? "PASS" : tests.Length == 1 ? "OVERSIZED_SINGLE_TEST" : "BLOCKED",
+                    BudgetViolations = violations.ToArray()
+                };
+            }).ToArray()
+        };
+        return normalizedPlan;
     }
 
     static JsonSerializerOptions JsonLineOptions() => new()
@@ -1659,7 +1844,7 @@ internal static class MigrationCommand
 Migration planning and wave run commands:
   selenium-pw-migrator migration inventory --input ./SeleniumTests --out migration/plan
   selenium-pw-migrator migration cluster --input ./SeleniumTests --out migration/plan
-  selenium-pw-migrator migration plan --strategy wavefront --input ./SeleniumTests --workspace migration --out migration/plan
+  selenium-pw-migrator migration plan --strategy wavefront --input ./SeleniumTests --workspace migration --out migration/plan --max-wave-size 4 --max-wave-files 2 --max-wave-actions 90 --max-wave-complexity 140 --smoke-wave-size 1
   selenium-pw-migrator migration plan show --plan migration/plan
   selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001
   selenium-pw-migrator migration refresh-wave-status --out migration/runs/wave-001 --migrate-exit-code 0
@@ -1688,6 +1873,10 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
         bool ExecuteMigrate,
         int MigrateExitCode,
         int MaxWaveSize,
+        int MaxWaveFiles,
+        int MaxWaveActions,
+        int MaxWaveComplexity,
+        int SmokeWaveSize,
         int RepresentativesPerCluster,
         bool PreferLowRiskFirst)
     {
@@ -1707,7 +1896,11 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
             var generationPolicy = string.Empty;
             var executeMigrate = false;
             var migrateExitCode = -1;
-            var maxWaveSize = 8;
+            var maxWaveSize = 4;
+            var maxWaveFiles = 2;
+            var maxWaveActions = 90;
+            var maxWaveComplexity = 140;
+            var smokeWaveSize = 1;
             var representativesPerCluster = 1;
             var preferLowRiskFirst = true;
             error = string.Empty;
@@ -1741,6 +1934,10 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
                         case "--execute-migrate": executeMigrate = ParseBool(Next(arg), arg); break;
                         case "--migrate-exit-code": migrateExitCode = ParseNonNegativeInt(Next(arg), arg); break;
                         case "--max-wave-size": maxWaveSize = ParsePositiveInt(Next(arg), arg); break;
+                        case "--max-wave-files": maxWaveFiles = ParsePositiveInt(Next(arg), arg); break;
+                        case "--max-wave-actions": maxWaveActions = ParsePositiveInt(Next(arg), arg); break;
+                        case "--max-wave-complexity": maxWaveComplexity = ParsePositiveInt(Next(arg), arg); break;
+                        case "--smoke-wave-size": smokeWaveSize = ParsePositiveInt(Next(arg), arg); break;
                         case "--representatives-per-cluster": representativesPerCluster = ParsePositiveInt(Next(arg), arg); break;
                         case "--prefer-low-risk-first": preferLowRiskFirst = ParseBool(Next(arg), arg); break;
                         default:
@@ -1764,7 +1961,7 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
                 return null;
             }
 
-            return new MigrationOptions(input, outPath, workspace, strategy, format, plan, inventory, wave, config, target, targetTestFramework, generationPolicy, executeMigrate, migrateExitCode, maxWaveSize, representativesPerCluster, preferLowRiskFirst);
+            return new MigrationOptions(input, outPath, workspace, strategy, format, plan, inventory, wave, config, target, targetTestFramework, generationPolicy, executeMigrate, migrateExitCode, maxWaveSize, maxWaveFiles, maxWaveActions, maxWaveComplexity, smokeWaveSize, representativesPerCluster, preferLowRiskFirst);
         }
 
         static int ParseNonNegativeInt(string value, string option)
@@ -1845,6 +2042,10 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
         string InputPath,
         string Workspace,
         int MaxWaveSize,
+        int MaxWaveFiles,
+        int MaxWaveActions,
+        int MaxWaveComplexity,
+        int SmokeWaveSize,
         int RepresentativesPerCluster,
         bool PreferLowRiskFirst,
         int TotalTests,
@@ -1859,6 +2060,11 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
         MigrationTestInventoryItem[] Tests,
         string[] Files,
         string DominantRisk,
+        int EstimatedActions,
+        int EstimatedComplexity,
+        int SourceFileCount,
+        string BudgetStatus,
+        string[] BudgetViolations,
         string Rationale);
 
     sealed record MigrationWaveInputScope(

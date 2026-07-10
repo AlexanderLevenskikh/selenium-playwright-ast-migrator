@@ -60,3 +60,7 @@ When `wave-quality-budget/v1` is `BLOCKED_BY_WAVE_QUALITY_BUDGET`, the final gat
 ## Artifact hygiene gate
 
 Final gate includes `artifact-hygiene`. It invokes `migration/scripts/validate-run-artifacts.ps1` when present and expects schema `artifact-hygiene/v1`. The hygiene report blocks final handoff when existing artifacts contradict the gate/state evidence: polluted `Plan.md`, optimistic `Documentation.md` while blocked, missing run/wave identity on generated boards/status reports, or fake session export status.
+
+### Bounded remediation and fresh restart
+
+Wavefront plans start with a one-test smoke wave and use `preflight-budget.json` to enforce test/file/action/complexity limits. Automatic post-final remediation is limited to four completed tickets per wave and two consecutive no-progress tickets. `wave-progress/v1` requires executable or assertion restoration; TODO deletion alone is not progress. When the budget is exhausted, final gate emits `FINAL_WITH_LIMITATIONS` and harness state `WAVE_REMEDIATION_BUDGET_EXHAUSTED`; the closed post-final loop must stop. Use `/supervised-task waves fresh` or `scripts/start-fresh-wavefront-run.ps1` / `.sh` to archive the pilot while preserving project memory.

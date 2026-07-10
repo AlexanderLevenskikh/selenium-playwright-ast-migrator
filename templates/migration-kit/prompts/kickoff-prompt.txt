@@ -66,3 +66,11 @@ Rules:
 After a successful `FINAL` / PASS checkpoint, stop and report. Start another run only when the user explicitly says `continue` or bounded auto-continuation is recorded for this exact next action.
 - Do not claim FINAL unless `{{WORKSPACE}}/scripts/check-final-gate.ps1 -RequireOpenCodeExport -RequireExplainTodo -RequireVerificationArtifacts` passes. If strict evidence is not available, report `NOT FINAL - INVESTIGATION RESULT ONLY`.
 - If interrupted, the next agent must be able to resume from workspace files.
+
+Bounded wavefront requirements:
+- Start with a one-test smoke-validation wave.
+- Read preflight-budget.json and execute only PASS waves.
+- Before each post-final ticket, evaluate wave quality/remediation budget.
+- Stop with FINAL_WITH_LIMITATIONS after four completed post-final tickets or two consecutive no-progress tickets.
+- TODO deletion without executable restoration does not count as progress.
+- Use /supervised-task waves fresh to archive a pilot and preserve memory before replanning.

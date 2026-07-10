@@ -104,3 +104,11 @@ If the user wants to share a failing/noisy migration with the migrator author, r
 ## Artifact hygiene loop
 
 Before final handoff or another wave after material state changes, ensure `migration/scripts/validate-run-artifacts.ps1` / `.sh` has produced `artifact-hygiene/v1`. Do not publish user-facing reports that claim `complete`, `success`, or green status while `final-gate-result.json` is blocked. `Plan.md` must remain a plan, not raw shell/write transcript; session export status must be explicit; generated boards/status artifacts must include run/wave identity.
+
+## Bounded production waves
+
+- Production wavefront plans begin with a one-test `smoke-validation` wave. Later waves are packed by test count, distinct source files, estimated Selenium actions, and estimated complexity; count-only grouping is not sufficient.
+- Read `runs/<wave-id>/preflight-budget.json` before execution. `OVERSIZED_SINGLE_TEST` and `BLOCKED` are review/replan states, not permission to execute automatically.
+- Automatic post-final remediation is capped at four completed tickets per wave and two consecutive no-progress tickets. `update-current-ticket-status` records `wave-progress/v1`; TODO deletion without executable restoration is no progress.
+- `REMEDIATION_BUDGET_EXHAUSTED` produces `FINAL_WITH_LIMITATIONS` and stops the closed loop. Do not create another ticket until the user explicitly extends the budget or starts `/supervised-task waves fresh`.
+- A fresh restart must use `scripts/start-fresh-wavefront-run.ps1` / `.sh`, archive the pilot under `archive/**`, and preserve `state/memory/**` plus configured source scope.

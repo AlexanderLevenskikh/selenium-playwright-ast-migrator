@@ -813,6 +813,11 @@ function Test-WaveQualityBudget([string]$WorkspacePath, [string]$LatestRunId, [r
             return $true
         }
 
+        if ($budgetStatus -eq "REMEDIATION_BUDGET_EXHAUSTED") {
+            $Detail.Value = "automatic remediation budget exhausted; final checkpoint may stop with limitations: $budgetPath"
+            return $true
+        }
+
         if ($budgetStatus -eq "BLOCKED_BY_WAVE_QUALITY_BUDGET" -and -not [string]::IsNullOrWhiteSpace($nextAction)) {
             $Detail.Value = "wave quality budget blocked next wave (violations=$violationCount): $nextAction"
             return $false
@@ -915,7 +920,16 @@ function Update-HarnessRunStateFromFinalGate([string]$WorkspacePath, $Report, $C
         $harnessRunState["finalGateReport"] = "state/final-gate-result.json"
         $harnessRunState["continuationDecision"] = "state/continuation-decision.json"
 
-        if ([string]$Report.status -eq "PASS" -and [string]$Continuation.status -eq "FINAL" -and [string]$Continuation.postSuccessPolicy -eq "STOP_FOR_REVIEW") {
+        if ([string]$Report.status -eq "PASS" -and [string]$Continuation.status -eq "FINAL_WITH_LIMITATIONS") {
+            $harnessRunState["status"] = "WAVE_REMEDIATION_BUDGET_EXHAUSTED"
+            $harnessRunState["finalizedAtUtc"] = [DateTimeOffset]::UtcNow.ToString("o")
+            $harnessRunState["postSuccessPolicy"] = "STOP_FOR_REVIEW"
+            $harnessRunState["continueCommand"] = $Continuation.continueCommand
+            $harnessRunState["postFinalContinueAction"] = "NONE_REMEDIATION_BUDGET_EXHAUSTED"
+            $harnessRunState["allowedNextAction"] = $null
+            $harnessRunState["remainingLimitationsRequired"] = $true
+        }
+        elseif ([string]$Report.status -eq "PASS" -and [string]$Continuation.status -eq "FINAL" -and [string]$Continuation.postSuccessPolicy -eq "STOP_FOR_REVIEW") {
             $harnessRunState["status"] = "FINAL_STOPPED_FOR_REVIEW"
             $harnessRunState["finalizedAtUtc"] = [DateTimeOffset]::UtcNow.ToString("o")
             $harnessRunState["postSuccessPolicy"] = $Continuation.postSuccessPolicy
@@ -1849,7 +1863,33 @@ function New-GateFollowupSlicerCandidate([string]$WorkspacePath, $Results) {
     return New-ContinuationCandidate "gate-followup-slicer" "Run migration/scripts/slice-gate-followups.ps1 -Workspace migration to convert failed final-gate/sentinel diagnostics into migration/current-ticket.md before the next wave." "failed checks: $failedNames"
 }
 
-function New-ContinuationDecision([bool]$Passed, $Results, $Candidate, [bool]$HasNonFinalStatus) {
+function Test-RemediationBudgetExhausted([string]$WorkspacePath) {
+    $path = Join-Path $WorkspacePath "state/wave-quality-budget.json"
+    if (-not (Test-Path $path)) { return $false }
+    try {
+        $budget = Get-Content -Raw -Path $path | ConvertFrom-Json -ErrorAction Stop
+        return [string]$budget.budgetStatus -eq "REMEDIATION_BUDGET_EXHAUSTED"
+    }
+    catch { return $false }
+}
+
+function New-ContinuationDecision([bool]$Passed, $Results, $Candidate, [bool]$HasNonFinalStatus, [bool]$RemediationBudgetExhausted) {
+    if ($Passed -and $RemediationBudgetExhausted) {
+        return [pscustomobject][ordered]@{
+            status = "FINAL_WITH_LIMITATIONS"
+            protocol = "The wave reached its automatic remediation budget. Stop with the remaining limitations recorded. Do not create another post-final ticket automatically and do not start the next wave without an explicit fresh-wave decision."
+            nextAction = $null
+            source = "state/wave-quality-budget.json"
+            evidence = "REMEDIATION_BUDGET_EXHAUSTED"
+            mustContinueBeforeUserMessage = $false
+            postSuccessPolicy = "STOP_FOR_REVIEW"
+            continueRequires = "explicit user approval to extend the remediation budget, or archive the pilot and start a fresh bounded wavefront"
+            continueCommand = "/supervised-task waves fresh"
+            postFinalContinueAction = "NONE_REMEDIATION_BUDGET_EXHAUSTED"
+            remainingLimitationsRequired = $true
+        }
+    }
+
     if ($HasNonFinalStatus -and $Candidate -ne $null) {
         return [pscustomobject][ordered]@{
             status = "CONTINUE_REQUIRED"
@@ -1977,6 +2017,8 @@ $guardFiles = @(
     "scripts/slice-gate-followups.sh",
     "scripts/evaluate-wave-quality-budget.ps1",
     "scripts/evaluate-wave-quality-budget.sh",
+    "scripts/start-fresh-wavefront-run.ps1",
+    "scripts/start-fresh-wavefront-run.sh",
     "scripts/collect-mapping-research-memory.ps1",
     "scripts/collect-mapping-research-memory.sh",
     "scripts/create-feedback-bundle.ps1",
@@ -2151,6 +2193,13 @@ $researchThresholdDetail = ""
 $researchThresholdOk = Test-MemoryResearchThresholds $workspacePath $latestRunId ([ref]$researchThresholdDetail)
 Add-Result $results "research-memory-thresholds" $researchThresholdOk $researchThresholdDetail
 
+$waveBudgetScript = Join-Path $workspacePath "scripts/evaluate-wave-quality-budget.ps1"
+if (Test-Path $waveBudgetScript) {
+    $waveBudgetArgs = @("-Workspace", $workspacePath)
+    if (-not [string]::IsNullOrWhiteSpace($latestRunId)) { $waveBudgetArgs += @("-RunId", $latestRunId) }
+    [void](Invoke-PowerShellScript $waveBudgetScript $waveBudgetArgs)
+}
+
 $waveBudgetDetail = ""
 $waveBudgetOk = Test-WaveQualityBudget $workspacePath $latestRunId ([ref]$waveBudgetDetail)
 Add-Result $results "wave-quality-budget" $waveBudgetOk $waveBudgetDetail
@@ -2271,7 +2320,8 @@ if ($null -eq $continuationCandidate -and -not $passed) {
     $continuationCandidate = New-GateFollowupSlicerCandidate $workspacePath $results
 }
 
-$continuation = New-ContinuationDecision $passed $results $continuationCandidate $hasNonFinalStatus
+$remediationBudgetExhausted = Test-RemediationBudgetExhausted $workspacePath
+$continuation = New-ContinuationDecision $passed $results $continuationCandidate $hasNonFinalStatus $remediationBudgetExhausted
 
 $report = [ordered]@{
     generatedAtUtc = [DateTimeOffset]::UtcNow.ToString("o")
@@ -2300,7 +2350,12 @@ $md = New-Object System.Text.StringBuilder
 [void]$md.AppendLine("Continuation: **$($continuation.status)**")
 if ($continuation.postSuccessPolicy) {
     [void]$md.AppendLine("Post-success policy: **$($continuation.postSuccessPolicy)**")
-    [void]$md.AppendLine("Stopped because SUCCESS checkpoint requires review before post-final research or another bounded ticket.")
+    if ($continuation.status -eq "FINAL_WITH_LIMITATIONS") {
+        [void]$md.AppendLine("Stopped because the automatic remediation budget is exhausted. Remaining limitations must be reported; no further post-final ticket may be created automatically.")
+    }
+    else {
+        [void]$md.AppendLine("Stopped because SUCCESS checkpoint requires review before post-final research or another bounded ticket.")
+    }
     [void]$md.AppendLine(("To continue, run: {0}" -f $continuation.continueCommand))
     if ($continuation.postFinalContinueAction) {
         [void]$md.AppendLine(("Post-final continue action: {0}" -f $continuation.postFinalContinueAction))
@@ -2348,8 +2403,14 @@ Write-Host "FINAL_GATE_$($report.status)"
 Write-Host "HARNESS_CONTINUATION_$($continuation.status)"
 if ($continuation.postSuccessPolicy) {
     Write-Host "HARNESS_SUCCESS_$($continuation.postSuccessPolicy)"
-    Write-Host "Harness run status: FINAL_STOPPED_FOR_REVIEW"
-    Write-Host "Stopped because SUCCESS checkpoint requires review before post-final research or another bounded ticket."
+    if ($continuation.status -eq "FINAL_WITH_LIMITATIONS") {
+        Write-Host "Harness run status: WAVE_REMEDIATION_BUDGET_EXHAUSTED"
+        Write-Host "Stopped because the automatic remediation budget is exhausted. Remaining limitations must be reported."
+    }
+    else {
+        Write-Host "Harness run status: FINAL_STOPPED_FOR_REVIEW"
+        Write-Host "Stopped because SUCCESS checkpoint requires review before post-final research or another bounded ticket."
+    }
     Write-Host "To continue, run: $($continuation.continueCommand)"
     Write-Host "Continue command: $($continuation.continueCommand)"
     if ($continuation.postFinalContinueAction) {

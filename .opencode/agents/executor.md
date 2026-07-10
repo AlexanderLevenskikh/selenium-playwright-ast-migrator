@@ -176,6 +176,10 @@ Treat machine ledgers as controlled state, not free-form text:
 4. Mention the verification you expect to run.
 5. If practical, write a `plan-written` or `implementation-started` event with `migration/scripts/write-harness-event.ps1`.
 
+## Bounded-wave progress accounting
+
+The current-ticket lifecycle records `wave-progress/v1` snapshots. Do not game those metrics: deleting TODO text, comments, or evidence without adding/restoring active executable code or assertions is explicitly recorded as no progress. Keep each ticket coherent enough that `IN_PROGRESS` provides a meaningful baseline and `REVIEW_READY`/`DONE` can show a real generated-code delta.
+
 ## During implementation
 
 - Keep changes small and reversible.

@@ -55,6 +55,8 @@ required_patterns = [
     r'^templates/migration-kit/scripts/slice-gate-followups\.sh$',
     r'^templates/migration-kit/scripts/evaluate-wave-quality-budget\.ps1$',
     r'^templates/migration-kit/scripts/evaluate-wave-quality-budget\.sh$',
+    r'^templates/migration-kit/scripts/start-fresh-wavefront-run\.ps1$',
+    r'^templates/migration-kit/scripts/start-fresh-wavefront-run\.sh$',
     r'^templates/migration-kit/scripts/collect-mapping-research-memory\.ps1$',
     r'^templates/migration-kit/scripts/collect-mapping-research-memory\.sh$',
     r'^templates/migration-kit/scripts/create-feedback-bundle\.ps1$',

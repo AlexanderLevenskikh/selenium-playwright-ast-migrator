@@ -114,3 +114,7 @@ Sentinel inspections must be finalized with `migration/scripts/complete-sentinel
 ## Current-ticket lifecycle
 
 When `migration/current-ticket.md` exists, route it through reviewer/executor before selecting a new wave. Use `migration/scripts/update-current-ticket-status.ps1` / `.sh` to track `READY`, `IN_PROGRESS`, `REVIEW_READY`, `DONE`, or `BLOCKED` in `migration/state/current-ticket-status.json` and `migration/state/current-ticket-ledger.jsonl`.
+
+## Bounded wavefront rule
+
+Wavefront migration starts with a one-test smoke wave and uses file/action/complexity budgets. Never auto-execute a non-PASS `preflight-budget.json`. Stop at `FINAL_WITH_LIMITATIONS` when `REMEDIATION_BUDGET_EXHAUSTED`; do not continue post-final tickets automatically. Use `/supervised-task waves fresh` to archive the pilot while preserving project memory.

@@ -112,6 +112,113 @@ function Update-ActiveWaveStatus([string]$WorkspacePath, [string]$TicketStatus, 
     }))
 }
 
+function Get-ActiveWaveRoot([string]$WorkspacePath) {
+    $runsPath = Join-Path $WorkspacePath "runs"
+    if (-not (Test-Path $runsPath)) { return $null }
+    $statusFile = Get-ChildItem -Path $runsPath -Recurse -File -Filter "wave-status.json" -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match '[\\/]wave-[^\\/]+[\\/]wave-status\.json$' } |
+        Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+    if ($null -eq $statusFile) { return $null }
+    return Split-Path -Parent $statusFile.FullName
+}
+
+function Get-WaveProgressMetrics([string]$WaveRoot) {
+    $generatedRoot = Join-Path $WaveRoot "generated"
+    $metrics = [ordered]@{
+        generatedFileCount = 0
+        todoCount = 0
+        unresolvedSymbolTodoCount = 0
+        activeExecutableLines = 0
+        activeAssertionLines = 0
+        commentedExecutableLines = 0
+    }
+    if (-not (Test-Path $generatedRoot)) { return $metrics }
+
+    $files = @(Get-ChildItem -Path $generatedRoot -Recurse -File -Include "*.cs", "*.ts" -ErrorAction SilentlyContinue)
+    $metrics.generatedFileCount = $files.Count
+    foreach ($file in $files) {
+        foreach ($line in (Get-Content -Path $file.FullName -ErrorAction SilentlyContinue)) {
+            $trimmed = $line.Trim()
+            if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
+            if ($trimmed -match '(?i)\bTODO\b') { $metrics.todoCount++ }
+            if ($trimmed -match '(?i)TODO.{0,80}UNRESOLVED_SYMBOL|UNRESOLVED_SYMBOL.{0,80}TODO') { $metrics.unresolvedSymbolTodoCount++ }
+            if ($trimmed.StartsWith("//")) {
+                if ($trimmed -match '(?i)(\(|=|;|\bawait\b|\bvar\b|\breturn\b)') { $metrics.commentedExecutableLines++ }
+                continue
+            }
+            if ($trimmed -match '(?i)\b(Assert|Expect|Should)\b') { $metrics.activeAssertionLines++ }
+            if ($trimmed.EndsWith(";") -and $trimmed -match '(?i)(\(|=|\bawait\b|\breturn\b)') { $metrics.activeExecutableLines++ }
+        }
+    }
+    return $metrics
+}
+
+function Read-JsonLines([string]$Path) {
+    $items = New-Object System.Collections.Generic.List[object]
+    if (-not (Test-Path $Path)) { return @() }
+    foreach ($line in (Get-Content -Path $Path -ErrorAction SilentlyContinue)) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        try { [void]$items.Add(($line | ConvertFrom-Json -ErrorAction Stop)) } catch { }
+    }
+    return $items.ToArray()
+}
+
+function Write-WaveProgressSnapshot([string]$WorkspacePath, [string]$RunId, [string]$TicketId, [string]$TicketStatus) {
+    $waveRoot = Get-ActiveWaveRoot $WorkspacePath
+    if ([string]::IsNullOrWhiteSpace($waveRoot)) { return $null }
+    $waveId = Split-Path -Leaf $waveRoot
+    $ledgerPath = Join-Path $WorkspacePath "state/wave-progress-ledger.jsonl"
+    $existing = @(Read-JsonLines $ledgerPath | Where-Object { [string]$_.waveId -eq $waveId })
+    $baseline = $existing | Where-Object {
+        ([string]$_.ticketId -eq $TicketId -and [string]$_.ticketStatus -in @("READY", "IN_PROGRESS")) -or
+        ([string]$_.ticketStatus -eq "DONE")
+    } | Select-Object -Last 1
+    $metrics = Get-WaveProgressMetrics $waveRoot
+    $meaningfulProgress = $null
+    $reasons = New-Object System.Collections.Generic.List[string]
+    if ($TicketStatus -eq "DONE") {
+        if ($null -eq $baseline) {
+            $meaningfulProgress = $true
+            [void]$reasons.Add("first measured ticket establishes a progress baseline")
+        }
+        else {
+            $before = $baseline.metrics
+            if ([int]$metrics.activeExecutableLines -gt [int]$before.activeExecutableLines) { [void]$reasons.Add("active executable lines increased") }
+            if ([int]$metrics.activeAssertionLines -gt [int]$before.activeAssertionLines) { [void]$reasons.Add("active assertion lines increased") }
+            if ([int]$metrics.unresolvedSymbolTodoCount -lt [int]$before.unresolvedSymbolTodoCount -and
+                [int]$metrics.commentedExecutableLines -lt [int]$before.commentedExecutableLines) {
+                [void]$reasons.Add("unresolved symbols decreased while commented code was restored")
+            }
+            if ([int]$metrics.todoCount -lt [int]$before.todoCount -and
+                [int]$metrics.activeExecutableLines -ge [int]$before.activeExecutableLines -and
+                [int]$metrics.commentedExecutableLines -lt [int]$before.commentedExecutableLines) {
+                [void]$reasons.Add("TODO count decreased with executable restoration")
+            }
+            $meaningfulProgress = $reasons.Count -gt 0
+            if (-not $meaningfulProgress -and [int]$metrics.todoCount -lt [int]$before.todoCount) {
+                [void]$reasons.Add("TODO count decreased without executable restoration; not counted as progress")
+            }
+            if (-not $meaningfulProgress -and $reasons.Count -eq 0) { [void]$reasons.Add("no measurable generated-code progress") }
+        }
+    }
+
+    $snapshot = [pscustomobject][ordered]@{
+        schemaVersion = "wave-progress/v1"
+        waveId = $waveId
+        waveRoot = $waveRoot
+        runId = $RunId
+        ticketId = $TicketId
+        ticketStatus = $TicketStatus
+        metrics = $metrics
+        meaningfulProgress = $meaningfulProgress
+        reasons = $reasons.ToArray()
+        updatedAtUtc = [DateTimeOffset]::UtcNow.ToString("o")
+    }
+    Add-Content -Path $ledgerPath -Encoding UTF8 -Value ($snapshot | ConvertTo-Json -Depth 20 -Compress)
+    Add-Content -Path (Join-Path $waveRoot "progress-ledger.jsonl") -Encoding UTF8 -Value ($snapshot | ConvertTo-Json -Depth 20 -Compress)
+    return $snapshot
+}
+
 function Read-LatestRunId([string]$WorkspacePath) {
     $harnessRunPath = Join-Path $WorkspacePath "state/harness-run.json"
     $harnessRun = Read-JsonIfExists $harnessRunPath
@@ -169,6 +276,7 @@ $ledgerPath = Join-Path $stateDir "current-ticket-ledger.jsonl"
 $statusPath = Join-Path $stateDir "current-ticket-status.json"
 
 $previous = Read-JsonIfExists $statusPath
+$progressSnapshot = Write-WaveProgressSnapshot $workspacePath $RunId ([string]$metadata.ticketId) $Status
 $event = [pscustomobject][ordered]@{
     schemaVersion = "current-ticket-lifecycle/v1"
     event = "CURRENT_TICKET_STATUS_UPDATED"
@@ -183,6 +291,7 @@ $event = [pscustomobject][ordered]@{
     summary = $Summary
     evidence = $Evidence
     result = $Result
+    progress = $progressSnapshot
     updatedAtUtc = [DateTimeOffset]::UtcNow.ToString("o")
 }
 
@@ -199,6 +308,7 @@ $statusPayload = [pscustomobject][ordered]@{
     summary = $Summary
     evidence = $Evidence
     result = $Result
+    progress = $progressSnapshot
     previousStatus = if ($null -ne $previous) { [string]$previous.status } else { $null }
     updatedAtUtc = $event.updatedAtUtc
 }
