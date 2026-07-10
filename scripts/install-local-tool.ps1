@@ -15,6 +15,34 @@ function Invoke-DotnetChecked {
     }
 }
 
+function Unblock-PathIfSupported {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) { return }
+    if (-not (Test-Path $Path)) { return }
+    if (-not (Get-Command Unblock-File -ErrorAction SilentlyContinue)) { return }
+
+    try {
+        Unblock-File -Path $Path -ErrorAction SilentlyContinue
+    }
+    catch {
+        Write-Warning "Could not unblock $Path: $($_.Exception.Message)"
+    }
+}
+
+function Unblock-LocalToolInputs {
+    param([string]$PackageSource)
+
+    Unblock-PathIfSupported (Join-Path $root "dotnet-tools.json")
+    Unblock-PathIfSupported (Join-Path $root ".config/dotnet-tools.json")
+
+    if (Test-Path $PackageSource) {
+        Get-ChildItem -Path $PackageSource -Filter "*.nupkg" -File -ErrorAction SilentlyContinue | ForEach-Object {
+            Unblock-PathIfSupported $_.FullName
+        }
+    }
+}
+
 function Test-ToolManifestExists {
     return ((Test-Path ".config/dotnet-tools.json") -or (Test-Path "dotnet-tools.json"))
 }
@@ -72,6 +100,7 @@ if (-not (Test-Path $source)) {
 }
 
 $resolvedVersion = Resolve-LocalPackageVersion
+Unblock-LocalToolInputs -PackageSource $source
 
 Push-Location $root
 try {

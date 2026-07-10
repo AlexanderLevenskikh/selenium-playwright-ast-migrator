@@ -83,26 +83,12 @@ function Test-IsSourceScriptPath([string]$RepoPath) {
 }
 
 function Find-Bash {
-    # On Linux/macOS, prefer PATH. In pwsh on GitHub Actions, Get-Command
-    # may populate Path and Source differently, so try both and then plain `bash`.
+    # On Linux/macOS, do not over-detect. GitHub Actions Ubuntu has bash in PATH,
+    # but pwsh can expose native-command metadata differently across versions.
+    # Returning plain `bash` is the most stable option; invocation below will fail
+    # naturally if it is truly unavailable.
     if (-not (Test-IsWindowsPlatform)) {
-        $command = Get-Command bash -ErrorAction SilentlyContinue
-        if ($command) {
-            foreach ($candidate in @($command.Path, $command.Source, 'bash')) {
-                if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
-                try {
-                    $version = & $candidate --version 2>&1 | Select-Object -First 1
-                    if ($LASTEXITCODE -eq 0 -and ([string]$version) -match 'bash') {
-                        return $candidate
-                    }
-                }
-                catch {
-                    continue
-                }
-            }
-        }
-
-        return $null
+        return 'bash'
     }
 
     $candidates = New-Object System.Collections.Generic.List[string]
