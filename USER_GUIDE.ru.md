@@ -137,18 +137,19 @@ dotnet tool run selenium-pw-migrator -- playground \
 
 ### Установка из локально собранного пакета
 
-Если вы проверяете release candidate до публикации:
+Если вы проверяете release candidate до публикации, используйте одну и ту же версию при упаковке и установке:
 
 ```bash
-./scripts/pack-tool.sh 0.0.0-preview.1
+version="0.0.0-preview.20"
+./scripts/pack-tool.sh "$version"
 dotnet new tool-manifest --force
 dotnet tool install SeleniumPlaywrightMigrator \
-  --version 0.0.0-preview.1 \
+  --version "$version" \
   --add-source ./artifacts/nuget
 dotnet tool run selenium-pw-migrator -- --help
 ```
 
-На Windows используйте `./scripts/pack-tool.ps1 -Version 0.0.0-preview.1`.
+На Windows используйте `./scripts/pack-tool.ps1 -Version $version` и `./scripts/install-local-tool.ps1 -Version $version`. Windows helper также умеет ставить самый новый локальный пакет, если не передавать `-Version`.
 
 ### Запуск из исходников
 

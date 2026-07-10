@@ -217,17 +217,24 @@ Use this when you want to test the NuGet/dotnet-tool package produced by this re
 Windows PowerShell:
 
 ```powershell
-$version = "0.0.0-preview.18"
+$version = "0.0.0-preview.20"
 Unblock-File .\scripts\*.ps1
 .\scripts\pack-tool.ps1 -Version $version
 .\scripts\install-local-tool.ps1 -Version $version
 dotnet tool run selenium-pw-migrator -- --help
 ```
 
+The install script now checks `artifacts/nuget` before calling `dotnet tool install`. The `-Version` value must match an existing local `.nupkg`. To install the newest local package without remembering its version, omit `-Version`:
+
+```powershell
+.\scripts\pack-tool.ps1 -Version $version
+.\scripts\install-local-tool.ps1
+```
+
 macOS/Linux/WSL:
 
 ```bash
-version="0.0.0-preview.18"
+version="0.0.0-preview.20"
 scripts/pack-tool.sh "$version"
 dotnet new tool-manifest --force
 dotnet tool install SeleniumPlaywrightMigrator --version "$version" --add-source ./artifacts/nuget
@@ -243,7 +250,7 @@ Use this when you want to test the same self-contained standalone layout that is
 Windows PowerShell:
 
 ```powershell
-$version = "0.0.0-preview.18"
+$version = "0.0.0-preview.20"
 Unblock-File .\scripts\*.ps1
 .\scripts\package-standalone.ps1 -Version $version -Runtimes win-x64
 .\scripts\install-standalone.ps1 `

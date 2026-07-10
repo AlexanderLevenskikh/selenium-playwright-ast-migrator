@@ -143,18 +143,19 @@ If you want to understand the AST-based migration model before using the tool on
 
 ### Install from a locally packed package
 
-If you are validating a release candidate before publishing it:
+If you are validating a release candidate before publishing it, use the same version for pack and install:
 
 ```bash
-./scripts/pack-tool.sh 0.0.0-preview.1
+version="0.0.0-preview.20"
+./scripts/pack-tool.sh "$version"
 dotnet new tool-manifest --force
 dotnet tool install SeleniumPlaywrightMigrator \
-  --version 0.0.0-preview.1 \
+  --version "$version" \
   --add-source ./artifacts/nuget
 dotnet tool run selenium-pw-migrator -- --help
 ```
 
-On Windows, use `./scripts/pack-tool.ps1 -Version 0.0.0-preview.1`.
+On Windows, use `./scripts/pack-tool.ps1 -Version $version` and `./scripts/install-local-tool.ps1 -Version $version`. The Windows helper can also install the newest local package when `-Version` is omitted.
 
 ### Run from source
 

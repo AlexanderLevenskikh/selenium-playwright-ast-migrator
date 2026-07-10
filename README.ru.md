@@ -213,17 +213,24 @@ dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --help
 Windows PowerShell:
 
 ```powershell
-$version = "0.0.0-preview.18"
+$version = "0.0.0-preview.20"
 Unblock-File .\scripts\*.ps1
 .\scripts\pack-tool.ps1 -Version $version
 .\scripts\install-local-tool.ps1 -Version $version
 dotnet tool run selenium-pw-migrator -- --help
 ```
 
+Скрипт установки сначала проверяет `artifacts/nuget`, а уже потом вызывает `dotnet tool install`. Значение `-Version` должно совпадать с существующим локальным `.nupkg`. Чтобы установить самый новый локально собранный пакет и не помнить версию, можно не передавать `-Version`:
+
+```powershell
+.\scripts\pack-tool.ps1 -Version $version
+.\scripts\install-local-tool.ps1
+```
+
 macOS/Linux/WSL:
 
 ```bash
-version="0.0.0-preview.18"
+version="0.0.0-preview.20"
 scripts/pack-tool.sh "$version"
 dotnet new tool-manifest --force
 dotnet tool install SeleniumPlaywrightMigrator --version "$version" --add-source ./artifacts/nuget
@@ -239,7 +246,7 @@ dotnet tool run selenium-pw-migrator -- --help
 Windows PowerShell:
 
 ```powershell
-$version = "0.0.0-preview.18"
+$version = "0.0.0-preview.20"
 Unblock-File .\scripts\*.ps1
 .\scripts\package-standalone.ps1 -Version $version -Runtimes win-x64
 .\scripts\install-standalone.ps1 `
