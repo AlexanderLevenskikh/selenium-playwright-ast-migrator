@@ -57,6 +57,8 @@ try {
         '^templates/migration-kit/scripts/create-feedback-bundle\.sh$',
         '^templates/migration-kit/scripts/validate-run-artifacts\.ps1$',
         '^templates/migration-kit/scripts/validate-run-artifacts\.sh$',
+        '^templates/migration-kit/scripts/repair-jsonl-ledger\.ps1$',
+        '^templates/migration-kit/scripts/repair-jsonl-ledger\.sh$',
         '^templates/migration-kit/scripts/update-current-ticket-status\.ps1$',
         '^templates/migration-kit/scripts/update-current-ticket-status\.sh$',
         '^templates/migration-kit/scripts/update-sentinel-finding-status\.ps1$',

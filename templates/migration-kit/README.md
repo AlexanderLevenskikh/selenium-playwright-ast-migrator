@@ -162,7 +162,7 @@ A new agent should start from `state/handoff.md`, not from chat memory.
 
 Harness state is part of the contract, not scratch text. Agents must not bypass denied OpenCode edit permissions by retrying writes through shell tools such as PowerShell `Set-Content`, `Out-File`, `tee`, `sed -i`, or redirection. A denied write is reported as `BLOCKED_BY_OPENCODE_PERMISSION_DENIED`.
 
-JSONL ledgers are append-only by default. Use `scripts/write-harness-event.ps1`/`.sh` for harness events and traces, `selenium-pw-migrator memory add` or `scripts/write-memory-entry.ps1`/`.sh` for memory entries, and `scripts/repair-memory-jsonl.ps1`/`.sh` only for explicit invalid-JSONL repair with a backup under `state/memory/.repair-backups/`.
+JSONL ledgers are append-only by default. Use `scripts/write-harness-event.ps1`/`.sh` for harness events and traces, `selenium-pw-migrator memory add` or `scripts/write-memory-entry.ps1`/`.sh` for memory entries, `scripts/repair-memory-jsonl.ps1`/`.sh` for memory-only repair, and `scripts/repair-jsonl-ledger.ps1`/`.sh` for explicit controlled state/backlog/run JSONL repair with a timestamped backup. `validate-run-artifacts` treats malformed JSONL as blocking.
 
 ## Artifact-Only Acceptance Rules
 
@@ -224,6 +224,7 @@ Safe autopilot categories are in `state/harness-policy.json`: safe read/scoped-t
 ## Project-scoped migration memory
 
 The kit includes `state/memory/**` as an inspectable project-local memory. Agents should read `state/memory/memory-summary.md` before planning, record durable decisions/warnings/final-gate lessons after bounded actions, and run `selenium-pw-migrator memory doctor --workspace migration` before final-gate handoff when the CLI is available. Memory is guidance, not authority: it cannot justify assertion suppression, over-suppressed user interactions, or selectors without evidence.
+`selenium-pw-migrator memory recall --file <file> --workspace migration` records scoped recall receipts in `state/memory/recall-index.json` and `state/memory/recall-ledger.jsonl`; final gate requires current-wave coverage when active memory exists.
 
 
 ## Session export and sentinel
@@ -251,7 +252,7 @@ Before final handoff, run `migration/scripts/validate-run-artifacts.ps1` / `.sh`
 
 ## Current-ticket executor loop
 
-`slice-gate-followups` and post-final task slicing write `migration/current-ticket.md`. That file is not a suggestion menu: it becomes the selected bounded task. Track it with `migration/scripts/update-current-ticket-status.ps1` / `.sh`, which writes `state/current-ticket-status.json`, appends `state/current-ticket-ledger.jsonl`, and mirrors status under `runs/<run-id>/tickets/**`.
+`slice-gate-followups` and post-final task slicing write `migration/current-ticket.md`. That file is not a suggestion menu: it becomes the selected bounded task. Track it with `migration/scripts/update-current-ticket-status.ps1` / `.sh`, which writes `state/current-ticket-status.json`, appends `state/current-ticket-ledger.jsonl`, mirrors status under `runs/<run-id>/tickets/**`, and synchronizes `task-slice-result.json`, `continuation-decision.json`, `harness-run.json`, and active `wave-status.json`. Set `DONE` after reviewer/hygiene evidence and immediately before a fresh final gate.
 
 Lifecycle: `READY` → `IN_PROGRESS` → `REVIEW_READY` → `DONE`, or `BLOCKED` with a concrete reason. `/supervised-task continue` must finish, validate, or block the current ticket before selecting a new wave.
 

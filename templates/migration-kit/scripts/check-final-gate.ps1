@@ -1210,6 +1210,86 @@ function Test-MigrationMemory([string]$WorkspacePath, [ref]$Detail) {
 }
 
 
+function Normalize-MemoryRecallPath([string]$Path) {
+    if ([string]::IsNullOrWhiteSpace($Path)) { return "" }
+    $normalized = $Path.Replace("\\", "/").Trim()
+    while ($normalized.StartsWith("./", [System.StringComparison]::Ordinal)) {
+        $normalized = $normalized.Substring(2)
+    }
+    return $normalized
+}
+
+function Test-MemoryRecallEvidence([string]$WorkspacePath, [ref]$Detail) {
+    $memoryDir = Join-Path $WorkspacePath "state/memory"
+    if (-not (Test-Path $memoryDir)) { $Detail.Value = "project-scoped memory missing; recall evidence not required"; return $true }
+
+    $activeEntries = 0
+    foreach ($name in @("decisions.jsonl", "warnings.jsonl", "antipatterns.jsonl", "final-gate-lessons.jsonl", "user-notes.jsonl")) {
+        $path = Join-Path $memoryDir $name
+        if (-not (Test-Path $path)) { continue }
+        foreach ($line in @(Get-Content -Path $path -ErrorAction SilentlyContinue)) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            try {
+                $entry = $line | ConvertFrom-Json -ErrorAction Stop
+                if ([string]$entry.status -eq "active") { $activeEntries++ }
+            }
+            catch { }
+        }
+    }
+    if ($activeEntries -eq 0) { $Detail.Value = "no active project memory; recall evidence not required"; return $true }
+
+    $waveScopes = @(Get-ChildItem -Path (Join-Path $WorkspacePath "runs") -Recurse -File -Filter "input-scope.json" -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match '[\\/]wave-[^\\/]+[\\/]input-scope\.json$' } |
+        Sort-Object LastWriteTimeUtc -Descending)
+    if ($waveScopes.Count -eq 0) { $Detail.Value = "active memory exists but no wave input scope is present; recall evidence deferred"; return $true }
+
+    $scopePath = $waveScopes[0].FullName
+    try { $scope = Get-Content -Raw -Path $scopePath | ConvertFrom-Json -ErrorAction Stop }
+    catch { $Detail.Value = "invalid wave input scope for recall evidence: $($_.Exception.Message)"; return $false }
+    $scopeGeneratedAt = [DateTimeOffset]::MinValue
+    [void][DateTimeOffset]::TryParse([string]$scope.generatedAtUtc, [ref]$scopeGeneratedAt)
+    $scopeFiles = New-Object System.Collections.Generic.List[string]
+    foreach ($value in @($scope.copiedFiles) + @($scope.files)) {
+        $normalized = Normalize-MemoryRecallPath ([string]$value)
+        if (-not [string]::IsNullOrWhiteSpace($normalized)) { $scopeFiles.Add($normalized) | Out-Null }
+    }
+    $scopeFiles = @($scopeFiles | Sort-Object -Unique)
+    if ($scopeFiles.Count -eq 0) { $Detail.Value = "wave input scope contains no files; recall evidence not required"; return $true }
+
+    $indexPath = Join-Path $memoryDir "recall-index.json"
+    if (-not (Test-Path $indexPath)) { $Detail.Value = "missing recall-index.json; run memory recall for each wave file"; return $false }
+    try { $index = Get-Content -Raw -Path $indexPath | ConvertFrom-Json -ErrorAction Stop }
+    catch { $Detail.Value = "invalid recall-index.json: $($_.Exception.Message)"; return $false }
+    $receipts = @($index.entries)
+    if ($receipts.Count -eq 0) { $Detail.Value = "recall-index.json has no receipts; run memory recall for each wave file"; return $false }
+
+    $missing = New-Object System.Collections.Generic.List[string]
+    foreach ($scopeFile in $scopeFiles) {
+        $matched = $false
+        foreach ($receipt in $receipts) {
+            $receiptFile = Normalize-MemoryRecallPath ([string](Get-ObjectProperty $receipt @("normalizedFile", "file")))
+            if ([string]::IsNullOrWhiteSpace($receiptFile)) { continue }
+            $pathMatches = $receiptFile.Equals($scopeFile, [StringComparison]::OrdinalIgnoreCase) -or
+                $receiptFile.EndsWith("/" + $scopeFile, [StringComparison]::OrdinalIgnoreCase) -or
+                $scopeFile.EndsWith("/" + $receiptFile, [StringComparison]::OrdinalIgnoreCase)
+            if (-not $pathMatches) { continue }
+            $recordedAt = [DateTimeOffset]::MinValue
+            [void][DateTimeOffset]::TryParse([string]$receipt.recordedAtUtc, [ref]$recordedAt)
+            if ($scopeGeneratedAt -ne [DateTimeOffset]::MinValue -and $recordedAt -ne [DateTimeOffset]::MinValue -and $recordedAt -lt $scopeGeneratedAt) { continue }
+            $matched = $true
+            break
+        }
+        if (-not $matched) { $missing.Add($scopeFile) | Out-Null }
+    }
+
+    if ($missing.Count -gt 0) {
+        $Detail.Value = "missing current-wave memory recall receipt(s): " + ($missing -join ", ") + "; run selenium-pw-migrator memory recall --file <file> --workspace migration"
+        return $false
+    }
+    $Detail.Value = "memory recall receipts cover all $($scopeFiles.Count) file(s) in latest wave scope"
+    return $true
+}
+
 function Test-ConfigDeltaMerge($WorkspaceRoot, [ref]$Detail) {
     $problems = New-Object System.Collections.Generic.List[string]
     $mergeDir = Join-Path $WorkspaceRoot "config-merge"
@@ -2006,6 +2086,10 @@ else {
 $memoryDetail = ""
 $memoryOk = Test-MigrationMemory $workspacePath ([ref]$memoryDetail)
 Add-Result $results "memory-doctor" $memoryOk $memoryDetail
+
+$memoryRecallDetail = ""
+$memoryRecallOk = Test-MemoryRecallEvidence $workspacePath ([ref]$memoryRecallDetail)
+Add-Result $results "memory-recall-evidence" $memoryRecallOk $memoryRecallDetail
 
 $configMergeDetail = ""
 $configMergeOk = Test-ConfigDeltaMerge $workspacePath ([ref]$configMergeDetail)

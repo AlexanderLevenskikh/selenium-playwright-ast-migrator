@@ -85,10 +85,11 @@ internal static class MemoryCommand
 """);
         WriteIfMissing(Path.Combine(memoryDir, "recall-index.json"), """
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "entries": []
 }
 """);
+        WriteIfMissing(Path.Combine(memoryDir, "recall-ledger.jsonl"), string.Empty);
         WriteIfMissing(Path.Combine(memoryDir, "README.md"), BuildReadme());
         WriteMemorySummary(memoryDir, LoadMemory(memoryDir));
 
@@ -190,9 +191,11 @@ internal static class MemoryCommand
             .ThenBy(e => e.Line)
             .ToArray();
 
+        var receipt = RecordRecallReceipt(memoryDir, options.File, relevant);
         var report = BuildRecall(memoryDir, options.File, relevant);
-        WriteOptionalOutputs(options.Out, options.Format, report, BuildRecallJson(memoryDir, options.File, relevant));
+        WriteOptionalOutputs(options.Out, options.Format, report, BuildRecallJson(memoryDir, options.File, relevant, receipt));
         Console.Write(report);
+        Console.WriteLine($"MIGRATION_MEMORY_RECALL_RECORDED: {receipt.Id}");
         return 0;
     }
 
@@ -205,6 +208,8 @@ internal static class MemoryCommand
         checks.Add(new("memory-directory", Directory.Exists(memoryDir), memoryDir));
         checks.Add(CheckJsonObject(Path.Combine(memoryDir, "project-profile.json"), required: false));
         checks.Add(CheckSelectorMap(Path.Combine(memoryDir, "selector-map.json")));
+        checks.Add(CheckRecallIndex(Path.Combine(memoryDir, "recall-index.json")));
+        checks.AddRange(CheckRecallLedger(Path.Combine(memoryDir, "recall-ledger.jsonl")));
 
         foreach (var file in JsonlFiles)
             checks.AddRange(CheckJsonl(Path.Combine(memoryDir, file)));
@@ -336,6 +341,58 @@ internal static class MemoryCommand
         return checks;
     }
 
+    static MemoryDoctorCheck CheckRecallIndex(string path)
+    {
+        if (!File.Exists(path))
+            return new("recall-index", true, "missing optional recall-index.json");
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            if (doc.RootElement.ValueKind != JsonValueKind.Object
+                || !doc.RootElement.TryGetProperty("entries", out var entries)
+                || entries.ValueKind != JsonValueKind.Array)
+                return new("recall-index", false, "recall-index.json requires an entries array");
+            return new("recall-index", true, $"valid recall index with {entries.GetArrayLength()} receipt(s)");
+        }
+        catch (Exception ex)
+        {
+            return new("recall-index", false, ex.Message);
+        }
+    }
+
+    static IEnumerable<MemoryDoctorCheck> CheckRecallLedger(string path)
+    {
+        if (!File.Exists(path))
+            return new[] { new MemoryDoctorCheck("recall-ledger", true, "missing optional recall-ledger.jsonl") };
+        var checks = new List<MemoryDoctorCheck>();
+        var lineNumber = 0;
+        foreach (var line in File.ReadLines(path))
+        {
+            lineNumber++;
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+            try
+            {
+                using var doc = JsonDocument.Parse(line);
+                var root = doc.RootElement;
+                var ok = root.ValueKind == JsonValueKind.Object
+                    && GetString(root, "schemaVersion") == "migration-memory-recall/v1"
+                    && HasNonEmptyString(root, "id")
+                    && root.TryGetProperty("matchedEntryIds", out var ids)
+                    && ids.ValueKind == JsonValueKind.Array
+                    && HasNonEmptyString(root, "recordedAtUtc");
+                checks.Add(new($"recall-ledger.jsonl:{lineNumber}", ok, ok ? "valid recall receipt" : "receipt requires schemaVersion/id/matchedEntryIds/recordedAtUtc"));
+            }
+            catch (Exception ex)
+            {
+                checks.Add(new($"recall-ledger.jsonl:{lineNumber}", false, ex.Message));
+            }
+        }
+        if (checks.Count == 0)
+            checks.Add(new("recall-ledger", true, "empty optional recall ledger"));
+        return checks;
+    }
+
     static bool HasNonEmptyString(JsonElement element, string propertyName)
         => element.TryGetProperty(propertyName, out var property)
            && property.ValueKind == JsonValueKind.String
@@ -383,6 +440,26 @@ internal static class MemoryCommand
 
     static string? GetString(JsonElement root, string propertyName)
         => root.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String ? property.GetString() : null;
+
+    static string? GetStringIgnoreCase(JsonElement root, string propertyName)
+        => TryGetPropertyIgnoreCase(root, propertyName, out var property) && property.ValueKind == JsonValueKind.String ? property.GetString() : null;
+
+    static bool TryGetPropertyIgnoreCase(JsonElement root, string propertyName, out JsonElement property)
+    {
+        if (root.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var candidate in root.EnumerateObject())
+            {
+                if (candidate.Name.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
+                {
+                    property = candidate.Value;
+                    return true;
+                }
+            }
+        }
+        property = default;
+        return false;
+    }
 
     static string BuildExplain(string memoryDir, ProjectMemory memory, bool includeInactive)
     {
@@ -450,14 +527,121 @@ internal static class MemoryCommand
         return sb.ToString();
     }
 
-    static object BuildRecallJson(string memoryDir, string file, IReadOnlyList<MemoryEntry> entries)
+    static object BuildRecallJson(string memoryDir, string file, IReadOnlyList<MemoryEntry> entries, MemoryRecallReceipt receipt)
         => new
         {
-            schemaVersion = 1,
+            schemaVersion = 2,
             memory = memoryDir,
             file,
+            receipt = new
+            {
+                id = receipt.Id,
+                file = receipt.File,
+                normalizedFile = receipt.NormalizedFile,
+                matchedEntries = receipt.MatchedEntries,
+                matchedEntryIds = receipt.MatchedEntryIds,
+                recordedAtUtc = receipt.RecordedAtUtc
+            },
             entries = entries.Select(e => new { e.Id, e.Kind, e.Text, e.Scope, e.Source, e.Status, e.File, e.Line }).ToArray()
         };
+
+    static MemoryRecallReceipt RecordRecallReceipt(string memoryDir, string file, IReadOnlyList<MemoryEntry> entries)
+    {
+        Directory.CreateDirectory(memoryDir);
+        var normalizedFile = NormalizePathToken(file ?? string.Empty);
+        var receipt = new MemoryRecallReceipt(
+            Id: $"recall-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}-{Random.Shared.Next(1000, 9999)}",
+            File: file ?? string.Empty,
+            NormalizedFile: normalizedFile,
+            MatchedEntries: entries.Count,
+            MatchedEntryIds: entries.Select(e => e.Id).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            RecordedAtUtc: DateTimeOffset.UtcNow.ToString("O"));
+
+        var ledgerPath = Path.Combine(memoryDir, "recall-ledger.jsonl");
+        var ledgerRecord = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["schemaVersion"] = "migration-memory-recall/v1",
+            ["id"] = receipt.Id,
+            ["file"] = receipt.File,
+            ["normalizedFile"] = receipt.NormalizedFile,
+            ["matchedEntries"] = receipt.MatchedEntries,
+            ["matchedEntryIds"] = receipt.MatchedEntryIds,
+            ["source"] = "memory recall",
+            ["recordedAtUtc"] = receipt.RecordedAtUtc
+        };
+        File.AppendAllText(ledgerPath, JsonSerializer.Serialize(ledgerRecord, JsonLineOptions()) + Environment.NewLine);
+
+        var indexPath = Path.Combine(memoryDir, "recall-index.json");
+        var existing = LoadRecallReceipts(indexPath).ToList();
+        existing.RemoveAll(item => item.NormalizedFile.Equals(receipt.NormalizedFile, StringComparison.OrdinalIgnoreCase));
+        existing.Add(receipt);
+        var index = new
+        {
+            schemaVersion = 2,
+            updatedAtUtc = receipt.RecordedAtUtc,
+            entries = existing
+                .OrderBy(item => item.NormalizedFile, StringComparer.OrdinalIgnoreCase)
+                .Select(item => new
+                {
+                    id = item.Id,
+                    file = item.File,
+                    normalizedFile = item.NormalizedFile,
+                    matchedEntries = item.MatchedEntries,
+                    matchedEntryIds = item.MatchedEntryIds,
+                    recordedAtUtc = item.RecordedAtUtc
+                })
+                .ToArray()
+        };
+        WriteJsonAtomic(indexPath, index);
+        return receipt;
+    }
+
+    static IReadOnlyList<MemoryRecallReceipt> LoadRecallReceipts(string indexPath)
+    {
+        if (!File.Exists(indexPath))
+            return Array.Empty<MemoryRecallReceipt>();
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(indexPath));
+            if (!doc.RootElement.TryGetProperty("entries", out var entries) || entries.ValueKind != JsonValueKind.Array)
+                return Array.Empty<MemoryRecallReceipt>();
+            var result = new List<MemoryRecallReceipt>();
+            foreach (var entry in entries.EnumerateArray())
+            {
+                var id = GetStringIgnoreCase(entry, "id") ?? string.Empty;
+                var file = GetStringIgnoreCase(entry, "file") ?? string.Empty;
+                var normalizedFile = GetStringIgnoreCase(entry, "normalizedFile") ?? NormalizePathToken(file);
+                var matchedEntries = TryGetPropertyIgnoreCase(entry, "matchedEntries", out var count) && count.TryGetInt32(out var parsed) ? parsed : 0;
+                var matchedEntryIds = TryGetPropertyIgnoreCase(entry, "matchedEntryIds", out var ids) && ids.ValueKind == JsonValueKind.Array
+                    ? ids.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString() ?? string.Empty).Where(x => x.Length > 0).ToArray()
+                    : Array.Empty<string>();
+                var recordedAtUtc = GetStringIgnoreCase(entry, "recordedAtUtc") ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(id))
+                    result.Add(new(id, file, normalizedFile, matchedEntries, matchedEntryIds, recordedAtUtc));
+            }
+            return result;
+        }
+        catch
+        {
+            return Array.Empty<MemoryRecallReceipt>();
+        }
+    }
+
+    static void WriteJsonAtomic(string path, object value)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
+        var tempPath = path + ".tmp-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            File.WriteAllText(tempPath, JsonSerializer.Serialize(value, JsonOptions()));
+            File.Move(tempPath, path, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
+        }
+    }
 
     static bool IsGlobalMemoryEntry(MemoryEntry entry)
         => entry.Kind is "antipattern" or "warning" or "constraint"
@@ -491,6 +675,7 @@ internal static class MemoryCommand
         sb.AppendLine("Required invariants:");
         sb.AppendLine("- memory entries are valid JSONL with kind/text/source/status");
         sb.AppendLine("- selector-map entries have sourceExpression, targetLocator, and evidence[]");
+        sb.AppendLine("- memory recall receipts are valid JSON/JSONL when present");
         sb.AppendLine("- active memory cannot allow assertion suppression");
         sb.AppendLine("- deprecated entries cannot be active guidance");
         return sb.ToString();
@@ -620,6 +805,7 @@ Files:
 - `antipatterns.jsonl` — bad paths that reviewers/watchdogs already identified;
 - `final-gate-lessons.jsonl` — lessons from failed/passed gates;
 - `selector-map.json` — project-local selector knowledge with evidence;
+- `recall-index.json` / `recall-ledger.jsonl` — machine-readable evidence that scoped memory was actually recalled;
 - `config-deltas/` — run/wave config deltas, not the global adapter config.
 """;
 
@@ -651,7 +837,7 @@ Commands:
   explain       Print active migration memory for humans and agents.
   doctor        Validate memory invariants for final gate / watchdog use.
   summarize     Refresh memory-summary.md and optionally record a run lesson.
-  recall        Print active memory that is relevant to one file or wave scope.
+  recall        Print active memory for one file/wave scope and record a recall receipt.
 
 Kinds:
   decision | warning | antipattern | final-gate-lesson | user-note | preference | constraint
@@ -768,6 +954,8 @@ Examples:
     }
 
     sealed record ProjectMemory(IReadOnlyList<MemoryEntry> Entries);
+
+    sealed record MemoryRecallReceipt(string Id, string File, string NormalizedFile, int MatchedEntries, string[] MatchedEntryIds, string RecordedAtUtc);
 
     sealed record MemoryDoctorCheck(string Name, bool Passed, string Detail);
 }

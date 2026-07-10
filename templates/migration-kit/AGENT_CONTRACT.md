@@ -32,7 +32,7 @@ Before planning a bounded action:
 - Read `plan/plan.md`, `plan/waves.json`, and `plan/memory-recall.md` when a divide-and-conquer wave plan exists.
 - Resolve the repository root before wave planning/execution. `migration/**`, `migration/plan/**`, and `migration/runs/**` are repository-root artifacts, not source-project-relative artifacts. Do not run kit/plan/run-wave from `Web/**` or any source/target subdirectory. A nested workspace such as `Web/**/migration/**` is `NESTED_MIGRATION_WORKSPACE` and must be reported/repaired before implementation continues.
 - If no wave run workspace exists for the selected wave, prepare it from the repository root with `selenium-pw-migrator migration run-wave --plan migration/plan --wave <wave-id> --workspace migration --out migration/runs/<wave-id>` before implementation.
-- If files in scope are known, run `selenium-pw-migrator memory explain --workspace migration` and `selenium-pw-migrator memory recall --file <file> --workspace migration`, or inspect `state/memory/decisions.jsonl`, `warnings.jsonl`, `antipatterns.jsonl`, and `final-gate-lessons.jsonl`.
+- If files in scope are known, run `selenium-pw-migrator memory explain --workspace migration` and `selenium-pw-migrator memory recall --file <file> --workspace migration` for every scoped file. Recall writes machine-readable receipts to `state/memory/recall-index.json` and `recall-ledger.jsonl`; merely reading the memory files is not equivalent evidence.
 - Treat memory as guidance, not authority: apply a remembered rule only when its scope/conditions match the current evidence.
 
 After implementation/review:
@@ -65,7 +65,7 @@ Memory safety rules:
 ## Permission and state-integrity rules
 
 14. OpenCode permission denials are authoritative. If an edit/write tool is denied, do not retry the same write through `bash`, PowerShell, Python, `sed`, `tee`, shell redirection, or any other alternate tool. Stop with `BLOCKED_BY_OPENCODE_PERMISSION_DENIED` and report the denied path and intended change.
-15. JSONL ledgers are controlled append-only state; treat them as append-only JSONL ledgers. Do not manually overwrite `state/harness-events.jsonl`, `runs/*/trace.jsonl`, `state/memory/*.jsonl`, or `state/backlog/*.jsonl` with ad-hoc shell writes. Use `write-harness-event` for events/traces, `record-agent-skill-profile` or `write-agent-skill-usage` for applied skill evidence, `selenium-pw-migrator memory add` or `write-memory-entry` for memory additions, and `repair-memory-jsonl` only for explicit JSONL repair with backup.
+15. JSONL ledgers are controlled append-only state; treat them as append-only JSONL ledgers. Do not manually overwrite `state/harness-events.jsonl`, `runs/*/trace.jsonl`, `state/memory/*.jsonl`, or `state/backlog/*.jsonl` with ad-hoc shell writes. Use `write-harness-event` for events/traces, `record-agent-skill-profile` or `write-agent-skill-usage` for applied skill evidence, `selenium-pw-migrator memory add` or `write-memory-entry` for memory additions, `repair-memory-jsonl` for memory-only repair, and `repair-jsonl-ledger` for explicit controlled state/backlog/run repair with a backup. `validate-run-artifacts` must parse every non-empty controlled JSONL line before handoff.
 16. Machine-readable state must be consistent before handoff. If `task-slice-result` or reviewer/gate evidence says `BLOCKED_NO_AGENT_EXECUTABLE_TASKS`, `state/continuation-decision.json` must not remain `CONTINUE_REQUIRED`.
 
 
@@ -85,10 +85,12 @@ Final gate reconciles `migration/state/harness-run.json` after every run: gate f
 
 Wave scope is file-based, not single-test-based: report `sourceFiles`, estimated/actual test count, migrated action count, and TODO count explicitly. Do not describe a wave as “3 tests” when the input scope is 3 files containing more tests.
 
+TODO reduction is not quality evidence by itself. Remove a TODO/unresolved-symbol marker only when active equivalent code exists or source-backed evidence proves the marker obsolete; leaving the declaration/action commented out while deleting the warning is forbidden evidence manipulation.
+
 
 ## Current-ticket executor loop
 
-When `migration/current-ticket.md` exists, it is the active bounded task. `/supervised-task` must route it through `migration-change-reviewer` and exactly one bounded `executor` task before selecting another wave. Track state in `migration/state/current-ticket-status.json` and append transitions to `migration/state/current-ticket-ledger.jsonl` with `migration/scripts/update-current-ticket-status.ps1` / `.sh`. Valid statuses are `READY`, `IN_PROGRESS`, `REVIEW_READY`, `DONE`, and `BLOCKED`. Do not start another wave while the current-ticket lifecycle is active unless the ticket is `DONE` with validation evidence or `BLOCKED` with a concrete non-agent-executable reason.
+When `migration/current-ticket.md` exists, it is the active bounded task. `/supervised-task` must route it through `migration-change-reviewer` and exactly one bounded `executor` task before selecting another wave. Track state in `migration/state/current-ticket-status.json` and append transitions to `migration/state/current-ticket-ledger.jsonl` with `migration/scripts/update-current-ticket-status.ps1` / `.sh`. Valid statuses are `READY`, `IN_PROGRESS`, `REVIEW_READY`, `DONE`, and `BLOCKED`. After executor/reviewer validation, set `DONE` before running the fresh final gate; the status script synchronizes task-slice, continuation, harness-run, and wave state. Never mark `DONE` after final gate. Do not start another wave while the current-ticket lifecycle is active unless the ticket is `DONE` with validation evidence or `BLOCKED` with a concrete non-agent-executable reason.
 
 Wave quality budget is mandatory for wave runs: after materializing or executing `runs/wave-*`, run `migration/scripts/evaluate-wave-quality-budget.ps1` / `.sh` before the next wave. If it writes `BLOCKED_BY_WAVE_QUALITY_BUDGET`, do not start another wave; route into mapping/research memory and one bounded config/POM/recognizer improvement ticket.
 

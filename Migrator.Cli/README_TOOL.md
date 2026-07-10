@@ -192,9 +192,10 @@ This is a read-only divide-and-conquer planner. It writes inventory, clusters, w
 ```bash
 selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001
 selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001 --execute-migrate true
+selenium-pw-migrator migration refresh-wave-status --out migration/runs/wave-001 --migrate-exit-code 0
 ```
 
-`run-wave` writes `source-scope/`, `generated/`, `input-scope.json`, `selected-tests.txt`, `config-delta.json`, `memory-delta.jsonl`, `run-summary.md`, `wave-status.json`, `run-migrate.sh`, and `run-migrate.ps1`. The generated migrate command passes `--selected-tests selected-tests.txt`; this keeps execution bounded to the tests in the wave even when a copied source file contains additional tests. The default mode prepares the workspace and scripts. `--execute-migrate true` additionally invokes the existing `--mode migrate` pipeline against `source-scope/` with that same selected-test filter.
+`run-wave` writes `source-scope/`, `generated/`, `input-scope.json`, `selected-tests.txt`, `config-delta.json`, `memory-delta.jsonl`, `run-summary.md`, `wave-status.json`, `run-migrate.sh`, and `run-migrate.ps1`. The generated migrate command passes `--selected-tests selected-tests.txt`; this keeps execution bounded to the tests in the wave even when a copied source file contains additional tests. The default mode prepares the workspace and scripts. `--execute-migrate true` additionally invokes the existing `--mode migrate` pipeline against `source-scope/` with that same selected-test filter. `run-migrate.ps1` and `run-migrate.sh` always refresh `wave-status.json` after execution; the explicit `refresh-wave-status` command is available for recovery or older workspaces.
 
 Safety boundary: `run-wave` does not promote memory, does not merge config, and does not publish any cross-project/org knowledge pack. `config-delta.json` is an observed/reviewable placeholder until Reviewer, Watchdog, and Final Gate evidence exists.
 

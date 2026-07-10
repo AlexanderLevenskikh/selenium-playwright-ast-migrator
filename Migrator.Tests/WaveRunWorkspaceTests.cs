@@ -13,7 +13,7 @@ public class WaveRunWorkspaceTests
         Assert.Contains("MIGRATION_WAVE_RUN_READY", command);
         Assert.Contains("migration-wave-input-scope/v1", command);
         Assert.Contains("migration-wave-run/v1", command);
-        Assert.Contains("migration-wave-status/v1", command);
+        Assert.Contains("migration-wave-status/v2", command);
         Assert.Contains("migration-config-delta/v1", command);
         Assert.Contains("input-scope.json", command);
         Assert.Contains("source-scope", command);
@@ -24,6 +24,10 @@ public class WaveRunWorkspaceTests
         Assert.Contains("run-migrate.sh", command);
         Assert.Contains("run-migrate.ps1", command);
         Assert.Contains("--execute-migrate", command);
+        Assert.Contains("refresh-wave-status", command);
+        Assert.Contains("--migrate-exit-code", command);
+        Assert.Contains("MIGRATION_WAVE_STATUS_REFRESHED", command);
+        Assert.Contains("WriteJsonAtomic", command);
         Assert.Contains("--selected-tests", command);
         Assert.Contains("selected-tests.txt", command);
     }

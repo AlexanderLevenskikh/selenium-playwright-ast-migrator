@@ -61,6 +61,8 @@ required_patterns = [
     r'^templates/migration-kit/scripts/create-feedback-bundle\.sh$',
     r'^templates/migration-kit/scripts/validate-run-artifacts\.ps1$',
     r'^templates/migration-kit/scripts/validate-run-artifacts\.sh$',
+    r'^templates/migration-kit/scripts/repair-jsonl-ledger\.ps1$',
+    r'^templates/migration-kit/scripts/repair-jsonl-ledger\.sh$',
     r'^templates/migration-kit/scripts/update-current-ticket-status\.ps1$',
     r'^templates/migration-kit/scripts/update-current-ticket-status\.sh$',
     r'^templates/migration-kit/scripts/update-sentinel-finding-status\.ps1$',

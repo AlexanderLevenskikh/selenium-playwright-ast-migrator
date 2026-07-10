@@ -661,6 +661,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         AddCheck(checks, "feedback-bundle-packer", File.Exists(Path.Combine(workspacePath, "scripts", "create-feedback-bundle.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "create-feedback-bundle.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "artifact-hygiene", File.Exists(Path.Combine(workspacePath, "scripts", "validate-run-artifacts.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "validate-run-artifacts.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "current-ticket-lifecycle", File.Exists(Path.Combine(workspacePath, "scripts", "update-current-ticket-status.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "update-current-ticket-status.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "jsonl-ledger-repair", File.Exists(Path.Combine(workspacePath, "scripts", "repair-jsonl-ledger.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "repair-jsonl-ledger.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "sentinel-finding-lifecycle", File.Exists(Path.Combine(workspacePath, "scripts", "update-sentinel-finding-status.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "update-sentinel-finding-status.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "harness-policy", File.Exists(Path.Combine(workspacePath, "state", "harness-policy.json")), Path.Combine(workspacePath, "state", "harness-policy.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "scope-contract", File.Exists(Path.Combine(workspacePath, "state", "scope-contract.json")), Path.Combine(workspacePath, "state", "scope-contract.json"), "Run `migrator kit update --backup --source <source-root>` or pass --source on bootstrap.");
@@ -990,6 +991,8 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
             "scripts/validate-run-artifacts.sh" or
             "scripts/update-current-ticket-status.ps1" or
             "scripts/update-current-ticket-status.sh" or
+            "scripts/repair-jsonl-ledger.ps1" or
+            "scripts/repair-jsonl-ledger.sh" or
             "scripts/update-sentinel-finding-status.ps1" or
             "scripts/update-sentinel-finding-status.sh" or
             "scripts/export-opencode-session.ps1" or
@@ -1531,6 +1534,8 @@ Fix only the current ticket.
             "scripts/validate-run-artifacts.sh",
             "scripts/update-current-ticket-status.ps1",
             "scripts/update-current-ticket-status.sh",
+            "scripts/repair-jsonl-ledger.ps1",
+            "scripts/repair-jsonl-ledger.sh",
             "scripts/update-sentinel-finding-status.ps1",
             "scripts/update-sentinel-finding-status.sh"
         };

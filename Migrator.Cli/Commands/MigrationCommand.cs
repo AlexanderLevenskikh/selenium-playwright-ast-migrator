@@ -59,6 +59,7 @@ internal static class MigrationCommand
             "cluster" => RunCluster(options),
             "plan" => RunPlan(options),
             "run-wave" => RunWave(options),
+            "refresh-wave-status" => RunRefreshWaveStatus(options),
             _ => UnknownCommand(command)
         };
     }
@@ -286,11 +287,11 @@ internal static class MigrationCommand
         WriteWaveConfigDelta(outPath, options.Workspace, wave, options);
         WriteWaveMemoryDelta(outPath, wave, copiedFiles.Count, missingFiles);
         WriteWaveCommands(outPath, sourceScopeDir, generatedDir, options, selectedTestsPath);
-        WriteWaveSummary(outPath, wave, scope, options, copiedFiles.Count, missingFiles, selectedTestsPath);
 
         var execution = options.ExecuteMigrate
             ? TryExecuteMigrate(outPath, sourceScopeDir, generatedDir, options, selectedTestsPath)
             : new WaveMigrateExecution("prepared", "--execute-migrate false; generated/ contains a README placeholder until migrate is run.", 0);
+        WriteWaveSummary(outPath, wave, scope, options, copiedFiles.Count, missingFiles, selectedTestsPath, execution);
         WriteWaveStatus(outPath, wave, execution, missingFiles);
 
         Console.WriteLine("MIGRATION_WAVE_RUN_READY");
@@ -307,6 +308,90 @@ internal static class MigrationCommand
         if (options.ExecuteMigrate && execution.Status.Equals("failed", StringComparison.OrdinalIgnoreCase))
             return execution.ExitCode == 0 ? 1 : execution.ExitCode;
         return 0;
+    }
+
+    static int RunRefreshWaveStatus(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        var scopePath = Path.Combine(outPath, "input-scope.json");
+        if (!File.Exists(scopePath))
+        {
+            Console.Error.WriteLine($"Wave input scope not found: {scopePath}");
+            return 2;
+        }
+
+        MigrationWaveInputScope? scope;
+        try
+        {
+            scope = JsonSerializer.Deserialize<MigrationWaveInputScope>(File.ReadAllText(scopePath), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Invalid wave input scope: {ex.Message}");
+            return 2;
+        }
+        if (scope == null)
+        {
+            Console.Error.WriteLine("Wave input scope deserialized to null.");
+            return 2;
+        }
+
+        var generatedDir = Path.Combine(outPath, "generated");
+        var generatedFiles = Directory.Exists(generatedDir)
+            ? Directory.EnumerateFiles(generatedDir, "*", SearchOption.AllDirectories)
+                .Select(path => NormalizeSlashes(Path.GetRelativePath(generatedDir, path)))
+                .Where(path => !path.Equals("README.md", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+            : Array.Empty<string>();
+        var generatedSourceFiles = generatedFiles.Count(path => path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".ts", StringComparison.OrdinalIgnoreCase));
+        var placeholderOnly = generatedFiles.Length == 0;
+        var exitCode = options.MigrateExitCode;
+        var status = exitCode > 0 ? "failed" : placeholderOnly ? "prepared" : "migrated";
+        var message = exitCode > 0
+            ? $"migrate exited with code {exitCode}"
+            : placeholderOnly
+                ? "generated/ still contains only the placeholder; run the wave-local migrate script."
+                : $"generated output detected ({generatedFiles.Length} file(s), {generatedSourceFiles} source file(s)).";
+
+        var statusPath = Path.Combine(outPath, "wave-status.json");
+        var payload = new SortedDictionary<string, object?>(StringComparer.Ordinal);
+        if (File.Exists(statusPath))
+        {
+            try
+            {
+                using var existing = JsonDocument.Parse(File.ReadAllText(statusPath));
+                if (existing.RootElement.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var property in existing.RootElement.EnumerateObject())
+                        payload[property.Name] = JsonSerializer.Deserialize<object?>(property.Value.GetRawText());
+                }
+            }
+            catch
+            {
+                // Replace malformed status with a valid status payload below.
+            }
+        }
+        payload["schemaVersion"] = "migration-wave-status/v2";
+        payload["waveId"] = scope.WaveId;
+        payload["status"] = status;
+        payload["message"] = message;
+        payload["migrateExitCode"] = exitCode < 0 ? null : exitCode;
+        payload["placeholderOnly"] = placeholderOnly;
+        payload["generatedFiles"] = generatedFiles;
+        payload["generatedFileCount"] = generatedFiles.Length;
+        payload["generatedSourceFileCount"] = generatedSourceFiles;
+        payload["updatedAtUtc"] = DateTimeOffset.UtcNow.ToString("O");
+        if (!payload.ContainsKey("generatedAtUtc"))
+            payload["generatedAtUtc"] = DateTimeOffset.UtcNow.ToString("O");
+        WriteJsonAtomic(statusPath, payload);
+
+        Console.WriteLine("MIGRATION_WAVE_STATUS_REFRESHED");
+        Console.WriteLine($"Wave: {scope.WaveId}");
+        Console.WriteLine($"Status: {status}");
+        Console.WriteLine($"Generated files: {generatedFiles.Length}");
+        return exitCode > 0 ? exitCode : 0;
     }
 
     static bool IsDefaultPlanOut(string outPath) => string.IsNullOrWhiteSpace(outPath) || NormalizeSlashes(outPath).Equals("migration/plan", StringComparison.OrdinalIgnoreCase);
@@ -579,6 +664,7 @@ internal static class MigrationCommand
         {
             ["schemaVersion"] = "migration-config-delta/v1",
             ["generatedAtUtc"] = DateTimeOffset.UtcNow.ToString("O"),
+            ["updatedAtUtc"] = DateTimeOffset.UtcNow.ToString("O"),
             ["waveId"] = wave.Id,
             ["phase"] = wave.Phase,
             ["cluster"] = wave.Cluster,
@@ -677,9 +763,25 @@ internal static class MigrationCommand
     static void WriteWaveCommands(string outPath, string sourceScopeDir, string generatedDir, MigrationOptions options, string selectedTestsPath)
     {
         var migrateArgs = BuildMigrateCommand(sourceScopeDir, generatedDir, options, selectedTestsPath);
-        File.WriteAllText(Path.Combine(outPath, "run-migrate.sh"), "#!/usr/bin/env bash\nset -euo pipefail\n" + migrateArgs + "\n");
-        File.WriteAllText(Path.Combine(outPath, "run-migrate.ps1"), "$ErrorActionPreference = 'Stop'\n" + migrateArgs + "\n");
-        File.WriteAllText(Path.Combine(generatedDir, "README.md"), "# Generated output placeholder\n\nRun `../run-migrate.sh` or `../run-migrate.ps1`, or rerun `migration run-wave --execute-migrate true`, to generate this wave.\n");
+        var refreshArgs = $"selenium-pw-migrator migration refresh-wave-status --out {QuoteForShell(Path.GetFullPath(outPath))} --migrate-exit-code";
+        var sh = new StringBuilder();
+        sh.AppendLine("#!/usr/bin/env bash");
+        sh.AppendLine("set -uo pipefail");
+        sh.AppendLine("migrate_exit_code=0");
+        sh.AppendLine(migrateArgs + " || migrate_exit_code=$?");
+        sh.AppendLine(refreshArgs + " \"$migrate_exit_code\"");
+        sh.AppendLine("exit \"$migrate_exit_code\"");
+        File.WriteAllText(Path.Combine(outPath, "run-migrate.sh"), sh.ToString());
+
+        var ps = new StringBuilder();
+        ps.AppendLine("$ErrorActionPreference = 'Continue'");
+        ps.AppendLine("$migrateExitCode = 0");
+        ps.AppendLine(migrateArgs);
+        ps.AppendLine("if ($null -ne $LASTEXITCODE) { $migrateExitCode = $LASTEXITCODE }");
+        ps.AppendLine(refreshArgs + " $migrateExitCode");
+        ps.AppendLine("exit $migrateExitCode");
+        File.WriteAllText(Path.Combine(outPath, "run-migrate.ps1"), ps.ToString());
+        File.WriteAllText(Path.Combine(generatedDir, "README.md"), "# Generated output placeholder\n\nRun `../run-migrate.sh` or `../run-migrate.ps1`, or rerun `migration run-wave --execute-migrate true`, to generate this wave. The wrapper refreshes `wave-status.json` after migration.\n");
     }
 
     static string BuildMigrateCommand(string sourceScopeDir, string generatedDir, MigrationOptions options, string? selectedTestsPath = null)
@@ -716,7 +818,7 @@ internal static class MigrationCommand
         return string.Join(" ", parts);
     }
 
-    static void WriteWaveSummary(string outPath, MigrationWave wave, MigrationWaveInputScope scope, MigrationOptions options, int copiedFiles, IReadOnlyList<string> missingFiles, string selectedTestsPath)
+    static void WriteWaveSummary(string outPath, MigrationWave wave, MigrationWaveInputScope scope, MigrationOptions options, int copiedFiles, IReadOnlyList<string> missingFiles, string selectedTestsPath, WaveMigrateExecution execution)
     {
         var sb = new StringBuilder();
         sb.AppendLine("# Migration wave run");
@@ -774,6 +876,7 @@ internal static class MigrationCommand
         {
             ["schemaVersion"] = "migration-wave-run/v1",
             ["generatedAtUtc"] = DateTimeOffset.UtcNow.ToString("O"),
+            ["updatedAtUtc"] = DateTimeOffset.UtcNow.ToString("O"),
             ["waveId"] = wave.Id,
             ["phase"] = wave.Phase,
             ["cluster"] = wave.Cluster,
@@ -781,6 +884,7 @@ internal static class MigrationCommand
             ["tests"] = wave.Tests.Length,
             ["filesCopied"] = copiedFiles,
             ["missingFiles"] = missingFiles.ToArray(),
+            ["placeholderOnly"] = execution.Status.Equals("prepared", StringComparison.OrdinalIgnoreCase),
             ["artifacts"] = new[] { "input-scope.json", "config-delta.json", "memory-delta.jsonl", "run-summary.md", "run-migrate.sh", "run-migrate.ps1" }
         };
         File.WriteAllText(Path.Combine(outPath, "run-summary.json"), JsonSerializer.Serialize(json, JsonOptions));
@@ -838,13 +942,15 @@ internal static class MigrationCommand
     {
         var status = new SortedDictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["schemaVersion"] = "migration-wave-status/v1",
+            ["schemaVersion"] = "migration-wave-status/v2",
             ["generatedAtUtc"] = DateTimeOffset.UtcNow.ToString("O"),
+            ["updatedAtUtc"] = DateTimeOffset.UtcNow.ToString("O"),
             ["waveId"] = wave.Id,
             ["status"] = missingFiles.Count > 0 ? "incomplete" : execution.Status,
             ["message"] = execution.Message,
             ["migrateExitCode"] = execution.ExitCode,
             ["missingFiles"] = missingFiles.ToArray(),
+            ["placeholderOnly"] = execution.Status.Equals("prepared", StringComparison.OrdinalIgnoreCase),
             ["next"] = new[]
             {
                 "Inspect run-summary.md and input-scope.json.",
@@ -853,7 +959,7 @@ internal static class MigrationCommand
                 "Run reviewer/watchdog/final-gate before promoting wave-local learning."
             }
         };
-        File.WriteAllText(Path.Combine(outPath, "wave-status.json"), JsonSerializer.Serialize(status, JsonOptions));
+        WriteJsonAtomic(Path.Combine(outPath, "wave-status.json"), status);
     }
 
     static bool ValidateInput(string input, out string fullInput)
@@ -1522,6 +1628,22 @@ internal static class MigrationCommand
         }
     }
 
+    static void WriteJsonAtomic(string path, object value)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
+        var tempPath = path + ".tmp-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            File.WriteAllText(tempPath, JsonSerializer.Serialize(value, JsonOptions));
+            File.Move(tempPath, path, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
+        }
+    }
+
     static bool IsHelp(string arg) => arg is "-h" or "--help" or "help" or "/?";
 
     static int UnknownCommand(string command)
@@ -1540,9 +1662,10 @@ Migration planning and wave run commands:
   selenium-pw-migrator migration plan --strategy wavefront --input ./SeleniumTests --workspace migration --out migration/plan
   selenium-pw-migrator migration plan show --plan migration/plan
   selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001
+  selenium-pw-migrator migration refresh-wave-status --out migration/runs/wave-001 --migrate-exit-code 0
 
 Planning is read-only. run-wave materializes a bounded source-scope plus config-delta,
-memory-delta, run summary, evidence folder, and migrate scripts. It never promotes config or memory automatically.
+memory-delta, run summary, evidence folder, and migrate scripts. The migrate wrappers refresh wave-status.json after execution. It never promotes config or memory automatically.
 Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to create a reviewable candidate config after wave deltas are reviewed.
 """);
     }
@@ -1563,6 +1686,7 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
         string TargetTestFramework,
         string GenerationPolicy,
         bool ExecuteMigrate,
+        int MigrateExitCode,
         int MaxWaveSize,
         int RepresentativesPerCluster,
         bool PreferLowRiskFirst)
@@ -1582,6 +1706,7 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
             var targetTestFramework = string.Empty;
             var generationPolicy = string.Empty;
             var executeMigrate = false;
+            var migrateExitCode = -1;
             var maxWaveSize = 8;
             var representativesPerCluster = 1;
             var preferLowRiskFirst = true;
@@ -1614,6 +1739,7 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
                         case "--target-test-framework": targetTestFramework = Next(arg); break;
                         case "--generation-policy": generationPolicy = Next(arg); break;
                         case "--execute-migrate": executeMigrate = ParseBool(Next(arg), arg); break;
+                        case "--migrate-exit-code": migrateExitCode = ParseNonNegativeInt(Next(arg), arg); break;
                         case "--max-wave-size": maxWaveSize = ParsePositiveInt(Next(arg), arg); break;
                         case "--representatives-per-cluster": representativesPerCluster = ParsePositiveInt(Next(arg), arg); break;
                         case "--prefer-low-risk-first": preferLowRiskFirst = ParseBool(Next(arg), arg); break;
@@ -1638,7 +1764,14 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
                 return null;
             }
 
-            return new MigrationOptions(input, outPath, workspace, strategy, format, plan, inventory, wave, config, target, targetTestFramework, generationPolicy, executeMigrate, maxWaveSize, representativesPerCluster, preferLowRiskFirst);
+            return new MigrationOptions(input, outPath, workspace, strategy, format, plan, inventory, wave, config, target, targetTestFramework, generationPolicy, executeMigrate, migrateExitCode, maxWaveSize, representativesPerCluster, preferLowRiskFirst);
+        }
+
+        static int ParseNonNegativeInt(string value, string option)
+        {
+            if (!int.TryParse(value, out var parsed) || parsed < 0)
+                throw new ArgumentException($"{option} requires a non-negative integer");
+            return parsed;
         }
 
         static int ParsePositiveInt(string value, string option)

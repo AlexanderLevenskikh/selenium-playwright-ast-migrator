@@ -181,12 +181,13 @@ Treat machine ledgers as controlled state, not free-form text:
 - Keep changes small and reversible.
 - Prefer existing project patterns.
 - Do not add or broaden suppression patterns to reduce TODO count.
+- Do not delete a TODO/unresolved-symbol marker while its replacement declaration, action, or assertion remains commented out or absent. TODO-count reduction alone is not progress.
 - Do not suppress assertion/check/helper methods such as `*.Should*`, `*Assert*`, `*Expect*`, or `*Equal*` unless explicit source evidence and review criteria are present.
 - Do not hide failures.
 - Do not invent APIs.
 - If you discover the plan is wrong, stop and report instead of improvising a broad rewrite.
 - Update `migration/runs/<run-id>/Documentation.md` with decisions, verification evidence, and unresolved risks.
-- When implementing `migration/current-ticket.md`, keep `migration/state/current-ticket-status.json` in sync through `migration/scripts/update-current-ticket-status.ps1` / `.sh`: `IN_PROGRESS` before edits, `REVIEW_READY` after a coherent patch, or `BLOCKED` with a concrete reason. Use `DONE` only after reviewer/gate validation, not immediately after editing.
+- When implementing `migration/current-ticket.md`, keep `migration/state/current-ticket-status.json` in sync through `migration/scripts/update-current-ticket-status.ps1` / `.sh`: `IN_PROGRESS` before edits, `REVIEW_READY` after a coherent patch, or `BLOCKED` with a concrete reason. Do not set `DONE` from the executor. Stop at `REVIEW_READY`; the orchestrator marks `DONE` after reviewer, scope, harness-policy, and artifact-hygiene validation pass, then runs a fresh final gate.
 - Append important command/evidence notes to `migration/runs/<run-id>/trace.jsonl` when practical.
 - Run or request `migration/scripts/check-scope.ps1` after editing and before handoff.
 - Run or request `migration/scripts/check-harness-policy.ps1` after editing and before handoff.

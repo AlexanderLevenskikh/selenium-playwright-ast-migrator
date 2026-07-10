@@ -47,7 +47,9 @@
     "migration/scripts/complete-claim.ps1",
     "migration/scripts/complete-claim.sh",
     "migration/scripts/claim-doctor.ps1",
-    "migration/scripts/claim-doctor.sh"
+    "migration/scripts/claim-doctor.sh",
+    "migration/scripts/repair-jsonl-ledger.ps1",
+    "migration/scripts/repair-jsonl-ledger.sh"
   ],
   "deniedWrites": [
     ".git/**",
@@ -309,7 +311,17 @@
     "bash *move-stale-claims.sh*",
     "powershell *evaluate-command-policy.ps1*",
     "pwsh *evaluate-command-policy.ps1*",
-    "bash *evaluate-command-policy.sh*"
+    "bash *evaluate-command-policy.sh*",
+    "pwsh *repair-jsonl-ledger.ps1*",
+    "powershell *repair-jsonl-ledger.ps1*",
+    "pwsh -NoProfile -ExecutionPolicy Bypass -File migration/scripts/repair-jsonl-ledger.ps1*",
+    "powershell -NoProfile -ExecutionPolicy Bypass -File migration/scripts/repair-jsonl-ledger.ps1*",
+    "./migration/scripts/repair-jsonl-ledger.ps1*",
+    ".\\migration\\scripts\\repair-jsonl-ledger.ps1*",
+    "./migration/scripts/repair-jsonl-ledger.sh*",
+    "bash migration/scripts/repair-jsonl-ledger.sh*",
+    "migration/scripts/repair-jsonl-ledger.sh*",
+    "bash ./migration/scripts/repair-jsonl-ledger.sh*"
   ],
   "deniedCommands": [
     "git commit*",
@@ -450,7 +462,9 @@
     "scripts/move-stale-claims.ps1",
     "scripts/move-stale-claims.sh",
     "scripts/evaluate-command-policy.ps1",
-    "scripts/evaluate-command-policy.sh"
+    "scripts/evaluate-command-policy.sh",
+    "scripts/repair-jsonl-ledger.ps1",
+    "scripts/repair-jsonl-ledger.sh"
   ],
   "evidenceBundle": {
     "schemaVersion": 1,

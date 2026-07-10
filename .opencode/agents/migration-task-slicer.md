@@ -116,6 +116,8 @@ Read when present:
 - `migration/state/harness-policy.json`
 - `migration/state/harness-run.json`
 - `migration/state/final-gate-result.json`
+- `migration/state/memory/memory-summary.md` and active memory JSONL
+- `migration/state/memory/recall-index.json` / `recall-ledger.jsonl` when present
 - `migration/state/continuation-decision.json`
 - `migration/state/handoff.md`
 - active run `Documentation.md`, `trace.jsonl`, TODO/explain/verify artifacts
@@ -143,6 +145,9 @@ Do not stop because the report says `Developer action`, `manual work`, or `post-
    - documentation/evidence fixes.
 5. Do not select tickets that require product source edits, package installation, network access, credentials, or business/product decisions. Still create non-selected `HUMAN_DECISION_REQUIRED`, `BLOCKED_BY_SCOPE`, or `BLOCKED_BY_MISSING_SOURCE_TRUTH` tickets for auditability. Artifact-only mode still permits selected tickets that edit only `migration/**` artifacts.
 6. Do not select a ticket whose success criteria require assertion suppression or weakening.
+7. TODO-count reduction is never a standalone success criterion. A ticket may remove an unresolved-symbol/TODO marker only when its scope names the active replacement declaration/action/assertion or provides source-backed evidence that the marker is obsolete. Reject “delete the TODO comment but leave the code commented out” as evidence manipulation.
+8. Before selecting a ticket with explicit files, run `selenium-pw-migrator memory recall --file <file> --workspace migration` for each scoped file and include `state/memory/recall-index.json` in evidence.
+9. `post-final-tasks.jsonl` must be valid one-object-per-line JSONL. After writing it, run `migration/scripts/validate-run-artifacts.ps1 -Workspace migration -RepoRoot .`; if any line is malformed, stop with `BLOCKED_INVALID_BACKLOG_JSONL` and use `repair-jsonl-ledger` only with an explicit backup/repair decision.
 
 ## Output artifacts
 
@@ -213,7 +218,7 @@ If no agent-executable task exists, set/add:
 }
 ```
 
-Also write `migration/state/task-slice-result.json` with the same status and update `migration/state/continuation-decision.json` plus `migration/state/continuation-decision.md` in the same task-slicer step. Do not leave `continuation-decision.json` as `CONTINUE_REQUIRED` when `task-slice-result.json` says `BLOCKED_NO_AGENT_EXECUTABLE_TASKS`.
+Also write `migration/state/task-slice-result.json` with the same status and update `migration/state/continuation-decision.json` plus `migration/state/continuation-decision.md` in the same task-slicer step. Then call `migration/scripts/update-current-ticket-status.ps1 -Workspace migration -Status READY -TicketId <selected-id> -Source migration-task-slicer` (or `.sh`) so task-slice, continuation, harness-run, and wave lifecycle state begin from one canonical ticket id. Do not leave `continuation-decision.json` as `CONTINUE_REQUIRED` when `task-slice-result.json` says `BLOCKED_NO_AGENT_EXECUTABLE_TASKS`.
 
 ## Final response
 

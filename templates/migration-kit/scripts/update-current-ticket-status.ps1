@@ -52,6 +52,66 @@ function ConvertTo-HashtableRecursive($Value) {
     return $Value
 }
 
+function Write-JsonAtomic([string]$Path, $Value, [int]$Depth = 30) {
+    $directory = Split-Path -Parent $Path
+    if (-not [string]::IsNullOrWhiteSpace($directory)) { New-Item -ItemType Directory -Force -Path $directory | Out-Null }
+    $tempPath = "$Path.tmp-$([Guid]::NewGuid().ToString('N'))"
+    try {
+        $Value | ConvertTo-Json -Depth $Depth | Set-Content -Path $tempPath -Encoding UTF8
+        Move-Item -Force -Path $tempPath -Destination $Path
+    }
+    finally {
+        if (Test-Path $tempPath) { Remove-Item -Force -Path $tempPath -ErrorAction SilentlyContinue }
+    }
+}
+
+function Merge-JsonState([string]$Path, $Changes) {
+    $state = [ordered]@{}
+    $existing = Read-JsonIfExists $Path
+    if ($null -ne $existing) {
+        foreach ($property in $existing.PSObject.Properties) { $state[$property.Name] = ConvertTo-HashtableRecursive $property.Value }
+    }
+    foreach ($key in $Changes.Keys) { $state[$key] = $Changes[$key] }
+    Write-JsonAtomic $Path $state
+    return $state
+}
+
+function Update-ActiveWaveStatus([string]$WorkspacePath, [string]$TicketStatus, [string]$TicketId) {
+    $runsPath = Join-Path $WorkspacePath "runs"
+    if (-not (Test-Path $runsPath)) { return }
+    $waveStatusFile = Get-ChildItem -Path $runsPath -Recurse -File -Filter "wave-status.json" -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match '[\\/]wave-[^\\/]+[\\/]wave-status\.json$' } |
+        Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+    if ($null -eq $waveStatusFile) { return }
+
+    $waveRoot = Split-Path -Parent $waveStatusFile.FullName
+    $generatedRoot = Join-Path $waveRoot "generated"
+    $generatedFiles = @()
+    if (Test-Path $generatedRoot) {
+        $generatedFiles = @(Get-ChildItem -Path $generatedRoot -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'README.md' })
+    }
+    $existingWave = Read-JsonIfExists $waveStatusFile.FullName
+    $currentWaveStatus = if ($null -ne $existingWave) { [string]$existingWave.status } else { "unknown" }
+    if ($generatedFiles.Count -gt 0 -and $currentWaveStatus -eq "prepared") { $currentWaveStatus = "migrated" }
+    $lifecycleStage = switch ($TicketStatus) {
+        "READY" { "ticket-ready" }
+        "IN_PROGRESS" { "ticket-in-progress" }
+        "REVIEW_READY" { "ticket-review-ready" }
+        "DONE" { "ticket-done-pending-final-gate" }
+        "BLOCKED" { "ticket-blocked" }
+    }
+    [void](Merge-JsonState $waveStatusFile.FullName ([ordered]@{
+        schemaVersion = "migration-wave-status/v2"
+        status = $currentWaveStatus
+        placeholderOnly = ($generatedFiles.Count -eq 0)
+        generatedFileCount = $generatedFiles.Count
+        lifecycleStage = $lifecycleStage
+        currentTicketId = $TicketId
+        currentTicketStatus = $TicketStatus
+        updatedAtUtc = [DateTimeOffset]::UtcNow.ToString("o")
+    }))
+}
+
 function Read-LatestRunId([string]$WorkspacePath) {
     $harnessRunPath = Join-Path $WorkspacePath "state/harness-run.json"
     $harnessRun = Read-JsonIfExists $harnessRunPath
@@ -143,7 +203,7 @@ $statusPayload = [pscustomobject][ordered]@{
     updatedAtUtc = $event.updatedAtUtc
 }
 
-$statusPayload | ConvertTo-Json -Depth 20 | Set-Content -Path $statusPath -Encoding UTF8
+Write-JsonAtomic $statusPath $statusPayload 20
 Add-Content -Path $ledgerPath -Encoding UTF8 -Value ($event | ConvertTo-Json -Depth 20 -Compress)
 
 if (-not [string]::IsNullOrWhiteSpace($RunId)) {
@@ -153,7 +213,7 @@ if (-not [string]::IsNullOrWhiteSpace($RunId)) {
     if ([string]::IsNullOrWhiteSpace($safeTicketId)) { $safeTicketId = "current-ticket" }
     $runTicketJson = Join-Path $ticketsDir ("{0}.json" -f $safeTicketId)
     $runTicketMd = Join-Path $ticketsDir ("{0}.md" -f $safeTicketId)
-    $statusPayload | ConvertTo-Json -Depth 20 | Set-Content -Path $runTicketJson -Encoding UTF8
+    Write-JsonAtomic $runTicketJson $statusPayload 20
     $md = @"
 # Current ticket status: $Status
 
@@ -175,11 +235,18 @@ if (-not $NoContinuationUpdate) {
     $continuationPath = Join-Path $workspacePath "state/continuation-decision.json"
     $continuationMdPath = Join-Path $workspacePath "state/continuation-decision.md"
     $decisionStatus = switch ($Status) {
-        "READY" { "CONTINUE_REQUIRED" }
+        "READY" { "POST_FINAL_TASKS_READY" }
         "IN_PROGRESS" { "CONTINUE_REQUIRED" }
         "REVIEW_READY" { "CONTINUE_REQUIRED" }
         "DONE" { "CONTINUE_REQUIRED" }
         "BLOCKED" { "BLOCKED_CURRENT_TICKET" }
+    }
+    $nextActionCode = switch ($Status) {
+        "READY" { "RUN_NEXT_BOUNDED_TASK" }
+        "IN_PROGRESS" { "FINISH_CURRENT_TICKET" }
+        "REVIEW_READY" { "REVIEW_CURRENT_TICKET" }
+        "DONE" { "RUN_FINAL_GATE" }
+        "BLOCKED" { $null }
     }
     $nextAction = switch ($Status) {
         "READY" { "Route migration/current-ticket.md through migration-change-reviewer, then executor. Do not start another wave first." }
@@ -188,18 +255,34 @@ if (-not $NoContinuationUpdate) {
         "DONE" { "Run migration/scripts/check-final-gate.ps1 -Workspace migration -RepoRoot . and reconcile follow-up findings." }
         "BLOCKED" { "Report the concrete current-ticket blocker and do not start another wave." }
     }
+    $autoAllowed = $Status -ne "BLOCKED"
     $decision = [pscustomobject][ordered]@{
         status = $decisionStatus
+        postFinalStage = switch ($Status) {
+            "READY" { "TASKS_SLICED" }
+            "IN_PROGRESS" { "TASK_IN_PROGRESS" }
+            "REVIEW_READY" { "TASK_REVIEW_READY" }
+            "DONE" { "TASK_COMPLETED_PENDING_GATE" }
+            "BLOCKED" { "TASK_BLOCKED" }
+        }
         protocol = "Current-ticket lifecycle is active. The selected ticket must be completed, blocked, or gate-validated before another wave can start."
-        nextAction = $nextAction
+        nextAction = $nextActionCode
+        nextActionDetail = $nextAction
         source = "update-current-ticket-status"
         evidence = "state/current-ticket-status.json"
         currentTicket = "current-ticket.md"
+        currentTicketId = [string]$metadata.ticketId
         currentTicketStatus = $Status
-        mustContinueBeforeUserMessage = ($Status -ne "BLOCKED")
-        boundedAutoContinuation = ($Status -ne "BLOCKED")
+        mustContinueBeforeUserMessage = $autoAllowed
+        boundedAutoContinuation = [ordered]@{
+            allowed = $autoAllowed
+            nextAction = $nextActionCode
+            maxExecutorTasks = if ($Status -eq "READY") { 1 } else { 0 }
+            requiresCurrentTicket = ($Status -in @("READY", "IN_PROGRESS", "REVIEW_READY"))
+        }
+        updatedAtUtc = $event.updatedAtUtc
     }
-    $decision | ConvertTo-Json -Depth 20 | Set-Content -Path $continuationPath -Encoding UTF8
+    Write-JsonAtomic $continuationPath $decision 20
     $decisionMd = @"
 # Harness Continuation Decision
 
@@ -208,11 +291,56 @@ Status: **$($decision.status)**
 $($decision.protocol)
 
 Next action: $($decision.nextAction)
+Detail: $($decision.nextActionDetail)
 Source: $($decision.source)
 Evidence: $($decision.evidence)
+Current ticket: $($metadata.ticketId)
 Current ticket status: $Status
 "@
     Set-Content -Path $continuationMdPath -Encoding UTF8 -Value $decisionMd
+
+    $taskSlicePath = Join-Path $workspacePath "state/task-slice-result.json"
+    $taskSliceStatus = switch ($Status) {
+        "READY" { "POST_FINAL_TASKS_READY" }
+        "IN_PROGRESS" { "POST_FINAL_TASK_IN_PROGRESS" }
+        "REVIEW_READY" { "POST_FINAL_TASK_REVIEW_READY" }
+        "DONE" { "POST_FINAL_TASK_COMPLETED" }
+        "BLOCKED" { "POST_FINAL_TASK_BLOCKED" }
+    }
+    [void](Merge-JsonState $taskSlicePath ([ordered]@{
+        schemaVersion = "post-final-task-slice/v2"
+        status = $taskSliceStatus
+        selectedTicketId = [string]$metadata.ticketId
+        selectedTicketTitle = [string]$metadata.title
+        selectedTicketStatus = $Status
+        currentTicket = "current-ticket.md"
+        nextAction = $nextActionCode
+        source = "update-current-ticket-status"
+        updatedAtUtc = $event.updatedAtUtc
+    }))
+
+    $harnessRunPath = Join-Path $workspacePath "state/harness-run.json"
+    if (Test-Path $harnessRunPath) {
+        $harnessStatus = switch ($Status) {
+            "READY" { "POST_FINAL_TASKS_READY" }
+            "IN_PROGRESS" { "CURRENT_TICKET_IN_PROGRESS" }
+            "REVIEW_READY" { "CURRENT_TICKET_REVIEW_READY" }
+            "DONE" { "CURRENT_TICKET_DONE_PENDING_GATE" }
+            "BLOCKED" { "BLOCKED_CURRENT_TICKET" }
+        }
+        [void](Merge-JsonState $harnessRunPath ([ordered]@{
+            status = $harnessStatus
+            currentTicketId = [string]$metadata.ticketId
+            currentTicketStatus = $Status
+            allowedNextAction = $nextActionCode
+            continuationStatus = $decisionStatus
+            continuationDecision = "state/continuation-decision.json"
+            taskSliceResult = "state/task-slice-result.json"
+            updatedAtUtc = $event.updatedAtUtc
+        }))
+    }
+
+    Update-ActiveWaveStatus $workspacePath $Status ([string]$metadata.ticketId)
 }
 
 Write-Host "CURRENT_TICKET_STATUS_UPDATED: ticket=$($metadata.ticketId) status=$Status run=$RunId"

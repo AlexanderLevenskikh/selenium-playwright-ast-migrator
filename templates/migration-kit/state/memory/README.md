@@ -9,3 +9,5 @@ Agents must treat memory as guidance, not authority:
 - record decisions, warnings, rejected approaches, and final-gate lessons after bounded actions;
 - never use memory to suppress assertions or hide over-suppressed user interactions;
 - keep POM uncertainty reviewable until target mappings exist.
+
+- `recall-index.json` and `recall-ledger.jsonl` record scoped memory recall receipts used by final gate.

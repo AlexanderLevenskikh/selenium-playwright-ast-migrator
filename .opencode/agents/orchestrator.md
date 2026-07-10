@@ -199,7 +199,7 @@ Sentinel findings are not user handoff by themselves. If `harness-sentinel` reco
 
 ### Current-ticket executor loop
 
-If `migration/current-ticket.md` exists, treat it as the selected bounded work item before looking for another wave. Read `migration/state/current-ticket-status.json` when present. For `READY`, missing, `IN_PROGRESS`, or `REVIEW_READY`, run `migration/scripts/update-current-ticket-status.ps1 -Status IN_PROGRESS -Source orchestrator` / `.sh`, route the ticket through `migration-change-reviewer`, delegate exactly one bounded `executor` task, then update status to `REVIEW_READY` or `BLOCKED` with evidence. Mark `DONE` only after validation/final-gate evidence. Do not start another wave while current-ticket lifecycle is active.
+If `migration/current-ticket.md` exists, treat it as the selected bounded work item before looking for another wave. Read `migration/state/current-ticket-status.json` when present. For `READY`, missing, `IN_PROGRESS`, or `REVIEW_READY`, run `migration/scripts/update-current-ticket-status.ps1 -Status IN_PROGRESS -Source orchestrator` / `.sh`, route the ticket through `migration-change-reviewer`, delegate exactly one bounded `executor` task, then update status to `REVIEW_READY` or `BLOCKED` with evidence. After reviewer, scope, harness-policy, and artifact-hygiene validation pass, mark the ticket `DONE` **before** running a fresh final gate. `DONE` means the bounded ticket is complete and the next required action is `RUN_FINAL_GATE`; never mark `DONE` after a gate run, because that makes the gate evidence stale. Do not start another wave while current-ticket lifecycle is active.
 
 ## post-final research flow
 
