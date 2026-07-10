@@ -26,7 +26,7 @@ function Unblock-PathIfSupported {
         Unblock-File -Path $Path -ErrorAction SilentlyContinue
     }
     catch {
-        Write-Warning "Could not unblock $Path: $($_.Exception.Message)"
+        Write-Warning "Could not unblock ${Path}: $($_.Exception.Message)"
     }
 }
 
