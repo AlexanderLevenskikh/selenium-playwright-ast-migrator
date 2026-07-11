@@ -4,7 +4,7 @@ All notable changes to Selenium Playwright Migrator are documented here.
 
 This project uses preview SemVer-style versions while the public API is still stabilizing.
 
-## [0.0.2-preview.1]
+## [Unreleased]
 
 ### Added
 - Durable agent recovery with bounded active-role leases, latest-heartbeat freshness, serialized runtime mutations, deterministic recovery planning, append-only stale-role closure, safe ledger-head rebuild, orphan lease archival, atomic-temp quarantine, and fail-closed handling of malformed or contradictory role evidence.
