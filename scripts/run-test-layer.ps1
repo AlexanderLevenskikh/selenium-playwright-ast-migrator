@@ -91,6 +91,10 @@ function Invoke-E2E {
     & $powerShellExecutable -NoProfile -ExecutionPolicy Bypass -File (Join-Path $rootPath 'scripts/run-validation-host-smoke.ps1') `
         -Root $rootPath -Configuration $Configuration -Output $smokeOutput -CliDll $cliDll
     if ($LASTEXITCODE -ne 0) { throw "E2E validation-host smoke failed with exit code $LASTEXITCODE." }
+    $agentSmokeOutput = Join-Path $outputPath 'e2e-agent-runtime'
+    & $powerShellExecutable -NoProfile -ExecutionPolicy Bypass -File (Join-Path $rootPath 'scripts/run-agent-runtime-smoke.ps1') `
+        -Root $rootPath -Configuration $Configuration -Output $agentSmokeOutput -CliDll $cliDll
+    if ($LASTEXITCODE -ne 0) { throw "E2E agent-runtime smoke failed with exit code $LASTEXITCODE." }
 }
 
 # xUnit/VSTest 2.5.x can occasionally omit a class-level custom trait from filtered

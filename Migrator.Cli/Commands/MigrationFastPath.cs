@@ -86,6 +86,27 @@ internal static class MigrationFastPath
                 "scope bypass or gate weakening",
                 "explicit audit profile"
             },
+            ["roleBudgets"] = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["maxTotalRoleInvocations"] = profile switch { "audit" => 9, "standard" => 7, _ => 6 },
+                ["perRole"] = new SortedDictionary<string, int>(StringComparer.Ordinal)
+                {
+                    ["executor"] = 2,
+                    ["reviewer"] = profile == "fast" ? 1 : 2,
+                    ["watchdog"] = profile == "audit" ? 2 : 1,
+                    ["sentinel"] = profile == "audit" ? 2 : 1
+                },
+                ["duplicateActiveDispatchAllowed"] = false,
+                ["budgetExhaustionAction"] = "HUMAN_REVIEW_REQUIRED"
+            },
+            ["protectedRiskTriggers"] = new[]
+            {
+                "protected path change",
+                "scope bypass",
+                "gate weakening",
+                "assertion suppression",
+                "evidence manipulation"
+            },
             ["invariants"] = new SortedDictionary<string, object?>(StringComparer.Ordinal)
             {
                 ["finalGateStillRequired"] = true,
@@ -404,6 +425,20 @@ internal static class MigrationFastPath
                             && policyInvariants.TryGetProperty("manualRuntimeStateMutationAllowed", out var mutationNode)
                             && mutationNode.ValueKind == JsonValueKind.False,
                             "execution policy may not allow manual runtime-state mutation");
+                        var roleBudgets = policyRoot.TryGetProperty("roleBudgets", out var roleBudgetNode) && roleBudgetNode.ValueKind == JsonValueKind.Object
+                            ? roleBudgetNode
+                            : default;
+                        AddCheck(checks, failures, "agent-role-budget-present",
+                            roleBudgets.ValueKind == JsonValueKind.Object
+                            && roleBudgets.TryGetProperty("maxTotalRoleInvocations", out var totalRoleBudget)
+                            && totalRoleBudget.TryGetInt32(out var maxRoles)
+                            && maxRoles > 0,
+                            "execution policy must define a positive bounded total role budget");
+                        AddCheck(checks, failures, "duplicate-agent-dispatch-forbidden",
+                            roleBudgets.ValueKind == JsonValueKind.Object
+                            && roleBudgets.TryGetProperty("duplicateActiveDispatchAllowed", out var duplicateDispatch)
+                            && duplicateDispatch.ValueKind == JsonValueKind.False,
+                            "execution policy may not allow duplicate active role dispatch");
                     }
                     catch (Exception ex) when (ex is JsonException or IOException)
                     {

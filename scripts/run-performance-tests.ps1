@@ -170,6 +170,7 @@ $trxPath = Join-Path $outputPath 'orchestrator-performance.trx'
 $jsonPath = Join-Path $outputPath 'orchestrator-performance.json'
 $mdPath = Join-Path $outputPath 'orchestrator-performance.md'
 $smokeOutput = Join-Path $outputPath 'validation-host-smoke'
+$agentSmokeOutput = Join-Path $outputPath 'agent-runtime-smoke'
 Remove-Item $trxPath -Force -ErrorAction SilentlyContinue
 
 $project = Join-Path $rootPath 'Migrator.Tests/Migrator.Tests.csproj'
@@ -246,6 +247,28 @@ if ($smokeExit -ne 0 -or $null -eq $smokeReport -or $smokeReport.status -ne 'PAS
     }
 }
 
+$agentSmokeScript = Join-Path $rootPath 'scripts/run-agent-runtime-smoke.ps1'
+$agentSmokeStdoutPath = Join-Path $outputPath 'agent-runtime-smoke.stdout.log'
+$agentSmokeStderrPath = Join-Path $outputPath 'agent-runtime-smoke.stderr.log'
+$agentSmokeProcess = Invoke-TrackedProcess -FileName $powerShellExecutable -Arguments @(
+    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $agentSmokeScript,
+    '-Root', $rootPath, '-Configuration', $Configuration, '-Output', $agentSmokeOutput, '-CliDll', $cliDll
+) -WorkingDirectory $rootPath -StdoutPath $agentSmokeStdoutPath -StderrPath $agentSmokeStderrPath -TimeoutSeconds 180
+$agentSmokeExit = $agentSmokeProcess.ExitCode
+$agentRuntimePeakWorkingSetBytes = [long]$agentSmokeProcess.PeakWorkingSetBytes
+$agentSmokeReportPath = Join-Path $agentSmokeOutput 'agent-runtime-smoke.json'
+$agentSmokeReport = if (Test-Path $agentSmokeReportPath) { Get-Content -Raw $agentSmokeReportPath | ConvertFrom-Json } else { $null }
+$agentSmokeDurationMs = if ($null -ne $agentSmokeReport -and $null -ne $agentSmokeReport.wallClockDurationMs) { [double]$agentSmokeReport.wallClockDurationMs } else { $null }
+$agentSmokeFailureSummary = $null
+if ($agentSmokeExit -ne 0 -or $null -eq $agentSmokeReport -or $agentSmokeReport.status -ne 'PASS') {
+    $agentFailureText = ''
+    if (Test-Path $agentSmokeStderrPath) { $agentFailureText = (Get-Content -Raw $agentSmokeStderrPath).Trim() }
+    if ([string]::IsNullOrWhiteSpace($agentFailureText) -and (Test-Path $agentSmokeStdoutPath)) { $agentFailureText = (Get-Content -Raw $agentSmokeStdoutPath).Trim() }
+    if (-not [string]::IsNullOrWhiteSpace($agentFailureText)) {
+        $agentSmokeFailureSummary = if ($agentFailureText.Length -gt 2000) { $agentFailureText.Substring(0, 2000) } else { $agentFailureText }
+    }
+}
+
 $baselineDurationMs = $null
 $regressionRatio = $null
 if ($Baseline -and (Test-Path $Baseline)) {
@@ -258,6 +281,7 @@ $budgetPath = Join-Path $rootPath 'Migrator.Tests/performance-budgets.json'
 $budgets = Get-Content -Raw $budgetPath | ConvertFrom-Json
 $orchestratorBudget = $budgets.scenarios.'orchestrator-baseline'
 $validationHostBudget = $budgets.scenarios.'validation-host-smoke'
+$agentRuntimeBudget = $budgets.scenarios.'agent-runtime-smoke'
 $budgetFindings = [Collections.Generic.List[object]]::new()
 function Add-BudgetFinding([string]$Scenario, [double]$ActualMs, [long]$ActualPeakBytes, $Budget) {
     $softMs = [double]$Budget.softDurationSeconds * 1000
@@ -282,12 +306,13 @@ function Add-BudgetFinding([string]$Scenario, [double]$ActualMs, [long]$ActualPe
 }
 Add-BudgetFinding 'orchestrator-baseline' $orchestratorDurationMs $orchestratorPeakWorkingSetBytes $orchestratorBudget
 if ($null -ne $smokeDurationMs) { Add-BudgetFinding 'validation-host-smoke' $smokeDurationMs $validationHostPeakWorkingSetBytes $validationHostBudget }
+if ($null -ne $agentSmokeDurationMs) { Add-BudgetFinding 'agent-runtime-smoke' $agentSmokeDurationMs $agentRuntimePeakWorkingSetBytes $agentRuntimeBudget }
 
 $hardBudgetFailure = @($budgetFindings | Where-Object level -eq 'HARD').Count -gt 0
 $softBudgetWarning = @($budgetFindings | Where-Object level -eq 'SOFT').Count -gt 0
 $status = if ($testExit -ne 0) {
     'TEST_FAIL'
-} elseif ($smokeExit -ne 0 -or $null -eq $smokeReport -or $smokeReport.status -ne 'PASS') {
+} elseif ($smokeExit -ne 0 -or $null -eq $smokeReport -or $smokeReport.status -ne 'PASS' -or $agentSmokeExit -ne 0 -or $null -eq $agentSmokeReport -or $agentSmokeReport.status -ne 'PASS') {
     'SMOKE_FAIL'
 } elseif ($hardBudgetFailure) {
     'BUDGET_FAIL'
@@ -314,6 +339,11 @@ $report = [ordered]@{
     validationHostSmokeStdout = $smokeStdoutRelative
     validationHostSmokeStderr = $smokeStderrRelative
     validationHostSmokeFailure = $smokeFailureSummary
+    agentRuntimeSmokeExitCode = $agentSmokeExit
+    agentRuntimeSmokeDurationMs = if ($null -eq $agentSmokeDurationMs) { $null } else { [Math]::Round($agentSmokeDurationMs, 3) }
+    agentRuntimeSmokePeakWorkingSetBytes = $agentRuntimePeakWorkingSetBytes
+    agentRuntimeSmokeReport = if ($null -ne $agentSmokeReport) { (Get-RelativePathCompat $outputPath $agentSmokeReportPath).Replace('\', '/') } else { $null }
+    agentRuntimeSmokeFailure = $agentSmokeFailureSummary
     baselineDurationMs = $baselineDurationMs
     regressionRatio = if ($null -eq $regressionRatio) { $null } else { [Math]::Round($regressionRatio, 4) }
     maxRegressionRatio = $MaxRegressionRatio
@@ -329,6 +359,7 @@ $lines = @(
     "Orchestrator wall clock: $([Math]::Round($orchestratorDurationMs / 1000, 2)) s",
     "Orchestrator peak working set: $([Math]::Round($orchestratorPeakWorkingSetBytes / 1MB, 2)) MB",
     "Validation-host smoke: $(if ($null -eq $smokeDurationMs) { 'missing' } else { "$([Math]::Round($smokeDurationMs / 1000, 2)) s" })",
+    "Agent-runtime smoke: $(if ($null -eq $agentSmokeDurationMs) { 'missing' } else { "$([Math]::Round($agentSmokeDurationMs / 1000, 2)) s" })",
     "Summed test duration: $([Math]::Round($totalTestMs / 1000, 2)) s"
 )
 if ($null -ne $regressionRatio) { $lines += "Regression ratio: $([Math]::Round($regressionRatio, 3)) (limit $MaxRegressionRatio)" }
@@ -336,6 +367,10 @@ if ($null -ne $smokeFailureSummary) {
     $singleLineFailure = ($smokeFailureSummary -replace '[\r\n]+', ' ').Trim()
     $lines += ('Validation-host smoke failure: `{0}`' -f $singleLineFailure)
     $lines += ('Validation-host logs: `{0}`, `{1}`' -f $smokeStdoutRelative, $smokeStderrRelative)
+}
+if ($null -ne $agentSmokeFailureSummary) {
+    $singleLineAgentFailure = ($agentSmokeFailureSummary -replace '[\r\n]+', ' ').Trim()
+    $lines += ('Agent-runtime smoke failure: `{0}`' -f $singleLineAgentFailure)
 }
 $lines += @('', '## Performance budgets', '', '| Scenario | Status | Actual, ms | Soft, ms | Hard, ms | Peak, MB | Soft, MB | Hard, MB |', '|---|---|---:|---:|---:|---:|---:|---:|')
 foreach ($item in $budgetFindings) { $lines += "| $($item.scenario) | $($item.level) | $($item.actualDurationMs) | $($item.softDurationMs) | $($item.hardDurationMs) | $($item.actualPeakMemoryMb) | $($item.softPeakMemoryMb) | $($item.hardPeakMemoryMb) |" }
@@ -347,5 +382,6 @@ Write-Host "PERFORMANCE_$status"
 Write-Host "Report: $jsonPath"
 if ($testExit -ne 0) { exit $testExit }
 if ($smokeExit -ne 0) { exit $smokeExit }
+if ($agentSmokeExit -ne 0) { exit $agentSmokeExit }
 if ($Enforce -and $status -in @('BUDGET_FAIL', 'REGRESSION', 'SMOKE_FAIL')) { exit 1 }
 exit 0

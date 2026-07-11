@@ -9,6 +9,7 @@ This index keeps the current workflow short and avoids legacy agent-launch noise
 - [Migration runbook](migration-runbook.md) — production migration plan, pilot scope, risks, and command chain.
 - [Wave mode operator runbook](wave-mode-operator-runbook.md) / [RU](wave-mode-operator-runbook.ru.md) — operating guide for an already bootstrapped wave workspace: blocked gates, current tickets, sentinel finding lifecycle, wave quality budget, mapping research memory, and feedback bundle handoff.
 - [Wave-plan tuning without agents](wave-plan-tuning.md) / [RU](wave-plan-tuning.ru.md) — deterministic budget experiment, auto profile, affinity-aware batching, and calibration of role overhead.
+- [Protected fast agent runtime](migration-agent-runtime.md) / [RU](migration-agent-runtime.ru.md) — deterministic single-action role routing, hash-chained role receipts, bounded agent turns, and lifecycle performance evidence.
 - [Tool installation](tool-installation.md) — install from a packed dotnet tool or run from source.
 - [Standalone installation](standalone-installation.md) / [RU](standalone-installation.ru.md) — install the CLI without .NET SDK/runtime.
 - [npm wrapper](npm-wrapper.md) — install the standalone CLI through npm for frontend-heavy teams.

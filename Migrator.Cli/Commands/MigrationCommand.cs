@@ -65,6 +65,10 @@ internal static class MigrationCommand
             "refresh-wave-status" => RunRefreshWaveStatus(options),
             "validate-wave" => RunValidateWave(options),
             "check-progress" => RunCheckProgress(options),
+            "next-agent-action" => RunNextAgentAction(options),
+            "record-agent-role" => RunRecordAgentRole(options),
+            "check-agent-budget" => RunCheckAgentBudget(options),
+            "agent-perf-report" => RunAgentPerformanceReport(options),
             "validation-plan" => RunValidationPlan(options),
             "validate" => RunValidationHost(options),
             "validation-host" => RunValidationHost(options),
@@ -475,6 +479,42 @@ internal static class MigrationCommand
         var repoRoot = ResolveRepositoryRoot();
         var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
         return MigrationFastPath.CheckProgress(outPath, options.MaxIdenticalSnapshots, Console.Out, Console.Error);
+    }
+
+    static int RunNextAgentAction(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        return MigrationAgentRuntime.ResolveNextAction(outPath, Console.Out, Console.Error);
+    }
+
+    static int RunRecordAgentRole(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        return MigrationAgentRuntime.RecordRoleEvent(
+            outPath,
+            options.AgentRole,
+            options.AgentRolePhase,
+            options.AgentRoleStatus,
+            options.AgentRoleEvidence,
+            options.AgentRoleReason,
+            Console.Out,
+            Console.Error);
+    }
+
+    static int RunCheckAgentBudget(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        return MigrationAgentRuntime.CheckBudget(outPath, Console.Out, Console.Error);
+    }
+
+    static int RunAgentPerformanceReport(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        return MigrationAgentRuntime.PrintPerformanceReport(outPath, Console.Out, Console.Error);
     }
 
     static int RunValidationPlan(MigrationOptions options)
@@ -2528,6 +2568,11 @@ Migration planning and wave run commands:
   selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001 --execution-profile fast
   selenium-pw-migrator migration validate-wave --out migration/runs/wave-001
   selenium-pw-migrator migration check-progress --out migration/runs/wave-001 --max-identical-snapshots 3
+  selenium-pw-migrator migration next-agent-action --out migration/runs/wave-001
+  selenium-pw-migrator migration record-agent-role --out migration/runs/wave-001 --role executor --role-phase execution --role-status STARTED
+  selenium-pw-migrator migration record-agent-role --out migration/runs/wave-001 --role executor --role-phase execution --role-status COMPLETED --role-evidence generated
+  selenium-pw-migrator migration check-agent-budget --out migration/runs/wave-001
+  selenium-pw-migrator migration agent-perf-report --out migration/runs/wave-001
   selenium-pw-migrator migration validation-plan --out migration/runs/wave-001
   selenium-pw-migrator migration validate --out migration/runs/wave-001 --validation-project ./Target.Tests/Target.Tests.csproj --checkpoint-on-pass true
   selenium-pw-migrator migration validate --out migration/runs/wave-001 --validation-command "dotnet test ./Target.Tests/Target.Tests.csproj --no-restore" --validation-timeout-seconds 900
@@ -2542,7 +2587,7 @@ Planning is read-only; tune-wave-plan also executes no agents. The auto profile
 tests deterministic budget combinations and minimizes role-cycle overhead, singleton waves,
 and source-file fragmentation. Same-file tests pay marginal rather than full repeated complexity.
 run-wave materializes an immutable wave manifest, execution policy, run-context, bounded source-scope plus config-delta,
-memory-delta, performance trace, run summary, evidence folder, and migrate scripts. `validate-wave` rejects scope drift or changed copied inputs. `check-progress` detects repeated identical generated/evidence/TODO/unmapped/validation state. `validation-plan` computes changed-file impact and exact-input cache eligibility; `migration validate` is the single validation host that plans, executes, records evidence, and materializes exact-input cache hits without an agent-managed three-command chain. `record-validation` remains available for compatibility and manual evidence import. Checkpoints, resume decisions, and review bundles preserve work without treating a checkpoint as DONE. The migrate wrappers refresh wave-status.json and validation-plan.json after execution. It never promotes config or memory automatically.
+memory-delta, performance trace, run summary, evidence folder, and migrate scripts. `validate-wave` rejects scope drift or changed copied inputs. `check-progress` detects repeated identical generated/evidence/TODO/unmapped/validation state. `next-agent-action` deterministically selects exactly one role/command/final handoff from the execution policy and current evidence; `record-agent-role` appends hash-chained role receipts; `check-agent-budget` prevents unbounded role loops; `agent-perf-report` reports role counts and durations. `validation-plan` computes changed-file impact and exact-input cache eligibility; `migration validate` is the single validation host that plans, executes, records evidence, and materializes exact-input cache hits without an agent-managed three-command chain. `record-validation` remains available for compatibility and manual evidence import. Checkpoints, resume decisions, and review bundles preserve work without treating a checkpoint as DONE. The migrate wrappers refresh wave-status.json and validation-plan.json after execution. It never promotes config or memory automatically.
 Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to create a reviewable candidate config after wave deltas are reviewed.
 """);
     }
@@ -2590,7 +2635,12 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
         bool ValidationDryRun,
         bool CheckpointOnPass,
         string CheckpointLabel,
-        string CheckpointStage)
+        string CheckpointStage,
+        string AgentRole,
+        string AgentRolePhase,
+        string AgentRoleStatus,
+        string AgentRoleEvidence,
+        string AgentRoleReason)
     {
         public static MigrationOptions? Parse(string[] args, out string error)
         {
@@ -2635,6 +2685,11 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
             var checkpointOnPass = true;
             var checkpointLabel = string.Empty;
             var checkpointStage = "migration";
+            var agentRole = "executor";
+            var agentRolePhase = "execution";
+            var agentRoleStatus = "STARTED";
+            var agentRoleEvidence = string.Empty;
+            var agentRoleReason = string.Empty;
             var profileExplicit = false;
             var budgetExplicit = false;
             error = string.Empty;
@@ -2694,6 +2749,11 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
                         case "--checkpoint-on-pass": checkpointOnPass = ParseBool(Next(arg), arg); break;
                         case "--checkpoint-label": checkpointLabel = Next(arg); break;
                         case "--checkpoint-stage": checkpointStage = Next(arg); break;
+                        case "--role": agentRole = Next(arg); break;
+                        case "--role-phase": agentRolePhase = Next(arg); break;
+                        case "--role-status": agentRoleStatus = Next(arg); break;
+                        case "--role-evidence": agentRoleEvidence = Next(arg); break;
+                        case "--role-reason": agentRoleReason = Next(arg); break;
                         default:
                             if (!arg.StartsWith("--", StringComparison.Ordinal) && string.IsNullOrWhiteSpace(input))
                                 input = arg;
@@ -2741,6 +2801,25 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
                 return null;
             }
 
+            agentRole = agentRole.Trim().ToLowerInvariant();
+            if (agentRole is not ("executor" or "reviewer" or "watchdog" or "sentinel"))
+            {
+                error = "--role must be executor, reviewer, watchdog, or sentinel.";
+                return null;
+            }
+            agentRolePhase = agentRolePhase.Trim().ToLowerInvariant();
+            if (agentRolePhase is not ("pre" or "execution" or "recovery" or "final"))
+            {
+                error = "--role-phase must be pre, execution, recovery, or final.";
+                return null;
+            }
+            agentRoleStatus = agentRoleStatus.Trim().ToUpperInvariant();
+            if (agentRoleStatus is not ("STARTED" or "COMPLETED" or "FAILED" or "SKIPPED"))
+            {
+                error = "--role-status must be STARTED, COMPLETED, FAILED, or SKIPPED.";
+                return null;
+            }
+
             if (waveProfile is not ("auto" or "manual" or "compact" or "balanced" or "conservative" or "experiment" or "auto-tuned"))
             {
                 error = "--wave-profile must be auto, manual, compact, balanced, or conservative.";
@@ -2762,7 +2841,7 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
                 ref hardWaveComplexity,
                 ref sameFileMarginalCostPercent);
 
-            return new MigrationOptions(input, outPath, workspace, strategy, format, plan, inventory, wave, config, target, targetTestFramework, generationPolicy, executeMigrate, migrateExitCode, maxWaveSize, maxWaveFiles, maxWaveActions, hardWaveActions, maxWaveComplexity, hardWaveComplexity, sameFileMarginalCostPercent, smokeWaveSize, representativesPerCluster, preferLowRiskFirst, waveProfile, targetWaveCount, roleOverhead, executionProfile, maxIdenticalSnapshots, validationId, validationExitCode, validationCommand, validationScope, forceValidation, validationProfile, validationProject, validationTimeoutSeconds, validationDryRun, checkpointOnPass, checkpointLabel, checkpointStage);
+            return new MigrationOptions(input, outPath, workspace, strategy, format, plan, inventory, wave, config, target, targetTestFramework, generationPolicy, executeMigrate, migrateExitCode, maxWaveSize, maxWaveFiles, maxWaveActions, hardWaveActions, maxWaveComplexity, hardWaveComplexity, sameFileMarginalCostPercent, smokeWaveSize, representativesPerCluster, preferLowRiskFirst, waveProfile, targetWaveCount, roleOverhead, executionProfile, maxIdenticalSnapshots, validationId, validationExitCode, validationCommand, validationScope, forceValidation, validationProfile, validationProject, validationTimeoutSeconds, validationDryRun, checkpointOnPass, checkpointLabel, checkpointStage, agentRole, agentRolePhase, agentRoleStatus, agentRoleEvidence, agentRoleReason);
         }
 
         static void ApplyNamedWaveProfile(
