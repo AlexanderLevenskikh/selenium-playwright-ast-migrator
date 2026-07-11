@@ -37,6 +37,18 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Sel
 
 Wave scope — файловый. Если wave берёт 3 source files, внутри всё равно может быть 20 tests и сотни actions. Отчёты должны честно писать `source files`, `tests`, `actions`, `TODOs` и `syntax-fallback ratio`.
 
+## Контракт быстрого выполнения
+
+Каждая материализованная wave содержит `wave-manifest.json` и `execution-policy.json`. Перед работой запусти:
+
+```bash
+selenium-pw-migrator migration validate-wave --out migration/runs/<wave-id>
+```
+
+По умолчанию используй `fast`, `standard` — когда reviewer нужен на протяжении задачи, `audit` — для protected/high-risk работ. Существующие run directories неизменяемы: запускай `run-migrate.ps1`/`.sh`, а не материализуй их повторно. Wrapper обновляет `wave-status.json` и пишет `validation-plan.json`. Выполни рекомендованные проверки, запиши реальную команду и exit code через `migration record-validation`, создай checkpoint и затем review bundle. После прерывания используй `migration resume-wave`, а не начинай заново. После каждого bounded fix cycle запускай `migration check-progress`; `NO_PROGRESS_DETECTED` означает остановить retries и вызвать watchdog/сменить стратегию. Exact-input cached PASS может убрать повторную validation, но reviewer, sentinel, project gates и final gate остаются обязательными.
+
+Контракты артефактов и полный поток команд описаны в [`migration-incremental-pipeline.ru.md`](migration-incremental-pipeline.ru.md).
+
 ## Безопасное продолжение
 
 Для существующего workspace:

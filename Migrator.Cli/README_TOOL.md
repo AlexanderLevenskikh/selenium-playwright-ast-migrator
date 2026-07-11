@@ -191,12 +191,20 @@ This is a read-only divide-and-conquer planner. `tune-wave-plan` evaluates deter
 ## Wave run workspace
 
 ```bash
-selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001
-selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001 --execute-migrate true
+selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001 --execution-profile fast
+selenium-pw-migrator migration validate-wave --out migration/runs/wave-001
+# execute the immutable workspace through run-migrate.ps1 or run-migrate.sh
+selenium-pw-migrator migration validation-plan --out migration/runs/wave-001
+selenium-pw-migrator migration record-validation --out migration/runs/wave-001 --validation-id target-checks --validation-exit-code 0 --validation-scope changed-files --validation-command "<executed command>"
+selenium-pw-migrator migration checkpoint-wave --out migration/runs/wave-001 --checkpoint-label validated --checkpoint-stage validation
+selenium-pw-migrator migration build-review-bundle --out migration/runs/wave-001
+selenium-pw-migrator migration resume-wave --out migration/runs/wave-001
+selenium-pw-migrator migration check-progress --out migration/runs/wave-001 --max-identical-snapshots 3
+selenium-pw-migrator migration perf-report --out migration/runs/wave-001
 selenium-pw-migrator migration refresh-wave-status --out migration/runs/wave-001 --migrate-exit-code 0
 ```
 
-`run-wave` writes `source-scope/`, `generated/`, `input-scope.json`, `preflight-budget.json`, `selected-tests.txt`, `config-delta.json`, `memory-delta.jsonl`, `run-summary.md`, `wave-status.json`, `run-migrate.sh`, and `run-migrate.ps1`. The generated migrate command passes `--selected-tests selected-tests.txt`; this keeps execution bounded to the tests in the wave even when a copied source file contains additional tests. The default mode prepares the workspace and scripts. Both migrate wrappers and `--execute-migrate true` accept `PASS`, `SOFT_LIMIT_EXCEEDED`, and `HEAVY_SINGLE_TEST`; only `BLOCKED` crosses the hard ceiling and requires replan. `--execute-migrate true` additionally invokes the existing `--mode migrate` pipeline against `source-scope/` with that same selected-test filter. `run-migrate.ps1` and `run-migrate.sh` always refresh `wave-status.json` after execution; the explicit `refresh-wave-status` command is available for recovery or older workspaces.
+`run-wave` writes immutable `wave-manifest.json`, `execution-policy.json`, `run-context.json`, `source-scope/`, `generated/`, `input-scope.json`, `preflight-budget.json`, `selected-tests.txt`, `config-delta.json`, `memory-delta.jsonl`, `wave-validation.json`, `performance-trace.json`, `run-summary.md`, `wave-status.json`, `run-migrate.sh`, and `run-migrate.ps1`. The generated migrate command passes `--selected-tests selected-tests.txt`; this keeps execution bounded to the tests in the wave even when a copied source file contains additional tests. Profiles are `fast` (default), `standard`, and `audit`. `validate-wave` verifies the manifest fingerprint, copied hashes, selected tests, run context, and non-weakened policy invariants. Existing run directories are never recopied: use their wrapper to execute. `validation-plan` creates a deterministic change set and exact-input cache decision; `record-validation` requires real command evidence for a reusable PASS; `checkpoint-wave` and `resume-wave` support recovery; `build-review-bundle` prepares cumulative and checkpoint-local deltas for the reviewer. `check-progress` fingerprints generated/evidence/TODO/unmapped/validation state and returns `NO_PROGRESS_DETECTED` after repeated identical snapshots. `run-migrate.ps1` and `run-migrate.sh` refresh `wave-status.json` and `validation-plan.json`; the explicit commands remain available for recovery or older workspaces. Full details: `docs/migration-fast-path.md` and `docs/migration-incremental-pipeline.md`.
 
 Safety boundary: `run-wave` does not promote memory, does not merge config, and does not publish any cross-project/org knowledge pack. `config-delta.json` is an observed/reviewable placeholder until Reviewer, Watchdog, and Final Gate evidence exists.
 

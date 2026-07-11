@@ -63,6 +63,14 @@ internal static class MigrationCommand
             "plan" => RunPlan(options),
             "run-wave" => RunWave(options),
             "refresh-wave-status" => RunRefreshWaveStatus(options),
+            "validate-wave" => RunValidateWave(options),
+            "check-progress" => RunCheckProgress(options),
+            "validation-plan" => RunValidationPlan(options),
+            "record-validation" => RunRecordValidation(options),
+            "checkpoint-wave" => RunCheckpointWave(options),
+            "resume-wave" => RunResumeWave(options),
+            "build-review-bundle" => RunBuildReviewBundle(options),
+            "perf-report" => RunPerformanceReport(options),
             _ => UnknownCommand(command)
         };
     }
@@ -259,6 +267,7 @@ internal static class MigrationCommand
 
     static int RunWave(MigrationOptions options)
     {
+        var trace = MigrationFastPath.StartTrace("run-wave", options.ExecutionProfile);
         var repoRoot = ResolveRepositoryRoot();
         var outWasDefault = IsDefaultPlanOut(options.Out);
         var rawPlanRoot = string.IsNullOrWhiteSpace(options.Plan) ? "migration/plan" : options.Plan;
@@ -293,6 +302,7 @@ internal static class MigrationCommand
             return 2;
         }
 
+        trace.Next("resolve-plan-and-wave");
         var sourceRoot = ResolveSourceRoot(plan.InputPath);
         if (!ValidateWaveSourceScope(plan, wave, sourceRoot, options.Workspace, repoRoot, out var waveScopeError))
         {
@@ -301,6 +311,31 @@ internal static class MigrationCommand
         }
 
         var outPath = outWasDefault ? Path.Combine(options.Workspace, "runs", wave.Id) : options.Out;
+        var existingManifestPath = Path.Combine(outPath, "wave-manifest.json");
+        if (File.Exists(existingManifestPath))
+        {
+            var existingValidation = MigrationFastPath.ValidateWave(outPath, Console.Out, Console.Error);
+            if (existingValidation != 0)
+                return existingValidation;
+
+            var requestedTests = wave.Tests.Select(test => test.File + "::" + test.TestId).ToArray();
+            if (!MigrationFastPath.MatchesRequestedWave(outPath, planRoot, wave.Id, wave.Files, requestedTests, options.ExecutionProfile, out var reuseError))
+            {
+                Console.Error.WriteLine(reuseError);
+                return 2;
+            }
+
+            if (options.ExecuteMigrate)
+            {
+                Console.Error.WriteLine("WAVE_MANIFEST_ALREADY_EXISTS: immutable run workspaces are not rematerialized. Execute the existing run-migrate.sh or run-migrate.ps1 wrapper instead.");
+                return 2;
+            }
+
+            Console.WriteLine("MIGRATION_WAVE_ALREADY_MATERIALIZED");
+            Console.WriteLine($"Run workspace: {Path.GetFullPath(outPath)}");
+            return 0;
+        }
+
         Directory.CreateDirectory(outPath);
         var sourceScopeDir = Path.Combine(outPath, "source-scope");
         var generatedDir = Path.Combine(outPath, "generated");
@@ -309,6 +344,7 @@ internal static class MigrationCommand
         Directory.CreateDirectory(generatedDir);
         Directory.CreateDirectory(evidenceDir);
 
+        trace.Next("materialize-source-scope");
         var copiedFiles = new List<string>();
         var missingFiles = new List<string>();
         foreach (var file in wave.Files.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
@@ -346,11 +382,52 @@ internal static class MigrationCommand
 
         File.WriteAllText(Path.Combine(outPath, "input-scope.json"), JsonSerializer.Serialize(scope, JsonOptions));
         var selectedTestsPath = Path.Combine(outPath, "selected-tests.txt");
-        File.WriteAllLines(selectedTestsPath, wave.Tests.Select(t => t.File + "::" + t.TestId));
+        var selectedTests = wave.Tests.Select(t => t.File + "::" + t.TestId).ToArray();
+        File.WriteAllLines(selectedTestsPath, selectedTests);
+        trace.SetMetric("selectedTests", selectedTests.Length);
+        trace.SetMetric("sourceFilesMaterialized", copiedFiles.Count);
+        trace.SetMetric("sourceFilesMissing", missingFiles.Count);
+        trace.SetMetric("processInvocations", options.ExecuteMigrate ? 1 : 0);
+        MigrationFastPath.WriteExecutionPolicy(outPath, options.ExecutionProfile, wave.DominantRisk, wave.BudgetStatus);
+        if (!MigrationFastPath.WriteImmutableManifest(
+                outPath,
+                planRoot,
+                wave.Id,
+                wave.Index,
+                wave.Phase,
+                wave.Cluster,
+                sourceRoot,
+                sourceScopeDir,
+                generatedDir,
+                selectedTestsPath,
+                wave.Files,
+                selectedTests,
+                options.ExecutionProfile,
+                out var manifestError))
+        {
+            Console.Error.WriteLine(manifestError);
+            trace.Write(outPath, "manifest-failed");
+            return 2;
+        }
+        if (!MigrationIncrementalPipeline.WriteRunContext(
+                outPath,
+                options.Workspace,
+                options.Config,
+                options.Target,
+                options.TargetTestFramework,
+                options.GenerationPolicy,
+                out var runContextError))
+        {
+            Console.Error.WriteLine(runContextError);
+            trace.Write(outPath, "run-context-failed");
+            return 2;
+        }
+        trace.Next("write-run-contract");
         WriteWaveConfigDelta(outPath, options.Workspace, wave, options);
         WriteWaveMemoryDelta(outPath, wave, copiedFiles.Count, missingFiles);
         WriteWaveCommands(outPath, sourceScopeDir, generatedDir, options, selectedTestsPath);
         WriteWavePreflightBudget(outPath, plan, wave);
+        trace.Next("execute-migration");
 
         var automaticExecutionBlocked = options.ExecuteMigrate && string.Equals(wave.BudgetStatus, "BLOCKED", StringComparison.OrdinalIgnoreCase);
         var execution = automaticExecutionBlocked
@@ -358,24 +435,93 @@ internal static class MigrationCommand
             : options.ExecuteMigrate
                 ? TryExecuteMigrate(outPath, sourceScopeDir, generatedDir, options, selectedTestsPath)
                 : new WaveMigrateExecution("prepared", "--execute-migrate false; generated/ contains a README placeholder until migrate is run.", 0);
+        trace.Next("finalize-run-artifacts");
         WriteWaveSummary(outPath, wave, scope, options, copiedFiles.Count, missingFiles, selectedTestsPath, execution);
         WriteWaveStatus(outPath, wave, execution, missingFiles);
+        var validationExitCode = MigrationFastPath.ValidateWave(outPath, TextWriter.Null, Console.Error);
+        trace.Write(outPath, missingFiles.Count > 0 ? "missing-source-files" : validationExitCode == 0 ? "ready" : "validation-failed");
+        if (validationExitCode != 0 && missingFiles.Count == 0)
+            return validationExitCode;
 
         Console.WriteLine("MIGRATION_WAVE_RUN_READY");
         Console.WriteLine($"Wave: {wave.Id}");
         Console.WriteLine($"Tests: {wave.Tests.Length}");
+        Console.WriteLine($"Execution profile: {options.ExecutionProfile}");
         Console.WriteLine($"Files copied: {copiedFiles.Count}");
         if (missingFiles.Count > 0)
             Console.WriteLine($"Missing files: {missingFiles.Count}");
         Console.WriteLine($"Run workspace: {Path.GetFullPath(outPath)}");
         Console.WriteLine($"Generated output: {Path.GetFullPath(generatedDir)}");
-        Console.WriteLine("Next: review run-summary.md, then run memory summarize after migrate/review artifacts exist.");
+        Console.WriteLine("Next: run `migration validate-wave`, then `migration check-progress` after each bounded fix cycle; invoke watchdog/sentinel only when execution-policy.json requires them or before final handoff.");
         if (missingFiles.Count > 0)
             return 1;
         if (options.ExecuteMigrate && (execution.Status.Equals("failed", StringComparison.OrdinalIgnoreCase)
             || execution.Status.Equals("blocked-by-complexity-budget", StringComparison.OrdinalIgnoreCase)))
             return execution.ExitCode == 0 ? 1 : execution.ExitCode;
         return 0;
+    }
+
+    static int RunValidateWave(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        return MigrationFastPath.ValidateWave(outPath, Console.Out, Console.Error);
+    }
+
+    static int RunCheckProgress(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        return MigrationFastPath.CheckProgress(outPath, options.MaxIdenticalSnapshots, Console.Out, Console.Error);
+    }
+
+    static int RunValidationPlan(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        return MigrationIncrementalPipeline.PlanValidation(outPath, options.ForceValidation, Console.Out, Console.Error);
+    }
+
+    static int RunRecordValidation(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        return MigrationIncrementalPipeline.RecordValidation(
+            outPath,
+            options.ValidationId,
+            options.ValidationExitCode,
+            options.ValidationCommand,
+            options.ValidationScope,
+            Console.Out,
+            Console.Error);
+    }
+
+    static int RunCheckpointWave(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        return MigrationIncrementalPipeline.CreateCheckpoint(outPath, options.CheckpointLabel, options.CheckpointStage, Console.Out, Console.Error);
+    }
+
+    static int RunResumeWave(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        return MigrationIncrementalPipeline.ResumeWave(outPath, Console.Out, Console.Error);
+    }
+
+    static int RunBuildReviewBundle(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        return MigrationIncrementalPipeline.BuildReviewBundle(outPath, Console.Out, Console.Error);
+    }
+
+    static int RunPerformanceReport(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        return MigrationFastPath.PrintPerformanceReport(outPath, Console.Out, Console.Error);
     }
 
     static int RunRefreshWaveStatus(MigrationOptions options)
@@ -832,6 +978,7 @@ internal static class MigrationCommand
     {
         var migrateArgs = BuildMigrateCommand(sourceScopeDir, generatedDir, options, selectedTestsPath);
         var refreshArgs = $"selenium-pw-migrator migration refresh-wave-status --out {QuoteForShell(Path.GetFullPath(outPath))} --migrate-exit-code";
+        var validationPlanArgs = $"selenium-pw-migrator migration validation-plan --out {QuoteForShell(Path.GetFullPath(outPath))}";
         var preflightPath = Path.GetFullPath(Path.Combine(outPath, "preflight-budget.json"));
         var sh = new StringBuilder();
         sh.AppendLine("#!/usr/bin/env bash");
@@ -844,6 +991,7 @@ internal static class MigrationCommand
         sh.AppendLine("migrate_exit_code=0");
         sh.AppendLine(migrateArgs + " || migrate_exit_code=$?");
         sh.AppendLine(refreshArgs + " \"$migrate_exit_code\"");
+        sh.AppendLine(validationPlanArgs);
         sh.AppendLine("exit \"$migrate_exit_code\"");
         File.WriteAllText(Path.Combine(outPath, "run-migrate.sh"), sh.ToString());
 
@@ -855,9 +1003,10 @@ internal static class MigrationCommand
         ps.AppendLine(migrateArgs);
         ps.AppendLine("if ($null -ne $LASTEXITCODE) { $migrateExitCode = $LASTEXITCODE }");
         ps.AppendLine(refreshArgs + " $migrateExitCode");
+        ps.AppendLine(validationPlanArgs);
         ps.AppendLine("exit $migrateExitCode");
         File.WriteAllText(Path.Combine(outPath, "run-migrate.ps1"), ps.ToString());
-        File.WriteAllText(Path.Combine(generatedDir, "README.md"), "# Generated output placeholder\n\nRun `../run-migrate.sh` or `../run-migrate.ps1`, or rerun `migration run-wave --execute-migrate true`, to generate this wave. The wrapper refreshes `wave-status.json` after migration.\n");
+        File.WriteAllText(Path.Combine(generatedDir, "README.md"), "# Generated output placeholder\n\nRun `../run-migrate.sh` or `../run-migrate.ps1` to generate this already-materialized wave. Do not rerun `migration run-wave` for the same output directory; the wrapper refreshes `wave-status.json` and creates an incremental `validation-plan.json` after migration.\n");
     }
 
     static string BuildMigrateCommand(string sourceScopeDir, string generatedDir, MigrationOptions options, string? selectedTestsPath = null)
@@ -938,6 +1087,7 @@ internal static class MigrationCommand
         sb.AppendLine($"Phase: `{wave.Phase}`");
         sb.AppendLine($"Cluster: `{wave.Cluster}`");
         sb.AppendLine($"Risk: **{wave.DominantRisk}**");
+        sb.AppendLine($"Execution profile: **{options.ExecutionProfile}**");
         sb.AppendLine($"Tests: {wave.Tests.Length}");
         sb.AppendLine($"Preflight budget: **{wave.BudgetStatus}** (files {wave.SourceFileCount}, actions {wave.EstimatedActions}, effective/raw complexity {wave.EstimatedComplexity}/{wave.RawComplexity})");
         sb.AppendLine($"Files copied: {copiedFiles}");
@@ -945,6 +1095,7 @@ internal static class MigrationCommand
         sb.AppendLine();
         sb.AppendLine("## Safety boundary");
         sb.AppendLine();
+        sb.AppendLine("- `wave-manifest.json` is immutable for this run directory and freezes the selected files/tests.");
         sb.AppendLine("- This wave is bounded to `source-scope/` and `generated/`.");
         sb.AppendLine("- `run-migrate` passes `--selected-tests selected-tests.txt`, so files copied into `source-scope/` cannot silently expand the wave to every test in those files.");
         sb.AppendLine("- `config-delta.json` is observed/reviewable only; do not merge it directly.");
@@ -981,6 +1132,9 @@ internal static class MigrationCommand
         sb.AppendLine("- Compare generated tests with source tests in `source-scope/`.");
         sb.AppendLine("- Keep any new config as a delta with evidence.");
         sb.AppendLine("- Run `memory summarize --run <this-run>` only after reviewer/watchdog findings exist.");
+        sb.AppendLine("- Run `selenium-pw-migrator migration validate-wave --out <run-dir>` before review.");
+        sb.AppendLine("- Run `selenium-pw-migrator migration check-progress --out <run-dir>` after each bounded fix cycle; `NO_PROGRESS_DETECTED` requires watchdog/strategy change.");
+        sb.AppendLine("- Follow `execution-policy.json`: fast/standard profiles use event-driven watchdog/sentinel; final gate remains mandatory.");
         sb.AppendLine("- Run final gate before promoting any wave-local learning.");
         File.WriteAllText(Path.Combine(outPath, "run-summary.md"), sb.ToString());
 
@@ -997,10 +1151,11 @@ internal static class MigrationCommand
             ["estimatedActions"] = wave.EstimatedActions,
             ["estimatedComplexity"] = wave.EstimatedComplexity,
             ["preflightBudgetStatus"] = wave.BudgetStatus,
+            ["executionProfile"] = options.ExecutionProfile,
             ["filesCopied"] = copiedFiles,
             ["missingFiles"] = missingFiles.ToArray(),
             ["placeholderOnly"] = execution.Status.Equals("prepared", StringComparison.OrdinalIgnoreCase),
-            ["artifacts"] = new[] { "input-scope.json", "preflight-budget.json", "config-delta.json", "memory-delta.jsonl", "run-summary.md", "run-migrate.sh", "run-migrate.ps1" }
+            ["artifacts"] = new[] { "wave-manifest.json", "execution-policy.json", "input-scope.json", "preflight-budget.json", "config-delta.json", "memory-delta.jsonl", "wave-validation.json", "performance-trace.json", "run-summary.md", "run-migrate.sh", "run-migrate.ps1" }
         };
         File.WriteAllText(Path.Combine(outPath, "run-summary.json"), JsonSerializer.Serialize(json, JsonOptions));
     }
@@ -1072,7 +1227,8 @@ internal static class MigrationCommand
             ["placeholderOnly"] = execution.Status.Equals("prepared", StringComparison.OrdinalIgnoreCase),
             ["next"] = new[]
             {
-                "Inspect run-summary.md and input-scope.json.",
+                "Inspect wave-manifest.json, execution-policy.json, run-summary.md, and input-scope.json.",
+                "Run migration validate-wave before review and migration check-progress after each fix cycle.",
                 "Run run-migrate.sh or run-migrate.ps1 if generated output has not been produced.",
                 "Add concrete config-delta entries only with evidence.",
                 "Run reviewer/watchdog/final-gate before promoting wave-local learning."
@@ -2347,14 +2503,22 @@ Migration planning and wave run commands:
   selenium-pw-migrator migration plan --strategy wavefront --input ./SeleniumTests --workspace migration --out migration/plan --wave-profile balanced
   selenium-pw-migrator migration plan --strategy wavefront --input ./SeleniumTests --workspace migration --out migration/plan --wave-profile manual --max-wave-size 12 --max-wave-files 4 --max-wave-actions 180 --hard-wave-actions 320 --max-wave-complexity 550 --hard-wave-complexity 850 --same-file-marginal-cost 30
   selenium-pw-migrator migration plan show --plan migration/plan
-  selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001
+  selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001 --execution-profile fast
+  selenium-pw-migrator migration validate-wave --out migration/runs/wave-001
+  selenium-pw-migrator migration check-progress --out migration/runs/wave-001 --max-identical-snapshots 3
+  selenium-pw-migrator migration validation-plan --out migration/runs/wave-001
+  selenium-pw-migrator migration record-validation --out migration/runs/wave-001 --validation-id target-build --validation-exit-code 0 --validation-scope changed-files --validation-command "dotnet test Target.Tests.csproj"
+  selenium-pw-migrator migration checkpoint-wave --out migration/runs/wave-001 --checkpoint-label generated --checkpoint-stage migration
+  selenium-pw-migrator migration resume-wave --out migration/runs/wave-001
+  selenium-pw-migrator migration build-review-bundle --out migration/runs/wave-001
+  selenium-pw-migrator migration perf-report --out migration/runs/wave-001
   selenium-pw-migrator migration refresh-wave-status --out migration/runs/wave-001 --migrate-exit-code 0
 
 Planning is read-only; tune-wave-plan also executes no agents. The auto profile
 tests deterministic budget combinations and minimizes role-cycle overhead, singleton waves,
 and source-file fragmentation. Same-file tests pay marginal rather than full repeated complexity.
-run-wave materializes a bounded source-scope plus config-delta,
-memory-delta, run summary, evidence folder, and migrate scripts. The migrate wrappers refresh wave-status.json after execution. It never promotes config or memory automatically.
+run-wave materializes an immutable wave manifest, execution policy, run-context, bounded source-scope plus config-delta,
+memory-delta, performance trace, run summary, evidence folder, and migrate scripts. `validate-wave` rejects scope drift or changed copied inputs. `check-progress` detects repeated identical generated/evidence/TODO/unmapped/validation state. `validation-plan` computes changed-file impact and exact-input cache eligibility; `record-validation` stores only passing results in the shared cache. Checkpoints, resume decisions, and review bundles preserve work without treating a checkpoint as DONE. The migrate wrappers refresh wave-status.json and validation-plan.json after execution. It never promotes config or memory automatically.
 Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to create a reviewable candidate config after wave deltas are reviewed.
 """);
     }
@@ -2388,7 +2552,16 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
         bool PreferLowRiskFirst,
         string WaveProfile,
         int TargetWaveCount,
-        int RoleOverhead)
+        int RoleOverhead,
+        string ExecutionProfile,
+        int MaxIdenticalSnapshots,
+        string ValidationId,
+        int ValidationExitCode,
+        string ValidationCommand,
+        string ValidationScope,
+        bool ForceValidation,
+        string CheckpointLabel,
+        string CheckpointStage)
     {
         public static MigrationOptions? Parse(string[] args, out string error)
         {
@@ -2419,6 +2592,15 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
             var waveProfile = "auto";
             var targetWaveCount = 0;
             var roleOverhead = 300;
+            var executionProfile = "fast";
+            var maxIdenticalSnapshots = 3;
+            var validationId = "wave-validation";
+            var validationExitCode = 0;
+            var validationCommand = string.Empty;
+            var validationScope = "changed-files";
+            var forceValidation = false;
+            var checkpointLabel = string.Empty;
+            var checkpointStage = "migration";
             var profileExplicit = false;
             var budgetExplicit = false;
             error = string.Empty;
@@ -2464,6 +2646,15 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
                         case "--wave-profile": waveProfile = Next(arg).Trim().ToLowerInvariant(); profileExplicit = true; break;
                         case "--target-waves": targetWaveCount = ParseNonNegativeInt(Next(arg), arg); break;
                         case "--role-overhead": roleOverhead = ParsePositiveInt(Next(arg), arg); break;
+                        case "--execution-profile": executionProfile = MigrationFastPath.NormalizeExecutionProfile(Next(arg)); break;
+                        case "--max-identical-snapshots": maxIdenticalSnapshots = ParsePositiveInt(Next(arg), arg); break;
+                        case "--validation-id": validationId = Next(arg); break;
+                        case "--validation-exit-code": validationExitCode = ParseNonNegativeInt(Next(arg), arg); break;
+                        case "--validation-command": validationCommand = Next(arg); break;
+                        case "--validation-scope": validationScope = Next(arg); break;
+                        case "--force-validation": forceValidation = ParseBool(Next(arg), arg); break;
+                        case "--checkpoint-label": checkpointLabel = Next(arg); break;
+                        case "--checkpoint-stage": checkpointStage = Next(arg); break;
                         default:
                             if (!arg.StartsWith("--", StringComparison.Ordinal) && string.IsNullOrWhiteSpace(input))
                                 input = arg;
@@ -2482,6 +2673,26 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
             if (format != "text" && format != "json" && format != "both")
             {
                 error = "--format must be text, json, or both.";
+                return null;
+            }
+
+            if (maxIdenticalSnapshots < 2)
+            {
+                error = "--max-identical-snapshots must be at least 2.";
+                return null;
+            }
+
+            validationScope = validationScope.Trim().ToLowerInvariant();
+            if (validationScope is not ("changed-files" or "project" or "full" or "artifacts"))
+            {
+                error = "--validation-scope must be changed-files, project, full, or artifacts.";
+                return null;
+            }
+
+            checkpointStage = checkpointStage.Trim().ToLowerInvariant();
+            if (checkpointStage is not ("migration" or "validation" or "review" or "final"))
+            {
+                error = "--checkpoint-stage must be migration, validation, review, or final.";
                 return null;
             }
 
@@ -2506,7 +2717,7 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
                 ref hardWaveComplexity,
                 ref sameFileMarginalCostPercent);
 
-            return new MigrationOptions(input, outPath, workspace, strategy, format, plan, inventory, wave, config, target, targetTestFramework, generationPolicy, executeMigrate, migrateExitCode, maxWaveSize, maxWaveFiles, maxWaveActions, hardWaveActions, maxWaveComplexity, hardWaveComplexity, sameFileMarginalCostPercent, smokeWaveSize, representativesPerCluster, preferLowRiskFirst, waveProfile, targetWaveCount, roleOverhead);
+            return new MigrationOptions(input, outPath, workspace, strategy, format, plan, inventory, wave, config, target, targetTestFramework, generationPolicy, executeMigrate, migrateExitCode, maxWaveSize, maxWaveFiles, maxWaveActions, hardWaveActions, maxWaveComplexity, hardWaveComplexity, sameFileMarginalCostPercent, smokeWaveSize, representativesPerCluster, preferLowRiskFirst, waveProfile, targetWaveCount, roleOverhead, executionProfile, maxIdenticalSnapshots, validationId, validationExitCode, validationCommand, validationScope, forceValidation, checkpointLabel, checkpointStage);
         }
 
         static void ApplyNamedWaveProfile(

@@ -30,6 +30,19 @@ public class WaveRunWorkspaceTests
         Assert.Contains("WriteJsonAtomic", command);
         Assert.Contains("--selected-tests", command);
         Assert.Contains("selected-tests.txt", command);
+        Assert.Contains("wave-manifest.json", command);
+        Assert.Contains("execution-policy.json", command);
+        Assert.Contains("wave-validation.json", command);
+        Assert.Contains("performance-trace.json", command);
+        Assert.Contains("MigrationIncrementalPipeline.WriteRunContext", command);
+        Assert.Contains("validation-plan", command);
+        Assert.Contains("record-validation", command);
+        Assert.Contains("checkpoint-wave", command);
+        Assert.Contains("resume-wave", command);
+        Assert.Contains("build-review-bundle", command);
+        Assert.Contains("validate-wave", command);
+        Assert.Contains("check-progress", command);
+        Assert.Contains("perf-report", command);
     }
 
     [Fact]

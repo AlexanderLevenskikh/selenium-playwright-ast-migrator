@@ -528,12 +528,19 @@ The auto planner first runs a deterministic planning-only experiment and writes 
 Prepare a bounded wave run workspace manually only when you are debugging the agent setup or running CI:
 
 ```bash
-selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001
+selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001 --execution-profile fast
+selenium-pw-migrator migration validate-wave --out migration/runs/wave-001
 # run migration/runs/wave-001/run-migrate.ps1 or run-migrate.sh
-# the wrapper refreshes wave-status.json automatically
+selenium-pw-migrator migration validation-plan --out migration/runs/wave-001
+selenium-pw-migrator migration record-validation --out migration/runs/wave-001 --validation-id target-checks --validation-exit-code 0 --validation-scope changed-files --validation-command "<executed command>"
+selenium-pw-migrator migration checkpoint-wave --out migration/runs/wave-001 --checkpoint-label validated --checkpoint-stage validation
+selenium-pw-migrator migration build-review-bundle --out migration/runs/wave-001
+selenium-pw-migrator migration resume-wave --out migration/runs/wave-001
+selenium-pw-migrator migration check-progress --out migration/runs/wave-001 --max-identical-snapshots 3
+selenium-pw-migrator migration perf-report --out migration/runs/wave-001
 ```
 
-`migration run-wave` materializes `source-scope/`, `generated/`, `input-scope.json`, `preflight-budget.json`, `config-delta.json`, `memory-delta.jsonl`, `run-summary.md`, `wave-status.json`, and migrate scripts. It is project-scoped only: it does not promote memory, does not merge config, and does not publish cross-project/org knowledge packs. Use `--execute-migrate true` only when you want the command to invoke the existing `--mode migrate` pipeline for the wave scope immediately. Both generated migrate wrappers call `migration refresh-wave-status`, so a populated `generated/` directory cannot remain falsely marked `prepared`.
+`migration run-wave` materializes an immutable `wave-manifest.json`, `execution-policy.json`, `run-context.json`, `source-scope/`, `generated/`, `input-scope.json`, `preflight-budget.json`, `config-delta.json`, `memory-delta.jsonl`, `wave-validation.json`, `performance-trace.json`, `run-summary.md`, `wave-status.json`, and migrate scripts. It is project-scoped only: it does not promote memory, merge config, or publish cross-project/org knowledge packs. Existing run directories are validated and reused rather than rematerialized; execute them through the generated wrapper. `validate-wave` rejects manifest/source/test/policy/context drift, while `check-progress` stops repeated identical fix cycles and requests a watchdog or strategy change. The incremental commands calculate changed-output impact, reuse only exact-input PASS validation, create recoverable checkpoints, choose the next action, and build a compact reviewer bundle. See [migration fast path](docs/migration-fast-path.md) and [incremental migration pipeline](docs/migration-incremental-pipeline.md). Both generated migrate wrappers refresh `wave-status.json` and write `validation-plan.json`, so a populated `generated/` directory cannot remain falsely marked `prepared` and unchanged validation is not repeated.
 
 Merge reviewed wave-local config deltas into a candidate config only after the wave has evidence:
 

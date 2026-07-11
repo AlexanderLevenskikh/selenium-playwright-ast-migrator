@@ -37,6 +37,18 @@ Then open the repository in OpenCode and run:
 
 Wave scope is file-based. If the wave materializes 3 source files, it may still contain 20 tests and hundreds of actions. Reports must say `source files`, `tests`, `actions`, `TODOs`, and `syntax-fallback ratio` explicitly.
 
+## Fast execution contract
+
+Each materialized wave contains `wave-manifest.json` and `execution-policy.json`. Before work, run:
+
+```bash
+selenium-pw-migrator migration validate-wave --out migration/runs/<wave-id>
+```
+
+Use `fast` by default, `standard` when reviewer participation is required throughout the task, and `audit` for protected/high-risk work. Existing run directories are immutable; execute `run-migrate.ps1`/`.sh` rather than rematerializing them. The wrapper refreshes `wave-status.json` and writes `validation-plan.json`. Execute the recommended checks, record the real command/exit code with `migration record-validation`, create a checkpoint, then build the review bundle. Use `migration resume-wave` after interruption instead of starting over. After each bounded fix cycle run `migration check-progress`; `NO_PROGRESS_DETECTED` means stop retries and invoke watchdog/change strategy. Exact-input cached PASS may skip repeated validation, but reviewer, sentinel, project gates, and final gate remain mandatory.
+
+See [`migration-incremental-pipeline.md`](migration-incremental-pipeline.md) for the artifact contracts and complete command flow.
+
 ## Continue safely
 
 For an existing workspace, run:
