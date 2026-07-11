@@ -121,6 +121,20 @@ internal static class MigrationFastPath
                 ["budgetExhaustionAction"] = "HUMAN_REVIEW_REQUIRED",
                 ["wallClockIsDiagnostic"] = true
             },
+            ["recoveryPolicy"] = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["mode"] = "lease-and-hash-journal",
+                ["defaultLeaseSeconds"] = MigrationAgentRecovery.DefaultLeaseSeconds,
+                ["staleAfterSeconds"] = MigrationAgentRecovery.DefaultStaleAfterSeconds,
+                ["maxLeaseSeconds"] = MigrationAgentRecovery.MaxLeaseSeconds,
+                ["maxStaleAfterSeconds"] = MigrationAgentRecovery.MaxStaleAfterSeconds,
+                ["freshnessSource"] = "latest-heartbeat",
+                ["mutationSerialization"] = "exclusive-runtime-lock",
+                ["safeRepairs"] = new[] { "rebuild-ledger-head", "close-stale-active-role", "archive-orphan-lease", "quarantine-atomic-temp" },
+                ["malformedJournalAction"] = "HUMAN_REVIEW_REQUIRED",
+                ["automaticJournalRewriteAllowed"] = false,
+                ["recoveredRoleConsumesBudget"] = true
+            },
             ["protectedRiskTriggers"] = new[]
             {
                 "protected path change",
@@ -139,7 +153,9 @@ internal static class MigrationFastPath
                 ["checkpointDoesNotEqualDone"] = true,
                 ["reviewBundleDoesNotReplaceFinalReview"] = true,
                 ["watchdogIsEventDriven"] = profile != "audit",
-                ["sentinelIsEventDrivenBeforeFinal"] = profile != "audit"
+                ["sentinelIsEventDrivenBeforeFinal"] = profile != "audit",
+                ["malformedRoleJournalMayBeRewrittenAutomatically"] = false,
+                ["staleRoleRecoveryMustAppendTerminalEvidence"] = true
             }
         };
         var fingerprint = ComputeTextHash(JsonSerializer.Serialize(immutable, CompactJsonOptions));
@@ -483,6 +499,31 @@ internal static class MigrationFastPath
                             && lifecycleWall.TryGetInt64(out var maxLifecycleWall)
                             && maxLifecycleWall > 0,
                             "execution policy must define a positive lifecycle wall-clock budget");
+                        var recoveryPolicy = policyRoot.TryGetProperty("recoveryPolicy", out var recoveryPolicyNode) && recoveryPolicyNode.ValueKind == JsonValueKind.Object
+                            ? recoveryPolicyNode
+                            : default;
+                        AddCheck(checks, failures, "durable-agent-recovery-present",
+                            recoveryPolicy.ValueKind == JsonValueKind.Object
+                            && recoveryPolicy.TryGetProperty("mode", out var recoveryMode)
+                            && recoveryMode.GetString() == "lease-and-hash-journal"
+                            && recoveryPolicy.TryGetProperty("defaultLeaseSeconds", out var leaseSeconds)
+                            && leaseSeconds.TryGetInt32(out var leaseSecondsValue) && leaseSecondsValue > 0
+                            && recoveryPolicy.TryGetProperty("staleAfterSeconds", out var staleSeconds)
+                            && staleSeconds.TryGetInt32(out var staleSecondsValue) && staleSecondsValue > leaseSecondsValue
+                            && recoveryPolicy.TryGetProperty("maxLeaseSeconds", out var maxLeaseSeconds)
+                            && maxLeaseSeconds.TryGetInt32(out var maxLeaseSecondsValue) && maxLeaseSecondsValue >= leaseSecondsValue
+                            && recoveryPolicy.TryGetProperty("maxStaleAfterSeconds", out var maxStaleSeconds)
+                            && maxStaleSeconds.TryGetInt32(out var maxStaleSecondsValue) && maxStaleSecondsValue >= staleSecondsValue
+                            && recoveryPolicy.TryGetProperty("freshnessSource", out var freshnessSource)
+                            && freshnessSource.GetString() == "latest-heartbeat"
+                            && recoveryPolicy.TryGetProperty("mutationSerialization", out var mutationSerialization)
+                            && mutationSerialization.GetString() == "exclusive-runtime-lock",
+                            "execution policy must define bounded lease-based recovery, latest-heartbeat freshness, and serialized runtime mutations");
+                        AddCheck(checks, failures, "malformed-agent-journal-rewrite-forbidden",
+                            recoveryPolicy.ValueKind == JsonValueKind.Object
+                            && recoveryPolicy.TryGetProperty("automaticJournalRewriteAllowed", out var journalRewrite)
+                            && journalRewrite.ValueKind == JsonValueKind.False,
+                            "execution policy may not allow automatic rewriting of malformed append-only role evidence");
                     }
                     catch (Exception ex) when (ex is JsonException or IOException)
                     {

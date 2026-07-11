@@ -68,6 +68,9 @@ internal static class MigrationCommand
             "next-agent-action" => RunNextAgentAction(options),
             "assess-agent-risk" => RunAssessAgentRisk(options),
             "record-agent-role" => RunRecordAgentRole(options),
+            "heartbeat-agent-role" => RunHeartbeatAgentRole(options),
+            "plan-agent-recovery" => RunPlanAgentRecovery(options),
+            "recover-agent-runtime" => RunRecoverAgentRuntime(options),
             "check-agent-budget" => RunCheckAgentBudget(options),
             "agent-perf-report" => RunAgentPerformanceReport(options),
             "validation-plan" => RunValidationPlan(options),
@@ -507,8 +510,30 @@ internal static class MigrationCommand
             options.AgentRoleStatus,
             options.AgentRoleEvidence,
             options.AgentRoleReason,
+            options.AgentRoleLeaseSeconds,
             Console.Out,
             Console.Error);
+    }
+
+    static int RunHeartbeatAgentRole(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        return MigrationAgentRuntime.HeartbeatRole(outPath, options.AgentRole, options.AgentRolePhase, options.AgentRoleLeaseSeconds, Console.Out, Console.Error);
+    }
+
+    static int RunPlanAgentRecovery(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        return MigrationAgentRuntime.PlanRecovery(outPath, options.RecoveryStaleAfterSeconds, Console.Out, Console.Error);
+    }
+
+    static int RunRecoverAgentRuntime(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        return MigrationAgentRuntime.RecoverRuntime(outPath, options.RecoveryStaleAfterSeconds, Console.Out, Console.Error);
     }
 
     static int RunCheckAgentBudget(MigrationOptions options)
@@ -2580,6 +2605,9 @@ Migration planning and wave run commands:
   selenium-pw-migrator migration assess-agent-risk --out migration/runs/wave-001
   selenium-pw-migrator migration record-agent-role --out migration/runs/wave-001 --role executor --role-phase execution --role-status STARTED
   selenium-pw-migrator migration record-agent-role --out migration/runs/wave-001 --role executor --role-phase execution --role-status COMPLETED --role-evidence generated
+  selenium-pw-migrator migration heartbeat-agent-role --out migration/runs/wave-001 --role executor --role-phase execution --role-lease-seconds 1800
+  selenium-pw-migrator migration plan-agent-recovery --out migration/runs/wave-001
+  selenium-pw-migrator migration recover-agent-runtime --out migration/runs/wave-001
   selenium-pw-migrator migration check-agent-budget --out migration/runs/wave-001
   selenium-pw-migrator migration agent-perf-report --out migration/runs/wave-001
   selenium-pw-migrator migration validation-plan --out migration/runs/wave-001
@@ -2596,7 +2624,7 @@ Planning is read-only; tune-wave-plan also executes no agents. The auto profile
 tests deterministic budget combinations and minimizes role-cycle overhead, singleton waves,
 and source-file fragmentation. Same-file tests pay marginal rather than full repeated complexity.
 run-wave materializes an immutable wave manifest, execution policy, run-context, bounded source-scope plus config-delta,
-memory-delta, performance trace, run summary, evidence folder, and migrate scripts. `validate-wave` rejects scope drift or changed copied inputs. `check-progress` detects repeated identical generated/evidence/TODO/unmapped/validation state. `next-agent-action` deterministically selects exactly one role/command/final handoff from the execution policy and current evidence; `assess-agent-risk` emits an explainable low/medium/high/critical score and adaptive role budget; `record-agent-role` appends hash-chained role receipts; `check-agent-budget` prevents unbounded role loops; `agent-perf-report` reports role counts, risk, and lifecycle budget status. `validation-plan` computes changed-file impact and exact-input cache eligibility; `migration validate` is the single validation host that plans, executes, records evidence, and materializes exact-input cache hits without an agent-managed three-command chain. `record-validation` remains available for compatibility and manual evidence import. Checkpoints, resume decisions, and review bundles preserve work without treating a checkpoint as DONE. The migrate wrappers refresh wave-status.json and validation-plan.json after execution. It never promotes config or memory automatically.
+memory-delta, performance trace, run summary, evidence folder, and migrate scripts. `validate-wave` rejects scope drift or changed copied inputs. `check-progress` detects repeated identical generated/evidence/TODO/unmapped/validation state. `next-agent-action` deterministically selects exactly one role/command/final handoff from the execution policy and current evidence; `assess-agent-risk` emits an explainable low/medium/high/critical score and adaptive role budget; `record-agent-role` appends hash-chained role receipts and a durable active-role lease; `heartbeat-agent-role` renews that lease; `plan-agent-recovery` and `recover-agent-runtime` safely resume interrupted roles without rewriting malformed journals; `check-agent-budget` prevents unbounded role loops; `agent-perf-report` reports role counts, risk, and lifecycle budget status. `validation-plan` computes changed-file impact and exact-input cache eligibility; `migration validate` is the single validation host that plans, executes, records evidence, and materializes exact-input cache hits without an agent-managed three-command chain. `record-validation` remains available for compatibility and manual evidence import. Checkpoints, resume decisions, and review bundles preserve work without treating a checkpoint as DONE. The migrate wrappers refresh wave-status.json and validation-plan.json after execution. It never promotes config or memory automatically.
 Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to create a reviewable candidate config after wave deltas are reviewed.
 """);
     }
@@ -2649,7 +2677,9 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
         string AgentRolePhase,
         string AgentRoleStatus,
         string AgentRoleEvidence,
-        string AgentRoleReason)
+        string AgentRoleReason,
+        int AgentRoleLeaseSeconds,
+        int RecoveryStaleAfterSeconds)
     {
         public static MigrationOptions? Parse(string[] args, out string error)
         {
@@ -2699,6 +2729,8 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
             var agentRoleStatus = "STARTED";
             var agentRoleEvidence = string.Empty;
             var agentRoleReason = string.Empty;
+            var agentRoleLeaseSeconds = MigrationAgentRecovery.DefaultLeaseSeconds;
+            var recoveryStaleAfterSeconds = MigrationAgentRecovery.DefaultStaleAfterSeconds;
             var profileExplicit = false;
             var budgetExplicit = false;
             error = string.Empty;
@@ -2763,6 +2795,8 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
                         case "--role-status": agentRoleStatus = Next(arg); break;
                         case "--role-evidence": agentRoleEvidence = Next(arg); break;
                         case "--role-reason": agentRoleReason = Next(arg); break;
+                        case "--role-lease-seconds": agentRoleLeaseSeconds = ParsePositiveInt(Next(arg), arg); break;
+                        case "--recovery-stale-after-seconds": recoveryStaleAfterSeconds = ParsePositiveInt(Next(arg), arg); break;
                         default:
                             if (!arg.StartsWith("--", StringComparison.Ordinal) && string.IsNullOrWhiteSpace(input))
                                 input = arg;
@@ -2850,7 +2884,7 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
                 ref hardWaveComplexity,
                 ref sameFileMarginalCostPercent);
 
-            return new MigrationOptions(input, outPath, workspace, strategy, format, plan, inventory, wave, config, target, targetTestFramework, generationPolicy, executeMigrate, migrateExitCode, maxWaveSize, maxWaveFiles, maxWaveActions, hardWaveActions, maxWaveComplexity, hardWaveComplexity, sameFileMarginalCostPercent, smokeWaveSize, representativesPerCluster, preferLowRiskFirst, waveProfile, targetWaveCount, roleOverhead, executionProfile, maxIdenticalSnapshots, validationId, validationExitCode, validationCommand, validationScope, forceValidation, validationProfile, validationProject, validationTimeoutSeconds, validationDryRun, checkpointOnPass, checkpointLabel, checkpointStage, agentRole, agentRolePhase, agentRoleStatus, agentRoleEvidence, agentRoleReason);
+            return new MigrationOptions(input, outPath, workspace, strategy, format, plan, inventory, wave, config, target, targetTestFramework, generationPolicy, executeMigrate, migrateExitCode, maxWaveSize, maxWaveFiles, maxWaveActions, hardWaveActions, maxWaveComplexity, hardWaveComplexity, sameFileMarginalCostPercent, smokeWaveSize, representativesPerCluster, preferLowRiskFirst, waveProfile, targetWaveCount, roleOverhead, executionProfile, maxIdenticalSnapshots, validationId, validationExitCode, validationCommand, validationScope, forceValidation, validationProfile, validationProject, validationTimeoutSeconds, validationDryRun, checkpointOnPass, checkpointLabel, checkpointStage, agentRole, agentRolePhase, agentRoleStatus, agentRoleEvidence, agentRoleReason, agentRoleLeaseSeconds, recoveryStaleAfterSeconds);
         }
 
         static void ApplyNamedWaveProfile(

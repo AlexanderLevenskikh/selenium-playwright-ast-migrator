@@ -4,9 +4,10 @@ All notable changes to Selenium Playwright Migrator are documented here.
 
 This project uses preview SemVer-style versions while the public API is still stabilizing.
 
-## [Unreleased]
+## [0.0.2-preview.1]
 
 ### Added
+- Durable agent recovery with bounded active-role leases, latest-heartbeat freshness, serialized runtime mutations, deterministic recovery planning, append-only stale-role closure, safe ledger-head rebuild, orphan lease archival, atomic-temp quarantine, and fail-closed handling of malformed or contradictory role evidence.
 
 - Fast, standard, and audit execution profiles for bounded migration waves, with immutable wave manifests, performance traces, scope enforcement, and no-progress detection.
 - Incremental wave state through `run-context.json`, change sets, validation plans/results, content-addressed validation cache, checkpoints/resume, and review bundles.

@@ -36,3 +36,5 @@ The script intentionally checks source-of-truth locations (`scripts/**`, `templa
 - New public behavior is reflected in README/docs.
 - Package-facing files contain no private paths, internal hosts, secrets, or local agent state.
 - Generated code changes include the source pattern that motivated them.
+
+Agent-runtime changes must preserve durable recovery invariants: an active role has a bounded lease, freshness is based on the latest heartbeat, lease/journal mutations are serialized, stale closure is an appended terminal event, derived ledger heads may be rebuilt from a valid journal, and malformed append-only role evidence is never rewritten automatically. Run `scripts/run-agent-recovery-smoke.ps1` (or `.sh`) when changing routing, role receipts, or recovery policy.

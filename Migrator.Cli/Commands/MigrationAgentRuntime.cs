@@ -38,6 +38,27 @@ internal static class MigrationAgentRuntime
                 "Execution policy is missing or invalid.", null, output, error, policyError, 2);
         }
 
+        var recovery = MigrationAgentRecovery.Plan(outPath, staleAfterSeconds: 0, writeArtifact: true);
+        if (recovery.Status == "BLOCKED")
+        {
+            return WriteDecision(outPath, "BLOCKED", recovery.ActiveRole, recovery.ActivePhase, recovery.ActiveInputFingerprint, null,
+                "Agent runtime recovery planning found evidence that is unsafe to repair automatically.", "recovery-blocked",
+                output, error, string.Join("; ", recovery.BlockingReasons), 4);
+        }
+        if (recovery.Status == "SAFE_REPAIR_AVAILABLE")
+        {
+            return WriteDecision(outPath, "RUN_COMMAND", recovery.ActiveRole, recovery.ActivePhase, recovery.ActiveInputFingerprint,
+                "selenium-pw-migrator migration recover-agent-runtime --out <run-dir>",
+                "A deterministic safe recovery is required before another role or validation action.", "safe-recovery",
+                output, error, null, 0);
+        }
+        if (recovery.Status == "WAIT_FOR_ROLE")
+        {
+            return WriteDecision(outPath, "WAIT_FOR_ROLE", recovery.ActiveRole, recovery.ActivePhase, recovery.ActiveInputFingerprint, null,
+                "The active role still owns a valid durable lease; duplicate dispatch and premature recovery are forbidden.", "active-lease",
+                output, error, null, 0);
+        }
+
         if (!TryReadEvents(outPath, out var events, out var eventError))
         {
             return WriteDecision(outPath, "BLOCKED", null, null, null, null,
@@ -190,10 +211,17 @@ internal static class MigrationAgentRuntime
         string status,
         string evidence,
         string reason,
+        int leaseSeconds,
         TextWriter output,
         TextWriter error)
     {
         outPath = Path.GetFullPath(outPath);
+        if (!MigrationAgentRecovery.TryAcquireMutationLock(outPath, out var mutationLockHandle, out var mutationLockError))
+        {
+            error.WriteLine("AGENT_ROLE_RUNTIME_BUSY: " + mutationLockError);
+            return 3;
+        }
+        using var mutationLock = mutationLockHandle!;
         role = Normalize(role, Roles, "--role");
         phase = Normalize(phase, Phases, "--role-phase");
         status = Normalize(status, Statuses, "--role-status", upper: true);
@@ -289,8 +317,25 @@ internal static class MigrationAgentRuntime
         {
             ["eventHash"] = eventHash
         };
+        if (status == "STARTED")
+        {
+            try
+            {
+                MigrationAgentRecovery.WriteActiveLease(outPath, role, phase, inputFingerprint, sequence, eventHash, leaseSeconds);
+            }
+            catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException or ArgumentOutOfRangeException)
+            {
+                error.WriteLine("AGENT_ROLE_LEASE_WRITE_FAILED: " + ex.Message);
+                return 2;
+            }
+        }
         AppendJsonLine(Path.Combine(outPath, "agent-role-events.jsonl"), payload);
         WriteLedgerHead(outPath, sequence, eventHash);
+        if (status != "STARTED" && !MigrationAgentRecovery.TryReleaseLease(outPath, role, phase, inputFingerprint, status, out var leaseReleaseError))
+        {
+            error.WriteLine("AGENT_ROLE_LEASE_RELEASE_FAILED: " + leaseReleaseError);
+            return 2;
+        }
 
         if (!TryReadEvents(outPath, out var updatedEvents, out eventError))
         {
@@ -308,6 +353,15 @@ internal static class MigrationAgentRuntime
         output.WriteLine("Input fingerprint: " + inputFingerprint);
         return budget.Passed ? 0 : 4;
     }
+
+    internal static int PlanRecovery(string outPath, int staleAfterSeconds, TextWriter output, TextWriter error) =>
+        MigrationAgentRecovery.WritePlan(Path.GetFullPath(outPath), staleAfterSeconds, output, error);
+
+    internal static int RecoverRuntime(string outPath, int staleAfterSeconds, TextWriter output, TextWriter error) =>
+        MigrationAgentRecovery.Recover(Path.GetFullPath(outPath), staleAfterSeconds, output, error);
+
+    internal static int HeartbeatRole(string outPath, string role, string phase, int leaseSeconds, TextWriter output, TextWriter error) =>
+        MigrationAgentRecovery.Heartbeat(Path.GetFullPath(outPath), role, phase, leaseSeconds, output, error);
 
     internal static int CheckBudget(string outPath, TextWriter output, TextWriter error)
     {

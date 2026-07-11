@@ -118,3 +118,5 @@ When `migration/current-ticket.md` exists, route it through reviewer/executor be
 ## Bounded wavefront rule
 
 Wavefront migration starts with a one-test smoke wave. The auto profile must write `wave-tuning.md/json` without agents and affinity-pack later tests using same-file marginal complexity. Soft limits may produce `SOFT_LIMIT_EXCEEDED` or `HEAVY_SINGLE_TEST`; only `BLOCKED` prevents automatic execution. Stop at `FINAL_WITH_LIMITATIONS` when `REMEDIATION_BUDGET_EXHAUSTED`; do not continue post-final tickets automatically. Use `/supervised-task waves fresh` to archive the pilot while preserving project memory.
+
+- After an agent/session interruption, run `migration plan-agent-recovery` before another dispatch. Honor `WAIT_FOR_ROLE`, use `recover-agent-runtime` only for `SAFE_REPAIR_AVAILABLE`, and never rewrite malformed `agent-role-events.jsonl`. Long roles renew their bounded lease with `heartbeat-agent-role`; freshness comes from the latest heartbeat, and concurrent lease/journal mutations must remain serialized.

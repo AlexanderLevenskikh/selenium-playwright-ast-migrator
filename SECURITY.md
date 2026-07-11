@@ -18,3 +18,5 @@ Helpful reports include:
 ## Handling sensitive migration data
 
 Migration inputs may contain private selectors, URLs, screenshots, logs, and project-specific source code. Before sharing reports publicly, review generated artifacts and redact project-specific paths, hosts, credentials, and customer data.
+
+Agent recovery is intentionally fail-closed. The tool may rebuild derived metadata from a valid hash chain, but it must not truncate, delete, or rewrite malformed append-only role evidence. Contradictory active roles, an impossible or unbounded lease, a lease/journal mismatch, or a broken event hash chain require human review. Runtime mutations remain serialized so heartbeat and recovery cannot race each other.

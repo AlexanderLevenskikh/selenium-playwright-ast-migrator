@@ -231,3 +231,5 @@ selenium-pw-migrator config validate-merge --base migration/adapter-config.json 
 ## Agent orchestration rails
 
 `kit init` / `kit bootstrap-opencode` write `migration/state/scope-contract.json` from `--source`. Use `migration/scripts/new-claim.*`, `update-claim-heartbeat.*`, `complete-claim.*`, and `claim-doctor.*` for lightweight wave leases before parallel agent work.
+
+Interrupted agent roles use `agent-role-lease.json`. Renew long-running work with `migration heartbeat-agent-role`; after a crash or lost session run `migration plan-agent-recovery` and execute `recover-agent-runtime` only when the plan says `SAFE_REPAIR_AVAILABLE`. Recovery is append-only for role history and refuses to rewrite malformed hash-chained JSONL.

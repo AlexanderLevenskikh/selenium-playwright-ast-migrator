@@ -1010,3 +1010,7 @@ selenium-pw-migrator report serve --input migration/runs/latest --static-only --
 ```
 
 The report includes a **Wavefront / memory / config-merge snapshot**. It summarizes project-scoped memory, wavefront progress, next wave candidates, candidate config status, and open `conflicts.jsonl` items. This is read-only: it does not promote memory, merge config into the active adapter config, or mark a wave complete.
+
+### Resume after an interrupted agent role
+
+Run `selenium-pw-migrator migration plan-agent-recovery --out <run-dir>`. Wait when it reports `WAIT_FOR_ROLE`; run `recover-agent-runtime` only for `SAFE_REPAIR_AVAILABLE`; stop for human review on `BLOCKED`. Use `heartbeat-agent-role` for a role that legitimately runs longer than its lease. Freshness is based on the latest heartbeat; individual leases are capped at two hours, and malformed or contradictory ownership evidence is not repaired automatically.

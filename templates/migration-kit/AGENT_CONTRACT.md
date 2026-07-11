@@ -124,3 +124,12 @@ Before final handoff or another wave after material state changes, ensure `migra
 - Run `assess-agent-risk` before automatic role dispatch. Treat `agent-risk-assessment.json` as runtime-owned deterministic evidence; never edit its score, reasons, budget, or `assessmentFingerprint` manually.
 - A `RUN_ROLE` authorization is valid only while its `riskAssessmentFingerprint` matches the current assessment. Evidence changes invalidate the authorization and require a fresh `next-agent-action`.
 - `critical` risk or `automaticContinuationAllowed=false` requires `HUMAN_REVIEW_REQUIRED`. Do not downgrade risk, increase adaptive budgets, or skip final reviewer/final sentinel/final gate.
+
+## Durable role recovery
+
+- `record-agent-role --role-status STARTED` owns `agent-role-lease.json`; long roles renew it with `heartbeat-agent-role`.
+- After interruption, run `plan-agent-recovery` before selecting another role.
+- `WAIT_FOR_ROLE` forbids duplicate dispatch. `SAFE_REPAIR_AVAILABLE` permits only the emitted `recover-agent-runtime` command. `BLOCKED` requires human review.
+- Safe recovery may rebuild only the derived ledger head, append a FAILED terminal event for a stale role, archive an orphan lease, or quarantine incomplete atomic temp files.
+- Never delete, truncate, or rewrite malformed `agent-role-events.jsonl`; a broken hash chain is blocking evidence.
+- Recovery does not reset role budgets and does not replace reviewer, sentinel, scope checks, validation, or final gate.
