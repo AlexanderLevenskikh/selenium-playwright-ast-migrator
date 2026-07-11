@@ -17,7 +17,7 @@ docs/wave-mode-operator-runbook.md
 docs/wave-mode-operator-runbook.ru.md
 ```
 
-This README only describes the reusable OpenCode team template. Do not use it as a complete migration launch procedure.
+This README only describes the reusable OpenCode team template. Do not use it as a complete migration launch procedure. The repository documentation `docs/supervised-task-modes.md` / `.ru.md` is the user-facing reference for zero-argument resume, wave start/restart, continuation, and sentinel aliases.
 
 ## Agents
 
@@ -96,7 +96,7 @@ For a fresh divide-and-conquer migration, open the product repo root in OpenCode
 /supervised-task waves
 ```
 
-That mode is allowed to auto-detect the Selenium source project, ask only for missing target/framework details, run kit bootstrap/doctor, create the wavefront plan, materialize `wave-001`, and run the wave-local migration script. It must not start a full-source migration before the wave workspace exists.
+That mode is allowed to auto-detect the Selenium source project, ask only for missing target/framework details, run kit bootstrap/doctor, run the no-agent wave-plan tuning experiment, create an affinity-aware wavefront plan, inspect `wave-tuning.md`, materialize `wave-001`, and run the wave-local migration script. It must not start a full-source migration before the wave workspace exists.
 
 For existing workspaces, run:
 
@@ -229,7 +229,7 @@ Wave quality budget is enforced by `migration/scripts/evaluate-wave-quality-budg
 
 ## Artifact hygiene
 
-Before final handoff or another wave after material state changes, run or honor final-gate execution of `migration/scripts/validate-run-artifacts.ps1` / `.sh`. `artifact-hygiene/v1` must pass: Plan.md is sanitized, Documentation.md does not contradict final gate, generated boards carry run/wave identity, and session export status is explicit.
+Before final handoff or another wave after material state changes, validate installed script syntax with `migration/scripts/validate-installed-scripts.ps1 -Workspace migration` / `.sh`, then run or honor final-gate execution of `migration/scripts/validate-run-artifacts.ps1` / `.sh`. `artifact-hygiene/v1` must pass: Plan.md is sanitized, Documentation.md does not contradict final gate, generated boards carry run/wave identity, and session export status is explicit.
 
 For user-shareable migrator feedback, use `migration/scripts/create-feedback-bundle.ps1` / `.sh` rather than asking for the full repository. It writes `feedback-bundle/v1` to `state/feedback-bundles/`, excludes project source by default, and includes a manifest the user must review before sharing.
 

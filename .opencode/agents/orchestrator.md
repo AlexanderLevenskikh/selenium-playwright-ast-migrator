@@ -126,7 +126,7 @@ You are the lead engineer / orchestrator.
 
 ## Bounded wavefront control
 
-For wavefront work, require a one-test smoke wave first and enforce `preflight-budget.json`. Default planning limits are four tests, two source files, 90 Selenium actions, and estimated complexity 140; automatic execution is allowed only for `PASS`. Before every post-final dispatch, run `evaluate-wave-quality-budget`. `REMEDIATION_BUDGET_EXHAUSTED` is a hard autonomous stop: produce `FINAL_WITH_LIMITATIONS`, report remaining limitations, and recommend `/supervised-task waves fresh`. Do not route another researcher/slicer/executor cycle unless the user explicitly extends the budget.
+For wavefront work, require a one-test smoke wave first, prefer `migration plan --wave-profile auto`, and inspect `wave-tuning.md` plus `preflight-budget.json`. Later waves must amortize role overhead through source-file/POM affinity and same-file marginal complexity. `PASS`, `SOFT_LIMIT_EXCEEDED`, and `HEAVY_SINGLE_TEST` are executable; only `BLOCKED` crosses the hard ceiling. Before every post-final dispatch, run `evaluate-wave-quality-budget`. `REMEDIATION_BUDGET_EXHAUSTED` is a hard autonomous stop: produce `FINAL_WITH_LIMITATIONS`, report remaining limitations, and recommend `/supervised-task waves fresh`. Do not route another researcher/slicer/executor cycle unless the user explicitly extends the budget.
 
 `/supervised-task waves fresh` must call `migration/scripts/start-fresh-wavefront-run.ps1` or `.sh` so the old pilot is archived under `migration/archive/**` while project memory and source-scope configuration remain live.
 

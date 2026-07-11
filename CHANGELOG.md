@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Reworked wavefront planning around a deterministic no-agent tuning experiment. `migration tune-wave-plan` and `plan --wave-profile auto` now search batching profiles, account for same-file/POM reuse with marginal complexity, use soft targets plus broad hard ceilings, and avoid pathological one-test-per-wave plans.
+
 - Fixed `kit update` timestamp churn so `.migration-kit/version.json` and `.migration-kit/guard-checksums.json` are not rewritten when only volatile timestamps change; harness policy now accepts checksum metadata-only changes when guard file hashes still match.
 
 - Added state-aware zero-argument `/supervised-task` auto-next dispatch for tester-friendly follow-up migration tasks after FINAL checkpoints.

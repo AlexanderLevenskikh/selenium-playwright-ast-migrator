@@ -122,6 +122,8 @@ public class AgentOrchestrationPrimitiveTests
     public void ScriptValidation_IsWindowsPowerShellCompatibleAndLoopGuardIsPrompted()
     {
         var validator = Read("scripts/validate-scripts.ps1");
+        var installedValidator = Read("templates/migration-kit/scripts/validate-installed-scripts.ps1");
+        var installedValidatorShell = Read("templates/migration-kit/scripts/validate-installed-scripts.sh");
         var loopGuard = Read("templates/migration-kit/scripts/check-loop-guard.ps1");
         var loopGuardSh = Read("templates/migration-kit/scripts/check-loop-guard.sh");
         var supervised = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
@@ -132,6 +134,14 @@ public class AgentOrchestrationPrimitiveTests
         Assert.Contains("Path.GetRelativePath does not exist", validator);
         Assert.Contains("MakeRelativeUri", validator);
         Assert.Contains("Test-IsWindowsPlatform", validator);
+        Assert.Contains("[string[]]$Workspace", validator);
+        Assert.Contains("Installed workspace:", validator);
+        Assert.Contains("$workspacePaths = @()", validator);
+        Assert.DoesNotContain("$workspacePaths = New-Object System.Collections.Generic.List[string]", validator);
+        Assert.DoesNotContain("[System.IO.Path].GetMethod(\"GetRelativePath\"", validator);
+        Assert.Contains("WORKSPACE_SCRIPT_VALIDATE_PASS", installedValidator);
+        Assert.Contains("Parser]::ParseFile", installedValidator);
+        Assert.Contains("Install PowerShell 7:", installedValidatorShell);
         Assert.Contains("LOOP_GUARD_BLOCKED", loopGuard);
         Assert.Contains("state/loop-guard.json", loopGuard);
         Assert.Contains("check-loop-guard.ps1", loopGuardSh);

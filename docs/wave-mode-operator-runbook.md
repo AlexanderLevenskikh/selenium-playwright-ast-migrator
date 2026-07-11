@@ -2,7 +2,7 @@
 
 This is an operating guide for an already bootstrapped migration workspace. It does not replace the canonical guarded launch procedure: start from [`guarded-opencode-desktop-runbook.ru.md`](guarded-opencode-desktop-runbook.ru.md) when setting up OpenCode Desktop or a fresh product repository.
 
-Use this guide when `/supervised-task waves` or `/supervised-task continue` has already produced `migration/**` state and you need to decide what to do next without guessing.
+Use this guide when `/supervised-task waves` or `/supervised-task continue` has already produced `migration/**` state and you need to decide what to do next without guessing. For the complete list of command modes and aliases, see [`supervised-task-modes.md`](supervised-task-modes.md).
 
 ## Mental model
 
@@ -266,3 +266,7 @@ Before another wave:
 [ ] artifact-hygiene/v1 is PASS
 [ ] Documentation.md says NOT FINAL when gates are blocked
 ```
+
+## Wave-plan quality check
+
+Before the first wave, read `migration/plan/wave-tuning.md`. The `auto` profile runs a static experiment without agents and should reduce expensive role cycles by grouping tests that reuse the same file/POM context. Only the smoke wave is intentionally singleton. `PASS`, `SOFT_LIMIT_EXCEEDED`, and `HEAVY_SINGLE_TEST` are executable; `BLOCKED` crosses the broad hard ceiling and requires replan.

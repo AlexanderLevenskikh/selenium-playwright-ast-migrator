@@ -12,13 +12,33 @@ public class BoundedWavefrontLifecycleTests
 
         Assert.Contains("smoke-validation", command);
         Assert.Contains("PackByBudget", command);
+        Assert.Contains("BuildFileChunks", command);
+        Assert.Contains("TuneWavePlan", command);
+        Assert.Contains("DeriveReferenceWaveCount", command);
+        Assert.Contains("BuildWaveSizeCandidates", command);
+        Assert.Contains("Quantile", command);
+        Assert.Contains("EstimatedWorkCost", command);
+        Assert.Contains("Sum(w => (double)w.EstimatedComplexity)", command);
+        Assert.Contains("plan.Waves.Length * (double)roleOverhead", command);
+        Assert.Contains("OrchestrationCost", command);
+        Assert.Contains("CoordinationRiskCost", command);
+        Assert.Contains("Recommendation confidence", command);
+        Assert.Contains("migration-wave-tuning/v1", command);
+        Assert.Contains("--wave-profile", command);
+        Assert.Contains("--target-waves", command);
+        Assert.Contains("--role-overhead", command);
         Assert.Contains("--max-wave-files", command);
         Assert.Contains("--max-wave-actions", command);
+        Assert.Contains("--hard-wave-actions", command);
         Assert.Contains("--max-wave-complexity", command);
+        Assert.Contains("--hard-wave-complexity", command);
+        Assert.Contains("--same-file-marginal-cost", command);
         Assert.Contains("--smoke-wave-size", command);
         Assert.Contains("migration-wave-preflight-budget/v1", command);
         Assert.Contains("blocked-by-complexity-budget", command);
         Assert.Contains("automaticExecutionAllowed", command);
+        Assert.Contains("SOFT_LIMIT_EXCEEDED", command);
+        Assert.Contains("HEAVY_SINGLE_TEST", command);
         Assert.Contains("preflight-budget.json", command);
         Assert.Contains("[A-Za-z_][A-Za-z0-9_]*(?:Page|Steps|Helper|Control|Table|Filter)", command);
     }
@@ -83,6 +103,44 @@ public class BoundedWavefrontLifecycleTests
         Assert.DoesNotContain("scripts/start-fresh-wavefront-run.sh", requiredFiles);
         Assert.Contains("scripts/start-fresh-wavefront-run.ps1", guardedScripts);
         Assert.Contains("scripts/start-fresh-wavefront-run.sh", guardedScripts);
+    }
+
+
+    [Fact]
+    public void SupervisedTaskModes_AreDocumentedWithAliasesAndStopSemantics()
+    {
+        var command = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var docs = Read("docs/supervised-task-modes.md");
+        var docsRu = Read("docs/supervised-task-modes.ru.md");
+        var readme = Read("README.md");
+        var readmeRu = Read("README.ru.md");
+        var runbook = Read("docs/wave-mode-operator-runbook.md");
+        var runbookRu = Read("docs/wave-mode-operator-runbook.ru.md");
+
+        foreach (var token in new[]
+        {
+            "/supervised-task waves",
+            "/supervised-task waves fresh",
+            "/supervised-task continue",
+            "/supervised-task sentinel",
+            "fresh waves",
+            "restart waves",
+            "inspect",
+            "qa",
+            "FINAL_WITH_LIMITATIONS"
+        })
+        {
+            Assert.Contains(token, command, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(token, docs, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(token, docsRu, StringComparison.OrdinalIgnoreCase);
+        }
+
+        Assert.Contains("not nested", docs, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("не вложенные", docsRu, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("supervised-task-modes.md", readme);
+        Assert.Contains("supervised-task-modes.ru.md", readmeRu);
+        Assert.Contains("supervised-task-modes.md", runbook);
+        Assert.Contains("supervised-task-modes.ru.md", runbookRu);
     }
 
     static string Read(string relativePath)

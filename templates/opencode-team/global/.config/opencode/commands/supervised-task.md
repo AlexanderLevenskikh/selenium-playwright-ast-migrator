@@ -23,18 +23,19 @@ In wavefront bootstrap mode:
    - source Selenium test project/path: only when no configured bootstrap source exists or the configured source is missing/placeholder; prefer `.csproj` files or directories containing Selenium/WebDriver references and test attributes; ignore `bin/`, `obj/`, `migration/`, generated reports, and archived workspaces;
    - target backend/framework: prefer existing Playwright .NET projects with `Microsoft.Playwright`, `Microsoft.Playwright.NUnit`, or xUnit/MSTest equivalents; otherwise infer `playwright-dotnet` and the source test framework (`nunit`, `xunit`, `mstest`) from package references/usings/attributes;
    - target project/output path if present; otherwise keep it as generated migration proposals under `migration/**`;
-   - desired strategy: default to `wavefront`, one-test smoke validation, `--max-wave-size 4`, `--max-wave-files 2`, `--max-wave-actions 90`, `--max-wave-complexity 140`, `--smoke-wave-size 1`, `--representatives-per-cluster 1`, and low-risk-first.
+   - desired strategy: default to `wavefront` with `--wave-profile auto`, a one-test smoke validation, affinity-aware same-file/POM batching, soft planning targets, broad hard ceilings, and low-risk-first ordering. Do not guess fixed budgets when the read-only tuner can derive them from the current inventory.
 4. Ask the user **only** when the configured source is absent/missing or detection is genuinely ambiguous. Ask one compact question with concrete options, for example: “I found two Selenium test projects and no configured bootstrap source: A and B. Which one should be migrated?” Do not ask broad preference questions when a safe configured source exists.
 5. If `migration/AGENT_CONTRACT.md` or `migration/opencode-team/**` is missing, run:
    `selenium-pw-migrator kit bootstrap-opencode --workspace migration --source <configured-or-detected-source> --target-path <detected-target-or-placeholder> --opencode-install none`
    The CLI bootstrap is expected to apply repository-root `opencode.jsonc`, `.opencode/agents`, `.opencode/commands`, and `AGENTS.md` automatically. If it does not, run `migration/scripts/apply-opencode-project-config.ps1` or `.sh` as a repair step and report that as a tool defect.
 6. Run `selenium-pw-migrator kit doctor --workspace migration`. If doctor reports only non-blocking warnings, continue. If source/config/workspace is missing, ask the smallest exact question needed.
 7. If `migration/plan/waves.json` is missing or stale relative to the configured-or-detected source, run:
-   `selenium-pw-migrator migration plan --input <configured-or-detected-source> --strategy wavefront --workspace migration --out migration/plan --max-wave-size 4 --max-wave-files 2 --max-wave-actions 90 --max-wave-complexity 140 --smoke-wave-size 1 --representatives-per-cluster 1 --prefer-low-risk-first true`
-8. If no active wave run exists, materialize the first pending wave before implementation:
+   `selenium-pw-migrator migration plan --input <configured-or-detected-source> --strategy wavefront --workspace migration --out migration/plan --wave-profile auto --smoke-wave-size 1 --prefer-low-risk-first true`
+8. Read `migration/plan/wave-tuning.md` and verify that the recommended plan amortizes orchestration: only the smoke wave should be intentionally singleton, source files should not be fragmented without a hard-cap reason, and a project of roughly 80 tests should normally produce a single-digit or low-double-digit wave count rather than one wave per test.
+9. If no active wave run exists, materialize the first pending wave before implementation:
    `selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001`
-9. Treat `migration/runs/<wave-id>/input-scope.json` as the active bounded scope. If generated output is still a placeholder, run the wave-local migrate script (`migration/runs/<wave-id>/run-migrate.ps1` or `.sh`) or rerun `migration run-wave --execute-migrate true` for that wave only.
-10. Create/resume the Harness run and continue through the normal lifecycle using the wave workspace as the active ticket. All implementation writes remain under `migration/**` unless a later explicit policy grants more.
+10. Treat `migration/runs/<wave-id>/input-scope.json` as the active bounded scope. If generated output is still a placeholder, run the wave-local migrate script (`migration/runs/<wave-id>/run-migrate.ps1` or `.sh`) or rerun `migration run-wave --execute-migrate true` for that wave only.
+11. Create/resume the Harness run and continue through the normal lifecycle using the wave workspace as the active ticket. All implementation writes remain under `migration/**` unless a later explicit policy grants more.
 
 If the repository is fresh and `/supervised-task waves` has a configured bootstrap source or enough information to auto-detect the source path, the expected first meaningful actions are: bootstrap/update kit → doctor → wavefront plan → materialize `wave-001` → wave-local migration. Returning a generic “no task was provided” or running full-source migration is not allowed in this mode.
 
@@ -249,7 +250,7 @@ When `evaluate-wave-quality-budget` reports `BLOCKED_BY_WAVE_QUALITY_BUDGET`, do
 
 ## Artifact hygiene
 
-Before final handoff or another wave after material state changes, run or honor final-gate execution of `migration/scripts/validate-run-artifacts.ps1` / `.sh`. `artifact-hygiene/v1` must pass: Plan.md is sanitized, Documentation.md does not contradict final gate, generated boards carry run/wave identity, session export status is explicit, every controlled JSONL line parses, current-ticket/task-slice/continuation/harness state agrees, and `wave-status.json` is not left `prepared` after generated output exists.
+Before final handoff or another wave after material state changes, run `migration/scripts/validate-installed-scripts.ps1 -Workspace migration` / `.sh` when installed, then run or honor final-gate execution of `migration/scripts/validate-run-artifacts.ps1` / `.sh`. `artifact-hygiene/v1` must pass: Plan.md is sanitized, Documentation.md does not contradict final gate, generated boards carry run/wave identity, session export status is explicit, every controlled JSONL line parses, current-ticket/task-slice/continuation/harness state agrees, and `wave-status.json` is not left `prepared` after generated output exists.
 For user-shareable feedback, run `migration/scripts/create-feedback-bundle.ps1` / `.sh` instead of collecting the repository. The `feedback-bundle/v1` packer excludes project source by default, writes `state/feedback-bundles/*/manifest.json`, and requires manifest review before sharing.
 
 

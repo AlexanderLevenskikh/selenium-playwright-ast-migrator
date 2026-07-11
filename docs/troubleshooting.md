@@ -196,3 +196,30 @@ selenium-pw-migrator --version
 ## Harness continuation strict protocol
 
 After a non-final final gate, read `migration/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, `NOT FINAL` is not a stopping point: execute exactly one next bounded action under `migration/**` before a user-facing handoff. A fresh `FINAL` checkpoint stops once for review and reports evidence; any later `/supervised-task` where `harness-run.json` is already `FINAL_STOPPED_FOR_REVIEW` resumes the closed post-final loop automatically. Stop for guard/scope/policy blocker, missing input, loop/plateau, or max autonomous budget.
+
+## `artifact-hygiene` reports a PowerShell syntax error, but `validate-scripts.ps1` passed
+
+The repository validator checks Migrator source scripts and templates. An existing product workspace can still contain an older or locally modified copy under `migration/scripts/`.
+
+Update the installed kit-owned scripts first:
+
+```powershell
+selenium-pw-migrator kit bootstrap-opencode `
+  --workspace migration `
+  --source <selenium-source> `
+  --opencode-install none
+```
+
+Then validate the installed workspace directly:
+
+```powershell
+pwsh ./migration/scripts/validate-installed-scripts.ps1 -Workspace migration -RequireShell
+```
+
+When running from the Migrator source repository, the source validator can include an external workspace:
+
+```powershell
+pwsh ./scripts/validate-scripts.ps1 -Root . -Workspace <path-to-product-repo>/migration -RequireShell
+```
+
+A source-only `SCRIPT_VALIDATE_PASS` is not evidence that an older generated workspace copy is valid. New final gates run `installed-script-syntax` before `artifact-hygiene` when the workspace validator is installed.

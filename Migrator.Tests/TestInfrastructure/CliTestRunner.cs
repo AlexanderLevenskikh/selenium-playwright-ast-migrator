@@ -8,7 +8,9 @@ internal sealed record CliResult(
     string StdOut,
     string StdErr,
     bool TimedOut = false,
-    string CommandLine = "");
+    string CommandLine = "",
+    TimeSpan Duration = default,
+    long PeakWorkingSetBytes = 0);
 
 internal static class CliTestRunner
 {
@@ -35,6 +37,7 @@ internal static class CliTestRunner
         psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
         psi.Environment["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1";
 
+        var stopwatch = Stopwatch.StartNew();
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start CLI process: {commandLine}");
 
@@ -57,12 +60,14 @@ internal static class CliTestRunner
             var stdout = GetCompletedResultOrEmpty(stdoutTask);
             var stderr = GetCompletedResultOrEmpty(stderrTask);
             stderr += $"\nCLI test process timed out after {effectiveTimeout.TotalSeconds:0}s. Command: {commandLine}";
-            return new CliResult(-1, stdout, stderr, TimedOut: true, CommandLine: commandLine);
+            stopwatch.Stop();
+            return new CliResult(-1, stdout, stderr, TimedOut: true, CommandLine: commandLine, Duration: stopwatch.Elapsed, PeakWorkingSetBytes: SafePeakWorkingSet(process));
         }
 
         var stdoutText = stdoutTask.GetAwaiter().GetResult();
         var stderrText = stderrTask.GetAwaiter().GetResult();
-        return new CliResult(process.ExitCode, stdoutText, stderrText, TimedOut: false, CommandLine: commandLine);
+        stopwatch.Stop();
+        return new CliResult(process.ExitCode, stdoutText, stderrText, TimedOut: false, CommandLine: commandLine, Duration: stopwatch.Elapsed, PeakWorkingSetBytes: SafePeakWorkingSet(process));
     }
 
     static string? GetRepoRoot()
@@ -119,6 +124,18 @@ internal static class CliTestRunner
         }
 
         return "Debug";
+    }
+
+    static long SafePeakWorkingSet(Process process)
+    {
+        try
+        {
+            return process.PeakWorkingSet64;
+        }
+        catch
+        {
+            return 0;
+        }
     }
 
     static string GetCompletedResultOrEmpty(Task<string> task)

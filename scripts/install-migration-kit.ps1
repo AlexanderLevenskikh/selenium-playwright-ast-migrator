@@ -174,6 +174,8 @@ function Test-AutoUpdatedKitOwnedFile([string]$RelativePath) {
         $normalized -eq "scripts/collect-mapping-research-memory.sh" -or
         $normalized -eq "scripts/create-feedback-bundle.ps1" -or
         $normalized -eq "scripts/create-feedback-bundle.sh" -or
+        $normalized -eq "scripts/validate-installed-scripts.ps1" -or
+        $normalized -eq "scripts/validate-installed-scripts.sh" -or
         $normalized -eq "scripts/validate-run-artifacts.ps1" -or
         $normalized -eq "scripts/validate-run-artifacts.sh" -or
         $normalized -eq "scripts/repair-jsonl-ledger.ps1" -or
@@ -352,6 +354,8 @@ function Write-GuardChecksums([string]$WorkspacePath) {
         "scripts/collect-mapping-research-memory.sh",
         "scripts/create-feedback-bundle.ps1",
         "scripts/create-feedback-bundle.sh",
+        "scripts/validate-installed-scripts.ps1",
+        "scripts/validate-installed-scripts.sh",
         "scripts/validate-run-artifacts.ps1",
         "scripts/validate-run-artifacts.sh",
         "scripts/repair-jsonl-ledger.ps1",

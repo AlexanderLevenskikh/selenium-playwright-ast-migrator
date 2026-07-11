@@ -8,6 +8,7 @@ This index keeps the current workflow short and avoids legacy agent-launch noise
 - [Guarded OpenCode Desktop migration runbook](guarded-opencode-desktop-runbook.ru.md) — canonical guarded agent workflow: local tool build/update, `kit bootstrap-opencode`, `/supervised-task`, approve/deny rules, scope/final gates, and forensic export.
 - [Migration runbook](migration-runbook.md) — production migration plan, pilot scope, risks, and command chain.
 - [Wave mode operator runbook](wave-mode-operator-runbook.md) / [RU](wave-mode-operator-runbook.ru.md) — operating guide for an already bootstrapped wave workspace: blocked gates, current tickets, sentinel finding lifecycle, wave quality budget, mapping research memory, and feedback bundle handoff.
+- [Wave-plan tuning without agents](wave-plan-tuning.md) / [RU](wave-plan-tuning.ru.md) — deterministic budget experiment, auto profile, affinity-aware batching, and calibration of role overhead.
 - [Tool installation](tool-installation.md) — install from a packed dotnet tool or run from source.
 - [Standalone installation](standalone-installation.md) / [RU](standalone-installation.ru.md) — install the CLI without .NET SDK/runtime.
 - [npm wrapper](npm-wrapper.md) — install the standalone CLI through npm for frontend-heavy teams.

@@ -2,7 +2,7 @@
 
 Это инструкция по эксплуатации уже созданного migration workspace. Она не заменяет канонический guarded launch flow: для настройки OpenCode Desktop и свежего репозитория начинай с [`guarded-opencode-desktop-runbook.ru.md`](guarded-opencode-desktop-runbook.ru.md).
 
-Используй этот документ, когда `/supervised-task waves` или `/supervised-task continue` уже создали состояние в `migration/**`, и нужно понять, что делать дальше без гадания.
+Используй этот документ, когда `/supervised-task waves` или `/supervised-task continue` уже создали состояние в `migration/**`, и нужно понять, что делать дальше без гадания. Полная таблица режимов и алиасов: [`supervised-task-modes.ru.md`](supervised-task-modes.ru.md).
 
 ## Модель в голове
 
@@ -264,3 +264,7 @@ sentinel report/findings при необходимости
 [ ] artifact-hygiene/v1 PASS
 [ ] Documentation.md пишет NOT FINAL, если gates blocked
 ```
+
+## Проверка качества wave-плана
+
+Перед первой волной прочитай `migration/plan/wave-tuning.md`. Профиль `auto` выполняет статический эксперимент без агентов и должен уменьшать число дорогих циклов ролей за счёт группировки тестов одного файла/POM. Одиночной по замыслу является только smoke-wave. `PASS`, `SOFT_LIMIT_EXCEEDED` и `HEAVY_SINGLE_TEST` разрешают выполнение; `BLOCKED` означает превышение широкой жёсткой границы и требует перепланирования.

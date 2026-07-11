@@ -3,9 +3,10 @@
 Validates repository PowerShell and shell scripts without executing them.
 
 .DESCRIPTION
-The check parses source-of-truth scripts and workflow snippets only. Generated
-release outputs and dogfood workspaces are excluded by default because they are
-copies produced by packaging/smoke commands and can contain stale artifacts.
+The check parses source-of-truth scripts and workflow snippets. Generated
+release outputs and dogfood workspaces are excluded by default. Pass -Workspace
+to additionally validate the scripts currently installed in one or more migration
+workspaces; this catches stale workspace copies after a tool update.
 
 PowerShell files are parsed with the current PowerShell parser. Shell files are
 checked with bash -n when bash is available. On Windows, Git Bash is preferred
@@ -15,6 +16,7 @@ no WSL distro is configured.
 [CmdletBinding()]
 param(
     [string]$Root = (Get-Location).Path,
+    [string[]]$Workspace = @(),
     [switch]$IncludeGenerated,
     [switch]$SkipShell,
     [switch]$RequireShell
@@ -40,22 +42,23 @@ function Test-IsWindowsPlatform {
 
 function Convert-ToRepoPath([string]$Path, [string]$RootPath) {
     $fullPath = [System.IO.Path]::GetFullPath($Path)
-    $fullRoot = [System.IO.Path]::GetFullPath($RootPath).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
-
-    if ([System.IO.Path].GetMethod("GetRelativePath", [type[]]@([string], [string]))) {
-        $relative = [System.IO.Path]::GetRelativePath($fullRoot, $fullPath)
-        return ($relative -replace '\\', '/')
-    }
+    $separatorChars = [char[]]@(
+        [System.IO.Path]::DirectorySeparatorChar,
+        [System.IO.Path]::AltDirectorySeparatorChar
+    )
+    $fullRoot = [System.IO.Path]::GetFullPath($RootPath).TrimEnd($separatorChars)
 
     # Windows PowerShell 5.1 runs on .NET Framework, where Path.GetRelativePath does not exist.
-    # Fall back to Uri-based relative paths so local smoke checks still work on older shells.
+    # Use the Uri implementation on every supported PowerShell version. Besides being portable,
+    # this avoids overload-binding differences between Windows PowerShell 5.1 and PowerShell 7.
+    $directorySeparator = [string][System.IO.Path]::DirectorySeparatorChar
     $rootWithSeparator = $fullRoot
-    if (-not $rootWithSeparator.EndsWith([System.IO.Path]::DirectorySeparatorChar)) {
-        $rootWithSeparator = $rootWithSeparator + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $rootWithSeparator.EndsWith($directorySeparator, [System.StringComparison]::Ordinal)) {
+        $rootWithSeparator = $rootWithSeparator + $directorySeparator
     }
 
-    $rootUri = [System.Uri]::new($rootWithSeparator)
-    $pathUri = [System.Uri]::new($fullPath)
+    $rootUri = New-Object System.Uri -ArgumentList $rootWithSeparator
+    $pathUri = New-Object System.Uri -ArgumentList $fullPath
     $relativeUri = $rootUri.MakeRelativeUri($pathUri).ToString()
     return ([System.Uri]::UnescapeDataString($relativeUri) -replace '\\', '/')
 }
@@ -138,21 +141,65 @@ if (-not (Test-Path $rootPath)) {
 
 $failures = New-Object System.Collections.Generic.List[object]
 
-$allScriptFiles = Get-ChildItem -LiteralPath $rootPath -Recurse -File |
+$sourceScriptFiles = @(Get-ChildItem -LiteralPath $rootPath -Recurse -File |
     Where-Object { $_.Extension -in @(".ps1", ".sh") } |
     Where-Object {
         $repoPath = Convert-ToRepoPath $_.FullName $rootPath
         (Test-IsSourceScriptPath $repoPath) -and ($IncludeGenerated -or -not (Test-IsGeneratedPath $repoPath))
-    } |
-    Sort-Object FullName
+    })
 
+# Plain PowerShell arrays are intentional here. Windows PowerShell 5.1 can throw
+# a non-diagnostic "Argument types do not match" when generic lists are combined
+# with array-subexpressions and pipeline enumeration.
+$workspacePaths = @()
+foreach ($workspaceValue in $Workspace) {
+    if ([string]::IsNullOrWhiteSpace($workspaceValue)) { continue }
+    $resolvedWorkspace = Resolve-RootPath $workspaceValue
+    if (-not (Test-Path $resolvedWorkspace)) { throw "Workspace path not found: $resolvedWorkspace" }
+    $workspacePaths += $resolvedWorkspace
+}
+
+if ($workspacePaths.Count -eq 0) {
+    $autoWorkspace = Join-Path $rootPath "migration"
+    if (Test-Path (Join-Path $autoWorkspace "scripts")) {
+        $workspacePaths += [System.IO.Path]::GetFullPath($autoWorkspace)
+    }
+}
+
+$workspaceScriptFiles = @()
+foreach ($workspacePath in ($workspacePaths | Sort-Object -Unique)) {
+    $scriptsPath = Join-Path $workspacePath "scripts"
+    if (-not (Test-Path $scriptsPath)) {
+        Write-Warning "Workspace scripts directory not found: $scriptsPath"
+        continue
+    }
+    $workspaceScriptFiles += @(Get-ChildItem -LiteralPath $scriptsPath -Recurse -File |
+        Where-Object { $_.Extension -in @(".ps1", ".sh") })
+}
+
+$allScriptFiles = @()
+$allScriptFiles += $sourceScriptFiles
+$allScriptFiles += $workspaceScriptFiles
+$allScriptFiles = @($allScriptFiles | Sort-Object FullName -Unique)
 $ps1Files = @($allScriptFiles | Where-Object { $_.Extension -ieq '.ps1' })
 $shFiles = @($allScriptFiles | Where-Object { $_.Extension -ieq '.sh' })
 
+function Get-DisplayPath([string]$Path) {
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    foreach ($workspacePath in ($workspacePaths | Sort-Object Length -Descending)) {
+        $workspacePrefix = $workspacePath.TrimEnd([char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)) + [System.IO.Path]::DirectorySeparatorChar
+        if ($fullPath.StartsWith($workspacePrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return "workspace:" + (Convert-ToRepoPath $fullPath $workspacePath)
+        }
+    }
+    return Convert-ToRepoPath $fullPath $rootPath
+}
+
 Write-Host "Script validation root: $rootPath"
+foreach ($workspacePath in ($workspacePaths | Sort-Object -Unique)) { Write-Host "Installed workspace: $workspacePath" }
 Write-Host "PowerShell scripts: $($ps1Files.Count)"
 foreach ($file in $ps1Files) {
-    $repoPath = Convert-ToRepoPath $file.FullName $rootPath
+    $repoPath = Get-DisplayPath $file.FullName
     Write-Host "PS1  $repoPath"
 
     $tokens = $null
@@ -183,7 +230,7 @@ if (-not $SkipShell) {
         Write-Host "Shell scripts: $($shFiles.Count)"
         Write-Host "Using bash: $bash"
         foreach ($file in $shFiles) {
-            $repoPath = Convert-ToRepoPath $file.FullName $rootPath
+            $repoPath = Get-DisplayPath $file.FullName
             Write-Host "SH   $repoPath"
 
             if (Test-IsWindowsPlatform) {

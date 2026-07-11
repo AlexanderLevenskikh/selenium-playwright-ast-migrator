@@ -2,6 +2,8 @@
 
 Актуальный public quick start находится здесь: [../quick-start.md](../quick-start.md).
 
+Режимы и алиасы OpenCode-команды описаны в [`../supervised-task-modes.ru.md`](../supervised-task-modes.ru.md).
+
 После первого прогона смотри:
 
 - [Migration Workflow](migration-workflow.md)

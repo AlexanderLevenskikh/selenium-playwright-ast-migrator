@@ -181,11 +181,12 @@ That mode should run the wavefront setup itself from the repository root. If the
 
 
 ```bash
-selenium-pw-migrator migration plan --input ./OldTests --strategy wavefront --workspace migration --out migration/plan --max-wave-size 4 --max-wave-files 2 --max-wave-actions 90 --max-wave-complexity 140 --smoke-wave-size 1
+selenium-pw-migrator migration tune-wave-plan --input ./OldTests --workspace migration --out migration/plan-tuning
+selenium-pw-migrator migration plan --input ./OldTests --strategy wavefront --workspace migration --out migration/plan --wave-profile auto --smoke-wave-size 1
 selenium-pw-migrator migration plan show --plan migration/plan
 ```
 
-This is a read-only divide-and-conquer planner. It writes inventory, clusters, budget-packed waves, selected tests, memory recall guidance, and next commands. The first wave is a one-test smoke validation; later waves respect file/action/complexity budgets. `/supervised-task waves` should run this automatically. Use `migration run-wave` manually only when debugging or CI needs to materialize a selected wave as a bounded workspace without editing the original project.
+This is a read-only divide-and-conquer planner. `tune-wave-plan` evaluates deterministic profiles without agents; `plan --wave-profile auto` performs the same experiment automatically and writes `wave-tuning.md/json`. The first wave is a one-test smoke validation; later waves use source-file/POM affinity, same-file marginal complexity, soft targets, and broad hard ceilings to amortize role overhead. `/supervised-task waves` should run this automatically. Use `migration run-wave` manually only when debugging or CI needs to materialize a selected wave as a bounded workspace without editing the original project.
 
 ## Wave run workspace
 
@@ -195,7 +196,7 @@ selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --
 selenium-pw-migrator migration refresh-wave-status --out migration/runs/wave-001 --migrate-exit-code 0
 ```
 
-`run-wave` writes `source-scope/`, `generated/`, `input-scope.json`, `preflight-budget.json`, `selected-tests.txt`, `config-delta.json`, `memory-delta.jsonl`, `run-summary.md`, `wave-status.json`, `run-migrate.sh`, and `run-migrate.ps1`. The generated migrate command passes `--selected-tests selected-tests.txt`; this keeps execution bounded to the tests in the wave even when a copied source file contains additional tests. The default mode prepares the workspace and scripts. Both migrate wrappers and `--execute-migrate true` require `preflight-budget.json` status `PASS`; oversized waves must be split or replanned. `--execute-migrate true` additionally invokes the existing `--mode migrate` pipeline against `source-scope/` with that same selected-test filter. `run-migrate.ps1` and `run-migrate.sh` always refresh `wave-status.json` after execution; the explicit `refresh-wave-status` command is available for recovery or older workspaces.
+`run-wave` writes `source-scope/`, `generated/`, `input-scope.json`, `preflight-budget.json`, `selected-tests.txt`, `config-delta.json`, `memory-delta.jsonl`, `run-summary.md`, `wave-status.json`, `run-migrate.sh`, and `run-migrate.ps1`. The generated migrate command passes `--selected-tests selected-tests.txt`; this keeps execution bounded to the tests in the wave even when a copied source file contains additional tests. The default mode prepares the workspace and scripts. Both migrate wrappers and `--execute-migrate true` accept `PASS`, `SOFT_LIMIT_EXCEEDED`, and `HEAVY_SINGLE_TEST`; only `BLOCKED` crosses the hard ceiling and requires replan. `--execute-migrate true` additionally invokes the existing `--mode migrate` pipeline against `source-scope/` with that same selected-test filter. `run-migrate.ps1` and `run-migrate.sh` always refresh `wave-status.json` after execution; the explicit `refresh-wave-status` command is available for recovery or older workspaces.
 
 Safety boundary: `run-wave` does not promote memory, does not merge config, and does not publish any cross-project/org knowledge pack. `config-delta.json` is an observed/reviewable placeholder until Reviewer, Watchdog, and Final Gate evidence exists.
 

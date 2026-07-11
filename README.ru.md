@@ -59,6 +59,16 @@ selenium-pw-migrator doctor install
 selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --opencode-install auto
 ```
 
+Затем открой корень репозитория в OpenCode и запусти:
+
+```text
+/supervised-task waves
+```
+
+Для существующего workspace используй обычный `/supervised-task`; для безопасного архивного перезапуска разросшегося pilot — `/supervised-task waves fresh`; для явной форензик-проверки — `/supervised-task sentinel` (`inspect` и `qa` — алиасы).
+
+Перед созданием рабочего wave-плана профиль `auto` выполняет детерминированный эксперимент **без агентов**: выводит диапазоны параметров из размера и квантилей сложности текущего inventory, перебирает варианты размера волн, учитывает повторное использование контекста одного файла/POM и выбирает конфигурацию с наименьшей оценочной полной стоимостью. Поэтому один режим адаптируется к маленьким, средним и большим наборам тестов. Результат сохраняется в `migration/plan/wave-tuning.md/json`. Ручной запуск эксперимента: `selenium-pw-migrator migration tune-wave-plan --input ./SeleniumTests --workspace migration --out migration/plan-tuning`. Подробнее: [подбор параметров wave-плана](docs/wave-plan-tuning.ru.md).
+
 ### 3. Миграция с другим агентом
 
 ```bash
@@ -82,7 +92,7 @@ selenium-pw-migrator report serve --input migration/runs/latest --static-only --
 
 Открывай `migration/dashboard/latest/report-dashboard.html` до ручного чтения JSON/TXT артефактов. Если остались TODO, `explain-todo` дополнительно пишет `suggested-config-patch.md/json` с grouped root causes, “fix this profile mapping first”, confidence/evidence badges и черновиками UiTarget/Method/Table mappings для ревью.
 
-Для ежедневной эксплуатации уже созданного wave workspace см. [операторский runbook для wave mode](docs/wave-mode-operator-runbook.ru.md): там описаны `BLOCKED_BY_GATE`, `current-ticket.md`, lifecycle sentinel findings, wave quality budget, mapping research memory и безопасная отправка feedback bundle автору мигратора.
+Полный справочник режимов и алиасов находится в [документации `/supervised-task`](docs/supervised-task-modes.ru.md): zero-argument resume, `waves`, `waves fresh`, `continue`, `sentinel | inspect | qa` и семантика остановок. Для ежедневной эксплуатации уже созданного wave workspace см. [операторский runbook для wave mode](docs/wave-mode-operator-runbook.ru.md): там описаны `BLOCKED_BY_GATE`, `current-ticket.md`, lifecycle sentinel findings, wave quality budget, mapping research memory и безопасная отправка feedback bundle автору мигратора.
 
 ### Безопасный feedback bundle для улучшения мигратора
 
@@ -468,3 +478,8 @@ Windows OpenCode Desktop shortcut: `--project-desktop` остаётся alias д
 
 When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts with `To continue, run: /supervised-task continue`, which triggers post-final research by default.
 
+
+
+## Performance
+
+- [Проверка производительности](docs/performance-testing.ru.md)

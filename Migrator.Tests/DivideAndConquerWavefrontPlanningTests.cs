@@ -18,6 +18,7 @@ public class DivideAndConquerWavefrontPlanningTests
         Assert.Contains("migration-wave-plan/v1", command);
         Assert.Contains("migration inventory", command);
         Assert.Contains("migration cluster", command);
+        Assert.Contains("migration tune-wave-plan", command);
         Assert.Contains("migration plan --strategy wavefront", command);
         Assert.Contains("migration plan show", command);
         Assert.Contains("Planning is read-only", command);
@@ -38,13 +39,18 @@ public class DivideAndConquerWavefrontPlanningTests
         Assert.Contains("plan.md", command);
         Assert.Contains("selected-tests.txt", command);
         Assert.Contains("memory-recall.md", command);
+        Assert.Contains("wave-tuning.json", command);
+        Assert.Contains("wave-tuning.md", command);
+        Assert.Contains("recommended-preview", command);
         Assert.Contains("next-commands.md", command);
         Assert.Contains("run-summary.md", command);
         Assert.Contains("input-scope.json", command);
         Assert.Contains("source-scope", command);
         Assert.Contains("generated", command);
         Assert.Contains("representatives", command);
-        Assert.Contains("cluster-expansion", command);
+        Assert.Contains("adaptive-batch", command);
+        Assert.Contains("SameFileMarginalCostPercent", command);
+        Assert.Contains("ComputeEffectiveComplexity", command);
         Assert.Contains("RepresentativeScore", command);
         Assert.Contains("DominantRisk", command);
         Assert.Contains("memory explain --workspace", command);
@@ -126,6 +132,8 @@ public class DivideAndConquerWavefrontPlanningTests
         Assert.Contains("auto-detect", supervised);
         Assert.Contains("kit bootstrap-opencode", supervised);
         Assert.Contains("migration plan --input", supervised);
+        Assert.Contains("--wave-profile auto", supervised);
+        Assert.Contains("wave-tuning.md", supervised);
         Assert.Contains("migration run-wave --plan", supervised);
         Assert.Contains("full-source migration is not allowed", supervised);
         Assert.Contains("OPENCODE_PROJECT_CONFIG_APPLIED", kitCommand);
@@ -151,6 +159,7 @@ public class DivideAndConquerWavefrontPlanningTests
         Assert.Contains("config-delta", rfc);
         Assert.Contains("Divide-and-conquer wave planning", readme);
         Assert.Contains("migration plan --input", readme);
+        Assert.Contains("tune-wave-plan", readme);
         Assert.Contains("Wavefront planning", toolReadme);
     }
 

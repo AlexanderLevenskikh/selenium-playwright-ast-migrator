@@ -1,0 +1,12 @@
+{
+  "$schema": "migrator-performance-budgets/v1",
+  "scenarios": {
+    "orchestrator-baseline": {
+      "softDurationSeconds": 30,
+      "hardDurationSeconds": 90,
+      "softPeakMemoryMb": 768,
+      "hardPeakMemoryMb": 1536,
+      "notes": "Soft limits are trend signals. Hard limits protect CI from hangs and runaway resource use."
+    }
+  }
+}

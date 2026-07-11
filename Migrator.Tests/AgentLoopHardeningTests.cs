@@ -1183,6 +1183,8 @@ public class AgentLoopHardeningTests
     [Fact]
     public void ArtifactHygiene_RejectsContradictoryOrPollutedRunReports()
     {
+        var installedScriptValidator = Read("templates/migration-kit/scripts/validate-installed-scripts.ps1");
+        var installedScriptValidatorShell = Read("templates/migration-kit/scripts/validate-installed-scripts.sh");
         var hygieneScript = Read("templates/migration-kit/scripts/validate-run-artifacts.ps1");
         var hygieneShell = Read("templates/migration-kit/scripts/validate-run-artifacts.sh");
         var finalGate = Read("templates/migration-kit/scripts/check-final-gate.ps1");
@@ -1203,6 +1205,9 @@ public class AgentLoopHardeningTests
         var verifyNupkg = Read("scripts/verify-nupkg-contents.ps1");
         var verifyNupkgSh = Read("scripts/verify-nupkg-contents.sh");
 
+        Assert.Contains("WORKSPACE_SCRIPT_VALIDATE_PASS", installedScriptValidator);
+        Assert.Contains("WORKSPACE_SCRIPT_VALIDATE_FAIL", installedScriptValidator);
+        Assert.Contains("Install PowerShell 7:", installedScriptValidatorShell);
         Assert.Contains("artifact-hygiene/v1", hygieneScript);
         Assert.Contains("ARTIFACT_HYGIENE_PASS", hygieneScript);
         Assert.Contains("ARTIFACT_HYGIENE_FAIL", hygieneScript);
@@ -1216,12 +1221,18 @@ public class AgentLoopHardeningTests
         Assert.Contains("Plan.md contains raw shell/write payloads", hygieneScript);
         Assert.Contains("REAL_EXPORT", hygieneScript);
         Assert.Contains("UNAVAILABLE_WITH_REASON", hygieneScript);
+        Assert.Contains("Run id: `{0}`", hygieneScript);
+        Assert.DoesNotContain("Run id: `$latestRunId`", hygieneScript);
         Assert.Contains("pwsh", hygieneShell);
 
+        Assert.Contains("installed-script-syntax", finalGate);
+        Assert.Contains("validate-installed-scripts.ps1", finalGate);
         Assert.Contains("artifact-hygiene", finalGate);
         Assert.Contains("validate-run-artifacts.ps1", finalGate);
         Assert.Contains("schema artifact-hygiene/v1", finalGate);
 
+        Assert.Contains("validate-installed-scripts.ps1", policy);
+        Assert.Contains("validate-installed-scripts.sh", policy);
         Assert.Contains("validate-run-artifacts.ps1", policy);
         Assert.Contains("validate-run-artifacts.sh", policy);
         Assert.Contains("Artifact hygiene", contract);
@@ -1234,6 +1245,13 @@ public class AgentLoopHardeningTests
         Assert.Contains("validate-run-artifacts.ps1", projectAgents);
         Assert.Contains("validate-run-artifacts.ps1", teamReadme);
 
+        Assert.Contains("installed-script-validator", kitCommand);
+        Assert.Contains("installed-script-syntax", kitCommand);
+        Assert.Contains("scripts/validate-installed-scripts.ps1", installScript);
+        Assert.Contains("templates/migration-kit/scripts/validate-installed-scripts.ps1", bundleScript);
+        Assert.Contains("templates/migration-kit/scripts/validate-installed-scripts.ps1", verifyBundle);
+        Assert.Contains("validate-installed-scripts\\.ps1", verifyNupkg);
+        Assert.Contains("validate-installed-scripts\\.ps1", verifyNupkgSh);
         Assert.Contains("artifact-hygiene", kitCommand);
         Assert.Contains("scripts/validate-run-artifacts.ps1", installScript);
         Assert.Contains("templates/migration-kit/scripts/validate-run-artifacts.ps1", bundleScript);

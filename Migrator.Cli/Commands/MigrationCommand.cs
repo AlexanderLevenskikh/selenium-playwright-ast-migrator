@@ -12,6 +12,7 @@ internal static class MigrationCommand
     const string InventorySchema = "migration-inventory/v1";
     const string ClustersSchema = "migration-clusters/v1";
     const string WavePlanSchema = "migration-wave-plan/v1";
+    const string WaveTuningSchema = "migration-wave-tuning/v1";
     const string SourceScopeSchema = "migration-source-scope/v1";
 
     static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
@@ -57,6 +58,8 @@ internal static class MigrationCommand
         {
             "inventory" => RunInventory(options),
             "cluster" => RunCluster(options),
+            "tune-wave-plan" => RunTuneWavePlan(options),
+            "tune" => RunTuneWavePlan(options),
             "plan" => RunPlan(options),
             "run-wave" => RunWave(options),
             "refresh-wave-status" => RunRefreshWaveStatus(options),
@@ -138,10 +141,19 @@ internal static class MigrationCommand
         }
 
         var clusters = BuildClusters(inventory);
+        WaveTuningReport? tuning = null;
+        if (string.Equals(options.WaveProfile, "auto", StringComparison.OrdinalIgnoreCase))
+        {
+            tuning = TuneWavePlan(inventory, clusters, options);
+            options = ApplyTuningRecommendation(options, tuning.Recommended);
+        }
+
         var plan = BuildWavePlan(inventory, clusters, options);
         Directory.CreateDirectory(options.Out);
         WriteInventoryArtifacts(options.Out, "json", inventory);
         WriteClusterArtifacts(options.Out, "json", clusters);
+        if (tuning != null)
+            WriteWaveTuningArtifacts(options.Out, tuning);
         WritePlanArtifacts(options.Out, options.Format, plan);
         WriteMemoryRecallGuide(options.Out, options.Workspace, plan);
         WriteNextCommands(options.Out, options);
@@ -151,8 +163,59 @@ internal static class MigrationCommand
         Console.WriteLine($"Tests: {inventory.Tests.Length}");
         Console.WriteLine($"Clusters: {clusters.Clusters.Length}");
         Console.WriteLine($"Waves: {plan.Waves.Length}");
+        Console.WriteLine($"Wave profile: {options.WaveProfile}");
+        if (tuning != null)
+        {
+            Console.WriteLine($"Auto-tuned reference: {tuning.TargetWaveCount} wave(s); selected {tuning.Recommended.EstimatedWaveCount}; confidence {tuning.Confidence}");
+            Console.WriteLine($"Recommended budgets: tests {options.MaxWaveSize}, files {options.MaxWaveFiles}, actions soft/hard {options.MaxWaveActions}/{options.HardWaveActions}, effective complexity soft/hard {options.MaxWaveComplexity}/{options.HardWaveComplexity}, same-file marginal cost {options.SameFileMarginalCostPercent}%");
+        }
         Console.WriteLine($"Artifacts: {Path.GetFullPath(options.Out)}");
         Console.WriteLine("Next: selenium-pw-migrator migration plan show --plan " + QuoteForShell(options.Out));
+        return 0;
+    }
+
+    static int RunTuneWavePlan(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        options = NormalizeProjectPaths(options, repoRoot, normalizeInput: false);
+
+        if (!TryResolvePlanInput(options, repoRoot, out var resolvedInput, out var inputError))
+        {
+            Console.Error.WriteLine(inputError);
+            return 2;
+        }
+
+        if (!ValidateInput(resolvedInput, out var fullInput))
+            return 2;
+
+        options = options with { Input = fullInput };
+        var inventory = BuildInventory(fullInput);
+        if (inventory.Tests.Length == 0)
+        {
+            Console.Error.WriteLine($"No Selenium-like test methods found under: {fullInput}");
+            return 2;
+        }
+
+        var clusters = BuildClusters(inventory);
+        var tuning = TuneWavePlan(inventory, clusters, options);
+        Directory.CreateDirectory(options.Out);
+        WriteInventoryArtifacts(options.Out, "json", inventory);
+        WriteClusterArtifacts(options.Out, "json", clusters);
+        WriteWaveTuningArtifacts(options.Out, tuning);
+
+        var recommended = ApplyTuningRecommendation(options, tuning.Recommended);
+        var preview = BuildWavePlan(inventory, clusters, recommended);
+        WritePlanArtifacts(Path.Combine(options.Out, "recommended-preview"), options.Format, preview);
+
+        Console.WriteLine("MIGRATION_WAVE_TUNING_READY");
+        Console.WriteLine($"Input: {inventory.InputPath}");
+        Console.WriteLine($"Tests: {inventory.Tests.Length}");
+        Console.WriteLine($"Reference waves: {tuning.TargetWaveCount}");
+        Console.WriteLine($"Recommended waves: {tuning.Recommended.EstimatedWaveCount}");
+        Console.WriteLine($"Recommendation confidence: {tuning.Confidence}; score gap {tuning.ScoreGapPercent}%");
+        Console.WriteLine($"Recommended budgets: tests {tuning.Recommended.MaxWaveSize}, files {tuning.Recommended.MaxWaveFiles}, actions soft/hard {tuning.Recommended.MaxWaveActions}/{tuning.Recommended.HardWaveActions}, effective complexity soft/hard {tuning.Recommended.MaxWaveComplexity}/{tuning.Recommended.HardWaveComplexity}, same-file marginal cost {tuning.Recommended.SameFileMarginalCostPercent}%");
+        Console.WriteLine($"Artifacts: {Path.GetFullPath(options.Out)}");
+        Console.WriteLine("No agents or migration execution were started.");
         return 0;
     }
 
@@ -289,9 +352,9 @@ internal static class MigrationCommand
         WriteWaveCommands(outPath, sourceScopeDir, generatedDir, options, selectedTestsPath);
         WriteWavePreflightBudget(outPath, plan, wave);
 
-        var automaticExecutionBlocked = options.ExecuteMigrate && !string.Equals(wave.BudgetStatus, "PASS", StringComparison.OrdinalIgnoreCase);
+        var automaticExecutionBlocked = options.ExecuteMigrate && string.Equals(wave.BudgetStatus, "BLOCKED", StringComparison.OrdinalIgnoreCase);
         var execution = automaticExecutionBlocked
-            ? new WaveMigrateExecution("blocked-by-complexity-budget", "Wave exceeds the planning budget. Split it or explicitly revise the plan before migration; automatic execution was not started.", 2)
+            ? new WaveMigrateExecution("blocked-by-complexity-budget", "Wave exceeds the hard planning ceiling. Split it or explicitly revise the plan before migration; automatic execution was not started.", 2)
             : options.ExecuteMigrate
                 ? TryExecuteMigrate(outPath, sourceScopeDir, generatedDir, options, selectedTestsPath)
                 : new WaveMigrateExecution("prepared", "--execute-migrate false; generated/ contains a README placeholder until migrate is run.", 0);
@@ -774,7 +837,7 @@ internal static class MigrationCommand
         sh.AppendLine("#!/usr/bin/env bash");
         sh.AppendLine("set -uo pipefail");
         sh.AppendLine($"preflight={QuoteForShell(preflightPath)}");
-        sh.AppendLine("if ! grep -Eq '\"status\"[[:space:]]*:[[:space:]]*\"PASS\"' \"$preflight\"; then");
+        sh.AppendLine("if grep -Eq '\"status\"[[:space:]]*:[[:space:]]*\"BLOCKED\"' \"$preflight\"; then");
         sh.AppendLine("  echo 'WAVE_PREFLIGHT_BUDGET_BLOCKED: split or replan this wave before migration.' >&2");
         sh.AppendLine("  exit 2");
         sh.AppendLine("fi");
@@ -787,7 +850,7 @@ internal static class MigrationCommand
         var ps = new StringBuilder();
         ps.AppendLine("$ErrorActionPreference = 'Continue'");
         ps.AppendLine($"$preflight = Get-Content -Raw -Path '{preflightPath.Replace("'", "''")}' | ConvertFrom-Json");
-        ps.AppendLine("if ([string]$preflight.status -ne 'PASS') { Write-Error 'WAVE_PREFLIGHT_BUDGET_BLOCKED: split or replan this wave before migration.'; exit 2 }");
+        ps.AppendLine("if ([string]$preflight.status -eq 'BLOCKED') { Write-Error 'WAVE_PREFLIGHT_BUDGET_BLOCKED: split or replan this wave before migration.'; exit 2 }");
         ps.AppendLine("$migrateExitCode = 0");
         ps.AppendLine(migrateArgs);
         ps.AppendLine("if ($null -ne $LASTEXITCODE) { $migrateExitCode = $LASTEXITCODE }");
@@ -844,17 +907,24 @@ internal static class MigrationCommand
                 ["testCount"] = wave.Tests.Length,
                 ["sourceFileCount"] = wave.SourceFileCount,
                 ["estimatedActions"] = wave.EstimatedActions,
-                ["estimatedComplexity"] = wave.EstimatedComplexity
+                ["rawComplexity"] = wave.RawComplexity,
+                ["estimatedComplexity"] = wave.EstimatedComplexity,
+                ["effectiveComplexity"] = wave.EstimatedComplexity
             },
             ["budgets"] = new SortedDictionary<string, object?>(StringComparer.Ordinal)
             {
                 ["maxWaveSize"] = plan.MaxWaveSize,
                 ["maxWaveFiles"] = plan.MaxWaveFiles,
                 ["maxWaveActions"] = plan.MaxWaveActions,
-                ["maxWaveComplexity"] = plan.MaxWaveComplexity
+                ["maxWaveComplexity"] = plan.MaxWaveComplexity,
+                ["softWaveActions"] = plan.MaxWaveActions,
+                ["hardWaveActions"] = plan.HardWaveActions,
+                ["softWaveComplexity"] = plan.MaxWaveComplexity,
+                ["hardWaveComplexity"] = plan.HardWaveComplexity,
+                ["sameFileMarginalCostPercent"] = plan.SameFileMarginalCostPercent
             },
             ["violations"] = wave.BudgetViolations ?? Array.Empty<string>(),
-            ["automaticExecutionAllowed"] = string.Equals(wave.BudgetStatus, "PASS", StringComparison.OrdinalIgnoreCase)
+            ["automaticExecutionAllowed"] = !string.Equals(wave.BudgetStatus, "BLOCKED", StringComparison.OrdinalIgnoreCase)
         };
         WriteJsonAtomic(Path.Combine(outPath, "preflight-budget.json"), payload);
     }
@@ -869,7 +939,7 @@ internal static class MigrationCommand
         sb.AppendLine($"Cluster: `{wave.Cluster}`");
         sb.AppendLine($"Risk: **{wave.DominantRisk}**");
         sb.AppendLine($"Tests: {wave.Tests.Length}");
-        sb.AppendLine($"Preflight budget: **{wave.BudgetStatus}** (files {wave.SourceFileCount}, actions {wave.EstimatedActions}, complexity {wave.EstimatedComplexity})");
+        sb.AppendLine($"Preflight budget: **{wave.BudgetStatus}** (files {wave.SourceFileCount}, actions {wave.EstimatedActions}, effective/raw complexity {wave.EstimatedComplexity}/{wave.RawComplexity})");
         sb.AppendLine($"Files copied: {copiedFiles}");
         sb.AppendLine($"Missing files: {missingFiles.Count}");
         sb.AppendLine();
@@ -1365,6 +1435,316 @@ internal static class MigrationCommand
         _ => 0
     };
 
+    static MigrationOptions ApplyTuningRecommendation(MigrationOptions options, WaveTuningCandidate recommendation)
+        => options with
+        {
+            WaveProfile = "auto-tuned",
+            MaxWaveSize = recommendation.MaxWaveSize,
+            MaxWaveFiles = recommendation.MaxWaveFiles,
+            MaxWaveActions = recommendation.MaxWaveActions,
+            HardWaveActions = recommendation.HardWaveActions,
+            MaxWaveComplexity = recommendation.MaxWaveComplexity,
+            HardWaveComplexity = recommendation.HardWaveComplexity,
+            SameFileMarginalCostPercent = recommendation.SameFileMarginalCostPercent
+        };
+
+    static WaveTuningReport TuneWavePlan(MigrationInventoryReport inventory, MigrationClusterReport clusters, MigrationOptions options)
+    {
+        var totalTests = inventory.Tests.Length;
+        var distinctFiles = inventory.Tests.Select(t => t.File).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        var smokeSize = Math.Max(1, Math.Min(options.SmokeWaveSize, totalTests));
+        var remainingTests = Math.Max(0, totalTests - smokeSize);
+        var referenceWaves = options.TargetWaveCount > 0
+            ? options.TargetWaveCount
+            : DeriveReferenceWaveCount(remainingTests, Math.Max(0, distinctFiles - 1));
+
+        if (remainingTests == 0)
+        {
+            var single = new WaveTuningCandidate(
+                MaxWaveSize: 1,
+                MaxWaveFiles: 1,
+                MaxWaveActions: Math.Max(1, inventory.Tests.Sum(t => t.SeleniumActions)),
+                HardWaveActions: Math.Max(1, inventory.Tests.Sum(t => t.SeleniumActions)),
+                MaxWaveComplexity: Math.Max(1, inventory.Tests.Sum(EstimateTestComplexity)),
+                HardWaveComplexity: Math.Max(1, inventory.Tests.Sum(EstimateTestComplexity)),
+                SameFileMarginalCostPercent: 100,
+                EstimatedWaveCount: 1,
+                NonSmokeSingletons: 0,
+                FileFragmentation: 0,
+                HeavySingleTests: 0,
+                SoftOverrun: 0,
+                LoadImbalance: 0,
+                EstimatedWorkCost: Math.Max(1, inventory.Tests.Sum(EstimateTestComplexity)),
+                OrchestrationCost: Math.Max(1, options.RoleOverhead),
+                CoordinationRiskCost: 0,
+                Score: Math.Max(1, inventory.Tests.Sum(EstimateTestComplexity)) + Math.Max(1, options.RoleOverhead));
+
+            return new WaveTuningReport(
+                SchemaVersion: WaveTuningSchema,
+                GeneratedAtUtc: DateTimeOffset.UtcNow,
+                InputPath: inventory.InputPath,
+                Tests: totalTests,
+                Files: distinctFiles,
+                Clusters: clusters.Clusters.Length,
+                TargetWaveCount: 1,
+                RoleOverhead: Math.Max(1, options.RoleOverhead),
+                SearchCandidatesEvaluated: 1,
+                Recommended: single,
+                TopCandidates: new[] { single },
+                Confidence: "high",
+                ScoreGapPercent: 100,
+                Notes: BuildTuningNotes(options.TargetWaveCount > 0));
+        }
+
+        var smokeIds = inventory.Tests
+            .OrderBy(t => RiskWeight(t.Risk))
+            .ThenBy(EstimateTestComplexity)
+            .ThenBy(t => t.SeleniumActions)
+            .ThenBy(t => t.TestId, StringComparer.OrdinalIgnoreCase)
+            .Take(smokeSize)
+            .Select(t => t.TestId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var workload = inventory.Tests.Where(t => !smokeIds.Contains(t.TestId)).ToArray();
+        var workloadFiles = workload.Select(t => t.File).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        var testComplexities = workload.Select(EstimateTestComplexity).OrderBy(x => x).ToArray();
+        var actionCounts = workload.Select(t => t.SeleniumActions).OrderBy(x => x).ToArray();
+        var medianComplexity = Math.Max(1, Quantile(testComplexities, 0.50));
+        var p75Complexity = Math.Max(medianComplexity, Quantile(testComplexities, 0.75));
+        var p95Complexity = Math.Max(p75Complexity, Quantile(testComplexities, 0.95));
+        var p75Actions = Math.Max(1, Quantile(actionCounts, 0.75));
+        var p95Actions = Math.Max(p75Actions, Quantile(actionCounts, 0.95));
+
+        var maxSizes = BuildWaveSizeCandidates(remainingTests);
+        var maxFiles = BuildWaveFileCandidates(workloadFiles);
+        if (remainingTests > 500)
+            maxSizes = SelectSpread(maxSizes, 10);
+        if (workloadFiles > 100)
+            maxFiles = SelectSpread(maxFiles, 6);
+        var marginalCosts = workloadFiles >= remainingTests
+            ? new[] { 75, 100 }
+            : remainingTests > 1000 ? new[] { 30, 50 } : new[] { 25, 35, 45, 60 };
+        var pressureFactors = remainingTests > 1000 ? new[] { 100, 125 } : new[] { 90, 110, 130 };
+        var referenceNonSmokeWaves = Math.Max(1, referenceWaves - 1);
+        var comfortableTestsPerWave = Math.Clamp((int)Math.Round(Math.Sqrt(remainingTests) * 1.25), 4, 14);
+        var comfortableFilesPerWave = Math.Clamp((int)Math.Round(Math.Sqrt(Math.Max(1, workloadFiles))), 2, 5);
+        var candidates = new List<WaveTuningCandidate>();
+
+        foreach (var maxSize in maxSizes)
+        foreach (var fileLimit in maxFiles)
+        foreach (var marginal in marginalCosts)
+        {
+            var lowerBoundWaves = Math.Max(
+                1,
+                Math.Max(
+                    (int)Math.Ceiling(remainingTests / (double)Math.Max(1, maxSize)),
+                    (int)Math.Ceiling(workloadFiles / (double)Math.Max(1, fileLimit))));
+            var totalEffectiveComplexity = ComputeEffectiveComplexity(workload, marginal);
+            var totalActions = workload.Sum(t => t.SeleniumActions);
+            var averageComplexity = Math.Max(p75Complexity, (int)Math.Ceiling(totalEffectiveComplexity / (double)lowerBoundWaves));
+            var averageActions = Math.Max(p75Actions, (int)Math.Ceiling(totalActions / (double)lowerBoundWaves));
+            var comfortableComplexityPerWave = Math.Max(p75Complexity, (int)Math.Ceiling(totalEffectiveComplexity / (double)referenceNonSmokeWaves));
+            var comfortableActionsPerWave = Math.Max(p75Actions, (int)Math.Ceiling(totalActions / (double)referenceNonSmokeWaves));
+
+            foreach (var pressure in pressureFactors)
+            {
+                var softComplexity = Math.Max(p75Complexity, (int)Math.Round(averageComplexity * pressure / 100.0));
+                var hardComplexity = Math.Max(
+                    Math.Max(p95Complexity + medianComplexity, (int)Math.Ceiling(softComplexity * 1.65)),
+                    softComplexity + medianComplexity);
+                var softActions = Math.Max(p75Actions, (int)Math.Round(averageActions * pressure / 100.0));
+                var hardActions = Math.Max(
+                    Math.Max(p95Actions + Math.Max(1, p75Actions), (int)Math.Ceiling(softActions * 1.75)),
+                    softActions + Math.Max(1, p75Actions));
+
+                var candidateOptions = options with
+                {
+                    WaveProfile = "experiment",
+                    MaxWaveSize = Math.Min(maxSize, remainingTests),
+                    MaxWaveFiles = Math.Min(fileLimit, Math.Max(1, workloadFiles)),
+                    MaxWaveActions = Math.Max(1, softActions),
+                    HardWaveActions = Math.Max(1, hardActions),
+                    MaxWaveComplexity = Math.Max(1, softComplexity),
+                    HardWaveComplexity = Math.Max(1, hardComplexity),
+                    SameFileMarginalCostPercent = marginal
+                };
+
+                var plan = BuildWavePlan(inventory, clusters, candidateOptions);
+                var blocked = plan.Waves.Count(w => string.Equals(w.BudgetStatus, "BLOCKED", StringComparison.OrdinalIgnoreCase));
+                if (blocked > 0)
+                    continue;
+
+                var nonSmokeWaves = plan.Waves.Skip(1).ToArray();
+                var nonSmokeSingletons = nonSmokeWaves.Count(w => w.Tests.Length == 1);
+                var fileFragmentation = nonSmokeWaves
+                    .SelectMany(w => w.Files.Select(file => new { file, w.Id }))
+                    .GroupBy(x => x.file, StringComparer.OrdinalIgnoreCase)
+                    .Sum(g => Math.Max(0, g.Select(x => x.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count() - 1));
+                var softOverrun = nonSmokeWaves.Sum(w =>
+                    Math.Max(0, w.EstimatedComplexity - candidateOptions.MaxWaveComplexity) / (double)Math.Max(1, candidateOptions.MaxWaveComplexity)
+                    + Math.Max(0, w.EstimatedActions - candidateOptions.MaxWaveActions) / (double)Math.Max(1, candidateOptions.MaxWaveActions));
+                var loads = nonSmokeWaves.Select(w => (double)w.EstimatedComplexity).ToArray();
+                var imbalance = loads.Length <= 1 || loads.Average() <= 0
+                    ? 0
+                    : Math.Sqrt(loads.Select(x => Math.Pow(x - loads.Average(), 2)).Average()) / loads.Average();
+                var heavySingles = plan.Waves.Count(w => string.Equals(w.BudgetStatus, "HEAVY_SINGLE_TEST", StringComparison.OrdinalIgnoreCase));
+                var roleOverhead = Math.Max(1, options.RoleOverhead);
+                var estimatedWorkCost = plan.Waves.Sum(w => (double)w.EstimatedComplexity);
+                var orchestrationCost = plan.Waves.Length * (double)roleOverhead;
+                var coordinationRiskCost = nonSmokeWaves.Sum(w =>
+                {
+                    // Candidate ceilings are allowed to be broad. Risk is measured against an
+                    // inventory-derived comfortable scope, otherwise a huge candidate would make
+                    // its own oversized waves appear artificially cheap.
+                    var testPressure = w.Tests.Length / (double)Math.Max(1, comfortableTestsPerWave);
+                    var filePressure = w.SourceFileCount / (double)Math.Max(1, comfortableFilesPerWave);
+                    var complexityPressure = w.EstimatedComplexity / (double)Math.Max(1, comfortableComplexityPerWave);
+                    var actionPressure = w.EstimatedActions / (double)Math.Max(1, comfortableActionsPerWave);
+                    return roleOverhead * (
+                        (Math.Pow(Math.Max(0, testPressure - 0.70), 2.4) * 0.50)
+                        + (Math.Pow(Math.Max(0, filePressure - 0.70), 2.2) * 0.30)
+                        + (Math.Pow(Math.Max(0, complexityPressure - 0.70), 2.2) * 0.45)
+                        + (Math.Pow(Math.Max(0, actionPressure - 0.80), 2.0) * 0.10));
+                });
+                coordinationRiskCost += nonSmokeSingletons * roleOverhead * 0.65;
+                coordinationRiskCost += fileFragmentation * Math.Max(medianComplexity, roleOverhead * 0.20);
+                coordinationRiskCost += softOverrun * roleOverhead * 0.60;
+                coordinationRiskCost += imbalance * roleOverhead * 0.40;
+                coordinationRiskCost += heavySingles * roleOverhead * 0.35;
+                if (options.TargetWaveCount > 0)
+                    coordinationRiskCost += Math.Abs(plan.Waves.Length - options.TargetWaveCount) * roleOverhead * 1.5;
+
+                var totalCost = estimatedWorkCost + orchestrationCost + coordinationRiskCost;
+                candidates.Add(new WaveTuningCandidate(
+                    MaxWaveSize: candidateOptions.MaxWaveSize,
+                    MaxWaveFiles: candidateOptions.MaxWaveFiles,
+                    MaxWaveActions: candidateOptions.MaxWaveActions,
+                    HardWaveActions: candidateOptions.HardWaveActions,
+                    MaxWaveComplexity: candidateOptions.MaxWaveComplexity,
+                    HardWaveComplexity: candidateOptions.HardWaveComplexity,
+                    SameFileMarginalCostPercent: candidateOptions.SameFileMarginalCostPercent,
+                    EstimatedWaveCount: plan.Waves.Length,
+                    NonSmokeSingletons: nonSmokeSingletons,
+                    FileFragmentation: fileFragmentation,
+                    HeavySingleTests: heavySingles,
+                    SoftOverrun: Math.Round(softOverrun, 3),
+                    LoadImbalance: Math.Round(imbalance, 3),
+                    EstimatedWorkCost: Math.Round(estimatedWorkCost, 3),
+                    OrchestrationCost: Math.Round(orchestrationCost, 3),
+                    CoordinationRiskCost: Math.Round(coordinationRiskCost, 3),
+                    Score: Math.Round(totalCost, 3)));
+            }
+        }
+
+        if (candidates.Count == 0)
+            throw new InvalidOperationException("Wave tuning produced no feasible candidate profiles.");
+
+        var ranked = candidates
+            .OrderBy(c => c.Score)
+            .ThenBy(c => c.EstimatedWaveCount)
+            .ThenBy(c => c.FileFragmentation)
+            .ThenBy(c => c.NonSmokeSingletons)
+            .ThenBy(c => c.LoadImbalance)
+            .Take(25)
+            .ToArray();
+        var scoreGapPercent = ranked.Length <= 1 || ranked[0].Score <= 0
+            ? 100
+            : Math.Round((ranked[1].Score - ranked[0].Score) / ranked[0].Score * 100.0, 2);
+        var confidence = scoreGapPercent >= 8 ? "high" : scoreGapPercent >= 2 ? "medium" : "low";
+
+        return new WaveTuningReport(
+            SchemaVersion: WaveTuningSchema,
+            GeneratedAtUtc: DateTimeOffset.UtcNow,
+            InputPath: inventory.InputPath,
+            Tests: totalTests,
+            Files: distinctFiles,
+            Clusters: clusters.Clusters.Length,
+            TargetWaveCount: referenceWaves,
+            RoleOverhead: Math.Max(1, options.RoleOverhead),
+            SearchCandidatesEvaluated: candidates.Count,
+            Recommended: ranked[0],
+            TopCandidates: ranked,
+            Confidence: confidence,
+            ScoreGapPercent: scoreGapPercent,
+            Notes: BuildTuningNotes(options.TargetWaveCount > 0));
+    }
+
+    static string[] BuildTuningNotes(bool explicitTarget)
+        => new[]
+        {
+            "This is a deterministic static experiment: it does not invoke agents or run migration.",
+            "Candidate limits are derived from the current inventory size and complexity distribution rather than a project-specific constant.",
+            "The score estimates migration work, full role-cycle overhead, source-file fragmentation, load imbalance, and coordination risk.",
+            "Same-file tests use marginal complexity instead of paying the full file/POM discovery cost repeatedly.",
+            "Soft action/complexity limits guide packing; only the broader dynamically derived hard ceiling blocks a multi-test wave.",
+            explicitTarget
+                ? "The explicit --target-waves value is treated as an optimization constraint."
+                : "The reported target wave count is a diagnostic reference; the recommendation is selected by estimated total cost, not forced to that number.",
+            "Actual wall-clock performance can be calibrated later by passing a measured --role-overhead value."
+        };
+
+    static int DeriveReferenceWaveCount(int remainingTests, int remainingFiles)
+    {
+        if (remainingTests <= 0)
+            return 1;
+        var adaptiveTestsPerWave = Math.Clamp((int)Math.Round(Math.Sqrt(remainingTests) * 1.5), 4, 16);
+        var adaptiveFilesPerWave = Math.Clamp((int)Math.Round(Math.Sqrt(Math.Max(1, remainingFiles))), 2, 6);
+        return 1 + Math.Max(
+            (int)Math.Ceiling(remainingTests / (double)adaptiveTestsPerWave),
+            (int)Math.Ceiling(Math.Max(1, remainingFiles) / (double)adaptiveFilesPerWave));
+    }
+
+    static int[] BuildWaveSizeCandidates(int remainingTests)
+    {
+        var values = new SortedSet<int>();
+        foreach (var value in new[] { 2, 4, 6, 8, 10, 12, 16, 24, 32, 48, 64 })
+            if (value <= remainingTests)
+                values.Add(value);
+        foreach (var desiredWaves in new[] { 2, 3, 4, 6, 8, 10, 12, 16, 24, 32 })
+        {
+            var value = (int)Math.Ceiling(remainingTests / (double)desiredWaves);
+            if (value >= 2 && value <= Math.Min(64, remainingTests))
+                values.Add(value);
+        }
+        values.Add(Math.Max(1, Math.Min(remainingTests, 64)));
+        return SelectSpread(values.ToArray(), 16);
+    }
+
+    static int[] BuildWaveFileCandidates(int distinctFiles)
+    {
+        var values = new SortedSet<int>();
+        foreach (var value in new[] { 1, 2, 3, 4, 5, 6, 8, 10, 12 })
+            if (value <= Math.Max(1, distinctFiles))
+                values.Add(value);
+        values.Add(Math.Max(1, Math.Min(distinctFiles, 12)));
+        return SelectSpread(values.ToArray(), 8);
+    }
+
+    static int[] SelectSpread(int[] values, int maxCount)
+    {
+        if (values.Length <= maxCount)
+            return values;
+        var selected = new SortedSet<int> { values[0], values[^1] };
+        for (var index = 1; index < maxCount - 1; index++)
+        {
+            var position = (int)Math.Round(index * (values.Length - 1) / (double)(maxCount - 1));
+            selected.Add(values[Math.Clamp(position, 0, values.Length - 1)]);
+        }
+        return selected.ToArray();
+    }
+
+    static int Quantile(int[] sortedValues, double quantile)
+    {
+        if (sortedValues.Length == 0)
+            return 0;
+        var position = Math.Clamp(quantile, 0, 1) * (sortedValues.Length - 1);
+        var lower = (int)Math.Floor(position);
+        var upper = (int)Math.Ceiling(position);
+        if (lower == upper)
+            return sortedValues[lower];
+        var weight = position - lower;
+        return (int)Math.Round(sortedValues[lower] + ((sortedValues[upper] - sortedValues[lower]) * weight));
+    }
+
     static MigrationWavePlan BuildWavePlan(MigrationInventoryReport inventory, MigrationClusterReport clusters, MigrationOptions options)
     {
         var maxWaveSize = Math.Max(1, options.MaxWaveSize);
@@ -1372,15 +1752,8 @@ internal static class MigrationCommand
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var waves = new List<MigrationWave>();
 
-        var orderedClusters = clusters.Clusters
-            .OrderBy(c => options.PreferLowRiskFirst ? RiskWeight(c.DominantRisk) : -RiskWeight(c.DominantRisk))
-            .ThenBy(c => c.Tests)
-            .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        // A production wavefront must prove the lifecycle on one cheap test before it mixes
-        // representatives from several clusters. This keeps the first wave a smoke test rather
-        // than an accidental dependency-closure stress test.
+        // Only the first wave is intentionally a singleton. It proves the lifecycle before the
+        // planner starts amortizing role overhead across file/POM-affine batches.
         var smokeCandidates = clusters.Tests
             .OrderBy(t => RiskWeight(t.Risk))
             .ThenBy(EstimateTestComplexity)
@@ -1388,35 +1761,20 @@ internal static class MigrationCommand
             .ThenBy(t => t.TestId, StringComparer.OrdinalIgnoreCase)
             .Take(Math.Max(1, options.SmokeWaveSize))
             .ToArray();
-        AddBudgetedWaves(waves, used, "smoke-validation", "mixed", smokeCandidates, options);
+        AddWave(waves, used, "smoke-validation", "mixed", smokeCandidates, options);
 
-        var representativeBuffer = new List<MigrationTestInventoryItem>();
-        foreach (var cluster in orderedClusters)
+        var remaining = clusters.Tests
+            .Where(t => !used.Contains(t.TestId))
+            .ToArray();
+        foreach (var chunk in PackByBudget(remaining, options))
         {
-            var clusterTests = clusters.Tests
-                .Where(t => t.Cluster.Equals(cluster.Name, StringComparison.OrdinalIgnoreCase))
-                .Where(t => !used.Contains(t.TestId))
-                .OrderBy(t => RiskWeight(t.Risk))
-                .ThenBy(EstimateTestComplexity)
-                .ThenByDescending(t => t.RepresentativeScore)
-                .ThenBy(t => t.TestId, StringComparer.OrdinalIgnoreCase)
-                .Take(repsPerCluster);
-            representativeBuffer.AddRange(clusterTests);
-        }
-        AddBudgetedWaves(waves, used, "representatives", "mixed", representativeBuffer, options);
-
-        foreach (var cluster in orderedClusters)
-        {
-            var remaining = clusters.Tests
-                .Where(t => t.Cluster.Equals(cluster.Name, StringComparison.OrdinalIgnoreCase))
-                .Where(t => !used.Contains(t.TestId))
-                .OrderBy(t => RiskWeight(t.Risk))
-                .ThenBy(EstimateTestComplexity)
-                .ThenByDescending(t => t.RepresentativeScore)
-                .ThenBy(t => t.TestId, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
-            AddBudgetedWaves(waves, used, "cluster-expansion", cluster.Name, remaining, options);
+            var dominantCluster = chunk
+                .GroupBy(t => t.Cluster, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(g => g.Count())
+                .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.Key)
+                .FirstOrDefault() ?? "mixed";
+            AddWave(waves, used, "adaptive-batch", dominantCluster, chunk, options);
         }
 
         return new MigrationWavePlan(
@@ -1434,56 +1792,114 @@ internal static class MigrationCommand
             PreferLowRiskFirst: options.PreferLowRiskFirst,
             TotalTests: inventory.Tests.Length,
             TotalClusters: clusters.Clusters.Length,
-            Waves: waves.ToArray());
-    }
-
-    static void AddBudgetedWaves(
-        List<MigrationWave> waves,
-        HashSet<string> used,
-        string phase,
-        string cluster,
-        IEnumerable<MigrationTestInventoryItem> candidates,
-        MigrationOptions options)
-    {
-        var pending = candidates.Where(t => !used.Contains(t.TestId)).ToArray();
-        foreach (var chunk in PackByBudget(pending, options))
-            AddWave(waves, used, phase, cluster, chunk, options);
+            Waves: waves.ToArray(),
+            WaveProfile: options.WaveProfile,
+            HardWaveActions: Math.Max(options.MaxWaveActions, options.HardWaveActions),
+            HardWaveComplexity: Math.Max(options.MaxWaveComplexity, options.HardWaveComplexity),
+            SameFileMarginalCostPercent: Math.Clamp(options.SameFileMarginalCostPercent, 0, 100));
     }
 
     static IReadOnlyList<IReadOnlyList<MigrationTestInventoryItem>> PackByBudget(
         IReadOnlyList<MigrationTestInventoryItem> items,
         MigrationOptions options)
     {
-        var result = new List<IReadOnlyList<MigrationTestInventoryItem>>();
-        var current = new List<MigrationTestInventoryItem>();
-        foreach (var item in items)
+        var chunks = BuildFileChunks(items, options)
+            .OrderByDescending(chunk => ComputeEffectiveComplexity(chunk, options.SameFileMarginalCostPercent))
+            .ThenByDescending(chunk => chunk.Count)
+            .ThenBy(chunk => chunk[0].File, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var bins = new List<List<MigrationTestInventoryItem>>();
+
+        foreach (var chunk in chunks)
         {
-            if (current.Count > 0 && !FitsWaveBudget(current.Append(item), options))
+            var bestIndex = -1;
+            var bestScore = double.MaxValue;
+            for (var index = 0; index < bins.Count; index++)
             {
-                result.Add(current.ToArray());
-                current.Clear();
+                var combined = bins[index].Concat(chunk).ToArray();
+                if (!FitsHardWaveBudget(combined, options))
+                    continue;
+
+                var effective = ComputeEffectiveComplexity(combined, options.SameFileMarginalCostPercent);
+                var files = combined.Select(t => t.File).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+                var clusters = combined.Select(t => t.Cluster).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+                var sameFileOverlap = bins[index].Select(t => t.File).Intersect(chunk.Select(t => t.File), StringComparer.OrdinalIgnoreCase).Any();
+                var targetTests = Math.Max(2, (int)Math.Round(options.MaxWaveSize * 0.85));
+                var score =
+                    Math.Abs(options.MaxWaveComplexity - effective)
+                    + (Math.Abs(targetTests - combined.Length) * 20)
+                    + (files * 25)
+                    + (clusters * 8)
+                    - (sameFileOverlap ? 500 : 0);
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    bestIndex = index;
+                }
             }
 
-            current.Add(item);
-            if (current.Count >= Math.Max(1, options.MaxWaveSize))
-            {
-                result.Add(current.ToArray());
-                current.Clear();
-            }
+            if (bestIndex < 0)
+                bins.Add(chunk.ToList());
+            else
+                bins[bestIndex].AddRange(chunk);
         }
 
-        if (current.Count > 0)
-            result.Add(current.ToArray());
-        return result;
+        return bins
+            .OrderBy(bin => RiskWeight(SelectDominantRisk(bin.Select(t => t.Risk))))
+            .ThenBy(bin => ComputeEffectiveComplexity(bin, options.SameFileMarginalCostPercent))
+            .ThenBy(bin => string.Join("|", bin.Select(t => t.File).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase)), StringComparer.OrdinalIgnoreCase)
+            .Select(bin => (IReadOnlyList<MigrationTestInventoryItem>)bin
+                .OrderBy(t => t.File, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(t => t.Line)
+                .ThenBy(t => t.TestId, StringComparer.OrdinalIgnoreCase)
+                .ToArray())
+            .ToArray();
     }
 
-    static bool FitsWaveBudget(IEnumerable<MigrationTestInventoryItem> tests, MigrationOptions options)
+    static IReadOnlyList<IReadOnlyList<MigrationTestInventoryItem>> BuildFileChunks(
+        IReadOnlyList<MigrationTestInventoryItem> items,
+        MigrationOptions options)
+    {
+        var chunks = new List<IReadOnlyList<MigrationTestInventoryItem>>();
+        foreach (var fileGroup in items
+            .GroupBy(t => t.File, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var current = new List<MigrationTestInventoryItem>();
+            foreach (var item in fileGroup
+                .OrderBy(t => RiskWeight(t.Risk))
+                .ThenBy(EstimateTestComplexity)
+                .ThenBy(t => t.Line)
+                .ThenBy(t => t.TestId, StringComparer.OrdinalIgnoreCase))
+            {
+                var proposed = current.Append(item).ToArray();
+                if (current.Count > 0 && !FitsHardWaveBudget(proposed, options))
+                {
+                    chunks.Add(current.ToArray());
+                    current.Clear();
+                }
+                current.Add(item);
+            }
+
+            if (current.Count > 0)
+                chunks.Add(current.ToArray());
+        }
+        return chunks;
+    }
+
+    static bool FitsHardWaveBudget(IEnumerable<MigrationTestInventoryItem> tests, MigrationOptions options)
     {
         var values = tests.ToArray();
+        if (values.Length == 0)
+            return true;
+        if (values.Length == 1)
+            return true; // A heavy test remains schedulable and is labelled explicitly.
+
         return values.Length <= Math.Max(1, options.MaxWaveSize)
             && values.Select(t => t.File).Distinct(StringComparer.OrdinalIgnoreCase).Count() <= Math.Max(1, options.MaxWaveFiles)
-            && values.Sum(t => t.SeleniumActions) <= Math.Max(1, options.MaxWaveActions)
-            && values.Sum(EstimateTestComplexity) <= Math.Max(1, options.MaxWaveComplexity);
+            && values.Sum(t => t.SeleniumActions) <= Math.Max(options.MaxWaveActions, options.HardWaveActions)
+            && ComputeEffectiveComplexity(values, options.SameFileMarginalCostPercent) <= Math.Max(options.MaxWaveComplexity, options.HardWaveComplexity);
     }
 
     static int EstimateTestComplexity(MigrationTestInventoryItem test)
@@ -1492,6 +1908,20 @@ internal static class MigrationCommand
             + (test.Waits * 2)
             + (test.Helpers * 3)
             + (RiskWeight(test.Risk) * 10);
+
+    static int ComputeEffectiveComplexity(IEnumerable<MigrationTestInventoryItem> tests, int sameFileMarginalCostPercent)
+    {
+        var marginal = Math.Clamp(sameFileMarginalCostPercent, 0, 100) / 100.0;
+        var total = 0.0;
+        foreach (var file in tests.GroupBy(t => t.File, StringComparer.OrdinalIgnoreCase))
+        {
+            var costs = file.Select(EstimateTestComplexity).OrderByDescending(x => x).ToArray();
+            if (costs.Length == 0)
+                continue;
+            total += costs[0] + (costs.Skip(1).Sum() * marginal);
+        }
+        return (int)Math.Ceiling(total);
+    }
 
     static void AddWave(
         List<MigrationWave> waves,
@@ -1507,13 +1937,19 @@ internal static class MigrationCommand
 
         var sourceFileCount = unique.Select(t => t.File).Distinct(StringComparer.OrdinalIgnoreCase).Count();
         var estimatedActions = unique.Sum(t => t.SeleniumActions);
-        var estimatedComplexity = unique.Sum(EstimateTestComplexity);
-        var violations = new List<string>();
-        if (unique.Length > options.MaxWaveSize) violations.Add($"testCount {unique.Length} > {options.MaxWaveSize}");
-        if (sourceFileCount > options.MaxWaveFiles) violations.Add($"sourceFileCount {sourceFileCount} > {options.MaxWaveFiles}");
-        if (estimatedActions > options.MaxWaveActions) violations.Add($"estimatedActions {estimatedActions} > {options.MaxWaveActions}");
-        if (estimatedComplexity > options.MaxWaveComplexity) violations.Add($"estimatedComplexity {estimatedComplexity} > {options.MaxWaveComplexity}");
-        var budgetStatus = violations.Count == 0 ? "PASS" : unique.Length == 1 ? "OVERSIZED_SINGLE_TEST" : "BLOCKED";
+        var rawComplexity = unique.Sum(EstimateTestComplexity);
+        var estimatedComplexity = ComputeEffectiveComplexity(unique, options.SameFileMarginalCostPercent);
+        var hardViolations = new List<string>();
+        if (unique.Length > options.MaxWaveSize) hardViolations.Add($"testCount {unique.Length} > hard {options.MaxWaveSize}");
+        if (sourceFileCount > options.MaxWaveFiles) hardViolations.Add($"sourceFileCount {sourceFileCount} > hard {options.MaxWaveFiles}");
+        if (estimatedActions > Math.Max(options.MaxWaveActions, options.HardWaveActions)) hardViolations.Add($"estimatedActions {estimatedActions} > hard {Math.Max(options.MaxWaveActions, options.HardWaveActions)}");
+        if (estimatedComplexity > Math.Max(options.MaxWaveComplexity, options.HardWaveComplexity)) hardViolations.Add($"effectiveComplexity {estimatedComplexity} > hard {Math.Max(options.MaxWaveComplexity, options.HardWaveComplexity)}");
+        var softWarnings = new List<string>();
+        if (estimatedActions > options.MaxWaveActions) softWarnings.Add($"soft estimatedActions {estimatedActions} > {options.MaxWaveActions}");
+        if (estimatedComplexity > options.MaxWaveComplexity) softWarnings.Add($"soft effectiveComplexity {estimatedComplexity} > {options.MaxWaveComplexity}");
+        var budgetStatus = hardViolations.Count > 0
+            ? unique.Length == 1 ? "HEAVY_SINGLE_TEST" : "BLOCKED"
+            : softWarnings.Count > 0 ? "SOFT_LIMIT_EXCEEDED" : "PASS";
 
         var index = waves.Count + 1;
         waves.Add(new MigrationWave(
@@ -1528,13 +1964,14 @@ internal static class MigrationCommand
             EstimatedComplexity: estimatedComplexity,
             SourceFileCount: sourceFileCount,
             BudgetStatus: budgetStatus,
-            BudgetViolations: violations.ToArray(),
+            BudgetViolations: hardViolations.Concat(softWarnings).ToArray(),
             Rationale: phase switch
             {
                 "smoke-validation" => "Single low-risk smoke wave validates recall, migration, review, remediation budget, and final-gate lifecycle before expansion.",
-                "representatives" => "Representative wave opens project patterns while staying inside file/action/complexity budgets.",
-                _ => $"Cluster expansion wave for {cluster}, packed by file/action/complexity budget."
-            }));
+                "representatives" => "Representative ordering opens project patterns without forcing a separate singleton wave per cluster.",
+                _ => $"Affinity-aware adaptive batch for {cluster}; same-file/POM discovery is charged once and subsequent tests use marginal complexity."
+            },
+            RawComplexity: rawComplexity));
     }
 
     static void WriteInventoryArtifacts(string outPath, string format, MigrationInventoryReport inventory)
@@ -1553,6 +1990,55 @@ internal static class MigrationCommand
             File.WriteAllText(Path.Combine(outPath, "clusters.json"), JsonSerializer.Serialize(clusters, JsonOptions));
         if (format is "text" or "both")
             File.WriteAllText(Path.Combine(outPath, "clusters.md"), WriteClustersMarkdown(clusters));
+    }
+
+    static void WriteWaveTuningArtifacts(string outPath, WaveTuningReport tuning)
+    {
+        Directory.CreateDirectory(outPath);
+        File.WriteAllText(Path.Combine(outPath, "wave-tuning.json"), JsonSerializer.Serialize(tuning, JsonOptions));
+
+        var sb = new StringBuilder();
+        sb.AppendLine("# Wave-plan tuning experiment");
+        sb.AppendLine();
+        sb.AppendLine($"Schema: `{tuning.SchemaVersion}`");
+        sb.AppendLine($"Input: `{tuning.InputPath}`");
+        sb.AppendLine($"Tests/files/clusters: {tuning.Tests}/{tuning.Files}/{tuning.Clusters}");
+        sb.AppendLine($"Reference waves: **{tuning.TargetWaveCount}**");
+        sb.AppendLine($"Static role-overhead weight: **{tuning.RoleOverhead}**");
+        sb.AppendLine($"Candidates evaluated: **{tuning.SearchCandidatesEvaluated}**");
+        sb.AppendLine($"Recommendation confidence: **{tuning.Confidence}** (gap to runner-up: {tuning.ScoreGapPercent}%)");
+        sb.AppendLine();
+        sb.AppendLine("## Recommended profile");
+        sb.AppendLine();
+        sb.AppendLine($"- predicted waves: **{tuning.Recommended.EstimatedWaveCount}**");
+        sb.AppendLine($"- tests/files: `{tuning.Recommended.MaxWaveSize}` / `{tuning.Recommended.MaxWaveFiles}`");
+        sb.AppendLine($"- actions soft/hard: `{tuning.Recommended.MaxWaveActions}` / `{tuning.Recommended.HardWaveActions}`");
+        sb.AppendLine($"- effective complexity soft/hard: `{tuning.Recommended.MaxWaveComplexity}` / `{tuning.Recommended.HardWaveComplexity}`");
+        sb.AppendLine($"- same-file marginal cost: `{tuning.Recommended.SameFileMarginalCostPercent}%`");
+        sb.AppendLine($"- non-smoke singleton waves: `{tuning.Recommended.NonSmokeSingletons}`");
+        sb.AppendLine($"- source-file fragmentation: `{tuning.Recommended.FileFragmentation}`");
+        sb.AppendLine($"- estimated work cost: `{tuning.Recommended.EstimatedWorkCost}`");
+        sb.AppendLine($"- orchestration cost: `{tuning.Recommended.OrchestrationCost}`");
+        sb.AppendLine($"- coordination-risk cost: `{tuning.Recommended.CoordinationRiskCost}`");
+        sb.AppendLine($"- total estimated cost: `{tuning.Recommended.Score}`");
+        sb.AppendLine();
+        sb.AppendLine("## Top candidates");
+        sb.AppendLine();
+        sb.AppendLine("| Rank | Waves | Tests | Files | Complexity soft/hard | Same-file % | Singletons | Fragmentation | Work | Roles | Risk | Total |");
+        sb.AppendLine("| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |");
+        for (var index = 0; index < tuning.TopCandidates.Length; index++)
+        {
+            var candidate = tuning.TopCandidates[index];
+            sb.AppendLine($"| {index + 1} | {candidate.EstimatedWaveCount} | {candidate.MaxWaveSize} | {candidate.MaxWaveFiles} | {candidate.MaxWaveComplexity}/{candidate.HardWaveComplexity} | {candidate.SameFileMarginalCostPercent} | {candidate.NonSmokeSingletons} | {candidate.FileFragmentation} | {candidate.EstimatedWorkCost} | {candidate.OrchestrationCost} | {candidate.CoordinationRiskCost} | {candidate.Score} |");
+        }
+        sb.AppendLine();
+        sb.AppendLine("## Interpretation");
+        sb.AppendLine();
+        foreach (var note in tuning.Notes)
+            sb.AppendLine($"- {note}");
+        sb.AppendLine();
+        sb.AppendLine("The experiment is planning-only: no agent, migration, review, watchdog, or final-gate role is started.");
+        File.WriteAllText(Path.Combine(outPath, "wave-tuning.md"), sb.ToString());
     }
 
     static void WritePlanArtifacts(string outPath, string format, MigrationWavePlan plan)
@@ -1618,7 +2104,8 @@ internal static class MigrationCommand
         sb.AppendLine($"Total tests: {plan.TotalTests}");
         sb.AppendLine($"Clusters: {plan.TotalClusters}");
         sb.AppendLine($"Waves: {plan.Waves.Length}");
-        sb.AppendLine($"Budgets: tests <= {plan.MaxWaveSize}, files <= {plan.MaxWaveFiles}, Selenium actions <= {plan.MaxWaveActions}, estimated complexity <= {plan.MaxWaveComplexity}; smoke wave size = {plan.SmokeWaveSize}.");
+        sb.AppendLine($"Wave profile: `{plan.WaveProfile}`");
+        sb.AppendLine($"Packing: tests <= {plan.MaxWaveSize}, files <= {plan.MaxWaveFiles}; actions soft/hard {plan.MaxWaveActions}/{plan.HardWaveActions}; effective complexity soft/hard {plan.MaxWaveComplexity}/{plan.HardWaveComplexity}; same-file marginal cost {plan.SameFileMarginalCostPercent}%; smoke wave size = {plan.SmokeWaveSize}.");
         sb.AppendLine();
         sb.AppendLine("> This plan is read-only. It does not migrate source files. Run `memory explain` and `memory doctor` before turning any wave into a bounded migration task.");
         sb.AppendLine();
@@ -1627,7 +2114,7 @@ internal static class MigrationCommand
             sb.AppendLine($"## {wave.Id}: {wave.Phase} / {wave.Cluster}");
             sb.AppendLine();
             sb.AppendLine($"Risk: **{wave.DominantRisk}**");
-            sb.AppendLine($"Preflight budget: **{wave.BudgetStatus}**; tests {wave.Tests.Length}, files {wave.SourceFileCount}, actions {wave.EstimatedActions}, complexity {wave.EstimatedComplexity}.");
+            sb.AppendLine($"Preflight budget: **{wave.BudgetStatus}**; tests {wave.Tests.Length}, files {wave.SourceFileCount}, actions {wave.EstimatedActions}, effective/raw complexity {wave.EstimatedComplexity}/{wave.RawComplexity}.");
             if ((wave.BudgetViolations?.Length ?? 0) > 0)
                 sb.AppendLine($"Budget violations: {string.Join("; ", wave.BudgetViolations ?? Array.Empty<string>())}");
             sb.AppendLine($"Rationale: {wave.Rationale}");
@@ -1744,11 +2231,15 @@ internal static class MigrationCommand
     {
         var normalizedPlan = plan with
         {
-            MaxWaveSize = plan.MaxWaveSize > 0 ? plan.MaxWaveSize : 4,
-            MaxWaveFiles = plan.MaxWaveFiles > 0 ? plan.MaxWaveFiles : 2,
-            MaxWaveActions = plan.MaxWaveActions > 0 ? plan.MaxWaveActions : 90,
-            MaxWaveComplexity = plan.MaxWaveComplexity > 0 ? plan.MaxWaveComplexity : 140,
-            SmokeWaveSize = plan.SmokeWaveSize > 0 ? plan.SmokeWaveSize : 1
+            MaxWaveSize = plan.MaxWaveSize > 0 ? plan.MaxWaveSize : 12,
+            MaxWaveFiles = plan.MaxWaveFiles > 0 ? plan.MaxWaveFiles : 4,
+            MaxWaveActions = plan.MaxWaveActions > 0 ? plan.MaxWaveActions : 180,
+            HardWaveActions = plan.HardWaveActions > 0 ? plan.HardWaveActions : Math.Max(plan.MaxWaveActions, 320),
+            MaxWaveComplexity = plan.MaxWaveComplexity > 0 ? plan.MaxWaveComplexity : 550,
+            HardWaveComplexity = plan.HardWaveComplexity > 0 ? plan.HardWaveComplexity : Math.Max(plan.MaxWaveComplexity, 850),
+            SameFileMarginalCostPercent = plan.SameFileMarginalCostPercent is >= 0 and <= 100 ? plan.SameFileMarginalCostPercent : 30,
+            SmokeWaveSize = plan.SmokeWaveSize > 0 ? plan.SmokeWaveSize : 1,
+            WaveProfile = string.IsNullOrWhiteSpace(plan.WaveProfile) ? "legacy" : plan.WaveProfile
         };
 
         normalizedPlan = normalizedPlan with
@@ -1758,21 +2249,28 @@ internal static class MigrationCommand
                 var tests = wave.Tests ?? Array.Empty<MigrationTestInventoryItem>();
                 var sourceFileCount = tests.Select(t => t.File).Distinct(StringComparer.OrdinalIgnoreCase).Count();
                 var estimatedActions = tests.Sum(t => t.SeleniumActions);
-                var estimatedComplexity = tests.Sum(EstimateTestComplexity);
-                var violations = new List<string>();
-                if (tests.Length > normalizedPlan.MaxWaveSize) violations.Add($"testCount {tests.Length} > {normalizedPlan.MaxWaveSize}");
-                if (sourceFileCount > normalizedPlan.MaxWaveFiles) violations.Add($"sourceFileCount {sourceFileCount} > {normalizedPlan.MaxWaveFiles}");
-                if (estimatedActions > normalizedPlan.MaxWaveActions) violations.Add($"estimatedActions {estimatedActions} > {normalizedPlan.MaxWaveActions}");
-                if (estimatedComplexity > normalizedPlan.MaxWaveComplexity) violations.Add($"estimatedComplexity {estimatedComplexity} > {normalizedPlan.MaxWaveComplexity}");
+                var rawComplexity = tests.Sum(EstimateTestComplexity);
+                var estimatedComplexity = ComputeEffectiveComplexity(tests, normalizedPlan.SameFileMarginalCostPercent);
+                var hardViolations = new List<string>();
+                if (tests.Length > normalizedPlan.MaxWaveSize) hardViolations.Add($"testCount {tests.Length} > hard {normalizedPlan.MaxWaveSize}");
+                if (sourceFileCount > normalizedPlan.MaxWaveFiles) hardViolations.Add($"sourceFileCount {sourceFileCount} > hard {normalizedPlan.MaxWaveFiles}");
+                if (estimatedActions > normalizedPlan.HardWaveActions) hardViolations.Add($"estimatedActions {estimatedActions} > hard {normalizedPlan.HardWaveActions}");
+                if (estimatedComplexity > normalizedPlan.HardWaveComplexity) hardViolations.Add($"effectiveComplexity {estimatedComplexity} > hard {normalizedPlan.HardWaveComplexity}");
+                var softWarnings = new List<string>();
+                if (estimatedActions > normalizedPlan.MaxWaveActions) softWarnings.Add($"soft estimatedActions {estimatedActions} > {normalizedPlan.MaxWaveActions}");
+                if (estimatedComplexity > normalizedPlan.MaxWaveComplexity) softWarnings.Add($"soft effectiveComplexity {estimatedComplexity} > {normalizedPlan.MaxWaveComplexity}");
                 return wave with
                 {
                     Tests = tests,
                     Files = wave.Files ?? tests.Select(t => t.File).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
                     EstimatedActions = estimatedActions,
                     EstimatedComplexity = estimatedComplexity,
+                    RawComplexity = rawComplexity,
                     SourceFileCount = sourceFileCount,
-                    BudgetStatus = violations.Count == 0 ? "PASS" : tests.Length == 1 ? "OVERSIZED_SINGLE_TEST" : "BLOCKED",
-                    BudgetViolations = violations.ToArray()
+                    BudgetStatus = hardViolations.Count > 0
+                        ? tests.Length == 1 ? "HEAVY_SINGLE_TEST" : "BLOCKED"
+                        : softWarnings.Count > 0 ? "SOFT_LIMIT_EXCEEDED" : "PASS",
+                    BudgetViolations = hardViolations.Concat(softWarnings).ToArray()
                 };
             }).ToArray()
         };
@@ -1844,12 +2342,18 @@ internal static class MigrationCommand
 Migration planning and wave run commands:
   selenium-pw-migrator migration inventory --input ./SeleniumTests --out migration/plan
   selenium-pw-migrator migration cluster --input ./SeleniumTests --out migration/plan
-  selenium-pw-migrator migration plan --strategy wavefront --input ./SeleniumTests --workspace migration --out migration/plan --max-wave-size 4 --max-wave-files 2 --max-wave-actions 90 --max-wave-complexity 140 --smoke-wave-size 1
+  selenium-pw-migrator migration tune-wave-plan --input ./SeleniumTests --workspace migration --out migration/plan-tuning
+  selenium-pw-migrator migration plan --strategy wavefront --input ./SeleniumTests --workspace migration --out migration/plan --wave-profile auto --smoke-wave-size 1
+  selenium-pw-migrator migration plan --strategy wavefront --input ./SeleniumTests --workspace migration --out migration/plan --wave-profile balanced
+  selenium-pw-migrator migration plan --strategy wavefront --input ./SeleniumTests --workspace migration --out migration/plan --wave-profile manual --max-wave-size 12 --max-wave-files 4 --max-wave-actions 180 --hard-wave-actions 320 --max-wave-complexity 550 --hard-wave-complexity 850 --same-file-marginal-cost 30
   selenium-pw-migrator migration plan show --plan migration/plan
   selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001
   selenium-pw-migrator migration refresh-wave-status --out migration/runs/wave-001 --migrate-exit-code 0
 
-Planning is read-only. run-wave materializes a bounded source-scope plus config-delta,
+Planning is read-only; tune-wave-plan also executes no agents. The auto profile
+tests deterministic budget combinations and minimizes role-cycle overhead, singleton waves,
+and source-file fragmentation. Same-file tests pay marginal rather than full repeated complexity.
+run-wave materializes a bounded source-scope plus config-delta,
 memory-delta, run summary, evidence folder, and migrate scripts. The migrate wrappers refresh wave-status.json after execution. It never promotes config or memory automatically.
 Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to create a reviewable candidate config after wave deltas are reviewed.
 """);
@@ -1875,10 +2379,16 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
         int MaxWaveSize,
         int MaxWaveFiles,
         int MaxWaveActions,
+        int HardWaveActions,
         int MaxWaveComplexity,
+        int HardWaveComplexity,
+        int SameFileMarginalCostPercent,
         int SmokeWaveSize,
         int RepresentativesPerCluster,
-        bool PreferLowRiskFirst)
+        bool PreferLowRiskFirst,
+        string WaveProfile,
+        int TargetWaveCount,
+        int RoleOverhead)
     {
         public static MigrationOptions? Parse(string[] args, out string error)
         {
@@ -1896,13 +2406,21 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
             var generationPolicy = string.Empty;
             var executeMigrate = false;
             var migrateExitCode = -1;
-            var maxWaveSize = 4;
-            var maxWaveFiles = 2;
-            var maxWaveActions = 90;
-            var maxWaveComplexity = 140;
+            var maxWaveSize = 12;
+            var maxWaveFiles = 4;
+            var maxWaveActions = 180;
+            var hardWaveActions = 320;
+            var maxWaveComplexity = 550;
+            var hardWaveComplexity = 850;
+            var sameFileMarginalCostPercent = 30;
             var smokeWaveSize = 1;
             var representativesPerCluster = 1;
             var preferLowRiskFirst = true;
+            var waveProfile = "auto";
+            var targetWaveCount = 0;
+            var roleOverhead = 300;
+            var profileExplicit = false;
+            var budgetExplicit = false;
             error = string.Empty;
 
             for (var i = 0; i < args.Length; i++)
@@ -1933,13 +2451,19 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
                         case "--generation-policy": generationPolicy = Next(arg); break;
                         case "--execute-migrate": executeMigrate = ParseBool(Next(arg), arg); break;
                         case "--migrate-exit-code": migrateExitCode = ParseNonNegativeInt(Next(arg), arg); break;
-                        case "--max-wave-size": maxWaveSize = ParsePositiveInt(Next(arg), arg); break;
-                        case "--max-wave-files": maxWaveFiles = ParsePositiveInt(Next(arg), arg); break;
-                        case "--max-wave-actions": maxWaveActions = ParsePositiveInt(Next(arg), arg); break;
-                        case "--max-wave-complexity": maxWaveComplexity = ParsePositiveInt(Next(arg), arg); break;
+                        case "--max-wave-size": maxWaveSize = ParsePositiveInt(Next(arg), arg); budgetExplicit = true; break;
+                        case "--max-wave-files": maxWaveFiles = ParsePositiveInt(Next(arg), arg); budgetExplicit = true; break;
+                        case "--max-wave-actions": maxWaveActions = ParsePositiveInt(Next(arg), arg); budgetExplicit = true; break;
+                        case "--hard-wave-actions": hardWaveActions = ParsePositiveInt(Next(arg), arg); budgetExplicit = true; break;
+                        case "--max-wave-complexity": maxWaveComplexity = ParsePositiveInt(Next(arg), arg); budgetExplicit = true; break;
+                        case "--hard-wave-complexity": hardWaveComplexity = ParsePositiveInt(Next(arg), arg); budgetExplicit = true; break;
+                        case "--same-file-marginal-cost": sameFileMarginalCostPercent = ParsePercentage(Next(arg), arg); budgetExplicit = true; break;
                         case "--smoke-wave-size": smokeWaveSize = ParsePositiveInt(Next(arg), arg); break;
                         case "--representatives-per-cluster": representativesPerCluster = ParsePositiveInt(Next(arg), arg); break;
                         case "--prefer-low-risk-first": preferLowRiskFirst = ParseBool(Next(arg), arg); break;
+                        case "--wave-profile": waveProfile = Next(arg).Trim().ToLowerInvariant(); profileExplicit = true; break;
+                        case "--target-waves": targetWaveCount = ParseNonNegativeInt(Next(arg), arg); break;
+                        case "--role-overhead": roleOverhead = ParsePositiveInt(Next(arg), arg); break;
                         default:
                             if (!arg.StartsWith("--", StringComparison.Ordinal) && string.IsNullOrWhiteSpace(input))
                                 input = arg;
@@ -1961,7 +2485,70 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
                 return null;
             }
 
-            return new MigrationOptions(input, outPath, workspace, strategy, format, plan, inventory, wave, config, target, targetTestFramework, generationPolicy, executeMigrate, migrateExitCode, maxWaveSize, maxWaveFiles, maxWaveActions, maxWaveComplexity, smokeWaveSize, representativesPerCluster, preferLowRiskFirst);
+            if (waveProfile is not ("auto" or "manual" or "compact" or "balanced" or "conservative" or "experiment" or "auto-tuned"))
+            {
+                error = "--wave-profile must be auto, manual, compact, balanced, or conservative.";
+                return null;
+            }
+
+            // Backward compatibility: callers that explicitly pass old max-wave-* switches are
+            // asking for a manual profile unless they explicitly opted into auto tuning.
+            if (budgetExplicit && !profileExplicit)
+                waveProfile = "manual";
+
+            ApplyNamedWaveProfile(
+                waveProfile,
+                ref maxWaveSize,
+                ref maxWaveFiles,
+                ref maxWaveActions,
+                ref hardWaveActions,
+                ref maxWaveComplexity,
+                ref hardWaveComplexity,
+                ref sameFileMarginalCostPercent);
+
+            return new MigrationOptions(input, outPath, workspace, strategy, format, plan, inventory, wave, config, target, targetTestFramework, generationPolicy, executeMigrate, migrateExitCode, maxWaveSize, maxWaveFiles, maxWaveActions, hardWaveActions, maxWaveComplexity, hardWaveComplexity, sameFileMarginalCostPercent, smokeWaveSize, representativesPerCluster, preferLowRiskFirst, waveProfile, targetWaveCount, roleOverhead);
+        }
+
+        static void ApplyNamedWaveProfile(
+            string profile,
+            ref int maxWaveSize,
+            ref int maxWaveFiles,
+            ref int maxWaveActions,
+            ref int hardWaveActions,
+            ref int maxWaveComplexity,
+            ref int hardWaveComplexity,
+            ref int sameFileMarginalCostPercent)
+        {
+            switch (profile)
+            {
+                case "compact":
+                    maxWaveSize = 14;
+                    maxWaveFiles = 5;
+                    maxWaveActions = 180;
+                    hardWaveActions = 360;
+                    maxWaveComplexity = 650;
+                    hardWaveComplexity = 1000;
+                    sameFileMarginalCostPercent = 25;
+                    break;
+                case "balanced":
+                    maxWaveSize = 12;
+                    maxWaveFiles = 4;
+                    maxWaveActions = 150;
+                    hardWaveActions = 300;
+                    maxWaveComplexity = 550;
+                    hardWaveComplexity = 850;
+                    sameFileMarginalCostPercent = 30;
+                    break;
+                case "conservative":
+                    maxWaveSize = 8;
+                    maxWaveFiles = 3;
+                    maxWaveActions = 100;
+                    hardWaveActions = 220;
+                    maxWaveComplexity = 420;
+                    hardWaveComplexity = 700;
+                    sameFileMarginalCostPercent = 40;
+                    break;
+            }
         }
 
         static int ParseNonNegativeInt(string value, string option)
@@ -1975,6 +2562,13 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
         {
             if (!int.TryParse(value, out var parsed) || parsed <= 0)
                 throw new ArgumentException($"{option} requires a positive integer");
+            return parsed;
+        }
+
+        static int ParsePercentage(string value, string option)
+        {
+            if (!int.TryParse(value, out var parsed) || parsed < 0 || parsed > 100)
+                throw new ArgumentException($"{option} requires an integer from 0 to 100");
             return parsed;
         }
 
@@ -2050,7 +2644,11 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
         bool PreferLowRiskFirst,
         int TotalTests,
         int TotalClusters,
-        MigrationWave[] Waves);
+        MigrationWave[] Waves,
+        string WaveProfile = "manual",
+        int HardWaveActions = 0,
+        int HardWaveComplexity = 0,
+        int SameFileMarginalCostPercent = 100);
 
     sealed record MigrationWave(
         string Id,
@@ -2065,7 +2663,43 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
         int SourceFileCount,
         string BudgetStatus,
         string[] BudgetViolations,
-        string Rationale);
+        string Rationale,
+        int RawComplexity = 0);
+
+    sealed record WaveTuningReport(
+        string SchemaVersion,
+        DateTimeOffset GeneratedAtUtc,
+        string InputPath,
+        int Tests,
+        int Files,
+        int Clusters,
+        int TargetWaveCount,
+        int RoleOverhead,
+        int SearchCandidatesEvaluated,
+        WaveTuningCandidate Recommended,
+        WaveTuningCandidate[] TopCandidates,
+        string Confidence,
+        double ScoreGapPercent,
+        string[] Notes);
+
+    sealed record WaveTuningCandidate(
+        int MaxWaveSize,
+        int MaxWaveFiles,
+        int MaxWaveActions,
+        int HardWaveActions,
+        int MaxWaveComplexity,
+        int HardWaveComplexity,
+        int SameFileMarginalCostPercent,
+        int EstimatedWaveCount,
+        int NonSmokeSingletons,
+        int FileFragmentation,
+        int HeavySingleTests,
+        double SoftOverrun,
+        double LoadImbalance,
+        double EstimatedWorkCost,
+        double OrchestrationCost,
+        double CoordinationRiskCost,
+        double Score);
 
     sealed record MigrationWaveInputScope(
         string SchemaVersion,

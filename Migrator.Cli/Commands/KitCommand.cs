@@ -660,6 +660,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         AddCheck(checks, "fresh-wavefront-restart", File.Exists(Path.Combine(workspacePath, "scripts", "start-fresh-wavefront-run.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "start-fresh-wavefront-run.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "mapping-research-memory", File.Exists(Path.Combine(workspacePath, "scripts", "collect-mapping-research-memory.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "collect-mapping-research-memory.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "feedback-bundle-packer", File.Exists(Path.Combine(workspacePath, "scripts", "create-feedback-bundle.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "create-feedback-bundle.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "installed-script-validator", File.Exists(Path.Combine(workspacePath, "scripts", "validate-installed-scripts.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "validate-installed-scripts.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "artifact-hygiene", File.Exists(Path.Combine(workspacePath, "scripts", "validate-run-artifacts.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "validate-run-artifacts.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "current-ticket-lifecycle", File.Exists(Path.Combine(workspacePath, "scripts", "update-current-ticket-status.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "update-current-ticket-status.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "jsonl-ledger-repair", File.Exists(Path.Combine(workspacePath, "scripts", "repair-jsonl-ledger.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "repair-jsonl-ledger.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
@@ -685,6 +686,24 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
 
         AddPowerShell7Check(checks);
 
+        var installedValidatorPath = Path.Combine(workspacePath, "scripts", "validate-installed-scripts.ps1");
+        var doctorPowerShell = ResolvePowerShellExecutable();
+        if (File.Exists(installedValidatorPath) && doctorPowerShell is not null)
+        {
+            var syntaxResult = RunProcess(
+                doctorPowerShell,
+                $"-NoProfile -ExecutionPolicy Bypass -File {Quote(installedValidatorPath)} -Workspace {Quote(workspacePath)} -SkipShell",
+                timeoutMs: 30000);
+            var syntaxDetail = syntaxResult.ExitCode == 0
+                ? "installed migration/scripts PowerShell syntax passed"
+                : string.Join(" | ", new[] { syntaxResult.StdOut.Trim(), syntaxResult.StdErr.Trim() }.Where(value => !string.IsNullOrWhiteSpace(value)));
+            AddCheck(checks, "installed-script-syntax", syntaxResult.ExitCode == 0, syntaxDetail, "Run `migration/scripts/validate-installed-scripts.ps1 -Workspace migration`, then `migrator kit update --backup` if a stale kit-owned script is reported.");
+        }
+        else
+        {
+            AddCheck(checks, "installed-script-syntax", true, doctorPowerShell is null ? "skipped: PowerShell executable unavailable" : "skipped: validator not installed", "Install PowerShell or run `migrator kit update --backup`.");
+        }
+
         var status = checks.All(c => c.Ok) ? "passed" : "warning";
         var reportDir = Path.Combine(workspacePath, "reports", "kit-doctor");
         Directory.CreateDirectory(reportDir);
@@ -696,7 +715,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
             Console.WriteLine($"{(check.Ok ? "OK" : "WARN"),-5} {check.Name,-18} {check.Detail}");
         Console.WriteLine($"Report: {Path.Combine(reportDir, "kit-doctor.md")}");
 
-        return checks.Count(c => !c.Ok && c.Name is "workspace" or "adapter-config") > 0 ? 2 : 0;
+        return checks.Count(c => !c.Ok && c.Name is "workspace" or "adapter-config" or "installed-script-syntax") > 0 ? 2 : 0;
     }
 
     static int RunNextTicket(KitOptions options)
@@ -990,6 +1009,8 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
             "scripts/collect-mapping-research-memory.sh" or
             "scripts/create-feedback-bundle.ps1" or
             "scripts/create-feedback-bundle.sh" or
+            "scripts/validate-installed-scripts.ps1" or
+            "scripts/validate-installed-scripts.sh" or
             "scripts/validate-run-artifacts.ps1" or
             "scripts/validate-run-artifacts.sh" or
             "scripts/update-current-ticket-status.ps1" or
@@ -1535,6 +1556,8 @@ Fix only the current ticket.
             "scripts/collect-mapping-research-memory.sh",
             "scripts/create-feedback-bundle.ps1",
             "scripts/create-feedback-bundle.sh",
+            "scripts/validate-installed-scripts.ps1",
+            "scripts/validate-installed-scripts.sh",
             "scripts/validate-run-artifacts.ps1",
             "scripts/validate-run-artifacts.sh",
             "scripts/update-current-ticket-status.ps1",

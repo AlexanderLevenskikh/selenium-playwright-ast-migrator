@@ -61,6 +61,8 @@ required_patterns = [
     r'^templates/migration-kit/scripts/collect-mapping-research-memory\.sh$',
     r'^templates/migration-kit/scripts/create-feedback-bundle\.ps1$',
     r'^templates/migration-kit/scripts/create-feedback-bundle\.sh$',
+    r'^templates/migration-kit/scripts/validate-installed-scripts\.ps1$',
+    r'^templates/migration-kit/scripts/validate-installed-scripts\.sh$',
     r'^templates/migration-kit/scripts/validate-run-artifacts\.ps1$',
     r'^templates/migration-kit/scripts/validate-run-artifacts\.sh$',
     r'^templates/migration-kit/scripts/repair-jsonl-ledger\.ps1$',

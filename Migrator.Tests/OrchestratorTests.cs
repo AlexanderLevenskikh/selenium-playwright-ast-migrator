@@ -305,6 +305,36 @@ public class OrchestratorTests
         }
     }
 
+    [Fact]
+    public void Orchestrator_ReusesCachedScenarioButMaterializesIndependentOutputs()
+    {
+        var before = OrchestratorScenarioCache.CachedScenarioCount;
+        var first = Path.Combine(Path.GetTempPath(), $"orch_cache_a_{Guid.NewGuid():N}");
+        var second = Path.Combine(Path.GetTempPath(), $"orch_cache_b_{Guid.NewGuid():N}");
+        try
+        {
+            var firstExit = RunOrchestratorCli(_testFilesDir, first);
+            var afterFirst = OrchestratorScenarioCache.CachedScenarioCount;
+            var secondExit = RunOrchestratorCli(_testFilesDir, second);
+            var afterSecond = OrchestratorScenarioCache.CachedScenarioCount;
+
+            Assert.Equal(firstExit, secondExit);
+            Assert.InRange(afterFirst - before, 0, 1);
+            Assert.Equal(afterFirst, afterSecond);
+            Assert.NotEqual(first, second);
+            Assert.True(File.Exists(Path.Combine(first, "orchestration-report.json")));
+            Assert.True(File.Exists(Path.Combine(second, "orchestration-report.json")));
+
+            File.WriteAllText(Path.Combine(first, "isolation-marker.txt"), "first");
+            Assert.False(File.Exists(Path.Combine(second, "isolation-marker.txt")));
+        }
+        finally
+        {
+            TryDelete(first);
+            TryDelete(second);
+        }
+    }
+
     // --- Exit code tests ---
 
     [Fact]
@@ -501,11 +531,21 @@ public class OrchestratorTests
 
     static int RunOrchestratorCli(string inputPath, string outPath, string? configPath = null)
     {
-        var args = $"--mode orchestrate --input \"{inputPath}\" --out \"{outPath}\" --format both";
-        if (configPath != null)
-            args += $" --config \"{configPath}\"";
+        CliResult Execute(string targetPath)
+        {
+            var args = $"--mode orchestrate --input \"{inputPath}\" --out \"{targetPath}\" --format both";
+            if (configPath != null)
+                args += $" --config \"{configPath}\"";
+            return CliTestRunner.Run(args, TimeSpan.FromSeconds(120));
+        }
 
-        var result = CliTestRunner.Run(args, TimeSpan.FromSeconds(120));
+        var materialized = OrchestratorScenarioCache.Materialize(inputPath, outPath, configPath, Execute);
+        var result = materialized.Result;
+        Assert.False(
+            result.TimedOut,
+            $"Orchestrator scenario timed out. Scenario: {materialized.ScenarioKey}\n" +
+            $"Duration: {result.Duration}\nCommand: {result.CommandLine}\n" +
+            $"STDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
         return result.ExitCode;
     }
 

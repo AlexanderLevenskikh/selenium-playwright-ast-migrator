@@ -2176,14 +2176,29 @@ $planSanitizerDetail = ""
 $planSanitizerOk = Test-RunPlanSanitized $workspacePath $latestRunId ([ref]$planSanitizerDetail)
 Add-Result $results "plan-artifact-sanitized" $planSanitizerOk $planSanitizerDetail
 
+$installedScriptValidator = Join-Path $workspacePath "scripts/validate-installed-scripts.ps1"
+$installedScriptSyntaxPassed = $true
+if (Test-Path $installedScriptValidator) {
+    $installedScriptArgs = @("-Workspace", $Workspace, "-SkipShell")
+    $installedScriptExitCode = Invoke-PowerShellScript $installedScriptValidator $installedScriptArgs
+    $installedScriptSyntaxPassed = $installedScriptExitCode -eq 0
+    Add-Result $results "installed-script-syntax" $installedScriptSyntaxPassed "validate-installed-scripts.ps1 exit code $installedScriptExitCode; PowerShell parser validation of migration/scripts"
+}
+else {
+    Add-Result $results "installed-script-syntax" $true "validate-installed-scripts.ps1 not installed; skipped for backward-compatible/minimal harness workspace"
+}
+
 $artifactHygieneScript = Join-Path $workspacePath "scripts/validate-run-artifacts.ps1"
-if (Test-Path $artifactHygieneScript) {
+if ((Test-Path $artifactHygieneScript) -and $installedScriptSyntaxPassed) {
     $artifactHygieneArgs = @("-Workspace", $Workspace, "-RepoRoot", $RepoRoot)
     if (-not [string]::IsNullOrWhiteSpace($latestRunId)) {
         $artifactHygieneArgs += @("-RunId", $latestRunId)
     }
     $artifactHygieneExitCode = Invoke-PowerShellScript $artifactHygieneScript $artifactHygieneArgs
     Add-Result $results "artifact-hygiene" ($artifactHygieneExitCode -eq 0) "validate-run-artifacts.ps1 exit code $artifactHygieneExitCode; schema artifact-hygiene/v1"
+}
+elseif ((Test-Path $artifactHygieneScript) -and -not $installedScriptSyntaxPassed) {
+    Add-Result $results "artifact-hygiene" $false "validate-run-artifacts.ps1 was not executed because installed-script-syntax failed"
 }
 else {
     Add-Result $results "artifact-hygiene" $true "validate-run-artifacts.ps1 not installed in this workspace; artifact-hygiene/v1 skipped for backward-compatible/minimal harness workspace"

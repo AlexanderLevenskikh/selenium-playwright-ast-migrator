@@ -35,6 +35,8 @@ $requiredFiles = @(
     "templates/migration-kit/scripts/collect-mapping-research-memory.sh",
     "templates/migration-kit/scripts/create-feedback-bundle.ps1",
     "templates/migration-kit/scripts/create-feedback-bundle.sh",
+    "templates/migration-kit/scripts/validate-installed-scripts.ps1",
+    "templates/migration-kit/scripts/validate-installed-scripts.sh",
     "templates/migration-kit/scripts/validate-run-artifacts.ps1",
     "templates/migration-kit/scripts/validate-run-artifacts.sh",
     "templates/migration-kit/scripts/repair-jsonl-ledger.ps1",

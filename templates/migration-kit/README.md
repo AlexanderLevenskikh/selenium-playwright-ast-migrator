@@ -6,7 +6,7 @@ For the current guarded OpenCode Desktop launch procedure, use the canonical run
 docs/guarded-opencode-desktop-runbook.ru.md
 ```
 
-This README describes the installed `migration/` workspace layout and local rules.
+This README describes the installed `migration/` workspace layout and local rules. The command modes are documented in the migrator repository at `docs/supervised-task-modes.md` / `.ru.md`; the installed command source of truth is `.opencode/commands/supervised-task.md`.
 
 This folder is the local workspace for a Selenium C# → Playwright migration.
 
@@ -247,7 +247,7 @@ Final gate reconciles `migration/state/harness-run.json` after every run: gate f
 
 ## Artifact hygiene
 
-Before final handoff, run `migration/scripts/validate-run-artifacts.ps1` / `.sh` or let final gate run it automatically. It writes schema `artifact-hygiene/v1` to `state/artifact-hygiene.json`, `state/artifact-hygiene.md`, and mirrors the report under `runs/<run-id>/artifact-hygiene.*`. The check is strict for artifacts that exist, but does not fail an early workspace just because optional reports have not been created yet. It validates that `Plan.md` is not polluted with shell/write payloads, `Documentation.md` does not claim success while final gate is blocked, generated boards/status files carry run/wave identity, and session exports are either `REAL_EXPORT` or `UNAVAILABLE_WITH_REASON`.
+Before final handoff, run `migration/scripts/validate-installed-scripts.ps1 -Workspace migration` / `.sh` to parse the installed workspace copies, then run `migration/scripts/validate-run-artifacts.ps1` / `.sh` or let final gate run both checks automatically. It writes schema `artifact-hygiene/v1` to `state/artifact-hygiene.json`, `state/artifact-hygiene.md`, and mirrors the report under `runs/<run-id>/artifact-hygiene.*`. The check is strict for artifacts that exist, but does not fail an early workspace just because optional reports have not been created yet. It validates that `Plan.md` is not polluted with shell/write payloads, `Documentation.md` does not claim success while final gate is blocked, generated boards/status files carry run/wave identity, and session exports are either `REAL_EXPORT` or `UNAVAILABLE_WITH_REASON`.
 
 
 ## Current-ticket executor loop
@@ -284,4 +284,4 @@ When a migration wave exposes a useful migrator gap, do not zip the whole reposi
 
 ### Bounded remediation and fresh restart
 
-Wavefront plans start with a one-test smoke wave and use `preflight-budget.json` to enforce test/file/action/complexity limits. Automatic post-final remediation is limited to four completed tickets per wave and two consecutive no-progress tickets. `wave-progress/v1` requires executable or assertion restoration; TODO deletion alone is not progress. When the budget is exhausted, final gate emits `FINAL_WITH_LIMITATIONS` and harness state `WAVE_REMEDIATION_BUDGET_EXHAUSTED`; the closed post-final loop must stop. Use `/supervised-task waves fresh` or `scripts/start-fresh-wavefront-run.ps1` / `.sh` to archive the pilot while preserving project memory.
+Wavefront plans start with a one-test smoke wave. `plan --wave-profile auto` writes `wave-tuning.md/json` without invoking agents, then affinity-packs later tests by source file/POM context using same-file marginal complexity. `preflight-budget.json` uses soft targets for normal packing and a broader hard ceiling; `PASS`, `SOFT_LIMIT_EXCEEDED`, and `HEAVY_SINGLE_TEST` are executable, while only `BLOCKED` requires replan. Automatic post-final remediation is limited to four completed tickets per wave and two consecutive no-progress tickets. `wave-progress/v1` requires executable or assertion restoration; TODO deletion alone is not progress. When the budget is exhausted, final gate emits `FINAL_WITH_LIMITATIONS` and harness state `WAVE_REMEDIATION_BUDGET_EXHAUSTED`; the closed post-final loop must stop. Use `/supervised-task waves fresh` or `scripts/start-fresh-wavefront-run.ps1` / `.sh` to archive the pilot while preserving project memory.
