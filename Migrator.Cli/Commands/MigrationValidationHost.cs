@@ -459,7 +459,8 @@ internal static class MigrationValidationHost
                 && root.TryGetProperty("reusable", out var reusable) && reusable.ValueKind == JsonValueKind.True
                 && string.Equals(OptionalString(root, "inputFingerprint"), inputFingerprint, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(OptionalString(root, "validationContractFingerprint"), validationContractFingerprint, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(OptionalString(root, "validationProfile"), profile, StringComparison.OrdinalIgnoreCase);
+                && string.Equals(OptionalString(root, "validationProfile"), profile, StringComparison.OrdinalIgnoreCase)
+                && MigrationCacheMaintenance.IsCurrentCompatible(root, out _);
         }
         catch (Exception ex) when (ex is IOException or JsonException)
         {
@@ -557,6 +558,7 @@ internal static class MigrationValidationHost
                 ["failedProcessNeverCached"] = true,
                 ["cacheRequiresExactInputPass"] = true,
                 ["cacheRequiresExactValidationContract"] = true,
+                ["cacheRequiresCurrentToolCompatibilityStamp"] = true,
                 ["checkpointDoesNotMeanDone"] = true
             }
         };

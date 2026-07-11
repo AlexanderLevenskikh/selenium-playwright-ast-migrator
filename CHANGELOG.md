@@ -6,6 +6,10 @@ This project uses preview SemVer-style versions while the public API is still st
 
 ## [Unreleased]
 
+### Performance
+- Added one correlated end-to-end performance report that aggregates wave materialization, validation host, agent lifecycle, risk, cache-hit status, and the largest measured component.
+- Added cache statistics, verification, dry-run/apply pruning, active-run reference protection, and concrete tool/recognizer/renderer/adapter compatibility fingerprints.
+
 ### Added
 - Durable agent recovery with bounded active-role leases, latest-heartbeat freshness, serialized runtime mutations, deterministic recovery planning, append-only stale-role closure, safe ledger-head rebuild, orphan lease archival, atomic-temp quarantine, and fail-closed handling of malformed or contradictory role evidence.
 
@@ -22,6 +26,9 @@ This project uses preview SemVer-style versions while the public API is still st
 - npm Trusted Publishing handoff docs plus Scoop/Homebrew package-manager templates.
 - Isolated npm registry smoke scripts for validating published wrapper installs through npmjs or corporate Nexus without changing global npm state.
 - Documentation for Nexus npm proxy plus internal standalone mirror post-publish smoke.
+
+### Reliability and scope
+- Added role scope-access receipts and a final handoff scope audit. Declared out-of-scope access always fails; missing declarations warn only in `fast` and fail in `standard`/`audit`.
 
 ### Changed
 

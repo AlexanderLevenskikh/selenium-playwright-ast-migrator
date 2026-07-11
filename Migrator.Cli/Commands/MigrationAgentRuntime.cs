@@ -198,6 +198,15 @@ internal static class MigrationAgentRuntime
             return ProposeRole(outPath, adaptivePolicy, events, "sentinel", "final", finalFingerprint,
                 "Final sentinel inspection remains mandatory before handoff.", output, error);
 
+        var scopeAuditOutput = new StringWriter();
+        var scopeAuditError = new StringWriter();
+        var scopeAuditExit = MigrationScopeAudit.Run(outPath, scopeAuditOutput, scopeAuditError);
+        if (scopeAuditExit != 0)
+            return WriteDecision(outPath, "HUMAN_REVIEW_REQUIRED", null, "final", finalFingerprint,
+                "selenium-pw-migrator migration scope-audit --out <run-dir>",
+                "Role scope audit failed; final handoff is blocked until declared and observed paths are within the immutable wave roots.", "scope-audit-failed",
+                output, error, scopeAuditError.ToString().Trim(), 4);
+
         return WriteDecision(outPath, "FINAL_HANDOFF", null, "final", finalFingerprint,
             "run final scope/harness checks and final gate",
             "All bounded role obligations are satisfied for the current validated input.", null,

@@ -64,6 +64,8 @@ internal static class MigrationCommand
             "run-wave" => RunWave(options),
             "refresh-wave-status" => RunRefreshWaveStatus(options),
             "validate-wave" => RunValidateWave(options),
+            "scope-audit" => RunScopeAudit(options),
+            "record-role-scope-access" => RunRecordRoleScopeAccess(options),
             "check-progress" => RunCheckProgress(options),
             "next-agent-action" => RunNextAgentAction(options),
             "assess-agent-risk" => RunAssessAgentRisk(options),
@@ -81,6 +83,9 @@ internal static class MigrationCommand
             "resume-wave" => RunResumeWave(options),
             "build-review-bundle" => RunBuildReviewBundle(options),
             "perf-report" => RunPerformanceReport(options),
+            "cache-stats" => RunCacheStats(options),
+            "cache-verify" => RunCacheVerify(options),
+            "cache-prune" => RunCachePrune(options),
             _ => UnknownCommand(command)
         };
     }
@@ -478,6 +483,20 @@ internal static class MigrationCommand
         return MigrationFastPath.ValidateWave(outPath, Console.Out, Console.Error);
     }
 
+    static int RunScopeAudit(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        return MigrationScopeAudit.Run(outPath, Console.Out, Console.Error);
+    }
+
+    static int RunRecordRoleScopeAccess(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        return MigrationScopeAudit.RecordAccess(outPath, options.AgentRole, options.AgentRolePhase, options.ScopeOperation, options.ScopePath, Console.Out, Console.Error);
+    }
+
     static int RunCheckProgress(MigrationOptions options)
     {
         var repoRoot = ResolveRepositoryRoot();
@@ -616,7 +635,28 @@ internal static class MigrationCommand
     {
         var repoRoot = ResolveRepositoryRoot();
         var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
-        return MigrationFastPath.PrintPerformanceReport(outPath, Console.Out, Console.Error);
+        return MigrationPerformanceAggregation.Run(outPath, Console.Out, Console.Error);
+    }
+
+    static int RunCacheStats(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var workspace = ResolveProjectArtifactPath(options.Workspace, repoRoot);
+        return MigrationCacheMaintenance.PrintStats(workspace, Console.Out, Console.Error);
+    }
+
+    static int RunCacheVerify(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var workspace = ResolveProjectArtifactPath(options.Workspace, repoRoot);
+        return MigrationCacheMaintenance.Verify(workspace, Console.Out, Console.Error);
+    }
+
+    static int RunCachePrune(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var workspace = ResolveProjectArtifactPath(options.Workspace, repoRoot);
+        return MigrationCacheMaintenance.Prune(workspace, options.CacheMaxAgeDays, options.CacheMaxSizeMegabytes, options.CacheApply, options.CacheRemoveInvalid, Console.Out, Console.Error);
     }
 
     static int RunRefreshWaveStatus(MigrationOptions options)
@@ -2600,6 +2640,8 @@ Migration planning and wave run commands:
   selenium-pw-migrator migration plan show --plan migration/plan
   selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001 --execution-profile fast
   selenium-pw-migrator migration validate-wave --out migration/runs/wave-001
+  selenium-pw-migrator migration scope-audit --out migration/runs/wave-001
+  selenium-pw-migrator migration record-role-scope-access --out migration/runs/wave-001 --role reviewer --role-phase final --scope-operation read --scope-path migration/runs/wave-001/review/review-bundle.json
   selenium-pw-migrator migration check-progress --out migration/runs/wave-001 --max-identical-snapshots 3
   selenium-pw-migrator migration next-agent-action --out migration/runs/wave-001
   selenium-pw-migrator migration assess-agent-risk --out migration/runs/wave-001
@@ -2618,6 +2660,9 @@ Migration planning and wave run commands:
   selenium-pw-migrator migration resume-wave --out migration/runs/wave-001
   selenium-pw-migrator migration build-review-bundle --out migration/runs/wave-001
   selenium-pw-migrator migration perf-report --out migration/runs/wave-001
+  selenium-pw-migrator migration cache-stats --workspace migration
+  selenium-pw-migrator migration cache-verify --workspace migration
+  selenium-pw-migrator migration cache-prune --workspace migration --cache-max-age-days 30 --cache-max-size-mb 2048 --cache-apply false
   selenium-pw-migrator migration refresh-wave-status --out migration/runs/wave-001 --migrate-exit-code 0
 
 Planning is read-only; tune-wave-plan also executes no agents. The auto profile
@@ -2679,7 +2724,13 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
         string AgentRoleEvidence,
         string AgentRoleReason,
         int AgentRoleLeaseSeconds,
-        int RecoveryStaleAfterSeconds)
+        int RecoveryStaleAfterSeconds,
+        string ScopeOperation,
+        string ScopePath,
+        int CacheMaxAgeDays,
+        long CacheMaxSizeMegabytes,
+        bool CacheApply,
+        bool CacheRemoveInvalid)
     {
         public static MigrationOptions? Parse(string[] args, out string error)
         {
@@ -2731,6 +2782,12 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
             var agentRoleReason = string.Empty;
             var agentRoleLeaseSeconds = MigrationAgentRecovery.DefaultLeaseSeconds;
             var recoveryStaleAfterSeconds = MigrationAgentRecovery.DefaultStaleAfterSeconds;
+            var scopeOperation = "read";
+            var scopePath = string.Empty;
+            var cacheMaxAgeDays = 30;
+            long cacheMaxSizeMegabytes = 2048;
+            var cacheApply = false;
+            var cacheRemoveInvalid = true;
             var profileExplicit = false;
             var budgetExplicit = false;
             error = string.Empty;
@@ -2797,6 +2854,12 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
                         case "--role-reason": agentRoleReason = Next(arg); break;
                         case "--role-lease-seconds": agentRoleLeaseSeconds = ParsePositiveInt(Next(arg), arg); break;
                         case "--recovery-stale-after-seconds": recoveryStaleAfterSeconds = ParsePositiveInt(Next(arg), arg); break;
+                        case "--scope-operation": scopeOperation = Next(arg).Trim().ToLowerInvariant(); break;
+                        case "--scope-path": scopePath = Next(arg); break;
+                        case "--cache-max-age-days": cacheMaxAgeDays = ParseNonNegativeInt(Next(arg), arg); break;
+                        case "--cache-max-size-mb": cacheMaxSizeMegabytes = ParseNonNegativeLong(Next(arg), arg); break;
+                        case "--cache-apply": cacheApply = ParseBool(Next(arg), arg); break;
+                        case "--cache-remove-invalid": cacheRemoveInvalid = ParseBool(Next(arg), arg); break;
                         default:
                             if (!arg.StartsWith("--", StringComparison.Ordinal) && string.IsNullOrWhiteSpace(input))
                                 input = arg;
@@ -2862,6 +2925,11 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
                 error = "--role-status must be STARTED, COMPLETED, FAILED, or SKIPPED.";
                 return null;
             }
+            if (scopeOperation is not ("read" or "write" or "discover"))
+            {
+                error = "--scope-operation must be read, write, or discover.";
+                return null;
+            }
 
             if (waveProfile is not ("auto" or "manual" or "compact" or "balanced" or "conservative" or "experiment" or "auto-tuned"))
             {
@@ -2884,7 +2952,7 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
                 ref hardWaveComplexity,
                 ref sameFileMarginalCostPercent);
 
-            return new MigrationOptions(input, outPath, workspace, strategy, format, plan, inventory, wave, config, target, targetTestFramework, generationPolicy, executeMigrate, migrateExitCode, maxWaveSize, maxWaveFiles, maxWaveActions, hardWaveActions, maxWaveComplexity, hardWaveComplexity, sameFileMarginalCostPercent, smokeWaveSize, representativesPerCluster, preferLowRiskFirst, waveProfile, targetWaveCount, roleOverhead, executionProfile, maxIdenticalSnapshots, validationId, validationExitCode, validationCommand, validationScope, forceValidation, validationProfile, validationProject, validationTimeoutSeconds, validationDryRun, checkpointOnPass, checkpointLabel, checkpointStage, agentRole, agentRolePhase, agentRoleStatus, agentRoleEvidence, agentRoleReason, agentRoleLeaseSeconds, recoveryStaleAfterSeconds);
+            return new MigrationOptions(input, outPath, workspace, strategy, format, plan, inventory, wave, config, target, targetTestFramework, generationPolicy, executeMigrate, migrateExitCode, maxWaveSize, maxWaveFiles, maxWaveActions, hardWaveActions, maxWaveComplexity, hardWaveComplexity, sameFileMarginalCostPercent, smokeWaveSize, representativesPerCluster, preferLowRiskFirst, waveProfile, targetWaveCount, roleOverhead, executionProfile, maxIdenticalSnapshots, validationId, validationExitCode, validationCommand, validationScope, forceValidation, validationProfile, validationProject, validationTimeoutSeconds, validationDryRun, checkpointOnPass, checkpointLabel, checkpointStage, agentRole, agentRolePhase, agentRoleStatus, agentRoleEvidence, agentRoleReason, agentRoleLeaseSeconds, recoveryStaleAfterSeconds, scopeOperation, scopePath, cacheMaxAgeDays, cacheMaxSizeMegabytes, cacheApply, cacheRemoveInvalid);
         }
 
         static void ApplyNamedWaveProfile(
@@ -2932,6 +3000,13 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
         static int ParseNonNegativeInt(string value, string option)
         {
             if (!int.TryParse(value, out var parsed) || parsed < 0)
+                throw new ArgumentException($"{option} requires a non-negative integer");
+            return parsed;
+        }
+
+        static long ParseNonNegativeLong(string value, string option)
+        {
+            if (!long.TryParse(value, out var parsed) || parsed < 0)
                 throw new ArgumentException($"{option} requires a non-negative integer");
             return parsed;
         }

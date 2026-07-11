@@ -224,6 +224,14 @@ internal static class MigrationFastPath
             ["selectedTestsPath"] = Path.GetFullPath(selectedTestsPath),
             ["sourceFiles"] = sourceEntries,
             ["selectedTests"] = normalizedTests,
+            ["allowedReadRoots"] = new[]
+            {
+                Path.GetFullPath(sourceScopePath),
+                Path.GetFullPath(generatedOutputPath),
+                Path.GetFullPath(outPath),
+                Path.GetFullPath(planPath),
+                Path.GetFullPath(selectedTestsPath)
+            },
             ["allowedWriteRoots"] = new[]
             {
                 Path.GetFullPath(generatedOutputPath),

@@ -47,6 +47,8 @@ internal static class MigrationIncrementalPipeline
             var sourceScopePath = RequiredString(manifestRoot, "sourceScopePath");
             var normalizedConfigPath = string.IsNullOrWhiteSpace(configPath) ? null : Path.GetFullPath(configPath);
             var cacheRoot = Path.Combine(workspacePath, ".cache", "validation");
+            var cacheCompatibility = MigrationCacheMaintenance.CreateCompatibilityStamp();
+            var runCorrelationId = (OptionalString(manifestRoot, "waveId") ?? "wave") + "-" + (OptionalString(manifestRoot, "immutableFingerprint") ?? Guid.NewGuid().ToString("N"))[..12];
 
             var immutable = new SortedDictionary<string, object?>(StringComparer.Ordinal)
             {
@@ -71,6 +73,9 @@ internal static class MigrationIncrementalPipeline
                 ["targetTestFramework"] = string.IsNullOrWhiteSpace(targetTestFramework) ? null : targetTestFramework,
                 ["generationPolicy"] = string.IsNullOrWhiteSpace(generationPolicy) ? null : generationPolicy,
                 ["cacheRoot"] = Path.GetFullPath(cacheRoot),
+                ["runCorrelationId"] = runCorrelationId,
+                ["cacheCompatibilityAtCreation"] = cacheCompatibility.Payload,
+                ["cacheCompatibilityFingerprintAtCreation"] = cacheCompatibility.Fingerprint,
                 ["toolContractVersion"] = typeof(MigrationIncrementalPipeline).Assembly.GetName().Version?.ToString() ?? "unknown",
                 ["invariants"] = new SortedDictionary<string, object?>(StringComparer.Ordinal)
                 {
@@ -225,7 +230,8 @@ internal static class MigrationIncrementalPipeline
             ["source"] = "executed",
             ["reusable"] = validationExitCode == 0,
             ["validationContractFingerprint"] = string.IsNullOrWhiteSpace(validationContractFingerprint) ? null : validationContractFingerprint,
-            ["validationProfile"] = string.IsNullOrWhiteSpace(validationProfile) ? null : validationProfile
+            ["validationProfile"] = string.IsNullOrWhiteSpace(validationProfile) ? null : validationProfile,
+            ["cacheCompatibilityFingerprint"] = MigrationCacheMaintenance.CreateCompatibilityStamp().Fingerprint
         };
         WriteJsonAtomic(Path.Combine(outPath, "validation-result.json"), result);
 
@@ -462,7 +468,8 @@ internal static class MigrationIncrementalPipeline
                 ["cacheHit"] = cacheHit,
                 ["forceValidation"] = forceValidation,
                 ["canSkipExecution"] = cacheHit && !forceValidation,
-                ["cachePolicy"] = "exact-input-pass-only"
+                ["cachePolicy"] = "exact-input-and-tool-contract-pass-only",
+                ["cacheCompatibilityFingerprint"] = MigrationCacheMaintenance.CreateCompatibilityStamp().Fingerprint
             };
             return true;
         }
@@ -524,7 +531,8 @@ internal static class MigrationIncrementalPipeline
             OptionalString(root, "selectedTestsHash") ?? string.Empty,
             currentConfigHash ?? string.Empty,
             currentTreeHash,
-            OptionalString(root, "toolContractVersion") ?? string.Empty
+            OptionalString(root, "toolContractVersion") ?? string.Empty,
+            MigrationCacheMaintenance.CreateCompatibilityStamp().Fingerprint
         };
         return ComputeTextHash(string.Join("|", parts));
     }
@@ -598,7 +606,8 @@ internal static class MigrationIncrementalPipeline
                 && !string.IsNullOrWhiteSpace(OptionalString(root, "command"))
                 && root.TryGetProperty("scopeCoversPlannedImpact", out var covers) && covers.ValueKind == JsonValueKind.True
                 && string.Equals(OptionalString(root, "inputFingerprint"), inputFingerprint, StringComparison.OrdinalIgnoreCase)
-                && root.TryGetProperty("reusable", out var reusable) && reusable.ValueKind == JsonValueKind.True;
+                && root.TryGetProperty("reusable", out var reusable) && reusable.ValueKind == JsonValueKind.True
+                && MigrationCacheMaintenance.IsCurrentCompatible(root, out _);
         }
         catch (Exception ex) when (ex is IOException or JsonException)
         {
@@ -623,7 +632,8 @@ internal static class MigrationIncrementalPipeline
             {
                 var validPass = root.TryGetProperty("exitCode", out var exitCode) && exitCode.TryGetInt32(out var code) && code == 0
                     && !string.IsNullOrWhiteSpace(OptionalString(root, "command"))
-                    && root.TryGetProperty("reusable", out var reusable) && reusable.ValueKind == JsonValueKind.True;
+                    && root.TryGetProperty("reusable", out var reusable) && reusable.ValueKind == JsonValueKind.True
+                    && MigrationCacheMaintenance.IsCurrentCompatible(root, out _);
                 return (validPass ? status : "INVALID", fingerprintFresh && scopeCovers && validPass);
             }
             return (status, fingerprintFresh && scopeCovers);
