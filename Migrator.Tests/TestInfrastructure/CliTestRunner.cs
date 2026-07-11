@@ -1,5 +1,6 @@
-using System.Diagnostics;
 using System.Reflection;
+using System.Text;
+using Migrator.Core;
 
 namespace Migrator.Tests;
 
@@ -15,59 +16,71 @@ internal sealed record CliResult(
 internal static class CliTestRunner
 {
     static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(90);
+    static readonly IProcessRunner ProcessRunner = new SystemProcessRunner();
 
     public static CliResult Run(string arguments, TimeSpan? timeout = null)
     {
         var repoRoot = GetRepoRoot()
             ?? throw new InvalidOperationException("Could not find repo root (Migrator.sln not found)");
         var cliDll = ResolveCliDll(repoRoot);
-        var effectiveTimeout = timeout ?? DefaultTimeout;
-        var commandLine = $"dotnet \"{cliDll}\" {arguments}";
+        var requestArguments = new List<string> { cliDll };
+        requestArguments.AddRange(Tokenize(arguments));
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = "dotnet",
-            Arguments = $"\"{cliDll}\" {arguments}",
-            WorkingDirectory = repoRoot,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
-        psi.Environment["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1";
-
-        var stopwatch = Stopwatch.StartNew();
-        using var process = Process.Start(psi)
-            ?? throw new InvalidOperationException($"Failed to start CLI process: {commandLine}");
-
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
-        var stderrTask = process.StandardError.ReadToEndAsync();
-        var waitTask = process.WaitForExitAsync();
-        var completedTask = Task.WhenAny(waitTask, Task.Delay(effectiveTimeout)).GetAwaiter().GetResult();
-
-        if (completedTask != waitTask)
-        {
-            try
+        var result = ProcessRunner.Execute(new ProcessRequest(
+            FileName: "dotnet",
+            Arguments: requestArguments,
+            WorkingDirectory: repoRoot,
+            Timeout: timeout ?? DefaultTimeout,
+            Environment: new Dictionary<string, string?>
             {
-                process.Kill(entireProcessTree: true);
-            }
-            catch
+                ["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1",
+                ["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1"
+            },
+            DisplayName: "Migrator CLI test"));
+
+        return new CliResult(
+            result.ExitCode,
+            result.StandardOutput,
+            result.StandardError,
+            result.TimedOut,
+            result.CommandLine,
+            result.Duration,
+            result.PeakWorkingSetBytes);
+    }
+
+    internal static IReadOnlyList<string> Tokenize(string commandLine)
+    {
+        var result = new List<string>();
+        var current = new StringBuilder();
+        var quoted = false;
+
+        for (var index = 0; index < commandLine.Length; index++)
+        {
+            var character = commandLine[index];
+            if (character == '"')
             {
-                // Best-effort cleanup. The failure result below carries enough diagnostics.
+                quoted = !quoted;
+                continue;
             }
 
-            var stdout = GetCompletedResultOrEmpty(stdoutTask);
-            var stderr = GetCompletedResultOrEmpty(stderrTask);
-            stderr += $"\nCLI test process timed out after {effectiveTimeout.TotalSeconds:0}s. Command: {commandLine}";
-            stopwatch.Stop();
-            return new CliResult(-1, stdout, stderr, TimedOut: true, CommandLine: commandLine, Duration: stopwatch.Elapsed, PeakWorkingSetBytes: SafePeakWorkingSet(process));
+            if (char.IsWhiteSpace(character) && !quoted)
+            {
+                if (current.Length > 0)
+                {
+                    result.Add(current.ToString());
+                    current.Clear();
+                }
+                continue;
+            }
+
+            current.Append(character);
         }
 
-        var stdoutText = stdoutTask.GetAwaiter().GetResult();
-        var stderrText = stderrTask.GetAwaiter().GetResult();
-        stopwatch.Stop();
-        return new CliResult(process.ExitCode, stdoutText, stderrText, TimedOut: false, CommandLine: commandLine, Duration: stopwatch.Elapsed, PeakWorkingSetBytes: SafePeakWorkingSet(process));
+        if (quoted)
+            throw new ArgumentException("Unterminated quote in CLI test arguments.", nameof(commandLine));
+        if (current.Length > 0)
+            result.Add(current.ToString());
+        return result;
     }
 
     static string? GetRepoRoot()
@@ -124,24 +137,5 @@ internal static class CliTestRunner
         }
 
         return "Debug";
-    }
-
-    static long SafePeakWorkingSet(Process process)
-    {
-        try
-        {
-            return process.PeakWorkingSet64;
-        }
-        catch
-        {
-            return 0;
-        }
-    }
-
-    static string GetCompletedResultOrEmpty(Task<string> task)
-    {
-        if (!task.IsCompletedSuccessfully)
-            return string.Empty;
-        return task.GetAwaiter().GetResult();
     }
 }

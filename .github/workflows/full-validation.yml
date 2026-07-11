@@ -34,6 +34,10 @@ jobs:
       - name: Test full suite
         run: dotnet test Migrator.sln --no-build --configuration Release --verbosity normal
 
+      - name: Enforce orchestration and validation-host performance budgets
+        shell: pwsh
+        run: ./scripts/run-performance-tests.ps1 -Root . -Configuration Release -Output artifacts/performance -Enforce -NoBuild
+
       - name: Release doctor
         run: dotnet Migrator.Cli/bin/Release/net10.0/Migrator.Cli.dll --mode release-doctor --input . --out artifacts/release-doctor --format both
 
@@ -71,6 +75,7 @@ jobs:
           name: full-validation-artifacts-${{ env.PACKAGE_VERSION }}
           path: |
             artifacts/release-doctor/**
+            artifacts/performance/**
             artifacts/nuget/*.nupkg
             artifacts/release/*.tar.gz
             artifacts/release/checksums.sha256

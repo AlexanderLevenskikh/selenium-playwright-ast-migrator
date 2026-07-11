@@ -66,6 +66,8 @@ internal static class MigrationCommand
             "validate-wave" => RunValidateWave(options),
             "check-progress" => RunCheckProgress(options),
             "validation-plan" => RunValidationPlan(options),
+            "validate" => RunValidationHost(options),
+            "validation-host" => RunValidationHost(options),
             "record-validation" => RunRecordValidation(options),
             "checkpoint-wave" => RunCheckpointWave(options),
             "resume-wave" => RunResumeWave(options),
@@ -480,6 +482,26 @@ internal static class MigrationCommand
         var repoRoot = ResolveRepositoryRoot();
         var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
         return MigrationIncrementalPipeline.PlanValidation(outPath, options.ForceValidation, Console.Out, Console.Error);
+    }
+
+    static int RunValidationHost(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        var validationProject = string.IsNullOrWhiteSpace(options.ValidationProject)
+            ? string.Empty
+            : ResolveProjectArtifactPath(options.ValidationProject, repoRoot);
+        return MigrationValidationHost.Run(
+            outPath,
+            options.ValidationProfile,
+            validationProject,
+            options.ValidationCommand,
+            options.ValidationTimeoutSeconds,
+            options.ValidationDryRun,
+            options.CheckpointOnPass,
+            options.ForceValidation,
+            Console.Out,
+            Console.Error);
     }
 
     static int RunRecordValidation(MigrationOptions options)
@@ -2507,6 +2529,8 @@ Migration planning and wave run commands:
   selenium-pw-migrator migration validate-wave --out migration/runs/wave-001
   selenium-pw-migrator migration check-progress --out migration/runs/wave-001 --max-identical-snapshots 3
   selenium-pw-migrator migration validation-plan --out migration/runs/wave-001
+  selenium-pw-migrator migration validate --out migration/runs/wave-001 --validation-project ./Target.Tests/Target.Tests.csproj --checkpoint-on-pass true
+  selenium-pw-migrator migration validate --out migration/runs/wave-001 --validation-command "dotnet test ./Target.Tests/Target.Tests.csproj --no-restore" --validation-timeout-seconds 900
   selenium-pw-migrator migration record-validation --out migration/runs/wave-001 --validation-id target-build --validation-exit-code 0 --validation-scope changed-files --validation-command "dotnet test Target.Tests.csproj"
   selenium-pw-migrator migration checkpoint-wave --out migration/runs/wave-001 --checkpoint-label generated --checkpoint-stage migration
   selenium-pw-migrator migration resume-wave --out migration/runs/wave-001
@@ -2518,7 +2542,7 @@ Planning is read-only; tune-wave-plan also executes no agents. The auto profile
 tests deterministic budget combinations and minimizes role-cycle overhead, singleton waves,
 and source-file fragmentation. Same-file tests pay marginal rather than full repeated complexity.
 run-wave materializes an immutable wave manifest, execution policy, run-context, bounded source-scope plus config-delta,
-memory-delta, performance trace, run summary, evidence folder, and migrate scripts. `validate-wave` rejects scope drift or changed copied inputs. `check-progress` detects repeated identical generated/evidence/TODO/unmapped/validation state. `validation-plan` computes changed-file impact and exact-input cache eligibility; `record-validation` stores only passing results in the shared cache. Checkpoints, resume decisions, and review bundles preserve work without treating a checkpoint as DONE. The migrate wrappers refresh wave-status.json and validation-plan.json after execution. It never promotes config or memory automatically.
+memory-delta, performance trace, run summary, evidence folder, and migrate scripts. `validate-wave` rejects scope drift or changed copied inputs. `check-progress` detects repeated identical generated/evidence/TODO/unmapped/validation state. `validation-plan` computes changed-file impact and exact-input cache eligibility; `migration validate` is the single validation host that plans, executes, records evidence, and materializes exact-input cache hits without an agent-managed three-command chain. `record-validation` remains available for compatibility and manual evidence import. Checkpoints, resume decisions, and review bundles preserve work without treating a checkpoint as DONE. The migrate wrappers refresh wave-status.json and validation-plan.json after execution. It never promotes config or memory automatically.
 Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to create a reviewable candidate config after wave deltas are reviewed.
 """);
     }
@@ -2560,6 +2584,11 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
         string ValidationCommand,
         string ValidationScope,
         bool ForceValidation,
+        string ValidationProfile,
+        string ValidationProject,
+        int ValidationTimeoutSeconds,
+        bool ValidationDryRun,
+        bool CheckpointOnPass,
         string CheckpointLabel,
         string CheckpointStage)
     {
@@ -2599,6 +2628,11 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
             var validationCommand = string.Empty;
             var validationScope = "changed-files";
             var forceValidation = false;
+            var validationProfile = "auto";
+            var validationProject = string.Empty;
+            var validationTimeoutSeconds = 900;
+            var validationDryRun = false;
+            var checkpointOnPass = true;
             var checkpointLabel = string.Empty;
             var checkpointStage = "migration";
             var profileExplicit = false;
@@ -2653,6 +2687,11 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
                         case "--validation-command": validationCommand = Next(arg); break;
                         case "--validation-scope": validationScope = Next(arg); break;
                         case "--force-validation": forceValidation = ParseBool(Next(arg), arg); break;
+                        case "--validation-profile": validationProfile = Next(arg).Trim().ToLowerInvariant(); break;
+                        case "--validation-project": validationProject = Next(arg); break;
+                        case "--validation-timeout-seconds": validationTimeoutSeconds = ParsePositiveInt(Next(arg), arg); break;
+                        case "--validation-dry-run": validationDryRun = ParseBool(Next(arg), arg); break;
+                        case "--checkpoint-on-pass": checkpointOnPass = ParseBool(Next(arg), arg); break;
                         case "--checkpoint-label": checkpointLabel = Next(arg); break;
                         case "--checkpoint-stage": checkpointStage = Next(arg); break;
                         default:
@@ -2689,6 +2728,12 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
                 return null;
             }
 
+            if (validationProfile is not ("auto" or "fast" or "standard" or "audit"))
+            {
+                error = "--validation-profile must be auto, fast, standard, or audit.";
+                return null;
+            }
+
             checkpointStage = checkpointStage.Trim().ToLowerInvariant();
             if (checkpointStage is not ("migration" or "validation" or "review" or "final"))
             {
@@ -2717,7 +2762,7 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
                 ref hardWaveComplexity,
                 ref sameFileMarginalCostPercent);
 
-            return new MigrationOptions(input, outPath, workspace, strategy, format, plan, inventory, wave, config, target, targetTestFramework, generationPolicy, executeMigrate, migrateExitCode, maxWaveSize, maxWaveFiles, maxWaveActions, hardWaveActions, maxWaveComplexity, hardWaveComplexity, sameFileMarginalCostPercent, smokeWaveSize, representativesPerCluster, preferLowRiskFirst, waveProfile, targetWaveCount, roleOverhead, executionProfile, maxIdenticalSnapshots, validationId, validationExitCode, validationCommand, validationScope, forceValidation, checkpointLabel, checkpointStage);
+            return new MigrationOptions(input, outPath, workspace, strategy, format, plan, inventory, wave, config, target, targetTestFramework, generationPolicy, executeMigrate, migrateExitCode, maxWaveSize, maxWaveFiles, maxWaveActions, hardWaveActions, maxWaveComplexity, hardWaveComplexity, sameFileMarginalCostPercent, smokeWaveSize, representativesPerCluster, preferLowRiskFirst, waveProfile, targetWaveCount, roleOverhead, executionProfile, maxIdenticalSnapshots, validationId, validationExitCode, validationCommand, validationScope, forceValidation, validationProfile, validationProject, validationTimeoutSeconds, validationDryRun, checkpointOnPass, checkpointLabel, checkpointStage);
         }
 
         static void ApplyNamedWaveProfile(

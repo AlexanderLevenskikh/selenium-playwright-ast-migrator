@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace Migrator.Tests;
@@ -10,6 +12,7 @@ internal sealed record OrchestratorScenarioMaterialization(
 
 internal static class OrchestratorScenarioCache
 {
+    const string CacheSchema = "orchestrator-test-scenario/v2";
     static readonly ConcurrentDictionary<string, Lazy<ScenarioSnapshot>> Cache = new(StringComparer.Ordinal);
     static readonly string CacheRoot = Path.Combine(Path.GetTempPath(), $"migrator-orchestrator-scenarios-{Environment.ProcessId}");
 
@@ -45,7 +48,7 @@ internal static class OrchestratorScenarioCache
 
         var receipt = new
         {
-            schema = "orchestrator-test-scenario/v1",
+            schema = CacheSchema,
             key,
             result.ExitCode,
             result.TimedOut,
@@ -63,13 +66,59 @@ internal static class OrchestratorScenarioCache
 
     static string BuildKey(string inputPath, string? configPath)
     {
-        var normalized = string.Join("|", new[]
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        Append(hash, CacheSchema);
+        AppendPath(hash, inputPath);
+        if (string.IsNullOrWhiteSpace(configPath))
+            Append(hash, "<default-config>");
+        else
+            AppendPath(hash, configPath);
+        return Convert.ToHexString(hash.GetHashAndReset())[..16].ToLowerInvariant();
+    }
+
+    static void AppendPath(IncrementalHash hash, string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        Append(hash, fullPath.Replace('\\', '/'));
+        if (File.Exists(fullPath))
         {
-            Path.GetFullPath(inputPath),
-            string.IsNullOrWhiteSpace(configPath) ? "<default>" : Path.GetFullPath(configPath)
-        });
-        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(normalized));
-        return Convert.ToHexString(bytes)[..16].ToLowerInvariant();
+            AppendFile(hash, fullPath, Path.GetFileName(fullPath));
+            return;
+        }
+
+        if (!Directory.Exists(fullPath))
+        {
+            Append(hash, "<missing>");
+            return;
+        }
+
+        foreach (var file in Directory.EnumerateFiles(fullPath, "*", SearchOption.AllDirectories)
+                     .Where(path => !IsTransient(path, fullPath))
+                     .OrderBy(path => path, StringComparer.Ordinal))
+        {
+            AppendFile(hash, file, Path.GetRelativePath(fullPath, file).Replace('\\', '/'));
+        }
+    }
+
+    static bool IsTransient(string path, string root)
+    {
+        var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
+        return relative.StartsWith("bin/", StringComparison.OrdinalIgnoreCase)
+            || relative.StartsWith("obj/", StringComparison.OrdinalIgnoreCase)
+            || relative.StartsWith(".git/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    static void AppendFile(IncrementalHash hash, string path, string relativePath)
+    {
+        Append(hash, relativePath);
+        hash.AppendData(File.ReadAllBytes(path));
+        hash.AppendData(new byte[] { 0 });
+    }
+
+    static void Append(IncrementalHash hash, string value)
+    {
+        hash.AppendData(Encoding.UTF8.GetBytes(value));
+        hash.AppendData(new byte[] { 0 });
     }
 
     static void RecreateDirectory(string path)

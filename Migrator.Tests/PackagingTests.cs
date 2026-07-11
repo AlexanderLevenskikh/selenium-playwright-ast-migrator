@@ -869,6 +869,29 @@ public class PackagingTests
         Assert.DoesNotContain("/temp/", packedMetadata, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void ReleaseNotesPipeline_UsesExactVersionNotesAndFailsClosed()
+    {
+        var changelog = File.ReadAllText(FindRepositoryFile("CHANGELOG.md"));
+        var extractor = File.ReadAllText(FindRepositoryFile("scripts/extract-release-notes.sh"));
+        var workflow = File.ReadAllText(FindRepositoryFile(".github/workflows/publish-nuget.yml"));
+        var releaseProcess = File.ReadAllText(FindRepositoryFile("docs/release-process.md"));
+
+        Assert.StartsWith("# Changelog", changelog);
+        Assert.Equal(1, changelog.Split("## [Unreleased]", StringSplitOptions.None).Length - 1);
+        Assert.Contains("Fast, standard, and audit execution profiles", changelog);
+        Assert.Contains("A single `migration validate` host", changelog);
+        Assert.Contains("Layered Unit/Contract/Scenario/E2E test runners", changelog);
+
+        Assert.Contains("docs/release-notes/v$VERSION.md", extractor);
+        Assert.Contains("RELEASE_NOTES_NOT_FOUND", extractor);
+        Assert.Contains("--allow-fallback", extractor);
+        Assert.Contains("exit 1", extractor);
+        Assert.Contains("--notes-file .release-notes.md", workflow);
+        Assert.Contains("exact matching `CHANGELOG.md` section", releaseProcess);
+        Assert.Contains("fails closed", releaseProcess);
+    }
+
     static string ElementValue(XDocument doc, string name)
     {
         return doc.Descendants().FirstOrDefault(e => e.Name.LocalName == name)?.Value ?? string.Empty;

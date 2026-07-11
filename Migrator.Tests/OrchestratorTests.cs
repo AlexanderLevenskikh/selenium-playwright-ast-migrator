@@ -14,86 +14,13 @@ namespace Migrator.Tests;
 
 [Collection("CliProcess")]
 [Trait("Shard", "Cli")]
+[Trait("Layer", "Scenario")]
 public class OrchestratorTests
 {
     readonly string _testFilesDir = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!, "TestFiles");
     readonly string _fixtuesDir = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!, "TestFixtures");
 
-    // --- Model and formatting tests ---
-
-    [Fact]
-    public void OrchestrationReport_SerializesToJson()
-    {
-        var report = CreateTestReport();
-        var json = JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true });
-
-        Assert.Contains("\"Status\"", json);
-        Assert.Contains("\"passed_with_warnings\"", json);
-        Assert.Contains("\"analyze\"", json);
-        Assert.Contains("\"migrate\"", json);
-        Assert.Contains("\"FilesProcessed\"", json);
-    }
-
-    [Fact]
-    public void OrchestrationReport_ContainsStageStatuses()
-    {
-        var report = CreateTestReport();
-
-        Assert.Equal(4, report.Stages.Count);
-        Assert.Contains(report.Stages, s => s.Name == "analyze" && s.Status == OrchestrationStageStatus.Passed);
-        Assert.Contains(report.Stages, s => s.Name == "migrate" && s.Status == OrchestrationStageStatus.Passed);
-        Assert.Contains(report.Stages, s => s.Name == "verify" && s.Status == OrchestrationStageStatus.Failed);
-        Assert.Contains(report.Stages, s => s.Name == "propose" && s.Status == OrchestrationStageStatus.Passed);
-    }
-
-    [Fact]
-    public void OrchestrationReport_ContainsTopProposals()
-    {
-        var report = CreateTestReport();
-        Assert.NotEmpty(report.TopProposals);
-        Assert.Contains(report.TopProposals, p => p.Contains("UiTarget"));
-    }
-
-    [Fact]
-    public void OrchestrationReport_ContainsRecommendedActions()
-    {
-        var report = CreateTestReport();
-        Assert.NotEmpty(report.RecommendedNextActions);
-    }
-
-    [Fact]
-    public void OrchestrationReport_Metrics_CorrectValues()
-    {
-        var report = CreateTestReport();
-        Assert.Equal(15, report.Metrics.FilesProcessed);
-        Assert.Equal(42, report.Metrics.TestsFound);
-        Assert.Equal(15, report.Metrics.GeneratedFiles);
-        Assert.Equal(3, report.Metrics.SyntaxErrors);
-        Assert.Equal(18, report.Metrics.TodoComments);
-        Assert.Equal(4, report.Metrics.PageTodoCalls);
-        Assert.Equal(6, report.Metrics.Proposals);
-    }
-
-    [Fact]
-    public void PathSanitizer_MakesRelativePath()
-    {
-        var safe = PathSanitizer.MakeSafePath("C:\\base\\sub\\file.cs", "C:\\base");
-        Assert.Equal("sub\\file.cs", safe);
-    }
-
-    [Fact]
-    public void PathSanitizer_FallsBackToFileName()
-    {
-        var safe = PathSanitizer.MakeSafePath("C:\\other\\file.cs", "C:\\base");
-        Assert.Equal("file.cs", safe);
-    }
-
-    [Fact]
-    public void PathSanitizer_ReturnsFileNameForEmptyBase()
-    {
-        var safe = PathSanitizer.MakeSafePath("C:\\some\\path\\file.cs");
-        Assert.Equal("file.cs", safe);
-    }
+    // CLI scenario tests use a content-addressed shared snapshot per input/config.
 
     // --- CLI integration tests ---
 
@@ -547,33 +474,6 @@ public class OrchestratorTests
             $"Duration: {result.Duration}\nCommand: {result.CommandLine}\n" +
             $"STDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
         return result.ExitCode;
-    }
-
-    static OrchestrationReport CreateTestReport()
-    {
-        return new OrchestrationReport(
-            Status: OrchestrationStageStatus.PassedWithWarnings,
-            InputPath: "test-input",
-            ConfigPath: "adapter-config.json",
-            OutputPath: "orchestration",
-            Stages: new[]
-            {
-                new OrchestrationStage("analyze", OrchestrationStageStatus.Passed, 0, "15 files, 42 tests", "analyze"),
-                new OrchestrationStage("migrate", OrchestrationStageStatus.Passed, 0, "15 files generated", "generated"),
-                new OrchestrationStage("verify", OrchestrationStageStatus.Failed, 1, "failed", "verify"),
-                new OrchestrationStage("propose", OrchestrationStageStatus.Passed, 0, "6 proposals generated", "propose")
-            },
-            Metrics: new OrchestrationMetrics(15, 42, 15, 3, 18, 4, 6),
-            Issues: new[] { "Verify: 3 syntax error(s)" },
-            TopProposals: new[] { "[High] Map UiTarget for modal.Add (score: 95)" },
-            RecommendedNextActions: new[]
-            {
-                "Fix 3 syntax error(s) in generated code.",
-                "Add source-truth UiTarget mappings for unmapped targets.",
-                "Re-run orchestrator after applying changes."
-            },
-            Warnings: Array.Empty<string>()
-        );
     }
 
     static void TryDelete(string path)

@@ -17,6 +17,8 @@ A materialized wave now owns the following incremental artifacts:
 | `resume-decision.json` | Deterministic next action without rematerializing source scope. |
 | `review/review-bundle.json` | Cumulative diff, incremental diff, validation freshness, TODO/unmapped counts, risk flags, and evidence references for final review. |
 
+`validation-host-result.json` records the host decision, deterministic checks, process executions, durations, and safety invariants. Process stdout/stderr is stored under `validation/processes/<invocation-id>/`, while immutable host summaries are kept under `validation/host-runs/`, rather than being reinterpreted by the agent.
+
 Shared validation cache entries are stored under `<workspace>/.cache/validation/<input-fingerprint>.json`. Only successful executed validations are reusable. The executed validation scope must cover the planner impact (`changed-files`, `project`, `full`, or `artifacts`); under-scoped PASS evidence is rejected. Failures and stale results never populate the cache.
 
 ## Typical flow
@@ -31,21 +33,10 @@ selenium-pw-migrator migration run-wave \
 
 migration/runs/wave-001/run-migrate.sh
 
-selenium-pw-migrator migration validation-plan \
-  --out migration/runs/wave-001
-
-# Execute the recommended checks, then record their real exit code and command.
-selenium-pw-migrator migration record-validation \
+# Preferred path: one host plans, executes, records evidence, and checkpoints a real PASS.
+selenium-pw-migrator migration validate \
   --out migration/runs/wave-001 \
-  --validation-id target-build-and-selected-tests \
-  --validation-exit-code 0 \
-  --validation-scope changed-files \
-  --validation-command "dotnet test Target.Tests.csproj --filter <selected tests>"
-
-selenium-pw-migrator migration checkpoint-wave \
-  --out migration/runs/wave-001 \
-  --checkpoint-label validated \
-  --checkpoint-stage validation
+  --validation-project ./Target.Tests/Target.Tests.csproj
 
 selenium-pw-migrator migration build-review-bundle \
   --out migration/runs/wave-001
@@ -53,6 +44,8 @@ selenium-pw-migrator migration build-review-bundle \
 selenium-pw-migrator migration resume-wave \
   --out migration/runs/wave-001
 ```
+
+The lower-level `validation-plan` and `record-validation` commands remain available for recovery or importing externally executed evidence. They are not the normal agent path because splitting planning, execution, and recording allows under-scoped or incorrectly reported evidence.
 
 `resume-wave` emits one of the following bounded actions:
 

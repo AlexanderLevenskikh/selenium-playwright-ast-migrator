@@ -183,7 +183,10 @@ internal static class MigrationIncrementalPipeline
         string validationCommand,
         string validationScope,
         TextWriter output,
-        TextWriter error)
+        TextWriter error,
+        string? cachePathOverride = null,
+        string? validationContractFingerprint = null,
+        string? validationProfile = null)
     {
         outPath = Path.GetFullPath(outPath);
         if (!TryBuildValidationPlan(outPath, forceValidation: true, out var plan, out var planError))
@@ -220,13 +223,17 @@ internal static class MigrationIncrementalPipeline
             ["changeSetHash"] = plan["changeSetHash"],
             ["checks"] = plan["recommendedChecks"],
             ["source"] = "executed",
-            ["reusable"] = validationExitCode == 0
+            ["reusable"] = validationExitCode == 0,
+            ["validationContractFingerprint"] = string.IsNullOrWhiteSpace(validationContractFingerprint) ? null : validationContractFingerprint,
+            ["validationProfile"] = string.IsNullOrWhiteSpace(validationProfile) ? null : validationProfile
         };
         WriteJsonAtomic(Path.Combine(outPath, "validation-result.json"), result);
 
         if (validationExitCode == 0)
         {
-            var cachePath = Convert.ToString(plan["cachePath"])!;
+            var cachePath = string.IsNullOrWhiteSpace(cachePathOverride)
+                ? Convert.ToString(plan["cachePath"])!
+                : Path.GetFullPath(cachePathOverride);
             WriteJsonAtomic(cachePath, result);
         }
 

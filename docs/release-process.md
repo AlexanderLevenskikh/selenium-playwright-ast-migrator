@@ -16,7 +16,17 @@ Publish a stable version only when the public command set, package contents, and
 
 ## Preview release checklist
 
-1. Update `CHANGELOG.md` with user-visible changes.
+1. Update `CHANGELOG.md` with user-visible changes. Keep work-in-progress summaries under the single canonical `## [Unreleased]` section. Before publishing version `<version>`, either:
+   - move the shipped entries into `## [<version>]`; or
+   - create `docs/release-notes/v<version>.md`.
+
+   Preview the exact body that GitHub Release will receive:
+
+```bash
+bash scripts/extract-release-notes.sh <version> .release-notes.md
+```
+
+   The extractor fails closed when neither exact source exists. It does not silently publish `Unreleased` or a generic placeholder. `--allow-fallback` is reserved for local diagnostics and is not used by the release workflow.
 2. Verify package metadata in `Migrator.Cli/Migrator.Cli.csproj`:
    - `PackageId`
    - `Version`
@@ -233,7 +243,7 @@ The workflow:
 9. uploads the staged `.nupkg`, standalone archives, npm wrapper `.tgz`, `checksums.sha256`, `standalone-release-manifest.json`, and standalone install scripts as one workflow artifact;
 10. publishes only when `dry_run=false`;
 11. downloads and verifies the same flat release asset directory in the publish job;
-12. creates or updates the GitHub release `v<version>` after a successful publish, using `docs/release-notes/v<version>.md` first and falling back to the matching `CHANGELOG.md` section;
+12. creates or updates the GitHub release `v<version>` after a successful publish, using `docs/release-notes/v<version>.md` first and then the exact matching `CHANGELOG.md` section; the publish job fails if neither exists;
 13. attaches every file from `artifacts/github-release` to the GitHub release.
 
 The staging directory is intentionally flat. Do not upload mixed source paths directly to GitHub Releases from `actions/download-artifact`; nested artifact layouts can make the install scripts appear in a release while the standalone archives are left behind.

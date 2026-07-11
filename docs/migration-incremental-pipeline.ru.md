@@ -15,6 +15,8 @@
 | `resume-decision.json` | Детерминированное следующее действие без повторной материализации source scope. |
 | `review/review-bundle.json` | Полная и инкрементальная дельты, свежесть validation, TODO/unmapped, risk flags и ссылки на evidence. |
 
+`validation-host-result.json` фиксирует решение host, детерминированные проверки, запуски процессов, длительности и safety-инварианты. stdout/stderr процессов сохраняются в `validation/processes/<invocation-id>/`, а неизменяемые summaries host — в `validation/host-runs/`, поэтому агенту не нужно пересказывать или повторно интерпретировать их.
+
 Общий кэш validation хранится в `<workspace>/.cache/validation/<input-fingerprint>.json`. В него попадает только успешная реально выполненная проверка. Выполненный validation scope обязан покрывать рассчитанное влияние (`changed-files`, `project`, `full` или `artifacts`); недовалидированный PASS отклоняется. FAIL и устаревшие результаты не переиспользуются.
 
 ## Типовой поток
@@ -29,21 +31,10 @@ selenium-pw-migrator migration run-wave `
 
 ./migration/runs/wave-001/run-migrate.ps1
 
-selenium-pw-migrator migration validation-plan `
-  --out migration/runs/wave-001
-
-# Выполнить рекомендованные проверки и записать реальный exit code и команду.
-selenium-pw-migrator migration record-validation `
+# Основной путь: один host планирует, исполняет, пишет evidence и создаёт checkpoint для реального PASS.
+selenium-pw-migrator migration validate `
   --out migration/runs/wave-001 `
-  --validation-id target-build-and-selected-tests `
-  --validation-exit-code 0 `
-  --validation-scope changed-files `
-  --validation-command "dotnet test Target.Tests.csproj --filter <selected tests>"
-
-selenium-pw-migrator migration checkpoint-wave `
-  --out migration/runs/wave-001 `
-  --checkpoint-label validated `
-  --checkpoint-stage validation
+  --validation-project ./Target.Tests/Target.Tests.csproj
 
 selenium-pw-migrator migration build-review-bundle `
   --out migration/runs/wave-001
@@ -51,6 +42,8 @@ selenium-pw-migrator migration build-review-bundle `
 selenium-pw-migrator migration resume-wave `
   --out migration/runs/wave-001
 ```
+
+Низкоуровневые `validation-plan` и `record-validation` остаются для восстановления или импорта внешнего evidence. Это не обычный путь агента: раздельные planning, execution и recording позволяют случайно записать недостаточный или неверно описанный результат.
 
 `resume-wave` возвращает одно ограниченное действие:
 
