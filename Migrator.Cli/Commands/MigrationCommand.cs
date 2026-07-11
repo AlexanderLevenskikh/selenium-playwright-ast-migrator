@@ -66,6 +66,7 @@ internal static class MigrationCommand
             "validate-wave" => RunValidateWave(options),
             "check-progress" => RunCheckProgress(options),
             "next-agent-action" => RunNextAgentAction(options),
+            "assess-agent-risk" => RunAssessAgentRisk(options),
             "record-agent-role" => RunRecordAgentRole(options),
             "check-agent-budget" => RunCheckAgentBudget(options),
             "agent-perf-report" => RunAgentPerformanceReport(options),
@@ -486,6 +487,13 @@ internal static class MigrationCommand
         var repoRoot = ResolveRepositoryRoot();
         var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
         return MigrationAgentRuntime.ResolveNextAction(outPath, Console.Out, Console.Error);
+    }
+
+    static int RunAssessAgentRisk(MigrationOptions options)
+    {
+        var repoRoot = ResolveRepositoryRoot();
+        var outPath = ResolveProjectArtifactPath(options.Out, repoRoot);
+        return MigrationAgentRuntime.AssessRisk(outPath, Console.Out, Console.Error);
     }
 
     static int RunRecordAgentRole(MigrationOptions options)
@@ -2569,6 +2577,7 @@ Migration planning and wave run commands:
   selenium-pw-migrator migration validate-wave --out migration/runs/wave-001
   selenium-pw-migrator migration check-progress --out migration/runs/wave-001 --max-identical-snapshots 3
   selenium-pw-migrator migration next-agent-action --out migration/runs/wave-001
+  selenium-pw-migrator migration assess-agent-risk --out migration/runs/wave-001
   selenium-pw-migrator migration record-agent-role --out migration/runs/wave-001 --role executor --role-phase execution --role-status STARTED
   selenium-pw-migrator migration record-agent-role --out migration/runs/wave-001 --role executor --role-phase execution --role-status COMPLETED --role-evidence generated
   selenium-pw-migrator migration check-agent-budget --out migration/runs/wave-001
@@ -2587,7 +2596,7 @@ Planning is read-only; tune-wave-plan also executes no agents. The auto profile
 tests deterministic budget combinations and minimizes role-cycle overhead, singleton waves,
 and source-file fragmentation. Same-file tests pay marginal rather than full repeated complexity.
 run-wave materializes an immutable wave manifest, execution policy, run-context, bounded source-scope plus config-delta,
-memory-delta, performance trace, run summary, evidence folder, and migrate scripts. `validate-wave` rejects scope drift or changed copied inputs. `check-progress` detects repeated identical generated/evidence/TODO/unmapped/validation state. `next-agent-action` deterministically selects exactly one role/command/final handoff from the execution policy and current evidence; `record-agent-role` appends hash-chained role receipts; `check-agent-budget` prevents unbounded role loops; `agent-perf-report` reports role counts and durations. `validation-plan` computes changed-file impact and exact-input cache eligibility; `migration validate` is the single validation host that plans, executes, records evidence, and materializes exact-input cache hits without an agent-managed three-command chain. `record-validation` remains available for compatibility and manual evidence import. Checkpoints, resume decisions, and review bundles preserve work without treating a checkpoint as DONE. The migrate wrappers refresh wave-status.json and validation-plan.json after execution. It never promotes config or memory automatically.
+memory-delta, performance trace, run summary, evidence folder, and migrate scripts. `validate-wave` rejects scope drift or changed copied inputs. `check-progress` detects repeated identical generated/evidence/TODO/unmapped/validation state. `next-agent-action` deterministically selects exactly one role/command/final handoff from the execution policy and current evidence; `assess-agent-risk` emits an explainable low/medium/high/critical score and adaptive role budget; `record-agent-role` appends hash-chained role receipts; `check-agent-budget` prevents unbounded role loops; `agent-perf-report` reports role counts, risk, and lifecycle budget status. `validation-plan` computes changed-file impact and exact-input cache eligibility; `migration validate` is the single validation host that plans, executes, records evidence, and materializes exact-input cache hits without an agent-managed three-command chain. `record-validation` remains available for compatibility and manual evidence import. Checkpoints, resume decisions, and review bundles preserve work without treating a checkpoint as DONE. The migrate wrappers refresh wave-status.json and validation-plan.json after execution. It never promotes config or memory automatically.
 Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to create a reviewable candidate config after wave deltas are reviewed.
 """);
     }

@@ -486,3 +486,8 @@ When a final gate passes, `check-final-gate.ps1` updates `migration/state/harnes
 
 - [Проверка производительности](docs/performance-testing.ru.md)
 - [Слои тестирования](docs/test-layers.ru.md)
+
+
+### Адаптивная маршрутизация риска агента
+
+`migration assess-agent-risk` создаёт объяснимый `agent-risk-assessment.json` и связывает разрешение на роль с `riskAssessmentFingerprint`. Для низкого риска fast-run получает компактный потолок в четыре вызова без watchdog; детерминированные no-progress/protected/scope-сигналы включают watchdog; критические evidence останавливают автоматическое продолжение. Подробнее: [`docs/migration-agent-risk-routing.ru.md`](docs/migration-agent-risk-routing.ru.md).

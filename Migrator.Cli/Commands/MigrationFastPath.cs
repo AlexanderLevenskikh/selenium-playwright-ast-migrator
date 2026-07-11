@@ -50,6 +50,22 @@ internal static class MigrationFastPath
             ["schemaVersion"] = ExecutionPolicySchema,
             ["profile"] = profile,
             ["purpose"] = "Bound the pre-final agent loop without weakening deterministic final-gate requirements.",
+            ["initialRisk"] = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["dominantRisk"] = dominantRisk.Trim().ToLowerInvariant(),
+                ["budgetStatus"] = budgetStatus.Trim().ToUpperInvariant(),
+                ["highRisk"] = highRisk
+            },
+            ["riskRouting"] = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["mode"] = "adaptive-deterministic",
+                ["assessmentArtifact"] = "agent-risk-assessment.json",
+                ["levels"] = new[] { "low", "medium", "high", "critical" },
+                ["criticalAction"] = "HUMAN_REVIEW_REQUIRED",
+                ["staleDispatchAllowed"] = false,
+                ["finalReviewerAlwaysRequired"] = true,
+                ["finalSentinelAlwaysRequired"] = true
+            },
             ["requiredRoles"] = requiredRoles,
             ["conditionalRoles"] = conditionalRoles,
             ["deterministicChecks"] = new[]
@@ -98,6 +114,12 @@ internal static class MigrationFastPath
                 },
                 ["duplicateActiveDispatchAllowed"] = false,
                 ["budgetExhaustionAction"] = "HUMAN_REVIEW_REQUIRED"
+            },
+            ["lifecycleBudgets"] = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["maxWallClockMilliseconds"] = profile switch { "audit" => 21600000L, "standard" => 10800000L, _ => 7200000L },
+                ["budgetExhaustionAction"] = "HUMAN_REVIEW_REQUIRED",
+                ["wallClockIsDiagnostic"] = true
             },
             ["protectedRiskTriggers"] = new[]
             {
@@ -439,6 +461,28 @@ internal static class MigrationFastPath
                             && roleBudgets.TryGetProperty("duplicateActiveDispatchAllowed", out var duplicateDispatch)
                             && duplicateDispatch.ValueKind == JsonValueKind.False,
                             "execution policy may not allow duplicate active role dispatch");
+                        var riskRouting = policyRoot.TryGetProperty("riskRouting", out var riskRoutingNode) && riskRoutingNode.ValueKind == JsonValueKind.Object
+                            ? riskRoutingNode
+                            : default;
+                        AddCheck(checks, failures, "adaptive-risk-routing-present",
+                            riskRouting.ValueKind == JsonValueKind.Object
+                            && riskRouting.TryGetProperty("mode", out var riskMode)
+                            && riskMode.GetString() == "adaptive-deterministic",
+                            "execution policy must use deterministic adaptive risk routing");
+                        AddCheck(checks, failures, "stale-risk-dispatch-forbidden",
+                            riskRouting.ValueKind == JsonValueKind.Object
+                            && riskRouting.TryGetProperty("staleDispatchAllowed", out var staleDispatch)
+                            && staleDispatch.ValueKind == JsonValueKind.False,
+                            "execution policy may not authorize a role from a stale risk assessment");
+                        var lifecycleBudgets = policyRoot.TryGetProperty("lifecycleBudgets", out var lifecycleBudgetNode) && lifecycleBudgetNode.ValueKind == JsonValueKind.Object
+                            ? lifecycleBudgetNode
+                            : default;
+                        AddCheck(checks, failures, "agent-lifecycle-budget-present",
+                            lifecycleBudgets.ValueKind == JsonValueKind.Object
+                            && lifecycleBudgets.TryGetProperty("maxWallClockMilliseconds", out var lifecycleWall)
+                            && lifecycleWall.TryGetInt64(out var maxLifecycleWall)
+                            && maxLifecycleWall > 0,
+                            "execution policy must define a positive lifecycle wall-clock budget");
                     }
                     catch (Exception ex) when (ex is JsonException or IOException)
                     {

@@ -13,6 +13,7 @@ This project uses preview SemVer-style versions while the public API is still st
 - A single `migration validate` host that owns impact analysis, process execution, immutable evidence, timeout handling, generated-source checks, and cache admission.
 - Layered Unit/Contract/Scenario/E2E test runners plus orchestration and validation-host performance budgets.
 - Protected fast agent runtime with deterministic `next-agent-action` routing, hash-chained role receipts, bounded role budgets, and agent lifecycle performance reports.
+- Adaptive deterministic risk routing with explainable `low`/`medium`/`high`/`critical` assessments, stale-dispatch rejection, compact low-risk budgets, watchdog escalation, and critical-risk human handoff.
 - Optional OpenCode `TrustedProject` permission profile for local dogfood runs and an expanded default install diagnostics allowlist.
 - Public preview flow docs (`public-preview-flow/v1`) that tie install diagnostics, playground/product start, wave gates, current-ticket follow-ups, mapping research memory, verify harness evidence, artifact hygiene, and safe feedback bundles into one user-facing story.
 - Installation diagnostics scripts and docs that start from PATH resolution before package-manager-specific checks.

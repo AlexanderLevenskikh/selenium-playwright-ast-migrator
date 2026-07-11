@@ -120,3 +120,7 @@ Before final handoff or another wave after material state changes, ensure `migra
 - Automatic post-final remediation is capped at four completed tickets per wave and two consecutive no-progress tickets. `update-current-ticket-status` records `wave-progress/v1`; TODO deletion without executable restoration is no progress.
 - `REMEDIATION_BUDGET_EXHAUSTED` produces `FINAL_WITH_LIMITATIONS` and stops the closed loop. Do not create another ticket until the user explicitly extends the budget or starts `/supervised-task waves fresh`.
 - A fresh restart must use `scripts/start-fresh-wavefront-run.ps1` / `.sh`, archive the pilot under `archive/**`, and preserve `state/memory/**` plus configured source scope.
+
+- Run `assess-agent-risk` before automatic role dispatch. Treat `agent-risk-assessment.json` as runtime-owned deterministic evidence; never edit its score, reasons, budget, or `assessmentFingerprint` manually.
+- A `RUN_ROLE` authorization is valid only while its `riskAssessmentFingerprint` matches the current assessment. Evidence changes invalidate the authorization and require a fresh `next-agent-action`.
+- `critical` risk or `automaticContinuationAllowed=false` requires `HUMAN_REVIEW_REQUIRED`. Do not downgrade risk, increase adaptive budgets, or skip final reviewer/final sentinel/final gate.

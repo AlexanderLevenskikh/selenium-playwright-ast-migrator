@@ -127,6 +127,10 @@ try {
     Invoke-Cli '17-budget' @('migration','check-agent-budget','--out',$runPath) | Out-Null
     Invoke-Cli '18-performance' @('migration','agent-perf-report','--out',$runPath) | Out-Null
 
+    $riskSmokeOutput = Join-Path $outputPath 'risk-routing'
+    & (Join-Path $rootPath 'scripts/run-agent-risk-routing-smoke.ps1') -Root $rootPath -Configuration $Configuration -Output $riskSmokeOutput -BaselineRun $runPath -CliDll $CliDll
+    if ($LASTEXITCODE -ne 0) { throw "Adaptive risk-routing smoke failed with exit code $LASTEXITCODE." }
+
     $budget = Get-Content -Raw (Join-Path $runPath 'agent-budget-result.json') | ConvertFrom-Json
     $performance = Get-Content -Raw (Join-Path $runPath 'agent-lifecycle-performance.json') | ConvertFrom-Json
     $roleEvents = @(Get-Content (Join-Path $runPath 'agent-role-events.jsonl') | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
@@ -147,6 +151,7 @@ try {
         roleInvocationCount = 3
         roleEventCount = 6
         finalAction = 'FINAL_HANDOFF'
+        adaptiveRiskRouting = 'PASS'
         events = $events
     } | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 (Join-Path $outputPath 'agent-runtime-smoke.json')
     Write-Host 'AGENT_RUNTIME_SMOKE_PASS'

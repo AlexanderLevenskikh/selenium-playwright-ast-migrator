@@ -44,14 +44,10 @@ internal static class MigrationAgentRuntime
                 "Agent role history failed integrity validation.", null, output, error, eventError, 2);
         }
 
-        var budget = EvaluateBudget(policy, events, projectedRole: null);
-        WriteBudgetArtifacts(outPath, policy, events, budget);
-        if (!budget.Passed)
-        {
-            return WriteDecision(outPath, "HUMAN_REVIEW_REQUIRED", null, null, null, null,
-                "Automatic agent-role budget is exhausted; do not dispatch another role.", null,
-                output, error, string.Join("; ", budget.Failures), 4);
-        }
+        var risk = AssessAndWriteRisk(outPath, policy, events);
+        var adaptivePolicy = ApplyAdaptiveBudget(policy, risk);
+        var budget = EvaluateBudget(adaptivePolicy, events, projectedRole: null);
+        WriteBudgetArtifacts(outPath, adaptivePolicy, events, budget, risk);
 
         var active = FindActiveRole(events, role: null, phase: null, fingerprint: null);
         if (active != null)
@@ -61,6 +57,20 @@ internal static class MigrationAgentRuntime
                 output, error, null, 0);
         }
 
+        if (!risk.AutomaticContinuationAllowed)
+        {
+            return WriteDecision(outPath, "HUMAN_REVIEW_REQUIRED", null, null, risk.InputFingerprint, null,
+                "Adaptive risk routing detected critical or blocking evidence; automatic continuation is disabled.", "critical-risk",
+                output, error, string.Join("; ", risk.Reasons.Where(item => item.Blocking).Select(item => item.Detail)), 4);
+        }
+
+        if (!budget.Passed)
+        {
+            return WriteDecision(outPath, "HUMAN_REVIEW_REQUIRED", null, null, risk.InputFingerprint, null,
+                "Automatic agent-role budget is exhausted; do not dispatch another role.", "adaptive-budget",
+                output, error, string.Join("; ", budget.Failures), 4);
+        }
+
         var profile = policy.Profile;
         var immutableFingerprint = ComputeImmutableWaveFingerprint(outPath);
 
@@ -68,17 +78,17 @@ internal static class MigrationAgentRuntime
         {
             var preFingerprint = ComputeTextHash($"pre|{immutableFingerprint}|{profile}");
             if (!HasCompleted(events, "reviewer", "pre", preFingerprint))
-                return ProposeRole(outPath, policy, events, "reviewer", "pre", preFingerprint,
+                return ProposeRole(outPath, adaptivePolicy, events, "reviewer", "pre", preFingerprint,
                     "The selected execution profile requires bounded pre-execution review.", output, error);
         }
         if (profile == "audit")
         {
             var preFingerprint = ComputeTextHash($"pre|{immutableFingerprint}|{profile}");
             if (!HasCompleted(events, "watchdog", "pre", preFingerprint))
-                return ProposeRole(outPath, policy, events, "watchdog", "pre", preFingerprint,
+                return ProposeRole(outPath, adaptivePolicy, events, "watchdog", "pre", preFingerprint,
                     "Audit profile requires a pre-execution watchdog pass.", output, error);
             if (!HasCompleted(events, "sentinel", "pre", preFingerprint))
-                return ProposeRole(outPath, policy, events, "sentinel", "pre", preFingerprint,
+                return ProposeRole(outPath, adaptivePolicy, events, "sentinel", "pre", preFingerprint,
                     "Audit profile requires a pre-execution sentinel pass.", output, error);
         }
 
@@ -88,7 +98,7 @@ internal static class MigrationAgentRuntime
         {
             var recoveryFingerprint = ComputeTextHash($"recovery|{immutableFingerprint}|{noProgressSignature}");
             if (!HasCompleted(events, "watchdog", "recovery", recoveryFingerprint))
-                return ProposeRole(outPath, policy, events, "watchdog", "recovery", recoveryFingerprint,
+                return ProposeRole(outPath, adaptivePolicy, events, "watchdog", "recovery", recoveryFingerprint,
                     "No-progress threshold was reached; strategy review is required before another executor turn.", output, error);
         }
 
@@ -100,6 +110,25 @@ internal static class MigrationAgentRuntime
                 "Validation planning failed before agent routing.", null, output, error, planErr.ToString(), 2);
         }
 
+        // validation-plan/change-set are risk inputs. Reassess after planning so a RUN_ROLE
+        // authorization is bound to the same evidence that record-agent-role will observe.
+        risk = AssessAndWriteRisk(outPath, policy, events);
+        adaptivePolicy = ApplyAdaptiveBudget(policy, risk);
+        budget = EvaluateBudget(adaptivePolicy, events, projectedRole: null);
+        WriteBudgetArtifacts(outPath, adaptivePolicy, events, budget, risk);
+        if (!risk.AutomaticContinuationAllowed)
+        {
+            return WriteDecision(outPath, "HUMAN_REVIEW_REQUIRED", null, null, risk.InputFingerprint, null,
+                "Adaptive risk routing detected critical or blocking evidence after validation planning.", "critical-risk",
+                output, error, string.Join("; ", risk.Reasons.Where(item => item.Blocking).Select(item => item.Detail)), 4);
+        }
+        if (!budget.Passed)
+        {
+            return WriteDecision(outPath, "HUMAN_REVIEW_REQUIRED", null, null, risk.InputFingerprint, null,
+                "Adaptive role budget is exhausted after validation planning.", "adaptive-budget",
+                output, error, string.Join("; ", budget.Failures), 4);
+        }
+
         var planPath = Path.Combine(outPath, "validation-plan.json");
         using var plan = JsonDocument.Parse(File.ReadAllText(planPath));
         var inputFingerprint = OptionalString(plan.RootElement, "inputFingerprint") ?? immutableFingerprint;
@@ -109,7 +138,7 @@ internal static class MigrationAgentRuntime
         {
             var executorFingerprint = ComputeTextHash($"executor|{immutableFingerprint}|{validation.Status}|{validation.InputFingerprint}|{noProgressSignature}");
             if (!HasCompleted(events, "executor", "execution", executorFingerprint))
-                return ProposeRole(outPath, policy, events, "executor", "execution", executorFingerprint,
+                return ProposeRole(outPath, adaptivePolicy, events, "executor", "execution", executorFingerprint,
                     validation.Status == null
                         ? "No current validation exists; execute one bounded migration/fix action."
                         : "Current validation is missing, stale, or failed; execute one bounded corrective action.", output, error);
@@ -135,17 +164,17 @@ internal static class MigrationAgentRuntime
         {
             var riskFingerprint = ComputeTextHash($"risk-watchdog|{inputFingerprint}|{string.Join("|", riskFlags.OrderBy(x => x, StringComparer.Ordinal))}");
             if (!HasCompleted(events, "watchdog", "recovery", riskFingerprint))
-                return ProposeRole(outPath, policy, events, "watchdog", "recovery", riskFingerprint,
+                return ProposeRole(outPath, adaptivePolicy, events, "watchdog", "recovery", riskFingerprint,
                     "Risk flags require a bounded watchdog pass before final review.", output, error);
         }
 
         var finalFingerprint = ComputeTextHash($"final|{inputFingerprint}|{ReadString(reviewBundlePath, "changeSetHash")}");
         if (!HasCompleted(events, "reviewer", "final", finalFingerprint))
-            return ProposeRole(outPath, policy, events, "reviewer", "final", finalFingerprint,
+            return ProposeRole(outPath, adaptivePolicy, events, "reviewer", "final", finalFingerprint,
                 "Final review remains mandatory in every execution profile.", output, error);
 
         if (!HasCompleted(events, "sentinel", "final", finalFingerprint))
-            return ProposeRole(outPath, policy, events, "sentinel", "final", finalFingerprint,
+            return ProposeRole(outPath, adaptivePolicy, events, "sentinel", "final", finalFingerprint,
                 "Final sentinel inspection remains mandatory before handoff.", output, error);
 
         return WriteDecision(outPath, "FINAL_HANDOFF", null, "final", finalFingerprint,
@@ -180,9 +209,17 @@ internal static class MigrationAgentRuntime
             return 2;
         }
 
+        var risk = AssessAndWriteRisk(outPath, policy, events);
+        var adaptivePolicy = ApplyAdaptiveBudget(policy, risk);
+
         string inputFingerprint;
         if (status == "STARTED")
         {
+            if (!risk.AutomaticContinuationAllowed)
+            {
+                error.WriteLine("AGENT_ROLE_CRITICAL_RISK: automatic dispatch is disabled; human review is required.");
+                return 4;
+            }
             if (!TryReadAuthorizedDispatch(outPath, role, phase, out inputFingerprint, out var dispatchError))
             {
                 error.WriteLine("AGENT_ROLE_DISPATCH_NOT_AUTHORIZED: " + dispatchError);
@@ -194,10 +231,10 @@ internal static class MigrationAgentRuntime
                 return 3;
             }
 
-            var projected = EvaluateBudget(policy, events, role);
+            var projected = EvaluateBudget(adaptivePolicy, events, role);
             if (!projected.Passed)
             {
-                WriteBudgetArtifacts(outPath, policy, events, projected);
+                WriteBudgetArtifacts(outPath, adaptivePolicy, events, projected, risk);
                 error.WriteLine("AGENT_ROLE_BUDGET_EXCEEDED: " + string.Join("; ", projected.Failures));
                 return 4;
             }
@@ -260,9 +297,11 @@ internal static class MigrationAgentRuntime
             error.WriteLine("AGENT_ROLE_EVENT_WRITE_INVALID: " + eventError);
             return 2;
         }
-        var budget = EvaluateBudget(policy, updatedEvents, projectedRole: null);
-        WriteBudgetArtifacts(outPath, policy, updatedEvents, budget);
-        WriteLifecyclePerformance(outPath, policy, updatedEvents);
+        var updatedRisk = AssessAndWriteRisk(outPath, policy, updatedEvents);
+        var updatedAdaptivePolicy = ApplyAdaptiveBudget(policy, updatedRisk);
+        var budget = EvaluateBudget(updatedAdaptivePolicy, updatedEvents, projectedRole: null);
+        WriteBudgetArtifacts(outPath, updatedAdaptivePolicy, updatedEvents, budget, updatedRisk);
+        WriteLifecyclePerformance(outPath, updatedAdaptivePolicy, updatedEvents, updatedRisk);
 
         output.WriteLine("MIGRATION_AGENT_ROLE_EVENT_RECORDED");
         output.WriteLine($"Role: {role}; phase: {phase}; status: {status}");
@@ -283,13 +322,23 @@ internal static class MigrationAgentRuntime
             error.WriteLine(eventError);
             return 2;
         }
-        var budget = EvaluateBudget(policy, events, projectedRole: null);
-        WriteBudgetArtifacts(outPath, policy, events, budget);
-        WriteLifecyclePerformance(outPath, policy, events);
-        output.WriteLine(budget.Passed ? "MIGRATION_AGENT_BUDGET_PASS" : "MIGRATION_AGENT_BUDGET_EXCEEDED");
-        output.WriteLine($"Role invocations: {budget.TotalInvocations}/{policy.MaxTotalInvocations}");
+        var risk = AssessAndWriteRisk(outPath, policy, events);
+        var adaptivePolicy = ApplyAdaptiveBudget(policy, risk);
+        var budget = EvaluateBudget(adaptivePolicy, events, projectedRole: null);
+        WriteBudgetArtifacts(outPath, adaptivePolicy, events, budget, risk);
+        WriteLifecyclePerformance(outPath, adaptivePolicy, events, risk);
+        output.WriteLine(!risk.AutomaticContinuationAllowed
+            ? "MIGRATION_AGENT_RISK_BLOCKED"
+            : budget.Passed ? "MIGRATION_AGENT_BUDGET_PASS" : "MIGRATION_AGENT_BUDGET_EXCEEDED");
+        output.WriteLine($"Risk: {risk.Level} ({risk.Score}/100)");
+        output.WriteLine($"Role invocations: {budget.TotalInvocations}/{adaptivePolicy.MaxTotalInvocations}");
         foreach (var item in budget.RoleCounts.OrderBy(x => x.Key, StringComparer.Ordinal))
-            output.WriteLine($"- {item.Key}: {item.Value}/{policy.RoleLimits[item.Key]}");
+            output.WriteLine($"- {item.Key}: {item.Value}/{adaptivePolicy.RoleLimits[item.Key]}");
+        if (!risk.AutomaticContinuationAllowed)
+        {
+            foreach (var reason in risk.Reasons.Where(item => item.Blocking)) error.WriteLine("- " + reason.Detail);
+            return 4;
+        }
         if (!budget.Passed)
         {
             foreach (var failure in budget.Failures) error.WriteLine("- " + failure);
@@ -311,12 +360,16 @@ internal static class MigrationAgentRuntime
             error.WriteLine(eventError);
             return 2;
         }
-        WriteLifecyclePerformance(outPath, policy, events);
+        var risk = AssessAndWriteRisk(outPath, policy, events);
+        var adaptivePolicy = ApplyAdaptiveBudget(policy, risk);
+        WriteLifecyclePerformance(outPath, adaptivePolicy, events, risk);
         var path = Path.Combine(outPath, "agent-lifecycle-performance.json");
         using var document = JsonDocument.Parse(File.ReadAllText(path));
         var root = document.RootElement;
         output.WriteLine("MIGRATION_AGENT_PERFORMANCE_REPORT");
         output.WriteLine("Execution profile: " + OptionalString(root, "executionProfile"));
+        output.WriteLine($"Risk: {OptionalString(root, "riskLevel")} ({root.GetProperty("riskScore").GetInt32()}/100)");
+        output.WriteLine("Lifecycle budget: " + OptionalString(root, "lifecycleBudgetStatus"));
         output.WriteLine("Role invocations: " + root.GetProperty("roleInvocationCount").GetInt32());
         output.WriteLine("Completed roles: " + root.GetProperty("completedRoleCount").GetInt32());
         output.WriteLine("Failed roles: " + root.GetProperty("failedRoleCount").GetInt32());
@@ -332,7 +385,8 @@ internal static class MigrationAgentRuntime
         var projected = EvaluateBudget(policy, events, role);
         if (!projected.Passed)
         {
-            WriteBudgetArtifacts(outPath, policy, events, projected);
+            var risk = AssessAndWriteRisk(outPath, policy, events);
+            WriteBudgetArtifacts(outPath, policy, events, projected, risk);
             return WriteDecision(outPath, "HUMAN_REVIEW_REQUIRED", null, null, fingerprint, null,
                 "The next role would exceed the automatic execution budget.", null,
                 output, error, string.Join("; ", projected.Failures), 4);
@@ -343,6 +397,10 @@ internal static class MigrationAgentRuntime
     static int WriteDecision(string outPath, string action, string? role, string? phase, string? fingerprint,
         string? command, string reason, string? trigger, TextWriter output, TextWriter error, string? detail, int exitCode)
     {
+        var riskPath = Path.Combine(outPath, "agent-risk-assessment.json");
+        var riskLevel = ReadString(riskPath, "riskLevel");
+        var riskFingerprint = ReadString(riskPath, "assessmentFingerprint");
+        var riskScore = ReadInt(riskPath, "riskScore");
         var payload = new SortedDictionary<string, object?>(StringComparer.Ordinal)
         {
             ["schemaVersion"] = RoutingDecisionSchema,
@@ -354,6 +412,9 @@ internal static class MigrationAgentRuntime
             ["command"] = command,
             ["reason"] = reason,
             ["trigger"] = trigger,
+            ["riskLevel"] = riskLevel,
+            ["riskScore"] = riskScore,
+            ["riskAssessmentFingerprint"] = riskFingerprint,
             ["detail"] = string.IsNullOrWhiteSpace(detail) ? null : detail.Trim(),
             ["singleBoundedAction"] = true,
             ["finalGateStillRequired"] = true,
@@ -394,6 +455,14 @@ internal static class MigrationAgentRuntime
             if (string.IsNullOrWhiteSpace(fingerprint))
             {
                 error = "the current routing decision has no input fingerprint.";
+                return false;
+            }
+            var authorizedRiskFingerprint = OptionalString(root, "riskAssessmentFingerprint");
+            var currentRiskFingerprint = MigrationAgentRiskRouter.ReadAssessmentFingerprint(outPath);
+            if (string.IsNullOrWhiteSpace(authorizedRiskFingerprint)
+                || !string.Equals(authorizedRiskFingerprint, currentRiskFingerprint, StringComparison.OrdinalIgnoreCase))
+            {
+                error = "the adaptive risk assessment changed after routing; run next-agent-action again.";
                 return false;
             }
             return true;
@@ -529,6 +598,7 @@ internal static class MigrationAgentRuntime
             var root = document.RootElement;
             var profile = OptionalString(root, "profile") ?? "fast";
             var maxTotal = 6;
+            var maxLifecycleWallClockMilliseconds = profile switch { "audit" => 360L * 60 * 1000, "standard" => 180L * 60 * 1000, _ => 120L * 60 * 1000 };
             var roleLimits = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
             {
                 ["executor"] = 2,
@@ -545,7 +615,11 @@ internal static class MigrationAgentRuntime
                         if (perRole.TryGetProperty(role, out var roleNode) && roleNode.TryGetInt32(out var parsed)) roleLimits[role] = parsed;
                 }
             }
-            policy = new Policy(profile, maxTotal, roleLimits);
+            if (root.TryGetProperty("lifecycleBudgets", out var lifecycleBudgets) && lifecycleBudgets.ValueKind == JsonValueKind.Object
+                && lifecycleBudgets.TryGetProperty("maxWallClockMilliseconds", out var wallNode)
+                && wallNode.TryGetInt64(out var parsedWall) && parsedWall > 0)
+                maxLifecycleWallClockMilliseconds = parsedWall;
+            policy = new Policy(profile, maxTotal, roleLimits, maxLifecycleWallClockMilliseconds);
             return true;
         }
         catch (Exception ex) when (ex is IOException or JsonException)
@@ -568,25 +642,29 @@ internal static class MigrationAgentRuntime
         return new(failures.Count == 0, total, counts, failures);
     }
 
-    static void WriteBudgetArtifacts(string outPath, Policy policy, List<RoleEvent> events, BudgetEvaluation budget)
+    static void WriteBudgetArtifacts(string outPath, Policy policy, List<RoleEvent> events, BudgetEvaluation budget, AgentRiskAssessment risk)
     {
         var payload = new SortedDictionary<string, object?>(StringComparer.Ordinal)
         {
             ["schemaVersion"] = BudgetResultSchema,
             ["generatedAtUtc"] = DateTimeOffset.UtcNow.ToString("O"),
-            ["status"] = budget.Passed ? "PASS" : "BUDGET_EXCEEDED",
+            ["status"] = !risk.AutomaticContinuationAllowed ? "RISK_BLOCKED" : budget.Passed ? "PASS" : "BUDGET_EXCEEDED",
             ["executionProfile"] = policy.Profile,
+            ["riskLevel"] = risk.Level,
+            ["riskScore"] = risk.Score,
+            ["riskAssessmentFingerprint"] = risk.AssessmentFingerprint,
+            ["budgetMode"] = "adaptive-risk-bounded",
             ["totalRoleInvocations"] = budget.TotalInvocations,
             ["maxTotalRoleInvocations"] = policy.MaxTotalInvocations,
             ["roleInvocations"] = budget.RoleCounts,
             ["perRoleLimits"] = policy.RoleLimits,
             ["failures"] = budget.Failures,
-            ["automaticContinuationAllowed"] = budget.Passed
+            ["automaticContinuationAllowed"] = budget.Passed && risk.AutomaticContinuationAllowed
         };
         WriteJsonAtomic(Path.Combine(outPath, "agent-budget-result.json"), payload);
     }
 
-    static void WriteLifecyclePerformance(string outPath, Policy policy, List<RoleEvent> events)
+    static void WriteLifecyclePerformance(string outPath, Policy policy, List<RoleEvent> events, AgentRiskAssessment risk)
     {
         var runs = new List<SortedDictionary<string, object?>>();
         foreach (var start in events.Where(item => item.Status == "STARTED"))
@@ -609,11 +687,17 @@ internal static class MigrationAgentRuntime
         var first = events.FirstOrDefault()?.RecordedAtUtc;
         var last = events.LastOrDefault()?.RecordedAtUtc;
         var wall = first == null || last == null ? 0 : Math.Max(0, (long)(last.Value - first.Value).TotalMilliseconds);
+        var lifecycleBudgetStatus = wall <= policy.MaxLifecycleWallClockMilliseconds ? "PASS" : "EXCEEDED";
         var payload = new SortedDictionary<string, object?>(StringComparer.Ordinal)
         {
             ["schemaVersion"] = LifecyclePerformanceSchema,
             ["generatedAtUtc"] = DateTimeOffset.UtcNow.ToString("O"),
             ["executionProfile"] = policy.Profile,
+            ["riskLevel"] = risk.Level,
+            ["riskScore"] = risk.Score,
+            ["riskAssessmentFingerprint"] = risk.AssessmentFingerprint,
+            ["maxLifecycleWallClockMilliseconds"] = policy.MaxLifecycleWallClockMilliseconds,
+            ["lifecycleBudgetStatus"] = lifecycleBudgetStatus,
             ["roleInvocationCount"] = runs.Count,
             ["completedRoleCount"] = runs.Count(item => Equals(item["status"], "COMPLETED")),
             ["failedRoleCount"] = runs.Count(item => Equals(item["status"], "FAILED")),
@@ -622,6 +706,55 @@ internal static class MigrationAgentRuntime
             ["roles"] = runs
         };
         WriteJsonAtomic(Path.Combine(outPath, "agent-lifecycle-performance.json"), payload);
+    }
+
+    internal static int AssessRisk(string outPath, TextWriter output, TextWriter error)
+    {
+        outPath = Path.GetFullPath(outPath);
+        if (!TryReadPolicy(outPath, out var policy, out var policyError))
+        {
+            error.WriteLine(policyError);
+            return 2;
+        }
+        if (!TryReadEvents(outPath, out var events, out var eventError))
+        {
+            error.WriteLine(eventError);
+            return 2;
+        }
+        var risk = AssessAndWriteRisk(outPath, policy, events);
+        var adaptive = ApplyAdaptiveBudget(policy, risk);
+        output.WriteLine("MIGRATION_AGENT_RISK_ASSESSED");
+        output.WriteLine($"Risk: {risk.Level} ({risk.Score}/100)");
+        output.WriteLine($"Automatic continuation: {risk.AutomaticContinuationAllowed}");
+        output.WriteLine($"Adaptive role budget: {adaptive.MaxTotalInvocations}");
+        foreach (var reason in risk.Reasons)
+            output.WriteLine($"- {reason.Code}: +{reason.Weight} — {reason.Detail}");
+        return risk.AutomaticContinuationAllowed ? 0 : 4;
+    }
+
+    static AgentRiskAssessment AssessAndWriteRisk(string outPath, Policy policy, List<RoleEvent> events)
+    {
+        var starts = Roles.ToDictionary(role => role, role => events.Count(item => item.Role == role && item.Status == "STARTED"), StringComparer.OrdinalIgnoreCase);
+        var failures = events.Count(item => item.Status == "FAILED");
+        var risk = MigrationAgentRiskRouter.Assess(outPath, policy.Profile, starts, failures);
+        MigrationAgentRiskRouter.Write(outPath, risk);
+        return risk;
+    }
+
+    static Policy ApplyAdaptiveBudget(Policy policy, AgentRiskAssessment risk)
+    {
+        var limits = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var role in Roles)
+        {
+            var baseLimit = policy.RoleLimits.TryGetValue(role, out var configured) ? configured : 0;
+            var adaptiveLimit = risk.Budget.RoleLimits.TryGetValue(role, out var recommended) ? recommended : 0;
+            limits[role] = Math.Min(baseLimit, adaptiveLimit);
+        }
+        return new Policy(
+            policy.Profile,
+            Math.Min(policy.MaxTotalInvocations, risk.Budget.MaxTotalInvocations),
+            limits,
+            Math.Min(policy.MaxLifecycleWallClockMilliseconds, risk.Budget.MaxLifecycleWallClockMilliseconds));
     }
 
     static bool TryReadEvents(string outPath, out List<RoleEvent> events, out string error)
@@ -710,6 +843,17 @@ internal static class MigrationAgentRuntime
         catch (Exception ex) when (ex is IOException or JsonException) { return null; }
     }
 
+    static int ReadInt(string path, string property)
+    {
+        if (!File.Exists(path)) return 0;
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            return document.RootElement.TryGetProperty(property, out var value) && value.TryGetInt32(out var result) ? result : 0;
+        }
+        catch (Exception ex) when (ex is IOException or JsonException) { return 0; }
+    }
+
     static string[] ReadStringArray(string path, string property)
     {
         if (!File.Exists(path)) return Array.Empty<string>();
@@ -749,7 +893,7 @@ internal static class MigrationAgentRuntime
         File.Move(temp, path, overwrite: true);
     }
 
-    sealed record Policy(string Profile, int MaxTotalInvocations, Dictionary<string, int> RoleLimits);
+    sealed record Policy(string Profile, int MaxTotalInvocations, Dictionary<string, int> RoleLimits, long MaxLifecycleWallClockMilliseconds);
     sealed record BudgetEvaluation(bool Passed, int TotalInvocations, Dictionary<string, int> RoleCounts, List<string> Failures);
     sealed record RoleEvent(int Sequence, string Role, string Phase, string Status, string InputFingerprint, string EventHash, DateTimeOffset RecordedAtUtc);
     sealed record ValidationState(string? Status, bool Fresh, string? InputFingerprint);

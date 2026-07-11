@@ -20,7 +20,7 @@
       "hardDurationSeconds": 60,
       "softPeakMemoryMb": 512,
       "hardPeakMemoryMb": 1024,
-      "notes": "One fast-profile lifecycle covers deterministic routing, executor, validation, review bundle, final reviewer, final sentinel, role budget, and final handoff."
+      "notes": "One fast-profile lifecycle covers deterministic routing, compact low-risk budgets, executor, validation, review bundle, final reviewer/sentinel, high-risk watchdog escalation, critical human handoff, stale-risk dispatch rejection, and final handoff."
     }
   }
 }

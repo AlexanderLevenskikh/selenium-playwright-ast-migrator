@@ -575,3 +575,8 @@ Migrator Kit writes `migration/state/scope-contract.json` during kit bootstrap/i
 
 - [Performance testing](docs/performance-testing.md)
 - [Test layers](docs/test-layers.md)
+
+
+### Adaptive agent risk routing
+
+`migration assess-agent-risk` writes an explainable `agent-risk-assessment.json` and binds each role authorization to its `riskAssessmentFingerprint`. Low-risk fast runs keep a compact four-turn ceiling and no watchdog capacity; deterministic no-progress/protected/scope signals restore watchdog routing; critical evidence stops automatic continuation. See [`docs/migration-agent-risk-routing.md`](docs/migration-agent-risk-routing.md).
