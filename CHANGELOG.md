@@ -39,6 +39,7 @@ This project uses preview SemVer-style versions while the public API is still st
 
 ### Fixed
 
+- Restored the exact zero-argument and post-final prompt contract wording required by existing OpenCode lifecycle tests while retaining continuous-mode normalization and behavior.
 - Fixed `kit update` timestamp churn so `.migration-kit/version.json` and `.migration-kit/guard-checksums.json` are not rewritten when only volatile timestamps change; harness policy now accepts checksum metadata-only changes when guard file hashes still match.
 - Test-layer and performance runners now work from the current PowerShell host, fail when a layer discovers zero tests, and avoid PowerShell 7-only process APIs when running under Windows PowerShell compatibility mode.
 - Windows custom validation commands now prefer PowerShell 7 but fall back to `powershell.exe`, so validation-host E2E does not require a separate `pwsh` command when Windows PowerShell is available.

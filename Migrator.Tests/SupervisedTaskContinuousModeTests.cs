@@ -34,6 +34,7 @@ public class SupervisedTaskContinuousModeTests
     public void ContinuousModifier_IsParsedSeparatelyFromBaseMode()
     {
         var command = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var autoNextDocs = Read("docs/harness-supervised-task-autonext.md");
 
         Assert.Contains("normalize the continuation modifier before selecting the base mode", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("remove only that modifier", command, StringComparison.OrdinalIgnoreCase);
@@ -42,6 +43,10 @@ public class SupervisedTaskContinuousModeTests
         Assert.Contains("explicit bounded requests retain their normal meaning", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("sentinel`, `inspect`, and `qa` are intentionally one-shot", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Do not recursively invoke `/supervised-task`", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("If `$ARGUMENTS` is empty", command, StringComparison.Ordinal);
+        Assert.Contains("even when `$ARGUMENTS` is empty", command, StringComparison.Ordinal);
+        Assert.Contains("If `$ARGUMENTS` is empty", autoNextDocs, StringComparison.Ordinal);
+        Assert.Contains("stop for review", autoNextDocs, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -35,7 +35,7 @@ Then it dispatches:
 | Persisted `FINAL_STOPPED_FOR_REVIEW` with zero args or plain explicit `continue` | Run the closed post-final loop: `migration-researcher` → `migration-research-lead` → `migration-task-slicer` → `migration-change-reviewer` → one bounded `executor` task when the ticket is approved. Do not ask for a long supervisor prompt. |
 | `FINAL_RESEARCH_COMPLETED` | Invoke `migration-research-lead`; weak research is revised once, approved research is sliced into backlog/current-ticket by `migration-task-slicer`. |
 
-Do not show a broad menu when state is clear. A fresh `FINAL` stops for review once in default mode; `continuous` / `--continuation auto` persists and consumes it inside the same guarded invocation. A persisted `FINAL_STOPPED_FOR_REVIEW` resumes the closed loop automatically. Plain `continue` means research/review/task-slicing first, not immediate implementation.
+Do not show a broad menu when state is clear. The default mode must stop for review at a fresh checkpoint. A fresh `FINAL` stops for review once in default mode; `continuous` / `--continuation auto` persists and consumes it inside the same guarded invocation. A persisted `FINAL_STOPPED_FOR_REVIEW` resumes the closed loop automatically. Plain `continue` means research/review/task-slicing first, not immediate implementation.
 | Blocked or missing user input | Stop with an explicit `BLOCKED_*` reason and exact user actions. |
 
 ## Explicit continue after SUCCESS
