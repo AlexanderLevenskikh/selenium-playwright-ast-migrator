@@ -63,6 +63,18 @@ selenium-pw-migrator migration validate-wave --out migration/runs/<wave-id>
 /supervised-task
 ```
 
+Для unattended-замера или длинного bounded run используй continuous-режим:
+
+```text
+/supervised-task continuous
+/supervised-task continue continuous
+/supervised-task waves continuous
+# эквивалентная flag-форма
+/supervised-task waves --continuation auto
+```
+
+Он записывает checkpoints, но не делает паузу только ради следующего `continue`. Остановка всё равно обязательна при DONE, `FINAL_WITH_LIMITATIONS`, blocker, human decision, critical risk, scope violation, malformed evidence, no-progress и исчерпании budgets. `sentinel`/`inspect`/`qa` остаются одноразовыми. Все варианты запуска перечислены в [`supervised-task-modes.ru.md`](supervised-task-modes.ru.md).
+
 Dispatcher должен выбирать следующий bounded action в таком порядке:
 
 1. Если есть `migration/current-ticket.md`, сначала завершить или заблокировать этот ticket.

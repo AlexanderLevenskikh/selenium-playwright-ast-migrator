@@ -90,7 +90,7 @@ with one of:
 - `FINAL_RESEARCH_COMPLETED`
 - `BLOCKED_NO_ALLOWED_NEXT_ACTION`
 
-When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports for the fresh checkpoint should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts with `To continue, run: /supervised-task continue`. After that state is persisted as `FINAL_STOPPED_FOR_REVIEW`, zero-argument `/supervised-task` also triggers post-final research/review/task-slicing by default.
+When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. In default mode, reports for the fresh checkpoint explain the pause and recommend `/supervised-task continue`. In `continuous` / `--continuation auto` mode, the same checkpoint is persisted and consumed immediately inside the current guarded invocation. Once state is `FINAL_STOPPED_FOR_REVIEW`, zero-argument `/supervised-task` also triggers post-final research/review/task-slicing by default.
 
 
 

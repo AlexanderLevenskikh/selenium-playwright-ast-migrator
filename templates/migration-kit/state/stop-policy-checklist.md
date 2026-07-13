@@ -58,5 +58,5 @@ At least one must be checked before stopping:
 
 ## SUCCESS checkpoint stop rule
 
-- [ ] If the latest continuation status is `FINAL`, I am stopping after FINAL/PASS because SUCCESS checkpoints default to STOP_FOR_REVIEW.
-- [ ] I am not starting another run/ticket unless the user explicitly requested `continue` or bounded auto-continuation is recorded in `state/continuation-decision.json`.
+- [ ] If the latest continuation status is `FINAL`, I am stopping after FINAL/PASS because SUCCESS checkpoints default to STOP_FOR_REVIEW, unless this exact invocation explicitly enabled `continuous` / `--continuation auto` and another runtime-authorized bounded cycle exists.
+- [ ] I am not starting another run/ticket unless the user explicitly requested `continue`, enabled continuous mode for this invocation, or bounded auto-continuation is recorded in `state/continuation-decision.json`.

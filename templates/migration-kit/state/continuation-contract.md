@@ -28,7 +28,7 @@ When final gate or sentinel diagnostics are blocking but no bounded `current-tic
 
 A SUCCESS checkpoint is a `FINAL` / PASS result. After it, the default policy is to stop for review. When `state/harness-run.json` exists, `check-final-gate.ps1` records this as `FINAL_STOPPED_FOR_REVIEW` so the old `CONTINUE_AUTONOMOUSLY` status cannot mislead the next session.
 
-After a fresh `FINAL` in the current run, stop once for review. On the next `/supervised-task` invocation, if `harness-run.json` is already `FINAL_STOPPED_FOR_REVIEW`, start or resume the closed post-final development loop automatically. A plain explicit continue request, for example `/supervised-task continue`, is still supported but is no longer required once the persisted state is `FINAL_STOPPED_FOR_REVIEW`:
+After a fresh `FINAL` in the current run, stop once for review in default mode. When the initiating invocation used `continuous` or `--continuation auto`, persist the checkpoint and immediately start or resume the same guarded closed loop. On the next `/supervised-task` invocation, if `harness-run.json` is already `FINAL_STOPPED_FOR_REVIEW`, start or resume the closed post-final development loop automatically. A plain explicit continue request, for example `/supervised-task continue`, remains supported but is no longer required once the persisted state is `FINAL_STOPPED_FOR_REVIEW`:
 
 1. `migration-researcher` investigates the active run's TODOs/source truth and writes only under `runs/<active-run>/research/**` plus lifecycle continuation/trace files. It must produce `research-summary.md` and machine-readable `todo-inventory.json`.
 2. `migration-research-lead` acts as the scientific supervisor: it validates counts, evidence, contradictions, and actionability. Weak research goes back for one bounded revision instead of becoming a human handoff.
@@ -39,7 +39,7 @@ This keeps the tester-facing prompt short: the user does not need to write a det
 
 `MANUAL_REVIEW` and `Developer action` are not terminal human handoffs by default. They must first be classified as `AGENT_EXECUTABLE`, `AGENT_EXECUTABLE_AFTER_RESEARCH`, `HUMAN_DECISION_REQUIRED`, `BLOCKED_BY_SCOPE`, or `BLOCKED_BY_MISSING_SOURCE_TRUTH`.
 
-Starting another bounded implementation ticket without a persisted `FINAL_STOPPED_FOR_REVIEW` loop, approved research, task slicing, a concrete implementation request, or bounded auto-continuation is a protocol violation.
+Starting another bounded implementation ticket without a persisted `FINAL_STOPPED_FOR_REVIEW` loop, approved research, task slicing, a concrete implementation request, explicit continuous invocation intent, or bounded auto-continuation is a protocol violation. Continuous intent still requires a fresh state decision and complete validation/review/final-gate cycle before each additional ticket.
 
 ## Non-final continuation rule
 
@@ -47,11 +47,13 @@ If status is `CONTINUE_REQUIRED`, do not stop with a restatement. A response tha
 
 ## Final stop rule
 
-If status is freshly `FINAL` in the current run and the workspace has not yet been resumed from persisted `FINAL_STOPPED_FOR_REVIEW`, starting post-final research or another bounded ticket is a protocol violation. Report the checkpoint and exactly one command:
+If status is freshly `FINAL` in the current run and continuous invocation mode is not active, starting post-final research or another bounded ticket is a protocol violation. Report the checkpoint and exactly one command:
 
 ```text
 /supervised-task continue
 ```
+
+If the initiating command used a standalone `continuous` token or the exact pair `--continuation auto`, persist the same checkpoint, re-read machine-readable state, and enter the closed post-final loop or next eligible wave inside the current invocation. This explicit invocation intent does not override `DONE`, `FINAL_WITH_LIMITATIONS`, `WAVE_REMEDIATION_BUDGET_EXHAUSTED`, `HUMAN_DECISION_REQUIRED`, `BLOCKED*`, critical risk, scope violations, no-progress, permission denials, malformed evidence, or any autonomous budget.
 
 
 Compatibility note: older docs/tests may say “reviewed research”; in the closed loop this means research approved by `migration-research-lead` and sliced by `migration-task-slicer` before executor work.

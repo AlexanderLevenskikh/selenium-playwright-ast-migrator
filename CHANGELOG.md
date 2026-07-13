@@ -11,6 +11,7 @@ This project uses preview SemVer-style versions while the public API is still st
 - Added cache statistics, verification, dry-run/apply pruning, active-run reference protection, and concrete tool/recognizer/renderer/adapter compatibility fingerprints.
 
 ### Added
+- Continuous `/supervised-task` invocation mode through either `continuous` or `--continuation auto`, supported for ordinary resume, bounded requests, `continue`, `waves`, and `waves fresh`; successful checkpoints are consumed automatically while blockers, critical risk, scope, no-progress, permission, evidence-integrity, and budget stops remain mandatory.
 - Durable agent recovery with bounded active-role leases, latest-heartbeat freshness, serialized runtime mutations, deterministic recovery planning, append-only stale-role closure, safe ledger-head rebuild, orphan lease archival, atomic-temp quarantine, and fail-closed handling of malformed or contradictory role evidence.
 
 - Fast, standard, and audit execution profiles for bounded migration waves, with immutable wave manifests, performance traces, scope enforcement, and no-progress detection.

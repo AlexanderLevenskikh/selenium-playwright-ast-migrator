@@ -35,7 +35,7 @@ Then it dispatches:
 | Persisted `FINAL_STOPPED_FOR_REVIEW` with zero args or plain explicit `continue` | Run the closed post-final loop: `migration-researcher` → `migration-research-lead` → `migration-task-slicer` → `migration-change-reviewer` → one bounded `executor` task when the ticket is approved. Do not ask for a long supervisor prompt. |
 | `FINAL_RESEARCH_COMPLETED` | Invoke `migration-research-lead`; weak research is revised once, approved research is sliced into backlog/current-ticket by `migration-task-slicer`. |
 
-Do not show a broad menu when state is clear. A fresh `FINAL` must stop for review once; a persisted `FINAL_STOPPED_FOR_REVIEW` resumes the closed loop automatically. Plain `continue` means research/review/task-slicing first, not immediate implementation.
+Do not show a broad menu when state is clear. A fresh `FINAL` stops for review once in default mode; `continuous` / `--continuation auto` persists and consumes it inside the same guarded invocation. A persisted `FINAL_STOPPED_FOR_REVIEW` resumes the closed loop automatically. Plain `continue` means research/review/task-slicing first, not immediate implementation.
 | Blocked or missing user input | Stop with an explicit `BLOCKED_*` reason and exact user actions. |
 
 ## Explicit continue after SUCCESS
@@ -82,7 +82,7 @@ Explicit continue does not grant broader permissions. It still must respect:
 
 If external assemblies, credentials, package installs, network access, or product source edits are required, the agent must stop with `BLOCKED_USER_INPUT_REQUIRED` and list exact user actions.
 
-When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts with `To continue, run: /supervised-task continue`, which triggers post-final research by default.
+When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. In default mode, report why the SUCCESS checkpoint paused and recommend `/supervised-task continue`. In `continuous` / `--continuation auto` mode, persist the same checkpoint but immediately re-read state and continue until a real terminal condition.
 
 
 

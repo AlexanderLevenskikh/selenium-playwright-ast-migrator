@@ -69,7 +69,19 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Sel
 
 The `waves` mode is the recommended divide-and-conquer start: it uses the `kit bootstrap-opencode --source ...` source as the hard scope when configured, auto-detects only missing source/target/framework details, asks only for missing required inputs, runs kit doctor, creates the wavefront plan, materializes the first wave, and runs only the wave-local migration. It must not run a full-source migration or discover sibling functional-test projects before a wave workspace exists. All `migration/**` artifacts are repository-root state; nested workspaces such as `Web/**/migration/**` are treated as process defects.
 
-For an existing workspace, plain `/supervised-task` resumes the next bounded action. After a successful FINAL/PASS checkpoint, the supervised agent stops once for review and reports evidence. To continue into post-final research without writing a long prompt, run `/supervised-task continue` or plain `/supervised-task` after `FINAL_STOPPED_FOR_REVIEW`. See the complete [`/supervised-task` mode reference](docs/supervised-task-modes.md) for `waves`, `waves fresh`, `continue`, `sentinel | inspect | qa`, aliases, and stop semantics. For day-to-day operations after a wave is already running, use the [Wave mode operator runbook](docs/wave-mode-operator-runbook.md): it explains `BLOCKED_BY_GATE`, `current-ticket.md`, sentinel finding lifecycle, wave quality budget, mapping research memory, and feedback bundle handoff.
+For an existing workspace, plain `/supervised-task` resumes the next bounded action. After a successful FINAL/PASS checkpoint, the supervised agent stops once for review by default. To continue into post-final research without writing a long prompt, run `/supervised-task continue` or plain `/supervised-task` after `FINAL_STOPPED_FOR_REVIEW`.
+
+To keep the same invocation running across ordinary checkpoints, add either `continuous` or `--continuation auto`:
+
+```text
+/supervised-task continuous
+/supervised-task continue continuous
+/supervised-task waves continuous
+# equivalent flag form:
+/supervised-task waves --continuation auto
+```
+
+The modifier works with ordinary resume, `continue`, `waves`, `waves fresh`, and bounded requests. It still stops on DONE, limitations, blockers, human decisions, critical risk, scope violations, no-progress and budget exhaustion; sentinel/inspect/qa remain one-shot. See the complete [`/supervised-task` mode reference](docs/supervised-task-modes.md) for every launch mode, alias, modifier and stop condition. For day-to-day operations after a wave is already running, use the [Wave mode operator runbook](docs/wave-mode-operator-runbook.md).
 
 ### 3. Migrate with another agent
 
@@ -498,7 +510,7 @@ The test suite covers parser behavior, adapter mappings, snapshots, compile-smok
 
 This project is currently prepared as a public preview. Stable commands are intended for external users; experimental commands may change between preview releases. See [CHANGELOG.md](CHANGELOG.md), [SECURITY.md](SECURITY.md), and [CONTRIBUTING.md](CONTRIBUTING.md).
 
-When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts with `To continue, run: /supervised-task continue`, which triggers post-final research by default.
+When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. In default mode, report why the SUCCESS checkpoint paused and recommend `/supervised-task continue`. In `continuous` / `--continuation auto` mode, persist the same checkpoint but immediately re-read state and continue until a real terminal condition.
 
 
 ## Divide-and-conquer wave planning

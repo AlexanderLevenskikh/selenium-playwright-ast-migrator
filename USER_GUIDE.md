@@ -217,6 +217,32 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Old
 
 Then run `/supervised-task`. After a successful FINAL/PASS checkpoint, `/supervised-task` stops for review by default. Use `/supervised-task continue` to start post-final TODO/source-truth research without writing a detailed supervisor prompt. The supervised agent should read `current-ticket.md` and `state/start-dispatch.json`, create or resume `migration/runs/<run-id>/`, and avoid asking the user broad menu questions when the state is clear.
 
+### OpenCode `/supervised-task` launch modes
+
+| Launch | Purpose |
+|---|---|
+| `/supervised-task` | Resume the next safe bounded action from persisted state. |
+| `/supervised-task <bounded request>` | Run a specific bounded task without bypassing current state or gates. |
+| `/supervised-task waves` | Bootstrap/resume affinity-aware wavefront migration. Aliases: `wave`, `wavefront`, `start waves`. |
+| `/supervised-task waves fresh` | Archive the current pilot, preserve memory/scope, and replan. Aliases: `fresh waves`, `restart waves`. |
+| `/supervised-task continue` | Resume the post-final research → review → slicing → bounded execution loop. |
+| `/supervised-task continue <topic or task>` | Continue with a named research topic or bounded request. |
+| `/supervised-task sentinel` | Run one forensic process inspection. Aliases: `inspect`, `qa`. |
+
+Add `continuous` or `--continuation auto` to ordinary resume, bounded requests, `continue`, `waves`, or `waves fresh` when the current invocation should automatically consume safe checkpoints:
+
+```text
+/supervised-task continuous
+/supervised-task --continuation auto
+/supervised-task continue continuous
+/supervised-task continue --continuation auto
+/supervised-task waves continuous
+/supervised-task waves --continuation auto
+/supervised-task waves fresh continuous
+```
+
+Continuous mode records every checkpoint but does not pause merely to request another `continue`. It stops on DONE, limitations, blockers, human decisions, critical risk, scope violations, malformed evidence, no-progress, missing input, exhausted budgets, or an explicit stop. `sentinel`, `inspect`, and `qa` remain one-shot. See [`docs/supervised-task-modes.md`](docs/supervised-task-modes.md) for the complete contract.
+
 For Codex, CI, or another agent, use the explicit handoff path:
 
 ```shell
@@ -998,7 +1024,7 @@ pwsh .\scripts\run-kitroot-shadow-smoke.ps1 -Clean
 
 The smoke creates a fake product repo with a shadow `templates/migration-kit` directory and fails if that directory is used as the kit root.
 
-When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. Reports should say why work stopped: the SUCCESS checkpoint requires review, and the next action starts with `To continue, run: /supervised-task continue`, which triggers post-final research by default.
+When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. In default mode, report why the SUCCESS checkpoint paused and recommend `/supervised-task continue`. In `continuous` / `--continuation auto` mode, persist the same checkpoint but immediately re-read state and continue until a real terminal condition.
 
 
 ### Wavefront / memory / config-merge snapshot

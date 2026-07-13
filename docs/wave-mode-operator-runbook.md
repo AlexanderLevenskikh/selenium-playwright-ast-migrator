@@ -63,6 +63,18 @@ or plain:
 /supervised-task
 ```
 
+For unattended measurement or long bounded runs, use continuous mode:
+
+```text
+/supervised-task continuous
+/supervised-task continue continuous
+/supervised-task waves continuous
+# equivalent flag form
+/supervised-task waves --continuation auto
+```
+
+It records checkpoints but does not pause merely to request another `continue`. It still stops on DONE, `FINAL_WITH_LIMITATIONS`, blockers, human decisions, critical risk, scope violations, malformed evidence, no-progress and exhausted budgets. `sentinel`/`inspect`/`qa` remain one-shot. See [`supervised-task-modes.md`](supervised-task-modes.md) for every launch form.
+
 The dispatcher must choose the next bounded action in this order:
 
 1. If `migration/current-ticket.md` exists, finish or block that ticket before selecting a new wave.

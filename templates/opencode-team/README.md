@@ -17,7 +17,7 @@ docs/wave-mode-operator-runbook.md
 docs/wave-mode-operator-runbook.ru.md
 ```
 
-This README only describes the reusable OpenCode team template. Do not use it as a complete migration launch procedure. The repository documentation `docs/supervised-task-modes.md` / `.ru.md` is the user-facing reference for zero-argument resume, wave start/restart, continuation, and sentinel aliases.
+This README only describes the reusable OpenCode team template. Do not use it as a complete migration launch procedure. The repository documentation `docs/supervised-task-modes.md` / `.ru.md` is the user-facing reference for zero-argument resume, bounded requests, wave start/restart, continuation, continuous modifiers, sentinel aliases, and stop semantics.
 
 ## Agents
 
@@ -106,7 +106,7 @@ For existing workspaces, run:
 
 plain `/supervised-task continue` starts post-final research; the new default then continues through research-lead review and task slicing when safe.
 
-No extra prompt is required for the normal path. `/supervised-task` is state-aware: if continuation is required, it executes the next allowed bounded action; after `FINAL_STOPPED_FOR_REVIEW`, plain `/supervised-task continue` starts the closed post-final research → research-lead → task-slicer flow instead of requiring a detailed supervisor prompt.
+No extra prompt is required for the normal path. `/supervised-task` is state-aware: if continuation is required, it executes the next allowed bounded action; after `FINAL_STOPPED_FOR_REVIEW`, plain `/supervised-task continue` starts the closed post-final research → research-lead → task-slicer flow instead of requiring a detailed supervisor prompt. Add `continuous` or `--continuation auto` to ordinary resume, `continue`, `waves`, `waves fresh`, or a bounded request when the same invocation should keep consuming safe checkpoints. The modifier is invocation-local and never bypasses blockers, critical risk, scope, no-progress, review, sentinel, final gate, or budgets.
 
 Manual control:
 
@@ -208,9 +208,9 @@ migration/opencode-team/scripts/install-unix.sh --mode ProjectLocal --permission
 
 Restart OpenCode after switching profiles.
 
-After a fresh successful FINAL/PASS checkpoint, the agent reports status and stops for review. Once that status is persisted as `FINAL_STOPPED_FOR_REVIEW`, a later zero-argument `/supervised-task` resumes the same post-final research/review/task-slicing loop automatically; the tester can still run `/supervised-task continue`, but no detailed supervisor prompt is needed.
+After a fresh successful FINAL/PASS checkpoint, the agent reports status and stops for review in default mode. With `continuous` or `--continuation auto`, it persists the checkpoint and immediately re-enters the same state-aware loop. Once status is persisted as `FINAL_STOPPED_FOR_REVIEW`, a later zero-argument `/supervised-task` also resumes the post-final research/review/task-slicing loop automatically.
 
-Compatibility note: `/supervised-task` still stops for review after FINAL on the fresh checkpoint, but persisted FINAL_STOPPED_FOR_REVIEW auto-resumes the closed post-final loop.
+Compatibility note: default `/supervised-task` still stops for review after FINAL on the fresh checkpoint; continuous mode consumes that checkpoint immediately, and persisted FINAL_STOPPED_FOR_REVIEW auto-resumes the closed post-final loop.
 
 
 Sentinel inspections must be finalized with `migration/scripts/complete-sentinel-inspection.ps1` or `.sh`; final gate treats a missing active-run `sentinel-inspection.json` as a process defect. Finding lifecycle transitions are `OPEN`, `ASSIGNED`, `FIX_ATTEMPTED`, `VERIFIED`, `CLOSED`, `BLOCKED`, `NON_AGENT_EXECUTABLE`, and `ACCEPTED_RISK`.
