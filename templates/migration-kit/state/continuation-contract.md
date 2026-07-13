@@ -9,7 +9,7 @@ This contract separates three states that agents must not blur together:
 Allowed statuses in `state/continuation-decision.json`:
 
 - `FINAL` — final gate passed. Default policy is `STOP_FOR_REVIEW`: report the result, show evidence, name `/supervised-task continue`, and stop.
-- `CONTINUE_REQUIRED` — an allowed next config/scaffold/evidence action exists for a non-final state. Execute exactly one next bounded action before sending a user-facing handoff.
+- `CONTINUE_REQUIRED` — an allowed next config/scaffold/evidence action exists for a non-final state. Execute exactly one next bounded action before sending a user-facing handoff. In continuous mode, validate that cycle, re-read state, and immediately execute the next authorized cycle; one action is a safety boundary, not a handoff entitlement.
 - `FINAL_RESEARCH_COMPLETED` — post-final research artifacts exist and must be reviewed by `migration-research-lead` (or compatibility `migration-change-reviewer`) before task slicing.
 - `RESEARCH_REVISION_REQUIRED` — research lead found weak counts/evidence/actionability; send exactly one bounded revision back to `migration-researcher` before handoff.
 - `POST_FINAL_RESEARCH_APPROVED` — research lead approved findings; invoke `migration-task-slicer` to create backlog/current-ticket.
@@ -43,7 +43,7 @@ Starting another bounded implementation ticket without a persisted `FINAL_STOPPE
 
 ## Non-final continuation rule
 
-If status is `CONTINUE_REQUIRED`, do not stop with a restatement. A response that only repeats NOT FINAL / NOT RUNTIME READY is a protocol violation.
+If status is `CONTINUE_REQUIRED`, do not stop with a restatement. A response that only repeats NOT FINAL / NOT RUNTIME READY is a protocol violation. In continuous mode, completing one bounded ticket does not permit a handoff when another runtime-authorized ticket is ready.
 
 ## Final stop rule
 
@@ -53,7 +53,7 @@ If status is freshly `FINAL` in the current run and continuous invocation mode i
 /supervised-task continue
 ```
 
-If the initiating command used a standalone `continuous` token or the exact pair `--continuation auto`, persist the same checkpoint, re-read machine-readable state, and enter the closed post-final loop or next eligible wave inside the current invocation. This explicit invocation intent does not override `DONE`, `FINAL_WITH_LIMITATIONS`, `WAVE_REMEDIATION_BUDGET_EXHAUSTED`, `HUMAN_DECISION_REQUIRED`, `BLOCKED*`, critical risk, scope violations, no-progress, permission denials, malformed evidence, or any autonomous budget.
+If the initiating command used a standalone `continuous` token or the exact pair `--continuation auto`, persist the same checkpoint, re-read machine-readable state, and enter the closed post-final loop or next eligible wave inside the current invocation. Keep repeating guarded bounded cycles until a terminal state is persisted. This explicit invocation intent does not override `DONE`, `FINAL_WITH_LIMITATIONS`, `WAVE_REMEDIATION_BUDGET_EXHAUSTED`, `HUMAN_DECISION_REQUIRED`, a concrete `BLOCKED*` state without agent-executable remediation, critical risk, scope violations, no-progress, permission denials, malformed evidence, or any autonomous budget. `BLOCKED_BY_WAVE_QUALITY_BUDGET` blocks wave advancement but is not terminal while it supplies an actionable remediation `nextAction` and budget remains.
 
 
 Compatibility note: older docs/tests may say “reviewed research”; in the closed loop this means research approved by `migration-research-lead` and sliced by `migration-task-slicer` before executor work.
@@ -71,12 +71,16 @@ Existing post-final research is not terminal. Whenever the active run is already
 
 ## Wave budget continuation
 
-`BLOCKED_BY_WAVE_QUALITY_BUDGET` is not a terminal handoff. It means the wave produced too many TODOs, too high a syntax-fallback ratio, too many unmapped targets, too many actions/files/tests, or failed verify-project. Do not start another wave; create or execute a bounded mapping/research/config improvement ticket under `migration/**`.
+`BLOCKED_BY_WAVE_QUALITY_BUDGET` is not a terminal handoff. It means the wave produced too many TODOs, too high a syntax-fallback ratio, too many unmapped targets, too many actions/files/tests, or failed verify-project. Do not start another wave; create or execute a bounded mapping/research/config improvement ticket under `migration/**`. In continuous mode, complete the ticket, rerun the budget/gates, and continue with the next approved remediation ticket while budget and measurable progress remain.
 
 
 ## Mapping/research continuation
 
 A blocked wave budget routes to mapping/research memory, not the next wave. Run `migration/scripts/collect-mapping-research-memory.ps1` / `.sh` to write `mapping-research-memory/v1` and `mapping-research-candidates.jsonl`, then slice exactly one bounded config/POM/recognizer or verify-harness improvement ticket.
+
+## Continuous handoff veto
+
+Before a user-facing final report in continuous mode, re-read `continuation-decision.json`, `task-slice-result.json`, `current-ticket-status.json`, `current-ticket.md`, `wave-quality-budget.json`, and active backlog entries. Handoff is forbidden while `mustContinueBeforeUserMessage` is true, status is `CONTINUE_REQUIRED`, `POST_FINAL_TASKS_READY`, or `CURRENT_TICKET_ACTIVE`, a selected `AGENT_EXECUTABLE` ticket is non-terminal, or wave quality budget provides an actionable remediation `nextAction` with remaining budget. Never recommend `/supervised-task continue` in those states; execute the next guarded bounded cycle.
 
 
 Artifact hygiene continuation: if final gate reports `installed-script-syntax` or `artifact-hygiene` failure, the next action is a bounded artifact repair under `migration/**` using `validate-run-artifacts.ps1` evidence. Do not start another wave or publish final handoff until `artifact-hygiene/v1` passes or the remaining issue is explicitly classified as non-agent-executable.

@@ -33,6 +33,7 @@ This project uses preview SemVer-style versions while the public API is still st
 
 ### Changed
 
+- Fixed continuous `/supervised-task` dispatch so the one-bounded-action rule is per cycle rather than per invocation; user-facing handoff is vetoed while continuation/current-ticket/remediation work remains, and `BLOCKED_BY_WAVE_QUALITY_BUDGET` blocks only wave advancement when actionable remediation is available.
 - `/supervised-task` now accepts `--execution-profile fast|standard|audit` for ordinary, `continue`, `waves`, `waves fresh`, and `continuous` invocations. New runs default to lightweight `fast`; existing wave policy remains immutable.
 - Reworked wavefront planning around a deterministic no-agent tuning experiment. `migration tune-wave-plan` and `plan --wave-profile auto` now search batching profiles, account for same-file/POM reuse with marginal complexity, use soft targets plus broad hard ceilings, and avoid pathological one-test-per-wave plans.
 - Added state-aware zero-argument `/supervised-task` auto-next dispatch for tester-friendly follow-up migration tasks after FINAL checkpoints.

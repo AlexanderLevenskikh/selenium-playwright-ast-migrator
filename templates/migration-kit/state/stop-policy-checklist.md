@@ -39,6 +39,9 @@ At least one must be checked before stopping:
 
 - [ ] I am not asking the user whether to continue.
 - [ ] I am not stopping while `state/continuation-decision.json` says `CONTINUE_REQUIRED`.
+- [ ] In continuous mode, I re-read continuation, task-slice, current-ticket, backlog, and wave-quality-budget state after the latest bounded action.
+- [ ] In continuous mode, no selected `AGENT_EXECUTABLE` ticket is `READY`, `IN_PROGRESS`, or `REVIEW_READY`, and `mustContinueBeforeUserMessage` is not `true`.
+- [ ] I did not treat `BLOCKED_BY_WAVE_QUALITY_BUDGET` as terminal when an actionable in-scope remediation `nextAction` and budget remained.
 - [ ] I am not stopping only because the latest report says `NOT FINAL - INVESTIGATION RESULT ONLY` or `NOT RUNTIME READY` while an allowed next config/scaffold/evidence action exists.
 - [ ] I am not stopping only because compile/project verify is green while actionable migration work remains.
 - [ ] I did not edit migrator source code in `migration-artifact` mode.

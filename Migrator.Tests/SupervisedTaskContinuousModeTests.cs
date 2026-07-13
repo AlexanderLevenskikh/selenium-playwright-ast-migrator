@@ -88,6 +88,48 @@ public class SupervisedTaskContinuousModeTests
         }
     }
 
+
+    [Fact]
+    public void ContinuousMode_RepeatsBoundedCyclesAndVetoesPrematureHandoff()
+    {
+        var command = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var installed = Read(".opencode/commands/supervised-task.md");
+        var contract = Read("templates/migration-kit/AGENT_CONTRACT.md");
+        var continuationContract = Read("templates/migration-kit/state/continuation-contract.md");
+        var stopChecklist = Read("templates/migration-kit/state/stop-policy-checklist.md");
+
+        foreach (var text in new[] { command, installed })
+        {
+            Assert.Contains("per-cycle safety boundary", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Continuous handoff veto", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("mustContinueBeforeUserMessage", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("POST_FINAL_TASKS_READY", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("CURRENT_TICKET_ACTIVE", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Never emit `To continue, run: /supervised-task continue`", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("blocks the next wave, not the remediation loop", text, StringComparison.OrdinalIgnoreCase);
+        }
+
+        Assert.Contains("consecutive runtime-authorized bounded cycles", contract, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Continuous-mode handoff is forbidden", contract, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("one action is a safety boundary, not a handoff entitlement", continuationContract, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Continuous handoff veto", continuationContract, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("did not treat `BLOCKED_BY_WAVE_QUALITY_BUDGET` as terminal", stopChecklist, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ContinuousMode_TreatsWaveQualityBudgetAsRemediationRoutingNotTerminalStop()
+    {
+        var command = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var docs = Read("docs/supervised-task-modes.md");
+        var docsRu = Read("docs/supervised-task-modes.ru.md");
+
+        Assert.Contains("`BLOCKED_BY_WAVE_QUALITY_BUDGET` is not terminal", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("actionable remediation `nextAction`", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("remediation budget remains", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("special non-terminal routing state", docs, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("особое нетерминальное routing-состояние", docsRu, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void AllLaunchModesAndContinuousStops_AreDocumentedInUserGuides()
     {

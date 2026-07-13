@@ -83,7 +83,7 @@
 - сохранённый `FINAL_STOPPED_FOR_REVIEW`;
 - следующую pending wave только после очистки current-ticket, gate, sentinel, scope и wave-quality-budget state.
 
-Checkpoint по-прежнему записывается в evidence и не превращается в `DONE`; он лишь перестаёт быть обязательной пользовательской паузой.
+Checkpoint по-прежнему записывается в evidence и не превращается в `DONE`; он лишь перестаёт быть обязательной пользовательской паузой. Формулировка «ровно один bounded action» относится к одному безопасно проверяемому циклу, а не ко всему continuous-вызову: после каждого ticket оркестратор повторно запускает gate-проверки, перечитывает state и начинает следующий разрешённый цикл.
 
 ## Жёсткие условия остановки
 
@@ -92,7 +92,7 @@ Checkpoint по-прежнему записывается в evidence и не п
 - `DONE`;
 - `FINAL_WITH_LIMITATIONS` или `WAVE_REMEDIATION_BUDGET_EXHAUSTED`;
 - `HUMAN_DECISION_REQUIRED`;
-- `BLOCKED` / `BLOCKED_*`;
+- конкретном состоянии `BLOCKED` / `BLOCKED_*`, для которого нет agent-executable remediation;
 - critical risk или подтверждённом scope violation;
 - отказе permission на запись;
 - malformed, tampered или противоречивом runtime/evidence;
@@ -100,6 +100,8 @@ Checkpoint по-прежнему записывается в evidence и не п
 - отсутствии обязательного пользовательского ввода;
 - исчерпании role, remediation, loop, time или другого autonomous budget;
 - явной команде пользователя остановиться.
+
+`BLOCKED_BY_WAVE_QUALITY_BUDGET` — особое нетерминальное routing-состояние, когда в нём есть actionable remediation `nextAction` и remediation budget ещё не исчерпан: оно блокирует следующую wave, но continuous продолжает bounded tickets для mappings/config/POM/recognizers.
 
 Continuous — это автоматическое продолжение, а не бесконечное выполнение.
 

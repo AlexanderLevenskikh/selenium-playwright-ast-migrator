@@ -83,7 +83,7 @@ Continuous mode re-reads machine-readable state after every bounded action and c
 - persisted `FINAL_STOPPED_FOR_REVIEW`;
 - the next pending wave only after current-ticket, gate, sentinel, scope and wave-quality-budget state is clean.
 
-A checkpoint is still written to evidence and is not renamed to `DONE`; it simply stops being a user-facing pause.
+A checkpoint is still written to evidence and is not renamed to `DONE`; it simply stops being a user-facing pause. “Exactly one bounded action” applies to each safety-checked cycle, not to the whole continuous invocation: after every ticket the orchestrator re-runs gates, re-reads state, and starts the next authorized cycle.
 
 ## Hard stop conditions
 
@@ -92,7 +92,7 @@ Every mode, including continuous mode, stops on:
 - `DONE`;
 - `FINAL_WITH_LIMITATIONS` or `WAVE_REMEDIATION_BUDGET_EXHAUSTED`;
 - `HUMAN_DECISION_REQUIRED`;
-- `BLOCKED` / `BLOCKED_*`;
+- a concrete `BLOCKED` / `BLOCKED_*` state with no agent-executable remediation;
 - critical risk or confirmed scope violation;
 - denied write permission;
 - malformed, tampered or contradictory runtime/evidence;
@@ -100,6 +100,8 @@ Every mode, including continuous mode, stops on:
 - missing required user input;
 - exhausted role, remediation, loop, time or other autonomous budget;
 - explicit user stop.
+
+`BLOCKED_BY_WAVE_QUALITY_BUDGET` is a special non-terminal routing state when it contains an actionable remediation `nextAction` and remediation budget remains: it blocks the next wave, but continuous mode keeps executing bounded mapping/config/POM/recognizer tickets.
 
 Continuous mode means automatic continuation, not unlimited execution.
 
