@@ -22,6 +22,13 @@ internal static class CliTestRunner
     {
         var repoRoot = GetRepoRoot()
             ?? throw new InvalidOperationException("Could not find repo root (Migrator.sln not found)");
+        return Run(arguments, repoRoot, timeout);
+    }
+
+    public static CliResult Run(string arguments, string workingDirectory, TimeSpan? timeout = null)
+    {
+        var repoRoot = GetRepoRoot()
+            ?? throw new InvalidOperationException("Could not find repo root (Migrator.sln not found)");
         var cliDll = ResolveCliDll(repoRoot);
         var requestArguments = new List<string> { cliDll };
         requestArguments.AddRange(Tokenize(arguments));
@@ -29,7 +36,7 @@ internal static class CliTestRunner
         var result = ProcessRunner.Execute(new ProcessRequest(
             FileName: "dotnet",
             Arguments: requestArguments,
-            WorkingDirectory: repoRoot,
+            WorkingDirectory: workingDirectory,
             Timeout: timeout ?? DefaultTimeout,
             Environment: new Dictionary<string, string?>
             {

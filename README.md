@@ -71,6 +71,16 @@ The `waves` mode is the recommended divide-and-conquer start: it uses the `kit b
 
 For an existing workspace, plain `/supervised-task` resumes the next bounded action. After a successful FINAL/PASS checkpoint, the supervised agent stops once for review by default. To continue into post-final research without writing a long prompt, run `/supervised-task continue` or plain `/supervised-task` after `FINAL_STOPPED_FOR_REVIEW`.
 
+Harness profile selection is explicit when needed. New runs default to the lightweight `fast` profile:
+
+```text
+/supervised-task waves --execution-profile fast      # lightweight/default
+/supervised-task waves --execution-profile standard  # balanced
+/supervised-task waves --execution-profile audit     # full Harness
+```
+
+The same modifier works with ordinary `/supervised-task`, `continue`, and `continuous`. Existing waves keep the immutable profile from `execution-policy.json`.
+
 To keep the same invocation running across ordinary checkpoints, add either `continuous` or `--continuation auto`:
 
 ```text

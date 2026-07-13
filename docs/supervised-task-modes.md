@@ -16,6 +16,29 @@ The installed source of truth is `.opencode/commands/supervised-task.md`; its te
 | `/supervised-task continue <topic or task>` | none | Continue with a named research topic or concrete bounded task | Uses the text as the research topic or requested task, but still obeys current-ticket, review, scope, policy, risk and remediation budgets. |
 | `/supervised-task sentinel` | `/supervised-task inspect`, `/supervised-task qa` | Run process/forensic inspection explicitly | Exports session evidence, invokes `harness-sentinel`, completes `sentinel-inspection.json`, and routes agent-executable findings into bounded follow-up tickets. This mode is intentionally one-shot. |
 
+## Harness execution profiles
+
+Use `--execution-profile` to choose how much Harness orchestration the current invocation should require:
+
+| Profile | Command example | Behavior |
+|---|---|---|
+| `fast` | `/supervised-task waves --execution-profile fast` | **Default/lightweight mode.** Executor first; reviewer/watchdog/sentinel are added only by risk, policy, no-progress, or final-handoff requirements. |
+| `standard` | `/supervised-task waves --execution-profile standard` | Balanced mode. Executor and reviewer are expected; watchdog/sentinel stay conditional until required. |
+| `audit` | `/supervised-task waves --execution-profile audit` | **Full Harness mode.** Executor, reviewer, watchdog, and sentinel are all required. |
+
+The modifier also works without `waves`, with `continue`, and with `continuous`:
+
+```text
+/supervised-task --execution-profile fast
+/supervised-task continue --execution-profile standard
+/supervised-task continuous --execution-profile fast
+/supervised-task waves continuous --execution-profile audit
+```
+
+When the modifier is omitted, `fast` is selected for a new run. An existing wave keeps the immutable profile stored in its `execution-policy.json`. To change that profile, start a fresh wave/run; do not rewrite the policy in place.
+
+All profiles still require scope enforcement, validation, final reviewer, final sentinel, and final gate. Profiles change orchestration cost, not safety guarantees.
+
 ## Continuous modifier
 
 Add either `continuous` or `--continuation auto` to keep the current invocation running across checkpoints that would normally ask for another `/supervised-task continue` command.
@@ -97,7 +120,7 @@ selenium-pw-migrator kit bootstrap-opencode `
   --opencode-install none
 ```
 
-`bootstrap-opencode` enters update mode when the workspace already exists. It backs up the old workspace, overwrites kit-owned runtime scripts, refreshes guard checksums and reapplies repository-root OpenCode commands.
+`bootstrap-opencode` enters update mode when the workspace already exists. It backs up the old workspace, overwrites kit-owned runtime scripts **and the managed `migration/opencode-team/**` command pack**, refreshes guard checksums, and then reapplies `.opencode/agents` and `.opencode/commands` in the repository root. Managed OpenCode commands therefore update without `--force`; project-owned files such as the root `AGENTS.md` still keep their safer preservation rules.
 
 ## Validate the installed scripts, not only the source templates
 

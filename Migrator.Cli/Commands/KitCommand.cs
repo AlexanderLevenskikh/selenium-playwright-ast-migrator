@@ -1027,7 +1027,8 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
             "scripts/complete-sentinel-inspection.sh" or
             "state/continuation-contract.md"
             || normalized.StartsWith("prompts/", StringComparison.Ordinal)
-            || normalized.StartsWith("agent-skills/", StringComparison.Ordinal);
+            || normalized.StartsWith("agent-skills/", StringComparison.Ordinal)
+            || normalized.StartsWith("opencode-team/", StringComparison.Ordinal);
     }
 
     static void CreateBackup(string workspacePath, string projectRoot)

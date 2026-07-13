@@ -33,12 +33,15 @@ This project uses preview SemVer-style versions while the public API is still st
 
 ### Changed
 
+- `/supervised-task` now accepts `--execution-profile fast|standard|audit` for ordinary, `continue`, `waves`, `waves fresh`, and `continuous` invocations. New runs default to lightweight `fast`; existing wave policy remains immutable.
 - Reworked wavefront planning around a deterministic no-agent tuning experiment. `migration tune-wave-plan` and `plan --wave-profile auto` now search batching profiles, account for same-file/POM reuse with marginal complexity, use soft targets plus broad hard ceilings, and avoid pathological one-test-per-wave plans.
 - Added state-aware zero-argument `/supervised-task` auto-next dispatch for tester-friendly follow-up migration tasks after FINAL checkpoints.
 - Standalone Windows installer now moves `%USERPROFILE%\.selenium-pw-migrator\bin` to the front of user/current-session `PATH` even when it was already present later, and supports `-RemoveDotnetTool` to remove an older global dotnet tool channel.
 
 ### Fixed
 
+- Fixed `evaluate-wave-quality-budget.ps1` on Windows PowerShell 5.1 and PowerShell 7 by materializing generic violation lists before assigning them to ordered hashtables; CI now parses and executes the script under Windows PowerShell 5.1.
+- Fixed existing-workspace `bootstrap-opencode` updates so the managed `migration/opencode-team/**` pack is refreshed before repository-root `.opencode/agents` and `.opencode/commands` are reapplied; new commands no longer remain hidden behind stale workspace copies, and users no longer need `--force` for managed command-pack updates.
 - Restored the exact zero-argument and post-final prompt contract wording required by existing OpenCode lifecycle tests while retaining continuous-mode normalization and behavior.
 - Fixed `kit update` timestamp churn so `.migration-kit/version.json` and `.migration-kit/guard-checksums.json` are not rewritten when only volatile timestamps change; harness policy now accepts checksum metadata-only changes when guard file hashes still match.
 - Test-layer and performance runners now work from the current PowerShell host, fail when a layer discovers zero tests, and avoid PowerShell 7-only process APIs when running under Windows PowerShell compatibility mode.

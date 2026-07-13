@@ -207,7 +207,12 @@ function Get-RemediationBudgetMetrics([string]$WorkspacePath, [string]$RunId, [s
     $ordered = @($latestByTicket | Sort-Object { [string]$_.updatedAtUtc })
     $consecutiveNoProgress = 0
     for ($index = $ordered.Count - 1; $index -ge 0; $index--) {
-        if ($ordered[$index].meaningfulProgress -eq $false) { $consecutiveNoProgress++ } else { break }
+        if ($ordered[$index].meaningfulProgress -eq $false) {
+            $consecutiveNoProgress++
+        }
+        else {
+            break
+        }
     }
     return [ordered]@{
         completedTickets = $ordered.Count
@@ -255,9 +260,20 @@ else {
     $waveRoot = $waveDir.FullName
     $waveText = Get-RecursiveText $waveRoot
     $preflight = Read-WavePreflight $waveRoot
-    $sourceFiles = if ($null -ne $preflight -and $null -ne $preflight.metrics.sourceFileCount) { [int]$preflight.metrics.sourceFileCount } else { Get-SourceFileCount $waveRoot }
-    $testCount = if ($null -ne $preflight -and $null -ne $preflight.metrics.testCount) { [int]$preflight.metrics.testCount } else { Get-MetricOrRegex $waveRoot $waveText @("testCount", "tests", "totalTests") @('(\d+)\s+tests?\s+in\s+scope', 'tests?\s*[:=]\s*(\d+)') 0 }
-    $estimatedActions = if ($null -ne $preflight -and $null -ne $preflight.metrics.estimatedActions) { [int]$preflight.metrics.estimatedActions } else { 0 }
+    $sourceFiles = Get-SourceFileCount $waveRoot
+    if ($null -ne $preflight -and $null -ne $preflight.metrics.sourceFileCount) {
+        $sourceFiles = [int]$preflight.metrics.sourceFileCount
+    }
+
+    $testCount = Get-MetricOrRegex $waveRoot $waveText @("testCount", "tests", "totalTests") @('(\d+)\s+tests?\s+in\s+scope', 'tests?\s*[:=]\s*(\d+)') 0
+    if ($null -ne $preflight -and $null -ne $preflight.metrics.testCount) {
+        $testCount = [int]$preflight.metrics.testCount
+    }
+
+    $estimatedActions = 0
+    if ($null -ne $preflight -and $null -ne $preflight.metrics.estimatedActions) {
+        $estimatedActions = [int]$preflight.metrics.estimatedActions
+    }
     $migratedActions = Get-MetricOrRegex $waveRoot $waveText @("migratedActions", "migratedActionCount", "seleniumActions", "actionsMigrated") @('(\d+)\s+Selenium\s+actions\s+migrated', 'migrated\s+actions?\s*[:=]\s*(\d+)') $estimatedActions
     $syntaxFallbackActions = Get-MetricOrRegex $waveRoot $waveText @("syntaxFallbackActions", "syntaxFallback", "fallbackActions") @('(\d+)\s+syntax[- ]fallback', 'syntax[- ]fallback\s+actions?\s*[:=]\s*(\d+)') 0
     $semanticActions = Get-MetricOrRegex $waveRoot $waveText @("semanticActions", "semanticMappings", "semanticActionCount") @('(\d+)\s+semantic', 'semantic\s+actions?\s*[:=]\s*(\d+)') 0
@@ -267,11 +283,17 @@ else {
     if ($semanticActions -eq 0 -and $migratedActions -gt 0 -and $syntaxFallbackActions -lt $migratedActions) {
         $semanticActions = $migratedActions - $syntaxFallbackActions
     }
-    $syntaxFallbackRatio = if ($migratedActions -gt 0) { [Math]::Round(($syntaxFallbackActions / [double]$migratedActions), 4) } else { 0.0 }
+    $syntaxFallbackRatio = 0.0
+    if ($migratedActions -gt 0) {
+        $syntaxFallbackRatio = [Math]::Round(($syntaxFallbackActions / [double]$migratedActions), 4)
+    }
     $verifyFailed = $waveText -match '(?i)verify-project.{0,120}(FAILED|failed)|NU1008|compilation not verified'
 
     $violations = New-Object System.Collections.Generic.List[object]
-    $preflightStatus = if ($null -ne $preflight) { [string]$preflight.status } else { "MISSING" }
+    $preflightStatus = "MISSING"
+    if ($null -ne $preflight) {
+        $preflightStatus = [string]$preflight.status
+    }
     if ($preflightStatus -ne "PASS") { $violations.Add([ordered]@{ metric = "preflightBudgetStatus"; actual = $preflightStatus; budget = "PASS"; severity = "high" }) | Out-Null }
     if ($sourceFiles -gt $MaxSourceFiles) { $violations.Add([ordered]@{ metric = "sourceFiles"; actual = $sourceFiles; budget = $MaxSourceFiles; severity = "medium" }) | Out-Null }
     if ($testCount -gt $MaxTests) { $violations.Add([ordered]@{ metric = "testCount"; actual = $testCount; budget = $MaxTests; severity = "medium" }) | Out-Null }
@@ -290,10 +312,36 @@ else {
     if ($noProgressLimitReached) { $violations.Add([ordered]@{ metric = "consecutiveNoProgressTickets"; actual = [int]$remediation.consecutiveNoProgressTickets; budget = $MaxConsecutiveNoProgressTickets; severity = "high" }) | Out-Null }
 
     $qualityBlocked = @($violations | Where-Object { $_.metric -notin @("postFinalTickets", "consecutiveNoProgressTickets") }).Count -gt 0
-    $budgetStatus = if ($remediationBudgetExhausted) { "REMEDIATION_BUDGET_EXHAUSTED" } elseif ($qualityBlocked) { "BLOCKED_BY_WAVE_QUALITY_BUDGET" } else { "PASS" }
-    $gateStatus = if ($budgetStatus -eq "BLOCKED_BY_WAVE_QUALITY_BUDGET") { "FAIL" } else { "PASS" }
-    $routing = if ($remediationBudgetExhausted) { "STOP_FOR_REVIEW_WITH_LIMITATIONS" } elseif ($qualityBlocked) { "ROUTE_TO_MAPPING_RESEARCH_OR_CONFIG_IMPROVEMENT" } else { "ROUTE_TO_NEXT_WAVE" }
-    $nextAction = if ($remediationBudgetExhausted) { $null } elseif ($qualityBlocked) { "Run migration/scripts/collect-mapping-research-memory.ps1 before the next wave: summarize top TODO causes, syntax-fallback clusters, unmapped targets, unresolved symbols, and verify-project blockers; then slice a bounded config/POM/recognizer improvement ticket." } else { $null }
+    $budgetStatus = "PASS"
+    if ($remediationBudgetExhausted) {
+        $budgetStatus = "REMEDIATION_BUDGET_EXHAUSTED"
+    }
+    elseif ($qualityBlocked) {
+        $budgetStatus = "BLOCKED_BY_WAVE_QUALITY_BUDGET"
+    }
+
+    $gateStatus = "PASS"
+    if ($budgetStatus -eq "BLOCKED_BY_WAVE_QUALITY_BUDGET") {
+        $gateStatus = "FAIL"
+    }
+
+    $routing = "ROUTE_TO_NEXT_WAVE"
+    if ($remediationBudgetExhausted) {
+        $routing = "STOP_FOR_REVIEW_WITH_LIMITATIONS"
+    }
+    elseif ($qualityBlocked) {
+        $routing = "ROUTE_TO_MAPPING_RESEARCH_OR_CONFIG_IMPROVEMENT"
+    }
+
+    $nextAction = $null
+    if ((-not $remediationBudgetExhausted) -and $qualityBlocked) {
+        $nextAction = "Run migration/scripts/collect-mapping-research-memory.ps1 before the next wave: summarize top TODO causes, syntax-fallback clusters, unmapped targets, unresolved symbols, and verify-project blockers; then slice a bounded config/POM/recognizer improvement ticket."
+    }
+
+    # Materialize the generic list before assigning it into an ordered hashtable.
+    # Windows PowerShell 5.1 and some PowerShell 7 runtimes can throw
+    # "Argument types do not match" for @($genericList) in a hashtable value.
+    $violationItems = $violations.ToArray()
 
     $report = [ordered]@{
         schemaVersion = "wave-quality-budget/v1"
@@ -332,7 +380,7 @@ else {
             maxConsecutiveNoProgressTickets = $MaxConsecutiveNoProgressTickets
             allowScaffoldingOnly = [bool]$AllowScaffoldingOnly
         }
-        violations = @($violations)
+        violations = $violationItems
         nextAction = $nextAction
         routing = $routing
     }

@@ -141,6 +141,7 @@ public class AgentLoopHardeningTests
         Assert.Contains("scripts/check-final-gate.ps1", kitCommand);
         Assert.Contains("state/continuation-contract.md", kitCommand);
         Assert.Contains("StartsWith(\"prompts/\"", kitCommand);
+        Assert.Contains("StartsWith(\"opencode-team/\"", kitCommand);
         Assert.Contains("check-harness-policy.ps1", psInstall);
         Assert.Contains("Write-GuardChecksums", psInstall);
         Assert.Contains("Test-AutoUpdatedKitOwnedFile", psInstall);
@@ -148,6 +149,7 @@ public class AgentLoopHardeningTests
         Assert.Contains("scripts/check-final-gate.ps1", psInstall);
         Assert.Contains("state/continuation-contract.md", psInstall);
         Assert.Contains("StartsWith(\"prompts/\"", psInstall);
+        Assert.Contains("StartsWith(\"opencode-team/\"", psInstall);
         Assert.Contains("templates/migration-kit/harness/README.md", bundleScript);
     }
 
@@ -969,7 +971,15 @@ public class AgentLoopHardeningTests
         Assert.Contains("WAVE_QUALITY_BUDGET_", budgetScript);
         Assert.Contains("state/wave-quality-budget.json", budgetScript);
         Assert.Contains("runs/$RunId/wave-quality-budget.json", budgetScript);
+        Assert.Contains("$violations.ToArray()", budgetScript);
+        Assert.DoesNotContain("violations = @($violations)", budgetScript);
+        Assert.DoesNotContain("= if (", budgetScript);
         Assert.Contains("pwsh", budgetShell);
+
+        var ciWorkflow = Read(".github/workflows/ci.yml");
+        Assert.Contains("windows-powershell-51", ciWorkflow);
+        Assert.Contains("WINDOWS_POWERSHELL_51_WAVE_QUALITY_BUDGET_PASS", ciWorkflow);
+        Assert.Contains("shell: powershell", ciWorkflow);
 
         Assert.Contains("Test-WaveQualityBudget", finalGate);
         Assert.Contains("wave-quality-budget", finalGate);

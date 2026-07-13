@@ -215,6 +215,8 @@ For OpenCode, install the agent team after `start`:
 selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./OldTests --config migration/profiles/adapter-config.start.json --opencode-install auto
 ```
 
+On an existing workspace this command updates the managed `migration/opencode-team/**` pack first, then resynchronizes repository-root `.opencode/agents` and `.opencode/commands`. New `/supervised-task` modes should therefore appear without `--force`; a stale `unchanged` command pack indicates an older affected build.
+
 Then run `/supervised-task`. After a successful FINAL/PASS checkpoint, `/supervised-task` stops for review by default. Use `/supervised-task continue` to start post-final TODO/source-truth research without writing a detailed supervisor prompt. The supervised agent should read `current-ticket.md` and `state/start-dispatch.json`, create or resume `migration/runs/<run-id>/`, and avoid asking the user broad menu questions when the state is clear.
 
 ### OpenCode `/supervised-task` launch modes
@@ -228,6 +230,16 @@ Then run `/supervised-task`. After a successful FINAL/PASS checkpoint, `/supervi
 | `/supervised-task continue` | Resume the post-final research → review → slicing → bounded execution loop. |
 | `/supervised-task continue <topic or task>` | Continue with a named research topic or bounded request. |
 | `/supervised-task sentinel` | Run one forensic process inspection. Aliases: `inspect`, `qa`. |
+
+Choose Harness depth with `--execution-profile`:
+
+| Profile | Meaning | Example |
+|---|---|---|
+| `fast` | Lightweight and default; expensive roles are risk-triggered. | `/supervised-task waves --execution-profile fast` |
+| `standard` | Executor plus reviewer; watchdog/sentinel remain conditional. | `/supervised-task waves --execution-profile standard` |
+| `audit` | Full Harness; executor, reviewer, watchdog and sentinel are required. | `/supervised-task waves --execution-profile audit` |
+
+The modifier also works with ordinary resume, `continue`, bounded requests and `continuous`. Existing waves keep their immutable `execution-policy.json`; use a fresh run to change profile.
 
 Add `continuous` or `--continuation auto` to ordinary resume, bounded requests, `continue`, `waves`, or `waves fresh` when the current invocation should automatically consume safe checkpoints:
 

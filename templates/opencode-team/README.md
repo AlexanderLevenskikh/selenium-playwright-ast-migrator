@@ -104,6 +104,17 @@ For existing workspaces, run:
 /supervised-task
 ```
 
+Harness depth is selected with `--execution-profile`:
+
+```text
+/supervised-task waves --execution-profile fast      # lightweight and default
+/supervised-task waves --execution-profile standard  # balanced
+/supervised-task waves --execution-profile audit     # full Harness
+```
+
+The modifier also works with ordinary `/supervised-task`, `continue`, and `continuous`. Existing waves keep the immutable profile in `execution-policy.json`; start a fresh wave/run to change it.
+
+
 plain `/supervised-task continue` starts post-final research; the new default then continues through research-lead review and task slicing when safe.
 
 No extra prompt is required for the normal path. `/supervised-task` is state-aware: if continuation is required, it executes the next allowed bounded action; after `FINAL_STOPPED_FOR_REVIEW`, plain `/supervised-task continue` starts the closed post-final research → research-lead → task-slicer flow instead of requiring a detailed supervisor prompt. Add `continuous` or `--continuation auto` to ordinary resume, `continue`, `waves`, `waves fresh`, or a bounded request when the same invocation should keep consuming safe checkpoints. The modifier is invocation-local and never bypasses blockers, critical risk, scope, no-progress, review, sentinel, final gate, or budgets.

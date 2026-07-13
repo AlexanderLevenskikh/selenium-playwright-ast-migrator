@@ -209,6 +209,8 @@ selenium-pw-migrator pilot --input ./OldTests --max-tests 10 --out migration/pil
 selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./OldTests --config migration/profiles/adapter-config.start.json --opencode-install auto
 ```
 
+Для существующего workspace команда сначала обновляет управляемый pack `migration/opencode-team/**`, а затем заново синхронизирует `.opencode/agents` и `.opencode/commands` в корне репозитория. Новые режимы `/supervised-task` должны появляться без `--force`; если старая команда остаётся `unchanged`, используется более ранняя версия с этим дефектом.
+
 Потом запустите `/supervised-task`. После успешного FINAL/PASS checkpoint `/supervised-task` по умолчанию останавливается для review. Используйте `/supervised-task continue`, чтобы запустить post-final TODO/source-truth research без подробного prompt для supervisor. Supervised agent должен прочитать `current-ticket.md` и `state/start-dispatch.json`, создать или возобновить `migration/runs/<run-id>/` и не задавать пользователю широкие вопросы, если state понятен.
 
 ### Режимы запуска OpenCode `/supervised-task`
@@ -222,6 +224,16 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Old
 | `/supervised-task continue` | Возобновить post-final research → review → slicing → bounded execution loop. |
 | `/supervised-task continue <тема или задача>` | Продолжить с указанной темой исследования или bounded-запросом. |
 | `/supervised-task sentinel` | Выполнить одну forensic process inspection. Алиасы: `inspect`, `qa`. |
+
+Глубина Harness выбирается через `--execution-profile`:
+
+| Профиль | Значение | Пример |
+|---|---|---|
+| `fast` | Облегчённый режим и значение по умолчанию; дорогие роли включаются по риску. | `/supervised-task waves --execution-profile fast` |
+| `standard` | Executor плюс reviewer; watchdog/sentinel остаются условными. | `/supervised-task waves --execution-profile standard` |
+| `audit` | Полный Harness; обязательны executor, reviewer, watchdog и sentinel. | `/supervised-task waves --execution-profile audit` |
+
+Модификатор работает также с обычным resume, `continue`, bounded-запросом и `continuous`. Уже созданная wave сохраняет неизменяемый `execution-policy.json`; для смены профиля используй fresh run.
 
 Добавь `continuous` или `--continuation auto` к обычному resume, bounded-запросу, `continue`, `waves` или `waves fresh`, если текущий invocation должен сам проходить безопасные checkpoints:
 

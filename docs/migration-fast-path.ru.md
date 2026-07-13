@@ -12,6 +12,16 @@
 --execution-profile audit     executor + reviewer + watchdog + sentinel
 ```
 
+OpenCode `/supervised-task` принимает тот же модификатор профиля:
+
+```text
+/supervised-task --execution-profile fast
+/supervised-task waves --execution-profile standard
+/supervised-task waves continuous --execution-profile audit
+```
+
+Если профиль не указан, для нового run используется `fast`. Профиль существующей wave неизменяем.
+
 Выбранный профиль записывается в `execution-policy.json`. Политика управляет маршрутизацией ролей, но её safety-инварианты детерминированы: final gate обязателен, scope нельзя расширять, подавление assertions запрещено, runtime-state нельзя править вручную.
 
 ## Неизменяемый контракт wave

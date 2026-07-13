@@ -193,6 +193,27 @@ selenium-pw-migrator --version
 ```
 
 
+
+## `bootstrap-opencode` says `unchanged`, but `/supervised-task` is still an old command
+
+Check both managed copies:
+
+```powershell
+Select-String -Path migration/opencode-team/global/.config/opencode/commands/supervised-task.md -Pattern continuous
+Select-String -Path .opencode/commands/supervised-task.md -Pattern continuous
+```
+
+Current builds treat `migration/opencode-team/**` as kit-owned during update. A normal bootstrap must refresh that workspace command pack first and then resync the repository-root `.opencode` directories:
+
+```powershell
+selenium-pw-migrator kit bootstrap-opencode `
+  --workspace migration `
+  --source <selenium-source> `
+  --opencode-install none
+```
+
+Expected update markers include `kit-overwrite: ...migration/opencode-team/...` and `sync: .../.opencode/commands`. Older builds had a defect where the workspace copy was preserved and the stale file was copied back to `.opencode`; for that older version only, `--force` is a one-time workaround.
+
 ## Harness continuation strict protocol
 
 After a non-final final gate, read `migration/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, `NOT FINAL` is not a stopping point: execute exactly one next bounded action under `migration/**` before a user-facing handoff. A fresh `FINAL` checkpoint stops once for review in default mode. If this invocation used `continuous` or `--continuation auto`, persist the checkpoint and immediately enter another guarded bounded cycle or eligible next wave. Any later `/supervised-task` where `harness-run.json` is already `FINAL_STOPPED_FOR_REVIEW` resumes the closed post-final loop automatically. Stop for guard/scope/policy blocker, human decision, critical risk, malformed evidence, missing input, no-progress/plateau, limitations, or max autonomous budget.

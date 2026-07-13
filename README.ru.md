@@ -67,6 +67,16 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Sel
 
 Для существующего workspace используй обычный `/supervised-task`; для безопасного архивного перезапуска разросшегося pilot — `/supervised-task waves fresh`; для явной форензик-проверки — `/supervised-task sentinel` (`inspect` и `qa` — алиасы).
 
+При необходимости профиль Harness можно выбрать явно. Для новых run по умолчанию используется облегчённый `fast`:
+
+```text
+/supervised-task waves --execution-profile fast      # облегчённый/по умолчанию
+/supervised-task waves --execution-profile standard  # сбалансированный
+/supervised-task waves --execution-profile audit     # полный Harness
+```
+
+Тот же модификатор работает с обычным `/supervised-task`, `continue` и `continuous`. Уже созданная wave сохраняет неизменяемый профиль из `execution-policy.json`.
+
 Чтобы тот же запуск автоматически проходил checkpoint-ы, после которых обычно нужно вводить `continue`, добавь `continuous` или `--continuation auto`:
 
 ```text

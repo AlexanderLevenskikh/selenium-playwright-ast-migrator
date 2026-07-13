@@ -186,7 +186,8 @@ function Test-AutoUpdatedKitOwnedFile([string]$RelativePath) {
         $normalized -eq "scripts/update-sentinel-finding-status.sh" -or
         $normalized -eq "state/continuation-contract.md" -or
         $normalized.StartsWith("prompts/") -or
-        $normalized.StartsWith("agent-skills/")
+        $normalized.StartsWith("agent-skills/") -or
+        $normalized.StartsWith("opencode-team/")
     )
 }
 

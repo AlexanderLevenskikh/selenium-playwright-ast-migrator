@@ -12,6 +12,16 @@ The migration fast path reduces orchestration overhead without weakening scope, 
 --execution-profile audit     executor + reviewer + watchdog + sentinel
 ```
 
+OpenCode `/supervised-task` accepts the same profile modifier:
+
+```text
+/supervised-task --execution-profile fast
+/supervised-task waves --execution-profile standard
+/supervised-task waves continuous --execution-profile audit
+```
+
+When omitted, `fast` is the default for a new run. Existing wave policy is immutable.
+
 The selected profile is written to `execution-policy.json`. The policy is advisory for role routing but its safety invariants are deterministic: the final gate remains required, scope may not expand, assertion suppression is forbidden, and runtime-owned state must not be edited manually.
 
 ## Immutable wave contract

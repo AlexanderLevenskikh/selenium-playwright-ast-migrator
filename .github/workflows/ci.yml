@@ -22,6 +22,52 @@ jobs:
         shell: pwsh
         run: ./scripts/validate-scripts.ps1 -Root . -RequireShell
 
+  windows-powershell-51:
+    name: Validate Windows PowerShell 5.1 compatibility
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse and execute wave quality budget under Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $scriptPath = Join-Path $PWD 'templates/migration-kit/scripts/evaluate-wave-quality-budget.ps1'
+          $tokens = $null
+          $parseErrors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors)
+          if (@($parseErrors).Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Error $_.Message }
+            throw 'Windows PowerShell 5.1 parser rejected evaluate-wave-quality-budget.ps1.'
+          }
+
+          $workspace = Join-Path $env:RUNNER_TEMP 'wave-quality-budget-ps51'
+          Remove-Item -Recurse -Force $workspace -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path (Join-Path $workspace 'runs/wave-001/source-scope') | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $workspace 'state') | Out-Null
+          Set-Content -Path (Join-Path $workspace 'runs/wave-001/source-scope/Smoke.cs') -Value 'class Smoke {}' -Encoding UTF8
+          @{
+            schemaVersion = 'migration-wave-preflight-budget/v1'
+            status = 'PASS'
+            metrics = @{
+              sourceFileCount = 1
+              testCount = 1
+              estimatedActions = 1
+            }
+          } | ConvertTo-Json -Depth 8 | Set-Content -Path (Join-Path $workspace 'runs/wave-001/preflight-budget.json') -Encoding UTF8
+
+          & $scriptPath -Workspace $workspace -WaveId 'wave-001' -AllowScaffoldingOnly -MinSemanticActions 0
+          if ($LASTEXITCODE -ne 0) {
+            throw "Wave quality budget smoke failed under Windows PowerShell 5.1 with exit code $LASTEXITCODE."
+          }
+          $report = Join-Path $workspace 'state/wave-quality-budget.json'
+          if (-not (Test-Path $report)) {
+            throw 'Wave quality budget report was not written under Windows PowerShell 5.1.'
+          }
+          Write-Host 'WINDOWS_POWERSHELL_51_WAVE_QUALITY_BUDGET_PASS'
+
   test-fast:
     name: Test fast suite
     runs-on: ubuntu-latest

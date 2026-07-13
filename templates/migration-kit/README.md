@@ -97,6 +97,8 @@ dotnet tool run selenium-pw-migrator -- kit doctor --workspace migration
 
 `bootstrap-opencode` normally copies `opencode.jsonc`, `.opencode/agents/*`, `.opencode/commands/*`, and `AGENTS.md` into the repository root with backups under `migration/.migration-kit/opencode-backups/`. The apply script is a repair fallback for old/skipped workspaces. Then open the product repo root in OpenCode Desktop and run `/supervised-task waves` for a fresh divide-and-conquer start. The orchestrator creates or resumes the active run with `scripts/new-harness-run.ps1`. Do not start kit/wave commands from `Web/**` or another source/target subdirectory; a nested `Web/**/migration/**` workspace is a process defect and is blocked by doctor/final-gate/sentinel checks.
 
+For new runs, `/supervised-task` defaults to the lightweight `fast` Harness profile. Select `standard` or the full `audit` profile explicitly with `--execution-profile`, for example `/supervised-task waves --execution-profile audit`. The modifier also composes with `continue` and `continuous`. Existing `execution-policy.json` files are immutable; use a fresh run to change profile.
+
 ## First run
 
 For OpenCode Desktop, follow `docs/guarded-opencode-desktop-runbook.ru.md` instead of copying prompts manually. After the workspace exists and wave mode is running, use `docs/wave-mode-operator-runbook.md` / `.ru.md` as the operator guide for `BLOCKED_BY_GATE`, `current-ticket.md`, sentinel finding lifecycle, wave quality budget, mapping research memory, and feedback bundle handoff.

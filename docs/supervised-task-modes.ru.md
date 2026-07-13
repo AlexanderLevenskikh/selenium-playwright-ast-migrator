@@ -16,6 +16,29 @@
 | `/supervised-task continue <тема или задача>` | нет | Продолжить с конкретной темой исследования или bounded-задачей | Использует текст как research topic или requested task, но не обходит current ticket, review, scope, policy, risk и remediation budgets. |
 | `/supervised-task sentinel` | `/supervised-task inspect`, `/supervised-task qa` | Явно запустить процессную/форензик-проверку | Экспортирует session evidence, вызывает `harness-sentinel`, завершает `sentinel-inspection.json` и маршрутизирует agent-executable findings в bounded follow-up tickets. Этот режим всегда одноразовый. |
 
+## Профили Harness
+
+Используй `--execution-profile`, чтобы выбрать объём оркестрации Harness для текущего запуска:
+
+| Профиль | Пример команды | Поведение |
+|---|---|---|
+| `fast` | `/supervised-task waves --execution-profile fast` | **Режим по умолчанию и облегчённый Harness.** Сначала executor; reviewer/watchdog/sentinel подключаются только по risk, policy, no-progress или требованиям final handoff. |
+| `standard` | `/supervised-task waves --execution-profile standard` | Сбалансированный режим. Executor и reviewer ожидаются всегда; watchdog/sentinel остаются условными до необходимости. |
+| `audit` | `/supervised-task waves --execution-profile audit` | **Полный Harness.** Обязательны executor, reviewer, watchdog и sentinel. |
+
+Модификатор работает также без `waves`, с `continue` и с `continuous`:
+
+```text
+/supervised-task --execution-profile fast
+/supervised-task continue --execution-profile standard
+/supervised-task continuous --execution-profile fast
+/supervised-task waves continuous --execution-profile audit
+```
+
+Если модификатор не указан, для нового run выбирается `fast`. Уже созданная wave сохраняет неизменяемый профиль из `execution-policy.json`. Чтобы сменить профиль, создай свежую wave/run; не переписывай policy вручную.
+
+Во всех профилях остаются обязательными scope enforcement, validation, final reviewer, final sentinel и final gate. Профиль меняет стоимость оркестрации, а не гарантии безопасности.
+
 ## Модификатор continuous
 
 Добавь `continuous` или `--continuation auto`, чтобы текущий запуск не останавливался на checkpoint, после которого обычно пришлось бы вручную вводить `/supervised-task continue`.
@@ -97,7 +120,7 @@ selenium-pw-migrator kit bootstrap-opencode `
   --opencode-install none
 ```
 
-Если workspace уже существует, `bootstrap-opencode` работает в update-режиме: создаёт backup, перезаписывает kit-owned runtime scripts, обновляет guard checksums и заново применяет repository-root OpenCode commands.
+Если workspace уже существует, `bootstrap-opencode` работает в update-режиме: создаёт backup, перезаписывает kit-owned runtime scripts **и управляемый command pack `migration/opencode-team/**`**, обновляет guard checksums, а затем заново синхронизирует `.opencode/agents` и `.opencode/commands` в корне репозитория. Для обновления управляемых OpenCode-команд `--force` больше не нужен; project-owned файлы вроде корневого `AGENTS.md` сохраняют более осторожные правила.
 
 ## Проверяй установленные scripts, а не только templates
 
