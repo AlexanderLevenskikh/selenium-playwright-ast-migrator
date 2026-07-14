@@ -29,6 +29,7 @@ This README only describes the reusable OpenCode team template. Do not use it as
 - `migration-researcher` — post-final исследователь TODO/source truth, пишет только research-артефакты и `todo-inventory.json`.
 - `migration-research-lead` — “научный руководитель” research-а: проверяет counts/evidence/actionability и отправляет слабый research на bounded revision.
 - `migration-task-slicer` — превращает approved research в backlog/current-ticket для следующего executor task.
+- `migration-wave-manager` — принимает граничное решение по волне: принять, исправить корневой паттерн, разделить, отложить только soft debt или честно остановиться по бюджету; hard gates он отменять не может.
 - `migration-change-reviewer` — compatibility read-only валидатор старого research-flow.
 - `/supervised-task` — zero-argument state-aware команда для следующей bounded-задачи через orchestrator + watchdog + reviewer.
 - `/checkpoint` — ручная команда для проверки текущего состояния watchdog'ом.
@@ -200,7 +201,7 @@ The bundled `opencode.jsonc` is intentionally low-noise for migration runs:
 - routine read/navigation tools (`read`, `glob`, `grep`, `list`, `lsp`) are allowed;
 - routine git inspection (`git status*`, `git diff*`, `git show*`, `git log*`, `git ls-files*`) is allowed;
 - PowerShell/source inspection commands (`Get-ChildItem*`, `Get-Content*`, `Test-Path*`, `Select-String*`, `rg *`) are allowed;
-- known subagents (`executor`, `watchdog`, `reviewer`, `migration-researcher`, `migration-research-lead`, `migration-task-slicer`, `migration-change-reviewer`, `harness-sentinel`) are allowed;
+- known subagents (`executor`, `watchdog`, `reviewer`, `migration-researcher`, `migration-research-lead`, `migration-task-slicer`, `migration-change-reviewer`, `migration-wave-manager`, `harness-sentinel`) are allowed;
 - `general` remains denied;
 - destructive VCS, delete, publish, network fetch, and external-directory operations remain denied;
 - direct shell write primitives (`Set-Content`, `Add-Content`, `Out-File`, `tee`, `sed -i`, redirection-style writes) are denied so agents cannot bypass an OpenCode edit denial through shell.
@@ -239,6 +240,7 @@ When `migration/current-ticket.md` exists, route it through reviewer/executor be
 
 
 Wave quality budget is enforced by `migration/scripts/evaluate-wave-quality-budget.ps1` / `.sh`; it writes `wave-quality-budget/v1` evidence and blocks noisy scaffolding waves with `BLOCKED_BY_WAVE_QUALITY_BUDGET`.
+Outcome readiness is measured separately by `selenium-pw-migrator migration measure-wave`. It preserves semantic/fallback/TODO metrics, but acceptance is based on generated ready/draft/empty tests, blocking root patterns, cascade estimates, assertion preservation, validation, and immutable hashes. `migration-wave-manager` records a bounded quality/profit decision. Remediation `COMPLETED`/`NO_PROGRESS` is derived from regenerated and validated before/after outcomes. `migration accept-wave` writes the receipt required before the next wave, while `migration check-wave-acceptance` lets gate scripts revalidate the complete receipt chain. The `fast` profile changes ceremony and bounded remediation cycles, not hard acceptance criteria.
 
 
 - `migration/scripts/collect-mapping-research-memory.ps1` / `.sh` — converts noisy wave evidence into `mapping-research-memory/v1`: top unresolved symbols, TODO clusters, unmapped targets, verify blockers, and bounded improvement candidates.

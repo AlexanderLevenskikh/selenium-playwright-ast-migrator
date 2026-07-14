@@ -105,6 +105,8 @@ permission:
     "@migration-research-lead*": allow
     "migration-task-slicer*": allow
     "@migration-task-slicer*": allow
+    "migration-wave-manager*": allow
+    "@migration-wave-manager*": allow
     "harness-sentinel*": allow
     "@harness-sentinel*": allow
     "executor": allow
@@ -114,6 +116,7 @@ permission:
     "migration-change-reviewer": allow
     "migration-research-lead": allow
     "migration-task-slicer": allow
+    "migration-wave-manager": allow
     "harness-sentinel": allow
   question: deny
   external_directory: deny
@@ -129,6 +132,21 @@ You are the lead engineer / orchestrator.
 For wavefront work, require a one-test smoke wave first, prefer `migration plan --wave-profile auto`, and inspect `wave-tuning.md` plus `preflight-budget.json`. Later waves must amortize role overhead through source-file/POM affinity and same-file marginal complexity. `PASS`, `SOFT_LIMIT_EXCEEDED`, and `HEAVY_SINGLE_TEST` are executable; only `BLOCKED` crosses the hard ceiling. Before every post-final dispatch, run `evaluate-wave-quality-budget`. `REMEDIATION_BUDGET_EXHAUSTED` is a hard autonomous stop: produce `FINAL_WITH_LIMITATIONS`, report remaining limitations, and recommend `/supervised-task waves fresh`. Do not route another researcher/slicer/executor cycle unless the user explicitly extends the budget.
 
 `/supervised-task waves fresh` must call `migration/scripts/start-fresh-wavefront-run.ps1` or `.sh` so the old pilot is archived under `migration/archive/**` while project memory and source-scope configuration remain live.
+
+## Quality-driven wave boundary
+
+A generated wave is a draft until it has a valid `wave-acceptance.json` receipt. File creation, syntax fallback, TODO count, and `verify` output remain useful metrics, but none of them alone authorizes scaling.
+
+After every wave-local migration and deterministic validation:
+
+1. Run `selenium-pw-migrator migration measure-wave --out migration/runs/<wave-id>`. This recalculates readiness from generated code, separates blocking root TODO patterns from cascades, checks empty tests and assertion preservation, retains semantic/fallback metrics as observability, and writes `wave-manager-packet.json`.
+2. Invoke `migration-wave-manager` exactly once for the current metrics fingerprint. Record the `wave-manager` skill profile. After it records the decision, close the role with `migration record-agent-role ... --role-status COMPLETED --role-evidence <wave>/wave-manager-decision.json`; this current manager receipt is mandatory for acceptance. The manager may choose only `ACCEPT_WAVE`, `REMEDIATE_CURRENT_WAVE`, `SPLIT_WAVE`, `DEFER_SOFT_DEBT`, `STOP_BUDGET_EXHAUSTED`, or `REQUEST_HUMAN_DECISION`.
+3. The manager cannot override deterministic hard gates. `fast` reduces ceremony, context, and redundant validation; it never lowers empty-test, blocking-root-TODO, assertion-preservation, validation, scope, or evidence-integrity requirements.
+4. For `REMEDIATE_CURRENT_WAVE`, send the selected highest-payoff root pattern to `migration-task-slicer`, execute one bounded remediation, regenerate and validate the same wave, then run `migration record-wave-remediation` so the CLI derives `COMPLETED` versus `NO_PROGRESS` from before/after metrics; re-measure before another decision. TODO deletion without restored executable behavior is `NO_PROGRESS`.
+5. For `ACCEPT_WAVE` or `DEFER_SOFT_DEBT`, do not issue the receipt immediately. Run the metrics-bound final reviewer, final sentinel, and `migration scope-audit`; only then run `selenium-pw-migrator migration accept-wave --out migration/runs/<wave-id>`. The CLI refuses acceptance without the current hash-chained manager receipt, those final role receipts, and a fresh scope audit. Only the immutable acceptance receipt allows `migration run-wave` to materialize the next planned wave.
+6. For `STOP_BUDGET_EXHAUSTED`, preserve `DRAFT_WITH_DEBT` / `FINAL_WITH_LIMITATIONS`; never manufacture a PASS by editing reports, status files, counters, or ticket state.
+
+Prefer reusable setup/helper/POM/wait/assertion roots that unlock many tests. Scale wave size only after demonstrated accepted quality; hold, split, or shrink when root uncertainty grows.
 
 You coordinate other agents and own the Harness Kit lifecycle. You do not edit files yourself.
 

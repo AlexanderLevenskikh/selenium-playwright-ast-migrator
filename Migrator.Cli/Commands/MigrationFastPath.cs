@@ -76,7 +76,12 @@ internal static class MigrationFastPath
                 "resume-wave",
                 "build-review-bundle",
                 "check-scope",
-                "check-harness-policy"
+                "check-harness-policy",
+                "measure-wave",
+                "record-wave-decision",
+                "record-wave-remediation",
+                "accept-wave",
+                "check-wave-acceptance"
             },
             ["reviewerTriggers"] = new[]
             {
@@ -102,15 +107,27 @@ internal static class MigrationFastPath
                 "scope bypass or gate weakening",
                 "explicit audit profile"
             },
+            ["boundaryRoles"] = new[] { "migration-wave-manager" },
+            ["waveQualityBoundary"] = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["maxRemediationCycles"] = profile switch { "audit" => 6, "standard" => 4, _ => 2 },
+                ["maxConsecutiveNoProgressCycles"] = 2,
+                ["budgetExhaustionStatus"] = "DRAFT_WITH_DEBT",
+                ["qualityThresholdsProfileIndependent"] = true
+            },
             ["roleBudgets"] = new SortedDictionary<string, object?>(StringComparer.Ordinal)
             {
-                ["maxTotalRoleInvocations"] = profile switch { "audit" => 9, "standard" => 7, _ => 6 },
+                // Each accepted wave can require the initial measurement plus the bounded
+                // remediation cycles (fast 2, standard 4, audit 6). Budgets cover that finite
+                // state machine without turning a profile into an unbounded role loop.
+                ["maxTotalRoleInvocations"] = profile switch { "audit" => 36, "standard" => 22, _ => 14 },
                 ["perRole"] = new SortedDictionary<string, int>(StringComparer.Ordinal)
                 {
-                    ["executor"] = 2,
-                    ["reviewer"] = profile == "fast" ? 1 : 2,
-                    ["watchdog"] = profile == "audit" ? 2 : 1,
-                    ["sentinel"] = profile == "audit" ? 2 : 1
+                    ["executor"] = profile switch { "audit" => 7, "standard" => 5, _ => 3 },
+                    ["reviewer"] = profile switch { "audit" => 8, "standard" => 6, _ => 3 },
+                    ["watchdog"] = profile switch { "audit" => 6, "standard" => 2, _ => 1 },
+                    ["sentinel"] = profile switch { "audit" => 8, "standard" => 5, _ => 3 },
+                    ["migration-wave-manager"] = profile switch { "audit" => 7, "standard" => 5, _ => 3 }
                 },
                 ["duplicateActiveDispatchAllowed"] = false,
                 ["budgetExhaustionAction"] = "HUMAN_REVIEW_REQUIRED"
@@ -155,7 +172,11 @@ internal static class MigrationFastPath
                 ["watchdogIsEventDriven"] = profile != "audit",
                 ["sentinelIsEventDrivenBeforeFinal"] = profile != "audit",
                 ["malformedRoleJournalMayBeRewrittenAutomatically"] = false,
-                ["staleRoleRecoveryMustAppendTerminalEvidence"] = true
+                ["staleRoleRecoveryMustAppendTerminalEvidence"] = true,
+                ["waveManagerCannotOverrideHardGates"] = true,
+                ["nextWaveRequiresAcceptanceReceipt"] = true,
+                ["fastChangesCeremonyNotQuality"] = true,
+                ["editableReportsAreObservabilityOnly"] = true
             }
         };
         var fingerprint = ComputeTextHash(JsonSerializer.Serialize(immutable, CompactJsonOptions));

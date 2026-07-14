@@ -517,6 +517,31 @@ internal static class MigrationIncrementalPipeline
         return new ChangeSet(payload, baselineName, currentTreeHash, changeHash, scope, checks, changed, added, modified, deleted);
     }
 
+    internal static bool TryComputeCurrentInputFingerprint(string outPath, out string inputFingerprint, out string error)
+    {
+        inputFingerprint = string.Empty;
+        error = string.Empty;
+        outPath = Path.GetFullPath(outPath);
+        if (!ValidateRunContext(outPath, out var contextDetail))
+        {
+            error = "RUN_CONTEXT_INVALID: " + contextDetail;
+            return false;
+        }
+
+        try
+        {
+            var generatedPath = ReadContextString(outPath, "generatedOutputPath");
+            var currentTreeHash = ComputeTreeHash(generatedPath);
+            inputFingerprint = ComputeCurrentInputFingerprint(outPath, currentTreeHash);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
     static string ComputeCurrentInputFingerprint(string outPath, string currentTreeHash)
     {
         using var context = ReadJson(Path.Combine(outPath, "run-context.json"));

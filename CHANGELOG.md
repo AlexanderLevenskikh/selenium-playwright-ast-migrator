@@ -7,22 +7,12 @@ This project uses preview SemVer-style versions while the public API is still st
 ## [Unreleased]
 
 ### Performance
-
-### Added
-
-### Reliability and scope
-
-### Changed
-
-### Fixed
-
-## [0.0.2-preview.2]
-
-### Performance
 - Added one correlated end-to-end performance report that aggregates wave materialization, validation host, agent lifecycle, risk, cache-hit status, and the largest measured component.
 - Added cache statistics, verification, dry-run/apply pruning, active-run reference protection, and concrete tool/recognizer/renderer/adapter compatibility fingerprints.
 
 ### Added
+- Added a deterministic quality-driven wave boundary with generated-code outcome measurement, root/cascade TODO analysis, payoff-ranked remediation candidates, an immutable `wave-acceptance.json` receipt, and a read-only `migration-wave-manager` role that cannot override hard gates. Acceptance now requires a current manager role receipt, metrics-bound reviewer/sentinel receipts, fresh scope audit, current-input validation fingerprint, and a valid hash-chained remediation ledger.
+- Added representative calibration waves before scale-out; `--representatives-per-cluster` now affects the actual plan instead of metadata only.
 - Added a live, bilingual Migration Progress dashboard with five plain-language process stages, draft-vs-accepted progress, current-wave and next-action explanations, contextual `?` hints, generated Playwright test previews, and file-based auto-refresh.
 - Continuous `/supervised-task` invocation mode through either `continuous` or `--continuation auto`, supported for ordinary resume, bounded requests, `continue`, `waves`, and `waves fresh`; successful checkpoints are consumed automatically while blockers, critical risk, scope, no-progress, permission, evidence-integrity, and budget stops remain mandatory.
 - Durable agent recovery with bounded active-role leases, latest-heartbeat freshness, serialized runtime mutations, deterministic recovery planning, append-only stale-role closure, safe ledger-head rebuild, orphan lease archival, atomic-temp quarantine, and fail-closed handling of malformed or contradictory role evidence.
@@ -46,6 +36,9 @@ This project uses preview SemVer-style versions while the public API is still st
 
 ### Changed
 
+- `fast`, `standard`, and `audit` now share the same hard wave-quality thresholds. Profiles vary bounded remediation cycles and ceremony only; exhausted/no-progress work stops honestly as `DRAFT_WITH_DEBT` / `FINAL_WITH_LIMITATIONS`.
+- Later waves are physically locked until every prior wave has a current outcome-bound acceptance receipt backed by generated-code metrics, executed validation, the manager/reviewer/sentinel role chain, and a fresh scope audit; quality/final evaluation revalidates the complete materialized wave chain.
+- Legacy semantic-action, syntax-fallback, TODO, action, and unmapped-target metrics remain visible for diagnosis and trends but no longer grant acceptance.
 - Continuous run intent is now persisted in harness state and restored after chat compaction or session resume; an exhausted completed backlog automatically routes blocked quality-budget work through deterministic gate-followup slicing.
 
 - Fixed continuous `/supervised-task` dispatch so the one-bounded-action rule is per cycle rather than per invocation; user-facing handoff is vetoed while continuation/current-ticket/remediation work remains, and `BLOCKED_BY_WAVE_QUALITY_BUDGET` blocks only wave advancement when actionable remediation is available.

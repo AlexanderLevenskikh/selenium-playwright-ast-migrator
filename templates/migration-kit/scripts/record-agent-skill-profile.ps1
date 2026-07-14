@@ -5,7 +5,7 @@ Record a named agent skill profile for the active migration run.
 .DESCRIPTION
 record-agent-skill-profile is a thin profile recorder over write-agent-skill-usage.
 It expands a role/profile name such as orchestrator, executor-docs-first, watchdog,
-or final-handoff into the corresponding migration/agent-skills usage evidence.
+final-handoff, or wave-manager into the corresponding migration/agent-skills usage evidence.
 #>
 
 param(
@@ -37,6 +37,7 @@ $profiles = [ordered]@{
     "reviewer" = @("agent-watchdog", "quick-recap")
     "plan-arbiter" = @("plan-arbiter")
     "final-handoff" = @("quick-recap")
+    "wave-manager" = @("quality-profit-arbitration", "root-cause-prioritization", "adaptive-wave-sizing")
 }
 
 $normalizedProfile = $Profile.Trim().ToLowerInvariant()

@@ -12,6 +12,7 @@ Use this map to load only the skill that matches the current situation. Do not p
 | Broad task with many files/TODOs/waves | `efficient-frontier/SKILL.md` | orchestrator |
 | Final answer or handoff | `quick-recap/SKILL.md` | orchestrator, reviewer |
 | Two or more plausible plans disagree | `plan-arbiter/SKILL.md` | orchestrator, reviewer |
+| Wave is measured and must be accepted, remediated, split, or stopped | `quality-profit-arbitration/SKILL.md`, `root-cause-prioritization/SKILL.md`, `adaptive-wave-sizing/SKILL.md` | migration-wave-manager |
 
 ## Profile shortcuts
 
@@ -28,6 +29,7 @@ For common role starts, prefer the profile recorder so the run captures consiste
 | `wave` | `efficient-frontier`, `plow-ahead` | `migration/scripts/record-agent-skill-profile.ps1 -Profile wave -Phase planning` |
 | `plan-arbiter` | `plan-arbiter` | `migration/scripts/record-agent-skill-profile.ps1 -Profile plan-arbiter -Phase planning` |
 | `final-handoff` | `quick-recap` | `migration/scripts/record-agent-skill-profile.ps1 -Profile final-handoff -Phase handoff` |
+| `wave-manager` | `quality-profit-arbitration`, `root-cause-prioritization`, `adaptive-wave-sizing` | `migration/scripts/record-agent-skill-profile.ps1 -Profile wave-manager -Phase wave-boundary` |
 
 Use `write-agent-skill-usage.ps1` / `.sh` directly only when a custom one-off skill decision is more precise than a profile.
 

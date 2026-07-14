@@ -11,8 +11,8 @@ internal static class MigrationAgentRuntime
 
     static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     static readonly JsonSerializerOptions CompactJsonOptions = new() { WriteIndented = false };
-    static readonly string[] Roles = { "executor", "reviewer", "watchdog", "sentinel" };
-    static readonly string[] Phases = { "pre", "execution", "recovery", "final" };
+    static readonly string[] Roles = { "executor", "reviewer", "watchdog", "sentinel", "migration-wave-manager" };
+    static readonly string[] Phases = { "pre", "execution", "quality", "recovery", "final" };
     static readonly string[] Statuses = { "STARTED", "COMPLETED", "FAILED", "SKIPPED" };
 
     internal static int ResolveNextAction(string outPath, TextWriter output, TextWriter error)
@@ -189,14 +189,87 @@ internal static class MigrationAgentRuntime
                     "Risk flags require a bounded watchdog pass before final review.", output, error);
         }
 
-        var finalFingerprint = ComputeTextHash($"final|{inputFingerprint}|{ReadString(reviewBundlePath, "changeSetHash")}");
+        // Measure outcome quality before spending final-review/sentinel turns. A failing wave
+        // should route directly to bounded remediation rather than paying ceremonial final roles.
+        // This boundary is profile-independent: fast saves ceremony, never quality.
+        var qualityOut = new StringWriter();
+        var qualityErr = new StringWriter();
+        var qualityExit = MigrationWaveQualityController.Run("measure-wave", new[] { "--out", outPath }, qualityOut, qualityErr);
+        if (qualityExit == 2)
+            return WriteDecision(outPath, "BLOCKED", null, "quality", inputFingerprint,
+                "selenium-pw-migrator migration measure-wave --out <run-dir>",
+                "Outcome-oriented wave measurement failed; no final handoff or next-wave materialization is allowed.", "wave-quality-measure-failed",
+                output, error, qualityErr.ToString().Trim(), 2);
+
+        var qualityFingerprint = ReadString(outPath, "wave-quality-metrics.json", "metricsFingerprint");
+        if (string.IsNullOrWhiteSpace(qualityFingerprint))
+            return WriteDecision(outPath, "BLOCKED", null, "quality", inputFingerprint,
+                "selenium-pw-migrator migration measure-wave --out <run-dir>",
+                "Wave quality metrics were not materialized with a fingerprint.", "wave-quality-metrics-missing",
+                output, error, qualityOut.ToString().Trim(), 2);
+
+        var managerFingerprint = ComputeTextHash($"wave-manager|{qualityFingerprint}|{profile}");
+        if (!HasCompleted(events, "migration-wave-manager", "quality", managerFingerprint))
+            return ProposeRole(outPath, adaptivePolicy, events, "migration-wave-manager", "quality", managerFingerprint,
+                qualityExit == 0
+                    ? "Deterministic hard gates pass; decide whether to accept or defer genuine soft debt before scaling."
+                    : "Deterministic hard gates fail; select the highest-payoff bounded remediation, split, honest budget stop, or human escalation.", output, error);
+
+        var managerDecisionPath = Path.Combine(outPath, "wave-manager-decision.json");
+        var managerDecision = ReadString(managerDecisionPath, "decision");
+        var managerMetricsFingerprint = ReadString(managerDecisionPath, "metricsFingerprint");
+        if (string.IsNullOrWhiteSpace(managerDecision)
+            || !string.Equals(managerMetricsFingerprint, qualityFingerprint, StringComparison.OrdinalIgnoreCase))
+        {
+            return WriteDecision(outPath, "BLOCKED", "migration-wave-manager", "quality", managerFingerprint,
+                "selenium-pw-migrator migration record-wave-decision --out <run-dir> --decision <decision>",
+                "The quality-manager role completed without a current, metrics-bound decision.", "wave-manager-decision-missing-or-stale",
+                output, error, null, 2);
+        }
+
+        if (managerDecision == "REMEDIATE_CURRENT_WAVE")
+        {
+            return WriteDecision(outPath, "RUN_COMMAND", "migration-wave-manager", "quality", managerFingerprint,
+                "route wave-manager-decision.json through migration-task-slicer, execute one bounded root-pattern remediation, regenerate and validate the same wave, run record-wave-remediation so progress is derived from before/after metrics, and re-measure",
+                "The current wave remains a draft. The next permitted action is one highest-payoff remediation cycle on this same wave.", "wave-remediation-required",
+                output, error, null, 0);
+        }
+        if (managerDecision == "SPLIT_WAVE")
+        {
+            return WriteDecision(outPath, "RUN_COMMAND", "migration-wave-manager", "quality", managerFingerprint,
+                "route wave-manager-decision.json through migration-task-slicer and write a revised smaller wave plan; preserve the current wave as unaccepted evidence and do not materialize a later wave",
+                "The current scope is too broad for efficient remediation and must be split before scaling.", "wave-split-required",
+                output, error, null, 0);
+        }
+        if (managerDecision == "STOP_BUDGET_EXHAUSTED")
+        {
+            return WriteDecision(outPath, "FINAL_WITH_LIMITATIONS", "migration-wave-manager", "quality", managerFingerprint, null,
+                "The bounded remediation budget/no-progress threshold is exhausted. Preserve DRAFT_WITH_DEBT; do not manufacture acceptance.", "wave-remediation-budget-exhausted",
+                output, error, null, 0);
+        }
+        if (managerDecision == "REQUEST_HUMAN_DECISION")
+        {
+            return WriteDecision(outPath, "HUMAN_REVIEW_REQUIRED", "migration-wave-manager", "quality", managerFingerprint, null,
+                "Product semantics, forbidden scope, credentials, or competing priorities require a human decision.", "wave-manager-human-decision",
+                output, error, null, 4);
+        }
+        if (managerDecision is not ("ACCEPT_WAVE" or "DEFER_SOFT_DEBT"))
+        {
+            return WriteDecision(outPath, "BLOCKED", "migration-wave-manager", "quality", managerFingerprint, null,
+                $"Unsupported wave-manager decision: {managerDecision}", "wave-manager-decision-invalid",
+                output, error, null, 2);
+        }
+
+        // Final reviewer/sentinel work is paid only for a wave the manager proposes to accept.
+        // Bind those receipts to the exact generated outcome and manager decision.
+        var finalFingerprint = ComputeTextHash($"final|{inputFingerprint}|{ReadString(reviewBundlePath, "changeSetHash")}|{qualityFingerprint}|{managerDecision}");
         if (!HasCompleted(events, "reviewer", "final", finalFingerprint))
             return ProposeRole(outPath, adaptivePolicy, events, "reviewer", "final", finalFingerprint,
-                "Final review remains mandatory in every execution profile.", output, error);
+                "Final review remains mandatory in every execution profile. It runs after the wave-manager proposes acceptance so failed drafts do not spend final-review turns.", output, error);
 
         if (!HasCompleted(events, "sentinel", "final", finalFingerprint))
             return ProposeRole(outPath, adaptivePolicy, events, "sentinel", "final", finalFingerprint,
-                "Final sentinel inspection remains mandatory before handoff.", output, error);
+                "Final sentinel inspection remains mandatory before handoff. It must complete before a wave acceptance receipt can be issued.", output, error);
 
         var scopeAuditOutput = new StringWriter();
         var scopeAuditError = new StringWriter();
@@ -204,13 +277,22 @@ internal static class MigrationAgentRuntime
         if (scopeAuditExit != 0)
             return WriteDecision(outPath, "HUMAN_REVIEW_REQUIRED", null, "final", finalFingerprint,
                 "selenium-pw-migrator migration scope-audit --out <run-dir>",
-                "Role scope audit failed; final handoff is blocked until declared and observed paths are within the immutable wave roots.", "scope-audit-failed",
+                "Role scope audit failed; wave acceptance and final handoff are blocked until declared and observed paths are within the immutable wave roots.", "scope-audit-failed",
                 output, error, scopeAuditError.ToString().Trim(), 4);
+
+        if (!MigrationWaveQualityController.ValidateAcceptanceReceipt(outPath, ReadString(outPath, "input-scope.json", "waveId") ?? Path.GetFileName(outPath), out _))
+        {
+            return WriteDecision(outPath, "RUN_COMMAND", "migration-wave-manager", "quality", finalFingerprint,
+                "selenium-pw-migrator migration accept-wave --out <run-dir>",
+                "Hard gates, manager acceptance, final reviewer, final sentinel, and scope audit are satisfied; issue the immutable wave acceptance receipt.", null,
+                output, error, null, 0);
+        }
 
         return WriteDecision(outPath, "FINAL_HANDOFF", null, "final", finalFingerprint,
             "run final scope/harness checks and final gate",
-            "All bounded role obligations are satisfied for the current validated input.", null,
+            "All bounded role obligations are satisfied and the current wave has a valid outcome-bound acceptance receipt.", null,
             output, error, null, 0);
+
     }
 
     internal static int RecordRoleEvent(
@@ -660,14 +742,15 @@ internal static class MigrationAgentRuntime
             using var document = JsonDocument.Parse(File.ReadAllText(path));
             var root = document.RootElement;
             var profile = OptionalString(root, "profile") ?? "fast";
-            var maxTotal = 6;
+            var maxTotal = profile switch { "audit" => 36, "standard" => 22, _ => 14 };
             var maxLifecycleWallClockMilliseconds = profile switch { "audit" => 360L * 60 * 1000, "standard" => 180L * 60 * 1000, _ => 120L * 60 * 1000 };
             var roleLimits = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
             {
-                ["executor"] = 2,
-                ["reviewer"] = profile == "fast" ? 1 : 2,
-                ["watchdog"] = profile == "audit" ? 2 : 1,
-                ["sentinel"] = profile == "audit" ? 2 : 1
+                ["executor"] = profile switch { "audit" => 7, "standard" => 5, _ => 3 },
+                ["reviewer"] = profile switch { "audit" => 8, "standard" => 6, _ => 3 },
+                ["watchdog"] = profile switch { "audit" => 6, "standard" => 2, _ => 1 },
+                ["sentinel"] = profile switch { "audit" => 8, "standard" => 5, _ => 3 },
+                ["migration-wave-manager"] = profile switch { "audit" => 7, "standard" => 5, _ => 3 }
             };
             if (root.TryGetProperty("roleBudgets", out var budgets) && budgets.ValueKind == JsonValueKind.Object)
             {

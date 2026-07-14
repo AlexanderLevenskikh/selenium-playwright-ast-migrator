@@ -291,9 +291,40 @@ if ($waveDir -eq $null) {
 }
 else {
     $waveRoot = $waveDir.FullName
+
+    # Recalculate outcome-oriented quality from generated code when the installed CLI supports it.
+    # A non-zero exit here means the hard gate is not ready; the JSON packet is still written and
+    # consumed below. Old editable report counters remain observability only.
+    $migratorCommand = $null
+    try {
+        $migratorCommand = Get-Command selenium-pw-migrator -ErrorAction SilentlyContinue
+        if ($null -ne $migratorCommand) {
+            & selenium-pw-migrator migration measure-wave --out $waveRoot 2>$null | Out-Null
+        }
+    }
+    catch { }
+
     $waveText = Get-RecursiveText $waveRoot
     $preflight = Read-WavePreflight $waveRoot
     $canonicalReport = Read-CanonicalMigrationReport $waveRoot
+    $outcomeMetricsPath = Join-Path $waveRoot "wave-quality-metrics.json"
+    $outcomeMetrics = $null
+    if (Test-Path $outcomeMetricsPath) {
+        try { $outcomeMetrics = Get-Content -Raw -Path $outcomeMetricsPath | ConvertFrom-Json -ErrorAction Stop } catch { }
+    }
+    $waveAcceptancePath = Join-Path $waveRoot "wave-acceptance.json"
+    $waveAcceptance = $null
+    if (Test-Path $waveAcceptancePath) {
+        try { $waveAcceptance = Get-Content -Raw -Path $waveAcceptancePath | ConvertFrom-Json -ErrorAction Stop } catch { }
+    }
+    $acceptanceCliValidated = $false
+    if ($null -ne $migratorCommand -and $null -ne $waveAcceptance) {
+        try {
+            & selenium-pw-migrator migration check-wave-acceptance --out $waveRoot 2>$null | Out-Null
+            $acceptanceCliValidated = $LASTEXITCODE -eq 0
+        }
+        catch { $acceptanceCliValidated = $false }
+    }
 
     $plannedSourceFiles = Get-SourceFileCount $waveRoot
     $plannedTests = 0
@@ -346,6 +377,13 @@ else {
     if ($semanticActions -eq 0 -and $migratedActions -gt 0 -and $syntaxFallbackActions -lt $migratedActions) {
         $semanticActions = $migratedActions - $syntaxFallbackActions
     }
+
+    # Outcome metrics are authoritative for readiness. Legacy report fields are retained below
+    # so users do not lose semantic/fallback/TODO history, but they cannot grant wave acceptance.
+    if ($null -ne $outcomeMetrics) {
+        $testCount = [int]$outcomeMetrics.selectedTests
+        $todoCount = [int]$outcomeMetrics.blockingTodoCount + [int]$outcomeMetrics.softTodoCount
+    }
     $syntaxFallbackRatio = 0.0
     if ($migratedActions -gt 0) {
         $syntaxFallbackRatio = [Math]::Round(($syntaxFallbackActions / [double]$migratedActions), 4)
@@ -362,20 +400,69 @@ else {
     $waveScopeMismatch = $scopeMismatchReasons.Count -gt 0
 
     $violations = New-Object System.Collections.Generic.List[object]
+    $advisories = New-Object System.Collections.Generic.List[object]
     $preflightStatus = "MISSING"
     if ($null -ne $preflight) {
         $preflightStatus = [string]$preflight.status
     }
-    if ($preflightStatus -ne "PASS") { $violations.Add([ordered]@{ metric = "preflightBudgetStatus"; actual = $preflightStatus; budget = "PASS"; severity = "high" }) | Out-Null }
+    if ($preflightStatus -eq "BLOCKED") { $violations.Add([ordered]@{ metric = "preflightBudgetStatus"; actual = $preflightStatus; budget = "not BLOCKED"; severity = "high" }) | Out-Null }
+    elseif ($preflightStatus -ne "PASS") { $advisories.Add([ordered]@{ metric = "preflightBudgetStatus"; actual = $preflightStatus; budget = "PASS"; severity = "advisory"; note = "soft/heavy preflight states remain executable but should influence manager sizing" }) | Out-Null }
     if ($waveScopeMismatch) { $violations.Add([ordered]@{ metric = "waveScopeMismatch"; actual = ($scopeMismatchReasons -join "; "); budget = "actual migration scope must not exceed input-scope.json"; severity = "high" }) | Out-Null }
-    if ($sourceFiles -gt $MaxSourceFiles) { $violations.Add([ordered]@{ metric = "sourceFiles"; actual = $sourceFiles; budget = $MaxSourceFiles; severity = "medium" }) | Out-Null }
-    if ($testCount -gt $MaxTests) { $violations.Add([ordered]@{ metric = "testCount"; actual = $testCount; budget = $MaxTests; severity = "medium" }) | Out-Null }
-    if ($migratedActions -gt $MaxActions) { $violations.Add([ordered]@{ metric = "migratedActions"; actual = $migratedActions; budget = $MaxActions; severity = "medium" }) | Out-Null }
-    if ($todoCount -gt $MaxTodos) { $violations.Add([ordered]@{ metric = "todoCount"; actual = $todoCount; budget = $MaxTodos; severity = "high" }) | Out-Null }
-    if ($unmappedTargets -gt $MaxUnmappedTargets) { $violations.Add([ordered]@{ metric = "unmappedTargets"; actual = $unmappedTargets; budget = $MaxUnmappedTargets; severity = "high" }) | Out-Null }
-    if ($migratedActions -gt 0 -and $syntaxFallbackRatio -gt $MaxSyntaxFallbackRatio) { $violations.Add([ordered]@{ metric = "syntaxFallbackRatio"; actual = $syntaxFallbackRatio; budget = $MaxSyntaxFallbackRatio; severity = "high" }) | Out-Null }
-    if ((-not $AllowScaffoldingOnly) -and $migratedActions -gt 0 -and $semanticActions -lt $MinSemanticActions) { $violations.Add([ordered]@{ metric = "semanticActions"; actual = $semanticActions; budget = ">= $MinSemanticActions"; severity = "high" }) | Out-Null }
+    if ($sourceFiles -gt $MaxSourceFiles) { $advisories.Add([ordered]@{ metric = "sourceFiles"; actual = $sourceFiles; budget = $MaxSourceFiles; severity = "advisory"; note = "planned wave size is managed adaptively; this legacy threshold is observational" }) | Out-Null }
+    if ($testCount -gt $MaxTests) { $advisories.Add([ordered]@{ metric = "testCount"; actual = $testCount; budget = $MaxTests; severity = "advisory"; note = "test count does not replace outcome readiness" }) | Out-Null }
+    if ($migratedActions -gt $MaxActions) { $advisories.Add([ordered]@{ metric = "migratedActions"; actual = $migratedActions; budget = $MaxActions; severity = "advisory"; note = "action volume informs cost but cannot block an otherwise accepted wave" }) | Out-Null }
+    if ($todoCount -gt $MaxTodos) { $advisories.Add([ordered]@{ metric = "todoCount"; actual = $todoCount; budget = $MaxTodos; severity = "advisory"; note = "flat TODO count is observational; root blocking patterns decide readiness" }) | Out-Null }
+    if ($unmappedTargets -gt $MaxUnmappedTargets) { $advisories.Add([ordered]@{ metric = "unmappedTargets"; actual = $unmappedTargets; budget = $MaxUnmappedTargets; severity = "advisory" }) | Out-Null }
+    if ($migratedActions -gt 0 -and $syntaxFallbackRatio -gt $MaxSyntaxFallbackRatio) { $advisories.Add([ordered]@{ metric = "syntaxFallbackRatio"; actual = $syntaxFallbackRatio; budget = $MaxSyntaxFallbackRatio; severity = "advisory"; note = "fallback is retained as a diagnostic metric; generated behavior and hard invariants decide acceptance" }) | Out-Null }
+    if ((-not $AllowScaffoldingOnly) -and $migratedActions -gt 0 -and $semanticActions -lt $MinSemanticActions) { $advisories.Add([ordered]@{ metric = "semanticActions"; actual = $semanticActions; budget = ">= $MinSemanticActions"; severity = "advisory"; note = "semantic count cannot be edited into acceptance" }) | Out-Null }
     if ($verifyFailed) { $violations.Add([ordered]@{ metric = "verifyProject"; actual = "FAILED"; budget = "PASS or explicit NOT RUNTIME READY blocker"; severity = "high" }) | Out-Null }
+
+    if ($null -eq $outcomeMetrics) {
+        $violations.Add([ordered]@{ metric = "outcomeMetrics"; actual = "MISSING"; budget = "wave-quality-metrics/v1"; severity = "high" }) | Out-Null
+    }
+    elseif (-not [bool]$outcomeMetrics.hardGatePassed) {
+        $failureText = @($outcomeMetrics.hardGateFailures) -join "; "
+        $violations.Add([ordered]@{ metric = "outcomeHardGate"; actual = $failureText; budget = "PASS"; severity = "high" }) | Out-Null
+    }
+
+    $acceptanceValid = $false
+    if ($null -ne $waveAcceptance -and $null -ne $outcomeMetrics) {
+        $acceptedStatus = [string]$waveAcceptance.status
+        $acceptanceValid = $acceptanceCliValidated -and
+            $acceptedStatus -in @("ACCEPTED", "ACCEPTED_WITH_DEFERRED_SOFT_DEBT") -and
+            [string]$waveAcceptance.metricsFingerprint -eq [string]$outcomeMetrics.metricsFingerprint -and
+            [string]$waveAcceptance.generatedTreeHash -eq [string]$outcomeMetrics.generatedTreeHash
+    }
+    if (-not $acceptanceValid) {
+        $violations.Add([ordered]@{ metric = "waveAcceptance"; actual = "MISSING_OR_STALE"; budget = "valid immutable wave-acceptance.json"; severity = "high" }) | Out-Null
+    }
+
+    # Revalidate the complete wave chain at every quality/final-gate evaluation. A predecessor
+    # may have drifted after a later wave was materialized; checking only the latest receipt would
+    # allow stale early-wave learning to survive until FINAL_GATE_PASS.
+    $acceptanceChainFailures = New-Object System.Collections.Generic.List[string]
+    $runsRoot = Join-Path $workspacePath "runs"
+    if ($null -eq $migratorCommand) {
+        $acceptanceChainFailures.Add("selenium-pw-migrator CLI unavailable") | Out-Null
+    }
+    elseif (Test-Path $runsRoot) {
+        $waveCandidates = @(Get-ChildItem -Path $runsRoot -Directory -Filter "wave-*" -ErrorAction SilentlyContinue | Sort-Object Name)
+        foreach ($candidateWave in $waveCandidates) {
+            try {
+                & selenium-pw-migrator migration check-wave-acceptance --out $candidateWave.FullName 2>$null | Out-Null
+                if ($LASTEXITCODE -ne 0) { $acceptanceChainFailures.Add($candidateWave.Name) | Out-Null }
+            }
+            catch { $acceptanceChainFailures.Add($candidateWave.Name) | Out-Null }
+        }
+    }
+    if ($acceptanceChainFailures.Count -gt 0) {
+        $violations.Add([ordered]@{
+            metric = "waveAcceptanceChain"
+            actual = ($acceptanceChainFailures.ToArray() -join ", ")
+            budget = "every materialized wave must retain a current validated acceptance receipt"
+            severity = "high"
+        }) | Out-Null
+    }
 
     $remediation = Get-RemediationBudgetMetrics $workspacePath $RunId $waveDir.Name
     $ticketLimitReached = [int]$remediation.completedTickets -ge $MaxPostFinalTickets
@@ -406,7 +493,7 @@ else {
         $routing = "ROUTE_TO_WAVE_SCOPE_REPAIR"
     }
     elseif ($qualityBlocked) {
-        $routing = "ROUTE_TO_MAPPING_RESEARCH_OR_CONFIG_IMPROVEMENT"
+        $routing = "ROUTE_TO_WAVE_MANAGER_OR_REMEDIATION"
     }
 
     $nextAction = $null
@@ -414,7 +501,7 @@ else {
         $nextAction = "Preserve the full-project output under migration/runs/$RunId/full-project-rerun/, restore the bounded wave generated directory, and rerun runs/$($waveDir.Name)/run-migrate.ps1 or run-migrate.sh so input-scope.json and selected-tests.txt remain authoritative."
     }
     elseif ((-not $remediationBudgetExhausted) -and $qualityBlocked) {
-        $nextAction = "Run migration/scripts/collect-mapping-research-memory.ps1 before the next wave: summarize top TODO causes, syntax-fallback clusters, unmapped targets, unresolved symbols, and verify-project blockers; then run slice-gate-followups to materialize the next bounded remediation ticket."
+        $nextAction = "Run selenium-pw-migrator migration measure-wave --out $waveRoot, invoke migration-wave-manager on wave-manager-packet.json, and obey its bounded decision. For REMEDIATE_CURRENT_WAVE, run migration/scripts/collect-mapping-research-memory.ps1 and slice exactly one highest-payoff root-pattern ticket before regenerating the same wave."
     }
 
     # Materialize the generic list before assigning it into an ordered hashtable.
@@ -424,6 +511,30 @@ else {
     if ($waveScopeMismatch) { $scopeIntegrityStatus = "CONTAMINATED_BY_FULL_SCOPE_RERUN" }
 
     $violationItems = $violations.ToArray()
+    $advisoryItems = $advisories.ToArray()
+    $outcomeHardGatePassed = $false
+    $outcomeReadyTests = 0
+    $outcomeDraftTests = 0
+    $outcomeEmptyTests = 0
+    $outcomeRootBlockingPatterns = 0
+    $outcomeCascadeTodoCount = 0
+    $outcomeAssertionPreservationRate = 0.0
+    $outcomeBehaviorPresenceRate = 0.0
+    $outcomeBehaviorlessTests = 0
+    if ($null -ne $outcomeMetrics) {
+        $outcomeHardGatePassed = [bool]$outcomeMetrics.hardGatePassed
+        $outcomeReadyTests = [int]$outcomeMetrics.readyTests
+        $outcomeDraftTests = [int]$outcomeMetrics.draftTests
+        $outcomeEmptyTests = [int]$outcomeMetrics.emptyTests
+        $outcomeRootBlockingPatterns = [int]$outcomeMetrics.rootBlockingPatterns
+        $outcomeCascadeTodoCount = [int]$outcomeMetrics.cascadeTodoCount
+        $outcomeAssertionPreservationRate = [double]$outcomeMetrics.assertionPreservationRate
+        $outcomeBehaviorPresenceRate = [double]$outcomeMetrics.behaviorPresenceRate
+        $behaviorlessItems = $outcomeMetrics.behaviorlessTests
+        if ($null -eq $behaviorlessItems) { $outcomeBehaviorlessTests = 0 }
+        elseif ($behaviorlessItems -is [System.Array]) { $outcomeBehaviorlessTests = [int]$behaviorlessItems.Length }
+        else { $outcomeBehaviorlessTests = 1 }
+    }
 
     $report = [ordered]@{
         schemaVersion = "wave-quality-budget/v1"
@@ -457,6 +568,16 @@ else {
             consecutiveNoProgressTickets = [int]$remediation.consecutiveNoProgressTickets
             progressEvidenceAvailable = [bool]$remediation.progressEvidenceAvailable
             remediationBudgetExhausted = [bool]$remediationBudgetExhausted
+            outcomeHardGatePassed = [bool]$outcomeHardGatePassed
+            readyTests = [int]$outcomeReadyTests
+            draftTests = [int]$outcomeDraftTests
+            emptyTests = [int]$outcomeEmptyTests
+            rootBlockingPatterns = [int]$outcomeRootBlockingPatterns
+            cascadeTodoCount = [int]$outcomeCascadeTodoCount
+            assertionPreservationRate = [double]$outcomeAssertionPreservationRate
+            behaviorPresenceRate = [double]$outcomeBehaviorPresenceRate
+            behaviorlessTests = [int]$outcomeBehaviorlessTests
+            waveAcceptanceValid = [bool]$acceptanceValid
         }
         budgets = [ordered]@{
             maxSourceFiles = $MaxSourceFiles
@@ -471,8 +592,18 @@ else {
             allowScaffoldingOnly = [bool]$AllowScaffoldingOnly
         }
         violations = $violationItems
+        advisories = $advisoryItems
+        qualityManager = [ordered]@{
+            metricsArtifact = $outcomeMetricsPath
+            acceptanceArtifact = $waveAcceptancePath
+            acceptanceValid = [bool]$acceptanceValid
+            hardGatesOverrideable = $false
+            cliValidationPassed = [bool]$acceptanceCliValidated
+            fastChangesCeremonyNotQuality = $true
+        }
         nextAction = $nextAction
         routing = $routing
+        legacyMappingRouting = "ROUTE_TO_MAPPING_RESEARCH_OR_CONFIG_IMPROVEMENT"
     }
 }
 
@@ -525,7 +656,14 @@ elseif (@($report.violations).Count -gt 0) {
     [void]$md.AppendLine("Next action: $($report.nextAction)")
 }
 else {
-    [void]$md.AppendLine("No budget violations. Next wave may be considered after the normal gates pass.")
+    [void]$md.AppendLine("No blocking budget violations. The next wave is allowed only with a valid wave-acceptance.json receipt.")
+}
+if ($advisoryItems.Length -gt 0) {
+    [void]$md.AppendLine()
+    [void]$md.AppendLine("## Advisory metrics")
+    foreach ($advisory in $advisoryItems) {
+        [void]$md.AppendLine("- $($advisory.metric): actual ``$($advisory.actual)`` reference ``$($advisory.budget)`` - $($advisory.note)")
+    }
 }
 Set-Content -Path $stateMd -Value $md.ToString() -Encoding UTF8
 if (-not [string]::IsNullOrWhiteSpace($RunId)) {

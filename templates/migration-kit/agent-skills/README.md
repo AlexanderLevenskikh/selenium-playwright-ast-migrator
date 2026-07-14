@@ -14,6 +14,9 @@ Read `skill-map.md` first. It tells each role which skills to load.
 - `efficient-frontier` — reserve the strongest model/role for judgment; delegate bounded heavy work.
 - `quick-recap` — finish with a concise green/yellow/red status signal.
 - `plan-arbiter` — compare competing plans and choose one executable direction.
+- `quality-profit-arbitration` — balance reusable migration payoff against bounded remediation cost without overriding hard gates.
+- `root-cause-prioritization` — collapse flat TODO counts into root blockers and cascades.
+- `adaptive-wave-sizing` — grow, hold, split, or shrink later waves from accepted quality evidence.
 
 ## Safety boundary
 
@@ -48,6 +51,7 @@ A skill is useful only when the run can prove it was actually applied. For commo
 - `wave` — `efficient-frontier`, `plow-ahead`.
 - `plan-arbiter` — `plan-arbiter`.
 - `final-handoff` — `quick-recap`.
+- `wave-manager` — `quality-profit-arbitration`, `root-cause-prioritization`, `adaptive-wave-sizing`.
 
 For custom one-off decisions, record directly with the kit-owned writer:
 

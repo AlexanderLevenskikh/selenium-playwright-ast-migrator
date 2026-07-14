@@ -45,6 +45,30 @@
       "requiredFor": [
         "competing plans"
       ]
+    },
+    {
+      "name": "quality-profit-arbitration",
+      "path": "agent-skills/quality-profit-arbitration/SKILL.md",
+      "requiredFor": [
+        "wave-boundary quality/profit decision",
+        "remediation budget arbitration"
+      ]
+    },
+    {
+      "name": "root-cause-prioritization",
+      "path": "agent-skills/root-cause-prioritization/SKILL.md",
+      "requiredFor": [
+        "TODO root/cascade analysis",
+        "high-leverage remediation selection"
+      ]
+    },
+    {
+      "name": "adaptive-wave-sizing",
+      "path": "agent-skills/adaptive-wave-sizing/SKILL.md",
+      "requiredFor": [
+        "next-wave size decision",
+        "split/shrink/grow wave choice"
+      ]
     }
   ],
   "usageLedger": {
@@ -131,6 +155,15 @@
         "quick-recap"
       ],
       "useWhen": "preparing a user-facing final handoff"
+    },
+    {
+      "name": "wave-manager",
+      "skills": [
+        "quality-profit-arbitration",
+        "root-cause-prioritization",
+        "adaptive-wave-sizing"
+      ],
+      "useWhen": "deciding whether a measured wave should be accepted, remediated, split, or stopped honestly"
     }
   ]
 }

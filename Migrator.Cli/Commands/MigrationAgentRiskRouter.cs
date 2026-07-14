@@ -227,20 +227,24 @@ internal static class MigrationAgentRiskRouter
 
     static AdaptiveAgentBudget BuildAdaptiveBudget(string profile, string level)
     {
+        // Risk routing may tighten a profile, but it must still leave enough room for the
+        // finite measure -> manager -> remediation -> remeasure boundary loop. The wave
+        // manager is not optional observability: without it the runtime cannot produce a
+        // metrics-bound acceptance receipt or an honest budget-exhausted draft stop.
         return (profile, level) switch
         {
-            ("fast", "low") => new(4, new(StringComparer.OrdinalIgnoreCase) { ["executor"] = 2, ["reviewer"] = 1, ["watchdog"] = 0, ["sentinel"] = 1 }, 60 * 60 * 1000L),
-            ("fast", "medium") => new(5, new(StringComparer.OrdinalIgnoreCase) { ["executor"] = 2, ["reviewer"] = 1, ["watchdog"] = 1, ["sentinel"] = 1 }, 90 * 60 * 1000L),
-            ("fast", _) => new(6, new(StringComparer.OrdinalIgnoreCase) { ["executor"] = 2, ["reviewer"] = 1, ["watchdog"] = 1, ["sentinel"] = 1 }, 120 * 60 * 1000L),
-            ("standard", "low") => new(6, new(StringComparer.OrdinalIgnoreCase) { ["executor"] = 2, ["reviewer"] = 2, ["watchdog"] = 0, ["sentinel"] = 1 }, 120 * 60 * 1000L),
-            ("standard", _) => new(7, new(StringComparer.OrdinalIgnoreCase) { ["executor"] = 2, ["reviewer"] = 2, ["watchdog"] = 1, ["sentinel"] = 1 }, 180 * 60 * 1000L),
-            _ => new(9, new(StringComparer.OrdinalIgnoreCase) { ["executor"] = 2, ["reviewer"] = 2, ["watchdog"] = 2, ["sentinel"] = 2 }, 360 * 60 * 1000L)
+            ("fast", "low") => new(12, new(StringComparer.OrdinalIgnoreCase) { ["executor"] = 3, ["reviewer"] = 3, ["watchdog"] = 0, ["sentinel"] = 3, ["migration-wave-manager"] = 3 }, 60 * 60 * 1000L),
+            ("fast", "medium") => new(13, new(StringComparer.OrdinalIgnoreCase) { ["executor"] = 3, ["reviewer"] = 3, ["watchdog"] = 1, ["sentinel"] = 3, ["migration-wave-manager"] = 3 }, 90 * 60 * 1000L),
+            ("fast", _) => new(14, new(StringComparer.OrdinalIgnoreCase) { ["executor"] = 3, ["reviewer"] = 3, ["watchdog"] = 1, ["sentinel"] = 3, ["migration-wave-manager"] = 3 }, 120 * 60 * 1000L),
+            ("standard", "low") => new(20, new(StringComparer.OrdinalIgnoreCase) { ["executor"] = 5, ["reviewer"] = 6, ["watchdog"] = 0, ["sentinel"] = 4, ["migration-wave-manager"] = 5 }, 120 * 60 * 1000L),
+            ("standard", _) => new(22, new(StringComparer.OrdinalIgnoreCase) { ["executor"] = 5, ["reviewer"] = 6, ["watchdog"] = 2, ["sentinel"] = 5, ["migration-wave-manager"] = 5 }, 180 * 60 * 1000L),
+            _ => new(36, new(StringComparer.OrdinalIgnoreCase) { ["executor"] = 7, ["reviewer"] = 8, ["watchdog"] = 6, ["sentinel"] = 8, ["migration-wave-manager"] = 7 }, 360 * 60 * 1000L)
         };
     }
 
     static string[] BuildRecommendedRoles(string profile, string level, IReadOnlyCollection<AgentRiskReason> reasons)
     {
-        var roles = new List<string> { "executor", "reviewer:final", "sentinel:final" };
+        var roles = new List<string> { "executor", "reviewer:final", "sentinel:final", "migration-wave-manager:quality" };
         if (profile is "standard" or "audit") roles.Add("reviewer:pre");
         if (profile == "audit")
         {

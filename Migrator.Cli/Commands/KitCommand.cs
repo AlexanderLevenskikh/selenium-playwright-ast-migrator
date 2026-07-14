@@ -654,6 +654,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         AddCheck(checks, "agent-skills-map", File.Exists(Path.Combine(workspacePath, "agent-skills", "skill-map.md")), Path.Combine(workspacePath, "agent-skills", "skill-map.md"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "agent-skills-manifest", File.Exists(Path.Combine(workspacePath, "agent-skills", "manifest.json")), Path.Combine(workspacePath, "agent-skills", "manifest.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "agent-skills-core", File.Exists(Path.Combine(workspacePath, "agent-skills", "plow-ahead", "SKILL.md")) && File.Exists(Path.Combine(workspacePath, "agent-skills", "agent-watchdog", "SKILL.md")) && File.Exists(Path.Combine(workspacePath, "agent-skills", "read-the-damn-docs", "SKILL.md")), Path.Combine(workspacePath, "agent-skills"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "wave-manager-skills", File.Exists(Path.Combine(workspacePath, "agent-skills", "quality-profit-arbitration", "SKILL.md")) && File.Exists(Path.Combine(workspacePath, "agent-skills", "root-cause-prioritization", "SKILL.md")) && File.Exists(Path.Combine(workspacePath, "agent-skills", "adaptive-wave-sizing", "SKILL.md")), Path.Combine(workspacePath, "agent-skills"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "agent-skills-usage-writer", File.Exists(Path.Combine(workspacePath, "scripts", "write-agent-skill-usage.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "write-agent-skill-usage.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "record-agent-skill-profile.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "record-agent-skill-profile.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "gate-followup-slicer", File.Exists(Path.Combine(workspacePath, "scripts", "slice-gate-followups.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "slice-gate-followups.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "wave-quality-budget", File.Exists(Path.Combine(workspacePath, "scripts", "evaluate-wave-quality-budget.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "evaluate-wave-quality-budget.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
@@ -1198,6 +1199,14 @@ Recommended first skills for OpenCode/Codex-style runs:
 {{Path.Combine(options.Workspace, "agent-skills", "plow-ahead", "SKILL.md")}}
 {{Path.Combine(options.Workspace, "agent-skills", "agent-watchdog", "SKILL.md")}}
 {{Path.Combine(options.Workspace, "agent-skills", "read-the-damn-docs", "SKILL.md")}}
+```
+
+Wave-boundary management skills:
+
+```text
+{{Path.Combine(options.Workspace, "agent-skills", "quality-profit-arbitration", "SKILL.md")}}
+{{Path.Combine(options.Workspace, "agent-skills", "root-cause-prioritization", "SKILL.md")}}
+{{Path.Combine(options.Workspace, "agent-skills", "adaptive-wave-sizing", "SKILL.md")}}
 ```
 
 Harness autopilot run from bash:

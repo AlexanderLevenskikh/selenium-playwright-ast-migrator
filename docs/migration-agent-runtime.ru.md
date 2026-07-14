@@ -31,6 +31,7 @@ selenium-pw-migrator migration agent-perf-report --out migration/runs/wave-001
 
 - `pre` — предварительная проверка, обязательная для выбранного профиля;
 - `execution` — один ограниченный ход executor;
+- `quality` — одно привязанное к fingerprint метрик решение `migration-wave-manager`;
 - `recovery` — watchdog после no-progress или подозрительных risk flags;
 - `final` — обязательные финальные reviewer и sentinel.
 
@@ -40,11 +41,11 @@ selenium-pw-migrator migration agent-perf-report --out migration/runs/wave-001
 - `standard` требует предварительный bounded review.
 - `audit` требует предварительные reviewer, watchdog и sentinel.
 
-Во всех профилях перед `FINAL_HANDOFF` обязательны финальные reviewer и sentinel. Существующий final gate остаётся источником истины.
+Во всех профилях обязательны детерминированный `measure-wave` и одна квитанция роли `migration-wave-manager/quality`. Финальные reviewer, sentinel и scope audit запускаются только после предложения менеджера принять волну и обязательны до выдачи receipt командой `accept-wave` и до `FINAL_HANDOFF`. Менеджер не может отменять жёсткие проверки. Существующий final gate остаётся источником истины, а материализация следующей волны дополнительно требует валидный `wave-acceptance.json`.
 
 ## Бюджет agent-turns
 
-В `execution-policy.json` добавлен ограниченный `roleBudgets`. Runtime запрещает повторный запуск уже активной роли и прекращает автоматическое продолжение при исчерпании общего или ролевого лимита. Результат сохраняется в `agent-budget-result.json`; вместо слепого повтора выдаётся `HUMAN_REVIEW_REQUIRED`.
+В `execution-policy.json` добавлен ограниченный `roleBudgets` для executor/reviewer/watchdog/sentinel и `migration-wave-manager`. Runtime запрещает повторный запуск уже активной роли и прекращает автоматическое продолжение при исчерпании общего или ролевого лимита. Risk routing может ужесточить лимиты, но не может убрать конечную quality-manager границу. Результат сохраняется в `agent-budget-result.json`; вместо слепого повтора или искусственного принятия выдаётся честное ограничение либо запрос решения человека.
 
 ## Performance evidence
 
@@ -59,8 +60,14 @@ next-agent-action
   -> migration validate
   -> next-agent-action
   -> build-review-bundle
+  -> measure-wave
+  -> migration-wave-manager quality STARTED / COMPLETED
+  -> одно bounded remediation / split / честная остановка
+     ИЛИ менеджер предлагает принять волну
   -> final reviewer STARTED / COMPLETED
   -> final sentinel STARTED / COMPLETED
+  -> scope-audit
+  -> accept-wave
   -> FINAL_HANDOFF
   -> существующие scope/harness/final-gate команды
 ```

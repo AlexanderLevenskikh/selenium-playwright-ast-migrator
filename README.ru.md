@@ -553,7 +553,7 @@ selenium-pw-migrator migration plan show --plan migration/plan
 
 Auto planner сначала проводит детерминированный planning-only эксперимент и пишет `wave-tuning.json` / `wave-tuning.md`, а затем создаёт `inventory.json`, `clusters.json`, `waves.json`, `plan.md`, `selected-tests.txt`, `memory-recall.md` и `next-commands.md`. Диапазоны кандидатов выводятся из размера inventory и квантилей действий/сложности, поэтому один режим адаптируется к маленьким, средним и большим наборам тестов. Во время tuning/planning агенты не вызываются и файлы не мигрируются. Подробнее: [подбор параметров wave-плана без агентов](docs/wave-plan-tuning.ru.md).
 
-Если `kit bootstrap-opencode --source ...` задал source, он является жёсткой границей wavefront: соседние functional-test проекты нельзя обнаруживать, планировать, копировать или рекомендовать. Первая wave — однотестовая low-risk smoke-проверка. Следующие waves группируются по affinity исходного файла и переиспользуемому POM-контексту. Первый тест файла оплачивает полную оценочную сложность; следующие тесты того же файла — только калиброванную marginal cost. Мягкие action/complexity targets направляют упаковку, а широкие hard ceilings защищают от настоящего runaway scope. Это позволяет среднему проекту укладываться в единицы или низкие десятки волн, а не создавать по одной wave на тест.
+Если `kit bootstrap-opencode --source ...` задал source, он является жёсткой границей wavefront: соседние functional-test проекты нельзя обнаруживать, планировать, копировать или рекомендовать. Первая wave — однотестовая low-risk smoke-проверка жизненного цикла. Вторая ограниченная calibration-wave использует `--representatives-per-cluster`, чтобы до масштабирования открыть несколько наиболее ценных проектных паттернов. Следующую wave разрешает только актуальный outcome-bound `wave-acceptance.json`; затем waves группируются по affinity исходного файла и переиспользуемому POM-контексту. Первый тест файла оплачивает полную оценочную сложность; следующие тесты того же файла — только калиброванную marginal cost. Мягкие action/complexity targets направляют упаковку, а широкие hard ceilings защищают от настоящего runaway scope. Это позволяет среднему проекту укладываться в единицы или низкие десятки волн, а не создавать по одной wave на тест.
 
 `run-wave` передаёт pipeline параметр `--selected-tests selected-tests.txt`, поэтому выполняются выбранные тесты, а не все тесты каждого скопированного файла. Перед превращением wave в bounded task агенты должны запускать `memory explain`, `memory doctor` и `memory recall --file` для каждого scoped-файла. Recall создаёт проверяемые receipts в `state/memory/recall-index.json` и `recall-ledger.jsonl`; final gate отклоняет active memory без актуального recall evidence текущей wave.
 
@@ -566,6 +566,10 @@ selenium-pw-migrator migration validate-wave --out migration/runs/wave-001
 selenium-pw-migrator migration validate --out migration/runs/wave-001 --validation-project ./Target.Tests/Target.Tests.csproj
 # validation-plan + record-validation остаются только для recovery/import внешнего evidence
 selenium-pw-migrator migration build-review-bundle --out migration/runs/wave-001
+selenium-pw-migrator migration measure-wave --out migration/runs/wave-001
+# migration-wave-manager записывает одно ограниченное решение; remediation сначала повторно генерируется и проверяется
+selenium-pw-migrator migration accept-wave --out migration/runs/wave-001
+selenium-pw-migrator migration check-wave-acceptance --out migration/runs/wave-001
 selenium-pw-migrator migration resume-wave --out migration/runs/wave-001
 selenium-pw-migrator migration check-progress --out migration/runs/wave-001 --max-identical-snapshots 3
 selenium-pw-migrator migration perf-report --out migration/runs/wave-001
@@ -595,6 +599,8 @@ selenium-pw-migrator config validate-merge --base migration/adapter-config.json 
 ### Новый bounded restart
 
 Если pilot wave накопила слишком много remediation tickets, используй `/supervised-task waves fresh`. Команда запускает `migration/scripts/start-fresh-wavefront-run.ps1` или `.sh`, архивирует текущие plan/runs/volatile state в `migration/archive/**`, сохраняет project memory и configured source scope, затем перепланирует работу с однотестовой smoke-wave. Автоматический post-final remediation прекращается после четырёх завершённых tickets или двух последовательных no-progress tickets со статусом `FINAL_WITH_LIMITATIONS`; удаление текста TODO без восстановления исполняемого кода не считается прогрессом.
+
+Переход между waves теперь определяется качеством результата, а не удобными счётчиками. См. [контроллер качества волн и migration-wave-manager](docs/wave-quality-manager.ru.md): semantic/fallback/TODO/unmapped сохраняются, но масштабирование разрешают readiness generated-кода, сохранность assertions и активного поведения по каждому тесту, измеренный before/after remediation, validation для текущего input, оценка профита менеджером и полностью перепроверяемый acceptance receipt.
 
 После использования project-scoped memory, wavefront planning, `migration run-wave` или `config merge-deltas` открой обычный dashboard:
 

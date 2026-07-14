@@ -31,6 +31,7 @@ Supported phases are:
 
 - `pre` — profile-required pre-execution review;
 - `execution` — one bounded executor turn;
+- `quality` — one metrics-bound `migration-wave-manager` decision after deterministic measurement;
 - `recovery` — watchdog work after no-progress or suspicious risk flags;
 - `final` — mandatory final reviewer and sentinel work.
 
@@ -40,11 +41,11 @@ Supported phases are:
 - `standard` requires bounded pre-execution review.
 - `audit` requires pre-execution reviewer, watchdog, and sentinel work.
 
-All profiles still require final reviewer and final sentinel receipts before `FINAL_HANDOFF`. The existing final gate remains authoritative.
+All profiles still require deterministic `measure-wave` and one `migration-wave-manager/quality` receipt. Final reviewer, final sentinel, and scope audit run only after the manager proposes acceptance and are mandatory before `accept-wave` can issue a receipt or `FINAL_HANDOFF` can occur. The manager cannot override hard gates. The existing final gate remains authoritative, while later-wave materialization additionally requires a valid `wave-acceptance.json`.
 
 ## Agent-turn budget
 
-`execution-policy.json` contains a bounded `roleBudgets` section. The runtime refuses duplicate active dispatch and stops automatic continuation when total or per-role limits are exhausted. The result is written to `agent-budget-result.json`; exhaustion produces `HUMAN_REVIEW_REQUIRED` rather than another blind retry.
+`execution-policy.json` contains a bounded `roleBudgets` section covering executor/reviewer/watchdog/sentinel and `migration-wave-manager`. The runtime refuses duplicate active dispatch and stops automatic continuation when total or per-role limits are exhausted. Risk routing may tighten these limits but never remove the finite quality-manager boundary. The result is written to `agent-budget-result.json`; exhaustion produces an honest limitation/human decision instead of another blind retry or manufactured acceptance.
 
 ## Performance evidence
 
@@ -59,8 +60,14 @@ next-agent-action
   -> migration validate
   -> next-agent-action
   -> build-review-bundle
+  -> measure-wave
+  -> migration-wave-manager quality STARTED / COMPLETED
+  -> one bounded remediation / split / honest stop
+     OR manager proposes acceptance
   -> final reviewer STARTED / COMPLETED
   -> final sentinel STARTED / COMPLETED
+  -> scope-audit
+  -> accept-wave
   -> FINAL_HANDOFF
   -> existing scope/harness/final-gate commands
 ```

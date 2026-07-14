@@ -15,8 +15,8 @@ internal static class MigrationAgentRecovery
 
     static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     static readonly JsonSerializerOptions CompactJsonOptions = new() { WriteIndented = false };
-    static readonly string[] Roles = { "executor", "reviewer", "watchdog", "sentinel" };
-    static readonly string[] Phases = { "pre", "execution", "recovery", "final" };
+    static readonly string[] Roles = { "executor", "reviewer", "watchdog", "sentinel", "migration-wave-manager" };
+    static readonly string[] Phases = { "pre", "execution", "quality", "recovery", "final" };
     static readonly string[] Statuses = { "STARTED", "COMPLETED", "FAILED", "SKIPPED" };
 
     internal static RecoveryPlan Plan(string outPath, int staleAfterSeconds = 0, bool writeArtifact = true)

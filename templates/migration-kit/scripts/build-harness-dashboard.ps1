@@ -184,6 +184,15 @@ function New-DashboardSnapshot {
     $waveDir = Find-LatestWaveDirectory $WorkspacePath $currentWaveId
     if ([string]::IsNullOrWhiteSpace($currentWaveId) -and $null -ne $waveDir) { $currentWaveId = $waveDir.Name }
 
+    $outcomeMetrics = $null
+    $waveManagerDecision = $null
+    $currentWaveAcceptance = $null
+    if ($null -ne $waveDir) {
+        $outcomeMetrics = Read-JsonFileOrNull (Join-Path $waveDir.FullName "wave-quality-metrics.json")
+        $waveManagerDecision = Read-JsonFileOrNull (Join-Path $waveDir.FullName "wave-manager-decision.json")
+        $currentWaveAcceptance = Read-JsonFileOrNull (Join-Path $waveDir.FullName "wave-acceptance.json")
+    }
+
     $planWaves = @()
     if ($null -ne $plan) {
         $candidateWaves = Get-PropertyValue $plan @("waves", "Waves") @()
@@ -207,8 +216,12 @@ function New-DashboardSnapshot {
         $fileCount = $files.Count
         $totalTests += $testCount
 
-        $waveStatus = Read-JsonFileOrNull (Join-Path $WorkspacePath "runs/$waveId/wave-status.json")
+        $waveRoot = Join-Path $WorkspacePath "runs/$waveId"
+        $waveStatus = Read-JsonFileOrNull (Join-Path $waveRoot "wave-status.json")
+        $waveAcceptance = Read-JsonFileOrNull (Join-Path $waveRoot "wave-acceptance.json")
+        $waveOutcomeMetrics = Read-JsonFileOrNull (Join-Path $waveRoot "wave-quality-metrics.json")
         $rawStatus = [string](Get-PropertyValue $waveStatus @("status") "pending")
+        $acceptanceStatus = [string](Get-PropertyValue $waveAcceptance @("status") "")
         $generatedCount = Get-IntValue $waveStatus @("generatedSourceFileCount", "generatedFileCount") 0
         $isCurrent = $waveId -eq $currentWaveId
         if ($isCurrent) { $currentWaveIndex = $i + 1 }
@@ -216,7 +229,18 @@ function New-DashboardSnapshot {
         $kind = Get-WaveStatusKind $rawStatus $isCurrent $qualityBlocked
 
         $isMigrated = $generatedCount -gt 0 -or $rawStatus -match '(?i)migrated|complete|done|accepted|verified|pass'
-        $isAccepted = $rawStatus -match '(?i)accepted|verified|done|complete|pass'
+        $acceptanceFingerprintMatches = $null -ne $waveAcceptance -and $null -ne $waveOutcomeMetrics -and
+            [string](Get-PropertyValue $waveAcceptance @("metricsFingerprint") "") -eq [string](Get-PropertyValue $waveOutcomeMetrics @("metricsFingerprint") "") -and
+            [string](Get-PropertyValue $waveAcceptance @("generatedTreeHash") "") -eq [string](Get-PropertyValue $waveOutcomeMetrics @("generatedTreeHash") "")
+        $isAccepted = $acceptanceStatus -in @("ACCEPTED", "ACCEPTED_WITH_DEFERRED_SOFT_DEBT") -and $acceptanceFingerprintMatches
+        if ($isAccepted) {
+            $rawStatus = $acceptanceStatus
+            $kind = "success"
+        }
+        elseif (-not [string]::IsNullOrWhiteSpace($acceptanceStatus)) {
+            $rawStatus = "STALE_ACCEPTANCE"
+            $kind = "attention"
+        }
         if ($isMigrated) {
             $migratedWaves++
             $migratedTests += $testCount
@@ -237,6 +261,8 @@ function New-DashboardSnapshot {
             kind = $kind
             current = $isCurrent
             generatedFiles = $generatedCount
+            acceptanceStatus = $acceptanceStatus
+            acceptanceValid = [bool]$isAccepted
         }) | Out-Null
     }
 
@@ -264,7 +290,7 @@ function New-DashboardSnapshot {
     }
 
     $qualityMetrics = Get-PropertyValue $qualityBudget @("metrics") $null
-    $actualDraftTests = Get-IntValue $qualityMetrics @("testCount") $migratedTests
+    $actualDraftTests = Get-IntValue $outcomeMetrics @("generatedTests", "selectedTests") (Get-IntValue $qualityMetrics @("testCount") $migratedTests)
     if ($actualDraftTests -lt $migratedTests) { $actualDraftTests = $migratedTests }
     $draftCoveragePercent = 0
     $acceptedPercent = 0
@@ -381,6 +407,7 @@ function New-DashboardSnapshot {
     elseif ($scopeMismatch -or $qualityStatus -eq "BLOCKED_BY_WAVE_QUALITY_BUDGET" -or $ticketState -match '(?i)READY|IN_PROGRESS|REVIEW_READY') { $processStage = "improve" }
     elseif ($failedPolicyChecks -gt 0 -or $failedFinalChecks -gt 0) { $processStage = "verify" }
     elseif ($acceptedWaves -gt 0 -and $acceptedWaves -ge $waveItems.Count -and $waveItems.Count -gt 0) { $processStage = "accept" }
+    elseif ($null -ne $outcomeMetrics -and [bool](Get-PropertyValue $outcomeMetrics @("hardGatePassed") $false)) { $processStage = "verify" }
 
     $processOrder = @("plan", "draft", "improve", "verify", "accept")
     $currentProcessIndex = [array]::IndexOf($processOrder, $processStage)
@@ -456,7 +483,25 @@ function New-DashboardSnapshot {
             scopeMismatch = $scopeMismatch
             scopeIntegrity = $scopeIntegrity
             metrics = $qualityMetrics
+            outcomeMetrics = $outcomeMetrics
             violations = $violations
+            manager = [ordered]@{
+                decision = [string](Get-PropertyValue $waveManagerDecision @("decision") "PENDING")
+                selectedPattern = [string](Get-PropertyValue $waveManagerDecision @("selectedPattern") "")
+                reason = [string](Get-PropertyValue $waveManagerDecision @("reason") "")
+                hardGatePassed = [bool](Get-PropertyValue $outcomeMetrics @("hardGatePassed") $false)
+                readyTests = Get-IntValue $outcomeMetrics @("readyTests") 0
+                draftTests = Get-IntValue $outcomeMetrics @("draftTests") 0
+                emptyTests = Get-IntValue $outcomeMetrics @("emptyTests") 0
+                rootBlockingPatterns = Get-IntValue $outcomeMetrics @("rootBlockingPatterns") 0
+                blockingTodoCount = Get-IntValue $outcomeMetrics @("blockingTodoCount") 0
+                cascadeTodoCount = Get-IntValue $outcomeMetrics @("cascadeTodoCount") 0
+                assertionPreservationRate = Get-PropertyValue $outcomeMetrics @("assertionPreservationRate") 0
+                behaviorPresenceRate = Get-PropertyValue $outcomeMetrics @("behaviorPresenceRate") 0
+                behaviorlessTests = Get-PropertyValue $outcomeMetrics @("behaviorlessTests") @()
+                remainingRemediationCycles = Get-IntValue $outcomeMetrics @("remainingRemediationCycles") 0
+                acceptanceStatus = [string](Get-PropertyValue $currentWaveAcceptance @("status") "NOT_ACCEPTED")
+            }
         }
         gates = [ordered]@{
             policyStatus = [string](Get-PropertyValue $policyResult @("status") "UNKNOWN")
@@ -757,9 +802,22 @@ function renderDetails() {
   document.getElementById('previewsHint').innerHTML=hint('hint.previews');
   document.getElementById('activityHint').innerHTML=hint('hint.activity');
   const violations=data.quality.violations||[];
+  const manager=data.quality.manager||{};
+  const outcome=data.quality.outcomeMetrics||{};
+  const managerSummary=`<div class="now-card"><h3>${esc(t('quality.manager.title'))}${hint('hint.quality.manager')}</h3><div class="now-main">${esc(t('quality.manager.decision'))}: <code>${esc(manager.decision||'PENDING')}</code></div><div class="now-sub">${esc(t('quality.manager.readiness'))}: ${esc(manager.readyTests||0)}/${esc((manager.readyTests||0)+(manager.draftTests||0))} · ${esc(t('quality.manager.roots'))}: ${esc(manager.rootBlockingPatterns||0)} · ${esc(t('quality.manager.acceptance'))}: <code>${esc(manager.acceptanceStatus||'NOT_ACCEPTED')}</code></div><div class="now-sub">${esc(manager.reason||t('quality.manager.pending'))}</div></div>`;
+  const metricRows=[
+    [t('quality.metrics.readyDraft'),`${outcome.readyTests||0} / ${outcome.draftTests||0} / ${outcome.emptyTests||0}`],
+    [t('quality.metrics.todos'),`${outcome.blockingTodoCount||0} / ${outcome.rootBlockingPatterns||0} / ${outcome.cascadeTodoCount||0} / ${outcome.softTodoCount||0}`],
+    [t('quality.metrics.actions'),`${outcome.reportedSemanticActions??'—'} / ${outcome.reportedSyntaxFallbackActions??'—'} / ${outcome.reportedActions??'—'}`],
+    [t('quality.metrics.unmapped'),`${outcome.reportedUnmappedTargets??'—'}`],
+    [t('quality.metrics.assertions'),`${Math.round((outcome.assertionPreservationRate||0)*100)}%`],
+    [t('quality.metrics.behavior'),`${Math.round((outcome.behaviorPresenceRate||0)*100)}% · ${(outcome.behaviorlessTests||[]).length}`],
+    [t('quality.metrics.awaits'),`${outcome.activeAwaitActions||0}`]
+  ].map(row=>`<tr><td>${esc(row[0])}</td><td><code>${esc(row[1])}</code></td></tr>`);
+  const metricSummary=`<h3>${esc(t('quality.metrics.title'))}${hint('hint.quality.metrics')}</h3>${table(metricRows,[t('quality.metrics.name'),t('quality.metrics.value')])}`;
   const scopeNote=data.quality.scopeMismatch?`<p class="now-sub"><strong>${esc(t('quality.scopeMismatch'))}</strong> ${esc(t('quality.scopeMismatch.explain'))}</p>`:'';
   const violationRows=violations.map(v=>`<tr><td><code>${esc(v.metric)}</code></td><td>${esc(v.actual)}</td><td>${esc(v.budget)}</td><td><span class="status ${v.severity==='high'?'attention':'pending'}">${esc(v.severity)}</span></td></tr>`);
-  document.getElementById('qualityDetails').innerHTML=`<p><span class="status ${data.quality.status==='PASS'?'success':'attention'}">${esc(data.quality.status||t('status.unknown'))}</span></p>${scopeNote}${violationRows.length?table(violationRows,[t('quality.metric'),t('quality.actual'),t('quality.budget'),t('quality.severity')]):`<div class="empty">${esc(t('quality.noViolations'))}</div>`}`;
+  document.getElementById('qualityDetails').innerHTML=`${managerSummary}${metricSummary}<p><span class="status ${data.quality.status==='PASS'?'success':'attention'}">${esc(data.quality.status||t('status.unknown'))}</span></p>${scopeNote}${violationRows.length?table(violationRows,[t('quality.metric'),t('quality.actual'),t('quality.budget'),t('quality.severity')]):`<div class="empty">${esc(t('quality.noViolations'))}</div>`}`;
   const checks=[...(data.gates.policyChecks||[]),...(data.gates.finalChecks||[])];
   const checkRows=checks.map(c=>`<tr><td><code>${esc(c.name)}</code></td><td><span class="status ${c.passed?'success':'attention'}">${esc(c.passed?t('status.pass'):t('status.fail'))}</span></td><td>${esc(c.detail||'')}</td></tr>`);
   document.getElementById('gatesDetails').innerHTML=checkRows.length?table(checkRows,[t('gates.check'),t('status.label'),t('events.detail')]):`<div class="empty">${esc(t('gates.empty'))}</div>`;

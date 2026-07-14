@@ -136,6 +136,8 @@
       "migration-research-lead*": "allow",
       "@migration-research-lead*": "allow",
       "migration-task-slicer*": "allow",
+      "migration-wave-manager*": "allow",
+      "@migration-wave-manager*": "allow",
       "harness-sentinel*": "allow",
       "@migration-task-slicer*": "allow",
       "@harness-sentinel*": "allow",
@@ -147,6 +149,7 @@
       "migration-change-reviewer": "allow",
       "migration-research-lead": "allow",
       "migration-task-slicer": "allow",
+      "migration-wave-manager": "allow",
       "harness-sentinel": "allow",
       "general": "deny"
     },

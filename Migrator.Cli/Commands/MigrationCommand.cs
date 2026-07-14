@@ -46,6 +46,9 @@ internal static class MigrationCommand
             return 0;
         }
 
+        if (command is "measure-wave" or "record-wave-decision" or "record-wave-remediation" or "accept-wave" or "check-wave-acceptance")
+            return MigrationWaveQualityController.Run(command, args.Skip(1).ToArray(), Console.Out, Console.Error);
+
         var options = MigrationOptions.Parse(args.Skip(1).ToArray(), out var error);
         if (options == null)
         {
@@ -315,6 +318,26 @@ internal static class MigrationCommand
             Console.Error.WriteLine($"Wave not found: {requestedWave}");
             Console.Error.WriteLine("Available waves: " + string.Join(", ", plan.Waves.Select(w => w.Id)));
             return 2;
+        }
+
+        var orderedWaves = plan.Waves.OrderBy(item => item.Index).ToArray();
+        var currentPosition = Array.FindIndex(orderedWaves, item => item.Id.Equals(wave.Id, StringComparison.OrdinalIgnoreCase));
+        if (currentPosition > 0)
+        {
+            // Validate the full acceptance chain, not only the immediate predecessor. Otherwise
+            // an early wave could drift after later waves were materialized and the next boundary
+            // would silently inherit stale learning/evidence.
+            foreach (var predecessor in orderedWaves.Take(currentPosition))
+            {
+                var predecessorPath = Path.Combine(options.Workspace, "runs", predecessor.Id);
+                if (!MigrationWaveQualityController.ValidateAcceptanceReceipt(predecessorPath, predecessor.Id, out var acceptanceError))
+                {
+                    Console.Error.WriteLine(acceptanceError);
+                    Console.Error.WriteLine($"Run: selenium-pw-migrator migration measure-wave --out {QuoteForShell(predecessorPath)}");
+                    Console.Error.WriteLine($"Then record the migration-wave-manager decision and run migration accept-wave before {wave.Id}.");
+                    return 3;
+                }
+            }
         }
 
         trace.Next("resolve-plan-and-wave");
@@ -1865,7 +1888,12 @@ internal static class MigrationCommand
                     continue;
 
                 var nonSmokeWaves = plan.Waves.Skip(1).ToArray();
-                var nonSmokeSingletons = nonSmokeWaves.Count(w => w.Tests.Length == 1);
+                // A deliberately bounded representative calibration wave is not the
+                // "one wave per test" pathology this tuning metric is designed to penalize.
+                // Count singleton waves only after calibration, during adaptive scaling.
+                var nonSmokeSingletons = nonSmokeWaves.Count(w =>
+                    w.Tests.Length == 1
+                    && !string.Equals(w.Phase, "representatives", StringComparison.OrdinalIgnoreCase));
                 var fileFragmentation = nonSmokeWaves
                     .SelectMany(w => w.Files.Select(file => new { file, w.Id }))
                     .GroupBy(x => x.file, StringComparer.OrdinalIgnoreCase)
@@ -2043,8 +2071,8 @@ internal static class MigrationCommand
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var waves = new List<MigrationWave>();
 
-        // Only the first wave is intentionally a singleton. It proves the lifecycle before the
-        // planner starts amortizing role overhead across file/POM-affine batches.
+        // The first wave is intentionally a singleton lifecycle smoke. A separate bounded
+        // representative calibration wave then covers project patterns before adaptive scaling.
         var smokeCandidates = clusters.Tests
             .OrderBy(t => RiskWeight(t.Risk))
             .ThenBy(EstimateTestComplexity)
@@ -2055,6 +2083,16 @@ internal static class MigrationCommand
         AddWave(waves, used, "smoke-validation", "mixed", smokeCandidates, options);
 
         var remaining = clusters.Tests
+            .Where(t => !used.Contains(t.TestId))
+            .ToArray();
+
+        // The smoke wave proves mechanics; the calibration wave proves representative project
+        // patterns. representatives-per-cluster was previously metadata-only, which allowed the
+        // pipeline to scale after learning almost nothing from one low-risk test.
+        var calibrationCandidates = BuildCalibrationCandidates(remaining, options);
+        AddWave(waves, used, "representatives", "mixed-calibration", calibrationCandidates, options);
+
+        remaining = clusters.Tests
             .Where(t => !used.Contains(t.TestId))
             .ToArray();
         foreach (var chunk in PackByBudget(remaining, options))
@@ -2088,6 +2126,62 @@ internal static class MigrationCommand
             HardWaveActions: Math.Max(options.MaxWaveActions, options.HardWaveActions),
             HardWaveComplexity: Math.Max(options.MaxWaveComplexity, options.HardWaveComplexity),
             SameFileMarginalCostPercent: Math.Clamp(options.SameFileMarginalCostPercent, 0, 100));
+    }
+
+    static MigrationTestInventoryItem[] BuildCalibrationCandidates(
+        IReadOnlyList<MigrationTestInventoryItem> remaining,
+        MigrationOptions options)
+    {
+        if (remaining.Count == 0)
+            return Array.Empty<MigrationTestInventoryItem>();
+
+        var queues = remaining
+            .GroupBy(test => test.Cluster, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(group => group.Count())
+            .ThenBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new Queue<MigrationTestInventoryItem>(group
+                .OrderBy(test => options.PreferLowRiskFirst ? RiskWeight(test.Risk) : 0)
+                .ThenBy(EstimateTestComplexity)
+                .ThenByDescending(test => test.SeleniumActions)
+                .ThenBy(test => test.TestId, StringComparer.OrdinalIgnoreCase)
+                .Take(Math.Max(1, options.RepresentativesPerCluster))))
+            .Where(queue => queue.Count > 0)
+            .ToArray();
+
+        var selected = new List<MigrationTestInventoryItem>();
+        var madeProgress = true;
+        while (madeProgress && selected.Count < options.MaxWaveSize)
+        {
+            madeProgress = false;
+            foreach (var queue in queues)
+            {
+                if (queue.Count == 0 || selected.Count >= options.MaxWaveSize)
+                    continue;
+
+                var candidate = queue.Peek();
+                var combined = selected.Append(candidate).ToArray();
+                if (!FitsHardWaveBudget(combined, options))
+                    continue;
+
+                selected.Add(queue.Dequeue());
+                madeProgress = true;
+            }
+        }
+
+        if (selected.Count == 0)
+        {
+            // Preserve the calibration boundary even when every remaining representative is a
+            // heavy singleton. AddWave labels that case explicitly instead of silently skipping
+            // learning and jumping straight to scale batches.
+            selected.Add(remaining
+                .OrderBy(test => options.PreferLowRiskFirst ? RiskWeight(test.Risk) : 0)
+                .ThenByDescending(test => test.RepresentativeScore)
+                .ThenBy(EstimateTestComplexity)
+                .ThenBy(test => test.TestId, StringComparer.OrdinalIgnoreCase)
+                .First());
+        }
+
+        return selected.ToArray();
     }
 
     static IReadOnlyList<IReadOnlyList<MigrationTestInventoryItem>> PackByBudget(
@@ -2640,6 +2734,11 @@ Migration planning and wave run commands:
   selenium-pw-migrator migration plan show --plan migration/plan
   selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001 --execution-profile fast
   selenium-pw-migrator migration validate-wave --out migration/runs/wave-001
+  selenium-pw-migrator migration measure-wave --out migration/runs/wave-001
+  selenium-pw-migrator migration record-wave-decision --out migration/runs/wave-001 --decision REMEDIATE_CURRENT_WAVE --pattern "<root-pattern>" --reason "<evidence-backed reason>"
+  selenium-pw-migrator migration record-wave-remediation --out migration/runs/wave-001 --pattern "<root-pattern>" --result COMPLETED
+  selenium-pw-migrator migration accept-wave --out migration/runs/wave-001
+  selenium-pw-migrator migration check-wave-acceptance --out migration/runs/wave-001
   selenium-pw-migrator migration scope-audit --out migration/runs/wave-001
   selenium-pw-migrator migration record-role-scope-access --out migration/runs/wave-001 --role reviewer --role-phase final --scope-operation read --scope-path migration/runs/wave-001/review/review-bundle.json
   selenium-pw-migrator migration check-progress --out migration/runs/wave-001 --max-identical-snapshots 3
@@ -2669,7 +2768,7 @@ Planning is read-only; tune-wave-plan also executes no agents. The auto profile
 tests deterministic budget combinations and minimizes role-cycle overhead, singleton waves,
 and source-file fragmentation. Same-file tests pay marginal rather than full repeated complexity.
 run-wave materializes an immutable wave manifest, execution policy, run-context, bounded source-scope plus config-delta,
-memory-delta, performance trace, run summary, evidence folder, and migrate scripts. `validate-wave` rejects scope drift or changed copied inputs. `check-progress` detects repeated identical generated/evidence/TODO/unmapped/validation state. `next-agent-action` deterministically selects exactly one role/command/final handoff from the execution policy and current evidence; `assess-agent-risk` emits an explainable low/medium/high/critical score and adaptive role budget; `record-agent-role` appends hash-chained role receipts and a durable active-role lease; `heartbeat-agent-role` renews that lease; `plan-agent-recovery` and `recover-agent-runtime` safely resume interrupted roles without rewriting malformed journals; `check-agent-budget` prevents unbounded role loops; `agent-perf-report` reports role counts, risk, and lifecycle budget status. `validation-plan` computes changed-file impact and exact-input cache eligibility; `migration validate` is the single validation host that plans, executes, records evidence, and materializes exact-input cache hits without an agent-managed three-command chain. `record-validation` remains available for compatibility and manual evidence import. Checkpoints, resume decisions, and review bundles preserve work without treating a checkpoint as DONE. The migrate wrappers refresh wave-status.json and validation-plan.json after execution. It never promotes config or memory automatically.
+memory-delta, performance trace, run summary, evidence folder, and migrate scripts. `validate-wave` rejects scope drift or changed copied inputs. `measure-wave` derives outcome-oriented readiness from generated code while retaining semantic/fallback/TODO counters as diagnostics; `record-wave-decision` binds the bounded migration-wave-manager decision to that fingerprint; `accept-wave` writes the immutable receipt required before a later wave can be materialized. `check-progress` detects repeated identical generated/evidence/TODO/unmapped/validation state. `next-agent-action` deterministically selects exactly one role/command/final handoff from the execution policy and current evidence; `assess-agent-risk` emits an explainable low/medium/high/critical score and adaptive role budget; `record-agent-role` appends hash-chained role receipts and a durable active-role lease; `heartbeat-agent-role` renews that lease; `plan-agent-recovery` and `recover-agent-runtime` safely resume interrupted roles without rewriting malformed journals; `check-agent-budget` prevents unbounded role loops; `agent-perf-report` reports role counts, risk, and lifecycle budget status. `validation-plan` computes changed-file impact and exact-input cache eligibility; `migration validate` is the single validation host that plans, executes, records evidence, and materializes exact-input cache hits without an agent-managed three-command chain. `record-validation` remains available for compatibility and manual evidence import. Checkpoints, resume decisions, and review bundles preserve work without treating a checkpoint as DONE. The migrate wrappers refresh wave-status.json and validation-plan.json after execution. It never promotes config or memory automatically.
 Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to create a reviewable candidate config after wave deltas are reviewed.
 """);
     }
@@ -2908,15 +3007,15 @@ Use `selenium-pw-migrator config merge-deltas` and `config validate-merge` to cr
             }
 
             agentRole = agentRole.Trim().ToLowerInvariant();
-            if (agentRole is not ("executor" or "reviewer" or "watchdog" or "sentinel"))
+            if (agentRole is not ("executor" or "reviewer" or "watchdog" or "sentinel" or "migration-wave-manager"))
             {
-                error = "--role must be executor, reviewer, watchdog, or sentinel.";
+                error = "--role must be executor, reviewer, watchdog, sentinel, or migration-wave-manager.";
                 return null;
             }
             agentRolePhase = agentRolePhase.Trim().ToLowerInvariant();
-            if (agentRolePhase is not ("pre" or "execution" or "recovery" or "final"))
+            if (agentRolePhase is not ("pre" or "execution" or "quality" or "recovery" or "final"))
             {
-                error = "--role-phase must be pre, execution, recovery, or final.";
+                error = "--role-phase must be pre, execution, quality, recovery, or final.";
                 return null;
             }
             agentRoleStatus = agentRoleStatus.Trim().ToUpperInvariant();
