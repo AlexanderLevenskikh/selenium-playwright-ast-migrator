@@ -1,6 +1,6 @@
 # Guarded OpenCode Desktop Migration Runbook
 
-Этот документ — **канонический способ** запускать агентскую Selenium C# → Playwright migration через OpenCode Desktop.
+Этот документ — **канонический (`canonical`) способ** запускать агентскую Selenium C# → Playwright migration через OpenCode Desktop.
 
 Цель runbook: агент может исследовать проект и создавать migration artifacts, но не может тихо превратить неудачный запуск в красивый `FINAL` за счёт записи в target/POM project, suppression, empty tests или ослабления проверок.
 

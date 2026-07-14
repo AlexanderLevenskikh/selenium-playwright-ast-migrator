@@ -1767,6 +1767,12 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
     var projectReferences = projectDiscovery.Select(x => x.Path).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     var assemblyReferences = ResolvePathList(verification.AssemblyReferences, baseDir).ToList();
     var discoveredBuildFiles = DiscoverBuildFiles(verification, baseDir, projectReferences).ToList();
+    var centralPackageManagementDetected = discoveredBuildFiles.Any(x =>
+        Path.GetFileName(x).Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase));
+    var importedBuildFiles = SelectVerificationBuildFilesToImport(discoveredBuildFiles, centralPackageManagementDetected).ToList();
+    var skippedBuildFiles = discoveredBuildFiles
+        .Except(importedBuildFiles, StringComparer.OrdinalIgnoreCase)
+        .ToList();
     var localDirectoryPackagesPropsShimPath = WriteLocalDirectoryPackagesPropsShim(harnessDir, discoveredBuildFiles);
     var targetFramework = ResolveVerificationTargetFramework(verification, projectReferences);
     var packageReferences = BuildPackageReferences(verification, projectReferences, config).ToList();
@@ -1780,15 +1786,17 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
         assemblyReferences,
         packageReferences,
         targetFramework,
-        discoveredBuildFiles);
-    File.WriteAllText(csprojPath, csprojText);
+        importedBuildFiles);
+    File.WriteAllText(csprojPath, csprojText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
     var harnessSnapshotPath = Path.Combine(outPath, "project-verify-harness.csproj");
-    File.WriteAllText(harnessSnapshotPath, csprojText);
+    File.WriteAllText(harnessSnapshotPath, csprojText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     var harnessEvidence = BuildProjectVerifyHarnessEvidence(
         harnessSnapshotPath,
         csprojText,
         discoveredBuildFiles,
+        importedBuildFiles,
+        skippedBuildFiles,
         packageReferences,
         localDirectoryPackagesPropsShimPath);
 
@@ -1808,7 +1816,7 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
         ProjectReferenceDiscovery: projectDiscovery.ToArray(),
         AssemblyReferences: assemblyReferences.Select(Path.GetFullPath).ToArray(),
         PackageReferences: packageReferences.ToArray(),
-        BuildFilesImported: discoveredBuildFiles.Select(Path.GetFullPath).ToArray(),
+        BuildFilesImported: importedBuildFiles.Select(Path.GetFullPath).ToArray(),
         TargetFramework: targetFramework,
         Command: buildResult.Command,
         StdOut: buildResult.StdOut,
@@ -1817,9 +1825,10 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
         ClassifiedDiagnostics: classifiedDiagnostics,
         HarnessEvidence: harnessEvidence);
 
+    var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
     File.WriteAllText(Path.Combine(outPath, "project-verify-report.json"),
-        System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
-    File.WriteAllText(Path.Combine(outPath, "project-verify-report.md"), WriteProjectVerifyMarkdown(report));
+        System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }), utf8NoBom);
+    File.WriteAllText(Path.Combine(outPath, "project-verify-report.md"), WriteProjectVerifyMarkdown(report), utf8NoBom);
     WriteExplainTodoArtifacts(summary with { GeneratedFiles = generatedFiles.Count }, outPath, format, allUnmapped, allUnsupported, report);
     WriteSmokePlanArtifacts(outPath, outPath, format);
     WriteMigrationBoardArtifacts(outPath, outPath, format);
@@ -2114,6 +2123,29 @@ static IEnumerable<string> DiscoverBuildFiles(VerificationConfig verification, s
     }
 }
 
+static IEnumerable<string> SelectVerificationBuildFilesToImport(
+    IReadOnlyList<string> discoveredBuildFiles,
+    bool centralPackageManagementDetected)
+{
+    foreach (var buildFile in discoveredBuildFiles)
+    {
+        var fileName = Path.GetFileName(buildFile);
+        if (fileName.Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase))
+            continue;
+
+        // When the source repository uses CPM, repo-wide Directory.Build.props/targets
+        // frequently inject PackageReference items whose versions live only in the skipped
+        // Directory.Packages.props. Importing those files into an isolated harness causes NU1015.
+        // ProjectReferences still evaluate with their own repository build configuration.
+        if (centralPackageManagementDetected
+            && (fileName.Equals("Directory.Build.props", StringComparison.OrdinalIgnoreCase)
+                || fileName.Equals("Directory.Build.targets", StringComparison.OrdinalIgnoreCase)))
+            continue;
+
+        yield return buildFile;
+    }
+}
+
 static IEnumerable<PackageReferenceConfig> BuildPackageReferences(VerificationConfig verification, IReadOnlyList<string> projectReferences, ProjectAdapterConfig config)
 {
     var result = new List<PackageReferenceConfig>();
@@ -2242,6 +2274,9 @@ static string BuildVerificationCsproj(
     sb.AppendLine("    <Nullable>enable</Nullable>");
     sb.AppendLine("    <ImplicitUsings>enable</ImplicitUsings>");
     sb.AppendLine("    <LangVersion>latest</LangVersion>");
+    sb.AppendLine("    <!-- dotnet build also receives these as global properties so automatic repo-wide imports cannot run before this project body is evaluated. -->");
+    sb.AppendLine("    <ImportDirectoryBuildProps>false</ImportDirectoryBuildProps>");
+    sb.AppendLine("    <ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets>");
     if (isolateCentralPackageManagement)
     {
         sb.AppendLine("    <!-- verify-project is an isolated temporary harness; keep inline PackageReference versions legal even when the source repo uses Central Package Management. -->");
@@ -2307,19 +2342,25 @@ static string BuildVerificationCsproj(
 static ProjectVerifyHarnessEvidence BuildProjectVerifyHarnessEvidence(
     string harnessSnapshotPath,
     string csprojText,
-    IReadOnlyList<string> buildFiles,
+    IReadOnlyList<string> discoveredBuildFiles,
+    IReadOnlyList<string> importedBuildFiles,
+    IReadOnlyList<string> skippedBuildFiles,
     IReadOnlyList<PackageReferenceConfig> packageReferences,
     string? localDirectoryPackagesPropsShimPath)
 {
-    var centralPackageFiles = buildFiles
+    var centralPackageFiles = discoveredBuildFiles
         .Where(x => Path.GetFileName(x).Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase))
         .Select(Path.GetFullPath)
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
         .ToArray();
 
-    var importedBuildFiles = buildFiles
-        .Where(x => !Path.GetFileName(x).Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase))
+    var importedBuildFilePaths = importedBuildFiles
+        .Select(Path.GetFullPath)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+    var skippedBuildFilePaths = skippedBuildFiles
         .Select(Path.GetFullPath)
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
@@ -2339,6 +2380,7 @@ static ProjectVerifyHarnessEvidence BuildProjectVerifyHarnessEvidence(
         notes.Add("Directory.Packages.props was detected as a CPM signal and intentionally isolated from the source repo inside the temporary verify-project harness.");
         notes.Add("ManagePackageVersionsCentrally=false keeps inline PackageReference Version attributes legal inside the isolated temporary harness.");
         notes.Add("DirectoryPackagesPropsPath is pinned to a local shim next to the harness so parent repo CPM auto-discovery cannot re-enable NU1008.");
+        notes.Add("Repo-wide Directory.Build.props/targets are skipped in CPM isolation because they can inject PackageReference items whose versions exist only in the source Directory.Packages.props, causing NU1015 in the temporary harness.");
     }
     else
     {
@@ -2357,11 +2399,11 @@ static ProjectVerifyHarnessEvidence BuildProjectVerifyHarnessEvidence(
         ManagePackageVersionsCentrallyDisabled: cpmDisabled,
         DirectoryPackagesPropsPathPinned: directoryPackagesPropsPathPinned,
         LocalDirectoryPackagesPropsShim: string.IsNullOrWhiteSpace(localDirectoryPackagesPropsShimPath) ? null : Path.GetFullPath(localDirectoryPackagesPropsShimPath),
-        ImportedBuildFiles: importedBuildFiles,
-        SkippedBuildFiles: centralPackageFiles,
+        ImportedBuildFiles: importedBuildFilePaths,
+        SkippedBuildFiles: skippedBuildFilePaths,
         PackageVersionMode: packageVersionMode,
         Nu1008Mitigation: cpmDetected
-            ? "Directory.Packages.props skipped, local shim pinned via DirectoryPackagesPropsPath, and ManagePackageVersionsCentrally=false in temporary harness"
+            ? "Directory.Packages.props and repo-wide Directory.Build.props/targets skipped, local shim pinned via DirectoryPackagesPropsPath, and ManagePackageVersionsCentrally=false in temporary harness"
             : "not-required",
         Notes: notes.ToArray());
 }
@@ -2373,7 +2415,9 @@ static DotnetBuildResult RunDotnetBuild(string csprojPath, VerificationConfig ve
         "build",
         csprojPath,
         "-v:minimal",
-        $"-c:{(string.IsNullOrWhiteSpace(verification.Configuration) ? "Debug" : verification.Configuration!.Trim())}"
+        $"-c:{(string.IsNullOrWhiteSpace(verification.Configuration) ? "Debug" : verification.Configuration!.Trim())}",
+        "-p:ImportDirectoryBuildProps=false",
+        "-p:ImportDirectoryBuildTargets=false"
     };
 
     if (verification.NoRestore == true)
@@ -2391,6 +2435,8 @@ static DotnetBuildResult RunDotnetBuild(string csprojPath, VerificationConfig ve
         WorkingDirectory = Directory.Exists(workingDirectory) ? workingDirectory : Directory.GetCurrentDirectory(),
         RedirectStandardOutput = true,
         RedirectStandardError = true,
+        StandardOutputEncoding = Encoding.UTF8,
+        StandardErrorEncoding = Encoding.UTF8,
         UseShellExecute = false,
         CreateNoWindow = true
     };
@@ -2482,6 +2528,12 @@ static ProjectVerifyDiagnostic ClassifyBuildDiagnostic(string diagnostic)
         category = "central-package-management";
         likelyCause = "Temporary verify-project harness унаследовал Central Package Management, но PackageReference содержит inline Version. Это означает, что CPM isolation не сработал или external import снова включил ManagePackageVersionsCentrally.";
         suggestedAction = "Проверь project-verify-harness.csproj snapshot и HarnessEvidence: Directory.Packages.props должен быть skipped, а ManagePackageVersionsCentrally=false должен быть записан в temporary harness.";
+    }
+    else if (code == "NU1015")
+    {
+        category = "missing-package-version";
+        likelyCause = "В temporary verify-project harness попали PackageReference без Version. Обычно repo-wide Directory.Build.props/targets добавляют пакеты, версии которых определены только в source Directory.Packages.props, тогда как isolated harness намеренно отключает CPM.";
+        suggestedAction = "Обнови Migrator и повтори verify-project: CPM isolation должна пропустить repo-wide Directory.Build.props/targets. Если пакет действительно нужен generated-коду, добавь его с явной версией в Verification.PackageReferences.";
     }
     else if (code.StartsWith("NU", StringComparison.OrdinalIgnoreCase))
     {
@@ -9848,7 +9900,7 @@ static int RunDoctor(string inputPath, string outPath, string format, string[] c
     AddDoctorCheck(checks, buildFiles.Length > 0 ? "passed" : "info", "BUILD_FILES",
         buildFiles.Length > 0 ? $"Found {buildFiles.Length} repo build file(s)." : "No Directory.Build.* / Directory.Packages.props found near repo root.",
         repoRoot,
-        buildFiles.Length > 0 ? "verify-project should import these when AutoDiscoverBuildFiles is enabled." : "OK if project does not use repo-level build props.");
+        buildFiles.Length > 0 ? "verify-project discovers these files; CPM isolation may intentionally skip repo-wide Directory.Build.props/targets to prevent inherited unversioned PackageReference items." : "OK if project does not use repo-level build props.");
 
     if (config?.Verification == null)
     {

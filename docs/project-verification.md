@@ -67,7 +67,7 @@ migrate_discounts_project_verify/
 - `AssemblyReferences` — fallback для прямых dll references, использовать только если нельзя через project/package references.
 - `AutoDiscoverNearestProject` — найти ближайший `.csproj` вверх от `--input` и подключить как `ProjectReference`. По умолчанию `true`.
 - `AutoDiscoverProjectReferences` — рекурсивно подключить `ProjectReference` из найденных/заданных `.csproj`. По умолчанию `true`.
-- `AutoDiscoverBuildFiles` — импортировать найденные `Directory.Build.props` и `Directory.Build.targets`; `Directory.Packages.props` обнаруживается для отчёта, но временный verify harness изолирует CPM через локальный shim, `DirectoryPackagesPropsPath` и `ManagePackageVersionsCentrally=false`, чтобы inline `PackageReference Version` не падали с NU1008. По умолчанию `true`.
+- `AutoDiscoverBuildFiles` — обнаруживать repo-wide `Directory.Build.props`, `Directory.Build.targets` и `Directory.Packages.props`. Без CPM props/targets импортируются явно. При обнаруженном CPM temporary harness намеренно пропускает repo-wide `Directory.Build.props/targets`, потому что они часто добавляют `PackageReference` без `Version`, чьи версии живут только в исходном `Directory.Packages.props`; такой гибрид вызывает `NU1015`. CPM при этом изолируется через локальный shim, `DirectoryPackagesPropsPath` и `ManagePackageVersionsCentrally=false`, чтобы inline `PackageReference Version` не падали с `NU1008`. По умолчанию `true`.
 - `AutoDiscoverPackageReferences` — зеркалировать `PackageReference` из project references во временный проект. По умолчанию `false`, потому что `ProjectReference` обычно уже тянет пакеты.
 - `NoRestore` — добавить `--no-restore` к `dotnet build`.
 - `Configuration` — конфигурация сборки, по умолчанию `Debug`.
@@ -107,7 +107,7 @@ migration/verify-project-1/
 - если `TargetFramework` не задан, пытается взять его из найденного `.csproj`;
 - если `AutoDiscoverNearestProject=true`, подключает ближайший `.csproj` вверх от `--input`;
 - если `AutoDiscoverProjectReferences=true`, рекурсивно подключает `ProjectReference` из найденных/заданных проектов;
-- если `AutoDiscoverBuildFiles=true`, импортирует найденные `Directory.Build.props` и `Directory.Build.targets`; `Directory.Packages.props` учитывается как CPM-сигнал, но temporary project пишет локальный `project-verify/Directory.Packages.props` shim и пинит `DirectoryPackagesPropsPath`, чтобы не конфликтовать с inline versions;
+- если `AutoDiscoverBuildFiles=true`, обнаруживает repo-wide build files; без CPM импортирует `Directory.Build.props/targets`, а при CPM намеренно пропускает их и source `Directory.Packages.props`, пишет локальный `project-verify/Directory.Packages.props` shim и пинит `DirectoryPackagesPropsPath`, чтобы избежать одновременно `NU1008` и безверсионных `PackageReference`/`NU1015`;
 - `BuildWorkingDirectory` позволяет запускать `dotnet build` из корня исходного repo, чтобы подхватился корпоративный `NuGet.config`;
 - `project-verify-report.md/json` теперь содержит discovery summary, классификацию diagnostics и `verify-project-harness/v1` evidence.
 - рядом с отчётом сохраняется `project-verify-harness.csproj` snapshot с SHA256, чтобы можно было доказуемо понять, какие props/targets/package references реально попали во временный harness.
@@ -124,6 +124,7 @@ migration/verify-project-1/
 | `missing-member` | тип есть, но метода/свойства нет | проверить mapping и target helper API |
 | `signature-mismatch` | метод найден, но параметры не совпали | проверить `ParameterizedMethodMapping` placeholders |
 | `central-package-management` | `NU1008`: temporary harness унаследовал CPM при inline `PackageReference Version` | открыть `project-verify-harness.csproj` snapshot и `HarnessEvidence`, проверить local shim, `DirectoryPackagesPropsPath` и `ManagePackageVersionsCentrally=false` |
+| `missing-package-version` | `NU1015`: repo-wide props/targets добавили `PackageReference` без версии после изоляции CPM | обновить Migrator и повторить `verify-project`; если пакет нужен generated-коду, добавить его с явной версией в `Verification.PackageReferences` |
 | `nuget-restore` | restore/package source issue | указать `BuildWorkingDirectory` на repo root с `NuGet.config` |
 | `msbuild-project` | проблема MSBuild/props/targets/project | проверить imports, `TargetFramework`, references |
 
@@ -143,8 +144,14 @@ migration/verify-project-1/
 
 Так `dotnet build` временного verification project будет запускаться из корня repo и сможет увидеть внутренние package sources.
 
-Если найден `Directory.Packages.props`, `verify-project` считает это признаком Central Package Management и делает temporary harness изолированным: рядом с `Generated.Playwright.Verify.csproj` создаётся локальный `Directory.Packages.props` shim, сам harness пинит `DirectoryPackagesPropsPath` на этот shim и выставляет `ManagePackageVersionsCentrally=false`, а `PackageReference` остаются с явными `Version`. Это предотвращает `NU1008` даже когда MSBuild/NuGet иначе мог бы auto-discover родительский CPM-файл source repo.
+Если найден `Directory.Packages.props`, `verify-project` считает это признаком Central Package Management и делает temporary harness изолированным: рядом с `Generated.Playwright.Verify.csproj` создаётся локальный `Directory.Packages.props` shim, harness пинит `DirectoryPackagesPropsPath` на этот shim и выставляет `ManagePackageVersionsCentrally=false`, а собственные `PackageReference` остаются с явными `Version`. Repo-wide `Directory.Build.props/targets` в этом режиме намеренно не импортируются: иначе они могут добавить `JetBrains.Annotations`, analyzers или внутренние пакеты без `Version`, ожидая версии из уже пропущенного source `Directory.Packages.props`, что приводит к `NU1015`. Это одновременно предотвращает `NU1008` и ложные restore-blockers временного harness.
 
+
+## Кодировка вывода `dotnet build`
+
+На Windows `dotnet` пишет перенаправленный вывод в UTF-8, но старый default `ProcessStartInfo` мог декодировать его через OEM code page (например, CP866). В отчёте это выглядело как `╨╜╨╡...`, хотя сам Markdown-файл уже был корректным UTF-8.
+
+`verify-project` теперь явно задаёт `StandardOutputEncoding = UTF-8` и `StandardErrorEncoding = UTF-8`, а `project-verify-report.md/json` записывает как UTF-8 without BOM. Поэтому feedback/migration ZIP должен содержать читаемые русские diagnostics без постобработки.
 
 ## Verify harness evidence
 
@@ -156,7 +163,7 @@ migration/verify-project-1/
 - `CentralPackageManagementMode` — `isolated`, если CPM обнаружен и временный harness отключил его локально;
 - `CentralPackageFiles` — найденные CPM-файлы;
 - `ImportedBuildFiles` — фактически импортируемые `Directory.Build.props` / `.targets`;
-- `SkippedBuildFiles` — намеренно пропущенные files, прежде всего source `Directory.Packages.props`;
+- `SkippedBuildFiles` — намеренно пропущенные files: source `Directory.Packages.props`, а при CPM также repo-wide `Directory.Build.props/targets`;
 - `DirectoryPackagesPropsPathPinned` — temporary harness пинит CPM path на локальный shim;
 - `LocalDirectoryPackagesPropsShim` — путь к локальному shim-файлу рядом с temporary harness;
 - `ManagePackageVersionsCentrallyDisabled` — есть ли в snapshot `<ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>`;

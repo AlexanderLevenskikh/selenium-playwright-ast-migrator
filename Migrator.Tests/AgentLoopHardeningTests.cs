@@ -1118,8 +1118,15 @@ public class AgentLoopHardeningTests
         Assert.Contains("SkippedBuildFiles", program);
         Assert.Contains("DirectoryPackagesPropsPath", program);
         Assert.Contains("local shim pinned", program);
+        Assert.Contains("SelectVerificationBuildFilesToImport", program);
+        Assert.Contains("ImportDirectoryBuildProps=false", program);
+        Assert.Contains("ImportDirectoryBuildTargets=false", program);
+        Assert.Contains("StandardOutputEncoding = Encoding.UTF8", program);
+        Assert.Contains("StandardErrorEncoding = Encoding.UTF8", program);
+        Assert.Contains("repo-wide Directory.Build.props/targets", program);
         Assert.Contains("central-package-management", program);
         Assert.Contains("NU1008", program);
+        Assert.Contains("NU1015", program);
         Assert.Contains(@"\b(CS|NU|MSB)\d{4}\b", program);
 
         Assert.Contains("record ProjectVerifyHarnessEvidence", models);
