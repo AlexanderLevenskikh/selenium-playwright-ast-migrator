@@ -167,10 +167,10 @@ function Get-TaskTemplateForCategory([string]$Category, [string]$Source) {
         }
         'wave-quality-budget|blocked-by-wave-quality-budget|syntax-fallback|todo-budget|mapping-budget' {
             return [pscustomobject][ordered]@{
-                title = "Switch noisy wave into mapping research"
-                allowedWriteScope = "migration/state/memory/**, migration/runs/**/research/**, migration/config-merge/**, migration/current-ticket.md"
-                objective = "Do not start the next wave. Run migration/scripts/collect-mapping-research-memory.ps1 to summarize the top TODO causes, syntax-fallback clusters, unmapped targets, unresolved symbols, and verify blockers, then slice one bounded mapping/config/POM/recognizer improvement ticket."
-                validation = "mapping-research-memory/v1 exists, then run migration/scripts/evaluate-wave-quality-budget.ps1 and migration/scripts/check-final-gate.ps1; budget evidence must either pass or name a concrete mapping/research next action."
+                title = "Repair wave scope or reduce the highest-value mapping gap"
+                allowedWriteScope = "migration/state/**, migration/runs/**, migration/config-merge/**, migration/profiles/**, migration/current-ticket.md"
+                objective = "Do not start the next wave. Inspect wave-quality-budget scopeIntegrity first. If the wave was contaminated by a full-project rerun, preserve that draft under migration/runs/<run-id>/full-project-rerun/**, restore exact wave-local output, and rerun the materialized wave wrapper. Otherwise run migration/scripts/collect-mapping-research-memory.ps1 (or migration/scripts/collect-mapping-research-memory.sh), summarize TODO causes, syntax-fallback clusters, unmapped targets, unresolved symbols, and verify blockers, then use its mapping-research-memory/v1 candidates to slice one bounded config/POM/recognizer improvement. Target-side Playwright POM/scaffold work under migration/** is agent-executable; original Selenium/product POM writes are forbidden."
+                validation = "Run migration/scripts/evaluate-wave-quality-budget.ps1 and migration/scripts/check-final-gate.ps1; scopeIntegrity must be clean and budget evidence must either pass or name a concrete bounded remediation next action."
             }
         }
         default {

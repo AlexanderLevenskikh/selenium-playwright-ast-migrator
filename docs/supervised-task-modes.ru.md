@@ -69,7 +69,7 @@
 | `/supervised-task waves continuous` | Запустить/возобновить wavefront и переходить к следующим допустимым waves без ручного `continue`. |
 | `/supervised-task waves fresh continuous` | Сначала архивировать и перепланировать, затем выполнять новый wavefront непрерывно. |
 
-`continuous` действует только внутри текущего вызова. Он не переписывает навсегда execution profile, policy, role budgets, remediation budgets, scope, review, sentinel, validation или final gate. Команда не вызывает рекурсивно новую slash-команду.
+`continuous` сохраняется в state активного run, поэтому compaction чата или новая OpenCode-сессия не должны незаметно выключать режим. При этом он остаётся локальным для run: реальное terminal condition, явный `stop`/`pause` или fresh/restarted run очищает его. Режим не изменяет execution profile, policy, role budgets, remediation budgets, scope, review, sentinel, validation или final gate и не вызывает рекурсивно новую slash-команду.
 
 `sentinel`, `inspect` и `qa` остаются одноразовыми forensic-режимами даже при наличии continuous-модификатора.
 
@@ -82,6 +82,8 @@
 - свежий успешный `FINAL`/PASS checkpoint, если осталась одобренная работа;
 - сохранённый `FINAL_STOPPED_FOR_REVIEW`;
 - следующую pending wave только после очистки current-ticket, gate, sentinel, scope и wave-quality-budget state.
+- завершённый backlog, если quality remediation ещё остаётся: запустить `slice-gate-followups` и создать следующий bounded ticket вместо handoff;
+- `CONTAMINATED_BY_FULL_SCOPE_RERUN`: отдельно сохранить полный exploratory draft, восстановить точные wave-local evidence и перезапустить materialized wave wrapper.
 
 Checkpoint по-прежнему записывается в evidence и не превращается в `DONE`; он лишь перестаёт быть обязательной пользовательской паузой. Формулировка «ровно один bounded action» относится к одному безопасно проверяемому циклу, а не ко всему continuous-вызову: после каждого ticket оркестратор повторно запускает gate-проверки, перечитывает state и начинает следующий разрешённый цикл.
 

@@ -11,6 +11,7 @@ This project uses preview SemVer-style versions while the public API is still st
 - Added cache statistics, verification, dry-run/apply pruning, active-run reference protection, and concrete tool/recognizer/renderer/adapter compatibility fingerprints.
 
 ### Added
+- Added a live, bilingual Migration Progress dashboard with five plain-language process stages, draft-vs-accepted progress, current-wave and next-action explanations, contextual `?` hints, generated Playwright test previews, and file-based auto-refresh.
 - Continuous `/supervised-task` invocation mode through either `continuous` or `--continuation auto`, supported for ordinary resume, bounded requests, `continue`, `waves`, and `waves fresh`; successful checkpoints are consumed automatically while blockers, critical risk, scope, no-progress, permission, evidence-integrity, and budget stops remain mandatory.
 - Durable agent recovery with bounded active-role leases, latest-heartbeat freshness, serialized runtime mutations, deterministic recovery planning, append-only stale-role closure, safe ledger-head rebuild, orphan lease archival, atomic-temp quarantine, and fail-closed handling of malformed or contradictory role evidence.
 
@@ -33,6 +34,8 @@ This project uses preview SemVer-style versions while the public API is still st
 
 ### Changed
 
+- Continuous run intent is now persisted in harness state and restored after chat compaction or session resume; an exhausted completed backlog automatically routes blocked quality-budget work through deterministic gate-followup slicing.
+
 - Fixed continuous `/supervised-task` dispatch so the one-bounded-action rule is per cycle rather than per invocation; user-facing handoff is vetoed while continuation/current-ticket/remediation work remains, and `BLOCKED_BY_WAVE_QUALITY_BUDGET` blocks only wave advancement when actionable remediation is available.
 - `/supervised-task` now accepts `--execution-profile fast|standard|audit` for ordinary, `continue`, `waves`, `waves fresh`, and `continuous` invocations. New runs default to lightweight `fast`; existing wave policy remains immutable.
 - Reworked wavefront planning around a deterministic no-agent tuning experiment. `migration tune-wave-plan` and `plan --wave-profile auto` now search batching profiles, account for same-file/POM reuse with marginal complexity, use soft targets plus broad hard ceilings, and avoid pathological one-test-per-wave plans.
@@ -40,6 +43,10 @@ This project uses preview SemVer-style versions while the public API is still st
 - Standalone Windows installer now moves `%USERPROFILE%\.selenium-pw-migrator\bin` to the front of user/current-session `PATH` even when it was already present later, and supports `-RemoveDotnetTool` to remove an older global dotnet tool channel.
 
 ### Fixed
+
+- Prevented direct full-project migrations from writing into materialized `wave-*/generated` directories, added wave-scope contamination detection and repair routing, and stopped quality metrics from summing duplicate report snapshots.
+- Fixed Windows PowerShell 5.1 generic-list handling in mapping-research collection by materializing lists before count, serialization, and ticket generation.
+- Clarified artifact-only POM scope: Selenium source/POM reads are allowed, target-side Playwright POMs under `migration/**` are executable, and mixed source-write/local-artifact candidates must be split instead of wholly blocked.
 
 - Fixed `evaluate-wave-quality-budget.ps1` on Windows PowerShell 5.1 and PowerShell 7 by materializing generic violation lists before assigning them to ordered hashtables; CI now parses and executes the script under Windows PowerShell 5.1.
 - Fixed existing-workspace `bootstrap-opencode` updates so the managed `migration/opencode-team/**` pack is refreshed before repository-root `.opencode/agents` and `.opencode/commands` are reapplied; new commands no longer remain hidden behind stale workspace copies, and users no longer need `--force` for managed command-pack updates.

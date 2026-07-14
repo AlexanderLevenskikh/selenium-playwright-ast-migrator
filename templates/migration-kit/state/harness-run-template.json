@@ -6,7 +6,9 @@
   "createdAtUtc": null,
   "taskTitle": "",
   "goal": "",
-  "allowedRoots": ["migration"],
+  "allowedRoots": [
+    "migration"
+  ],
   "files": {
     "prompt": "runs/run-000/Prompt.md",
     "plan": "runs/run-000/Plan.md",
@@ -18,5 +20,9 @@
     "scope": "UNKNOWN",
     "harnessPolicy": "UNKNOWN",
     "finalGate": "UNKNOWN"
-  }
+  },
+  "continuationMode": "default",
+  "continuousRequested": false,
+  "continuousSource": null,
+  "stopOnlyOnTerminalCondition": false
 }

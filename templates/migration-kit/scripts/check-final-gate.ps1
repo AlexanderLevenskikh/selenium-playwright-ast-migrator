@@ -1863,6 +1863,28 @@ function New-GateFollowupSlicerCandidate([string]$WorkspacePath, $Results) {
     return New-ContinuationCandidate "gate-followup-slicer" "Run migration/scripts/slice-gate-followups.ps1 -Workspace migration to convert failed final-gate/sentinel diagnostics into migration/current-ticket.md before the next wave." "failed checks: $failedNames"
 }
 
+
+function Test-ActiveCurrentTicket([string]$WorkspacePath) {
+    $path = Join-Path $WorkspacePath "state/current-ticket-status.json"
+    if (-not (Test-Path $path)) { return $false }
+    try {
+        $ticket = Get-Content -Raw -Path $path | ConvertFrom-Json -ErrorAction Stop
+        $status = ([string]$ticket.status).Trim().ToUpperInvariant().Replace("-", "_")
+        return $status -match '^(READY|IN_PROGRESS|REVIEW_READY|CURRENT_TICKET_ACTIVE)$'
+    }
+    catch { return $false }
+}
+
+function Test-WaveQualityBudgetBlocked([string]$WorkspacePath) {
+    $path = Join-Path $WorkspacePath "state/wave-quality-budget.json"
+    if (-not (Test-Path $path)) { return $false }
+    try {
+        $budget = Get-Content -Raw -Path $path | ConvertFrom-Json -ErrorAction Stop
+        return ([string]$budget.status -eq "BLOCKED_BY_WAVE_QUALITY_BUDGET") -or ([string]$budget.budgetStatus -eq "BLOCKED_BY_WAVE_QUALITY_BUDGET")
+    }
+    catch { return $false }
+}
+
 function Test-RemediationBudgetExhausted([string]$WorkspacePath) {
     $path = Join-Path $WorkspacePath "state/wave-quality-budget.json"
     if (-not (Test-Path $path)) { return $false }
@@ -1898,6 +1920,9 @@ function New-ContinuationDecision([bool]$Passed, $Results, $Candidate, [bool]$Ha
             source = $Candidate.source
             evidence = $Candidate.evidence
             mustContinueBeforeUserMessage = $true
+            nextActionKind = if ([string]$Candidate.source -eq "gate-followup-slicer") { "SLICE_GATE_FOLLOWUPS" } else { "EXECUTE_BOUNDED_ACTION" }
+            autoSliceRequired = [string]$Candidate.source -eq "gate-followup-slicer"
+            backlogExhaustionIsNotTerminal = $true
         }
     }
 
@@ -1913,6 +1938,9 @@ function New-ContinuationDecision([bool]$Passed, $Results, $Candidate, [bool]$Ha
                 source = $Candidate.source
                 evidence = $Candidate.evidence
                 mustContinueBeforeUserMessage = $true
+                nextActionKind = "SLICE_GATE_FOLLOWUPS"
+                autoSliceRequired = $true
+                backlogExhaustionIsNotTerminal = $true
                 gateFollowupSlicer = "migration/scripts/slice-gate-followups.ps1"
             }
         }
@@ -1963,6 +1991,9 @@ function New-ContinuationDecision([bool]$Passed, $Results, $Candidate, [bool]$Ha
             source = $Candidate.source
             evidence = $Candidate.evidence
             mustContinueBeforeUserMessage = $true
+            nextActionKind = if ([string]$Candidate.source -eq "gate-followup-slicer") { "SLICE_GATE_FOLLOWUPS" } else { "EXECUTE_BOUNDED_ACTION" }
+            autoSliceRequired = [string]$Candidate.source -eq "gate-followup-slicer"
+            backlogExhaustionIsNotTerminal = $true
         }
     }
 
@@ -2331,11 +2362,22 @@ if ($null -eq $continuationCandidate) {
     }
 }
 
+$remediationBudgetExhausted = Test-RemediationBudgetExhausted $workspacePath
+$waveQualityBlocked = Test-WaveQualityBudgetBlocked $workspacePath
+$activeCurrentTicket = Test-ActiveCurrentTicket $workspacePath
+
+# A blocked quality budget with an exhausted/terminal ticket backlog is not a
+# handoff condition. Prefer the deterministic gate-followup slicer over stale
+# prose in current-ticket.md, handoff.md, or compressed chat summaries.
+if ($waveQualityBlocked -and -not $activeCurrentTicket -and -not $remediationBudgetExhausted) {
+    $slicerCandidate = New-GateFollowupSlicerCandidate $workspacePath $results
+    if ($null -ne $slicerCandidate) { $continuationCandidate = $slicerCandidate }
+}
+
 if ($null -eq $continuationCandidate -and -not $passed) {
     $continuationCandidate = New-GateFollowupSlicerCandidate $workspacePath $results
 }
 
-$remediationBudgetExhausted = Test-RemediationBudgetExhausted $workspacePath
 $continuation = New-ContinuationDecision $passed $results $continuationCandidate $hasNonFinalStatus $remediationBudgetExhausted
 
 $report = [ordered]@{

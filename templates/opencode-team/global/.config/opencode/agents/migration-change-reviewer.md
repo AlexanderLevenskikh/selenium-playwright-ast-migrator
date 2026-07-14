@@ -129,6 +129,8 @@ Approve only recommendations that have:
 
 Reject recommendations that rely on guesses, broad suppressions, assertion weakening, empty-test acceptance, real project edits, inconsistent TODO counts, or generic `Developer action` handoffs that could be sliced into agent-executable tasks.
 
+Do not confuse source reads with source writes. Reading Selenium source and existing POM files to derive behavior is allowed. A target-side Playwright page object, scaffold, config mapping, generated test, or proposal written under `migration/**` is migration-local and can be approved as `AGENT_EXECUTABLE`. When a proposed task combines that allowed work with a forbidden product-tree edit, require the slicer to split the task rather than blocking both parts.
+
 ## Output
 
 Return:

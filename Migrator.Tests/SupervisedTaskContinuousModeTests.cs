@@ -130,6 +130,71 @@ public class SupervisedTaskContinuousModeTests
         Assert.Contains("особое нетерминальное routing-состояние", docsRu, StringComparison.OrdinalIgnoreCase);
     }
 
+
+    [Fact]
+    public void ContinuousMode_IsPersistedAcrossCompactionAndResume()
+    {
+        var command = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var runTemplate = Read("templates/migration-kit/state/harness-run-template.json");
+        var newRun = Read("templates/migration-kit/scripts/new-harness-run.ps1");
+        var contract = Read("templates/migration-kit/state/continuation-contract.md");
+
+        foreach (var token in new[]
+        {
+            "continuationMode",
+            "continuousRequested",
+            "continuousSource",
+            "stopOnlyOnTerminalCondition"
+        })
+        {
+            Assert.Contains(token, command, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(token, runTemplate, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(token, newRun, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(token, contract, StringComparison.OrdinalIgnoreCase);
+        }
+
+        Assert.Contains("chat compaction", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("restore continuous behavior", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ValidateSet(\"default\", \"continuous\")", newRun, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ContinuousMode_AutoSlicesWhenQualityBudgetRemainsButBacklogIsExhausted()
+    {
+        var command = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var finalGate = Read("templates/migration-kit/scripts/check-final-gate.ps1");
+        var contract = Read("templates/migration-kit/state/continuation-contract.md");
+        var slicer = Read("templates/opencode-team/global/.config/opencode/agents/migration-task-slicer.md");
+
+        Assert.Contains("Empty-backlog remediation dispatch", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("slice-gate-followups.ps1", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("completed tickets do not make a blocked quality budget terminal", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Test-ActiveCurrentTicket", finalGate, StringComparison.Ordinal);
+        Assert.Contains("Test-WaveQualityBudgetBlocked", finalGate, StringComparison.Ordinal);
+        Assert.Contains("SLICE_GATE_FOLLOWUPS", finalGate, StringComparison.Ordinal);
+        Assert.Contains("autoSliceRequired", finalGate, StringComparison.Ordinal);
+        Assert.Contains("backlogExhaustionIsNotTerminal", finalGate, StringComparison.Ordinal);
+        Assert.Contains("completed backlog is not a terminal state", contract, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("completed backlog with remaining quality-budget remediation is not terminal", slicer, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TargetLocalPomWork_IsNotMisclassifiedAsSourceScopeViolation()
+    {
+        var command = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var slicer = Read("templates/opencode-team/global/.config/opencode/agents/migration-task-slicer.md");
+        var reviewer = Read("templates/opencode-team/global/.config/opencode/agents/migration-change-reviewer.md");
+        var contract = Read("templates/migration-kit/state/continuation-contract.md");
+
+        foreach (var text in new[] { command, slicer, reviewer, contract })
+        {
+            Assert.Contains("Reading Selenium", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("target-side Playwright", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("migration/**", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("split", text, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     [Fact]
     public void AllLaunchModesAndContinuousStops_AreDocumentedInUserGuides()
     {

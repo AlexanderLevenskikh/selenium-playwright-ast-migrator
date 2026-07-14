@@ -250,6 +250,14 @@ Forbidden terminal reports after persisted `FINAL_STOPPED_FOR_REVIEW` dispatch, 
 Artifact-only mode does not block migration-artifact work. It blocks real product source edits, package/project edits, credentials, and network work. It still allows bounded writes under `migration/**` when the selected role has permission, including research, task backlog, current-ticket, migration-run migrated proposal files, and review documentation.
 
 
+## Persisted continuous-mode recovery
+
+At the start of every orchestration cycle, read `migration/state/harness-run.json`. If it records `continuationMode: continuous`, `continuousRequested: true`, and the run is not terminal, restore continuous behavior even after chat compaction, a zero-argument resume, or a new OpenCode context. Do not trust repeated compressed summaries as proof that the run should stop. Clear persisted continuous intent only after a real terminal condition, explicit user stop/pause, or fresh run.
+
+When wave quality budget is blocked and `current-ticket-status.json` is terminal/missing while remediation budget remains, run `slice-gate-followups` immediately. A backlog containing only completed tickets is not a terminal condition. If `scopeIntegrity.status` is `CONTAMINATED_BY_FULL_SCOPE_RERUN`, the next bounded ticket must preserve the full-project draft separately and restore exact wave-local evidence.
+
+Reading Selenium source/POM files is allowed. Target-side Playwright POMs/scaffolds under `migration/**` are agent-executable. Split mixed source-write/local-artifact tasks instead of blocking the whole candidate.
+
 ## Default workflow
 
 1. Understand the user's task and restate the concrete goal.
@@ -339,12 +347,10 @@ Wave scope is file-based, not single-test-based: report `sourceFiles`, estimated
 
 ## Gate follow-up slicing
 
-When final gate or harness-sentinel reports blocking diagnostics and no bounded `migration/current-ticket.md` exists, run `migration/scripts/slice-gate-followups.ps1` / `.sh`. Track sentinel finding lifecycle with `migration/scripts/update-sentinel-finding-status.ps1` / `.sh`: `ASSIGNED` when a current ticket is selected, `FIX_ATTEMPTED` after executor work, and `VERIFIED`/`CLOSED` only after reviewer/final-gate evidence.
-
-When final gate or harness-sentinel reports blocking diagnostics and no bounded `migration/current-ticket.md` exists, run `migration/scripts/slice-gate-followups.ps1` / `.sh`. This writes `state/backlog/gate-followup-tasks.jsonl`, `state/backlog/gate-followup-backlog.md`, and `current-ticket.md`; route that ticket through `migration-change-reviewer` before executor work.
+When final gate or harness-sentinel reports blocking diagnostics and no bounded `migration/current-ticket.md` exists, run `migration/scripts/slice-gate-followups.ps1` / `.sh`. Track sentinel finding lifecycle with `migration/scripts/update-sentinel-finding-status.ps1` / `.sh`: `ASSIGNED` when a current ticket is selected, `FIX_ATTEMPTED` after executor work, and `VERIFIED`/`CLOSED` only after reviewer/final-gate evidence. The slicer writes `state/backlog/gate-followup-tasks.jsonl`, `state/backlog/gate-followup-backlog.md`, and `current-ticket.md`; route that ticket through `migration-change-reviewer` before executor work.
 
 
-Wave quality budget rule: `runs/wave-*` output must be followed by `migration/scripts/evaluate-wave-quality-budget.ps1` / `.sh`. `BLOCKED_BY_WAVE_QUALITY_BUDGET` routes to mapping/research/config improvement instead of another wave.
+Wave quality budget rule: `runs/wave-*` output must be followed by `migration/scripts/evaluate-wave-quality-budget.ps1` / `.sh`. `BLOCKED_BY_WAVE_QUALITY_BUDGET` routes to wave-scope repair or mapping/research/config improvement instead of another wave. Direct full-project migration output must never be written into `runs/wave-*/generated`.
 
 ## Mapping/research memory loop
 

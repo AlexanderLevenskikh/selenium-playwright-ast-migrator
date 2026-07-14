@@ -196,15 +196,21 @@ Reusable loop templates can be installed with:
 .\tool\scripts\install-migration-kit.ps1 -Workspace migration -Update -Backup
 ```
 
-## Harness dashboard
+## Migration Progress dashboard
 
-Use `scripts/build-harness-dashboard.ps1` to create a static dashboard from the active harness run:
+Use `scripts/build-harness-dashboard.ps1` to create a human-friendly snapshot from the active run:
 
 ```powershell
-.\migration\scripts\build-harness-dashboard.ps1 -Workspace migration -Out dashboard/harness -Language en
+.\migration\scripts\build-harness-dashboard.ps1 -Workspace migration -Out dashboard/harness -Language ru
 ```
 
-The dashboard is English-first and includes a `languageSelect` control for Russian. Machine-readable event/status codes stay language-neutral.
+For continuous refresh, keep this running in a separate user terminal and open `migration/dashboard/harness/index.html`:
+
+```powershell
+.\migration\scripts\build-harness-dashboard.ps1 -Workspace migration -Out dashboard/harness -Language ru -Watch -RefreshSeconds 5
+```
+
+The dashboard separates draft coverage from accepted progress, explains the five wave stages in plain language, shows the current and next action, includes `?` hints throughout, and provides read-only previews of generated tests. English is canonical and Russian is available through `languageSelect`; machine-readable event/status codes stay language-neutral.
 
 
 Windows OpenCode Desktop shortcut: `--project-desktop` remains an alias for `--opencode-install project-desktop`.

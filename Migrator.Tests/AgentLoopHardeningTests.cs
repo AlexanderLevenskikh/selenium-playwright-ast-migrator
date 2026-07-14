@@ -968,6 +968,11 @@ public class AgentLoopHardeningTests
         Assert.Contains("MaxTodos", budgetScript);
         Assert.Contains("MinSemanticActions", budgetScript);
         Assert.Contains("ROUTE_TO_MAPPING_RESEARCH_OR_CONFIG_IMPROVEMENT", budgetScript);
+        Assert.Contains("ROUTE_TO_WAVE_SCOPE_REPAIR", budgetScript);
+        Assert.Contains("CONTAMINATED_BY_FULL_SCOPE_RERUN", budgetScript);
+        Assert.Contains("Read-CanonicalMigrationReport", budgetScript);
+        Assert.Contains("waveScopeMismatch", budgetScript);
+        Assert.Contains("full-project-rerun", budgetScript);
         Assert.Contains("WAVE_QUALITY_BUDGET_", budgetScript);
         Assert.Contains("state/wave-quality-budget.json", budgetScript);
         Assert.Contains("runs/$RunId/wave-quality-budget.json", budgetScript);
@@ -989,7 +994,7 @@ public class AgentLoopHardeningTests
         Assert.Contains("wave-quality-budget.json", finalGate);
 
         Assert.Contains("wave-quality-budget|blocked-by-wave-quality-budget", slicer);
-        Assert.Contains("Switch noisy wave into mapping research", slicer);
+        Assert.Contains("Repair wave scope or reduce the highest-value mapping gap", slicer);
         Assert.Contains("TODO causes", slicer);
         Assert.Contains("syntax-fallback clusters", slicer);
 
@@ -1055,6 +1060,10 @@ public class AgentLoopHardeningTests
         Assert.Contains("syntaxFallbackClusters", researchScript);
         Assert.Contains("verifyBlockers", researchScript);
         Assert.Contains("recommendedNextTickets", researchScript);
+        Assert.Contains("$verifyBlockers.ToArray()", researchScript);
+        Assert.Contains("$recommendedTickets.ToArray()", researchScript);
+        Assert.DoesNotContain("@($verifyBlockers)", researchScript);
+        Assert.DoesNotContain("@($recommendedTickets)", researchScript);
         Assert.Contains("ROUTE_TO_CONFIG_POM_RECOGNIZER_IMPROVEMENT", researchScript);
         Assert.Contains("pwsh", researchShell);
 
@@ -1676,7 +1685,7 @@ public class AgentLoopHardeningTests
         var dashboardCommand = Read("templates/opencode-team/global/.config/opencode/commands/dashboard-harness.md");
 
         Assert.Contains("migrator-agent-harness-dashboard.md", docsIndex);
-        Assert.Contains("English is the default", dashboardDoc);
+        Assert.Contains("English is the canonical UI language", dashboardDoc);
         Assert.Contains("language-neutral", dashboardDoc);
         Assert.Contains("languageSelect", dashboardDoc);
         Assert.Contains("English", dashboardDocRu);
@@ -1689,10 +1698,33 @@ public class AgentLoopHardeningTests
         Assert.Contains("harness-dashboard.json", dashboardScript);
         Assert.Contains("harness-dashboard.md", dashboardScript);
         Assert.Contains("dashboard/i18n", dashboardScript);
-        Assert.Contains("Machine-readable data stays language-neutral", dashboardScript);
+        Assert.Contains("Machine-readable statuses remain language-neutral", dashboardScript);
+        Assert.Contains("[switch]$Watch", dashboardScript);
+        Assert.Contains("RefreshSeconds", dashboardScript);
+        Assert.Contains("setTimeout(()=>location.reload()", dashboardScript);
+        Assert.Contains("draftCoveragePercent", dashboardScript);
+        Assert.Contains("acceptedPercent", dashboardScript);
+        Assert.Contains("wave-quality-budget.json", dashboardScript);
+        Assert.Contains("continuation-decision.json", dashboardScript);
+        Assert.Contains("data-hint", dashboardScript);
+        Assert.Contains("What is happening now", dashboardScript);
+        Assert.Contains("processGuide", dashboardScript);
+        Assert.Contains("testPreviews", dashboardScript);
+        Assert.Contains("previewDetails", dashboardScript);
+        Assert.Contains("interventionBadge", dashboardScript);
+        Assert.Contains("hint.intervention", en);
+        Assert.Contains("hint.intervention", ru);
+        Assert.Contains("hint.process", en);
+        Assert.Contains("hint.process", ru);
+        Assert.Contains("hint.previews", en);
+        Assert.Contains("hint.previews", ru);
 
-        Assert.Contains("Migrator Agent Harness Dashboard", en);
-        Assert.Contains("Дашборд Migrator Agent Harness", ru);
+        Assert.Contains("Migration Progress", en);
+        Assert.Contains("Прогресс миграции", ru);
+        Assert.Contains("hint.waves", en);
+        Assert.Contains("hint.waves", ru);
+        Assert.Contains("human.scopeRepair.title", en);
+        Assert.Contains("human.scopeRepair.title", ru);
         Assert.Contains("dashboard.title", en);
         Assert.Contains("dashboard.title", ru);
 
@@ -1701,6 +1733,8 @@ public class AgentLoopHardeningTests
         Assert.Contains("HARNESS_DASHBOARD_SMOKE_PASS", dashboardSmoke);
         Assert.Contains("harness-dashboard-smoke.md", dashboardSmoke);
         Assert.Contains("languageSelect", dashboardSmoke);
+        Assert.Contains("Migration Progress", dashboardSmoke);
+        Assert.Contains("draftCoveragePercent", dashboardSmoke);
         Assert.Contains("run-harness-dashboard-smoke.ps1", dashboardSmokeSh);
 
         Assert.Contains("dashboard/", kitReadme);
@@ -1716,6 +1750,9 @@ public class AgentLoopHardeningTests
         Assert.Contains("/dashboard-harness", teamReadme);
         Assert.Contains("language-neutral", dashboardCommand);
         Assert.Contains("migration/dashboard/harness/index.html", dashboardCommand);
+        Assert.Contains("-Watch -RefreshSeconds 5", dashboardCommand);
+        Assert.Contains("processGuide", dashboardCommand);
+        Assert.Contains("previewDetails", dashboardCommand);
     }
 
 

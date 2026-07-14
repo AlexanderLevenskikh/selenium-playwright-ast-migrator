@@ -73,6 +73,23 @@ public class WaveRunWorkspaceTests
 
 
     [Fact]
+    public void DirectMigrate_CannotContaminateMaterializedWaveOutput()
+    {
+        var program = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Program.cs"));
+
+        Assert.Contains("ValidateWaveLocalMigrationInvocation", program);
+        Assert.Contains("WAVE_LOCAL_SCOPE_GUARD_FAILED", program);
+        Assert.Contains("input-scope.json", program);
+        Assert.Contains("SourceScopePath", program);
+        Assert.Contains("GeneratedOutputPath", program);
+        Assert.Contains("WaveId", program);
+        Assert.Contains("selected-tests.txt", program);
+        Assert.Contains("run-migrate.ps1/run-migrate.sh", program);
+        Assert.Contains("full-project-rerun/generated", program);
+    }
+
+
+    [Fact]
     public void MigrationRunWave_KeepsSafetyBoundaryExplicit()
     {
         var command = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/MigrationCommand.cs"));

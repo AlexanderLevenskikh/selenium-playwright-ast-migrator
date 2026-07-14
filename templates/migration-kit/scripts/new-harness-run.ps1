@@ -4,6 +4,9 @@ param(
     [string]$TaskTitle = "Migration harness batch",
     [string]$Goal = "Run one bounded artifact-only migration batch.",
     [string[]]$AllowedRoots = @($Workspace),
+    [ValidateSet("default", "continuous")]
+    [string]$ContinuationMode = "default",
+    [string]$ContinuousSource = "new-harness-run",
     [switch]$Force
 )
 
@@ -179,6 +182,18 @@ Set-Utf8NoBom (Join-Path $workspacePath "state/scope-baseline.json") ($scopeBase
 
 $createdAt = [DateTimeOffset]::UtcNow.ToString("o")
 $allowedRootsText = ($AllowedRoots -join ", ")
+$continuousRequested = $ContinuationMode -eq "continuous"
+$stopOnlyOnTerminalCondition = $continuousRequested
+$continuationPlanText = if ($continuousRequested) {
+    "After every bounded action, persist a checkpoint, re-read continuation state, and begin the next runtime-authorized bounded cycle until a real terminal condition."
+} else {
+    "If final gate writes continuation-decision.json with CONTINUE_REQUIRED, execute one next bounded action before handoff. If it writes FINAL, stop for review unless the user explicitly requested continue."
+}
+$continuationImplementText = if ($continuousRequested) {
+    "If continuation-decision.json or another runtime artifact exposes an allowed next action, continue through repeated bounded cycles. The one-action boundary is per cycle, not a handoff permission."
+} else {
+    "If continuation-decision.json says CONTINUE_REQUIRED, continue with exactly one next bounded action before user-facing handoff. If it says FINAL, stop for review and include one continue command."
+}
 
 Set-Utf8NoBom (Join-Path $runPath "Prompt.md") @"
 # $RunId Prompt
@@ -219,7 +234,7 @@ Set-Utf8NoBom (Join-Path $runPath "Plan.md") @"
 7. Update handoff and run ledger.
 8. Record common role skill usage with `scripts/record-agent-skill-profile.ps1` / `.sh`; use `scripts/write-agent-skill-usage.ps1` / `.sh` for custom one-off skill evidence.
 9. Run final gate only when claiming FINAL.
-10. If final gate writes continuation-decision.json with CONTINUE_REQUIRED, execute one next bounded action before handoff. If it writes FINAL, stop for review unless the user explicitly requested continue.
+10. $continuationPlanText
 11. Keep Plan.md clean: do not paste raw shell write commands, helper function bodies, heredoc payloads, or denied write workarounds into plan artifacts.
 
 ## Validation commands
@@ -308,6 +323,10 @@ $runState = [ordered]@{
     runId = $RunId
     status = "CONTINUE_AUTONOMOUSLY"
     mode = "artifact-only"
+    continuationMode = $ContinuationMode
+    continuousRequested = $continuousRequested
+    continuousSource = if ($continuousRequested) { $ContinuousSource } else { $null }
+    stopOnlyOnTerminalCondition = $stopOnlyOnTerminalCondition
     createdAtUtc = $createdAt
     taskTitle = $TaskTitle
     goal = $Goal

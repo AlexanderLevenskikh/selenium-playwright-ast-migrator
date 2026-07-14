@@ -117,7 +117,7 @@ The modifier also works with ordinary `/supervised-task`, `continue`, and `conti
 
 plain `/supervised-task continue` starts post-final research; the new default then continues through research-lead review and task slicing when safe.
 
-No extra prompt is required for the normal path. `/supervised-task` is state-aware: if continuation is required, it executes the next allowed bounded action; after `FINAL_STOPPED_FOR_REVIEW`, plain `/supervised-task continue` starts the closed post-final research → research-lead → task-slicer flow instead of requiring a detailed supervisor prompt. Add `continuous` or `--continuation auto` to ordinary resume, `continue`, `waves`, `waves fresh`, or a bounded request when the same invocation should keep consuming safe checkpoints. The modifier is invocation-local and never bypasses blockers, critical risk, scope, no-progress, review, sentinel, final gate, or budgets.
+No extra prompt is required for the normal path. `/supervised-task` is state-aware: if continuation is required, it executes the next allowed bounded action; after `FINAL_STOPPED_FOR_REVIEW`, plain `/supervised-task continue` starts the closed post-final research → research-lead → task-slicer flow instead of requiring a detailed supervisor prompt. Add `continuous` or `--continuation auto` to ordinary resume, `continue`, `waves`, `waves fresh`, or a bounded request when the same invocation should keep consuming safe checkpoints. The modifier is persisted for the active run so compaction/resume cannot silently downgrade it; terminal state, explicit stop/pause, or fresh/restart clears it. It never bypasses blockers, critical risk, scope, no-progress, review, sentinel, final gate, or budgets.
 
 Manual control:
 
@@ -179,9 +179,15 @@ Use `/supervised-task sentinel` or `/supervised-task inspect` to run the process
 
 Sentinel does not directly fix defects. It writes `migration/runs/<run-id>/sentinel/sentinel-report.md` and machine-readable findings. High/critical agent-executable findings are routed to `migration-task-slicer` as bounded process-hardening tasks before a final handoff. When there is no ticket yet, `migration/scripts/slice-gate-followups.ps1` / `.sh` converts final-gate/sentinel diagnostics into `state/backlog/gate-followup-tasks.jsonl`, `state/backlog/gate-followup-backlog.md`, and `current-ticket.md`. Finding status transitions must use `migration/scripts/update-sentinel-finding-status.ps1` / `.sh`, which writes `state/sentinel-finding-ledger.jsonl` without mutating forensic `sentinel-findings.jsonl`.
 
-## Harness dashboard command
+## Migration Progress dashboard command
 
-Use `/dashboard-harness` after a harness run has produced `state/harness-events.jsonl` and `state/harness-policy-result.json`. It generates `migration/dashboard/harness/index.html` with English as the default language and Russian available through the language switch.
+Use `/dashboard-harness` after a run starts. It generates a non-blocking snapshot at `migration/dashboard/harness/index.html` with plain-language wave status, draft and accepted percentages, current/next work, process hints, safety details, and generated-test previews. English is canonical and Russian is available through the language switch.
+
+For live refresh, run this separately in the user's terminal so the agent command is not blocked:
+
+```powershell
+.\migration\scripts\build-harness-dashboard.ps1 -Workspace migration -Out dashboard/harness -Language ru -Watch -RefreshSeconds 5
+```
 
 
 Windows OpenCode Desktop shortcut: `--project-desktop` remains an alias for `--opencode-install project-desktop`.

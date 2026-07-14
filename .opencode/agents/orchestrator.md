@@ -189,7 +189,7 @@ Treat `migration/state/harness-policy.json` as the action policy:
 
 ## Session export and sentinel process testing
 
-Before any final user-facing handoff, ensure the active run has a forensic session artifact at `migration/runs/<run-id>/opencode-session-export.md` and a completed sentinel inspection at `migration/runs/<run-id>/sentinel/sentinel-inspection.json`. Use `migration/scripts/export-opencode-session.ps1` or `.sh` to create it. If a native OpenCode transcript is unavailable, export a best-effort session artifact and keep important observable lines in `session-observations.jsonl`; do not pretend that missing transcript text exists.
+Before any final user-facing handoff, ensure the active run has a forensic session artifact at `migration/runs/<run-id>/opencode-session-export.md` and a completed sentinel inspection at `migration/runs/<run-id>/sentinel/sentinel-inspection.json`. Use `migration/scripts/export-opencode-session.ps1` or `.sh` to create it. If a native OpenCode transcript is unavailable, export an explicit `UNAVAILABLE_WITH_REASON` session artifact and keep important observable lines in `session-observations.jsonl`; do not pretend that missing transcript text exists.
 
 Invoke `harness-sentinel` as the process tester in these checkpoints:
 
@@ -249,6 +249,14 @@ Forbidden terminal reports after persisted `FINAL_STOPPED_FOR_REVIEW` dispatch, 
 
 Artifact-only mode does not block migration-artifact work. It blocks real product source edits, package/project edits, credentials, and network work. It still allows bounded writes under `migration/**` when the selected role has permission, including research, task backlog, current-ticket, migration-run migrated proposal files, and review documentation.
 
+
+## Persisted continuous-mode recovery
+
+At the start of every orchestration cycle, read `migration/state/harness-run.json`. If it records `continuationMode: continuous`, `continuousRequested: true`, and the run is not terminal, restore continuous behavior even after chat compaction, a zero-argument resume, or a new OpenCode context. Do not trust repeated compressed summaries as proof that the run should stop. Clear persisted continuous intent only after a real terminal condition, explicit user stop/pause, or fresh run.
+
+When wave quality budget is blocked and `current-ticket-status.json` is terminal/missing while remediation budget remains, run `slice-gate-followups` immediately. A backlog containing only completed tickets is not a terminal condition. If `scopeIntegrity.status` is `CONTAMINATED_BY_FULL_SCOPE_RERUN`, the next bounded ticket must preserve the full-project draft separately and restore exact wave-local evidence.
+
+Reading Selenium source/POM files is allowed. Target-side Playwright POMs/scaffolds under `migration/**` are agent-executable. Split mixed source-write/local-artifact tasks instead of blocking the whole candidate.
 
 ## Default workflow
 
@@ -331,6 +339,25 @@ Treat machine ledgers as controlled state, not free-form text:
 Sentinel inspections must be finalized with `migration/scripts/complete-sentinel-inspection.ps1` or `.sh`; final gate treats a missing active-run `sentinel-inspection.json` as a process defect.
 
 
+Final gate reconciles `migration/state/harness-run.json` after every run: gate failure writes `BLOCKED_BY_GATE`/the concrete continuation status and real `latestChecks`; a supervisor must not continue from stale `CONTINUE_AUTONOMOUSLY` state after a failed gate.
+
+
+Wave scope is file-based, not single-test-based: report `sourceFiles`, estimated/actual test count, migrated action count, and TODO count explicitly. Do not describe a wave as “3 tests” when the input scope is 3 files containing more tests.
+
+
 ## Gate follow-up slicing
 
-When final gate or harness-sentinel reports blocking diagnostics and no bounded `migration/current-ticket.md` exists, run `migration/scripts/slice-gate-followups.ps1` / `.sh`. This writes `state/backlog/gate-followup-tasks.jsonl`, `state/backlog/gate-followup-backlog.md`, and `current-ticket.md`; route that ticket through `migration-change-reviewer` before executor work.
+When final gate or harness-sentinel reports blocking diagnostics and no bounded `migration/current-ticket.md` exists, run `migration/scripts/slice-gate-followups.ps1` / `.sh`. Track sentinel finding lifecycle with `migration/scripts/update-sentinel-finding-status.ps1` / `.sh`: `ASSIGNED` when a current ticket is selected, `FIX_ATTEMPTED` after executor work, and `VERIFIED`/`CLOSED` only after reviewer/final-gate evidence. The slicer writes `state/backlog/gate-followup-tasks.jsonl`, `state/backlog/gate-followup-backlog.md`, and `current-ticket.md`; route that ticket through `migration-change-reviewer` before executor work.
+
+
+Wave quality budget rule: `runs/wave-*` output must be followed by `migration/scripts/evaluate-wave-quality-budget.ps1` / `.sh`. `BLOCKED_BY_WAVE_QUALITY_BUDGET` routes to wave-scope repair or mapping/research/config improvement instead of another wave. Direct full-project migration output must never be written into `runs/wave-*/generated`.
+
+## Mapping/research memory loop
+
+When `evaluate-wave-quality-budget` reports `BLOCKED_BY_WAVE_QUALITY_BUDGET`, do not select another wave. Run `migration/scripts/collect-mapping-research-memory.ps1` / `.sh` first. Use `mapping-research-memory/v1`, `state/mapping-research-memory.json`, and `state/mapping-research-candidates.jsonl` to route one bounded config/POM/recognizer or verify-harness improvement ticket.
+
+
+## Artifact hygiene
+
+Before final handoff or another wave after material state changes, run or honor final-gate execution of `migration/scripts/validate-run-artifacts.ps1` / `.sh`. `artifact-hygiene/v1` must pass: Plan.md is sanitized, Documentation.md does not contradict final gate, generated boards carry run/wave identity, and session export status is explicit.
+For user-shareable feedback, run `migration/scripts/create-feedback-bundle.ps1` / `.sh` instead of collecting the repository. The `feedback-bundle/v1` packer excludes project source by default, writes `state/feedback-bundles/*/manifest.json`, and requires manifest review before sharing.

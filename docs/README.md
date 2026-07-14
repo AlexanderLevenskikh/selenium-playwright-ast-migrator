@@ -73,7 +73,7 @@ The current launch procedure is only the guarded Desktop runbook above. Detailed
 - [Migrator Agent Harness Kit](migrator-agent-harness-kit.md) / [RU](migrator-agent-harness-kit.ru.md) — English-first reference for autopilot policy, run artifacts, gates, and dashboard i18n.
 - [Agent environments](agent-environments.md) / [RU](agent-environments.ru.md) — portable bootstrap matrix for Windows OpenCode Desktop, macOS/Linux/WSL OpenCode CLI, Codex, CI, and other agents.
 - [Migrator Agent Harness Dogfood](migrator-agent-harness-dogfood.md) / [RU](migrator-agent-harness-dogfood.ru.md) — reproducible smoke pass for installing the kit, creating a run, writing events, and validating harness policy.
-- [Migrator Agent Harness Dashboard](migrator-agent-harness-dashboard.md) / [RU](migrator-agent-harness-dashboard.ru.md) — static English-first dashboard with Russian switch for run lifecycle, trace events, and harness policy results.
+- [Migrator Agent Harness Dashboard](migrator-agent-harness-dashboard.md) / [RU](migrator-agent-harness-dashboard.ru.md) — live-capable, human-friendly dashboard with Russian switch, wave progress, hints, current/next work, and generated-test previews.
 - [`templates/migration-kit/AGENT_CONTRACT.md`](../templates/migration-kit/AGENT_CONTRACT.md)
 - [`templates/migration-kit/state/final-gate.md`](../templates/migration-kit/state/final-gate.md)
 - [`templates/opencode-team/INSTALLATION-SAFETY.md`](../templates/opencode-team/INSTALLATION-SAFETY.md)

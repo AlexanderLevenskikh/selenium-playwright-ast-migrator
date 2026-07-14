@@ -147,7 +147,7 @@ Do not stop because the report says `Developer action`, `manual work`, or `post-
    - assertion conversion per file;
    - input helper conversion per file;
    - documentation/evidence fixes.
-5. Do not select tickets that require product source edits, package installation, network access, credentials, or business/product decisions. Still create non-selected `HUMAN_DECISION_REQUIRED`, `BLOCKED_BY_SCOPE`, or `BLOCKED_BY_MISSING_SOURCE_TRUTH` tickets for auditability. Artifact-only mode still permits selected tickets that edit only `migration/**` artifacts.
+5. Do not select tickets that require product source edits, package installation, network access, credentials, or business/product decisions. Still create non-selected `HUMAN_DECISION_REQUIRED`, `BLOCKED_BY_SCOPE`, or `BLOCKED_BY_MISSING_SOURCE_TRUTH` tickets for auditability. Artifact-only mode still permits selected tickets that edit only `migration/**` artifacts. Reading Selenium source/POM files is allowed. Creating or extending target-side Playwright page objects, local scaffolds, generated output, adapter config, or proposals under `migration/**` is `AGENT_EXECUTABLE`; do not classify those writes as product-tree POM edits. If one candidate mixes a migration-local implementation with a forbidden product edit, split it into two tickets and select the migration-local ticket instead of blocking the whole candidate.
 6. Do not select a ticket whose success criteria require assertion suppression or weakening.
 7. TODO-count reduction is never a standalone success criterion. A ticket may remove an unresolved-symbol/TODO marker only when its scope names the active replacement declaration/action/assertion or provides source-backed evidence that the marker is obsolete. Reject “delete the TODO comment but leave the code commented out” as evidence manipulation.
 8. Before selecting a ticket with explicit files, run `selenium-pw-migrator memory recall --file <file> --workspace migration` for each scoped file and include `state/memory/recall-index.json` in evidence.
@@ -232,3 +232,10 @@ Report only the backlog artifacts, selected ticket id/title, and whether the sup
 ## Gate/sentinel follow-up input
 
 If `migration/state/backlog/gate-followup-tasks.jsonl` exists, treat it like approved diagnostic input. Select exactly one agent-executable bounded task, refresh `migration/current-ticket.md`, and preserve the source evidence. If every remaining gate follow-up requires product-tree writes outside `migration/**`, write `BLOCKED_NO_AGENT_EXECUTABLE_TASKS` with evidence instead of broadening scope.
+
+
+When diagnostics include `wave-quality-budget` or `BLOCKED_BY_WAVE_QUALITY_BUDGET`, first inspect `scopeIntegrity`. If it reports `CONTAMINATED_BY_FULL_SCOPE_RERUN`, slice an `AGENT_EXECUTABLE` wave-scope repair ticket that preserves the full-project draft under `migration/runs/<run-id>/full-project-rerun/**`, restores exact wave-local generated evidence, and reruns the materialized wave wrapper. Otherwise slice a mapping/research/config improvement task: summarize TODO causes, syntax-fallback clusters, unmapped targets, unresolved symbols, and verify blockers before any new wave. A completed backlog with remaining quality-budget remediation is not terminal; refresh it with the next bounded task.
+
+## Mapping/research memory loop
+
+When `evaluate-wave-quality-budget` reports `BLOCKED_BY_WAVE_QUALITY_BUDGET`, do not select another wave. Run `migration/scripts/collect-mapping-research-memory.ps1` / `.sh` first. Use `mapping-research-memory/v1`, `state/mapping-research-memory.json`, and `state/mapping-research-candidates.jsonl` to route one bounded config/POM/recognizer or verify-harness improvement ticket.

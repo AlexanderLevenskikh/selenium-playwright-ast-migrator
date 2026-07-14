@@ -35,7 +35,7 @@ foreach ($required in @($html, $json, $md, $en, $ru)) {
 }
 
 $htmlText = Get-Content -Raw -Path $html
-foreach ($marker in @("languageSelect", "English", "Русский", "harness-dashboard.json", "Migrator Agent Harness Dashboard")) {
+foreach ($marker in @("languageSelect", "English", "Русский", "harness-dashboard.json", "Migration Progress", "draftCoveragePercent", "data-hint", "What is happening now", "processGuide", "previewDetails")) {
     if (-not $htmlText.Contains($marker)) { throw "Dashboard HTML is missing marker: $marker" }
 }
 

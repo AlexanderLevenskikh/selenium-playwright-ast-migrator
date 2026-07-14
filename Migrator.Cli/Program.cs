@@ -89,6 +89,12 @@ string validationMode = opts.ValidationMode;
 string? targetTestFramework = opts.TargetTestFramework;
 string generationPolicy = GenerationPolicy.NormalizeOrDefault(opts.GenerationPolicy);
 
+if (mode == "migrate" && !ValidateWaveLocalMigrationInvocation(inputPath, outPath, selectedTestsFile, out var waveScopeError))
+{
+    Console.Error.WriteLine(waveScopeError);
+    return 2;
+}
+
 if (mode == "memory")
 {
     Console.WriteLine("Use the direct memory command family: selenium-pw-migrator memory init|add|explain|doctor|summarize");
@@ -1101,6 +1107,92 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
 
     PrintSummary(summaryWithGenerated);
     Console.WriteLine($"Migration written to: {Path.GetFullPath(outPath)} ({generated} files generated)");
+}
+
+static bool ValidateWaveLocalMigrationInvocation(string inputPath, string outPath, string? selectedTestsFile, out string error)
+{
+    error = string.Empty;
+    var fullOut = Path.GetFullPath(outPath);
+    var cursor = new DirectoryInfo(fullOut);
+    FileInfo? scopeFile = null;
+
+    for (var depth = 0; cursor != null && depth < 3; depth++, cursor = cursor.Parent)
+    {
+        var candidate = new FileInfo(Path.Combine(cursor.FullName, "input-scope.json"));
+        if (candidate.Exists)
+        {
+            scopeFile = candidate;
+            break;
+        }
+    }
+
+    if (scopeFile == null)
+        return true;
+
+    try
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(scopeFile.FullName));
+        var root = document.RootElement;
+        var waveRoot = scopeFile.Directory!.FullName;
+        var expectedSourceScope = GetJsonString(root, "SourceScopePath", "sourceScopePath")
+            ?? Path.Combine(waveRoot, "source-scope");
+        var expectedGenerated = GetJsonString(root, "GeneratedOutputPath", "generatedOutputPath")
+            ?? Path.Combine(waveRoot, "generated");
+        var expectedSelectedTests = Path.Combine(waveRoot, "selected-tests.txt");
+
+        var inputMatches = !string.IsNullOrWhiteSpace(expectedSourceScope)
+            && IsSamePathOrChild(Path.GetFullPath(inputPath), Path.GetFullPath(expectedSourceScope!));
+        var outputMatches = !string.IsNullOrWhiteSpace(expectedGenerated)
+            && PathsEqual(fullOut, Path.GetFullPath(expectedGenerated!));
+        var selectedTestsMatch = !string.IsNullOrWhiteSpace(selectedTestsFile)
+            && PathsEqual(Path.GetFullPath(selectedTestsFile!), Path.GetFullPath(expectedSelectedTests));
+
+        if (inputMatches && outputMatches && selectedTestsMatch)
+            return true;
+
+        var waveId = GetJsonString(root, "WaveId", "waveId") ?? scopeFile.Directory!.Name;
+        error = string.Join(Environment.NewLine, new[]
+        {
+            $"WAVE_LOCAL_SCOPE_GUARD_FAILED: output '{fullOut}' belongs to bounded wave '{waveId}'.",
+            "A wave generated directory may only be written by its materialized run-migrate.ps1/run-migrate.sh wrapper using source-scope/ and selected-tests.txt.",
+            $"Expected input under: {expectedSourceScope}",
+            $"Expected selected tests: {expectedSelectedTests}",
+            "For a full-project exploratory rerun, choose a separate artifact location such as migration/runs/<run-id>/full-project-rerun/generated; do not write it into runs/wave-*/generated."
+        });
+        return false;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+    {
+        error = $"WAVE_LOCAL_SCOPE_GUARD_FAILED: could not read '{scopeFile.FullName}': {ex.Message}";
+        return false;
+    }
+}
+
+static string? GetJsonString(JsonElement root, params string[] names)
+{
+    foreach (var name in names)
+    {
+        if (root.TryGetProperty(name, out var node) && node.ValueKind == JsonValueKind.String)
+            return node.GetString();
+    }
+
+    return null;
+}
+
+static bool PathsEqual(string left, string right)
+{
+    var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+    return Path.TrimEndingDirectorySeparator(Path.GetFullPath(left))
+        .Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)), comparison);
+}
+
+static bool IsSamePathOrChild(string candidate, string root)
+{
+    var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+    var normalizedCandidate = Path.TrimEndingDirectorySeparator(Path.GetFullPath(candidate));
+    var normalizedRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+    return normalizedCandidate.Equals(normalizedRoot, comparison)
+        || normalizedCandidate.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, comparison);
 }
 
 static TargetBackendRegistry CreateBuiltInTargetBackendRegistry()
@@ -12073,13 +12165,6 @@ static StandaloneVersionManifest? ReadStandaloneVersionManifest()
     {
         return null;
     }
-}
-
-static string? GetJsonString(JsonElement element, string propertyName)
-{
-    return element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
-        ? property.GetString()
-        : null;
 }
 
 static bool GetJsonBool(JsonElement element, string propertyName)

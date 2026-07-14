@@ -147,7 +147,7 @@ if (-not [string]::IsNullOrWhiteSpace($RunId)) {
     if (Test-Path $runRoot) { $rootsToScan.Add($runRoot) | Out-Null }
 }
 
-foreach ($rootPath in @($rootsToScan | Select-Object -Unique)) {
+foreach ($rootPath in @($rootsToScan.ToArray() | Select-Object -Unique)) {
     foreach ($file in Get-ChildItem -Path $rootPath -Recurse -File -Include "*.md", "*.json", "*.jsonl", "*.txt", "*.cs" -ErrorAction SilentlyContinue) {
         $relative = $file.FullName.Substring($workspacePath.Length).TrimStart([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar).Replace('\', '/')
         $sourceArtifacts.Add([ordered]@{ path = $relative; bytes = $file.Length }) | Out-Null
@@ -195,6 +195,7 @@ $topUnresolved = Convert-Counts $unresolved $MaxItems
 $topTodo = Convert-Counts $todoClusters $MaxItems
 $topUnmapped = Convert-Counts $unmapped $MaxItems
 $topSyntax = Convert-Counts $syntaxFallback $MaxItems
+$verifyBlockerItems = $verifyBlockers.ToArray()
 
 if (@($topPages).Count -gt 0) {
     $recommendedTickets.Add([ordered]@{
@@ -214,12 +215,12 @@ if (@($topUnresolved).Count -gt 0 -or @($topUnmapped).Count -gt 0) {
         validation = "Run evaluate-wave-quality-budget and check-final-gate; unresolved/unmapped evidence must shrink or be reclassified."
     }) | Out-Null
 }
-if (@($verifyBlockers).Count -gt 0) {
+if ($verifyBlockerItems.Count -gt 0) {
     $recommendedTickets.Add([ordered]@{
         title = "Fix verify-project blocker before scaling waves"
         kind = "verify-harness"
         source = "mapping-research-memory/v1"
-        examples = @($verifyBlockers | Select-Object -First 5)
+        examples = @($verifyBlockerItems | Select-Object -First 5)
         validation = "verify-project no longer fails for the same source scope, or reports a classified NOT RUNTIME READY blocker."
     }) | Out-Null
 }
@@ -233,7 +234,14 @@ if (@($topTodo).Count -gt 0) {
     }) | Out-Null
 }
 
-$status = if (@($recommendedTickets).Count -gt 0) { "RESEARCH_READY" } else { "NO_ACTIONABLE_MAPPING_RESEARCH" }
+# Materialize generic lists before assigning them into ordered hashtables or @() expressions.
+# Windows PowerShell 5.1 can throw "Argument types do not match" when a generic
+# List[object] is wrapped directly with @(...).
+$sourceArtifactItems = $sourceArtifacts.ToArray()
+$todoSampleItems = $todoSamples.ToArray()
+$recommendedTicketItems = $recommendedTickets.ToArray()
+
+$status = if ($recommendedTicketItems.Count -gt 0) { "RESEARCH_READY" } else { "NO_ACTIONABLE_MAPPING_RESEARCH" }
 $routing = if ($status -eq "RESEARCH_READY") { "ROUTE_TO_CONFIG_POM_RECOGNIZER_IMPROVEMENT" } else { "NO_ACTIONABLE_MAPPING_RESEARCH" }
 
 $waveQualityBudgetReport = $null
@@ -260,16 +268,16 @@ $report = [ordered]@{
     waveRoot = $waveRoot
     status = $status
     routing = $routing
-    sourceArtifacts = @($sourceArtifacts | Select-Object -First 200)
+    sourceArtifacts = @($sourceArtifactItems | Select-Object -First 200)
     waveQualityBudget = $waveQualityBudgetReport
     topUnresolvedSymbols = @($topUnresolved)
     topPageObjectSymbols = @($topPages)
     topTodoClusters = @($topTodo)
     topUnmappedTargets = @($topUnmapped)
     syntaxFallbackClusters = @($topSyntax)
-    todoSamples = @($todoSamples)
-    verifyBlockers = @($verifyBlockers)
-    recommendedNextTickets = @($recommendedTickets)
+    todoSamples = $todoSampleItems
+    verifyBlockers = $verifyBlockerItems
+    recommendedNextTickets = $recommendedTicketItems
     nextAction = $nextAction
 }
 
@@ -286,7 +294,7 @@ if (-not [string]::IsNullOrWhiteSpace($RunId)) {
 
 # Rewrite candidate JSONL from the current snapshot so downstream slicers can read compact entries.
 if (Test-Path $stateJsonl) { Remove-Item -Path $stateJsonl -Force }
-foreach ($ticket in @($recommendedTickets)) {
+foreach ($ticket in $recommendedTicketItems) {
     $line = ([ordered]@{
         schemaVersion = "mapping-research-candidate/v1"
         generatedAtUtc = $report.generatedAtUtc
@@ -305,7 +313,7 @@ $memoryStatus = if ($status -eq "RESEARCH_READY") { "active" } else { "blocked" 
 
 $memoryEntry = [ordered]@{
     kind = "final-gate-lesson"
-    text = "Mapping research memory collected for wave '$waveName': $(@($recommendedTickets).Count) candidate improvement tickets."
+    text = "Mapping research memory collected for wave '$waveName': $($recommendedTicketItems.Count) candidate improvement tickets."
     source = "collect-mapping-research-memory"
     status = $memoryStatus
     createdAtUtc = [DateTimeOffset]::UtcNow.ToString("o")
@@ -314,7 +322,7 @@ $memoryEntry = [ordered]@{
         runId = $RunId
         waveId = $waveName
         report = "state/mapping-research-memory.json"
-        candidateCount = @($recommendedTickets).Count
+        candidateCount = $recommendedTicketItems.Count
     }
 }
 Add-Content -Path (Join-Path $memoryDir "final-gate-lessons.jsonl") -Encoding UTF8 -Value ($memoryEntry | ConvertTo-Json -Compress -Depth 20)
@@ -344,12 +352,12 @@ foreach ($item in @($topTodo | Select-Object -First 10)) {
 }
 [void]$md.AppendLine()
 [void]$md.AppendLine('## Verify blockers')
-foreach ($item in @($verifyBlockers | Select-Object -First 10)) {
+foreach ($item in @($verifyBlockerItems | Select-Object -First 10)) {
     [void]$md.AppendLine(('- `{0}:{1}` {2}' -f $item.path, $item.line, $item.text))
 }
 [void]$md.AppendLine()
 [void]$md.AppendLine('## Recommended next tickets')
-foreach ($ticket in @($recommendedTickets)) {
+foreach ($ticket in $recommendedTicketItems) {
     [void]$md.AppendLine(('- **{0}** (`{1}`) — {2}' -f $ticket.title, $ticket.kind, $ticket.validation))
 }
 [void]$md.AppendLine()
@@ -360,8 +368,8 @@ if (-not [string]::IsNullOrWhiteSpace($RunId)) {
     Set-Content -Path (Join-Path $researchDir 'mapping-research-memory.md') -Value $md.ToString() -Encoding UTF8
 }
 
-if ($CreateCurrentTicket -and @($recommendedTickets).Count -gt 0) {
-    $ticket = @($recommendedTickets)[0]
+if ($CreateCurrentTicket -and $recommendedTicketItems.Count -gt 0) {
+    $ticket = $recommendedTicketItems[0]
     $ticketText = @(
         ('# Current Ticket: {0}' -f $ticket.title),
         '',

@@ -69,7 +69,7 @@ The modifier is parsed independently from the base mode:
 | `/supervised-task waves continuous` | Bootstrap/resume wavefront work and advance through eligible planned waves without requiring a manual `continue` between them. |
 | `/supervised-task waves fresh continuous` | Archive/replan first, then run the new wavefront continuously. |
 
-`continuous` is invocation-local. It does not permanently change execution profiles, policy, role budgets, remediation budgets, scope, review, sentinel, validation or final-gate requirements. It does not recursively invoke another slash command.
+`continuous` is persisted for the active run, so chat compaction or a resumed OpenCode session cannot silently downgrade it. It is still run-local: a real terminal condition, explicit `stop`/`pause`, or a fresh/restarted run clears it. It does not change execution profiles, policy, role budgets, remediation budgets, scope, review, sentinel, validation or final-gate requirements, and it does not recursively invoke another slash command.
 
 `sentinel`, `inspect` and `qa` remain one-shot forensic modes even when a continuation modifier is present.
 
@@ -82,6 +82,8 @@ Continuous mode re-reads machine-readable state after every bounded action and c
 - a fresh successful `FINAL`/PASS checkpoint when more approved work remains;
 - persisted `FINAL_STOPPED_FOR_REVIEW`;
 - the next pending wave only after current-ticket, gate, sentinel, scope and wave-quality-budget state is clean.
+- an exhausted completed backlog when wave-quality remediation remains: run `slice-gate-followups` to create the next bounded ticket instead of handing off;
+- `CONTAMINATED_BY_FULL_SCOPE_RERUN`: preserve the exploratory full-project draft separately, restore exact wave-local evidence, and rerun the materialized wave wrapper.
 
 A checkpoint is still written to evidence and is not renamed to `DONE`; it simply stops being a user-facing pause. “Exactly one bounded action” applies to each safety-checked cycle, not to the whole continuous invocation: after every ticket the orchestrator re-runs gates, re-reads state, and starts the next authorized cycle.
 

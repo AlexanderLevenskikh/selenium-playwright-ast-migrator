@@ -106,17 +106,50 @@ function Count-JsonMetric($Node, [string[]]$Names, [ref]$Found) {
 
 function Get-JsonMetric([string]$Root, [string[]]$Names) {
     if (-not (Test-Path $Root)) { return $null }
-    $found = $false
-    $sum = 0
+    $values = New-Object System.Collections.Generic.List[int]
     foreach ($file in Get-ChildItem -Path $Root -Recurse -File -Include "*.json" -ErrorAction SilentlyContinue) {
         try {
             $json = Get-Content -Raw -Path $file.FullName | ConvertFrom-Json -ErrorAction Stop
-            $sum += Count-JsonMetric $json $Names ([ref]$found)
+            $foundInFile = $false
+            $value = Count-JsonMetric $json $Names ([ref]$foundInFile)
+            if ($foundInFile) { $values.Add([int]$value) | Out-Null }
         }
         catch { }
     }
-    if ($found) { return $sum }
+    if ($values.Count -gt 0) {
+        # Do not sum repeated report snapshots. report.json, migration-board.json,
+        # quality artifacts, and copied run evidence can contain the same counters.
+        # The maximum is a conservative fallback when no canonical report exists.
+        return [int](($values | Measure-Object -Maximum).Maximum)
+    }
     return $null
+}
+
+function Read-CanonicalMigrationReport([string]$WaveRoot) {
+    $candidates = @(
+        (Join-Path $WaveRoot "generated/report.json"),
+        (Join-Path $WaveRoot "report.json")
+    )
+    foreach ($candidate in $candidates) {
+        if (-not (Test-Path $candidate)) { continue }
+        try {
+            $value = Get-Content -Raw -Path $candidate | ConvertFrom-Json -ErrorAction Stop
+            return [pscustomobject]@{ path = $candidate; value = $value }
+        }
+        catch { }
+    }
+    return $null
+}
+
+function Get-JsonIntProperty($Object, [string[]]$Names, [int]$Default = 0) {
+    if ($null -eq $Object) { return $Default }
+    foreach ($name in $Names) {
+        $property = $Object.PSObject.Properties | Where-Object { $_.Name -ieq $name } | Select-Object -First 1
+        if ($null -eq $property) { continue }
+        $number = 0
+        if ([int]::TryParse([string]$property.Value, [ref]$number)) { return $number }
+    }
+    return $Default
 }
 
 function Read-WavePreflight([string]$WaveRoot) {
@@ -260,26 +293,56 @@ else {
     $waveRoot = $waveDir.FullName
     $waveText = Get-RecursiveText $waveRoot
     $preflight = Read-WavePreflight $waveRoot
-    $sourceFiles = Get-SourceFileCount $waveRoot
-    if ($null -ne $preflight -and $null -ne $preflight.metrics.sourceFileCount) {
-        $sourceFiles = [int]$preflight.metrics.sourceFileCount
-    }
+    $canonicalReport = Read-CanonicalMigrationReport $waveRoot
 
-    $testCount = Get-MetricOrRegex $waveRoot $waveText @("testCount", "tests", "totalTests") @('(\d+)\s+tests?\s+in\s+scope', 'tests?\s*[:=]\s*(\d+)') 0
-    if ($null -ne $preflight -and $null -ne $preflight.metrics.testCount) {
-        $testCount = [int]$preflight.metrics.testCount
-    }
-
+    $plannedSourceFiles = Get-SourceFileCount $waveRoot
+    $plannedTests = 0
     $estimatedActions = 0
-    if ($null -ne $preflight -and $null -ne $preflight.metrics.estimatedActions) {
-        $estimatedActions = [int]$preflight.metrics.estimatedActions
+    if ($null -ne $preflight) {
+        if ($null -ne $preflight.metrics.sourceFileCount) { $plannedSourceFiles = [int]$preflight.metrics.sourceFileCount }
+        if ($null -ne $preflight.metrics.testCount) { $plannedTests = [int]$preflight.metrics.testCount }
+        if ($null -ne $preflight.metrics.estimatedActions) { $estimatedActions = [int]$preflight.metrics.estimatedActions }
     }
-    $migratedActions = Get-MetricOrRegex $waveRoot $waveText @("migratedActions", "migratedActionCount", "seleniumActions", "actionsMigrated") @('(\d+)\s+Selenium\s+actions\s+migrated', 'migrated\s+actions?\s*[:=]\s*(\d+)') $estimatedActions
-    $syntaxFallbackActions = Get-MetricOrRegex $waveRoot $waveText @("syntaxFallbackActions", "syntaxFallback", "fallbackActions") @('(\d+)\s+syntax[- ]fallback', 'syntax[- ]fallback\s+actions?\s*[:=]\s*(\d+)') 0
-    $semanticActions = Get-MetricOrRegex $waveRoot $waveText @("semanticActions", "semanticMappings", "semanticActionCount") @('(\d+)\s+semantic', 'semantic\s+actions?\s*[:=]\s*(\d+)') 0
-    $unmappedTargets = Get-MetricOrRegex $waveRoot $waveText @("unmappedTargets", "unmappedTargetCount", "unmapped") @('(\d+)\s+unmapped\s+targets?', 'unmapped\s+targets?\s*[:=]\s*(\d+)') 0
-    $todoCount = Get-MetricOrRegex $waveRoot $waveText @("todoCount", "todos", "todoComments") @('(\d+)\s+TODO\s+comments?', 'TODO\s+comments?\s*[:=]\s*(\d+)') 0
-    if ($todoCount -eq 0) { $todoCount = [regex]::Matches($waveText, '(?i)\bTODO\b').Count }
+
+    $sourceFiles = $plannedSourceFiles
+    $testCount = $plannedTests
+    $migratedActions = $estimatedActions
+    $syntaxFallbackActions = 0
+    $semanticActions = 0
+    $unmappedTargets = 0
+    $todoCount = 0
+    $canonicalReportPath = $null
+
+    if ($null -ne $canonicalReport) {
+        $canonicalReportPath = $canonicalReport.path
+        $generatedRoot = Join-Path $waveRoot "generated"
+        $generatedSourceFiles = 0
+        if (Test-Path $generatedRoot) {
+            $generatedSourceFiles = @(Get-ChildItem -Path $generatedRoot -Recurse -File -Include "*.cs", "*.ts" -ErrorAction SilentlyContinue).Count
+        }
+        $sourceFilesDefault = $sourceFiles
+        if ($generatedSourceFiles -gt 0) { $sourceFilesDefault = $generatedSourceFiles }
+        $sourceFiles = Get-JsonIntProperty $canonicalReport.value @("FilesProcessed", "filesProcessed") $sourceFilesDefault
+        $testCount = Get-JsonIntProperty $canonicalReport.value @("TestsFound", "TotalTests", "testCount", "tests") $testCount
+        $syntaxFallbackActions = Get-JsonIntProperty $canonicalReport.value @("SyntaxFallbackActions", "syntaxFallbackActions") 0
+        $semanticActions = Get-JsonIntProperty $canonicalReport.value @("SemanticActions", "semanticActions") 0
+        $actionDefault = $semanticActions + $syntaxFallbackActions
+        if ($actionDefault -eq 0) { $actionDefault = $migratedActions }
+        $migratedActions = Get-JsonIntProperty $canonicalReport.value @("ActionsFound", "migratedActions", "actionsMigrated") $actionDefault
+        $unmappedTargets = Get-JsonIntProperty $canonicalReport.value @("UnmappedTargets", "unmappedTargets") 0
+        $todoCount = Get-JsonIntProperty $canonicalReport.value @("TodoComments", "todoCount", "todos") 0
+    }
+    else {
+        $sourceFiles = Get-MetricOrRegex $waveRoot $waveText @("filesProcessed", "sourceFiles") @('files?\s+processed\s*[:=]\s*(\d+)', 'source\s+files?\s*[:=]\s*(\d+)') $sourceFiles
+        $testCount = Get-MetricOrRegex $waveRoot $waveText @("testCount", "tests", "totalTests", "TestsFound") @('(\d+)\s+tests?\s+in\s+scope', 'tests?\s*[:=]\s*(\d+)') $testCount
+        $migratedActions = Get-MetricOrRegex $waveRoot $waveText @("migratedActions", "migratedActionCount", "seleniumActions", "actionsMigrated", "ActionsFound") @('(\d+)\s+Selenium\s+actions\s+migrated', 'migrated\s+actions?\s*[:=]\s*(\d+)') $migratedActions
+        $syntaxFallbackActions = Get-MetricOrRegex $waveRoot $waveText @("syntaxFallbackActions", "syntaxFallback", "fallbackActions") @('(\d+)\s+syntax[- ]fallback', 'syntax[- ]fallback\s+actions?\s*[:=]\s*(\d+)') 0
+        $semanticActions = Get-MetricOrRegex $waveRoot $waveText @("semanticActions", "semanticMappings", "semanticActionCount") @('(\d+)\s+semantic', 'semantic\s+actions?\s*[:=]\s*(\d+)') 0
+        $unmappedTargets = Get-MetricOrRegex $waveRoot $waveText @("unmappedTargets", "unmappedTargetCount", "unmapped") @('(\d+)\s+unmapped\s+targets?', 'unmapped\s+targets?\s*[:=]\s*(\d+)') 0
+        $todoCount = Get-MetricOrRegex $waveRoot $waveText @("todoCount", "todos", "todoComments") @('(\d+)\s+TODO\s+comments?', 'TODO\s+comments?\s*[:=]\s*(\d+)') 0
+        if ($todoCount -eq 0) { $todoCount = [regex]::Matches($waveText, '(?i)\bTODO\b').Count }
+    }
+
     if ($semanticActions -eq 0 -and $migratedActions -gt 0 -and $syntaxFallbackActions -lt $migratedActions) {
         $semanticActions = $migratedActions - $syntaxFallbackActions
     }
@@ -289,12 +352,22 @@ else {
     }
     $verifyFailed = $waveText -match '(?i)verify-project.{0,120}(FAILED|failed)|NU1008|compilation not verified'
 
+    $scopeMismatchReasons = New-Object System.Collections.Generic.List[string]
+    if ($plannedSourceFiles -gt 0 -and $sourceFiles -gt $plannedSourceFiles) {
+        $scopeMismatchReasons.Add("actual source files $sourceFiles exceed planned wave files $plannedSourceFiles") | Out-Null
+    }
+    if ($plannedTests -gt 0 -and $testCount -gt $plannedTests) {
+        $scopeMismatchReasons.Add("actual tests $testCount exceed planned wave tests $plannedTests") | Out-Null
+    }
+    $waveScopeMismatch = $scopeMismatchReasons.Count -gt 0
+
     $violations = New-Object System.Collections.Generic.List[object]
     $preflightStatus = "MISSING"
     if ($null -ne $preflight) {
         $preflightStatus = [string]$preflight.status
     }
     if ($preflightStatus -ne "PASS") { $violations.Add([ordered]@{ metric = "preflightBudgetStatus"; actual = $preflightStatus; budget = "PASS"; severity = "high" }) | Out-Null }
+    if ($waveScopeMismatch) { $violations.Add([ordered]@{ metric = "waveScopeMismatch"; actual = ($scopeMismatchReasons -join "; "); budget = "actual migration scope must not exceed input-scope.json"; severity = "high" }) | Out-Null }
     if ($sourceFiles -gt $MaxSourceFiles) { $violations.Add([ordered]@{ metric = "sourceFiles"; actual = $sourceFiles; budget = $MaxSourceFiles; severity = "medium" }) | Out-Null }
     if ($testCount -gt $MaxTests) { $violations.Add([ordered]@{ metric = "testCount"; actual = $testCount; budget = $MaxTests; severity = "medium" }) | Out-Null }
     if ($migratedActions -gt $MaxActions) { $violations.Add([ordered]@{ metric = "migratedActions"; actual = $migratedActions; budget = $MaxActions; severity = "medium" }) | Out-Null }
@@ -329,18 +402,27 @@ else {
     if ($remediationBudgetExhausted) {
         $routing = "STOP_FOR_REVIEW_WITH_LIMITATIONS"
     }
+    elseif ($waveScopeMismatch) {
+        $routing = "ROUTE_TO_WAVE_SCOPE_REPAIR"
+    }
     elseif ($qualityBlocked) {
         $routing = "ROUTE_TO_MAPPING_RESEARCH_OR_CONFIG_IMPROVEMENT"
     }
 
     $nextAction = $null
-    if ((-not $remediationBudgetExhausted) -and $qualityBlocked) {
-        $nextAction = "Run migration/scripts/collect-mapping-research-memory.ps1 before the next wave: summarize top TODO causes, syntax-fallback clusters, unmapped targets, unresolved symbols, and verify-project blockers; then slice a bounded config/POM/recognizer improvement ticket."
+    if ((-not $remediationBudgetExhausted) -and $waveScopeMismatch) {
+        $nextAction = "Preserve the full-project output under migration/runs/$RunId/full-project-rerun/, restore the bounded wave generated directory, and rerun runs/$($waveDir.Name)/run-migrate.ps1 or run-migrate.sh so input-scope.json and selected-tests.txt remain authoritative."
+    }
+    elseif ((-not $remediationBudgetExhausted) -and $qualityBlocked) {
+        $nextAction = "Run migration/scripts/collect-mapping-research-memory.ps1 before the next wave: summarize top TODO causes, syntax-fallback clusters, unmapped targets, unresolved symbols, and verify-project blockers; then run slice-gate-followups to materialize the next bounded remediation ticket."
     }
 
     # Materialize the generic list before assigning it into an ordered hashtable.
     # Windows PowerShell 5.1 and some PowerShell 7 runtimes can throw
     # "Argument types do not match" for @($genericList) in a hashtable value.
+    $scopeIntegrityStatus = "PASS"
+    if ($waveScopeMismatch) { $scopeIntegrityStatus = "CONTAMINATED_BY_FULL_SCOPE_RERUN" }
+
     $violationItems = $violations.ToArray()
 
     $report = [ordered]@{
@@ -351,7 +433,15 @@ else {
         waveRoot = $waveRoot
         status = $gateStatus
         budgetStatus = $budgetStatus
+        scopeIntegrity = [ordered]@{
+            status = $scopeIntegrityStatus
+            mismatchDetected = [bool]$waveScopeMismatch
+            reasons = $scopeMismatchReasons.ToArray()
+            canonicalReport = $canonicalReportPath
+        }
         metrics = [ordered]@{
+            plannedSourceFiles = $plannedSourceFiles
+            plannedTests = $plannedTests
             sourceFiles = $sourceFiles
             testCount = $testCount
             estimatedActions = $estimatedActions

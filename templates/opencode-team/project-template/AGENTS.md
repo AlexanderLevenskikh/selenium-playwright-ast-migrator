@@ -182,3 +182,7 @@ For user-shareable feedback, run `migration/scripts/create-feedback-bundle.ps1` 
 - For long runs, write compaction receipts with `migration/scripts/write-memory-compaction-receipt.ps1` / `.sh`.
 - Before ambiguous shell execution, classify it with `migration/scripts/evaluate-command-policy.ps1` / `.sh`; stop on `COMMAND_POLICY_FORBIDDEN`.
 - Use `migration/scripts/move-stale-claims.ps1` / `.sh` only after reviewing an expired/abandoned claim.
+
+## Continuous state and wave evidence
+
+Continuous mode is persisted in `migration/state/harness-run.json`; compaction or a resumed chat must restore it until a terminal condition, explicit stop/pause, or fresh run. A completed backlog is not terminal while wave-quality remediation remains: run `slice-gate-followups` and continue the new bounded ticket. Never put a full-project exploratory rerun into `migration/runs/wave-*/generated`; keep it under a separate run-level `full-project-rerun/**` path. Reading Selenium POMs is allowed, while source/product writes are blocked; target-side Playwright POM/scaffold work under `migration/**` is allowed and should be split from any forbidden product edit.
