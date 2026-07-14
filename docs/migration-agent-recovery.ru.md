@@ -47,4 +47,4 @@ selenium-pw-migrator migration recover-agent-runtime `
 
 ## Маршрутизация
 
-`next-agent-action` сначала строит recovery plan. Действующий lease даёт `WAIT_FOR_ROLE`, безопасный ремонт — единственную команду `recover-agent-runtime`, а небезопасное состояние — `BLOCKED`. Новая роль назначается только после состояния `CLEAN`.
+`next-agent-action` сначала строит recovery plan. Действующий lease даёт `WAIT_FOR_ROLE`, безопасный ремонт — единственное действие `RUN_COMMAND recover-agent-runtime`, а небезопасное состояние — `BLOCKED`. Новая роль назначается только после состояния `CLEAN`.

@@ -53,7 +53,8 @@ dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode scaffold --out
 ```
 
 Опциональные флаги:
-- `--target-test-framework nunit|xunit`, `--format text|json|both` — какие файлы отчётов генерировать (по умолчанию: `both`)
+- `--target-test-framework nunit|xunit` — выбирает framework для сгенерированного Playwright .NET проекта (по умолчанию: `nunit`)
+- `--format text|json|both` — определяет набор файлов отчётов (по умолчанию: `both`)
 
 Выходная директория не должна существовать или должна быть пустой. Если она существует и содержит файлы, scaffold безопасно завершается с ошибкой, не изменяя ничего.
 

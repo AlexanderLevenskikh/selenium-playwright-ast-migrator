@@ -4,6 +4,8 @@
 
 ## Единый performance report
 
+Запуск:
+
 ```powershell
 selenium-pw-migrator migration perf-report --out migration/runs/wave-001
 ```
@@ -38,7 +40,7 @@ selenium-pw-migrator migration cache-prune --workspace migration --cache-max-age
 selenium-pw-migrator migration cache-prune --workspace migration --cache-max-age-days 30 --cache-max-size-mb 2048 --cache-apply true
 ```
 
-`cache-prune` по умолчанию работает как dry run. Entries, на которые ссылаются активные validation plans, защищены от удаления.
+`cache-prune` по умолчанию работает как dry run. Entries, на которые ссылаются активные validation plans, защищены от удаления. Некорректные entries можно удалить, а структурно корректные, но несовместимые entries сохраняются как непереиспользуемая история, пока prune policy не выберет их для удаления.
 
 ## Scope audit ролей
 

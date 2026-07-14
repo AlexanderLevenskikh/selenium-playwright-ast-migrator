@@ -51,6 +51,8 @@ selenium-pw-migrator doctor install
 selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
 ```
 
+Открой `playground/try-this-first.md` и выполни сгенерированные команды. Это самый безопасный одноразовый маршрут.
+
 ### 2. Миграция с OpenCode
 
 ```bash
@@ -59,13 +61,15 @@ selenium-pw-migrator doctor install
 selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --opencode-install auto
 ```
 
-Затем открой корень репозитория в OpenCode и запусти:
+`bootstrap-opencode` также копирует project command pack в корень репозитория: `opencode.jsonc`, `.opencode/agents`, `.opencode/commands` и, если отсутствует, `AGENTS.md`. Затем открой корень репозитория в OpenCode и запусти:
 
 ```text
 /supervised-task waves
 ```
 
-Для существующего workspace используй обычный `/supervised-task`; для безопасного архивного перезапуска разросшегося pilot — `/supervised-task waves fresh`; для явной форензик-проверки — `/supervised-task sentinel` (`inspect` и `qa` — алиасы).
+Режим `waves` — рекомендуемый divide-and-conquer старт. Он использует source из `kit bootstrap-opencode --source ...` как жёсткий scope, если тот настроен; автоматически определяет только отсутствующие source/target/framework details; спрашивает только обязательные недостающие данные; запускает kit doctor; создаёт wavefront plan; материализует первую wave и выполняет только wave-local migration. До появления wave workspace он не должен запускать full-source migration или искать соседние проекты функциональных тестов. Все артефакты `migration/**` являются repository-root state; вложенные workspace вроде `Web/**/migration/**` считаются дефектом процесса.
+
+Для существующего workspace обычный `/supervised-task` возобновляет следующую bounded-задачу. После успешного FINAL/PASS checkpoint supervised agent по умолчанию один раз останавливается для review. Чтобы продолжить post-final research без длинного prompt, запусти `/supervised-task continue` или обычный `/supervised-task` после `FINAL_STOPPED_FOR_REVIEW`. Для безопасного архивного перезапуска разросшегося pilot используй `/supervised-task waves fresh`; для явной форензик-проверки — `/supervised-task sentinel` (`inspect` и `qa` — алиасы).
 
 При необходимости профиль Harness можно выбрать явно. Для новых run по умолчанию используется облегчённый `fast`:
 
@@ -96,7 +100,10 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Sel
 ### 3. Миграция с другим агентом
 
 ```bash
+npm install -g selenium-pw-migrator@preview
+selenium-pw-migrator doctor install
 selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --source ./SeleniumTests
+# или:
 selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration --source ./SeleniumTests
 ```
 
@@ -194,18 +201,9 @@ Windows-установщик по умолчанию добавляет standalo
 
 Чтобы удалить standalone-установку на Windows, запусти тот же installer с `-Uninstall`. На Linux/macOS запусти `install-standalone.sh --uninstall` и убери PATH-строку из shell profile.
 
-### Вариант для frontend-команд: npm wrapper
+### npm details
 
 Перед сравнением каналов установки проверь, что реально запускает shell: `./scripts/diagnose-install.ps1` или `Get-Command selenium-pw-migrator -All`; одного `dotnet tool list` недостаточно.
-
-
-Npm-пакет — тонкая обёртка над теми же standalone release-архивами. Он удобен для frontend/test-automation команд, где Node.js уже есть, а .NET ставить не хочется.
-
-```bash
-npm install -g selenium-pw-migrator@preview
-selenium-pw-migrator --version
-```
-
 
 Для закреплённого preview можно поставить конкретную npm-версию или matching GitHub Release asset:
 
@@ -310,17 +308,29 @@ bash playground/commands.sh
 selenium-pw-migrator playground verify --input playground --out playground-verify --format both
 ```
 
-Для реального проекта один раз bootstrap’им guarded workspace, дальше run lifecycle ведёт агент:
+Для реального проекта начни с onboarding и репрезентативного pilot-среза:
+
+```bash
+selenium-pw-migrator start --input ./SeleniumTests --agent opencode --workspace migration
+selenium-pw-migrator pilot --input ./SeleniumTests --max-tests 10 --out migration/pilot
+```
+
+Затем один раз bootstrap’ни guarded workspace и передай агенту управление lifecycle запуска:
 
 ```bash
 selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --opencode-install auto
 ```
 
-Потом запускаем `/supervised-task` в OpenCode или передаём другому агенту `migration/AGENT_CONTRACT.md` и `migration/prompts/kickoff-prompt.txt`. `migration/runs/<run-id>` руками не создаём — это делает harness.
+Для Codex или другого агента используй явный non-OpenCode handoff:
 
-После успешного FINAL/PASS checkpoint агент останавливается для review и показывает evidence. Для перехода в post-final research без длинного prompt используйте `/supervised-task continue`.
+```bash
+selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --source ./SeleniumTests
+selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration --source ./SeleniumTests
+```
 
-Java, Python и Playwright TypeScript — experimental-направления. В release/demo/marketing основной production promise остаётся Selenium C# -> Playwright .NET.
+После этого запусти `/supervised-task` в OpenCode или передай другому агенту `migration/AGENT_HANDOFF.md`, `migration/AGENT_CONTRACT.md` и `migration/prompts/kickoff-prompt.txt`. Не создавай `migration/runs/<run-id>` вручную — это делает harness.
+
+Java, Python и Playwright TypeScript остаются experimental preview-направлениями. Release demo и production promises должны быть сфокусированы на Selenium C# -> Playwright .NET.
 
 ## Быстрый старт
 
@@ -356,22 +366,24 @@ migration/run-001/
 Быстрый пяти минутный playground:
 
 ```bash
-selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
+dotnet tool run selenium-pw-migrator -- playground --out playground --target-test-framework xunit --generation-policy conservative
+dotnet tool run selenium-pw-migrator -- playground verify --input playground --out playground-verify
 cat playground/try-this-first.md
 ```
 
 Пошагово:
 
 - [Quick start](docs/quick-start.md)
+- [Init wizard](docs/init-wizard.md)
 - [Migration runbook](docs/migration-runbook.md)
+- [Guarded OpenCode Desktop migration runbook](docs/guarded-opencode-desktop-runbook.ru.md)
 - [End-to-end simple example](docs/examples/end-to-end-simple.md)
 - [Public demo and guided tutorial](docs/public-demo-tutorial.md)
 - [Public Demo / Playground](docs/public-playground.md)
 - [Teaching demo: AST migration explained](examples/teaching-demo/README.md)
 - [AST migration explained](docs/articles/ast-migration-explained.md) / [RU](docs/articles/ast-migration-explained.ru.md)
 - [Public demo files](examples/public-demo/README.md)
-- [Migration workflow](docs/user-guide/migration-workflow.md)
-- [Guarded OpenCode Desktop migration runbook](docs/guarded-opencode-desktop-runbook.ru.md)
+- [Migration workflow](docs/user-guide/migration-workflow.ru.md)
 - [Extensibility and public API](docs/extensibility.md)
 
 ## Безопасный агентский старт
@@ -420,30 +432,37 @@ pwsh .\scripts\run-kitroot-shadow-smoke.ps1 -Clean
 
 | Mode | Статус | Назначение |
 |---|---|---|
-| `playground` | Stable | Создать пяти минутный публичный demo workspace с готовыми командами, ожидаемыми outputs, dashboard sample и PR pack sample. |
-| `runbook` | Stable | Практический план миграции: pilot scope, command chain, risk map, artifacts и acceptance checklist. |
-| `doctor` | Stable | Preflight checks и безопасные `--fix` repair plans для input, config layers, project files и workspace hygiene. |
-| `analyze` | Stable | Парсинг Selenium-файлов и отчёты без генерации target files. |
-| `migrate` | Stable | Генерация Playwright target files. |
-| `verify` | Stable | Лёгкая проверка generated code. |
-| `verify-project` | Stable | Компиляция generated Playwright .NET тестов в project-aware harness. |
-| `config-validate` | Stable | Проверка profile structure и safety rules. |
-| `config-diff` | Stable | Сравнение profile changes и risky edits. |
-| `guard` | Stable | Сравнение before/after migration metrics. |
-| `index-pom` | Stable | Поиск selector evidence в Selenium PageObjects. |
-| `helper-inventory` | Stable | Анализ helper/POM method bodies и MethodSemantics candidates. |
-| `discover-target` | Stable | Сканирование существующего Playwright .NET проекта и target inventory. |
-| `scaffold` | Stable | Минимальный compile-ready Playwright .NET scaffold для NUnit/xUnit. |
-| `capabilities` | Stable | Показывает capability reports для source frontends и target backends. |
-| `verify-ts-project` | Experimental | Type-check generated Playwright TS specs внутри существующего TS проекта. |
-| `orchestrate` | Experimental | Dry-run analyze → migrate → verify → propose. |
-| `explain-todo` / `smoke-plan` / `runtime-classify` / `selector-evidence` / `migration-board` / `report-serve` | Experimental | Приоритизация fixes по artifacts/logs, runtime root causes, readiness score, dashboard по run artifacts и экспорт triage decisions. |
-| `learn-pack` | Experimental | Извлечение reusable migration knowledge из завершённых runs в reviewable profile layer и learning changelog. |
-| `config-author` | Experimental | Evidence-driven config proposals и reviewable patch без автоматического применения. |
-| `agent-contract` | Experimental | Ticket-specific agent instructions: allowed paths, stop policy, exact commands и multi-agent prompts. |
-| `pr-pack` | Experimental | PR/review bundle: summary, generated files list, before/after metrics, risks, checklist и suggested PR description. |
-| `evidence pack` | Stable | Redacted zip для issue/PR: reports, generated artifacts, manifest и checksums. |
-| `profile list/search/inspect/install/diff` | Experimental | Offline built-in profiles как reviewable config layers. |
+| `runbook` | Stable | Создать практический migration plan с pilot scope, цепочкой команд, картой рисков, artifacts и acceptance checklist. |
+| `playground` | Stable | Создать пятиминутный public demo workspace с готовыми командами, ожидаемыми outputs, dashboard sample и PR pack sample. |
+| `playground-verify` | Stable | Проверить, что сгенерированный playground по-прежнему содержит manifest, command chain, demo input, expected output и корректные safety-формулировки. |
+| `memory` | Stable | Управлять project-scoped migration memory (`init/add/explain/doctor/summarize/recall`) в `migration/state/memory/**` для supervised runs. |
+| `migration` | Stable | Строить divide-and-conquer wave plans (`inventory/cluster/plan/plan show`) и готовить bounded wave workspaces (`run-wave`) с project-scoped memory deltas. |
+| `config merge-deltas` / `config validate-merge` | Stable | Объединять wave-local `config-delta.json` в reviewable candidate config и проверять conflicts до promotion. |
+| `doctor` | Stable | Preflight checks и безопасные `--fix` repair plans для inputs, config layers, project files и workspace hygiene. |
+| `release-doctor` | Stable | Проверить готовность NuGet preview: package metadata, docs, scripts, workflow dry-run, secret references и release hygiene. |
+| `analyze` | Stable | Разобрать Selenium-файлы и создать отчёты без генерации target files. |
+| `migrate` | Stable | Сгенерировать Playwright target files. |
+| `verify` | Stable | Выполнить лёгкую проверку generated code. |
+| `verify-project` | Stable | Скомпилировать generated Playwright .NET tests в project-aware harness. |
+| `config-validate` | Stable | Проверить structure профиля и safety rules. |
+| `config-diff` | Stable | Сравнить изменения профиля и подсветить risky edits. |
+| `guard` | Stable | Сравнить migration metrics до/после и обнаружить регрессии. |
+| `index-pom` | Stable | Извлечь selector evidence из Selenium PageObjects и target-side Playwright/Kontur POM. |
+| `selector-evidence` | Experimental | Объяснить provenance Selenium selector → config mapping → generated locator с confidence и unsafe/inferred flags. |
+| `agent-contract` | Experimental | Создать ticket-specific agent contract pack с allowed paths, stop policy, точными командами и prompts для coordinator/migrator/verifier. |
+| `pr-pack` | Experimental | Создать PR/review bundle с summary, списком changed/generated files, before/after metrics, risk summary, reviewer checklist, evidence references и suggested PR description. |
+| `learn-pack` | Experimental | Извлечь reusable migration knowledge из завершённых runs в reviewable profile layer и learning changelog. |
+| `config-author` | Experimental | Создать evidence-driven config proposals и reviewable patch без автоматического применения. |
+| `helper-inventory` | Stable | Проанализировать тела helper/POM методов и вывести кандидатов MethodSemantics. |
+| `discover-target` | Stable | Просканировать существующий Playwright .NET project и создать reviewable target inventory. |
+| `scaffold` | Stable | Сгенерировать минимальный compile-ready Playwright .NET project scaffold. |
+| `bootstrap-project` | Stable | Создать reusable migration profile skeletons для нового source project. |
+| `capabilities` | Stable | Показать built-in capability reports для source frontends и target backends. |
+| `verify-ts-project` | Experimental | Выполнить type-check generated Playwright TS specs внутри существующего TS project. |
+| `orchestrate` | Experimental | Выполнить analyze → migrate → verify → propose как единый dry-run workflow. |
+| `explain-todo` / `smoke-plan` / `runtime-classify` / `selector-evidence` / `migration-board` / `report-serve` | Experimental | Приоритизировать follow-up work по artifacts/runtime logs, классифицировать runtime root causes, считать readiness, объяснять selector provenance и экспортировать triage decisions. |
+| `evidence pack` | Stable | Создать redacted shareable zip с reports, generated artifacts, manifest и checksums. |
+| `profile list/search/inspect/install/diff` | Experimental | Использовать offline built-in profiles как reviewable config layers. |
 
 Command-specific help:
 
@@ -463,24 +482,30 @@ selenium-pw-migrator --mode migrate --help
 
 ## Карта документации
 
-- [Полное руководство пользователя](USER_GUIDE.ru.md)
 - [Complete user guide](USER_GUIDE.md)
+- [Полное руководство пользователя](USER_GUIDE.ru.md)
 - [Documentation index](docs/README.md)
 - [Quick start](docs/quick-start.md)
-- [User guide](docs/user-guide/README.md)
-- [Config and profile guide](docs/config-profile-guide.md)
-- [Limitations](docs/user-guide/limitations.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [Migration quality program](docs/migration-quality-program.md)
-- [Report serve dashboard](docs/report-serve-dashboard.md)
+- [Init wizard](docs/init-wizard.md)
 - [Migration runbook](docs/migration-runbook.md)
+- [Guarded OpenCode Desktop migration runbook](docs/guarded-opencode-desktop-runbook.ru.md)
 - [Teaching demo: AST migration explained](examples/teaching-demo/README.md)
 - [AST migration explained](docs/articles/ast-migration-explained.md) / [RU](docs/articles/ast-migration-explained.ru.md)
-- [Framework matrix](docs/framework-matrix.md)
+- [Framework matrix](docs/framework-matrix.md) — статическая support-таблица и generated readiness reports команды `framework matrix`
+- [Doctor fix mode](docs/doctor-fix-mode.md)
+- [Report serve dashboard](docs/report-serve-dashboard.md)
+- [Profile marketplace](docs/profile-marketplace.md)
 - [Migration PR pack](docs/migration-pr-pack.md)
 - [Migration learning pack](docs/migration-learning-pack.md)
 - [Config Authoring Assistant](docs/config-authoring-assistant.md)
 - [Generation Policy](docs/generation-policy.md)
+- [Evidence pack workflow](docs/evidence-pack.md)
+- [User guide](docs/user-guide/README.md)
+- [Config and profile guide](docs/config-profile-guide.md)
+- [Guarded OpenCode Desktop migration runbook](docs/guarded-opencode-desktop-runbook.ru.md) — каноническая процедура guarded agent launch
+- [Limitations](docs/user-guide/limitations.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Migration quality program](docs/migration-quality-program.md)
 - [Public roadmap](docs/public-roadmap.md)
 - [Release process](docs/release-process.md)
 
@@ -500,9 +525,88 @@ dotnet test --no-restore
 
 Windows OpenCode Desktop shortcut: `--project-desktop` остаётся alias для `--opencode-install project-desktop`.
 
-When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. In default mode, report why the SUCCESS checkpoint paused and recommend `/supervised-task continue`. In `continuous` / `--continuation auto` mode, persist the same checkpoint but immediately re-read state and continue until a real terminal condition.
+Когда final gate проходит, `check-final-gate.ps1` обновляет `migration/state/harness-run.json` до `FINAL_STOPPED_FOR_REVIEW`, если файл существует. В default mode нужно объяснить, почему SUCCESS checkpoint поставлен на паузу, и рекомендовать `/supervised-task continue`. В `continuous` / `--continuation auto` тот же checkpoint сохраняется, после чего state немедленно перечитывается и выполнение продолжается до реального terminal condition.
 
 
+
+## Планирование волн по принципу divide-and-conquer
+
+Для больших проектов предпочитай one-command wavefront start в OpenCode. Один раз установи или обнови guarded project command pack, затем позволь `/supervised-task waves` выполнить всю setup-цепочку:
+
+```bash
+selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --opencode-install auto
+```
+
+Открой репозиторий в OpenCode и запусти:
+
+```text
+/supervised-task waves
+```
+
+Команда должна по возможности автоматически определить source/target/framework, запустить doctor, создать план, материализовать первую wave и выполнить только wave-local migration. Ручные команды остаются для отладки и CI:
+
+```bash
+selenium-pw-migrator migration tune-wave-plan --input ./SeleniumTests --workspace migration --out migration/plan-tuning
+selenium-pw-migrator migration plan --input ./SeleniumTests --strategy wavefront --workspace migration --out migration/plan --wave-profile auto --smoke-wave-size 1
+selenium-pw-migrator migration plan show --plan migration/plan
+```
+
+Auto planner сначала проводит детерминированный planning-only эксперимент и пишет `wave-tuning.json` / `wave-tuning.md`, а затем создаёт `inventory.json`, `clusters.json`, `waves.json`, `plan.md`, `selected-tests.txt`, `memory-recall.md` и `next-commands.md`. Диапазоны кандидатов выводятся из размера inventory и квантилей действий/сложности, поэтому один режим адаптируется к маленьким, средним и большим наборам тестов. Во время tuning/planning агенты не вызываются и файлы не мигрируются. Подробнее: [подбор параметров wave-плана без агентов](docs/wave-plan-tuning.ru.md).
+
+Если `kit bootstrap-opencode --source ...` задал source, он является жёсткой границей wavefront: соседние functional-test проекты нельзя обнаруживать, планировать, копировать или рекомендовать. Первая wave — однотестовая low-risk smoke-проверка. Следующие waves группируются по affinity исходного файла и переиспользуемому POM-контексту. Первый тест файла оплачивает полную оценочную сложность; следующие тесты того же файла — только калиброванную marginal cost. Мягкие action/complexity targets направляют упаковку, а широкие hard ceilings защищают от настоящего runaway scope. Это позволяет среднему проекту укладываться в единицы или низкие десятки волн, а не создавать по одной wave на тест.
+
+`run-wave` передаёт pipeline параметр `--selected-tests selected-tests.txt`, поэтому выполняются выбранные тесты, а не все тесты каждого скопированного файла. Перед превращением wave в bounded task агенты должны запускать `memory explain`, `memory doctor` и `memory recall --file` для каждого scoped-файла. Recall создаёт проверяемые receipts в `state/memory/recall-index.json` и `recall-ledger.jsonl`; final gate отклоняет active memory без актуального recall evidence текущей wave.
+
+Ручная подготовка bounded wave workspace нужна только при отладке agent setup или запуске CI:
+
+```bash
+selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001 --execution-profile fast
+selenium-pw-migrator migration validate-wave --out migration/runs/wave-001
+# запусти migration/runs/wave-001/run-migrate.ps1 или run-migrate.sh
+selenium-pw-migrator migration validate --out migration/runs/wave-001 --validation-project ./Target.Tests/Target.Tests.csproj
+# validation-plan + record-validation остаются только для recovery/import внешнего evidence
+selenium-pw-migrator migration build-review-bundle --out migration/runs/wave-001
+selenium-pw-migrator migration resume-wave --out migration/runs/wave-001
+selenium-pw-migrator migration check-progress --out migration/runs/wave-001 --max-identical-snapshots 3
+selenium-pw-migrator migration perf-report --out migration/runs/wave-001
+selenium-pw-migrator migration scope-audit --out migration/runs/wave-001
+selenium-pw-migrator migration cache-stats --workspace migration
+selenium-pw-migrator migration cache-verify --workspace migration
+selenium-pw-migrator migration cache-prune --workspace migration --cache-max-age-days 30 --cache-max-size-mb 2048 --cache-apply false
+```
+
+`migration run-wave` материализует неизменяемые `wave-manifest.json`, `execution-policy.json`, `run-context.json`, `source-scope/`, `generated/`, `input-scope.json`, `preflight-budget.json`, `config-delta.json`, `memory-delta.jsonl`, `wave-validation.json`, `performance-trace.json`, `run-summary.md`, `wave-status.json` и migrate-wrapper’ы. Команда работает только в рамках проекта: она не продвигает memory, не объединяет config и не публикует cross-project/org knowledge packs. Существующие run directories проверяются и переиспользуются, а не материализуются заново.
+
+`validate-wave` отклоняет drift manifest/source/tests/policy/context, а `check-progress` останавливает повторяющиеся одинаковые fix-циклы и требует watchdog или смену стратегии. Единый host `migration validate` вычисляет влияние изменившегося output, выполняет минимальный безопасный набор проверок, сохраняет process evidence, переиспользует только PASS с точным совпадением inputs и validation contract и создаёт восстанавливаемый checkpoint. Остальные incremental-команды выбирают следующее действие и формируют компактный reviewer bundle. Подробнее: [быстрый путь миграции](docs/migration-fast-path.ru.md), [инкрементальный конвейер](docs/migration-incremental-pipeline.ru.md), [единый validation host](docs/migration-validation-host.ru.md) и [усиление производительности и кэша](docs/performance-cache-hardening.ru.md).
+
+Оба generated migrate-wrapper’а обновляют `wave-status.json` и пишут `validation-plan.json`, поэтому заполненная папка `generated/` не может остаться ошибочно помеченной как `prepared`, а неизменившаяся validation не запускается повторно.
+
+Объединяй проверенные wave-local config deltas в candidate config только после появления evidence:
+
+```bash
+selenium-pw-migrator config merge-deltas --base migration/adapter-config.json --deltas migration/state/memory/config-deltas --out migration/config-merge
+selenium-pw-migrator config validate-merge --base migration/adapter-config.json --candidate migration/config-merge/adapter-config.merged.json --out migration/config-merge
+```
+
+`config merge-deltas` создаёт `adapter-config.merged.json`, `merge-report.md/json` и `conflicts.jsonl`. `config validate-merge` создаёт `validate-merge-report.md/json`. Ни одна команда не продвигает candidate автоматически: merge должны принять Reviewer, Watchdog и Final Gate, а `conflicts.jsonl` должен быть пустым.
+
+### Snapshot wavefront / memory / config merge
+
+### Новый bounded restart
+
+Если pilot wave накопила слишком много remediation tickets, используй `/supervised-task waves fresh`. Команда запускает `migration/scripts/start-fresh-wavefront-run.ps1` или `.sh`, архивирует текущие plan/runs/volatile state в `migration/archive/**`, сохраняет project memory и configured source scope, затем перепланирует работу с однотестовой smoke-wave. Автоматический post-final remediation прекращается после четырёх завершённых tickets или двух последовательных no-progress tickets со статусом `FINAL_WITH_LIMITATIONS`; удаление текста TODO без восстановления исполняемого кода не считается прогрессом.
+
+После использования project-scoped memory, wavefront planning, `migration run-wave` или `config merge-deltas` открой обычный dashboard:
+
+```bash
+selenium-pw-migrator report serve --input migration/runs/latest --static-only --out migration/dashboard/latest --format both
+```
+
+Dashboard содержит **snapshot wavefront / memory / config merge**: количество project-scoped memory entries, прогресс waves, кандидатов следующей wave, состояние config merge и рекомендуемые next commands. Сгенерированный `report-dashboard-evidence.zip` также включает соседние artifacts `state/memory`, `plan` и `config-merge` как review evidence.
+
+### Ограничители agent orchestration
+
+Во время kit bootstrap/init Migrator записывает `migration/state/scope-contract.json`, чтобы supervised waves знали разрешённый source root, workspace root, forbidden roots и classes команд. Final gate читает этот контракт и отклоняет изменения вне scope. Файловые claim-скрипты в `migration/scripts/*claim*` предоставляют лёгкий MVP lease/heartbeat для параллельных wave agents. Подробнее: `docs/agent-orchestration.md`.
 
 ## Performance
 

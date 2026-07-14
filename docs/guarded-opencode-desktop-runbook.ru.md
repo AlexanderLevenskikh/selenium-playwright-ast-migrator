@@ -379,13 +379,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ".\path\to\script.ps1"
 
 ## 13. Ссылки на детали
 
-Canonical entrypoint:
+Канонический entrypoint:
 
 ```text
 docs/guarded-opencode-desktop-runbook.ru.md
 ```
 
-Useful details:
+Полезные материалы:
 
 ```text
 docs/tool-installation.md
@@ -396,12 +396,12 @@ templates/migration-kit/state/final-gate.md
 templates/opencode-team/INSTALLATION-SAFETY.md
 ```
 
-Old root prompt packs and broad autopilot launch docs were removed to avoid conflicting instructions. Use git history for archaeology.
+Старые root prompt packs и широкие инструкции запуска autopilot удалены, чтобы избежать конфликтующих правил. Для археологии используйте историю git.
 
 
 Windows OpenCode Desktop shortcut: `--project-desktop` остаётся alias для `--opencode-install project-desktop`.
 
 
-## Harness continuation strict protocol
+## Строгий протокол продолжения Harness
 
-After a non-final final gate, read `migration/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, `NOT FINAL` is not a stopping point: execute exactly one next bounded action under `migration/**` before a user-facing handoff. A fresh `FINAL` checkpoint stops once for review in default mode. If this invocation used `continuous` or `--continuation auto`, persist the checkpoint and immediately enter another guarded bounded cycle or eligible next wave. Any later `/supervised-task` where `harness-run.json` is already `FINAL_STOPPED_FOR_REVIEW` resumes the closed post-final loop automatically. Stop for guard/scope/policy blocker, human decision, critical risk, malformed evidence, missing input, no-progress/plateau, limitations, or max autonomous budget.
+После non-final final gate прочитайте `migration/state/continuation-decision.json`. Если там указано `CONTINUE_REQUIRED`, статус `NOT FINAL` не является точкой остановки: до user-facing handoff нужно выполнить ровно одно следующее bounded action в `migration/**`. Свежий checkpoint `FINAL` в default mode один раз останавливается для review. Если текущий запуск использует `continuous` или `--continuation auto`, сохраните checkpoint и сразу начните следующий guarded bounded cycle или разрешённую следующую wave. Любой последующий `/supervised-task`, при котором `harness-run.json` уже находится в `FINAL_STOPPED_FOR_REVIEW`, автоматически возобновляет закрытый post-final loop. Останавливайтесь при guard/scope/policy blocker, human decision, critical risk, malformed evidence, missing input, no-progress/plateau, limitations или исчерпании max autonomous budget.

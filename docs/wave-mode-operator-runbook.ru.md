@@ -279,6 +279,8 @@ sentinel report/findings при необходимости
 
 ## Быстрый checklist перед следующей wave
 
+Перед запуском следующей wave:
+
 ```text
 [ ] нет active current-ticket, или он DONE/BLOCKED с причиной
 [ ] final gate не показывает unresolved hard failures

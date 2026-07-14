@@ -23,21 +23,41 @@ analyze → configure profile → migrate → verify → propose → iterate
 
 Подробнее о Пути B: [Scaffold без инфраструктуры](no-infra-scaffold.ru.md).
 
-## Шаг 1. Начните с маленького пилота
+## Шаг 1. Начните с репрезентативного пилота
 
-Не начинайте с самого большого или сложного набора тестов.
+Не начинайте с самого большого или сложного набора тестов. Сначала позвольте CLI выбрать ограниченный репрезентативный срез:
 
-**Рекомендуемый выбор пилота:**
-- 1 файл с простым тестом на странице
-- Тесты, использующие straightforward локаторы (кнопки, поля, ссылки)
-- Тесты без сложной table/list логики
-- Избегайте Registry-heavy, table-heavy или pagination тестов в пилоте
+```shell
+selenium-pw-migrator start --input ./SeleniumTests --agent manual --workspace migration
+selenium-pw-migrator pilot --input ./SeleniumTests --max-tests 10 --out migration/pilot
+```
+
+Команда `pilot` создаёт:
+
+- `migration/pilot/pilot-selection.md/json` — выбранные файлы и причины выбора;
+- `migration/pilot/selected-tests.txt` — точный список исходных файлов;
+- `migration/pilot/selected-input/` — скопированный bounded input;
+- `migration/pilot/next-commands.md` — команды analyze/migrate для `selected-input`.
+
+Сгенерированные next commands не должны запускаться на всём suite. Используй pilot `selected-input/`, пока profile и проверки target project не станут стабильными.
+
+**Стратегия выбора:**
+
+- простые smoke tests;
+- файлы с активным использованием PageObject;
+- table/filter patterns;
+- assertions и waits;
+- custom helpers;
+- XPath selectors;
+- data-driven tests;
+- base fixtures.
 
 **Стратегия итерации:**
-1. Начните с 1 файла
-2. Расширьте до 5-10 тестов
-3. Масштабируйте до 20-50 тестов
-4. Сложные паттерны — в последнюю очередь
+
+1. Доказать работоспособность выбранного пилота.
+2. Исправить повторяющиеся root causes через profile mappings.
+3. Расширить scope до 20–50 тестов.
+4. Сложные patterns оставить напоследок.
 
 ## Шаг 2. Запустите analyze
 

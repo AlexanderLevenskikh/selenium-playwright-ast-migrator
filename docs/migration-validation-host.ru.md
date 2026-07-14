@@ -1,6 +1,6 @@
 # Единый validation host
 
-Итерация 3 убирает из обычного wave-процесса ручную агентскую цепочку `validation-plan → запуск shell-команды → record-validation`.
+Итерация 3 убирает из обычного wave-процесса управляемую агентом цепочку `validation-plan → execute shell command → record-validation`.
 
 ## Команда
 
@@ -29,6 +29,8 @@ Cache hit не создаёт дублирующий checkpoint.
 ## Project validation
 
 Для изменений кода host работает fail-closed: PASS невозможен без исполняемого project evidence.
+
+Используй один из вариантов:
 
 ```powershell
 # .NET solution/project или TypeScript tsconfig

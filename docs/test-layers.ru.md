@@ -28,6 +28,10 @@ Migrator отделяет быстрые детерминированные пр
 
 Обычный `dotnet test Migrator.sln` остаётся источником истины для полного regression suite. Слои ускоряют обратную связь, но не разрешают пропускать обязательную финальную проверку.
 
+Runner не сообщает успех, если выбранный фильтром слой обнаружил ноль тестов. Для слоя Unit он объединяет явный trait `Layer=Unit` с соглашением по имени класса `*UnitTests`, потому что старые адаптеры xUnit/VSTest могут не включить class-level custom traits в filtered discovery при запуске устаревшей сборки с `--no-build`. В таком случае сначала пересобери проект и повтори запуск.
+
+PowerShell-runner’ы предпочитают `pwsh`, когда он установлен, но Windows PowerShell может выполнить compatibility path. Формирование process arguments, относительные пути, определение Windows и остановка по timeout не используют PowerShell 7-only API в fallback-режиме.
+
 ## Тестовые швы
 
 В `Migrator.Core` находятся `IProcessRunner`, `IFileSystem` и `IClock`. Unit-тесты используют `FakeProcessRunner`, `InMemoryFileSystem` и `FakeClock`, поэтому не запускают `dotnet` или `pwsh` для каждой проверки.

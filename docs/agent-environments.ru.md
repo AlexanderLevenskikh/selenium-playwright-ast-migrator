@@ -35,13 +35,13 @@ Legacy Windows shortcut всё ещё поддержан:
 selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.start.json --project-desktop
 ```
 
-После этого откройте корень product repo в OpenCode и запустите:
+После этого откройте корень product repo в OpenCode и запустите one-command wavefront start:
 
 ```text
 /supervised-task waves
 ```
 
-Orchestrator должен сам создать или возобновить `migration/runs/<run-id>/` через `migration/scripts/new-harness-run.ps1` или `.sh`; пользователь не должен руками создавать run folders.
+`bootstrap-opencode` применяет repository-root command pack (`opencode.jsonc`, `.opencode/agents`, `.opencode/commands` и `AGENTS.md`, если его ещё нет) до запуска OpenCode. Orchestrator должен по возможности автоматически определить source/target/framework, запустить doctor, создать wavefront plan, материализовать первую wave и выполнить только wave-local migration. Он обязан создать или возобновить `migration/runs/<run-id>/` через `migration/scripts/new-harness-run.ps1` или `.sh`; пользователь не должен вручную создавать run folders. Для существующего workspace обычный `/supervised-task` возобновляет active bounded state.
 
 ## Codex, CI или другой coding agent
 
