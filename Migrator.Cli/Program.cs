@@ -3034,6 +3034,8 @@ static TargetExpression? GetTarget(TestAction action)
         TextAssertionAction ta => ta.Target,
         VisibilityAssertionAction va => va.Target,
         WaitForAction wa => wa.Kind == WaitForKind.ActionabilityElided ? null : wa.Target,
+        ControlStateAssertionAction state => state.Target,
+        CollectionForEachAction collection => collection.CollectionTarget,
         _ => null
     };
 }

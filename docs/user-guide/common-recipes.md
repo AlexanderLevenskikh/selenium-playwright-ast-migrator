@@ -201,6 +201,26 @@ await popup.GetByText("ООО Пример").ClickAsync();
 - `{value}` inside string literal → string content (quotes stripped)
 - Use for helpers with 3+ occurrences and a stable signature
 
+### Generic helpers that return a page object
+
+Generic invocations are normalized for matching, while their type arguments remain available in target templates:
+
+```json
+{
+  "ParameterizedMethods": [
+    {
+      "SourceMethodPattern": "GoToPageWithUserAccessRight({uri}, {rights}, {wait})",
+      "TargetStatements": [
+        "var {result} = await TargetNavigation.GoToPageWithUserAccessRightAsync<{T}>(Page, {uri}, {rights});"
+      ],
+      "RequiresReview": true
+    }
+  ]
+}
+```
+
+For exact `Methods`, declaration-like signatures such as `GoToPageWithUserAccessRight<T>(uri, rights, wait)` may use `{T}`, `{result}`, `{arg0}`/`{argument0}`, and the named parameters from that signature. Keep authentication, user provisioning, navigation, and typed POM construction in a target-side helper; do not replace a whole infrastructure helper with a bare `Page.GotoAsync`.
+
 ---
 
 ## 7. Add file-specific setup with Scope

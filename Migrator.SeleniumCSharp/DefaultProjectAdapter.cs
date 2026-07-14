@@ -213,6 +213,17 @@ public class DefaultProjectAdapter : IProjectAdapter
                 _ => TargetKind.PlaywrightLocator
             };
 
+            // Configs created by agents occasionally mark a full Playwright expression
+            // (for example Page.GetByTestId("save")) as TestId/Locator. Treating that
+            // expression as a literal selector produces nested/broken locators such as
+            // Page.GetByTestId("Page.GetByTestId(...)"). A syntactically obvious target
+            // expression is already target-side code and must be rendered as-is.
+            if (kind == TargetKind.PlaywrightLocator
+                && LooksLikeRawPlaywrightTargetExpression(mapping.TargetExpression))
+            {
+                kind = TargetKind.RawExpression;
+            }
+
             string? testIdAttribute = null;
             if (kind == TargetKind.PlaywrightLocator && mapping.TargetKind == "TestId")
             {
@@ -247,12 +258,62 @@ public class DefaultProjectAdapter : IProjectAdapter
 
             var methodStatements = ResolveMethodStatements(m);
             if (methodStatements.HasAnyStatements)
+            {
                 resolved._methodStatementsMap[m.SourceMethod] = methodStatements;
+
+                // Accept declaration-like exact mappings such as
+                // `GoToPageWithUserAccessRight<T>(uri, accessRights)` as aliases for
+                // the invocation method name. This keeps older/agent-authored configs
+                // useful without allowing receiver-specific mappings to become broad.
+                if (TryParseReceiverlessMethodSignature(m.SourceMethod, out var methodName, out var parameterNames))
+                {
+                    resolved._methodSignatureMappings.Add(
+                        new ResolvedMethodSignatureMapping(methodName, parameterNames.Count, methodStatements));
+                }
+            }
         }
 
         resolved._parameterizedMethods = paramMethods;
 
         return resolved;
+    }
+
+    static bool LooksLikeRawPlaywrightTargetExpression(string? expression)
+    {
+        if (string.IsNullOrWhiteSpace(expression))
+            return false;
+
+        var trimmed = expression.Trim();
+        return Regex.IsMatch(
+            trimmed,
+            @"^(?:Page|page|[A-Za-z_][A-Za-z0-9_]*)\s*\.\s*(?:Locator|GetByTestId|GetByText|GetByRole|GetByLabel|GetByPlaceholder|GetByAltText)\s*\(",
+            RegexOptions.CultureInvariant);
+    }
+
+    static bool TryParseReceiverlessMethodSignature(
+        string sourceMethod,
+        out string methodName,
+        out IReadOnlyList<string> parameterNames)
+    {
+        methodName = string.Empty;
+        parameterNames = Array.Empty<string>();
+        if (string.IsNullOrWhiteSpace(sourceMethod))
+            return false;
+
+        var match = Regex.Match(
+            sourceMethod.Trim(),
+            @"^(?<name>[A-Za-z_]\w*)(?:\s*<[^>]+>)?\s*\((?<parameters>.*)\)$",
+            RegexOptions.CultureInvariant);
+        if (!match.Success)
+            return false;
+
+        methodName = match.Groups["name"].Value;
+        parameterNames = SplitTopLevelArguments(match.Groups["parameters"].Value)
+            .Select(parameter => Regex.Match(parameter.Trim(), @"(?<name>[A-Za-z_]\w*)\s*$", RegexOptions.CultureInvariant))
+            .Where(parameterMatch => parameterMatch.Success)
+            .Select(parameterMatch => parameterMatch.Groups["name"].Value)
+            .ToArray();
+        return methodName.Length > 0;
     }
 
     static UiTargetMapping[] MergeUiTargets(UiTargetMapping[] global, UiTargetMapping[] scope)
@@ -284,11 +345,13 @@ public class DefaultProjectAdapter : IProjectAdapter
     static ResolvedMethodStatements ResolveMethodStatements(MethodMapping mapping)
     {
         var targetStatementsByTarget = ResolveExactTargetStatementOverrides(mapping.Targets, mapping.RequiresReview, out var requiresReviewByTarget);
+        TryParseReceiverlessMethodSignature(mapping.SourceMethod, out _, out var parameterNames);
         return new ResolvedMethodStatements(
             mapping.TargetStatements ?? Array.Empty<string>(),
             mapping.RequiresReview,
             targetStatementsByTarget,
-            requiresReviewByTarget);
+            requiresReviewByTarget,
+            parameterNames);
     }
 
     ResolvedMethodStatements ResolveParameterizedStatements(ParameterizedMethodMapping mapping, Dictionary<string, PlaceholderValue> placeholders)
@@ -302,7 +365,8 @@ public class DefaultProjectAdapter : IProjectAdapter
             legacyStatements,
             mapping.RequiresReview,
             targetStatementsByTarget,
-            requiresReviewByTarget);
+            requiresReviewByTarget,
+            Array.Empty<string>());
     }
 
     static IReadOnlyDictionary<string, IReadOnlyList<string>> ResolveExactTargetStatementOverrides(
@@ -545,6 +609,40 @@ public class DefaultProjectAdapter : IProjectAdapter
         };
     }
 
+    IEnumerable<TestAction> AdaptCollectionForEach(
+        CollectionForEachAction action,
+        ResolvedFileConfig resolved,
+        Dictionary<string, TargetExpression>? localVariableMappings = null)
+    {
+        var collectionTarget = localVariableMappings == null
+            ? ResolveTarget(action.SourceCollectionExpression, resolved)
+            : ResolveTargetWithLocalVars(action.SourceCollectionExpression, resolved, localVariableMappings);
+
+        var nestedLocals = localVariableMappings == null
+            ? new Dictionary<string, TargetExpression>(StringComparer.Ordinal)
+            : new Dictionary<string, TargetExpression>(localVariableMappings, StringComparer.Ordinal);
+        nestedLocals[action.ItemVariable] = TargetExpression.Mapped(
+            action.ItemVariable,
+            action.ItemVariable,
+            TargetKind.RawExpression);
+
+        var bodyActions = action.BodyActions
+            .SelectMany(body => AdaptActionWithLocalVars(body, resolved, nestedLocals))
+            .ToList();
+
+        return new[]
+        {
+            new CollectionForEachAction(
+                action.SourceLine,
+                action.SourceCollectionExpression,
+                collectionTarget,
+                action.ItemVariable,
+                bodyActions,
+                action.FullSourceText,
+                action.Confidence)
+        };
+    }
+
     static readonly Regex FindElementXPathPattern = new(
         @"^\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*XPath\s*\(\s*""([^""]*)""\s*\)\s*\)\s*$",
         RegexOptions.Compiled);
@@ -722,11 +820,12 @@ public class DefaultProjectAdapter : IProjectAdapter
                 tca.ExpectedCount,
                 tca.SourceText,
                 tca.Confidence) },
-            MethodInvocationAction mi => TryResolveMethodMapping(mi, resolved),
+            MethodInvocationAction mi => TryResolveMethodMapping(mi, resolved, localVariableMappings),
             RawStatementAction raw => TryResolveRawStatement(raw, resolved),
             LocalDeclarationAction lds => TryResolveLocalDeclaration(lds, resolved),
             ConditionalBlockAction cond => AdaptConditionalBlockWithLocalVars(cond, resolved, localVariableMappings),
             AssertMultipleAction multiple => AdaptAssertMultipleWithLocalVars(multiple, resolved, localVariableMappings),
+            CollectionForEachAction collection => AdaptCollectionForEach(collection, resolved, localVariableMappings),
             _ => new[] { action }
         };
     }
@@ -891,6 +990,7 @@ public class DefaultProjectAdapter : IProjectAdapter
             LocalDeclarationAction lds => TryResolveLocalDeclaration(lds, resolved),
             ConditionalBlockAction cond => AdaptConditionalBlock(cond, resolved),
             AssertMultipleAction multiple => AdaptAssertMultiple(multiple, resolved),
+            CollectionForEachAction collection => AdaptCollectionForEach(collection, resolved),
             _ => new[] { action }
         };
     }
@@ -1109,26 +1209,55 @@ public class DefaultProjectAdapter : IProjectAdapter
             ta.FullSourceText) };
     }
 
-    IEnumerable<TestAction> TryResolveMethodMapping(MethodInvocationAction mi, ResolvedFileConfig resolved)
+    IEnumerable<TestAction> TryResolveMethodMapping(
+        MethodInvocationAction mi,
+        ResolvedFileConfig resolved,
+        Dictionary<string, TargetExpression>? localVariableMappings = null)
     {
         var fullText = mi.FullSourceText.TrimEnd(';');
-        var resolvedTarget = TryResolveReceiverTarget(mi.ReceiverExpression, resolved);
+        var resolvedTarget = ResolveInvocationReceiverTarget(mi.ReceiverExpression, resolved, localVariableMappings);
 
         // 1. Exact match by full text (highest priority)
         if (resolved._methodStatementsMap.TryGetValue(fullText, out var mapping))
         {
+            var invocationMapping = ResolveMethodStatementsForInvocation(mapping, mi);
             return new[]
             {
                 new MappedMethodInvocationAction(
                     mi.SourceLine,
                     mi.FullSourceText,
-                    mapping.Statements,
-                    mapping.RequiresReview,
+                    invocationMapping.Statements,
+                    invocationMapping.RequiresReview,
                     resolvedTarget,
                     fullText,
                     mi.ResultVariable,
-                    mapping.TargetStatementsByTarget,
-                    mapping.RequiresReviewByTarget)
+                    invocationMapping.TargetStatementsByTarget,
+                    invocationMapping.RequiresReviewByTarget)
+            };
+        }
+
+        // Declaration-like exact mappings such as `CreatePage<T>(uri, rights)`
+        // match by method name and arity without becoming a broad alias that could
+        // steal a different overload.
+        var signatureMapping = resolved._methodSignatureMappings
+            .LastOrDefault(candidate =>
+                string.Equals(candidate.MethodName, mi.MethodName, StringComparison.Ordinal)
+                && candidate.ParameterCount == mi.ArgumentTexts.Count);
+        if (signatureMapping != default)
+        {
+            var invocationMapping = ResolveMethodStatementsForInvocation(signatureMapping.Statements, mi);
+            return new[]
+            {
+                new MappedMethodInvocationAction(
+                    mi.SourceLine,
+                    mi.FullSourceText,
+                    invocationMapping.Statements,
+                    invocationMapping.RequiresReview,
+                    resolvedTarget,
+                    mi.MethodName,
+                    mi.ResultVariable,
+                    invocationMapping.TargetStatementsByTarget,
+                    invocationMapping.RequiresReviewByTarget)
             };
         }
 
@@ -1140,7 +1269,7 @@ public class DefaultProjectAdapter : IProjectAdapter
         // ResultVariable = "page". A broad method-name mapping like Methods["Click"]
         // must not steal those actions before ParameterizedMethods["{source}.Click<{T}>()"]
         // can emit the follow-up page variable declaration.
-        var paramResult = TryMatchParameterized(mi, resolved);
+        var paramResult = TryMatchParameterized(mi, resolved, localVariableMappings);
         if (paramResult is MappedMethodInvocationAction mappedResult)
         {
             if (!string.IsNullOrWhiteSpace(mi.ResultVariable))
@@ -1157,25 +1286,26 @@ public class DefaultProjectAdapter : IProjectAdapter
         // Here "element" is a reusable receiver slot, not a literal source object.
         // It lets one mapping cover discountSettingsPage.Save.WaitDisabled(),
         // page.Submit.WaitDisabled(), etc.
-        var genericReceiverResult = TryResolveGenericReceiverMethodMapping(mi, resolved);
+        var genericReceiverResult = TryResolveGenericReceiverMethodMapping(mi, resolved, localVariableMappings);
         if (genericReceiverResult != null)
             return new[] { genericReceiverResult };
 
         // 4. Exact match by method name
         if (!string.IsNullOrEmpty(mi.MethodName) && resolved._methodStatementsMap.TryGetValue(mi.MethodName, out var methodMapping))
         {
+            var invocationMapping = ResolveMethodStatementsForInvocation(methodMapping, mi);
             return new[]
             {
                 new MappedMethodInvocationAction(
                     mi.SourceLine,
                     mi.FullSourceText,
-                    methodMapping.Statements,
-                    methodMapping.RequiresReview,
+                    invocationMapping.Statements,
+                    invocationMapping.RequiresReview,
                     resolvedTarget,
                     mi.MethodName,
                     mi.ResultVariable,
-                    methodMapping.TargetStatementsByTarget,
-                    methodMapping.RequiresReviewByTarget)
+                    invocationMapping.TargetStatementsByTarget,
+                    invocationMapping.RequiresReviewByTarget)
             };
         }
 
@@ -1183,12 +1313,61 @@ public class DefaultProjectAdapter : IProjectAdapter
         if (paramResult != null)
             return new[] { paramResult };
 
+        // Built-in, semantically stable FluentAssertions state checks. These are
+        // common enough that forcing every project to repeat config mappings creates
+        // avoidable MANUAL_REVIEW debt. Only emit when the receiver resolves to a
+        // target locator (including a lambda-local locator inside CollectionForEachAction).
+        if (TryResolveBuiltInLocatorStateAssertion(mi, resolvedTarget) is { } stateAssertion)
+            return new[] { stateAssertion };
+
         // 6. No match — return original action (will render as TODO)
         return new[] { mi };
     }
 
+    static ControlStateAssertionAction? TryResolveBuiltInLocatorStateAssertion(
+        MethodInvocationAction invocation,
+        TargetExpression? resolvedTarget)
+    {
+        if (resolvedTarget == null || resolvedTarget.Kind == TargetKind.Unresolved)
+            return null;
 
-    MappedMethodInvocationAction? TryResolveGenericReceiverMethodMapping(MethodInvocationAction mi, ResolvedFileConfig resolved)
+        var kind = invocation.MethodName switch
+        {
+            // FluentAssertions state assertions may carry a because/reason string
+            // and formatting arguments. They do not change the Playwright assertion.
+            "BeDisabled" => ControlStateAssertionKind.Disabled,
+            "BeEnabled" => ControlStateAssertionKind.Enabled,
+            _ => (ControlStateAssertionKind?)null
+        };
+        if (kind == null)
+            return null;
+
+        return new ControlStateAssertionAction(
+            invocation.SourceLine,
+            resolvedTarget,
+            kind.Value,
+            invocation.FullSourceText,
+            invocation.Confidence);
+    }
+
+    TargetExpression? ResolveInvocationReceiverTarget(
+        string receiverExpression,
+        ResolvedFileConfig resolved,
+        Dictionary<string, TargetExpression>? localVariableMappings)
+    {
+        var receiverForTarget = StripTerminalShouldInvocation(receiverExpression);
+        var target = localVariableMappings == null
+            ? ResolveTarget(receiverForTarget, resolved)
+            : ResolveTargetWithLocalVars(receiverForTarget, resolved, localVariableMappings);
+
+        return target.Kind == TargetKind.Unresolved ? null : target;
+    }
+
+
+    MappedMethodInvocationAction? TryResolveGenericReceiverMethodMapping(
+        MethodInvocationAction mi,
+        ResolvedFileConfig resolved,
+        Dictionary<string, TargetExpression>? localVariableMappings = null)
     {
         foreach (var kvp in resolved._methodStatementsMap)
         {
@@ -1206,12 +1385,12 @@ public class DefaultProjectAdapter : IProjectAdapter
             if (configuredInvocation.ArgumentTexts.Count != mi.ArgumentTexts.Count)
                 continue;
 
-            var receiverForTarget = StripTerminalShouldInvocation(mi.ReceiverExpression);
-            var resolvedTarget = TryResolveReceiverTarget(receiverForTarget, resolved);
-            var statements = kvp.Value.Statements
+            var resolvedTarget = ResolveInvocationReceiverTarget(mi.ReceiverExpression, resolved, localVariableMappings);
+            var invocationMapping = ResolveMethodStatementsForInvocation(kvp.Value, mi);
+            var statements = invocationMapping.Statements
                 .Select(stmt => RewriteGenericReceiverStatement(stmt, configuredReceiver))
                 .ToArray();
-            var statementsByTarget = kvp.Value.TargetStatementsByTarget.ToDictionary(
+            var statementsByTarget = invocationMapping.TargetStatementsByTarget.ToDictionary(
                 x => x.Key,
                 x => (IReadOnlyList<string>)x.Value.Select(stmt => RewriteGenericReceiverStatement(stmt, configuredReceiver)).ToArray(),
                 StringComparer.OrdinalIgnoreCase);
@@ -1220,12 +1399,12 @@ public class DefaultProjectAdapter : IProjectAdapter
                 mi.SourceLine,
                 mi.FullSourceText,
                 statements,
-                kvp.Value.RequiresReview,
+                invocationMapping.RequiresReview,
                 resolvedTarget,
                 kvp.Key,
                 mi.ResultVariable,
                 statementsByTarget,
-                kvp.Value.RequiresReviewByTarget);
+                invocationMapping.RequiresReviewByTarget);
         }
 
         return null;
@@ -1264,19 +1443,26 @@ public class DefaultProjectAdapter : IProjectAdapter
         return null;
     }
 
-    TestAction? TryMatchParameterized(MethodInvocationAction mi, ResolvedFileConfig resolved)
+    TestAction? TryMatchParameterized(
+        MethodInvocationAction mi,
+        ResolvedFileConfig resolved,
+        Dictionary<string, TargetExpression>? localVariableMappings = null)
     {
         var fullText = mi.FullSourceText.TrimEnd(';');
         var assignmentRightSide = TryExtractSimpleAssignmentRightSide(fullText);
 
         foreach (var mapping in resolved._parameterizedMethods)
         {
-            var placeholders = TryMatchPattern(mapping.SourceMethodPattern, fullText, mi.ArgumentTexts)
-                ?? (assignmentRightSide == null
-                    ? null
-                    : TryMatchPattern(mapping.SourceMethodPattern, assignmentRightSide, mi.ArgumentTexts));
+            Dictionary<string, PlaceholderValue>? placeholders = null;
+            foreach (var candidate in EnumerateInvocationMatchCandidates(mi, fullText, assignmentRightSide))
+            {
+                placeholders = TryMatchPattern(mapping.SourceMethodPattern, candidate, mi.ArgumentTexts);
+                if (placeholders != null)
+                    break;
+            }
             if (placeholders != null)
             {
+                AddInvocationSpecialPlaceholders(placeholders, mi);
                 if (!placeholders.ContainsKey("source"))
                     placeholders["source"] = new PlaceholderValue(mi.ReceiverExpression, mi.ReceiverExpression, IsStringLiteral: false);
                 if (!placeholders.ContainsKey("element"))
@@ -1289,8 +1475,7 @@ public class DefaultProjectAdapter : IProjectAdapter
                     placeholders["result"] = new PlaceholderValue(mi.ResultVariable!, mi.ResultVariable!, IsStringLiteral: false);
                 }
 
-                var receiverForTarget = StripTerminalShouldInvocation(mi.ReceiverExpression);
-                var resolvedTarget = TryResolveReceiverTarget(receiverForTarget, resolved);
+                var resolvedTarget = ResolveInvocationReceiverTarget(mi.ReceiverExpression, resolved, localVariableMappings);
 
                 // Expression mapping takes priority over statement mapping
                 if (!string.IsNullOrWhiteSpace(mapping.TargetExpression))
@@ -1321,6 +1506,189 @@ public class DefaultProjectAdapter : IProjectAdapter
         }
 
         return null;
+    }
+
+    ResolvedMethodStatements ResolveMethodStatementsForInvocation(
+        ResolvedMethodStatements mapping,
+        MethodInvocationAction invocation)
+    {
+        var placeholders = new Dictionary<string, PlaceholderValue>(StringComparer.Ordinal);
+        AddInvocationSpecialPlaceholders(placeholders, invocation);
+        for (var i = 0; i < mapping.InvocationParameterNames.Count && i < invocation.ArgumentTexts.Count; i++)
+        {
+            var parameterName = mapping.InvocationParameterNames[i];
+            if (string.IsNullOrWhiteSpace(parameterName))
+                continue;
+
+            var argument = invocation.ArgumentTexts[i];
+            placeholders.TryAdd(
+                parameterName,
+                new PlaceholderValue(
+                    argument,
+                    IsCSharpStringLiteral(argument) ? StripCSharpStringLiteralQuotes(argument) : argument,
+                    IsCSharpStringLiteral(argument)));
+        }
+        if (placeholders.Count == 0)
+            return mapping;
+
+        var statements = mapping.Statements
+            .Select(statement => SubstitutePlaceholders(statement, placeholders))
+            .ToArray();
+        var statementsByTarget = mapping.TargetStatementsByTarget.ToDictionary(
+            entry => entry.Key,
+            entry => (IReadOnlyList<string>)entry.Value
+                .Select(statement => SubstitutePlaceholders(statement, placeholders))
+                .ToArray(),
+            StringComparer.OrdinalIgnoreCase);
+
+        return new ResolvedMethodStatements(
+            statements,
+            mapping.RequiresReview,
+            statementsByTarget,
+            mapping.RequiresReviewByTarget,
+            mapping.InvocationParameterNames);
+    }
+
+    static void AddInvocationSpecialPlaceholders(
+        Dictionary<string, PlaceholderValue> placeholders,
+        MethodInvocationAction invocation)
+    {
+        for (var i = 0; i < invocation.ArgumentTexts.Count; i++)
+        {
+            var argument = invocation.ArgumentTexts[i];
+            var value = new PlaceholderValue(
+                argument,
+                IsCSharpStringLiteral(argument) ? StripCSharpStringLiteralQuotes(argument) : argument,
+                IsCSharpStringLiteral(argument));
+            placeholders.TryAdd($"arg{i}", value);
+            placeholders.TryAdd($"argument{i}", value);
+        }
+
+        for (var i = 0; i < invocation.GenericArgumentTexts.Count; i++)
+        {
+            var genericArgument = invocation.GenericArgumentTexts[i];
+            var value = new PlaceholderValue(genericArgument, genericArgument, IsStringLiteral: false);
+            placeholders.TryAdd($"T{i}", value);
+            placeholders.TryAdd($"type{i}", value);
+            placeholders.TryAdd($"genericType{i}", value);
+        }
+
+        if (invocation.GenericArgumentTexts.Count > 0)
+        {
+            var first = invocation.GenericArgumentTexts[0];
+            var value = new PlaceholderValue(first, first, IsStringLiteral: false);
+            placeholders.TryAdd("T", value);
+            placeholders.TryAdd("type", value);
+            placeholders.TryAdd("genericType", value);
+            placeholders.TryAdd("typeArgument", value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(invocation.ResultVariable))
+        {
+            var result = invocation.ResultVariable!;
+            placeholders.TryAdd("result", new PlaceholderValue(result, result, IsStringLiteral: false));
+        }
+    }
+
+    static string StripCSharpStringLiteralQuotes(string text)
+    {
+        var trimmed = text.Trim();
+        if (trimmed.StartsWith("@\"", StringComparison.Ordinal)
+            && trimmed.EndsWith("\"", StringComparison.Ordinal)
+            && trimmed.Length >= 3)
+        {
+            return trimmed.Substring(2, trimmed.Length - 3);
+        }
+
+        if ((trimmed.StartsWith("\"", StringComparison.Ordinal)
+             || trimmed.StartsWith("$\"", StringComparison.Ordinal))
+            && trimmed.EndsWith("\"", StringComparison.Ordinal))
+        {
+            var start = trimmed.StartsWith("$\"", StringComparison.Ordinal) ? 2 : 1;
+            return trimmed.Substring(start, trimmed.Length - start - 1);
+        }
+
+        return trimmed;
+    }
+
+    static IEnumerable<string> EnumerateInvocationMatchCandidates(
+        MethodInvocationAction invocation,
+        string fullText,
+        string? assignmentRightSide)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var candidate in new[] { fullText, assignmentRightSide })
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+                continue;
+
+            var trimmed = candidate.Trim();
+            if (seen.Add(trimmed))
+                yield return trimmed;
+
+            var normalized = RemoveInvocationGenericArguments(trimmed, invocation.MethodName);
+            if (!string.Equals(normalized, trimmed, StringComparison.Ordinal) && seen.Add(normalized))
+                yield return normalized;
+        }
+    }
+
+    static string RemoveInvocationGenericArguments(string sourceText, string methodName)
+    {
+        if (string.IsNullOrWhiteSpace(sourceText)
+            || string.IsNullOrWhiteSpace(methodName)
+            || sourceText.IndexOf('<') < 0)
+        {
+            return sourceText;
+        }
+
+        var searchIndex = 0;
+        while (searchIndex < sourceText.Length)
+        {
+            var methodIndex = sourceText.IndexOf(methodName, searchIndex, StringComparison.Ordinal);
+            if (methodIndex < 0)
+                return sourceText;
+
+            var beforeIsIdentifier = methodIndex > 0
+                && (char.IsLetterOrDigit(sourceText[methodIndex - 1])
+                    || sourceText[methodIndex - 1] is '_' or '@');
+            var afterNameIndex = methodIndex + methodName.Length;
+            var afterIsIdentifier = afterNameIndex < sourceText.Length
+                && (char.IsLetterOrDigit(sourceText[afterNameIndex])
+                    || sourceText[afterNameIndex] is '_' or '@');
+            if (beforeIsIdentifier || afterIsIdentifier)
+            {
+                searchIndex = afterNameIndex;
+                continue;
+            }
+
+            var genericStart = afterNameIndex;
+            while (genericStart < sourceText.Length && char.IsWhiteSpace(sourceText[genericStart]))
+                genericStart++;
+            if (genericStart >= sourceText.Length || sourceText[genericStart] != '<')
+            {
+                searchIndex = afterNameIndex;
+                continue;
+            }
+
+            var depth = 0;
+            for (var i = genericStart; i < sourceText.Length; i++)
+            {
+                if (sourceText[i] == '<')
+                    depth++;
+                else if (sourceText[i] == '>')
+                    depth--;
+
+                if (depth == 0)
+                {
+                    return sourceText.Remove(genericStart, i - genericStart + 1);
+                }
+            }
+
+            return sourceText;
+        }
+
+        return sourceText;
     }
 
     static string? TryExtractSimpleAssignmentRightSide(string sourceText)
@@ -2331,6 +2699,7 @@ public class DefaultProjectAdapter : IProjectAdapter
         internal readonly Dictionary<string, string> _pageObjectMap = new();
         internal readonly Dictionary<string, string> _methodMap = new();
         internal readonly Dictionary<string, ResolvedMethodStatements> _methodStatementsMap = new();
+        internal readonly List<ResolvedMethodSignatureMapping> _methodSignatureMappings = new();
         internal IList<ParameterizedMethodMapping> _parameterizedMethods = Array.Empty<ParameterizedMethodMapping>();
         internal IReadOnlyList<string> _sourceOnlyIdentifiers = Array.Empty<string>();
         internal IReadOnlyList<string> _targetKnownTypes = Array.Empty<string>();
@@ -2556,11 +2925,17 @@ public class DefaultProjectAdapter : IProjectAdapter
         }
     }
 
+    readonly record struct ResolvedMethodSignatureMapping(
+        string MethodName,
+        int ParameterCount,
+        ResolvedMethodStatements Statements);
+
     readonly record struct ResolvedMethodStatements(
         string[] Statements,
         bool RequiresReview,
         IReadOnlyDictionary<string, IReadOnlyList<string>> TargetStatementsByTarget,
-        IReadOnlyDictionary<string, bool> RequiresReviewByTarget)
+        IReadOnlyDictionary<string, bool> RequiresReviewByTarget,
+        IReadOnlyList<string> InvocationParameterNames)
     {
         public bool HasAnyStatements => Statements.Length > 0 || TargetStatementsByTarget.Count > 0;
     }

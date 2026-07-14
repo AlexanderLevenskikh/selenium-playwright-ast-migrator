@@ -295,6 +295,12 @@ public partial class PlaywrightDotNetRenderer : IRenderer
             else
                 sb.AppendLine($"{_indent}{declaration}");
 
+            // A class field that was emitted as active target C# is available to every
+            // generated test method. Without this registration, a later local alias such
+            // as `var tariff = pravoTariff1;` was incorrectly classified as
+            // UNAVAILABLE_SYMBOL even though pravoTariff1 exists in the same class.
+            _targetKnownIdentifiers.Add(field.FieldName);
+
             renderedAny = true;
         }
 
@@ -517,6 +523,12 @@ public partial class PlaywrightDotNetRenderer : IRenderer
             return;
         }
 
+        if (action is CollectionForEachAction collectionForEach)
+        {
+            RenderCollectionForEach(sb, collectionForEach);
+            return;
+        }
+
         // Assert.Multiple is a source assertion wrapper. It should not be treated as
         // an assertion subject; render nested actions individually.
         if (action is AssertMultipleAction assertMultiple)
@@ -701,6 +713,7 @@ public partial class PlaywrightDotNetRenderer : IRenderer
             WaitForAction w when w.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(w.Target),
             TextAssertionAction t when t.Target.Kind != TargetKind.Unresolved => $"{RenderTargetExpression(t.Target)} {t.ExpectedValue}",
             VisibilityAssertionAction v when v.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(v.Target),
+            ControlStateAssertionAction s when s.Target.Kind != TargetKind.Unresolved => RenderTargetExpression(s.Target),
             TableCountAssertionAction t when t.Target.Kind != TargetKind.Unresolved => $"{RenderTargetExpression(t.Target)} {t.ExpectedCount}",
             TableRowAccessAction t when t.Target.Kind != TargetKind.Unresolved => $"{RenderTargetExpression(t.Target)} {t.IndexExpression}",
             TableRowTextAccessAction t when t.Target.Kind != TargetKind.Unresolved => $"{RenderTargetExpression(t.Target)} {t.IndexExpression}",
@@ -1984,6 +1997,7 @@ public partial class PlaywrightDotNetRenderer : IRenderer
             AssertAreEqualAction a => $"Assert.AreEqual({a.ExpectedExpression}, {a.ActualExpression})",
             TextAssertionAction a => $"{a.Target.SourceExpression}.Text.Should({a.ExpectedValue})",
             VisibilityAssertionAction a => $"{a.Target.SourceExpression}.Visible.Should()",
+            ControlStateAssertionAction a => a.FullSourceText,
             WaitForAction a => a.FullSourceText,
             UrlAssertionAction a => $"UrlAssertion({a.ExpectedValue})",
             MethodInvocationAction a => a.FullSourceText,
@@ -1996,6 +2010,7 @@ public partial class PlaywrightDotNetRenderer : IRenderer
             LocatorDeclarationAction a => $"var {a.VariableName} = {a.SourceText}",
             NavigationAction a => a.SourceText ?? $"Navigation.OpenPage({a.UrlExpression})",
             ConditionalBlockAction a => a.ConditionExpression,
+            CollectionForEachAction a => a.FullSourceText,
             TableRowTextAccessAction a => a.SourceText,
             TableRowAccessAction a => a.SourceText,
             TableCountAssertionAction a => a.SourceText,

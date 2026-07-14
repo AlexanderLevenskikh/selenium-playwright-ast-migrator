@@ -378,11 +378,25 @@ public static class VerifyRunner
 
     static bool IsSpecialParameterizedPlaceholder(string placeholder)
     {
-        // {result} is supplied by the parser for assignment-pattern method invocations:
-        // var page = Browser.GoToPage<Page>(...).
-        // {TARGET} is supplied by renderers from the resolved receiver target.
-        return string.Equals(placeholder, "result", StringComparison.Ordinal)
-            || string.Equals(placeholder, "TARGET", StringComparison.Ordinal);
+        // Invocation-derived placeholders do not need to appear in SourceMethodPattern:
+        // - {result}: assignment target from `var page = Helper<T>(...)`
+        // - {T}/{type}/{genericType}/{typeArgument} and indexed variants: generic type arguments
+        // - {arg0}/{argument0}: positional arguments for exact/generic-normalized mappings
+        // - {TARGET}: resolved receiver target supplied by renderers
+        if (string.Equals(placeholder, "result", StringComparison.Ordinal)
+            || string.Equals(placeholder, "TARGET", StringComparison.Ordinal)
+            || string.Equals(placeholder, "T", StringComparison.Ordinal)
+            || string.Equals(placeholder, "type", StringComparison.Ordinal)
+            || string.Equals(placeholder, "genericType", StringComparison.Ordinal)
+            || string.Equals(placeholder, "typeArgument", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return System.Text.RegularExpressions.Regex.IsMatch(
+            placeholder,
+            @"^(?:T|type|genericType|arg|argument)\d+$",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
     }
 
     // --- Scope matching ---

@@ -49,6 +49,9 @@ This project uses preview SemVer-style versions while the public API is still st
 
 ### Fixed
 
+- Fixed generic helper mappings so `Method<T>(...)` invocations match generic-free `ParameterizedMethods`, declaration-like exact `Methods` signatures can bind by method name, and `{T}`, `{T0}`, `{arg0}`, `{result}`, plus named signature parameters are substituted without losing helper semantics.
+- Fixed active class-field availability, `foreach`/`ForEach` lambda item scope, and FluentAssertions `BeDisabled`/`BeEnabled` lowering to native Playwright assertions.
+- Prevented full Playwright locator expressions configured as `TestId`/`Locator` from being nested as selector literals; collection and control-state actions now remain visible in migration metrics.
 - Fixed `verify-project` false `NU1015` restore blockers in Central Package Management repositories by skipping repo-wide `Directory.Build.props/targets` inside the isolated temporary harness while preserving project-reference evaluation.
 - Fixed Windows `dotnet build` diagnostics mojibake in `project-verify-report.md/json` by decoding redirected stdout/stderr as UTF-8 and writing report artifacts as UTF-8 without BOM.
 - Prevented direct full-project migrations from writing into materialized `wave-*/generated` directories, added wave-scope contamination detection and repair routing, and stopped quality metrics from summing duplicate report snapshots.

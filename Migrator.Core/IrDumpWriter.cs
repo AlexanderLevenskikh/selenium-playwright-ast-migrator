@@ -183,6 +183,18 @@ public static class IrDumpWriter
                     Actions: x.Actions.Select(DumpAction).ToArray())).ToArray();
                 props["elseActions"] = a.ElseActions.Select(DumpAction).ToArray();
                 break;
+            case CollectionForEachAction a:
+                props["sourceCollectionExpression"] = a.SourceCollectionExpression;
+                props["collectionTarget"] = DumpTarget(a.CollectionTarget);
+                props["itemVariable"] = a.ItemVariable;
+                props["bodyActions"] = a.BodyActions.Select(DumpAction).ToArray();
+                props["fullSourceText"] = a.FullSourceText;
+                break;
+            case ControlStateAssertionAction a:
+                props["target"] = DumpTarget(a.Target);
+                props["kind"] = a.Kind.ToString();
+                props["fullSourceText"] = a.FullSourceText;
+                break;
             case LocalDeclarationAction a:
                 props["variableName"] = a.VariableName;
                 props["variableType"] = a.VariableType;
@@ -217,6 +229,7 @@ public static class IrDumpWriter
                 props["methodName"] = a.MethodName;
                 props["fullSourceText"] = a.FullSourceText;
                 props["argumentTexts"] = a.ArgumentTexts.ToArray();
+                props["genericArgumentTexts"] = a.GenericArgumentTexts.ToArray();
                 props["resultVariable"] = a.ResultVariable;
                 break;
             case NavigationAction a:

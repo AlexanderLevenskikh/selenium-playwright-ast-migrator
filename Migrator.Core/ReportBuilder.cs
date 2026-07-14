@@ -6,8 +6,8 @@ public static class ReportBuilder
 {
     public static MigrationReport Build(TestFileModel model, string generatedOutput)
     {
-        var allActions = model.Tests.SelectMany(t => t.BodyActions).ToList();
-        var allSetupActions = model.SetUpActions.ToList();
+        var allActions = model.Tests.SelectMany(t => FlattenActions(t.BodyActions)).ToList();
+        var allSetupActions = FlattenActions(model.SetUpActions).ToList();
         var allFileActions = allActions.Concat(allSetupActions).ToList();
 
         var unsupportedActions = allFileActions.OfType<UnsupportedAction>().ToList();
@@ -27,7 +27,7 @@ public static class ReportBuilder
             TotalTests: model.Tests.Count(),
             SuccessfullyConvertedTests: setupHasUnsupported
                 ? 0
-                : model.Tests.Count(t => !t.BodyActions.Any(a => a is UnsupportedAction)),
+                : model.Tests.Count(t => !FlattenActions(t.BodyActions).Any(a => a is UnsupportedAction)),
             UnsupportedActions: unsupportedActions,
             GeneratedOutput: generatedOutput,
             SemanticActions: semanticCount,
@@ -46,7 +46,22 @@ public static class ReportBuilder
         if (action is PressAction p) return p.Target;
         if (action is TextAssertionAction ta) return ta.Target;
         if (action is VisibilityAssertionAction va) return va.Target;
+        if (action is ControlStateAssertionAction state) return state.Target;
+        if (action is CollectionForEachAction collection) return collection.CollectionTarget;
         if (action is WaitForAction wa) return wa.Kind == WaitForKind.ActionabilityElided ? null : wa.Target;
         return null;
+    }
+
+    static IEnumerable<TestAction> FlattenActions(IEnumerable<TestAction> actions)
+    {
+        foreach (var action in actions)
+        {
+            yield return action;
+            if (action is CollectionForEachAction collection)
+            {
+                foreach (var nested in FlattenActions(collection.BodyActions))
+                    yield return nested;
+            }
+        }
     }
 }

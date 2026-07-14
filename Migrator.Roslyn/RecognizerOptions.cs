@@ -46,6 +46,7 @@ public sealed class RecognizerOptions
         var genericResultMethods = Merge(
             DefaultGenericResultMethods
                 .Concat(config?.GenericResultMethods ?? Array.Empty<string>())
+                .Concat(InferGenericResultMethods(config?.Methods ?? Array.Empty<MethodMapping>()))
                 .Concat(InferGenericResultMethods(config?.ParameterizedMethods ?? Array.Empty<ParameterizedMethodMapping>())),
             null);
 
@@ -114,21 +115,41 @@ public sealed class RecognizerOptions
         return result;
     }
 
+    static IEnumerable<string> InferGenericResultMethods(IEnumerable<MethodMapping> mappings)
+    {
+        foreach (var mapping in mappings)
+        {
+            var statements = (mapping.TargetStatements ?? Array.Empty<string>())
+                .Concat(mapping.Targets?.Values.SelectMany(target => target?.TargetStatements ?? Array.Empty<string>())
+                    ?? Array.Empty<string>());
+            if (!statements.Any(statement => statement.Contains("{result}", StringComparison.Ordinal)))
+                continue;
+
+            var match = Regex.Match(
+                mapping.SourceMethod ?? string.Empty,
+                @"^(?<method>[A-Za-z_]\w*)\s*<[^>]+>\s*\(",
+                RegexOptions.CultureInvariant);
+            if (match.Success)
+                yield return match.Groups["method"].Value;
+        }
+    }
+
     static IEnumerable<string> InferGenericResultMethods(IEnumerable<ParameterizedMethodMapping> mappings)
     {
         foreach (var mapping in mappings)
         {
-            if (mapping.TargetStatements == null || !mapping.TargetStatements.Any(s => s.Contains("{result}", StringComparison.Ordinal)))
+            var statements = (mapping.TargetStatements ?? Array.Empty<string>())
+                .Concat(mapping.Targets?.Values.SelectMany(target => target?.TargetStatements ?? Array.Empty<string>())
+                    ?? Array.Empty<string>());
+            if (!statements.Any(statement => statement.Contains("{result}", StringComparison.Ordinal)))
                 continue;
 
-            foreach (Match match in Regex.Matches(
-                mapping.SourceMethodPattern ?? string.Empty,
-                @"(?:^|\.)\s*(?<method>[A-Za-z_]\w*)\s*<\s*\{[^}]+\}\s*>"))
-            {
-                var method = match.Groups["method"].Value;
-                if (!string.IsNullOrWhiteSpace(method))
-                    yield return method;
-            }
+            // Generic invocations are normalized before pattern matching, so a config
+            // may intentionally use `CreatePage({uri})` for source `CreatePage<T>({uri})`.
+            // Infer the result-producing helper from either form.
+            var method = NormalizeMethodName(mapping.SourceMethodPattern);
+            if (!string.IsNullOrWhiteSpace(method))
+                yield return method;
         }
     }
 

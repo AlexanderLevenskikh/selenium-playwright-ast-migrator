@@ -90,6 +90,42 @@ public sealed class PlaywrightTypeScriptRenderer : IRenderer
             case VisibilityAssertionAction visibilityAssertion:
                 RenderVisibilityAssertion(sb, pad, visibilityAssertion);
                 break;
+            case ControlStateAssertionAction controlState:
+                if (IsResolved(controlState.Target))
+                {
+                    var matcher = controlState.Kind == ControlStateAssertionKind.Disabled
+                        ? "toBeDisabled"
+                        : "toBeEnabled";
+                    sb.AppendLine($"{pad}await expect({RenderTarget(controlState.Target)}).{matcher}();");
+                }
+                else
+                {
+                    RenderTodo(sb, pad, "MISSING_MAPPING", controlState.FullSourceText, "Control state assertion target is unresolved.", "Add a UiTargets mapping for the control.");
+                }
+                break;
+            case CollectionForEachAction collectionForEach:
+                if (IsResolved(collectionForEach.CollectionTarget))
+                {
+                    sb.AppendLine($"{pad}for (const {collectionForEach.ItemVariable} of await {RenderTarget(collectionForEach.CollectionTarget)}.all()) {{");
+                    var itemAlreadyKnown = _targetLocals.Contains(collectionForEach.ItemVariable);
+                    _targetLocals.Add(collectionForEach.ItemVariable);
+                    try
+                    {
+                        foreach (var inner in collectionForEach.BodyActions)
+                            RenderAction(sb, inner, indent + 1);
+                    }
+                    finally
+                    {
+                        if (!itemAlreadyKnown)
+                            _targetLocals.Remove(collectionForEach.ItemVariable);
+                    }
+                    sb.AppendLine($"{pad}}}");
+                }
+                else
+                {
+                    RenderTodo(sb, pad, "COLLECTION_MAPPING_REQUIRED", collectionForEach.FullSourceText, "Collection receiver is unresolved.", "Add a UiTargets mapping for the collection.");
+                }
+                break;
             case UrlAssertionAction urlAssertion:
                 RenderUrlAssertion(sb, pad, urlAssertion);
                 break;

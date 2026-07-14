@@ -14,7 +14,15 @@ public class PageObjectMethodRecognizer : IInvocationRecognizer
     public TestAction? TryRecognize(InvocationContext ctx)
     {
         if (!string.IsNullOrEmpty(ctx.ReceiverText))
-            return new MethodInvocationAction(ctx.SourceLine, ctx.ReceiverText, ctx.MethodName, ctx.FullText, ctx.ArgumentTexts, RecognitionConfidence.SyntaxFallback);
+            return new MethodInvocationAction(
+                ctx.SourceLine,
+                ctx.ReceiverText,
+                ctx.MethodName,
+                ctx.FullText,
+                ctx.ArgumentTexts,
+                ctx.GenericArgumentTexts ?? Array.Empty<string>(),
+                resultVariable: null,
+                confidence: RecognitionConfidence.SyntaxFallback);
 
         return null;
     }

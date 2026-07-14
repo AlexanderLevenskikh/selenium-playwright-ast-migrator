@@ -16,6 +16,8 @@ public partial class PlaywrightDotNetRenderer
         TableCountAssertionAction a => a.Target.Kind != TargetKind.Unresolved,
         TableRowAccessAction a => a.Target.Kind != TargetKind.Unresolved,
         TableRowTextAccessAction a => a.Target.Kind != TargetKind.Unresolved,
+        CollectionForEachAction a => a.CollectionTarget.Kind != TargetKind.Unresolved,
+        ControlStateAssertionAction a => a.Target.Kind != TargetKind.Unresolved,
         _ => false
     };
     void RenderAction(StringBuilder sb, TestAction action)
@@ -78,6 +80,12 @@ public partial class PlaywrightDotNetRenderer
                 break;
             case ConditionalBlockAction condBlock:
                 RenderConditionalBlock(sb, condBlock);
+                break;
+            case CollectionForEachAction collectionForEach:
+                RenderCollectionForEach(sb, collectionForEach);
+                break;
+            case ControlStateAssertionAction controlState:
+                RenderControlStateAssertion(sb, controlState);
                 break;
             case TableRowTextAccessAction tableTextAccess:
                 RenderTableRowTextAccess(sb, tableTextAccess);

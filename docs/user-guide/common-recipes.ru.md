@@ -201,6 +201,26 @@ await popup.GetByText("ООО Пример").ClickAsync();
 - `{value}` внутри string literal → содержимое строки (без кавычек)
 - Используйте для хелперов с 3+ вхождениями и стабильной сигнатурой
 
+### Generic-хелперы, возвращающие page object
+
+Generic-вызов нормализуется для сопоставления, но его тип остаётся доступен в target-шаблоне:
+
+```json
+{
+  "ParameterizedMethods": [
+    {
+      "SourceMethodPattern": "GoToPageWithUserAccessRight({uri}, {rights}, {wait})",
+      "TargetStatements": [
+        "var {result} = await TargetNavigation.GoToPageWithUserAccessRightAsync<{T}>(Page, {uri}, {rights});"
+      ],
+      "RequiresReview": true
+    }
+  ]
+}
+```
+
+В exact `Methods` декларативная сигнатура вроде `GoToPageWithUserAccessRight<T>(uri, rights, wait)` может использовать `{T}`, `{result}`, `{arg0}`/`{argument0}` и именованные параметры из этой сигнатуры. Авторизацию, создание пользователя, навигацию и конструирование typed POM сохраняйте в target-side helper; нельзя заменять весь инфраструктурный хелпер одним `Page.GotoAsync`.
+
 ---
 
 ## 7. Добавить файловый setup через Scope

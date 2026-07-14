@@ -8,7 +8,8 @@ public record InvocationContext(
     string FullText,
     int SourceLine,
     bool SymbolResolved,
-    IReadOnlyList<string> ArgumentTexts
+    IReadOnlyList<string> ArgumentTexts,
+    IReadOnlyList<string>? GenericArgumentTexts = null
 );
 
 public interface IInvocationRecognizer

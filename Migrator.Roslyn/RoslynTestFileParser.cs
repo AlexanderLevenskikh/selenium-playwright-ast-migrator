@@ -318,6 +318,11 @@ public class RoslynTestFileParser : ITestFileParser
 
     TestAction? TryExtractAction(StatementSyntax statement, SemanticModel semanticModel, int line)
     {
+        if (statement is ForEachStatementSyntax foreachStatement)
+        {
+            return TryExtractCollectionForEach(foreachStatement, semanticModel, line);
+        }
+
         // Local declarations — try to extract meaningful declarations
         if (statement is LocalDeclarationStatementSyntax lds)
         {
@@ -394,6 +399,9 @@ public class RoslynTestFileParser : ITestFileParser
 
         if (invocation == null) return null;
 
+        if (TryExtractCollectionForEach(invocation, semanticModel, line) is { } collectionForEach)
+            return collectionForEach;
+
         return TryExtractFromInvocation(invocation, semanticModel, line);
     }
 
@@ -408,8 +416,9 @@ public class RoslynTestFileParser : ITestFileParser
         var argumentTexts = invocation.ArgumentList.Arguments
             .Select(a => a.Expression.ToString())
             .ToArray();
+        var genericArgumentTexts = GetGenericArgumentTexts(invocation);
 
-        var ctx = new InvocationContext(methodName, receiverText, fullText, line, symbolResolved, argumentTexts);
+        var ctx = new InvocationContext(methodName, receiverText, fullText, line, symbolResolved, argumentTexts, genericArgumentTexts);
 
         if (TryExtractAssertThatBinary(invocation, line) is { } assertThatBinary)
             return assertThatBinary;
@@ -454,12 +463,79 @@ public class RoslynTestFileParser : ITestFileParser
                 methodName,
                 fullText,
                 argumentTexts,
-                RecognitionConfidence.SyntaxFallback);
+                genericArgumentTexts,
+                resultVariable: null,
+                confidence: RecognitionConfidence.SyntaxFallback);
         }
 
         return new UnsupportedAction(line, fullText, symbolResolved
             ? "Semantic match not implemented for this method"
             : "Could not resolve method symbol and no syntax fallback matched");
+    }
+
+    CollectionForEachAction? TryExtractCollectionForEach(
+        ForEachStatementSyntax statement,
+        SemanticModel semanticModel,
+        int line)
+    {
+        var sourceCollection = statement.Expression.ToString().Trim();
+        var itemVariable = statement.Identifier.ValueText;
+        if (string.IsNullOrWhiteSpace(sourceCollection) || string.IsNullOrWhiteSpace(itemVariable))
+            return null;
+
+        var bodyActions = ParseBlockStatements(statement.Statement, semanticModel).ToList();
+        return new CollectionForEachAction(
+            line,
+            sourceCollection,
+            TargetExpression.Unresolved(sourceCollection),
+            itemVariable,
+            bodyActions,
+            statement.ToString().Trim(),
+            RecognitionConfidence.SyntaxFallback);
+    }
+
+    CollectionForEachAction? TryExtractCollectionForEach(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        int line)
+    {
+        var methodName = GetMethodName(invocation);
+        if (!string.Equals(methodName, "ForEach", StringComparison.Ordinal)
+            && !string.Equals(methodName, "Foreach", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var receiver = GetReceiverText(invocation).Trim();
+        if (string.IsNullOrWhiteSpace(receiver))
+            return null;
+
+        var lambda = invocation.ArgumentList.Arguments
+            .Select(argument => argument.Expression)
+            .OfType<LambdaExpressionSyntax>()
+            .FirstOrDefault();
+        if (lambda == null)
+            return null;
+
+        var itemVariable = lambda switch
+        {
+            SimpleLambdaExpressionSyntax simple => simple.Parameter.Identifier.ValueText,
+            ParenthesizedLambdaExpressionSyntax parenthesized when parenthesized.ParameterList.Parameters.Count == 1
+                => parenthesized.ParameterList.Parameters[0].Identifier.ValueText,
+            _ => string.Empty
+        };
+        if (string.IsNullOrWhiteSpace(itemVariable))
+            return null;
+
+        var bodyActions = ExtractLambdaActions(lambda.Body, semanticModel).ToList();
+        return new CollectionForEachAction(
+            line,
+            receiver,
+            TargetExpression.Unresolved(receiver),
+            itemVariable,
+            bodyActions,
+            invocation.ToString().Trim().TrimEnd(';'),
+            RecognitionConfidence.SyntaxFallback);
     }
 
     TestAction? TryExtractAssertThatBinary(InvocationExpressionSyntax invocation, int line)
@@ -794,6 +870,7 @@ public class RoslynTestFileParser : ITestFileParser
         var argumentTexts = invocation.ArgumentList.Arguments
             .Select(a => a.Expression.ToString())
             .ToArray();
+        var genericArgumentTexts = GetGenericArgumentTexts(invocation);
 
         return new MethodInvocationAction(
             line,
@@ -801,6 +878,7 @@ public class RoslynTestFileParser : ITestFileParser
             methodName,
             invocation.ToString().Trim().TrimEnd(';'),
             argumentTexts,
+            genericArgumentTexts,
             variable.Identifier.Text,
             RecognitionConfidence.SyntaxFallback);
     }
@@ -836,6 +914,7 @@ public class RoslynTestFileParser : ITestFileParser
         var argumentTexts = invocation.ArgumentList.Arguments
             .Select(a => a.Expression.ToString())
             .ToArray();
+        var genericArgumentTexts = GetGenericArgumentTexts(invocation);
 
         return new MethodInvocationAction(
             line,
@@ -843,6 +922,7 @@ public class RoslynTestFileParser : ITestFileParser
             methodName,
             assignment.ToString().Trim().TrimEnd(';'),
             argumentTexts,
+            genericArgumentTexts,
             targetVariable,
             RecognitionConfidence.SyntaxFallback);
     }
@@ -878,6 +958,7 @@ public class RoslynTestFileParser : ITestFileParser
         var argumentTexts = invocation.ArgumentList.Arguments
             .Select(a => a.Expression.ToString())
             .ToArray();
+        var genericArgumentTexts = GetGenericArgumentTexts(invocation);
 
         return new MethodInvocationAction(
             line,
@@ -885,6 +966,7 @@ public class RoslynTestFileParser : ITestFileParser
             methodName,
             fullText,
             argumentTexts,
+            genericArgumentTexts,
             targetVariable,
             RecognitionConfidence.SyntaxFallback);
     }
@@ -917,6 +999,7 @@ public class RoslynTestFileParser : ITestFileParser
         var argumentTexts = invocation.ArgumentList.Arguments
             .Select(a => a.Expression.ToString())
             .ToArray();
+        var genericArgumentTexts = GetGenericArgumentTexts(invocation);
 
         return new MethodInvocationAction(
             line,
@@ -924,6 +1007,7 @@ public class RoslynTestFileParser : ITestFileParser
             methodName,
             fullText,
             argumentTexts,
+            genericArgumentTexts,
             variable.Identifier.Text,
             RecognitionConfidence.SyntaxFallback);
     }
@@ -937,6 +1021,23 @@ public class RoslynTestFileParser : ITestFileParser
             MemberBindingExpressionSyntax { Name: GenericNameSyntax } => true,
             _ => false
         };
+    }
+
+    static IReadOnlyList<string> GetGenericArgumentTexts(InvocationExpressionSyntax invocation)
+    {
+        var genericName = invocation.Expression switch
+        {
+            GenericNameSyntax direct => direct,
+            MemberAccessExpressionSyntax { Name: GenericNameSyntax member } => member,
+            MemberBindingExpressionSyntax { Name: GenericNameSyntax binding } => binding,
+            _ => null
+        };
+
+        return genericName?.TypeArgumentList.Arguments
+            .Select(argument => argument.ToString().Trim())
+            .Where(argument => argument.Length > 0)
+            .ToArray()
+            ?? Array.Empty<string>();
     }
 
     static LocalDeclarationAction? TryExtractLocalDeclaration(LocalDeclarationStatementSyntax lds, int line)

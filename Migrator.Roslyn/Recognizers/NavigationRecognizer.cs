@@ -43,7 +43,15 @@ public class NavigationRecognizer : IInvocationRecognizer
         }
 
         if (NavigationMethods.Contains(ctx.MethodName))
-            return new MethodInvocationAction(ctx.SourceLine, ctx.ReceiverText, ctx.MethodName, ctx.FullText, RecognitionConfidence.SyntaxFallback);
+            return new MethodInvocationAction(
+                ctx.SourceLine,
+                ctx.ReceiverText,
+                ctx.MethodName,
+                ctx.FullText,
+                ctx.ArgumentTexts,
+                ctx.GenericArgumentTexts ?? Array.Empty<string>(),
+                resultVariable: null,
+                confidence: RecognitionConfidence.SyntaxFallback);
 
         return null;
     }

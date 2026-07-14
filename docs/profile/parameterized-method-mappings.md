@@ -78,6 +78,9 @@ Output:    await Page.Locator($"span:has-text('{sortOrder}')").ClickAsync();
 - Use `{placeholderName}` in `SourceMethodPattern` to match method arguments.
 - Use the same `{placeholderName}` in `TargetStatements` to substitute the matched value.
 - The regex extracts argument text from the source invocation (e.g., `"По возрастанию"` from `page.NameSort.Sort("По возрастанию")`).
+- Generic invocations are normalized for matching: `CreatePage<TPage>(uri)` can match `CreatePage({uri})`.
+- Invocation-derived placeholders remain available even when they do not appear in the pattern: `{T}` / `{T0}`, `{type}` / `{genericType}`, `{arg0}` / `{argument0}`, and `{result}` for the assignment variable.
+- Exact `Methods` may use a declaration-like receiverless signature such as `CreatePage<T>(uri, rights)`. Its parameter names become placeholders in addition to the invocation-derived placeholders.
 
 ## Priority Order
 
