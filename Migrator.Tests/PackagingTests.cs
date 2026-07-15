@@ -571,6 +571,21 @@ public class PackagingTests
         Assert.Contains("selenium-pw-migrator playground", quickStart);
         Assert.Contains("Fast standalone install", userGuide);
         Assert.Contains("Быстрая standalone-установка", userGuideRu);
+        Assert.Contains("### Build and install a local standalone `win-x64` package", userGuide);
+        Assert.Contains(".\\scripts\\package-standalone.ps1", userGuide);
+        Assert.Contains("selenium-pw-migrator-$version-win-x64.zip", userGuide);
+        Assert.Contains(".\\scripts\\install-standalone.ps1", userGuide);
+        Assert.Contains("### Сборка и установка локального standalone `win-x64`", userGuideRu);
+        Assert.Contains(".\\scripts\\package-standalone.ps1", userGuideRu);
+        Assert.Contains("selenium-pw-migrator-$version-win-x64.zip", userGuideRu);
+        Assert.Contains(".\\scripts\\install-standalone.ps1", userGuideRu);
+
+        var guideWorkflows = userGuide[userGuide.IndexOf("## 3. Recommended First Run", StringComparison.Ordinal)..];
+        var guideWorkflowsRu = userGuideRu[userGuideRu.IndexOf("## 3. Первый правильный запуск", StringComparison.Ordinal)..];
+        Assert.DoesNotContain("dotnet tool run selenium-pw-migrator", guideWorkflows);
+        Assert.DoesNotContain("dotnet tool run selenium-pw-migrator", guideWorkflowsRu);
+        Assert.Contains("selenium-pw-migrator --mode analyze", guideWorkflows);
+        Assert.Contains("selenium-pw-migrator --mode analyze", guideWorkflowsRu);
     }
 
 

@@ -105,7 +105,7 @@ selenium-pw-migrator --version
 selenium-pw-migrator doctor install
 ```
 
-### Быстрый старт из NuGet
+### Альтернатива: установка через NuGet/dotnet tool
 
 Используйте dotnet tool, если нужна global/local .NET tool установка или закрепление версии через `.config/dotnet-tools.json`. Для использования мигратора репозиторий клонировать не нужно:
 
@@ -141,9 +141,37 @@ dotnet tool run selenium-pw-migrator -- playground \
 - `docs/articles/ast-migration-explained.md`
 - `docs/articles/ast-migration-explained.ru.md`
 
-### Установка из локально собранного пакета
+### Сборка и установка локального standalone `win-x64`
 
-Если вы проверяете release candidate до публикации, используйте одну и ту же версию при упаковке и установке:
+Это рекомендуемый путь для проверки release candidate: устанавливается тот же self-contained layout, который затем публикуется в GitHub Releases. На машине сборки нужен .NET SDK, но после установки CLI не требует ни .NET SDK, ни .NET Runtime.
+
+Запустите из корня репозитория в Windows PowerShell:
+
+```powershell
+$version = "0.0.0-preview.20"
+
+Unblock-File .\scripts\*.ps1
+.\scripts\package-standalone.ps1 `
+  -Version $version `
+  -Runtimes win-x64
+
+$archive = ".\artifacts\release\selenium-pw-migrator-$version-win-x64.zip"
+.\scripts\install-standalone.ps1 `
+  -Version $version `
+  -Runtime win-x64 `
+  -ArchivePath $archive `
+  -ChecksumsPath ".\artifacts\release\checksums.sha256"
+
+selenium-pw-migrator --version
+selenium-pw-migrator --help
+Get-Command selenium-pw-migrator -All
+```
+
+Архив создаётся в `artifacts/release/`. Установщик по умолчанию заменяет файлы в `%USERPROFILE%\.selenium-pw-migrator\bin`, ставит эту папку первой в user `PATH` и обновляет `PATH` текущей PowerShell-сессии. Если старая global dotnet tool всё ещё мешает разрешению команды, добавьте к вызову установщика `-RemoveDotnetTool`. Для изолированной проверки используйте `-InstallDir "$env:LOCALAPPDATA\selenium-pw-migrator-dev"`.
+
+### Альтернатива: локально собранный dotnet tool package
+
+Этот вариант проверяет NuGet/dotnet-tool упаковку, а не standalone. Используйте одну и ту же версию при упаковке и установке:
 
 ```bash
 version="0.0.0-preview.20"
@@ -166,7 +194,7 @@ dotnet restore
 dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --help
 ```
 
-В примерах ниже предполагается local dotnet tool manifest и используется `dotnet tool run selenium-pw-migrator -- ...`. `selenium-pw-migrator ...` используйте только после global install. Если запускаете из исходников, заменяйте local-tool prefix на:
+Во всех сценариях ниже используется установленная команда `selenium-pw-migrator ...`, как после npm или standalone. Если вы выбрали local dotnet tool manifest, добавляйте префикс `dotnet tool run selenium-pw-migrator --`. Если запускаете из исходников, заменяйте установленную команду на:
 
 ```bash
 dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- 
@@ -281,7 +309,7 @@ selenium-pw-migrator init --wizard \
 ### Шаг 1. Проверить вход и конфиг
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode doctor \
+selenium-pw-migrator --mode doctor \
   --input ./OldTests \
   --config migration/profiles/adapter-config.json \
   --out doctor \
@@ -291,7 +319,7 @@ dotnet tool run selenium-pw-migrator -- --mode doctor \
 `doctor --fix` строит безопасный план исправлений и candidate-файлы:
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode doctor \
+selenium-pw-migrator --mode doctor \
   --input ./OldTests \
   --config migration/profiles/adapter-config.json \
   --fix \
@@ -302,7 +330,7 @@ dotnet tool run selenium-pw-migrator -- --mode doctor \
 `--apply` применяйте только если согласны с безопасными изменениями внутри workspace или `.doctor.new` config candidates:
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode doctor \
+selenium-pw-migrator --mode doctor \
   --input ./OldTests \
   --config migration/profiles/adapter-config.json \
   --fix \
@@ -315,7 +343,7 @@ dotnet tool run selenium-pw-migrator -- --mode doctor \
 Перед большим маппингом PageObject и helper-методов:
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode index-pom \
+selenium-pw-migrator --mode index-pom \
   --input ./OldTests \
   --out pom-index \
   --format both
@@ -324,7 +352,7 @@ dotnet tool run selenium-pw-migrator -- --mode index-pom \
 Потом проверьте helper wrappers:
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode helper-inventory \
+selenium-pw-migrator --mode helper-inventory \
   --input ./OldTests \
   --out helper-inventory \
   --format both
@@ -333,7 +361,7 @@ dotnet tool run selenium-pw-migrator -- --mode helper-inventory \
 Если уже есть Playwright .NET проект:
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode discover-target \
+selenium-pw-migrator --mode discover-target \
   --input ./PlaywrightTests \
   --out target-discovery \
   --format both
@@ -342,7 +370,7 @@ dotnet tool run selenium-pw-migrator -- --mode discover-target \
 ### Шаг 3. Анализ без генерации кода
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode analyze \
+selenium-pw-migrator --mode analyze \
   --input ./OldTests \
   --config migration/profiles/adapter-config.json \
   --out run-001-analysis \
@@ -356,7 +384,7 @@ dotnet tool run selenium-pw-migrator -- --mode analyze \
 Для NUnit:
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode migrate \
+selenium-pw-migrator --mode migrate \
   --input ./OldTests \
   --config migration/profiles/adapter-config.json \
   --target dotnet \
@@ -368,7 +396,7 @@ dotnet tool run selenium-pw-migrator -- --mode migrate \
 Для xUnit:
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode migrate \
+selenium-pw-migrator --mode migrate \
   --input ./OldTests \
   --config migration/profiles/adapter-config.json \
   --target dotnet \
@@ -382,7 +410,7 @@ dotnet tool run selenium-pw-migrator -- --mode migrate \
 Сначала легкая проверка:
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode verify \
+selenium-pw-migrator --mode verify \
   --input migration/run-001-generated \
   --config migration/profiles/adapter-config.json \
   --out run-001-verify \
@@ -392,7 +420,7 @@ dotnet tool run selenium-pw-migrator -- --mode verify \
 Для Playwright .NET запускайте project-aware проверку:
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode verify-project \
+selenium-pw-migrator --mode verify-project \
   --input ./OldTests \
   --config migration/profiles/adapter-config.json \
   --target-test-framework nunit \
@@ -403,7 +431,7 @@ dotnet tool run selenium-pw-migrator -- --mode verify-project \
 Для Playwright TypeScript:
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode verify-ts-project \
+selenium-pw-migrator --mode verify-ts-project \
   --input migration/run-001-generated \
   --ts-project ./PlaywrightTsProject \
   --out run-001-verify-ts \
@@ -413,7 +441,7 @@ dotnet tool run selenium-pw-migrator -- --mode verify-ts-project \
 ### Шаг 6. Понять, что осталось
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode explain-todo \
+selenium-pw-migrator --mode explain-todo \
   --input migration/run-001-verify-project \
   --out run-001-explain \
   --format both
@@ -424,7 +452,7 @@ dotnet tool run selenium-pw-migrator -- --mode explain-todo \
 ### Шаг 7. Сравнить до и после
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode guard \
+selenium-pw-migrator --mode guard \
   --before migration/baseline \
   --after migration/run-001-verify-project \
   --out run-001-guard \
@@ -438,7 +466,7 @@ dotnet tool run selenium-pw-migrator -- --mode guard \
 Когда базовая настройка готова, `orchestrate` запускает типовой dry-run workflow:
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode orchestrate \
+selenium-pw-migrator --mode orchestrate \
   --input ./OldTests \
   --config migration/profiles/adapter-config.json \
   --target dotnet \
@@ -465,13 +493,13 @@ NUnit используется по умолчанию.
 Если целевой проект на xUnit:
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode scaffold \
+selenium-pw-migrator --mode scaffold \
   --target-test-framework xunit \
   --out generated-scaffold
 ```
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode migrate \
+selenium-pw-migrator --mode migrate \
   --input ./OldTests \
   --config ./adapter-config.json \
   --target dotnet \
@@ -492,7 +520,7 @@ xUnit output использует xUnit attributes и Playwright xUnit packages.
 Создает одноразовый пяти минутный demo workspace с готовыми командами, expected outputs, dashboard sample, PR pack sample и manifest.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- playground --out playground --target-test-framework xunit --generation-policy conservative
+selenium-pw-migrator playground --out playground --target-test-framework xunit --generation-policy conservative
 ```
 
 `playground-verify`
@@ -500,7 +528,7 @@ dotnet tool run selenium-pw-migrator -- playground --out playground --target-tes
 Проверяет, что сгенерированный playground по-прежнему содержит публичный demo contract: manifest, готовую цепочку команд, пример Selenium input, adapter config, ожидаемый Playwright output, dashboard sample, PR pack sample и формулировки selector safety.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- playground verify --input playground --out playground-verify
+selenium-pw-migrator playground verify --input playground --out playground-verify
 ```
 
 `memory`
@@ -508,10 +536,10 @@ dotnet tool run selenium-pw-migrator -- playground verify --input playground --o
 Создаёт и проверяет project-scoped migration memory в `migration/state/memory/**`. Используйте её во время supervised runs, чтобы следующие bounded actions переиспользовали решения, предупреждения, final-gate lessons и selector evidence без зависимости от памяти чата.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- memory init --workspace migration
-dotnet tool run selenium-pw-migrator -- memory add --kind decision "Keep POM unresolved until target mapping exists"
-dotnet tool run selenium-pw-migrator -- memory explain --workspace migration
-dotnet tool run selenium-pw-migrator -- memory doctor --workspace migration
+selenium-pw-migrator memory init --workspace migration
+selenium-pw-migrator memory add --kind decision "Keep POM unresolved until target mapping exists"
+selenium-pw-migrator memory explain --workspace migration
+selenium-pw-migrator memory doctor --workspace migration
 ```
 
 `config-merge`
@@ -519,8 +547,8 @@ dotnet tool run selenium-pw-migrator -- memory doctor --workspace migration
 Объединяет проверенные wave-local файлы `config-delta.json` в candidate config и валидирует результат до promotion. Это безопасный мост между divide-and-conquer waves и основным `adapter-config.json`.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- config merge-deltas --base migration/adapter-config.json --deltas migration/state/memory/config-deltas --out migration/config-merge
-dotnet tool run selenium-pw-migrator -- config validate-merge --base migration/adapter-config.json --candidate migration/config-merge/adapter-config.merged.json --out migration/config-merge
+selenium-pw-migrator config merge-deltas --base migration/adapter-config.json --deltas migration/state/memory/config-deltas --out migration/config-merge
+selenium-pw-migrator config validate-merge --base migration/adapter-config.json --candidate migration/config-merge/adapter-config.merged.json --out migration/config-merge
 ```
 
 Команда создаёт `adapter-config.merged.json`, `merge-report.md/json`, `validate-merge-report.md/json` и `conflicts.jsonl`. Candidate не продвигается автоматически: Reviewer, Watchdog и Final Gate должны принять merge, а `conflicts.jsonl` должен быть пустым.
@@ -530,7 +558,7 @@ dotnet tool run selenium-pw-migrator -- config validate-merge --base migration/a
 Проверяет готовность NuGet preview из корня репозитория: package metadata, согласованность version/changelog, release scripts, документацию упаковки README_TOOL, поддержку dry-run в publish workflow, ссылки на NuGet secrets и repository hygiene.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- doctor release --out release-doctor
+selenium-pw-migrator doctor release --out release-doctor
 ```
 
 `runbook`
@@ -538,7 +566,7 @@ dotnet tool run selenium-pw-migrator -- doctor release --out release-doctor
 Генерирует практический план миграции: pilot scope, command chain, risk map, artifacts и acceptance checklist.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- runbook --input ./OldTests --target dotnet --target-test-framework xunit --generation-policy conservative --out runbook
+selenium-pw-migrator runbook --input ./OldTests --target dotnet --target-test-framework xunit --generation-policy conservative --out runbook
 ```
 
 `start`
@@ -570,7 +598,7 @@ selenium-pw-migrator init --wizard --source-path ./OldTests --target dotnet --ta
 Проверяет, готовы ли input, config, environment и workspace. С `--fix` пишет безопасный план или candidate-файлы.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode doctor --input ./OldTests --config ./adapter-config.json --fix --dry-run --out doctor
+selenium-pw-migrator --mode doctor --input ./OldTests --config ./adapter-config.json --fix --dry-run --out doctor
 ```
 
 `capabilities`
@@ -578,7 +606,7 @@ dotnet tool run selenium-pw-migrator -- --mode doctor --input ./OldTests --confi
 Показывает доступные source frontends и target backends.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode capabilities --out capabilities --format both
+selenium-pw-migrator --mode capabilities --out capabilities --format both
 ```
 
 `framework matrix`
@@ -586,7 +614,7 @@ dotnet tool run selenium-pw-migrator -- --mode capabilities --out capabilities -
 Пишет source framework detection и target framework readiness reports.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- framework matrix --input ./OldTests --target dotnet --target-test-framework xunit --out framework-matrix --format both
+selenium-pw-migrator framework matrix --input ./OldTests --target dotnet --target-test-framework xunit --out framework-matrix --format both
 ```
 
 `discover-target`
@@ -594,7 +622,7 @@ dotnet tool run selenium-pw-migrator -- framework matrix --input ./OldTests --ta
 Сканирует существующий Playwright .NET проект: namespaces, base classes, packages, reusable infrastructure.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode discover-target --input ./PlaywrightTests --out target-discovery
+selenium-pw-migrator --mode discover-target --input ./PlaywrightTests --out target-discovery
 ```
 
 `scaffold`
@@ -602,7 +630,7 @@ dotnet tool run selenium-pw-migrator -- --mode discover-target --input ./Playwri
 Создает минимальный Playwright .NET test project skeleton.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode scaffold --target-test-framework nunit --out scaffold
+selenium-pw-migrator --mode scaffold --target-test-framework nunit --out scaffold
 ```
 
 `bootstrap-project`
@@ -610,7 +638,7 @@ dotnet tool run selenium-pw-migrator -- --mode scaffold --target-test-framework 
 Создает migration profile skeletons для нового проекта.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode bootstrap-project --input ./OldTests --out bootstrap-oldtests
+selenium-pw-migrator --mode bootstrap-project --input ./OldTests --out bootstrap-oldtests
 ```
 
 ### Анализ и генерация
@@ -620,7 +648,7 @@ dotnet tool run selenium-pw-migrator -- --mode bootstrap-project --input ./OldTe
 Читает Selenium-тесты и пишет отчет о том, что можно мигрировать.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode analyze --input ./OldTests --config ./adapter-config.json --out analysis
+selenium-pw-migrator --mode analyze --input ./OldTests --config ./adapter-config.json --out analysis
 ```
 
 `migrate`
@@ -628,7 +656,7 @@ dotnet tool run selenium-pw-migrator -- --mode analyze --input ./OldTests --conf
 Генерирует Playwright output.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode migrate --input ./OldTests --config ./adapter-config.json --target dotnet --generation-policy balanced --out generated
+selenium-pw-migrator --mode migrate --input ./OldTests --config ./adapter-config.json --target dotnet --generation-policy balanced --out generated
 ```
 
 `--generation-policy conservative|balanced|aggressive` управляет риском helper generation. Conservative чаще оставляет review/TODO, balanced - нормальный дефолт, aggressive генерирует больше active helper code с risk annotations.
@@ -638,7 +666,7 @@ dotnet tool run selenium-pw-migrator -- --mode migrate --input ./OldTests --conf
 Maintainer/debug режим, который выгружает внутреннюю модель.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode dump-ir --input ./OldTests --config ./adapter-config.json --out ir --ir-version both
+selenium-pw-migrator --mode dump-ir --input ./OldTests --config ./adapter-config.json --out ir --ir-version both
 ```
 
 `orchestrate`
@@ -646,7 +674,7 @@ dotnet tool run selenium-pw-migrator -- --mode dump-ir --input ./OldTests --conf
 Запускает analyze, migrate, verify и proposal generation одним dry-run процессом.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode orchestrate --input ./OldTests --config ./adapter-config.json --out run-001
+selenium-pw-migrator --mode orchestrate --input ./OldTests --config ./adapter-config.json --out run-001
 ```
 
 ### Проверки и quality gates
@@ -656,7 +684,7 @@ dotnet tool run selenium-pw-migrator -- --mode orchestrate --input ./OldTests --
 Проверяет generated code и пишет syntax/TODO/config issues.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode verify --input migration/generated --config ./adapter-config.json --out verify
+selenium-pw-migrator --mode verify --input migration/generated --config ./adapter-config.json --out verify
 ```
 
 `verify-project`
@@ -664,7 +692,7 @@ dotnet tool run selenium-pw-migrator -- --mode verify --input migration/generate
 Собирает generated Playwright .NET output во временном project-aware harness.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode verify-project --input ./OldTests --config ./adapter-config.json --out verify-project
+selenium-pw-migrator --mode verify-project --input ./OldTests --config ./adapter-config.json --out verify-project
 ```
 
 `verify-ts-project`
@@ -672,7 +700,7 @@ dotnet tool run selenium-pw-migrator -- --mode verify-project --input ./OldTests
 Type-check generated Playwright TypeScript specs внутри существующего TS проекта.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode verify-ts-project --input migration/generated-ts --ts-project ./PlaywrightTs --out verify-ts
+selenium-pw-migrator --mode verify-ts-project --input migration/generated-ts --ts-project ./PlaywrightTs --out verify-ts
 ```
 
 `guard`
@@ -680,7 +708,7 @@ dotnet tool run selenium-pw-migrator -- --mode verify-ts-project --input migrati
 Сравнивает два запуска и падает на регрессиях.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode guard --before migration/baseline --after migration/current --out guard
+selenium-pw-migrator --mode guard --before migration/baseline --after migration/current --out guard
 ```
 
 ### Config и profiles
@@ -690,7 +718,7 @@ dotnet tool run selenium-pw-migrator -- --mode guard --before migration/baseline
 Пишет JSON Schema для adapter config.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode config-schema --out schema
+selenium-pw-migrator --mode config-schema --out schema
 ```
 
 `config-validate`
@@ -698,7 +726,7 @@ dotnet tool run selenium-pw-migrator -- --mode config-schema --out schema
 Проверяет структуру adapter config и safety rules.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode config-validate --config ./adapter-config.json --validation-mode strict --out config-check
+selenium-pw-migrator --mode config-validate --config ./adapter-config.json --validation-mode strict --out config-check
 ```
 
 `config-normalize`
@@ -706,7 +734,7 @@ dotnet tool run selenium-pw-migrator -- --mode config-validate --config ./adapte
 Maintainer режим для перевода старого config shape в новый profile shape.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode config-normalize --config ./adapter-config.json --out normalized
+selenium-pw-migrator --mode config-normalize --config ./adapter-config.json --out normalized
 ```
 
 `config-diff`
@@ -714,7 +742,7 @@ dotnet tool run selenium-pw-migrator -- --mode config-normalize --config ./adapt
 Сравнивает два config и подсвечивает risky changes.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode config-diff --before adapter.old.json --after adapter-config.json --out config-diff
+selenium-pw-migrator --mode config-diff --before adapter.old.json --after adapter-config.json --out config-diff
 ```
 
 `profile list`
@@ -722,7 +750,7 @@ dotnet tool run selenium-pw-migrator -- --mode config-diff --before adapter.old.
 Показывает встроенные offline profiles.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- profile list
+selenium-pw-migrator profile list
 ```
 
 `profile search`
@@ -730,7 +758,7 @@ dotnet tool run selenium-pw-migrator -- profile list
 Ищет profiles по framework, backend или capability.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- profile search xunit
+selenium-pw-migrator profile search xunit
 ```
 
 `profile recommend`
@@ -738,7 +766,7 @@ dotnet tool run selenium-pw-migrator -- profile search xunit
 Оценивает built-in profiles для source project и рекомендует порядок установки.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- profile recommend --input ./OldTests --target-test-framework xunit --out profile-recommendations
+selenium-pw-migrator profile recommend --input ./OldTests --target-test-framework xunit --out profile-recommendations
 ```
 
 `profile inspect`
@@ -746,7 +774,7 @@ dotnet tool run selenium-pw-migrator -- profile recommend --input ./OldTests --t
 Объясняет встроенный profile перед установкой.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- profile inspect basic-csharp-xunit
+selenium-pw-migrator profile inspect basic-csharp-xunit
 ```
 
 `profile install`
@@ -754,7 +782,7 @@ dotnet tool run selenium-pw-migrator -- profile inspect basic-csharp-xunit
 Устанавливает встроенный profile как config layer.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- profile install basic-csharp-nunit --out profiles
+selenium-pw-migrator profile install basic-csharp-nunit --out profiles
 ```
 
 `profile diff`
@@ -762,7 +790,7 @@ dotnet tool run selenium-pw-migrator -- profile install basic-csharp-nunit --out
 Сравнивает config с другим config или встроенным profile.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- profile diff --before adapter-config.json --after basic-csharp-xunit --out profile-diff
+selenium-pw-migrator profile diff --before adapter-config.json --after basic-csharp-xunit --out profile-diff
 ```
 
 `profile-match`
@@ -770,7 +798,7 @@ dotnet tool run selenium-pw-migrator -- profile diff --before adapter-config.jso
 Оценивает, подходит ли существующий profile/config для исходного проекта.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode profile-match --input ./OldTests --config ./profiles/base.adapter.json --out profile-match
+selenium-pw-migrator --mode profile-match --input ./OldTests --config ./profiles/base.adapter.json --out profile-match
 ```
 
 `config author`
@@ -778,7 +806,7 @@ dotnet tool run selenium-pw-migrator -- --mode profile-match --input ./OldTests 
 Пишет evidence-driven config proposals и reviewable patch на основе selector evidence, POM index, helper inventory, target discovery и TODO reports. Patch не применяется автоматически.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- config author --input migration/run-001 --config ./adapter-config.json --out config-proposals --format both
+selenium-pw-migrator config author --input migration/run-001 --config ./adapter-config.json --out config-proposals --format both
 ```
 
 ### Помощники для source truth
@@ -788,7 +816,7 @@ dotnet tool run selenium-pw-migrator -- config author --input migration/run-001 
 Ищет Selenium PageObject selectors и source-truth candidates.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode index-pom --input ./OldTests --out pom-index
+selenium-pw-migrator --mode index-pom --input ./OldTests --out pom-index
 ```
 
 `helper-inventory`
@@ -796,7 +824,7 @@ dotnet tool run selenium-pw-migrator -- --mode index-pom --input ./OldTests --ou
 Смотрит helper/POM methods перед тем, как маппить или suppress helper wrappers.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode helper-inventory --input ./OldTests --out helper-inventory
+selenium-pw-migrator --mode helper-inventory --input ./OldTests --out helper-inventory
 ```
 
 `selector evidence`
@@ -804,7 +832,7 @@ dotnet tool run selenium-pw-migrator -- --mode helper-inventory --input ./OldTes
 Объясняет происхождение локаторов: Selenium selector → config mapping → generated Playwright locator.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- selector evidence --input migration/run-001 --config ./adapter-config.json --out selector-evidence
+selenium-pw-migrator selector evidence --input migration/run-001 --config ./adapter-config.json --out selector-evidence
 ```
 
 `propose`
@@ -812,7 +840,7 @@ dotnet tool run selenium-pw-migrator -- selector evidence --input migration/run-
 Создает mapping proposals из migration artifacts, не меняя config.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode propose --input migration/generated --config ./adapter-config.json --out proposals
+selenium-pw-migrator --mode propose --input migration/generated --config ./adapter-config.json --out proposals
 ```
 
 ### Reports, runtime triage и sharing
@@ -822,7 +850,7 @@ dotnet tool run selenium-pw-migrator -- --mode propose --input migration/generat
 Объясняет оставшиеся TODO и вероятные root causes.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode explain-todo --input migration/verify-project --out todo-explanation
+selenium-pw-migrator --mode explain-todo --input migration/verify-project --out todo-explanation
 ```
 
 `smoke-plan`
@@ -830,7 +858,7 @@ dotnet tool run selenium-pw-migrator -- --mode explain-todo --input migration/ve
 Ранжирует generated tests по runtime readiness.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode smoke-plan --input migration/verify-project --out smoke-plan
+selenium-pw-migrator --mode smoke-plan --input migration/verify-project --out smoke-plan
 ```
 
 `runtime-classify`
@@ -838,7 +866,7 @@ dotnet tool run selenium-pw-migrator -- --mode smoke-plan --input migration/veri
 Классифицирует Playwright runtime failures из logs, traces, screenshots и videos.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode runtime-classify --input migration/runtime-logs --out runtime-classify
+selenium-pw-migrator --mode runtime-classify --input migration/runtime-logs --out runtime-classify
 ```
 
 `learn pack`
@@ -846,7 +874,7 @@ dotnet tool run selenium-pw-migrator -- --mode runtime-classify --input migratio
 Извлекает reusable migration knowledge из завершенного run-а в reviewable profile layer и learning changelog.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- learn pack --input migration/run-001 --config ./adapter-config.json --out learn-pack --format both
+selenium-pw-migrator learn pack --input migration/run-001 --config ./adapter-config.json --out learn-pack --format both
 ```
 
 `migration-board`
@@ -854,7 +882,7 @@ dotnet tool run selenium-pw-migrator -- learn pack --input migration/run-001 --c
 Строит HTML dashboard из migration artifacts.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode migration-board --input migration/run-001 --out board --format both
+selenium-pw-migrator --mode migration-board --input migration/run-001 --out board --format both
 ```
 
 `report serve`
@@ -862,13 +890,13 @@ dotnet tool run selenium-pw-migrator -- --mode migration-board --input migration
 Строит и при необходимости запускает локальный dashboard.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- report serve --input migration/runs/latest --port 5077 --out migration/dashboard/latest
+selenium-pw-migrator report serve --input migration/runs/latest --port 5077 --out migration/dashboard/latest
 ```
 
 Для CI используйте static-only:
 
 ```bash
-dotnet tool run selenium-pw-migrator -- report serve --input migration/runs/latest --static-only --out migration/dashboard/latest
+selenium-pw-migrator report serve --input migration/runs/latest --static-only --out migration/dashboard/latest
 ```
 
 `evidence pack`
@@ -876,13 +904,13 @@ dotnet tool run selenium-pw-migrator -- report serve --input migration/runs/late
 Создает redacted zip для PR, issue или внешнего review.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- evidence pack --input migration/run-001 --out evidence/run-001.zip
+selenium-pw-migrator evidence pack --input migration/run-001 --out evidence/run-001.zip
 ```
 
 `--include-source` используйте только после явной проверки:
 
 ```bash
-dotnet tool run selenium-pw-migrator -- evidence pack --input migration/run-001 --out evidence/run-001.zip --include-source
+selenium-pw-migrator evidence pack --input migration/run-001 --out evidence/run-001.zip --include-source
 ```
 
 `pr pack`
@@ -890,7 +918,7 @@ dotnet tool run selenium-pw-migrator -- evidence pack --input migration/run-001 
 Создает PR/review bundle: summary, generated files list, before/after metrics, risk summary, reviewer checklist и suggested PR description.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- pr pack --input migration/run-001 --out pr-pack --format both
+selenium-pw-migrator pr pack --input migration/run-001 --out pr-pack --format both
 ```
 
 `agent contract`
@@ -898,7 +926,7 @@ dotnet tool run selenium-pw-migrator -- pr pack --input migration/run-001 --out 
 Генерирует agent instructions под конкретный ticket: allowed paths, stop policy, exact commands, report template и prompts для coordinator/migrator/verifier.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- agent contract --input migration/current-ticket.md --out agent-contract --format both
+selenium-pw-migrator agent contract --input migration/current-ticket.md --out agent-contract --format both
 ```
 
 ## 8. Частые сценарии
@@ -993,7 +1021,7 @@ Reports - часть продукта. Храните `orchestration-report`, `e
 Относительные `--out` обычно пишутся внутрь `migration/`.
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode analyze --out analysis
+selenium-pw-migrator --mode analyze --out analysis
 ```
 
 Обычно получится:
@@ -1005,7 +1033,7 @@ migration/analysis/
 Абсолютные пути сохраняются как есть:
 
 ```bash
-dotnet tool run selenium-pw-migrator -- --mode analyze --out C:/temp/migrator-analysis
+selenium-pw-migrator --mode analyze --out C:/temp/migrator-analysis
 ```
 
 Для передачи результата наружу лучше использовать `evidence pack`.
