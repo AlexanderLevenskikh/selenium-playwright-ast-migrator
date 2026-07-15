@@ -47,7 +47,7 @@ public class RoslynTestFileParser : ITestFileParser
     {
         new WebDriverFindElementRecognizer(),
         new ClickInvocationRecognizer(),
-        new SendKeysInvocationRecognizer(),
+        new SendKeysInvocationRecognizer(options.InputMethods),
         new AssertInvocationRecognizer(),
         new TableInvocationRecognizer(),
         new ProjectAssertionHelperRecognizer(),
@@ -55,12 +55,12 @@ public class RoslynTestFileParser : ITestFileParser
         new VisibilityAssertionRecognizer(),
         new WaitPresenceRecognizer(),
         new UrlAssertionRecognizer(),
-        new FluentAssertionsRecognizer(),
+        new FluentAssertionsRecognizer(options.FluentAssertionMethods),
         new WaitInvocationRecognizer(options),
         new AsyncPlaywrightRecognizer(),
-        new NavigationRecognizer(),
+        new NavigationRecognizer(options.NavigationMethods),
         new PlaywrightAssertionRecognizer(),
-        new SelectValueRecognizer(),
+        new SelectValueRecognizer(options.SelectMethods),
         new PageObjectMethodRecognizer(),
         new UnknownInvocationRecognizer(),
     };
@@ -103,15 +103,12 @@ public class RoslynTestFileParser : ITestFileParser
 
         var classDecls = root.DescendantNodes().OfType<ClassDeclarationSyntax>().ToList();
 
-        var testClass = classDecls.FirstOrDefault(c =>
-            c.AttributeLists.SelectMany(al => al.Attributes)
-                .Any(a =>
-                {
-                    var name = a.Name.ToString();
-                    return name == "TestFixture" || name == "NUnit.Framework.TestFixture";
-                }) ||
-            classDecls.Count == 1
-        );
+        // Prefer an explicit fixture, then a class that actually owns test methods.
+        // The previous single-class fallback rejected perfectly valid files that keep
+        // small DTO/helper types next to the fixture (a common pattern in migrated tests).
+        var testClass = classDecls.FirstOrDefault(HasTestFixtureAttribute)
+            ?? classDecls.FirstOrDefault(ContainsTestMethod)
+            ?? (classDecls.Count == 1 ? classDecls[0] : null);
 
         if (testClass == null)
             throw new InvalidOperationException($"No test class found in {filePath}");
@@ -307,6 +304,12 @@ public class RoslynTestFileParser : ITestFileParser
             {
                 yield return action;
             }
+            else if (ShouldIgnoreStatement(statement, semanticModel))
+            {
+                // Resolved framework/runtime calls intentionally ignored by the
+                // extractor must not be reintroduced as UnsupportedAction here.
+                continue;
+            }
             else if (IsMeaningfulStatement(statement))
             {
                 var text = statement.ToString().Trim();
@@ -321,6 +324,15 @@ public class RoslynTestFileParser : ITestFileParser
         if (statement is ForEachStatementSyntax foreachStatement)
         {
             return TryExtractCollectionForEach(foreachStatement, semanticModel, line);
+        }
+
+        // Roslyn represents `var (_, value) = await Helper()` as an expression
+        // statement whose left side is a DeclarationExpressionSyntax. Handle that
+        // top-level assignment before ordinary reassignment/raw-statement paths.
+        if (statement is ExpressionStatementSyntax { Expression: AssignmentExpressionSyntax deconstructionAssignment }
+            && TryExtractInvocationDeconstructionAssignment(deconstructionAssignment, semanticModel, line) is { } deconstructionInvocation)
+        {
+            return deconstructionInvocation;
         }
 
         // Local declarations — try to extract meaningful declarations
@@ -456,7 +468,7 @@ public class RoslynTestFileParser : ITestFileParser
         // file with only lightweight framework references. Preserve them as
         // structured MethodInvocationAction so adapter config, MethodSemantics, or
         // helper-inventory evidence can classify them later.
-        if (!symbolResolved && IsUnqualifiedHelperInvocation(invocation, methodName, receiverText))
+        if (IsUnqualifiedHelperInvocation(invocation, methodName, receiverText))
         {
             return new MethodInvocationAction(
                 line,
@@ -742,8 +754,11 @@ public class RoslynTestFileParser : ITestFileParser
 
     static bool IsBuiltinSystemMethod(IMethodSymbol methodSymbol)
     {
-        var containingType = methodSymbol.ContainingType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
-        return containingType.Contains("System.") || containingType.Contains("Microsoft.");
+        var containingNamespace = methodSymbol.ContainingNamespace?.ToDisplayString() ?? string.Empty;
+        return string.Equals(containingNamespace, "System", StringComparison.Ordinal)
+            || containingNamespace.StartsWith("System.", StringComparison.Ordinal)
+            || string.Equals(containingNamespace, "Microsoft", StringComparison.Ordinal)
+            || containingNamespace.StartsWith("Microsoft.", StringComparison.Ordinal);
     }
 
     static bool IsSeleniumControlType(IMethodSymbol methodSymbol, string containingType)
@@ -811,6 +826,43 @@ public class RoslynTestFileParser : ITestFileParser
         return !excluded.Contains(methodName);
     }
 
+    static bool HasTestFixtureAttribute(ClassDeclarationSyntax classDeclaration) =>
+        classDeclaration.AttributeLists
+            .SelectMany(attributeList => attributeList.Attributes)
+            .Any(attribute => IsAttributeNamed(attribute, "TestFixture"));
+
+    static bool ContainsTestMethod(ClassDeclarationSyntax classDeclaration) =>
+        classDeclaration.Members
+            .OfType<MethodDeclarationSyntax>()
+            .Any(method => method.AttributeLists
+                .SelectMany(attributeList => attributeList.Attributes)
+                .Any(attribute => IsAttributeNamed(attribute, "Test") || IsAttributeNamed(attribute, "TestCase")));
+
+    static bool IsAttributeNamed(AttributeSyntax attribute, string expectedName)
+    {
+        var name = attribute.Name.ToString();
+        var simpleName = name.Split('.').Last();
+        return string.Equals(simpleName, expectedName, StringComparison.Ordinal)
+            || string.Equals(simpleName, expectedName + "Attribute", StringComparison.Ordinal);
+    }
+
+    static bool ShouldIgnoreStatement(StatementSyntax statement, SemanticModel semanticModel)
+    {
+        var expression = statement is ExpressionStatementSyntax expressionStatement
+            ? expressionStatement.Expression
+            : null;
+        var invocation = expression switch
+        {
+            InvocationExpressionSyntax direct => direct,
+            AwaitExpressionSyntax { Expression: InvocationExpressionSyntax awaited } => awaited,
+            _ => null
+        };
+
+        return invocation != null
+            && semanticModel.GetSymbolInfo(invocation).Symbol is IMethodSymbol methodSymbol
+            && IsBuiltinSystemMethod(methodSymbol);
+    }
+
     static bool IsMeaningfulStatement(StatementSyntax statement)
     {
         return statement switch
@@ -872,8 +924,8 @@ public class RoslynTestFileParser : ITestFileParser
         if (!IsUnqualifiedHelperInvocation(invocation, methodName, receiverText))
             return null;
 
-        var symbolResolved = semanticModel.GetSymbolInfo(invocation).Symbol is IMethodSymbol;
-        if (symbolResolved)
+        var methodSymbol = semanticModel.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
+        if (methodSymbol != null && IsBuiltinSystemMethod(methodSymbol))
             return null;
 
         var argumentTexts = invocation.ArgumentList.Arguments
@@ -914,8 +966,8 @@ public class RoslynTestFileParser : ITestFileParser
         if (!IsUnqualifiedHelperInvocation(invocation, methodName, receiverText))
             return null;
 
-        var symbolResolved = semanticModel.GetSymbolInfo(invocation).Symbol is IMethodSymbol;
-        if (symbolResolved)
+        var methodSymbol = semanticModel.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
+        if (methodSymbol != null && IsBuiltinSystemMethod(methodSymbol))
             return null;
 
         var targetVariable = assignment.Left.ToString().Trim();
@@ -937,6 +989,119 @@ public class RoslynTestFileParser : ITestFileParser
             targetVariable,
             RecognitionConfidence.SyntaxFallback,
             isAwaited);
+    }
+
+    TestAction? TryExtractInvocationDeconstructionAssignment(
+        AssignmentExpressionSyntax assignment,
+        SemanticModel semanticModel,
+        int line)
+    {
+        if (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression))
+            return null;
+
+        if (!TryGetDeconstructionResultBinding(assignment.Left, out var resultBinding, out var isDeclaration))
+            return null;
+
+        var invocation = assignment.Right switch
+        {
+            InvocationExpressionSyntax direct => direct,
+            AwaitExpressionSyntax { Expression: InvocationExpressionSyntax awaited } => awaited,
+            _ => null
+        };
+        var isAwaited = assignment.Right is AwaitExpressionSyntax;
+        if (invocation == null)
+            return null;
+
+        var methodName = GetMethodName(invocation);
+        var receiverText = GetReceiverText(invocation);
+        var methodSymbol = semanticModel.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
+        if (methodSymbol != null && IsBuiltinSystemMethod(methodSymbol))
+            return null;
+
+        var argumentTexts = invocation.ArgumentList.Arguments
+            .Select(argument => argument.Expression.ToString())
+            .ToArray();
+        var genericArgumentTexts = GetGenericArgumentTexts(invocation);
+
+        // Declaration mappings use templates such as `var {result} = await ...`.
+        // Keep only the invocation as FullSourceText so the renderer does not mistake
+        // a declaration for a reassignment. Tuple reassignments keep the assignment
+        // text and the renderer removes a template's leading `var`.
+        var fullText = isDeclaration
+            ? invocation.ToString().Trim().TrimEnd(';')
+            : assignment.ToString().Trim().TrimEnd(';');
+
+        return new MethodInvocationAction(
+            line,
+            receiverText,
+            methodName,
+            fullText,
+            argumentTexts,
+            genericArgumentTexts,
+            resultBinding,
+            RecognitionConfidence.SyntaxFallback,
+            isAwaited);
+    }
+
+    static bool TryGetDeconstructionResultBinding(
+        ExpressionSyntax left,
+        out string resultBinding,
+        out bool isDeclaration)
+    {
+        var text = left.ToString().Trim();
+        isDeclaration = false;
+        resultBinding = string.Empty;
+
+        if (text.StartsWith("var", StringComparison.Ordinal))
+        {
+            var remainder = text["var".Length..].TrimStart();
+            if (LooksLikeTupleBinding(remainder))
+            {
+                resultBinding = remainder;
+                isDeclaration = true;
+                return true;
+            }
+        }
+
+        if (LooksLikeTupleBinding(text))
+        {
+            resultBinding = text;
+            return true;
+        }
+
+        return false;
+    }
+
+    static bool LooksLikeTupleBinding(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)
+            || text[0] != '('
+            || text[^1] != ')')
+        {
+            return false;
+        }
+
+        var depth = 0;
+        var hasTopLevelComma = false;
+        for (var i = 0; i < text.Length; i++)
+        {
+            switch (text[i])
+            {
+                case '(':
+                    depth++;
+                    break;
+                case ')':
+                    depth--;
+                    if (depth < 0)
+                        return false;
+                    break;
+                case ',' when depth == 1:
+                    hasTopLevelComma = true;
+                    break;
+            }
+        }
+
+        return depth == 0 && hasTopLevelComma;
     }
 
     TestAction? TryExtractGenericInvocationAssignment(AssignmentExpressionSyntax assignment, int line)

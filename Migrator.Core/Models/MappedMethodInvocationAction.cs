@@ -23,8 +23,9 @@ public sealed class MappedMethodInvocationAction : TestAction
     public string? SourceMethod { get; }
 
     /// <summary>
-    /// Name of the local variable assigned from the source invocation, when available.
-    /// Used to substitute {result} in TargetStatements.
+    /// Local result binding assigned from the source invocation, when available.
+    /// May be a single variable name or a tuple/deconstruction binding. Used to
+    /// substitute {result} in TargetStatements.
     /// </summary>
     public string? ResultVariable { get; }
 

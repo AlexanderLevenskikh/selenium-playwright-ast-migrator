@@ -76,12 +76,27 @@ public partial class PlaywrightDotNetRenderer
 
         var originalUsesResultPlaceholder = originalStatement.Contains("{result}", StringComparison.Ordinal);
         var originalDeclaredVariables = ExtractDeclaredVariableNames(originalStatement);
-        var originalDeclaresResultVariable = originalDeclaredVariables.Any(v => v == action.ResultVariable);
-        var declaredResultVariable = declaredVariables.FirstOrDefault(v => v == action.ResultVariable);
-        if (!originalUsesResultPlaceholder && !originalDeclaresResultVariable && declaredResultVariable == null)
+        var resultBindingVariables = ExtractDeclaredVariableNames($"var {action.ResultVariable} = default");
+        if (resultBindingVariables.Count == 0
+            && Regex.IsMatch(action.ResultVariable!, @"^@?[A-Za-z_]\w*$"))
+        {
+            resultBindingVariables = new[] { action.ResultVariable!.TrimStart('@') };
+        }
+
+        var hasMappedResultDeclaration = originalUsesResultPlaceholder
+            || resultBindingVariables.Any(result => originalDeclaredVariables.Contains(result))
+            || resultBindingVariables.Any(result => declaredVariables.Contains(result));
+        if (!hasMappedResultDeclaration)
             return;
 
-        RegisterSourceVar(action.ResultVariable!, declaredResultVariable ?? declaredVariables[0]);
+        for (var i = 0; i < resultBindingVariables.Count; i++)
+        {
+            var sourceVariable = resultBindingVariables[i];
+            var targetVariable = declaredVariables.FirstOrDefault(variable => variable == sourceVariable)
+                ?? declaredVariables.ElementAtOrDefault(i);
+            if (!string.IsNullOrWhiteSpace(targetVariable))
+                RegisterSourceVar(sourceVariable, targetVariable!);
+        }
     }
 
 

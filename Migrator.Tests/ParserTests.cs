@@ -1412,7 +1412,7 @@ namespace Sample.E2ETests
         var renderer = new PlaywrightDotNetRenderer();
 
         var setupCall = new RawStatementAction(1, "var data = UnavailableMethod()");
-        var sendKeys = new SendKeysAction(2, TargetExpression.Mapped("page.Input", "inp", TargetKind.PlaywrightLocator, "data-tid", null, null), "test");
+        var sendKeys = new SendKeysAction(2, TargetExpression.Mapped("page.Input", "inp", TargetKind.PlaywrightLocator, "data-tid", null, null), "\"test\"");
         var model = CreateModelWithSetup(new[] { setupCall }, new[] { sendKeys });
         var output = renderer.Render(model);
 

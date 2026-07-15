@@ -270,14 +270,25 @@ public class DefaultProjectAdapter : IProjectAdapter
             {
                 resolved._methodStatementsMap[m.SourceMethod] = methodStatements;
 
-                // Accept declaration-like exact mappings such as
-                // `GoToPageWithUserAccessRight<T>(uri, accessRights)` as aliases for
-                // the invocation method name. This keeps older/agent-authored configs
-                // useful without allowing receiver-specific mappings to become broad.
-                if (TryParseReceiverlessMethodSignature(m.SourceMethod, out var methodName, out var parameterNames))
+                // Accept declaration-like mappings such as
+                // `GoToPageWithUserAccessRight<T>(uri, accessRights)` and
+                // receiver-qualified forms such as `Browser.GoToPage<T>(uri)`.
+                // Qualified mappings retain their receiver, so they cannot become a
+                // broad alias that steals the same method name from another helper.
+                if (TryParseMethodSignature(
+                    m.SourceMethod,
+                    out var receiver,
+                    out var methodName,
+                    out var genericArity,
+                    out var parameterNames))
                 {
                     resolved._methodSignatureMappings.Add(
-                        new ResolvedMethodSignatureMapping(methodName, parameterNames.Count, methodStatements));
+                        new ResolvedMethodSignatureMapping(
+                            receiver,
+                            methodName,
+                            genericArity,
+                            parameterNames.Count,
+                            methodStatements));
                 }
             }
         }
@@ -299,24 +310,34 @@ public class DefaultProjectAdapter : IProjectAdapter
             RegexOptions.CultureInvariant);
     }
 
-    static bool TryParseReceiverlessMethodSignature(
+    static bool TryParseMethodSignature(
         string sourceMethod,
+        out string? receiver,
         out string methodName,
+        out int genericArity,
         out IReadOnlyList<string> parameterNames)
     {
+        receiver = null;
         methodName = string.Empty;
+        genericArity = 0;
         parameterNames = Array.Empty<string>();
         if (string.IsNullOrWhiteSpace(sourceMethod))
             return false;
 
         var match = Regex.Match(
             sourceMethod.Trim(),
-            @"^(?<name>[A-Za-z_]\w*)(?:\s*<[^>]+>)?\s*\((?<parameters>.*)\)$",
+            @"^(?:(?<receiver>@?[A-Za-z_]\w*(?:\s*\.\s*@?[A-Za-z_]\w*)*)\s*\.\s*)?(?<name>[A-Za-z_]\w*)(?:\s*<(?<genericArguments>[^>]+)>)?\s*\((?<parameters>.*)\)$",
             RegexOptions.CultureInvariant);
         if (!match.Success)
             return false;
 
+        receiver = match.Groups["receiver"].Success
+            ? Regex.Replace(match.Groups["receiver"].Value, @"\s*\.\s*", ".")
+            : null;
         methodName = match.Groups["name"].Value;
+        genericArity = match.Groups["genericArguments"].Success
+            ? SplitTopLevelArguments(match.Groups["genericArguments"].Value).Count()
+            : 0;
         parameterNames = SplitTopLevelArguments(match.Groups["parameters"].Value)
             .Select(parameter => Regex.Match(parameter.Trim(), @"(?<name>[A-Za-z_]\w*)\s*$", RegexOptions.CultureInvariant))
             .Where(parameterMatch => parameterMatch.Success)
@@ -354,7 +375,7 @@ public class DefaultProjectAdapter : IProjectAdapter
     static ResolvedMethodStatements ResolveMethodStatements(MethodMapping mapping)
     {
         var targetStatementsByTarget = ResolveExactTargetStatementOverrides(mapping.Targets, mapping.RequiresReview, out var requiresReviewByTarget);
-        TryParseReceiverlessMethodSignature(mapping.SourceMethod, out _, out var parameterNames);
+        TryParseMethodSignature(mapping.SourceMethod, out _, out _, out _, out var parameterNames);
         return new ResolvedMethodStatements(
             mapping.TargetStatements ?? Array.Empty<string>(),
             mapping.RequiresReview,
@@ -367,7 +388,7 @@ public class DefaultProjectAdapter : IProjectAdapter
     {
         var legacyStatements = mapping.TargetStatements == null
             ? Array.Empty<string>()
-            : mapping.TargetStatements.Select(stmt => SubstitutePlaceholders(stmt, placeholders)).ToArray();
+            : mapping.TargetStatements.Select(stmt => SubstituteMappedStatementPlaceholders(stmt, placeholders)).ToArray();
 
         var targetStatementsByTarget = ResolveParameterizedTargetStatementOverrides(mapping.Targets, mapping.RequiresReview, placeholders, out var requiresReviewByTarget);
         return new ResolvedMethodStatements(
@@ -420,7 +441,7 @@ public class DefaultProjectAdapter : IProjectAdapter
                     continue;
 
                 statementsByTarget[targetId.Trim()] = target.TargetStatements
-                    .Select(stmt => SubstitutePlaceholders(stmt, placeholders))
+                    .Select(stmt => SubstituteMappedStatementPlaceholders(stmt, placeholders))
                     .ToArray();
                 reviewByTarget[targetId.Trim()] = target.RequiresReview ?? parentRequiresReview;
             }
@@ -1245,13 +1266,18 @@ public class DefaultProjectAdapter : IProjectAdapter
             };
         }
 
-        // Declaration-like exact mappings such as `CreatePage<T>(uri, rights)`
-        // match by method name and arity without becoming a broad alias that could
-        // steal a different overload.
+        // Declaration-like mappings such as `CreatePage<T>(uri, rights)` match by
+        // method/generic/parameter arity. Receiver-qualified mappings additionally
+        // require the same receiver, so `Browser.GoToPage<T>` cannot steal another
+        // helper named GoToPage.
+        var normalizedReceiver = NormalizeConfiguredReceiver(mi.ReceiverExpression);
         var signatureMapping = resolved._methodSignatureMappings
             .LastOrDefault(candidate =>
                 string.Equals(candidate.MethodName, mi.MethodName, StringComparison.Ordinal)
-                && candidate.ParameterCount == mi.ArgumentTexts.Count);
+                && candidate.GenericArity == mi.GenericArgumentTexts.Count
+                && candidate.ParameterCount == mi.ArgumentTexts.Count
+                && (candidate.Receiver == null
+                    || string.Equals(candidate.Receiver, normalizedReceiver, StringComparison.Ordinal)));
         if (signatureMapping != default)
         {
             var invocationMapping = ResolveMethodStatementsForInvocation(signatureMapping.Statements, mi);
@@ -1419,6 +1445,9 @@ public class DefaultProjectAdapter : IProjectAdapter
         return null;
     }
 
+    static string NormalizeConfiguredReceiver(string receiver) =>
+        Regex.Replace(receiver.Trim(), @"\s*\.\s*", ".");
+
     static bool IsGenericReceiverName(string receiver)
     {
         return string.Equals(receiver, "element", StringComparison.Ordinal)
@@ -1541,12 +1570,12 @@ public class DefaultProjectAdapter : IProjectAdapter
             return mapping;
 
         var statements = mapping.Statements
-            .Select(statement => SubstitutePlaceholders(statement, placeholders))
+            .Select(statement => SubstituteMappedStatementPlaceholders(statement, placeholders))
             .ToArray();
         var statementsByTarget = mapping.TargetStatementsByTarget.ToDictionary(
             entry => entry.Key,
             entry => (IReadOnlyList<string>)entry.Value
-                .Select(statement => SubstitutePlaceholders(statement, placeholders))
+                .Select(statement => SubstituteMappedStatementPlaceholders(statement, placeholders))
                 .ToArray(),
             StringComparer.OrdinalIgnoreCase);
 
@@ -1705,10 +1734,13 @@ public class DefaultProjectAdapter : IProjectAdapter
         if (string.IsNullOrWhiteSpace(sourceText))
             return null;
 
-        // Keep this intentionally conservative: we only need simple reassignment
-        // forms such as `page = Browser.GoToPage<T>(...)`. Local declarations
-        // (`var page = ...`) are parsed separately and should keep their own path.
-        var match = Regex.Match(sourceText.Trim(), @"^(?!var\s+)(?<left>[A-Za-z_][A-Za-z0-9_\.]*?)\s*=\s*(?<right>.+)$");
+        // Keep this intentionally conservative: support simple and tuple
+        // reassignments such as `page = Browser.GoToPage<T>(...)` and
+        // `(ignored, page) = await CreatePageAsync()`. Local declarations
+        // (`var page = ...` / `var (...) = ...`) keep their own parser path.
+        var match = Regex.Match(
+            sourceText.Trim(),
+            @"^(?!var\s+)(?<left>(?:[A-Za-z_][A-Za-z0-9_\.]*?|\([^=]+\)))\s*=\s*(?<right>.+)$");
         if (!match.Success)
             return null;
 
@@ -1845,6 +1877,25 @@ public class DefaultProjectAdapter : IProjectAdapter
         if (trimmed.StartsWith("\"") && trimmed.EndsWith("\"") && trimmed.Length >= 2)
             return trimmed.Substring(1, trimmed.Length - 2);
         return trimmed;
+    }
+
+    string SubstituteMappedStatementPlaceholders(
+        string statement,
+        Dictionary<string, PlaceholderValue> placeholders)
+    {
+        // Result bindings are target-language syntax. For example, the same C#
+        // deconstruction `(_, actual)` must render as `(_, actual)` in C# but
+        // `[, actual]` in TypeScript. Keep {result} unresolved until the target
+        // renderer can apply its own binding syntax; resolve all other invocation
+        // placeholders here as before.
+        if (!placeholders.ContainsKey("result"))
+            return SubstitutePlaceholders(statement, placeholders);
+
+        var nonResultPlaceholders = placeholders
+            .Where(entry => !string.Equals(entry.Key, "result", StringComparison.Ordinal))
+            .ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.Ordinal);
+
+        return SubstitutePlaceholders(statement, nonResultPlaceholders);
     }
 
     string SubstitutePlaceholders(string statement, Dictionary<string, PlaceholderValue> placeholders)
@@ -2941,7 +2992,9 @@ public class DefaultProjectAdapter : IProjectAdapter
     }
 
     readonly record struct ResolvedMethodSignatureMapping(
+        string? Receiver,
         string MethodName,
+        int GenericArity,
         int ParameterCount,
         ResolvedMethodStatements Statements);
 

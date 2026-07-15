@@ -47,18 +47,22 @@ Example:
 ## RecognizerAliases
 
 Use aliases to teach the parser source wrapper method names that are equivalent to built-in recognizer groups.
-Target-side semantics should still be handled through mappings when needed.
+All four alias families are consumed by the parser. Target-side semantics should still be handled through mappings when needed.
 
 ```json
 {
   "RecognizerAliases": {
-    "InputMethods": ["Set", "SetValue"],
+    "InputMethods": ["Set", "SetValue", "Enter"],
     "SelectMethods": ["Choose", "Pick"],
     "NavigationMethods": ["Open"],
     "FluentAssertionMethods": ["HaveValue"]
   }
 }
 ```
+
+For example, `ComboBox.Enter(value)` can be classified as an input action by adding `Enter` to `InputMethods`;
+the receiver still needs a source-backed `UiTargets` mapping. Aliases are deliberately not global hardcodes, because
+project helpers with the same method name may have different semantics.
 
 ## GenericResultMethods
 
@@ -74,8 +78,10 @@ var page = button.ClickAndOpen<MyPage>();
 }
 ```
 
-The parser also infers generic result methods from `ParameterizedMethods` whose pattern contains a generic placeholder
-and whose target statements declare `{result}`.
+The parser also infers generic result methods from `Methods` and `ParameterizedMethods` whose source signature is generic
+and whose target statements declare `{result}`. Receiver-qualified signatures such as `Browser.GoToPage<T>(uri)` are supported.
+Awaited tuple declarations such as `var (_, page) = await Browser.GoToPage<T>(uri)` preserve the complete binding for
+`{result}` substitution; the .NET target keeps tuple deconstruction and the TypeScript target uses array destructuring (C# discards become omitted slots).
 
 ## SuppressedMethods / SuppressedMethodPatterns
 

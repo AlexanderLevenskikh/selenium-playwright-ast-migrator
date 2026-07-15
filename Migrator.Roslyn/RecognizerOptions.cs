@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Migrator.Core;
 
 namespace Migrator.Roslyn;
@@ -99,6 +98,10 @@ public sealed class RecognizerOptions
         if (dotIndex >= 0 && dotIndex + 1 < value.Length)
             value = value[(dotIndex + 1)..].Trim();
 
+        var genericIndex = value.IndexOf('<', StringComparison.Ordinal);
+        if (genericIndex >= 0)
+            value = value[..genericIndex].Trim();
+
         return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
@@ -125,12 +128,13 @@ public sealed class RecognizerOptions
             if (!statements.Any(statement => statement.Contains("{result}", StringComparison.Ordinal)))
                 continue;
 
-            var match = Regex.Match(
-                mapping.SourceMethod ?? string.Empty,
-                @"^(?<method>[A-Za-z_]\w*)\s*<[^>]+>\s*\(",
-                RegexOptions.CultureInvariant);
-            if (match.Success)
-                yield return match.Groups["method"].Value;
+            var sourceMethod = mapping.SourceMethod ?? string.Empty;
+            if (sourceMethod.IndexOf('<', StringComparison.Ordinal) < 0)
+                continue;
+
+            var method = NormalizeMethodName(sourceMethod);
+            if (!string.IsNullOrWhiteSpace(method))
+                yield return method;
         }
     }
 

@@ -107,3 +107,4 @@ Bad: `page` has 1540 TODO, config cannot help.
 Some formerly escalated patterns may become parser/recognizer features. See:
 
 - `docs/migrator-tickets/browser-gotopage-generic-invocation.md` — `Browser.GoToPage<T>(...)` local declarations parsed as `MethodInvocationAction` so `ParameterizedMethods` can resolve them.
+- `docs/migrator-tickets/wave-002-product-remediation.md` — recognizer alias wiring, receiverless helper mapping, awaited deconstruction, qualified generic `Methods`, and safe data-assertion lowering.

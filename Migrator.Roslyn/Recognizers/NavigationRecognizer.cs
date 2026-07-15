@@ -1,31 +1,42 @@
 using System.Text.RegularExpressions;
+using Migrator.Core;
 using Migrator.Core.Models;
+using Migrator.Roslyn;
 
 namespace Migrator.Roslyn.Recognizers;
 
 /// <summary>
-/// Recognizes navigation-like calls:
-/// GoToAsync, NavigateTo, OpenPage, GoTo, Navigate
-/// Always with a receiver (e.g., Navigation.GoToAsync(...)) or no receiver (bare GoToAsync).
-/// For Navigation.OpenPage<T>(url), produces NavigationAction.
-/// For other navigation methods, produces MethodInvocationAction with SyntaxFallback confidence.
+/// Recognizes configured navigation-like calls. Project-specific aliases are supplied
+/// through RecognizerAliases.NavigationMethods.
 /// </summary>
 public class NavigationRecognizer : IInvocationRecognizer
 {
-    static readonly HashSet<string> NavigationMethods = new()
-    {
-        "GoToAsync", "GoTo", "NavigateTo", "Navigate", "OpenPage"
-    };
+    readonly IReadOnlySet<string> _navigationMethods;
 
     static readonly Regex OpenPagePattern = new(
         @"^\s*var\s+(\w+)\s*=\s*Navigation\s*\.\s*OpenPage\s*<\w+>\s*\(([^)]+)\)\s*$",
         RegexOptions.Compiled);
 
+    public NavigationRecognizer()
+        : this(RecognizerOptions.Default.NavigationMethods)
+    {
+    }
+
+    public NavigationRecognizer(IEnumerable<string> navigationMethods)
+    {
+        _navigationMethods = new HashSet<string>(
+            navigationMethods
+                .Select(method => method?.Trim())
+                .Where(method => !string.IsNullOrWhiteSpace(method))
+                .Select(method => method!),
+            StringComparer.Ordinal);
+    }
+
     public TestAction? TryRecognize(InvocationContext ctx)
     {
         // Special handling for Navigation.OpenPage<T>(url)
         var fullText = ctx.FullText.Trim();
-        if (ctx.MethodName == "OpenPage" && ctx.ReceiverText.Contains("Navigation"))
+        if (ctx.MethodName == "OpenPage" && ctx.ReceiverText.Contains("Navigation", StringComparison.Ordinal))
         {
             var match = OpenPagePattern.Match(fullText);
             if (match.Success)
@@ -35,14 +46,12 @@ public class NavigationRecognizer : IInvocationRecognizer
                 return new NavigationAction(ctx.SourceLine, urlExpr, pageVar, fullText);
             }
 
-            // OpenPage without var assignment — still handle
             if (ctx.ArgumentTexts.Count > 0)
-            {
                 return new NavigationAction(ctx.SourceLine, ctx.ArgumentTexts[0], null, fullText);
-            }
         }
 
-        if (NavigationMethods.Contains(ctx.MethodName))
+        if (_navigationMethods.Contains(ctx.MethodName))
+        {
             return new MethodInvocationAction(
                 ctx.SourceLine,
                 ctx.ReceiverText,
@@ -51,7 +60,9 @@ public class NavigationRecognizer : IInvocationRecognizer
                 ctx.ArgumentTexts,
                 ctx.GenericArgumentTexts ?? Array.Empty<string>(),
                 resultVariable: null,
-                confidence: RecognitionConfidence.SyntaxFallback);
+                confidence: RecognitionConfidence.SyntaxFallback,
+                isAwaited: ctx.IsAwaited);
+        }
 
         return null;
     }

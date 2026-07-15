@@ -1,28 +1,44 @@
 using Migrator.Core;
 using Migrator.Core.Models;
+using Migrator.Roslyn;
 
 namespace Migrator.Roslyn.Recognizers;
 
 public class SendKeysInvocationRecognizer : IInvocationRecognizer
 {
-    static readonly HashSet<string> SimpleInputMethods = new()
+    readonly IReadOnlySet<string> _inputMethods;
+
+    public SendKeysInvocationRecognizer()
+        : this(RecognizerOptions.Default.InputMethods)
     {
-        "SendKeys", "InputText", "InputValue"
-    };
+    }
+
+    public SendKeysInvocationRecognizer(IEnumerable<string> inputMethods)
+    {
+        _inputMethods = new HashSet<string>(
+            inputMethods
+                .Select(method => method?.Trim())
+                .Where(method => !string.IsNullOrWhiteSpace(method))
+                .Select(method => method!),
+            StringComparer.Ordinal);
+    }
 
     public TestAction? TryRecognize(InvocationContext ctx)
     {
-        if (SimpleInputMethods.Contains(ctx.MethodName) && !string.IsNullOrEmpty(ctx.ReceiverText))
+        if (!_inputMethods.Contains(ctx.MethodName)
+            || string.IsNullOrEmpty(ctx.ReceiverText)
+            || ctx.ArgumentTexts.Count == 0)
         {
-            var argText = ctx.ArgumentTexts.FirstOrDefault() ?? string.Empty;
-            if (argText.StartsWith("Keys.", System.StringComparison.Ordinal))
-            {
-                var keyName = argText.Substring("Keys.".Length);
-                return new PressAction(ctx.SourceLine, ctx.ReceiverText, keyName, RecognitionConfidence.SyntaxFallback);
-            }
-            return new SendKeysAction(ctx.SourceLine, ctx.ReceiverText, argText, RecognitionConfidence.SyntaxFallback);
+            return null;
         }
 
-        return null;
+        var argText = ctx.ArgumentTexts[0];
+        if (argText.StartsWith("Keys.", StringComparison.Ordinal))
+        {
+            var keyName = argText.Substring("Keys.".Length);
+            return new PressAction(ctx.SourceLine, ctx.ReceiverText, keyName, RecognitionConfidence.SyntaxFallback);
+        }
+
+        return new SendKeysAction(ctx.SourceLine, ctx.ReceiverText, argText, RecognitionConfidence.SyntaxFallback);
     }
 }

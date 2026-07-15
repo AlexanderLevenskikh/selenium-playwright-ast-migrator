@@ -16,9 +16,9 @@ public sealed class MethodInvocationAction : TestAction
     public IReadOnlyList<string> GenericArgumentTexts { get; }
 
     /// <summary>
-    /// Name of the local variable assigned from this invocation, when the source was
-    /// a declaration such as "var page = Browser.GoToPage&lt;T&gt;(...)".
-    /// Used by parameterized mappings to substitute the special {result} placeholder.
+    /// Local result binding assigned from this invocation. Usually this is a single
+    /// variable name (for example "page"), but it may also be a deconstruction binding
+    /// such as "(_, page)". Used to substitute the special {result} placeholder.
     /// </summary>
     public string? ResultVariable { get; }
 

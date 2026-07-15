@@ -37,6 +37,7 @@ This project uses preview SemVer-style versions while the public API is still st
 
 ### Changed
 
+- Deferred `{result}` binding substitution to target renderers so C# tuple deconstruction such as `(_, actual)` becomes valid TypeScript array destructuring `[, actual]` instead of leaking C# syntax into TS output.
 - `fast`, `standard`, and `audit` now share the same hard wave-quality thresholds. Profiles vary bounded remediation cycles and ceremony only; exhausted/no-progress work stops honestly as `DRAFT_WITH_DEBT` / `FINAL_WITH_LIMITATIONS`.
 - Later waves are physically locked until every prior wave has a current outcome-bound acceptance receipt backed by generated-code metrics, executed validation, the manager/reviewer/sentinel role chain, and a fresh scope audit; quality/final evaluation revalidates the complete materialized wave chain.
 - Legacy semantic-action, syntax-fallback, TODO, action, and unmapped-target metrics remain visible for diagnosis and trends but no longer grant acceptance.
@@ -50,6 +51,8 @@ This project uses preview SemVer-style versions while the public API is still st
 
 ### Fixed
 
+- Fixed the wave-002 remediation regressions found by the focused test run: files with adjacent helper/DTO classes now select the class that owns `[Test]`/`[TestCase]` methods, intentionally ignored resolved `System.*` calls no longer reappear as `UnsupportedAction`, and input expressions such as `ComboBox.Enter(value)` preserve `value` as an expression instead of rendering the literal `"value"`.
+- Fixed wave-002 product gaps: all `RecognizerAliases` families now reach their recognizers, resolved receiverless project helpers remain available to adapter mappings, awaited tuple deconstruction preserves `{result}` bindings without cascade TODOs, receiver-qualified generic result mappings are inferred correctly, safe FluentAssertions data checks lower to NUnit/xUnit, and TypeScript renders tuple results as array destructuring.
 - Fixed balanced-scaffolding regressions: ordinary unknown `page.*`/service calls keep their established `MANUAL_REVIEW` diagnostics, helper guidance again names `--mode helper-inventory`, generated scaffold runtime methods no longer expose `dynamic` in member signatures, bounded mapping-memory routing remains discoverable, and the no-progress scenario now spends separate cycles only on separate root patterns.
 - Fixed generic helper mappings so `Method<T>(...)` invocations match generic-free `ParameterizedMethods`, declaration-like exact `Methods` signatures can bind by method name, and `{T}`, `{T0}`, `{arg0}`, `{result}`, plus named signature parameters are substituted without losing helper semantics.
 - Fixed active class-field availability, `foreach`/`ForEach` lambda item scope, and FluentAssertions `BeDisabled`/`BeEnabled` lowering to native Playwright assertions.

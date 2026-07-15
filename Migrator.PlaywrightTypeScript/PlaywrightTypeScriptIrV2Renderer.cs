@@ -343,7 +343,7 @@ public sealed class PlaywrightTypeScriptIrV2Renderer
         if (statement.Contains("{result}", StringComparison.Ordinal))
         {
             if (!string.IsNullOrWhiteSpace(resultVariable))
-                statement = statement.Replace("{result}", resultVariable, StringComparison.Ordinal);
+                statement = statement.Replace("{result}", PlaywrightTypeScriptMappedStatementSupport.RenderResultBinding(resultVariable), StringComparison.Ordinal);
             else
             {
                 RenderTodo(sb, pad, "UNRESOLVED_PLACEHOLDER", sourceText, "Mapped TargetStatement uses {result}, but the source action has no assigned result variable.", "Use {result} only for assignment-pattern mappings such as var page = Browser.GoToPage<T>(...). ");
@@ -583,9 +583,8 @@ public sealed class PlaywrightTypeScriptIrV2Renderer
 
     void RegisterDeclaredLocal(string statement)
     {
-        var match = Regex.Match(statement, @"\b(?:const|let|var)\s+([A-Za-z_][A-Za-z0-9_]*)\b");
-        if (match.Success)
-            _targetLocals.Add(match.Groups[1].Value);
+        foreach (var local in PlaywrightTypeScriptMappedStatementSupport.ExtractDeclaredLocalNames(statement))
+            _targetLocals.Add(local);
     }
 
     static string FormatRawStatementReason(string language) =>

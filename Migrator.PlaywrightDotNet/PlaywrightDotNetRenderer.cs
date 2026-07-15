@@ -675,6 +675,16 @@ public partial class PlaywrightDotNetRenderer : IRenderer
             return;
         }
 
+        // Pure FluentAssertions checks over already-available data variables are not
+        // browser operations. Translate the small, semantics-preserving subset to the
+        // configured target test framework instead of leaving MANUAL_REVIEW debt.
+        // UI/POM receivers and unresolved symbols remain on the normal safe TODO path.
+        if (action is MethodInvocationAction dataAssertion
+            && TryRenderBuiltInFluentDataAssertion(sb, dataAssertion, declaredVariables))
+        {
+            return;
+        }
+
         // Resolved raw statement: if a raw statement only references known symbols
         // (local aliases, framework built-ins, known types, etc.), render as active code
         // instead of TODO. This covers usages like `await Expect(loader).ToBeHiddenAsync()`
@@ -833,9 +843,11 @@ public partial class PlaywrightDotNetRenderer : IRenderer
     void RenderSendKeys(StringBuilder sb, SendKeysAction action)
     {
         var target = action.Target;
-        var text = ConvertExpression(action.TextExpression);
-        // Ensure text is a valid C# string expression — bare values should be quoted
-        text = EnsureStringExpression(text);
+        // TextExpression is source code, not display text. String literals already
+        // carry quotes, while bare identifiers must remain variables/parameters.
+        // Normalize Java/Python-style single-quoted literals without inventing quotes
+        // around valid C# expressions such as `value` or `model.Name`.
+        var text = NormalizeJavaScriptStyleSingleQuotedStrings(ConvertExpression(action.TextExpression));
         var escaped = EscapeComment(target.SourceExpression);
 
         if (target.Kind != TargetKind.Unresolved)
@@ -857,22 +869,6 @@ public partial class PlaywrightDotNetRenderer : IRenderer
             else
                 RenderUnresolvedTargetComment(sb, target, $"await (locator).FillAsync({text})", action.SourceLine);
         }
-    }
-
-    /// <summary>
-    /// Ensures the expression is a valid C# string argument.
-    /// Already-quoted strings pass through. Numeric literals are left as-is.
-    /// Bare identifiers are wrapped in quotes since SendKeys text is always a literal.
-    /// </summary>
-    static string EnsureStringExpression(string expr)
-    {
-        var trimmed = expr.Trim();
-        if (trimmed.StartsWith('"'))
-            return trimmed;
-        if (trimmed.All(char.IsDigit) || trimmed.All(c => c == '.' || char.IsDigit(c)))
-            return trimmed;
-        // Bare identifier — treat as string literal
-        return $"\"{trimmed.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"";
     }
 
     bool TryRenderConfiguredMigrationScaffold(StringBuilder sb, TestAction action, string sourceText)
@@ -1118,6 +1114,85 @@ public partial class PlaywrightDotNetRenderer : IRenderer
     }
 
 
+
+    bool TryRenderBuiltInFluentDataAssertion(
+        StringBuilder sb,
+        MethodInvocationAction action,
+        IReadOnlyList<string> declaredVariables)
+    {
+        if (!action.FullSourceText.Contains(".Should", StringComparison.Ordinal)
+            || string.IsNullOrWhiteSpace(action.ReceiverExpression)
+            || IsLikelyUiOrPomAssertionReceiver(action.ReceiverExpression)
+            || !AllSymbolsResolved(action.FullSourceText, declaredVariables))
+        {
+            return false;
+        }
+
+        var actual = action.ReceiverExpression.Trim();
+        var expected = action.ArgumentTexts.FirstOrDefault();
+        string? statement = action.MethodName switch
+        {
+            "Be" when !string.IsNullOrWhiteSpace(expected) => _targetTestFramework == DotNetTargetTestFramework.XUnit
+                ? $"Assert.Equal({expected}, {actual});"
+                : $"Assert.That({actual}, Is.EqualTo({expected}));",
+            "NotBe" when !string.IsNullOrWhiteSpace(expected) => _targetTestFramework == DotNetTargetTestFramework.XUnit
+                ? $"Assert.NotEqual({expected}, {actual});"
+                : $"Assert.That({actual}, Is.Not.EqualTo({expected}));",
+            "BeTrue" => _targetTestFramework == DotNetTargetTestFramework.XUnit
+                ? $"Assert.True({actual});"
+                : $"Assert.That({actual}, Is.True);",
+            "BeFalse" => _targetTestFramework == DotNetTargetTestFramework.XUnit
+                ? $"Assert.False({actual});"
+                : $"Assert.That({actual}, Is.False);",
+            "BeNull" => _targetTestFramework == DotNetTargetTestFramework.XUnit
+                ? $"Assert.Null({actual});"
+                : $"Assert.That({actual}, Is.Null);",
+            "NotBeNull" => _targetTestFramework == DotNetTargetTestFramework.XUnit
+                ? $"Assert.NotNull({actual});"
+                : $"Assert.That({actual}, Is.Not.Null);",
+            "BeEmpty" => _targetTestFramework == DotNetTargetTestFramework.XUnit
+                ? $"Assert.Empty({actual});"
+                : $"Assert.That({actual}, Is.Empty);",
+            "NotBeEmpty" => _targetTestFramework == DotNetTargetTestFramework.XUnit
+                ? $"Assert.NotEmpty({actual});"
+                : $"Assert.That({actual}, Is.Not.Empty);",
+            _ => null
+        };
+
+        if (statement == null)
+            return false;
+
+        sb.AppendLine($"{_indent}{_indent}{statement} // line {action.SourceLine}");
+        return true;
+    }
+
+    static bool IsLikelyUiOrPomAssertionReceiver(string receiverExpression)
+    {
+        var receiver = Regex.Replace(receiverExpression.Trim(), @"\s+", string.Empty);
+        if (receiver.Length == 0)
+            return true;
+
+        var rootMatch = Regex.Match(receiver, @"^@?(?<root>[A-Za-z_][A-Za-z0-9_]*)");
+        var root = rootMatch.Success ? rootMatch.Groups["root"].Value : string.Empty;
+        if (root is "page" or "Page" or "pagef" or "WebDriver" or "driver")
+            return true;
+
+        var uiRootSuffixes = new[]
+        {
+            "Page", "PageObject", "Pom", "Button", "Input", "ComboBox",
+            "Element", "Control", "Locator", "Table", "Grid", "Label",
+            "Link", "Menu", "Dialog", "Modal", "Popup", "Informer"
+        };
+        if (uiRootSuffixes.Any(suffix => root.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+            return true;
+
+        return receiver.Contains(".Text", StringComparison.Ordinal)
+            || receiver.Contains(".Visible", StringComparison.Ordinal)
+            || receiver.Contains(".Get()", StringComparison.Ordinal)
+            || receiver.Contains(".Items", StringComparison.Ordinal)
+            || receiver.Contains(".ElementAt(", StringComparison.Ordinal)
+            || receiver.Contains(".FindElement", StringComparison.Ordinal);
+    }
 
     void RenderMethodInvocation(StringBuilder sb, MethodInvocationAction action)
     {

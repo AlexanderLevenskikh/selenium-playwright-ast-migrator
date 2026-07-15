@@ -46,6 +46,44 @@ internal static class PlaywrightTypeScriptMappedStatementSupport
             .ToArray();
     }
 
+
+    public static string RenderResultBinding(string resultVariable)
+    {
+        var binding = resultVariable.Trim();
+        if (binding.Length < 2 || binding[0] != '(' || binding[^1] != ')')
+            return binding;
+
+        // C# uses `_` as a discard. TypeScript array destructuring represents the
+        // same intent with an omitted slot; declaring `_` would create a real local
+        // and duplicate discards could produce invalid output.
+        var elements = binding[1..^1]
+            .Split(',', StringSplitOptions.TrimEntries)
+            .Select(element => element == "_" ? string.Empty : element);
+        return "[" + string.Join(", ", elements) + "]";
+    }
+
+    public static IReadOnlyList<string> ExtractDeclaredLocalNames(string statement)
+    {
+        if (string.IsNullOrWhiteSpace(statement))
+            return Array.Empty<string>();
+
+        var simple = Regex.Match(statement, @"\b(?:const|let|var)\s+([A-Za-z_][A-Za-z0-9_]*)\b");
+        if (simple.Success)
+            return new[] { simple.Groups[1].Value };
+
+        var arrayBinding = Regex.Match(statement, @"\b(?:const|let|var)\s+\[([^\]]+)\]");
+        if (!arrayBinding.Success)
+            return Array.Empty<string>();
+
+        return arrayBinding.Groups[1].Value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(part => part.Trim().TrimStart('.'))
+            .Select(part => part.Split('=', 2, StringSplitOptions.TrimEntries)[0])
+            .Where(part => part != "_" && Regex.IsMatch(part, @"^[A-Za-z_][A-Za-z0-9_]*$"))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
     public static IEnumerable<string> CommentOutStatement(string statement)
     {
         var lines = statement.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
