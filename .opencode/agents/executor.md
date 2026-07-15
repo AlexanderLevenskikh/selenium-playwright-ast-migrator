@@ -185,13 +185,17 @@ The current-ticket lifecycle records `wave-progress/v1` snapshots. Do not game t
 - Keep changes small and reversible.
 - Prefer existing project patterns.
 - Do not add or broaden suppression patterns to reduce TODO count.
+- Implement simple, source-backed helper/POM side effects when the ticket is `REMEDIATE_CURRENT_WAVE`; keep the attempt bounded to the selected root and stop when implementation requires open-ended product research.
+- Add `ScaffoldMethods`/`ScaffoldMethodPatterns` only for a `SCAFFOLD_CURRENT_ROOT` ticket backed by measured `NO_PROGRESS` for the exact candidate. Use one exact member or a qualified final-segment pattern such as `TariffSettingsHelper.*`.
+- A migration scaffold must preserve assignment and `await` shape, emit `[MIGRATOR:SCAFFOLD]`, and fail loudly at runtime. Never return `default`, `false`, empty collections, or `Task.CompletedTask`; never scaffold assertions, selectors, waits, Selenium/Playwright APIs, or arbitrary statements.
+- Do not turn scaffolding into the whole migration. Respect `maxScaffoldRoots` and `maxScaffoldOnlyTestRatio`; split or stop when the boundary is reached.
 - Do not delete a TODO/unresolved-symbol marker while its replacement declaration, action, or assertion remains commented out or absent. TODO-count reduction alone is not progress.
 - Do not suppress assertion/check/helper methods such as `*.Should*`, `*Assert*`, `*Expect*`, or `*Equal*` unless explicit source evidence and review criteria are present.
 - Do not hide failures.
 - Do not invent APIs.
 - If you discover the plan is wrong, stop and report instead of improvising a broad rewrite.
 - Update `migration/runs/<run-id>/Documentation.md` with decisions, verification evidence, and unresolved risks.
-- When implementing `migration/current-ticket.md`, keep `migration/state/current-ticket-status.json` in sync through `migration/scripts/update-current-ticket-status.ps1` / `.sh`: `IN_PROGRESS` before edits, `REVIEW_READY` after a coherent patch, or `BLOCKED` with a concrete reason. Do not set `DONE` from the executor. Stop at `REVIEW_READY`; the orchestrator marks `DONE` after reviewer, scope, harness-policy, and artifact-hygiene validation pass, then runs a fresh final gate.
+- When implementing `migration/current-ticket.md`, keep `migration/state/current-ticket-status.json` in sync through `migration/scripts/update-current-ticket-status.ps1` / `.sh`: `IN_PROGRESS` before edits, `REVIEW_READY` after a coherent patch, or `BLOCKED` with a concrete reason. Do not set `DONE` from the executor. Stop at `REVIEW_READY`; the orchestrator marks `DONE` after reviewer, scope, harness-policy, and artifact-hygiene validation pass, then runs a fresh final gate. If the ticket names a sentinel `Finding id`, also record `migration/scripts/update-sentinel-finding-status.ps1 -FindingId <id> -Status FIX_ATTEMPTED -TicketId <ticket>` / `.sh` after the patch; use `BLOCKED` or `NON_AGENT_EXECUTABLE` only with concrete evidence.
 - Append important command/evidence notes to `migration/runs/<run-id>/trace.jsonl` when practical.
 - Run or request `migration/scripts/check-scope.ps1` after editing and before handoff.
 - Run or request `migration/scripts/check-harness-policy.ps1` after editing and before handoff.
@@ -204,7 +208,7 @@ The current-ticket lifecycle records `wave-progress/v1` snapshots. Do not game t
 4. Show scope guard and harness-policy results.
 5. Report unresolved risks.
 6. If practical, write a `handoff-written` event.
-7. For current-ticket work, run `migration/scripts/update-current-ticket-status.ps1 -Status REVIEW_READY -Source executor` / `.sh` after the patch and before handoff; use `-Status BLOCKED` if the ticket cannot be executed safely.
+7. For current-ticket work, run `migration/scripts/update-current-ticket-status.ps1 -Status REVIEW_READY -Source executor` / `.sh` after the patch and before handoff; use `-Status BLOCKED` if the ticket cannot be executed safely. For sentinel-derived tickets, also update the finding lifecycle to `FIX_ATTEMPTED` with `migration/scripts/update-sentinel-finding-status.ps1`.
 
 Final report format:
 

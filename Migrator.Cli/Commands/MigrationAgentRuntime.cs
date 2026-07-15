@@ -230,8 +230,15 @@ internal static class MigrationAgentRuntime
         if (managerDecision == "REMEDIATE_CURRENT_WAVE")
         {
             return WriteDecision(outPath, "RUN_COMMAND", "migration-wave-manager", "quality", managerFingerprint,
-                "route wave-manager-decision.json through migration-task-slicer, execute one bounded root-pattern remediation, regenerate and validate the same wave, run record-wave-remediation so progress is derived from before/after metrics, and re-measure",
-                "The current wave remains a draft. The next permitted action is one highest-payoff remediation cycle on this same wave.", "wave-remediation-required",
+                "route wave-manager-decision.json through migration-task-slicer, execute one bounded normal implementation attempt for the selected root, regenerate and validate the same wave, run record-wave-remediation, and re-measure",
+                "The current wave remains a draft. Implement cheap deterministic helper/POM behavior, but stop before open-ended research.", "wave-remediation-required",
+                output, error, null, 0);
+        }
+        if (managerDecision == "SCAFFOLD_CURRENT_ROOT")
+        {
+            return WriteDecision(outPath, "RUN_COMMAND", "migration-wave-manager", "quality", managerFingerprint,
+                "route wave-manager-decision.json through migration-task-slicer, add one exact measured-no-progress helper/POM scaffold rule, regenerate and validate the same wave, run record-wave-remediation, and re-measure",
+                "The selected root may be structurally scaffolded because the exact candidate has measured no-progress. Runtime readiness must remain false and scaffold budgets still apply.", "wave-scaffolding-required",
                 output, error, null, 0);
         }
         if (managerDecision == "SPLIT_WAVE")
@@ -253,7 +260,7 @@ internal static class MigrationAgentRuntime
                 "Product semantics, forbidden scope, credentials, or competing priorities require a human decision.", "wave-manager-human-decision",
                 output, error, null, 4);
         }
-        if (managerDecision is not ("ACCEPT_WAVE" or "DEFER_SOFT_DEBT"))
+        if (managerDecision is not ("ACCEPT_WAVE" or "ACCEPT_WITH_SCAFFOLDING" or "DEFER_SOFT_DEBT"))
         {
             return WriteDecision(outPath, "BLOCKED", "migration-wave-manager", "quality", managerFingerprint, null,
                 $"Unsupported wave-manager decision: {managerDecision}", "wave-manager-decision-invalid",

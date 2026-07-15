@@ -64,6 +64,8 @@ public static class ProjectAdapterConfigMerger
             WaitPolicies: MergeBy(layers.SelectMany(c => c.WaitPolicies), WaitPolicyKey),
             SuppressedMethods: MergeStrings(layers.SelectMany(c => c.SuppressedMethods)),
             SuppressedMethodPatterns: MergeStrings(layers.SelectMany(c => c.SuppressedMethodPatterns)),
+            ScaffoldMethods: MergeStrings(layers.SelectMany(c => c.ScaffoldMethods ?? Array.Empty<string>())),
+            ScaffoldMethodPatterns: MergeStrings(layers.SelectMany(c => c.ScaffoldMethodPatterns ?? Array.Empty<string>())),
             SchemaVersion: schemaVersion,
             GenerationPolicy: generationPolicy);
     }
@@ -284,6 +286,8 @@ public static class ProjectAdapterConfigMerger
                 targetKnownIdentifiers: MergeStrings(existing.TargetKnownIdentifiers.Concat(scope.TargetKnownIdentifiers)),
                 suppressedMethods: MergeStrings(existing.SuppressedMethods.Concat(scope.SuppressedMethods)),
                 suppressedMethodPatterns: MergeStrings(existing.SuppressedMethodPatterns.Concat(scope.SuppressedMethodPatterns)),
+                scaffoldMethods: MergeStrings((existing.ScaffoldMethods ?? Array.Empty<string>()).Concat(scope.ScaffoldMethods ?? Array.Empty<string>())),
+                scaffoldMethodPatterns: MergeStrings((existing.ScaffoldMethodPatterns ?? Array.Empty<string>()).Concat(scope.ScaffoldMethodPatterns ?? Array.Empty<string>())),
                 navigationUrls: MergeDictionaries(new[] { existing.NavigationUrls, scope.NavigationUrls }),
                 navigationTargetStatement: LastNonEmpty(new[] { existing.NavigationTargetStatement, scope.NavigationTargetStatement }))
             {

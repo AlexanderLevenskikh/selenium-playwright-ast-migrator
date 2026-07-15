@@ -70,6 +70,21 @@ public sealed class ProjectAdapterConfig
     public string[] SuppressedMethodPatterns { get; init; } = Array.Empty<string>();
 
     /// <summary>
+    /// Exact project helper/POM methods that should become explicit compile scaffolds.
+    /// Scaffolds preserve the migrated call shape but always fail at runtime. Keep this list
+    /// narrow and evidence-backed; use normal mappings for behavior that can be migrated cheaply.
+    /// </summary>
+    [JsonPropertyName("ScaffoldMethods")]
+    public string[] ScaffoldMethods { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Glob-like project helper/POM patterns that should become explicit compile scaffolds.
+    /// Catch-all patterns are rejected by config validation to prevent mass scaffolding.
+    /// </summary>
+    [JsonPropertyName("ScaffoldMethodPatterns")]
+    public string[] ScaffoldMethodPatterns { get; init; } = Array.Empty<string>();
+
+    /// <summary>
     /// Parameterized method mappings with placeholder support.
     /// Pattern uses {placeholderName} syntax. Priority: exact SourceMethod wins over SourceMethodPattern.
     /// </summary>
@@ -188,6 +203,8 @@ public sealed class ProjectAdapterConfig
         WaitPolicyMapping[]? WaitPolicies = null,
         string[]? SuppressedMethods = null,
         string[]? SuppressedMethodPatterns = null,
+        string[]? ScaffoldMethods = null,
+        string[]? ScaffoldMethodPatterns = null,
         Dictionary<string, string>? NavigationUrls = null,
         string? NavigationTargetStatement = null,
         string? SchemaVersion = null,
@@ -217,6 +234,8 @@ public sealed class ProjectAdapterConfig
         this.WaitPolicies = WaitPolicies ?? Array.Empty<WaitPolicyMapping>();
         this.SuppressedMethods = SuppressedMethods ?? Array.Empty<string>();
         this.SuppressedMethodPatterns = SuppressedMethodPatterns ?? Array.Empty<string>();
+        this.ScaffoldMethods = ScaffoldMethods ?? Array.Empty<string>();
+        this.ScaffoldMethodPatterns = ScaffoldMethodPatterns ?? Array.Empty<string>();
     }
 }
 
@@ -769,12 +788,26 @@ public sealed class ProfileScope
     [JsonPropertyName("SuppressedMethodPatterns")]
     public string[] SuppressedMethodPatterns { get; init; } = Array.Empty<string>();
 
+    /// <summary>
+    /// Scope-specific exact helper/POM methods converted to explicit runtime-failing scaffolds.
+    /// Unioned with global ScaffoldMethods.
+    /// </summary>
+    [JsonPropertyName("ScaffoldMethods")]
+    public string[] ScaffoldMethods { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Scope-specific helper/POM scaffold patterns. Unioned with global ScaffoldMethodPatterns.
+    /// </summary>
+    [JsonPropertyName("ScaffoldMethodPatterns")]
+    public string[] ScaffoldMethodPatterns { get; init; } = Array.Empty<string>();
+
     public ProfileScope() { }
     public ProfileScope(string name, string[] sourcePathPatterns, TestHostConfig? testHost = null,
         UiTargetMapping[]? uiTargets = null, MethodMapping[]? methods = null,
         ParameterizedMethodMapping[]? parameterizedMethods = null,
         string[]? targetKnownTypes = null, string[]? targetKnownIdentifiers = null,
         string[]? suppressedMethods = null, string[]? suppressedMethodPatterns = null,
+        string[]? scaffoldMethods = null, string[]? scaffoldMethodPatterns = null,
         Dictionary<string, string>? navigationUrls = null, string? navigationTargetStatement = null)
     {
         Name = name;
@@ -789,6 +822,8 @@ public sealed class ProfileScope
         TargetKnownIdentifiers = targetKnownIdentifiers ?? Array.Empty<string>();
         SuppressedMethods = suppressedMethods ?? Array.Empty<string>();
         SuppressedMethodPatterns = suppressedMethodPatterns ?? Array.Empty<string>();
+        ScaffoldMethods = scaffoldMethods ?? Array.Empty<string>();
+        ScaffoldMethodPatterns = scaffoldMethodPatterns ?? Array.Empty<string>();
     }
 
     /// <summary>

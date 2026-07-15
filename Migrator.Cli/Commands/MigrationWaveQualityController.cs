@@ -21,6 +21,7 @@ internal static class MigrationWaveQualityController
     static readonly Regex TodoRegex = new(@"^\s*(?://+|/\*+|\*+)\s*TODO(?:\s*\[[^\]]+\])?\s*[:\-]?\s*(?<message>.*?)(?:\s*\*/)?$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     static readonly Regex AssertionRegex = new(@"\b(?:Assert|ClassicAssert|CollectionAssert|StringAssert)\s*\.|\.Should\s*\(|\bExpect\s*\(", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     static readonly Regex ForbiddenPlaceholderRegex = new(@"\bAssert\s*\.\s*(?:Inconclusive|Ignore|Pass)\s*\(|\bTask\s*\.\s*CompletedTask\b|\bNotImplementedException\b|\bNotSupportedException\b|\btest\s*\.\s*(?:skip|fixme)\s*\(", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    static readonly Regex MigrationScaffoldCallRegex = new(@"\b__MigratorScaffoldRuntime\s*\.\s*(?:Invoke|InvokeAsync)\s*\(", RegexOptions.Compiled);
 
     internal static int Run(string command, string[] args, TextWriter output, TextWriter error)
     {
@@ -76,7 +77,7 @@ internal static class MigrationWaveQualityController
                 return false;
             }
             var status = OptionalString(root, "status");
-            if (status is not ("ACCEPTED" or "ACCEPTED_WITH_DEFERRED_SOFT_DEBT"))
+            if (status is not ("ACCEPTED" or "ACCEPTED_WITH_SCAFFOLDING" or "ACCEPTED_WITH_DEFERRED_SOFT_DEBT" or "ACCEPTED_WITH_SCAFFOLDING_AND_DEFERRED_SOFT_DEBT"))
             {
                 error = $"PREVIOUS_WAVE_NOT_ACCEPTED: {expectedWaveId} receipt status is {status ?? "missing"}.";
                 return false;
@@ -86,6 +87,14 @@ internal static class MigrationWaveQualityController
             // Recompute outcomes from generated code and wave-local validation, then require both
             // the persisted metrics and the receipt to be bound to that deterministic result.
             var recomputed = BuildMetrics(wavePath, readPrevious: false);
+            var receiptAcknowledgesScaffolding = status is "ACCEPTED_WITH_SCAFFOLDING" or "ACCEPTED_WITH_SCAFFOLDING_AND_DEFERRED_SOFT_DEBT";
+            if (receiptAcknowledgesScaffolding == recomputed.RuntimeReady)
+            {
+                error = recomputed.RuntimeReady
+                    ? $"PREVIOUS_WAVE_ACCEPTANCE_INVALID: {expectedWaveId} claims scaffolding even though no runtime blockers remain."
+                    : $"PREVIOUS_WAVE_ACCEPTANCE_INVALID: {expectedWaveId} does not acknowledge the remaining migration scaffolds.";
+                return false;
+            }
             if (!recomputed.HardGatePassed)
             {
                 error = $"PREVIOUS_WAVE_ACCEPTANCE_STALE: {expectedWaveId} no longer passes hard gates: {string.Join("; ", recomputed.HardGateFailures)}";
@@ -122,7 +131,7 @@ internal static class MigrationWaveQualityController
                 return false;
             }
             var currentDecision = OptionalString(decisionRoot, "decision");
-            if (currentDecision is not ("ACCEPT_WAVE" or "DEFER_SOFT_DEBT")
+            if (currentDecision is not ("ACCEPT_WAVE" or "ACCEPT_WITH_SCAFFOLDING" or "DEFER_SOFT_DEBT")
                 || !string.Equals(OptionalString(root, "decision"), currentDecision, StringComparison.Ordinal))
             {
                 error = $"PREVIOUS_WAVE_NOT_ACCEPTED: {expectedWaveId} manager decision no longer permits acceptance.";
@@ -178,6 +187,9 @@ internal static class MigrationWaveQualityController
             output.WriteLine($"Ready tests: {metrics.ReadyTests}/{metrics.SelectedTests}");
             output.WriteLine($"Blocking TODOs: {metrics.BlockingTodoCount} ({metrics.RootBlockingPatterns} root pattern(s))");
             output.WriteLine($"Soft TODOs: {metrics.SoftTodoCount}");
+            output.WriteLine($"Migration scaffolds: {metrics.ScaffoldCallCount} call(s), {metrics.ScaffoldRootCount}/{metrics.MaxScaffoldRoots} root(s), across {metrics.ScaffoldedTests.Length} test(s)");
+            output.WriteLine($"Scaffold-only tests: {metrics.ScaffoldOnlyTests.Length}/{metrics.MaxScaffoldOnlyTests}");
+            output.WriteLine($"Runtime ready: {metrics.RuntimeReady}");
             output.WriteLine($"Hard gate: {(metrics.HardGatePassed ? "PASS" : "FAIL")}");
             output.WriteLine($"Recommendation: {metrics.RecommendedDecision}");
             return metrics.HardGatePassed ? 0 : 3;
@@ -202,16 +214,32 @@ internal static class MigrationWaveQualityController
         var decision = NormalizeDecision(options.Decision);
         if (decision == null)
         {
-            error.WriteLine("--decision must be ACCEPT_WAVE, REMEDIATE_CURRENT_WAVE, SPLIT_WAVE, DEFER_SOFT_DEBT, STOP_BUDGET_EXHAUSTED, or REQUEST_HUMAN_DECISION.");
+            error.WriteLine("--decision must be ACCEPT_WAVE, ACCEPT_WITH_SCAFFOLDING, REMEDIATE_CURRENT_WAVE, SCAFFOLD_CURRENT_ROOT, SPLIT_WAVE, DEFER_SOFT_DEBT, STOP_BUDGET_EXHAUSTED, or REQUEST_HUMAN_DECISION.");
             return 2;
         }
 
         try
         {
             var metrics = ReadMetrics(metricsPath);
-            if ((decision == "ACCEPT_WAVE" || decision == "DEFER_SOFT_DEBT") && !metrics.HardGatePassed)
+            var currentRemediationLedger = ReadRemediationLedger(Path.Combine(wavePath, "wave-remediation-ledger.jsonl"));
+            if (currentRemediationLedger.Count != metrics.RemediationCyclesUsed)
+            {
+                error.WriteLine("WAVE_MANAGER_METRICS_STALE_AFTER_REMEDIATION: run `migration measure-wave --out <wave>` before recording another decision.");
+                return 3;
+            }
+            if ((decision == "ACCEPT_WAVE" || decision == "ACCEPT_WITH_SCAFFOLDING" || decision == "DEFER_SOFT_DEBT") && !metrics.HardGatePassed)
             {
                 error.WriteLine("WAVE_MANAGER_HARD_GATE_OVERRIDE_DENIED: the manager cannot accept or defer a wave while deterministic hard invariants fail.");
+                return 3;
+            }
+            if (decision == "ACCEPT_WAVE" && !metrics.RuntimeReady)
+            {
+                error.WriteLine("WAVE_MANAGER_SCAFFOLD_ACKNOWLEDGEMENT_REQUIRED: explicit migration scaffolds remain; use ACCEPT_WITH_SCAFFOLDING or remediate them.");
+                return 3;
+            }
+            if (decision == "ACCEPT_WITH_SCAFFOLDING" && metrics.RuntimeReady)
+            {
+                error.WriteLine("WAVE_MANAGER_NO_SCAFFOLDING_TO_ACCEPT: use ACCEPT_WAVE when runtime readiness is complete.");
                 return 3;
             }
             if (decision == "ACCEPT_WAVE" && metrics.SoftTodoCount > 0)
@@ -219,12 +247,19 @@ internal static class MigrationWaveQualityController
                 error.WriteLine("WAVE_MANAGER_SOFT_DEBT_UNACKNOWLEDGED: use DEFER_SOFT_DEBT with a reason, or remediate the remaining soft debt.");
                 return 3;
             }
-            if (decision == "DEFER_SOFT_DEBT" && metrics.SoftTodoCount == 0)
+            if (decision == "ACCEPT_WITH_SCAFFOLDING" && metrics.SoftTodoCount > 0)
             {
-                error.WriteLine("WAVE_MANAGER_NO_SOFT_DEBT_TO_DEFER: use ACCEPT_WAVE when no soft debt remains.");
+                error.WriteLine("WAVE_MANAGER_SOFT_DEBT_UNACKNOWLEDGED: scaffolding and soft debt are separate; remediate the soft debt or use DEFER_SOFT_DEBT with an explicit reason.");
                 return 3;
             }
-            if (decision == "REMEDIATE_CURRENT_WAVE" && metrics.RemainingRemediationCycles <= 0)
+            if (decision == "DEFER_SOFT_DEBT" && metrics.SoftTodoCount == 0)
+            {
+                error.WriteLine(metrics.RuntimeReady
+                    ? "WAVE_MANAGER_NO_SOFT_DEBT_TO_DEFER: use ACCEPT_WAVE when no soft debt remains."
+                    : "WAVE_MANAGER_NO_SOFT_DEBT_TO_DEFER: use ACCEPT_WITH_SCAFFOLDING when scaffolds are the only remaining runtime blockers.");
+                return 3;
+            }
+            if ((decision is "REMEDIATE_CURRENT_WAVE" or "SCAFFOLD_CURRENT_ROOT") && metrics.RemainingRemediationCycles <= 0)
             {
                 error.WriteLine("WAVE_MANAGER_REMEDIATION_BUDGET_EXHAUSTED: choose STOP_BUDGET_EXHAUSTED or REQUEST_HUMAN_DECISION.");
                 return 3;
@@ -236,18 +271,48 @@ internal static class MigrationWaveQualityController
             }
 
             var selectedPattern = string.IsNullOrWhiteSpace(options.Pattern)
-                ? metrics.Candidates.FirstOrDefault()?.Pattern
+                ? decision == "SCAFFOLD_CURRENT_ROOT"
+                    ? metrics.Candidates.FirstOrDefault(candidate => candidate.ScaffoldEligible && candidate.PriorNoProgress > 0)?.Pattern
+                    : metrics.Candidates.FirstOrDefault()?.Pattern
                 : options.Pattern.Trim();
-            if (decision == "REMEDIATE_CURRENT_WAVE")
+            Candidate? selectedCandidate = null;
+            if (decision is "REMEDIATE_CURRENT_WAVE" or "SCAFFOLD_CURRENT_ROOT")
             {
                 if (string.IsNullOrWhiteSpace(selectedPattern))
                 {
                     error.WriteLine("WAVE_MANAGER_REMEDIATION_PATTERN_REQUIRED: no deterministic root-pattern candidate exists; split, stop, or request human review instead.");
                     return 3;
                 }
-                if (!metrics.Candidates.Any(candidate => string.Equals(candidate.Pattern, selectedPattern, StringComparison.OrdinalIgnoreCase)))
+                selectedCandidate = metrics.Candidates.FirstOrDefault(candidate =>
+                    string.Equals(candidate.Pattern, selectedPattern, StringComparison.OrdinalIgnoreCase));
+                if (selectedCandidate == null)
                 {
                     error.WriteLine("WAVE_MANAGER_UNKNOWN_REMEDIATION_PATTERN: select a pattern from wave-manager-packet.json candidates.");
+                    return 3;
+                }
+            }
+            if (decision == "REMEDIATE_CURRENT_WAVE" && selectedCandidate is { PriorNoProgress: > 0 })
+            {
+                error.WriteLine(selectedCandidate.ScaffoldEligible
+                    ? "WAVE_MANAGER_REPEATED_ROOT_RESEARCH_DENIED: this exact helper/POM root already produced measured NO_PROGRESS; choose SCAFFOLD_CURRENT_ROOT, SPLIT_WAVE, or STOP_BUDGET_EXHAUSTED instead of spending another cycle on the same hypothesis."
+                    : "WAVE_MANAGER_REPEATED_ROOT_REMEDIATION_DENIED: this exact root already produced measured NO_PROGRESS; choose another root, SPLIT_WAVE, STOP_BUDGET_EXHAUSTED, or REQUEST_HUMAN_DECISION.");
+                return 3;
+            }
+            if (decision == "SCAFFOLD_CURRENT_ROOT")
+            {
+                if (selectedCandidate is not { ScaffoldEligible: true })
+                {
+                    error.WriteLine("WAVE_MANAGER_SCAFFOLD_ROOT_NOT_ELIGIBLE: only a project helper/POM dependency root may become a migration scaffold.");
+                    return 3;
+                }
+                if (selectedCandidate.PriorNoProgress <= 0)
+                {
+                    error.WriteLine("WAVE_MANAGER_SCAFFOLD_REQUIRES_MEASURED_NO_PROGRESS: make one bounded implementation attempt and record its measured result before scaffolding this root.");
+                    return 3;
+                }
+                if (metrics.ScaffoldRootCount >= metrics.MaxScaffoldRoots)
+                {
+                    error.WriteLine("WAVE_MANAGER_SCAFFOLD_BUDGET_EXHAUSTED: the bounded scaffold-root limit is reached; split the wave or implement an existing scaffold.");
                     return 3;
                 }
             }
@@ -267,9 +332,15 @@ internal static class MigrationWaveQualityController
                 ["hardGatePassed"] = metrics.HardGatePassed,
                 ["hardGateFailures"] = metrics.HardGateFailures,
                 ["remainingRemediationCycles"] = metrics.RemainingRemediationCycles,
+                ["runtimeReady"] = metrics.RuntimeReady,
+                ["scaffoldCallCount"] = metrics.ScaffoldCallCount,
+                ["scaffoldRootCount"] = metrics.ScaffoldRootCount,
+                ["scaffoldRoots"] = metrics.ScaffoldRoots,
+                ["scaffoldedTests"] = metrics.ScaffoldedTests,
+                ["scaffoldOnlyTests"] = metrics.ScaffoldOnlyTests,
                 ["managerCannotOverrideHardGates"] = true,
                 ["expectedPayoff"] = metrics.Candidates.FirstOrDefault(candidate => string.Equals(candidate.Pattern, selectedPattern, StringComparison.OrdinalIgnoreCase))?.ExpectedPayoff,
-                ["allowedDecisions"] = new[] { "ACCEPT_WAVE", "REMEDIATE_CURRENT_WAVE", "SPLIT_WAVE", "DEFER_SOFT_DEBT", "STOP_BUDGET_EXHAUSTED", "REQUEST_HUMAN_DECISION" }
+                ["allowedDecisions"] = new[] { "ACCEPT_WAVE", "ACCEPT_WITH_SCAFFOLDING", "REMEDIATE_CURRENT_WAVE", "SCAFFOLD_CURRENT_ROOT", "SPLIT_WAVE", "DEFER_SOFT_DEBT", "STOP_BUDGET_EXHAUSTED", "REQUEST_HUMAN_DECISION" }
             };
             payload["immutableFingerprint"] = ComputeTextHash(JsonSerializer.Serialize(payload, CompactJsonOptions));
             WriteJsonAtomic(Path.Combine(wavePath, "wave-manager-decision.json"), payload);
@@ -294,7 +365,7 @@ internal static class MigrationWaveQualityController
         var decisionPath = Path.Combine(wavePath, "wave-manager-decision.json");
         if (!File.Exists(metricsPath) || !File.Exists(decisionPath))
         {
-            error.WriteLine("WAVE_REMEDIATION_INPUT_MISSING: measure the wave and record REMEDIATE_CURRENT_WAVE before recording the result.");
+            error.WriteLine("WAVE_REMEDIATION_INPUT_MISSING: measure the wave and record REMEDIATE_CURRENT_WAVE or SCAFFOLD_CURRENT_ROOT before recording the result.");
             return 2;
         }
 
@@ -308,11 +379,19 @@ internal static class MigrationWaveQualityController
         try
         {
             var before = ReadMetrics(metricsPath);
+            var ledgerPath = Path.Combine(wavePath, "wave-remediation-ledger.jsonl");
+            var priorLedger = ReadRemediationLedger(ledgerPath);
+            if (priorLedger.Count != before.RemediationCyclesUsed)
+            {
+                error.WriteLine("WAVE_REMEDIATION_METRICS_STALE: the current metrics do not include the latest remediation ledger entry; re-run measure-wave before another remediation cycle.");
+                return 3;
+            }
             using var decisionDocument = JsonDocument.Parse(File.ReadAllText(decisionPath));
             var decisionRoot = decisionDocument.RootElement;
             var selectedPattern = OptionalString(decisionRoot, "selectedPattern");
+            var managerDecision = OptionalString(decisionRoot, "decision");
             if (!string.Equals(OptionalString(decisionRoot, "schemaVersion"), DecisionSchema, StringComparison.Ordinal)
-                || !string.Equals(OptionalString(decisionRoot, "decision"), "REMEDIATE_CURRENT_WAVE", StringComparison.Ordinal)
+                || managerDecision is not ("REMEDIATE_CURRENT_WAVE" or "SCAFFOLD_CURRENT_ROOT")
                 || !string.Equals(OptionalString(decisionRoot, "metricsFingerprint"), before.MetricsFingerprint, StringComparison.OrdinalIgnoreCase)
                 || !string.Equals(OptionalString(decisionRoot, "immutableFingerprint"), ComputeImmutableFingerprint(decisionRoot), StringComparison.OrdinalIgnoreCase))
             {
@@ -345,14 +424,17 @@ internal static class MigrationWaveQualityController
                 || after.ReadyTests > before.ReadyTests
                 || after.BehaviorlessTests.Length < before.BehaviorlessTests.Length
                 || after.HardGateFailures.Length < before.HardGateFailures.Length;
+            var beforeSelectedOccurrences = before.Todos.Count(item =>
+                item.Blocking && string.Equals(item.Pattern, selectedPattern, StringComparison.OrdinalIgnoreCase));
+            var afterSelectedOccurrences = after.Todos.Count(item =>
+                item.Blocking && string.Equals(item.Pattern, selectedPattern, StringComparison.OrdinalIgnoreCase));
+            var selectedRootResolved = beforeSelectedOccurrences > 0 && afterSelectedOccurrences == 0;
             var result = declaredResult == "FAILED"
                 ? "FAILED"
-                : generatedChanged && measurableImprovement
+                : generatedChanged && measurableImprovement && selectedRootResolved
                     ? "COMPLETED"
                     : "NO_PROGRESS";
 
-            var ledgerPath = Path.Combine(wavePath, "wave-remediation-ledger.jsonl");
-            var priorLedger = ReadRemediationLedger(ledgerPath);
             var sequence = priorLedger.Count + 1;
             var previousEntryHash = priorLedger.LastOrDefault()?.EntryHash;
             var payload = new SortedDictionary<string, object?>(StringComparer.Ordinal)
@@ -363,6 +445,7 @@ internal static class MigrationWaveQualityController
                 ["previousEntryHash"] = previousEntryHash,
                 ["waveId"] = before.WaveId,
                 ["pattern"] = selectedPattern,
+                ["managerDecision"] = managerDecision,
                 ["declaredResult"] = declaredResult,
                 ["result"] = result,
                 ["resultDerivedFromMetrics"] = true,
@@ -373,6 +456,9 @@ internal static class MigrationWaveQualityController
                 ["afterGeneratedTreeHash"] = after.GeneratedTreeHash,
                 ["beforeRootBlockingPatterns"] = before.RootBlockingPatterns,
                 ["afterRootBlockingPatterns"] = after.RootBlockingPatterns,
+                ["beforeSelectedPatternOccurrences"] = beforeSelectedOccurrences,
+                ["afterSelectedPatternOccurrences"] = afterSelectedOccurrences,
+                ["selectedRootResolved"] = selectedRootResolved,
                 ["beforeBlockingTodoCount"] = before.BlockingTodoCount,
                 ["afterBlockingTodoCount"] = after.BlockingTodoCount,
                 ["beforeSoftTodoCount"] = before.SoftTodoCount,
@@ -392,6 +478,7 @@ internal static class MigrationWaveQualityController
             output.WriteLine($"Declared result: {declaredResult}");
             output.WriteLine($"Measured result: {result}");
             output.WriteLine($"Root patterns: {before.RootBlockingPatterns} -> {after.RootBlockingPatterns}");
+            output.WriteLine($"Selected root occurrences: {beforeSelectedOccurrences} -> {afterSelectedOccurrences}");
             output.WriteLine($"Ready tests: {before.ReadyTests} -> {after.ReadyTests}");
             output.WriteLine("Next: run `migration measure-wave --out <wave>` to persist the new bounded state and route the manager again.");
             return result == "FAILED" ? 3 : 0;
@@ -479,7 +566,7 @@ internal static class MigrationWaveQualityController
                 return 3;
             }
             var decision = OptionalString(decisionRoot, "decision");
-            if (decision is not ("ACCEPT_WAVE" or "DEFER_SOFT_DEBT"))
+            if (decision is not ("ACCEPT_WAVE" or "ACCEPT_WITH_SCAFFOLDING" or "DEFER_SOFT_DEBT"))
             {
                 error.WriteLine($"WAVE_NOT_ACCEPTED: manager decision is {decision ?? "missing"}.");
                 return 3;
@@ -520,7 +607,13 @@ internal static class MigrationWaveQualityController
                 ["schemaVersion"] = AcceptanceSchema,
                 ["acceptedAtUtc"] = DateTimeOffset.UtcNow.ToString("O"),
                 ["waveId"] = current.WaveId,
-                ["status"] = decision == "DEFER_SOFT_DEBT" ? "ACCEPTED_WITH_DEFERRED_SOFT_DEBT" : "ACCEPTED",
+                ["status"] = decision switch
+                {
+                    "ACCEPT_WITH_SCAFFOLDING" => "ACCEPTED_WITH_SCAFFOLDING",
+                    "DEFER_SOFT_DEBT" when !current.RuntimeReady => "ACCEPTED_WITH_SCAFFOLDING_AND_DEFERRED_SOFT_DEBT",
+                    "DEFER_SOFT_DEBT" => "ACCEPTED_WITH_DEFERRED_SOFT_DEBT",
+                    _ => "ACCEPTED"
+                },
                 ["decision"] = decision,
                 ["decisionFingerprint"] = OptionalString(decisionRoot, "immutableFingerprint"),
                 ["finalReviewFingerprint"] = finalReviewFingerprint,
@@ -540,6 +633,15 @@ internal static class MigrationWaveQualityController
                 ["softTodoCount"] = current.SoftTodoCount,
                 ["emptyTests"] = current.EmptyTests,
                 ["forbiddenPlaceholderCount"] = current.ForbiddenPlaceholderCount,
+                ["scaffoldCallCount"] = current.ScaffoldCallCount,
+                ["scaffoldRootCount"] = current.ScaffoldRootCount,
+                ["scaffoldRoots"] = current.ScaffoldRoots,
+                ["scaffoldedTests"] = current.ScaffoldedTests,
+                ["scaffoldOnlyTests"] = current.ScaffoldOnlyTests,
+                ["generatedConcreteBehaviorStatements"] = current.GeneratedConcreteBehaviorStatements,
+                ["maxScaffoldRoots"] = current.MaxScaffoldRoots,
+                ["maxScaffoldOnlyTests"] = current.MaxScaffoldOnlyTests,
+                ["runtimeReady"] = current.RuntimeReady,
                 ["assertionPreservationRate"] = current.AssertionPreservationRate,
                 ["sourceBehaviorStatements"] = current.SourceBehaviorStatements,
                 ["generatedActiveBehaviorStatements"] = current.GeneratedActiveBehaviorStatements,
@@ -556,7 +658,9 @@ internal static class MigrationWaveQualityController
                     ["editableReportsAreObservabilityOnly"] = true,
                     ["waveManagerRoleReceiptRequired"] = true,
                     ["finalReviewerAndSentinelRequired"] = true,
-                    ["scopeAuditRecomputedAtAcceptance"] = true
+                    ["scopeAuditRecomputedAtAcceptance"] = true,
+                    ["scaffoldsAreExplicitRuntimeBlockers"] = true,
+                    ["runtimeReadyRequiresZeroScaffolds"] = true
                 }
             };
             receipt["immutableFingerprint"] = ComputeTextHash(JsonSerializer.Serialize(receipt, CompactJsonOptions));
@@ -901,6 +1005,37 @@ internal static class MigrationWaveQualityController
         var selectedGeneratedBodies = selectedTestNames.Count == 0
             ? generatedBodies
             : generatedBodies.Where(body => selectedTestNames.Contains(MatchKey(body))).ToArray();
+        var scaffoldedTests = selectedGeneratedBodies
+            .Where(body => body.Lines.Any(line => IsActiveLine(line) && MigrationScaffoldCallRegex.IsMatch(line)))
+            .Select(MatchKey)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var scaffoldMembers = generatedFiles
+            .SelectMany(ExtractMigrationScaffoldMembersInFile)
+            .Where(member => !string.IsNullOrWhiteSpace(member))
+            .ToArray();
+        var scaffoldCallCount = scaffoldMembers.Length;
+        var scaffoldRoots = scaffoldMembers
+            .Select(NormalizeScaffoldRoot)
+            .Where(root => root.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(root => root, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var generatedConcreteBehaviorStatements = selectedGeneratedBodies.Sum(CountConcreteBehaviorStatements);
+        var scaffoldOnlyTests = selectedGeneratedBodies
+            .Where(body =>
+            {
+                var key = MatchKey(body);
+                var requiresBehavior = sourceBehaviorByTest.TryGetValue(key, out var expectedBehavior) && expectedBehavior > 0;
+                var hasScaffold = body.Lines.Any(line => IsActiveLine(line) && MigrationScaffoldCallRegex.IsMatch(line));
+                return requiresBehavior && hasScaffold && CountConcreteBehaviorStatements(body) == 0;
+            })
+            .Select(MatchKey)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var runtimeReady = scaffoldCallCount == 0;
         var readyTests = selectedGeneratedBodies.Count(body =>
         {
             var key = MatchKey(body);
@@ -917,15 +1052,24 @@ internal static class MigrationWaveQualityController
         // Scan the complete generated code tree, not only test bodies. Moving a suppression or
         // Task.CompletedTask placeholder into a helper must not make the invoking tests look ready.
         var forbiddenPlaceholders = generatedFiles.Sum(CountForbiddenPlaceholdersInFile);
-        var rootGroups = blockingTodos.GroupBy(item => item.Pattern, StringComparer.OrdinalIgnoreCase).OrderByDescending(group => group.Count()).ToArray();
-        var candidates = rootGroups.Select(CreateCandidate).OrderByDescending(candidate => candidate.ExpectedPayoff).ThenBy(candidate => candidate.Pattern, StringComparer.Ordinal).ToArray();
         var validationStatus = ReadOutcomeValidationStatus(wavePath);
         var executionPolicyPath = Path.Combine(wavePath, "execution-policy.json");
         var profile = ReadJsonString(executionPolicyPath, "profile") ?? "fast";
         var maxCycles = ReadMaxRemediationCycles(executionPolicyPath, profile);
+        var maxScaffoldRoots = ReadMaxScaffoldRoots(executionPolicyPath, profile);
+        var maxScaffoldOnlyRatio = ReadMaxScaffoldOnlyTestRatio(executionPolicyPath, profile);
+        var maxScaffoldOnlyTests = selectedGeneratedBodies.Length == 0
+            ? 0
+            : Math.Max(1, (int)Math.Floor(selectedGeneratedBodies.Length * maxScaffoldOnlyRatio));
         var remediation = ReadRemediationLedger(Path.Combine(wavePath, "wave-remediation-ledger.jsonl"));
         var completedCycles = remediation.Count;
         var consecutiveNoProgress = remediation.AsEnumerable().Reverse().TakeWhile(item => item.Result == "NO_PROGRESS").Count();
+        var rootGroups = blockingTodos.GroupBy(item => item.Pattern, StringComparer.OrdinalIgnoreCase).OrderByDescending(group => group.Count()).ToArray();
+        var candidates = rootGroups
+            .Select(group => CreateCandidate(group, remediation, blockingTodos))
+            .OrderByDescending(candidate => candidate.ExpectedPayoff)
+            .ThenBy(candidate => candidate.Pattern, StringComparer.Ordinal)
+            .ToArray();
 
         var hardFailures = new List<string>();
         if (selectedLines.Length == 0)
@@ -941,7 +1085,11 @@ internal static class MigrationWaveQualityController
         if (blockingTodos.Length > 0)
             hardFailures.Add($"{blockingTodos.Length} blocking TODO(s) remain across {rootGroups.Length} root pattern(s)");
         if (forbiddenPlaceholders > 0)
-            hardFailures.Add($"{forbiddenPlaceholders} active placeholder/suppression statement(s) remain (Assert.Ignore/Inconclusive/Pass, Task.CompletedTask, or not-implemented throws)");
+            hardFailures.Add($"{forbiddenPlaceholders} active placeholder/suppression statement(s) remain (Assert.Ignore/Inconclusive/Pass, Task.CompletedTask, or unapproved not-implemented throws)");
+        if (scaffoldRoots.Length > maxScaffoldRoots)
+            hardFailures.Add($"migration scaffolding spans {scaffoldRoots.Length} root(s), above the bounded limit {maxScaffoldRoots}; split the wave or implement the cheapest roots");
+        if (scaffoldOnlyTests.Length > maxScaffoldOnlyTests)
+            hardFailures.Add($"{scaffoldOnlyTests.Length} test(s) contain only scaffolded behavior, above the bounded limit {maxScaffoldOnlyTests}; scaffolding cannot replace the whole migration");
         if (assertionDeficits.Length > 0)
             hardFailures.Add("assertions were lost in " + assertionDeficits.Length + " selected test method(s): "
                 + string.Join(", ", assertionDeficits.Take(5).Select(item => $"{item.Method} {item.Generated}/{item.Source}")));
@@ -969,11 +1117,24 @@ internal static class MigrationWaveQualityController
         }
 
         var remaining = Math.Max(0, maxCycles - completedCycles);
+        var scaffoldBoundaryFailed = scaffoldRoots.Length > maxScaffoldRoots
+            || scaffoldOnlyTests.Length > maxScaffoldOnlyTests;
+        var scaffoldCandidate = candidates.FirstOrDefault(candidate =>
+            candidate.ScaffoldEligible
+            && candidate.PriorNoProgress > 0);
         var recommendation = hardFailures.Count == 0
-            ? (softTodos.Length > 0 ? "DEFER_SOFT_DEBT_OR_REMEDIATE" : "ACCEPT_WAVE")
-            : remaining == 0 || consecutiveNoProgress >= 2
-                ? "STOP_BUDGET_EXHAUSTED"
-                : "REMEDIATE_CURRENT_WAVE";
+            ? softTodos.Length > 0
+                ? "DEFER_SOFT_DEBT_OR_REMEDIATE"
+                : runtimeReady
+                    ? "ACCEPT_WAVE"
+                    : "ACCEPT_WITH_SCAFFOLDING"
+            : scaffoldBoundaryFailed
+                ? "SPLIT_WAVE"
+                : remaining == 0 || consecutiveNoProgress >= 2
+                    ? "STOP_BUDGET_EXHAUSTED"
+                    : scaffoldCandidate != null && scaffoldRoots.Length < maxScaffoldRoots
+                        ? "SCAFFOLD_CURRENT_ROOT"
+                        : "REMEDIATE_CURRENT_WAVE";
 
         var provisional = new WaveMetrics(
             WaveId: waveId,
@@ -995,6 +1156,15 @@ internal static class MigrationWaveQualityController
             BehaviorlessTests: behaviorlessTests,
             ActiveAwaitActions: activeAwaitActions,
             ForbiddenPlaceholderCount: forbiddenPlaceholders,
+            ScaffoldCallCount: scaffoldCallCount,
+            ScaffoldRootCount: scaffoldRoots.Length,
+            ScaffoldRoots: scaffoldRoots,
+            ScaffoldedTests: scaffoldedTests,
+            ScaffoldOnlyTests: scaffoldOnlyTests,
+            GeneratedConcreteBehaviorStatements: generatedConcreteBehaviorStatements,
+            MaxScaffoldRoots: maxScaffoldRoots,
+            MaxScaffoldOnlyTests: maxScaffoldOnlyTests,
+            RuntimeReady: runtimeReady,
             BlockingTodoCount: blockingTodos.Length,
             SoftTodoCount: softTodos.Length,
             RootBlockingPatterns: rootGroups.Length,
@@ -1075,6 +1245,15 @@ internal static class MigrationWaveQualityController
                 ["cascadeTodos"] = metrics.CascadeTodoCount,
                 ["softTodos"] = metrics.SoftTodoCount,
                 ["forbiddenPlaceholderCount"] = metrics.ForbiddenPlaceholderCount,
+                ["scaffoldCallCount"] = metrics.ScaffoldCallCount,
+                ["scaffoldRootCount"] = metrics.ScaffoldRootCount,
+                ["scaffoldRoots"] = metrics.ScaffoldRoots,
+                ["scaffoldedTests"] = metrics.ScaffoldedTests,
+                ["scaffoldOnlyTests"] = metrics.ScaffoldOnlyTests,
+                ["generatedConcreteBehaviorStatements"] = metrics.GeneratedConcreteBehaviorStatements,
+                ["maxScaffoldRoots"] = metrics.MaxScaffoldRoots,
+                ["maxScaffoldOnlyTests"] = metrics.MaxScaffoldOnlyTests,
+                ["runtimeReady"] = metrics.RuntimeReady,
                 ["assertionPreservationRate"] = metrics.AssertionPreservationRate,
                 ["sourceBehaviorStatements"] = metrics.SourceBehaviorStatements,
                 ["generatedActiveBehaviorStatements"] = metrics.GeneratedActiveBehaviorStatements,
@@ -1109,17 +1288,24 @@ internal static class MigrationWaveQualityController
                 ["maxCycles"] = metrics.MaxRemediationCycles,
                 ["remainingCycles"] = metrics.RemainingRemediationCycles,
                 ["consecutiveNoProgress"] = metrics.ConsecutiveNoProgress,
+                ["maxScaffoldRoots"] = metrics.MaxScaffoldRoots,
+                ["remainingScaffoldRoots"] = Math.Max(0, metrics.MaxScaffoldRoots - metrics.ScaffoldRootCount),
+                ["maxScaffoldOnlyTests"] = metrics.MaxScaffoldOnlyTests,
                 ["fastChangesCeremonyNotQuality"] = true
             },
             ["candidates"] = metrics.Candidates,
             ["recommendedDecision"] = metrics.RecommendedDecision,
-            ["allowedDecisions"] = new[] { "ACCEPT_WAVE", "REMEDIATE_CURRENT_WAVE", "SPLIT_WAVE", "DEFER_SOFT_DEBT", "STOP_BUDGET_EXHAUSTED", "REQUEST_HUMAN_DECISION" }
+            ["allowedDecisions"] = new[] { "ACCEPT_WAVE", "ACCEPT_WITH_SCAFFOLDING", "REMEDIATE_CURRENT_WAVE", "SCAFFOLD_CURRENT_ROOT", "SPLIT_WAVE", "DEFER_SOFT_DEBT", "STOP_BUDGET_EXHAUSTED", "REQUEST_HUMAN_DECISION" }
         };
     }
 
-    static Candidate CreateCandidate(IGrouping<string, TodoItem> group)
+    static Candidate CreateCandidate(
+        IGrouping<string, TodoItem> group,
+        IReadOnlyList<RemediationEntry> remediation,
+        IReadOnlyList<TodoItem> allBlockingTodos)
     {
-        var category = group.First().Category;
+        var groupedItems = group.ToArray();
+        var category = groupedItems[0].Category;
         var severity = category switch
         {
             "UNRESOLVED_SYMBOL" or "UNAVAILABLE_SYMBOLS" or "HELPER_METHOD_REQUIRES_MAPPING" => 5d,
@@ -1134,19 +1320,53 @@ internal static class MigrationWaveQualityController
             "RAW_STATEMENT" => 0.45,
             _ => 0.4
         };
-        var affectedTests = group.Select(item => item.TestName).Where(name => name != "<file-scope>").Distinct(StringComparer.OrdinalIgnoreCase).Count();
-        var affectedFiles = group.Select(item => item.File).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        var affectedTests = groupedItems.Select(item => item.TestName).Where(name => name != "<file-scope>").Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        var affectedFiles = groupedItems.Select(item => item.File).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        var impactedLocations = groupedItems
+            .Select(item => (item.TestName, item.File))
+            .ToHashSet();
+        var cascadeOccurrences = category == "HELPER_METHOD_REQUIRES_MAPPING"
+            ? allBlockingTodos.Count(item =>
+                (item.Category is "UNRESOLVED_SYMBOL" or "UNAVAILABLE_SYMBOLS")
+                && impactedLocations.Contains((item.TestName, item.File)))
+            : 0;
+        var effectiveOccurrences = groupedItems.Length + cascadeOccurrences;
         var cost = Math.Max(1d, 1d + affectedFiles * 0.5d);
-        var payoff = Math.Round(group.Count() * Math.Max(1, affectedTests) * severity * confidence / cost, 2);
-        return new Candidate(group.Key, category, group.Count(), affectedTests, affectedFiles, severity, confidence, cost, payoff,
-            category switch
+        var payoff = Math.Round(effectiveOccurrences * Math.Max(1, affectedTests) * severity * confidence / cost, 2);
+        // A generic unresolved local/symbol cascade is not enough evidence to scaffold.
+        // Only a project-owned helper/POM invocation emitted as an explicit helper root is eligible.
+        var scaffoldEligible = category == "HELPER_METHOD_REQUIRES_MAPPING";
+        var priorNoProgress = remediation.Count(item =>
+            item.Result == "NO_PROGRESS"
+            && string.Equals(item.Pattern, group.Key, StringComparison.OrdinalIgnoreCase));
+        var scaffoldReason = scaffoldEligible
+            ? "Only project helper/POM boundaries may be scaffolded, and only after measured no-progress for this exact root pattern."
+            : null;
+        var recommendedAction = scaffoldEligible && priorNoProgress > 0
+            ? "Create one exact ScaffoldMethods/ScaffoldMethodPatterns entry for the proven helper/POM root; keep assertions and concrete migrated behavior active, then regenerate."
+            : category switch
             {
-                "HELPER_METHOD_REQUIRES_MAPPING" => "Add or refine a reusable helper/method mapping, then regenerate the same wave.",
-                "UNRESOLVED_SYMBOL" or "UNAVAILABLE_SYMBOLS" => "Restore the missing target-side declaration/POM/setup root before touching downstream TODOs.",
+                "HELPER_METHOD_REQUIRES_MAPPING" => "Make one bounded attempt to add or refine a reusable helper/method mapping, then regenerate the same wave.",
+                "UNRESOLVED_SYMBOL" or "UNAVAILABLE_SYMBOLS" => "Trace this cascade to its first concrete helper/POM/setup declaration. Do not scaffold a derived local symbol or repeat the same research-heavy repair.",
                 "WAIT_MAPPING_REQUIRED" or "WAIT_REQUIRES_STATE_ASSERTION" => "Map the shared wait to an explicit Playwright state/assertion and regenerate.",
                 "RAW_STATEMENT" => "Promote the repeated raw statement into a semantic recognizer or bounded adapter mapping.",
                 _ => "Investigate the root pattern and create one bounded remediation ticket."
-            });
+            };
+        return new Candidate(
+            group.Key,
+            category,
+            groupedItems.Length,
+            cascadeOccurrences,
+            affectedTests,
+            affectedFiles,
+            severity,
+            confidence,
+            cost,
+            payoff,
+            recommendedAction,
+            scaffoldEligible,
+            priorNoProgress,
+            scaffoldReason);
     }
 
     static bool IsEmptyTestBody(TestBody body)
@@ -1197,6 +1417,10 @@ internal static class MigrationWaveQualityController
 
     static int CountBehaviorStatements(TestBody body) => body.Lines.Count(IsBehaviorStatementLine);
 
+    static int CountConcreteBehaviorStatements(TestBody body) => body.Lines.Count(line =>
+        IsBehaviorStatementLine(line)
+        && !MigrationScaffoldCallRegex.IsMatch(line));
+
     static int CountForbiddenPlaceholdersInFile(string path)
     {
         if (Path.GetExtension(path).Equals(".ts", StringComparison.OrdinalIgnoreCase))
@@ -1212,8 +1436,67 @@ internal static class MigrationWaveQualityController
             .Count(member => string.Equals(member.ToString().Replace(" ", string.Empty, StringComparison.Ordinal), "Task.CompletedTask", StringComparison.Ordinal));
         var forbiddenThrows = root.DescendantNodes().OfType<ObjectCreationExpressionSyntax>()
             .Count(creation => creation.Type.ToString().EndsWith("NotImplementedException", StringComparison.Ordinal)
-                || creation.Type.ToString().EndsWith("NotSupportedException", StringComparison.Ordinal));
+                || creation.Type.ToString().EndsWith("NotSupportedException", StringComparison.Ordinal)
+                ? !IsExplicitMigrationScaffoldException(creation)
+                : false);
         return forbiddenInvocations + completedTasks + forbiddenThrows;
+    }
+
+    static bool IsExplicitMigrationScaffoldException(ObjectCreationExpressionSyntax creation)
+    {
+        var containingType = creation.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault();
+        return containingType != null
+            && string.Equals(containingType.Identifier.ValueText, "__MigratorScaffoldRuntime", StringComparison.Ordinal)
+            && containingType.ToFullString().Contains("[MIGRATOR:SCAFFOLD]", StringComparison.Ordinal);
+    }
+
+    static IEnumerable<string> ExtractMigrationScaffoldMembersInFile(string path)
+    {
+        if (Path.GetExtension(path).Equals(".ts", StringComparison.OrdinalIgnoreCase))
+        {
+            var memberRegex = new Regex(@"__MigratorScaffoldRuntime\s*\.\s*(?:Invoke|InvokeAsync)\s*\(\s*[""'`](?<member>[^""'`]+)[""'`]", RegexOptions.Compiled);
+            foreach (var line in File.ReadLines(path))
+            {
+                if (!IsActiveLine(line))
+                    continue;
+                var match = memberRegex.Match(line);
+                if (match.Success)
+                    yield return match.Groups["member"].Value;
+            }
+            yield break;
+        }
+
+        var root = CSharpSyntaxTree.ParseText(File.ReadAllText(path)).GetRoot();
+        foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (!MigrationScaffoldCallRegex.IsMatch(invocation.Expression.ToString() + "("))
+                continue;
+
+            var firstArgument = invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression;
+            if (firstArgument is LiteralExpressionSyntax literal
+                && literal.IsKind(SyntaxKind.StringLiteralExpression))
+            {
+                yield return literal.Token.ValueText;
+            }
+            else
+            {
+                yield return "<unknown-scaffold>";
+            }
+        }
+    }
+
+    static string NormalizeScaffoldRoot(string member)
+    {
+        var value = member.Trim();
+        if (value.Length == 0)
+            return string.Empty;
+
+        var genericIndex = value.IndexOf('<');
+        if (genericIndex >= 0)
+            value = value[..genericIndex];
+
+        var lastDot = value.LastIndexOf('.');
+        return lastDot > 0 ? value[..lastDot] : value;
     }
 
     static int CountActiveMatches(IEnumerable<string> lines, Regex regex) => lines.Count(line => IsActiveLine(line) && regex.IsMatch(line));
@@ -1405,7 +1688,16 @@ internal static class MigrationWaveQualityController
 
     static WaveMetrics ReadMetrics(string path)
     {
-        var metrics = JsonSerializer.Deserialize<WaveMetrics>(File.ReadAllText(path), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        var json = File.ReadAllText(path);
+        using var document = JsonDocument.Parse(json);
+        if (!document.RootElement.TryGetProperty("runtimeReady", out _)
+            || !document.RootElement.TryGetProperty("scaffoldRootCount", out _)
+            || !document.RootElement.TryGetProperty("maxScaffoldRoots", out _))
+        {
+            throw new InvalidOperationException("wave-quality-metrics.json predates the balanced scaffolding protocol; run `migration measure-wave --out <wave>` again before recording a decision.");
+        }
+
+        var metrics = JsonSerializer.Deserialize<WaveMetrics>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         return metrics ?? throw new InvalidOperationException("wave-quality-metrics.json deserialized to null.");
     }
 
@@ -1433,8 +1725,9 @@ internal static class MigrationWaveQualityController
             {
                 throw new InvalidOperationException("wave-remediation-ledger.jsonl is malformed, out of sequence, or tampered; archive and rebuild it from trusted remediation evidence.");
             }
+            var pattern = OptionalString(root, "pattern") ?? string.Empty;
             var resultValue = OptionalString(root, "result") ?? "FAILED";
-            result.Add(new RemediationEntry(resultValue, storedHash));
+            result.Add(new RemediationEntry(pattern, resultValue, storedHash));
             previousEntryHash = storedHash;
             expectedSequence++;
         }
@@ -1481,8 +1774,12 @@ internal static class MigrationWaveQualityController
         sb.AppendLine($"- Blocking TODOs: **{metrics.BlockingTodoCount}** across **{metrics.RootBlockingPatterns}** root pattern(s)");
         sb.AppendLine($"- Cascade TODO estimate: **{metrics.CascadeTodoCount}**");
         sb.AppendLine($"- Soft TODOs: **{metrics.SoftTodoCount}**");
+        sb.AppendLine($"- Migration scaffolds: **{metrics.ScaffoldCallCount}** call(s), **{metrics.ScaffoldRootCount}/{metrics.MaxScaffoldRoots}** root(s)");
+        sb.AppendLine($"- Scaffolded tests: **{metrics.ScaffoldedTests.Length}**; scaffold-only tests: **{metrics.ScaffoldOnlyTests.Length}/{metrics.MaxScaffoldOnlyTests}**");
+        sb.AppendLine($"- Runtime ready: **{metrics.RuntimeReady}**");
         sb.AppendLine($"- Assertion preservation: **{metrics.AssertionPreservationRate:P0}** ({metrics.GeneratedActiveAssertions}/{metrics.SourceAssertions})");
         sb.AppendLine($"- Active behavior presence: **{metrics.BehaviorPresenceRate:P0}** ({metrics.GeneratedActiveBehaviorStatements}/{metrics.SourceBehaviorStatements} behavior statement(s))");
+        sb.AppendLine($"- Concrete migrated behavior statements: **{metrics.GeneratedConcreteBehaviorStatements}**");
         sb.AppendLine($"- Behaviorless selected tests: **{metrics.BehaviorlessTests.Length}**");
         sb.AppendLine($"- Remediation budget: **{metrics.RemainingRemediationCycles}/{metrics.MaxRemediationCycles}** cycle(s) remain ({metrics.ExecutionProfile})");
         sb.AppendLine();
@@ -1503,15 +1800,26 @@ internal static class MigrationWaveQualityController
 
     static string RenderAcceptanceMarkdown(WaveMetrics metrics, string decision)
     {
+        var status = decision switch
+        {
+            "ACCEPT_WITH_SCAFFOLDING" => "ACCEPTED WITH SCAFFOLDING",
+            "DEFER_SOFT_DEBT" when !metrics.RuntimeReady => "ACCEPTED WITH SCAFFOLDING AND DEFERRED SOFT DEBT",
+            "DEFER_SOFT_DEBT" => "ACCEPTED WITH DEFERRED SOFT DEBT",
+            _ => "ACCEPTED"
+        };
+
         return $"""
 # Wave acceptance — {metrics.WaveId}
 
-Status: **{(decision == "DEFER_SOFT_DEBT" ? "ACCEPTED WITH DEFERRED SOFT DEBT" : "ACCEPTED")}**
+Status: **{status}**
 
 - Ready tests: {metrics.ReadyTests}/{metrics.SelectedTests}
 - Blocking TODOs: {metrics.BlockingTodoCount}
 - Empty tests: {metrics.EmptyTests}
 - Active placeholder/suppression statements: {metrics.ForbiddenPlaceholderCount}
+- Migration scaffold roots: {metrics.ScaffoldRootCount}/{metrics.MaxScaffoldRoots}
+- Scaffold-only tests: {metrics.ScaffoldOnlyTests.Length}/{metrics.MaxScaffoldOnlyTests}
+- Runtime ready: {metrics.RuntimeReady}
 - Assertion preservation: {metrics.AssertionPreservationRate:P0}
 - Active behavior presence: {metrics.BehaviorPresenceRate:P0}
 - Behaviorless selected tests: {metrics.BehaviorlessTests.Length}
@@ -1525,9 +1833,11 @@ The next wave is allowed only while this receipt remains valid. Any change to ge
 
     static string DefaultDecisionReason(string decision, WaveMetrics metrics, string? pattern) => decision switch
     {
-        "ACCEPT_WAVE" => "All deterministic hard invariants pass; scaling to the next bounded wave is allowed.",
+        "ACCEPT_WAVE" => "All deterministic hard invariants pass and no runtime scaffolds remain; scaling to the next bounded wave is allowed.",
+        "ACCEPT_WITH_SCAFFOLDING" => $"Structural migration is complete with {metrics.ScaffoldRootCount} explicit runtime-blocking scaffold root(s); runtime readiness remains false.",
         "DEFER_SOFT_DEBT" => $"Only non-blocking review debt remains ({metrics.SoftTodoCount} item(s)); it is recorded without weakening hard gates.",
-        "REMEDIATE_CURRENT_WAVE" => $"The highest expected-payoff blocking root pattern is {pattern ?? "the top ranked candidate"}; fix it before scaling.",
+        "REMEDIATE_CURRENT_WAVE" => $"The highest expected-payoff blocking root pattern is {pattern ?? "the top ranked candidate"}; make one bounded implementation attempt before scaling.",
+        "SCAFFOLD_CURRENT_ROOT" => $"The root pattern {pattern ?? "selected by the manager"} already produced measured no-progress; replace only that helper/POM boundary with an explicit runtime scaffold.",
         "SPLIT_WAVE" => "The current wave is too broad for an efficient bounded remediation cycle.",
         "STOP_BUDGET_EXHAUSTED" => "The bounded remediation budget or no-progress threshold is exhausted; preserve an honest draft checkpoint.",
         _ => "A human decision is required because the bounded manager cannot safely choose among the remaining options."
@@ -1537,7 +1847,7 @@ The next wave is allowed only while this receipt remains valid. Any change to ge
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
         var normalized = value.Trim().ToUpperInvariant().Replace('-', '_');
-        return normalized is "ACCEPT_WAVE" or "REMEDIATE_CURRENT_WAVE" or "SPLIT_WAVE" or "DEFER_SOFT_DEBT" or "STOP_BUDGET_EXHAUSTED" or "REQUEST_HUMAN_DECISION" ? normalized : null;
+        return normalized is "ACCEPT_WAVE" or "ACCEPT_WITH_SCAFFOLDING" or "REMEDIATE_CURRENT_WAVE" or "SCAFFOLD_CURRENT_ROOT" or "SPLIT_WAVE" or "DEFER_SOFT_DEBT" or "STOP_BUDGET_EXHAUSTED" or "REQUEST_HUMAN_DECISION" ? normalized : null;
     }
 
     static int ReadMaxRemediationCycles(string policyPath, string profile)
@@ -1552,6 +1862,40 @@ The next wave is allowed only while this receipt remains valid. Any change to ge
                 && boundary.TryGetProperty("maxRemediationCycles", out var cycles)
                 && cycles.TryGetInt32(out var value))
                 return Math.Clamp(value, 0, 20);
+        }
+        catch { }
+        return fallback;
+    }
+
+    static int ReadMaxScaffoldRoots(string policyPath, string profile)
+    {
+        var fallback = profile.ToLowerInvariant() switch { "audit" => 5, "standard" => 3, _ => 2 };
+        if (!File.Exists(policyPath)) return fallback;
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(policyPath));
+            if (document.RootElement.TryGetProperty("waveQualityBoundary", out var boundary)
+                && boundary.ValueKind == JsonValueKind.Object
+                && boundary.TryGetProperty("maxScaffoldRoots", out var roots)
+                && roots.TryGetInt32(out var value))
+                return Math.Clamp(value, 0, 20);
+        }
+        catch { }
+        return fallback;
+    }
+
+    static double ReadMaxScaffoldOnlyTestRatio(string policyPath, string profile)
+    {
+        const double fallback = 0.5d;
+        if (!File.Exists(policyPath)) return fallback;
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(policyPath));
+            if (document.RootElement.TryGetProperty("waveQualityBoundary", out var boundary)
+                && boundary.ValueKind == JsonValueKind.Object
+                && boundary.TryGetProperty("maxScaffoldOnlyTestRatio", out var ratio)
+                && ratio.TryGetDouble(out var value))
+                return Math.Clamp(value, 0d, 1d);
         }
         catch { }
         return fallback;
@@ -1731,7 +2075,7 @@ The next wave is allowed only while this receipt remains valid. Any change to ge
     {
         output.WriteLine("Wave quality commands:");
         output.WriteLine("  migration measure-wave --out migration/runs/wave-001");
-        output.WriteLine("  migration record-wave-decision --out migration/runs/wave-001 --decision REMEDIATE_CURRENT_WAVE --pattern <pattern> --reason <reason>");
+        output.WriteLine("  migration record-wave-decision --out migration/runs/wave-001 --decision REMEDIATE_CURRENT_WAVE|SCAFFOLD_CURRENT_ROOT|ACCEPT_WITH_SCAFFOLDING --pattern <pattern> --reason <reason>");
         output.WriteLine("  migration record-wave-remediation --out migration/runs/wave-001 --pattern <pattern> --result COMPLETED|NO_PROGRESS|FAILED");
         output.WriteLine("  migration accept-wave --out migration/runs/wave-001");
         output.WriteLine("  migration check-wave-acceptance --out migration/runs/wave-001");
@@ -1740,8 +2084,22 @@ The next wave is allowed only while this receipt remains valid. Any change to ge
     sealed record Options(string Out, string Decision, string Pattern, string Reason, string Result);
     sealed record TestBody(string File, string Name, string Identity, string[] Lines, int[] LineNumbers);
     sealed record TodoItem(string Category, string Pattern, string Raw, string TestName, string File, bool Blocking);
-    sealed record Candidate(string Pattern, string Category, int Occurrences, int AffectedTests, int AffectedFiles, double Severity, double Confidence, double EstimatedCost, double ExpectedPayoff, string RecommendedAction);
-    sealed record RemediationEntry(string Result, string EntryHash);
+    sealed record Candidate(
+        string Pattern,
+        string Category,
+        int Occurrences,
+        int CascadeOccurrences,
+        int AffectedTests,
+        int AffectedFiles,
+        double Severity,
+        double Confidence,
+        double EstimatedCost,
+        double ExpectedPayoff,
+        string RecommendedAction,
+        bool ScaffoldEligible,
+        int PriorNoProgress,
+        string? ScaffoldReason);
+    sealed record RemediationEntry(string Pattern, string Result, string EntryHash);
     sealed record WaveMetrics(
         string WaveId,
         DateTimeOffset GeneratedAtUtc,
@@ -1762,6 +2120,15 @@ The next wave is allowed only while this receipt remains valid. Any change to ge
         string[] BehaviorlessTests,
         int ActiveAwaitActions,
         int ForbiddenPlaceholderCount,
+        int ScaffoldCallCount,
+        int ScaffoldRootCount,
+        string[] ScaffoldRoots,
+        string[] ScaffoldedTests,
+        string[] ScaffoldOnlyTests,
+        int GeneratedConcreteBehaviorStatements,
+        int MaxScaffoldRoots,
+        int MaxScaffoldOnlyTests,
+        bool RuntimeReady,
         int BlockingTodoCount,
         int SoftTodoCount,
         int RootBlockingPatterns,

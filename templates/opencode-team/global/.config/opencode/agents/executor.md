@@ -185,6 +185,10 @@ The current-ticket lifecycle records `wave-progress/v1` snapshots. Do not game t
 - Keep changes small and reversible.
 - Prefer existing project patterns.
 - Do not add or broaden suppression patterns to reduce TODO count.
+- Implement simple, source-backed helper/POM side effects when the ticket is `REMEDIATE_CURRENT_WAVE`; keep the attempt bounded to the selected root and stop when implementation requires open-ended product research.
+- Add `ScaffoldMethods`/`ScaffoldMethodPatterns` only for a `SCAFFOLD_CURRENT_ROOT` ticket backed by measured `NO_PROGRESS` for the exact candidate. Use one exact member or a qualified final-segment pattern such as `TariffSettingsHelper.*`.
+- A migration scaffold must preserve assignment and `await` shape, emit `[MIGRATOR:SCAFFOLD]`, and fail loudly at runtime. Never return `default`, `false`, empty collections, or `Task.CompletedTask`; never scaffold assertions, selectors, waits, Selenium/Playwright APIs, or arbitrary statements.
+- Do not turn scaffolding into the whole migration. Respect `maxScaffoldRoots` and `maxScaffoldOnlyTestRatio`; split or stop when the boundary is reached.
 - Do not delete a TODO/unresolved-symbol marker while its replacement declaration, action, or assertion remains commented out or absent. TODO-count reduction alone is not progress.
 - Do not suppress assertion/check/helper methods such as `*.Should*`, `*Assert*`, `*Expect*`, or `*Equal*` unless explicit source evidence and review criteria are present.
 - Do not hide failures.

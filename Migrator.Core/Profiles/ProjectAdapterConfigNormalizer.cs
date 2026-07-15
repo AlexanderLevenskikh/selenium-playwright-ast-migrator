@@ -27,6 +27,8 @@ public static class ProjectAdapterConfigNormalizer
             config.SourceOnlyIdentifiers,
             config.SuppressedMethods,
             config.SuppressedMethodPatterns,
+            config.ScaffoldMethods ?? Array.Empty<string>(),
+            config.ScaffoldMethodPatterns ?? Array.Empty<string>(),
             config.RecognizerAliases,
             config.GenericResultMethods,
             config.WaitPolicies);

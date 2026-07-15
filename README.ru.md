@@ -567,7 +567,7 @@ selenium-pw-migrator migration validate --out migration/runs/wave-001 --validati
 # validation-plan + record-validation остаются только для recovery/import внешнего evidence
 selenium-pw-migrator migration build-review-bundle --out migration/runs/wave-001
 selenium-pw-migrator migration measure-wave --out migration/runs/wave-001
-# migration-wave-manager записывает одно ограниченное решение; remediation сначала повторно генерируется и проверяется
+# manager сначала пробует дешёвую детерминированную реализацию; после измеренного NO_PROGRESS может scaffold-ить только точный helper/POM-корень
 selenium-pw-migrator migration accept-wave --out migration/runs/wave-001
 selenium-pw-migrator migration check-wave-acceptance --out migration/runs/wave-001
 selenium-pw-migrator migration resume-wave --out migration/runs/wave-001
@@ -578,6 +578,8 @@ selenium-pw-migrator migration cache-stats --workspace migration
 selenium-pw-migrator migration cache-verify --workspace migration
 selenium-pw-migrator migration cache-prune --workspace migration --cache-max-age-days 30 --cache-max-size-mb 2048 --cache-apply false
 ```
+Migration scaffolding оставляет массово переписанные тесты читаемыми и компиляционно связанными, не выдавая редкие проектные helper-ы за реализованные. Протокол ограничен точным корнем, измеренным no-progress, бюджетом корней и долей scaffold-only тестов: [migration scaffolding](docs/migration-scaffolding.ru.md).
+
 
 `migration run-wave` материализует неизменяемые `wave-manifest.json`, `execution-policy.json`, `run-context.json`, `source-scope/`, `generated/`, `input-scope.json`, `preflight-budget.json`, `config-delta.json`, `memory-delta.jsonl`, `wave-validation.json`, `performance-trace.json`, `run-summary.md`, `wave-status.json` и migrate-wrapper’ы. Команда работает только в рамках проекта: она не продвигает memory, не объединяет config и не публикует cross-project/org knowledge packs. Существующие run directories проверяются и переиспользуются, а не материализуются заново.
 

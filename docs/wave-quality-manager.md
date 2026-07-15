@@ -51,7 +51,8 @@ Acceptance uses outcome-oriented evidence recalculated from generated code:
 - per-test active behavior presence, including behaviorless assertion-only/comment-only stubs;
 - deterministic wave validation status;
 - source-scope-tree, generated-tree, selected-tests, config, metrics, and decision fingerprints;
-- remediation cycles, no-progress streak, and remaining profile budget.
+- remediation cycles, no-progress streak, and remaining profile budget;
+- explicit migration scaffold calls, distinct scaffold roots, scaffold-only tests, and `runtimeReady`.
 
 Editable migration reports are observability inputs, never acceptance authority. The validation receipt must match the current input fingerprint for generated code, config, selected tests, policy, and tool version. Remediation progress is also derived by the CLI from before/after metrics: an agent cannot declare `COMPLETED` without measurable improvement.
 
@@ -60,7 +61,9 @@ Editable migration reports are observability inputs, never acceptance authority.
 `migration-wave-manager` may choose:
 
 - `ACCEPT_WAVE`;
+- `ACCEPT_WITH_SCAFFOLDING`;
 - `REMEDIATE_CURRENT_WAVE`;
+- `SCAFFOLD_CURRENT_ROOT`;
 - `SPLIT_WAVE`;
 - `DEFER_SOFT_DEBT`;
 - `STOP_BUDGET_EXHAUSTED`;
@@ -91,6 +94,20 @@ Profiles change ceremony and bounded remediation cost, not acceptance quality:
 - `audit`: up to 6.
 
 When the budget is exhausted, the honest result is `DRAFT_WITH_DEBT` / `FINAL_WITH_LIMITATIONS`, not a manufactured final pass.
+
+## Balanced scaffolding protocol
+
+The controller deliberately rejects both extremes: suppressing every difficult dependency and spending the whole budget chasing 100% runtime readiness.
+
+1. A helper/POM root first receives one bounded `REMEDIATE_CURRENT_WAVE` attempt. Cheap deterministic mappings, members, and side effects should be implemented normally.
+2. The CLI records `COMPLETED` only when that exact selected root disappears; unrelated or partial cleanup is `NO_PROGRESS`. Only then may the manager choose `SCAFFOLD_CURRENT_ROOT`, and it cannot choose this earlier.
+3. The executor adds one exact `ScaffoldMethods` entry or a qualified final-segment pattern such as `TariffSettingsHelper.*`. Catch-all and owner-wildcard patterns are invalid.
+4. The renderer preserves assignment and `await` shape, emits `[MIGRATOR:SCAFFOLD]`, and throws at runtime. It never returns a plausible default.
+5. Assertions, Playwright/Selenium APIs, selectors, waits, and arbitrary statements are not scaffoldable. Suppression remains a different, evidence-heavy policy.
+6. `maxScaffoldRoots` and `maxScaffoldOnlyTestRatio` bound the escape hatch. Crossing either boundary routes to `SPLIT_WAVE`, implementation, or an honest stop.
+7. A clean structural wave with scaffolds is accepted only through `ACCEPT_WITH_SCAFFOLDING`; its `runtimeReady` remains `false`.
+
+This lets the migrator remove repetitive test-rewrite work while leaving rare project-specific helpers as a small explicit queue for a focused agent or developer.
 
 ## Dashboard
 

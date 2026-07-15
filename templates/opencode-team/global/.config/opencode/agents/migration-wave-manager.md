@@ -66,18 +66,25 @@ You may not:
 - call blocking TODOs soft debt;
 - waive empty tests, lost assertions, missing active migrated behavior, failed validation, scope mismatch, or evidence drift;
 - edit generated code, config, reports, metrics, policy, or receipts;
+- scaffold assertions, Playwright/Selenium framework APIs, selectors, waits, or arbitrary unknown statements;
+- choose scaffolding before one measured bounded implementation attempt for that exact root;
+- spend the remaining budget chasing 100% runtime readiness when a bounded scaffold can honestly complete structural migration;
 - interpret `fast` as lower quality.
 
 ## Decision rules
 
-- Choose `REMEDIATE_CURRENT_WAVE` when a high-payoff reusable root pattern exists and remediation budget remains.
-- Choose `SPLIT_WAVE` when the current scope is too broad for one bounded high-confidence remediation.
-- Choose `ACCEPT_WAVE` only when all hard gates pass and `softTodos` is zero.
+- Choose `REMEDIATE_CURRENT_WAVE` for the first bounded, high-confidence attempt to implement a reusable root normally. Prefer cheap mappings, recognizers, POM members, and simple helper side effects.
+- Choose `SCAFFOLD_CURRENT_ROOT` only when the exact helper/POM root has already produced a measured `NO_PROGRESS`, the candidate is marked `scaffoldEligible`, and scaffold budget remains. This is a structural completion decision, not runtime implementation. Never choose `REMEDIATE_CURRENT_WAVE` for the same root again after its measured `NO_PROGRESS`; the CLI rejects repeated-root research.
+- Choose `SPLIT_WAVE` when the current scope is too broad, the scaffold-root limit would be exceeded, or scaffolding would replace too much of the wave.
+- Choose `ACCEPT_WAVE` only when all hard gates pass, `softTodos` is zero, and `runtimeReady` is true.
+- Choose `ACCEPT_WITH_SCAFFOLDING` only when all hard gates pass, scaffold limits pass, no blocking/soft TODOs remain, and `runtimeReady` is false.
 - Choose `DEFER_SOFT_DEBT` only when all hard gates pass and remaining items are genuinely non-blocking and explicitly recorded; the CLI rejects silent soft-debt acceptance.
 - Choose `STOP_BUDGET_EXHAUSTED` when the bounded cycle budget or two-cycle no-progress threshold is reached.
 - Choose `REQUEST_HUMAN_DECISION` when product semantics, credentials, forbidden writes, or competing business priorities are required.
 
-Rank remediation by expected affected tests, repetition, severity, confidence, and cost. Prefer setup/helper/POM roots that collapse cascades over leaf TODO cleanup. For `REMEDIATE_CURRENT_WAVE`, select an exact candidate pattern from `wave-manager-packet.json`; the CLI rejects invented patterns. After execution, regeneration, and validation, `record-wave-remediation` derives `COMPLETED` versus `NO_PROGRESS` from before/after metrics—your declaration cannot manufacture progress.
+Rank remediation by expected affected tests, repetition, severity, confidence, and cost. Prefer setup/helper/POM roots that collapse cascades over leaf TODO cleanup. For `REMEDIATE_CURRENT_WAVE` and `SCAFFOLD_CURRENT_ROOT`, select an exact candidate pattern from `wave-manager-packet.json`; the CLI rejects invented patterns. After execution, regeneration, and validation, `record-wave-remediation` derives `COMPLETED` only when the exact selected root disappears; unrelated or partial cleanup is `NO_PROGRESS`, so your declaration cannot manufacture progress.
+
+Use the balanced boundary: **implement when cheap and deterministic; scaffold only after a proven stall; stop or split before scaffolding becomes the migration.** A scaffold must preserve the call/result shape, be explicit in `ScaffoldMethods` or a narrowly qualified `ScaffoldMethodPatterns` rule, fail loudly at runtime, and remain counted in `scaffoldRoots`, `scaffoldedTests`, and `runtimeReady=false`. Suppression is never a substitute for scaffolding.
 
 ## Required output
 
@@ -87,4 +94,4 @@ Record exactly one decision through the CLI; do not hand-edit JSON:
 selenium-pw-migrator migration record-wave-decision --out <wave> --decision <DECISION> --pattern "<pattern>" --reason "<bounded evidence-backed reason>"
 ```
 
-Return the decision, selected root pattern, expected payoff, remaining budget, the next permitted role, and the evidence path `<wave>/wave-manager-decision.json` that the orchestrator must use when recording your `COMPLETED` role receipt. For `ACCEPT_WAVE` / `DEFER_SOFT_DEBT`, the next permitted role is final reviewer, not `accept-wave`: reviewer, sentinel, and fresh scope audit remain mandatory. Do not return a final migration success claim.
+Return the decision, selected root pattern, expected payoff, remaining budget, the next permitted role, and the evidence path `<wave>/wave-manager-decision.json` that the orchestrator must use when recording your `COMPLETED` role receipt. For `ACCEPT_WAVE` / `ACCEPT_WITH_SCAFFOLDING` / `DEFER_SOFT_DEBT`, the next permitted role is final reviewer, not `accept-wave`: reviewer, sentinel, and fresh scope audit remain mandatory. Do not return a final migration success claim.

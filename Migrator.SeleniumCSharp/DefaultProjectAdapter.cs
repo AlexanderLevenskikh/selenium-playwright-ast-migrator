@@ -104,6 +104,8 @@ public class DefaultProjectAdapter : IProjectAdapter
             TargetKnownIdentifiers = resolved._targetKnownIdentifiers,
             SuppressedMethods = resolved._suppressedMethods,
             SuppressedMethodPatterns = resolved._suppressedMethodPatterns,
+            ScaffoldMethods = resolved._scaffoldMethods,
+            ScaffoldMethodPatterns = resolved._scaffoldMethodPatterns,
             ClassFields = sourceModel.ClassFields
         };
     }
@@ -170,11 +172,14 @@ public class DefaultProjectAdapter : IProjectAdapter
         var mergedTargetKnownIdentifiers = MergeStrings(_globalConfig.TargetKnownIdentifiers, scope.TargetKnownIdentifiers);
         var mergedSuppressedMethods = MergeStrings(_globalConfig.SuppressedMethods, scope.SuppressedMethods);
         var mergedSuppressedMethodPatterns = MergeStrings(_globalConfig.SuppressedMethodPatterns, scope.SuppressedMethodPatterns);
+        var mergedScaffoldMethods = MergeStrings(_globalConfig.ScaffoldMethods ?? Array.Empty<string>(), scope.ScaffoldMethods ?? Array.Empty<string>());
+        var mergedScaffoldMethodPatterns = MergeStrings(_globalConfig.ScaffoldMethodPatterns ?? Array.Empty<string>(), scope.ScaffoldMethodPatterns ?? Array.Empty<string>());
 
         return CreateResolvedConfig(_globalConfig, mergedTargets, mergedMethods,
             mergedParamMethods, testHost, _globalConfig.PageObjects,
             mergedTargetKnownTypes, mergedTargetKnownIdentifiers,
             mergedSuppressedMethods, mergedSuppressedMethodPatterns,
+            mergedScaffoldMethods, mergedScaffoldMethodPatterns,
             mergedNavigationUrls, navigationTargetStatement);
     }
 
@@ -185,6 +190,8 @@ public class DefaultProjectAdapter : IProjectAdapter
         IReadOnlyList<string>? targetKnownIdentifiers = null,
         IReadOnlyList<string>? suppressedMethods = null,
         IReadOnlyList<string>? suppressedMethodPatterns = null,
+        IReadOnlyList<string>? scaffoldMethods = null,
+        IReadOnlyList<string>? scaffoldMethodPatterns = null,
         IReadOnlyDictionary<string, string>? navigationUrls = null,
         string? navigationTargetStatement = null)
     {
@@ -195,6 +202,8 @@ public class DefaultProjectAdapter : IProjectAdapter
             targetKnownIdentifiers,
             suppressedMethods,
             suppressedMethodPatterns,
+            scaffoldMethods,
+            scaffoldMethodPatterns,
             navigationUrls,
             navigationTargetStatement);
 
@@ -2706,6 +2715,8 @@ public class DefaultProjectAdapter : IProjectAdapter
         internal IReadOnlyList<string> _targetKnownIdentifiers = Array.Empty<string>();
         internal IReadOnlyList<string> _suppressedMethods = Array.Empty<string>();
         internal IReadOnlyList<string> _suppressedMethodPatterns = Array.Empty<string>();
+        internal IReadOnlyList<string> _scaffoldMethods = Array.Empty<string>();
+        internal IReadOnlyList<string> _scaffoldMethodPatterns = Array.Empty<string>();
         internal IReadOnlyDictionary<string, string> _navigationUrls = new Dictionary<string, string>(StringComparer.Ordinal);
         internal string? _navigationTargetStatement;
         internal readonly TestHostConfig? _testHost;
@@ -2718,6 +2729,8 @@ public class DefaultProjectAdapter : IProjectAdapter
             IReadOnlyList<string>? targetKnownIdentifiers = null,
             IReadOnlyList<string>? suppressedMethods = null,
             IReadOnlyList<string>? suppressedMethodPatterns = null,
+            IReadOnlyList<string>? scaffoldMethods = null,
+            IReadOnlyList<string>? scaffoldMethodPatterns = null,
             IReadOnlyDictionary<string, string>? navigationUrls = null,
             string? navigationTargetStatement = null)
         {
@@ -2728,6 +2741,8 @@ public class DefaultProjectAdapter : IProjectAdapter
             _targetKnownIdentifiers = targetKnownIdentifiers ?? globalConfig.TargetKnownIdentifiers ?? Array.Empty<string>();
             _suppressedMethods = suppressedMethods ?? globalConfig.SuppressedMethods ?? Array.Empty<string>();
             _suppressedMethodPatterns = suppressedMethodPatterns ?? globalConfig.SuppressedMethodPatterns ?? Array.Empty<string>();
+            _scaffoldMethods = scaffoldMethods ?? globalConfig.ScaffoldMethods ?? Array.Empty<string>();
+            _scaffoldMethodPatterns = scaffoldMethodPatterns ?? globalConfig.ScaffoldMethodPatterns ?? Array.Empty<string>();
             _navigationUrls = navigationUrls ?? globalConfig.NavigationUrls ?? new Dictionary<string, string>(StringComparer.Ordinal);
             _navigationTargetStatement = navigationTargetStatement ?? globalConfig.NavigationTargetStatement;
         }

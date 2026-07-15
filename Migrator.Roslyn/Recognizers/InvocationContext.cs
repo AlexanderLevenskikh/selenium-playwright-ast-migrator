@@ -9,7 +9,8 @@ public record InvocationContext(
     int SourceLine,
     bool SymbolResolved,
     IReadOnlyList<string> ArgumentTexts,
-    IReadOnlyList<string>? GenericArgumentTexts = null
+    IReadOnlyList<string>? GenericArgumentTexts = null,
+    bool IsAwaited = false
 );
 
 public interface IInvocationRecognizer

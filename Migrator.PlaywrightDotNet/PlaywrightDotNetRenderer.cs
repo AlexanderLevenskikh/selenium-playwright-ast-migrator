@@ -23,12 +23,15 @@ public partial class PlaywrightDotNetRenderer : IRenderer
     HashSet<string> _targetKnownIdentifiers = new(StringComparer.Ordinal);
     HashSet<string> _suppressedMethods = new(StringComparer.Ordinal);
     IReadOnlyList<string> _suppressedMethodPatterns = Array.Empty<string>();
+    HashSet<string> _scaffoldMethods = new(StringComparer.Ordinal);
+    IReadOnlyList<string> _scaffoldMethodPatterns = Array.Empty<string>();
     DotNetTargetTestFramework _targetTestFramework = DotNetTargetTestFramework.NUnit;
     bool _useAssertionsExpect;
     bool _useAssertionsExpectExplicit;
     bool _hasSuppressedSideEffect;
     int _suppressedSideEffectLine;
     string? _suppressedSideEffectSource;
+    bool _usedMigrationScaffold;
     string _pageVariable;
 
     public PlaywrightDotNetRenderer(string indent = "\t")
@@ -48,6 +51,7 @@ public partial class PlaywrightDotNetRenderer : IRenderer
     public string Render(TestFileModel model)
     {
         _tempVarCounter = 0;
+        _usedMigrationScaffold = false;
         var sb = new StringBuilder();
 
         var testHost = model.TestHost;
@@ -66,6 +70,17 @@ public partial class PlaywrightDotNetRenderer : IRenderer
             model.SuppressedMethods ?? Array.Empty<string>(),
             StringComparer.Ordinal);
         _suppressedMethodPatterns = model.SuppressedMethodPatterns ?? Array.Empty<string>();
+        _scaffoldMethods = new HashSet<string>(
+            (model.ScaffoldMethods ?? Array.Empty<string>())
+                .Select(item => item?.Trim())
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .Select(item => item!),
+            StringComparer.Ordinal);
+        _scaffoldMethodPatterns = (model.ScaffoldMethodPatterns ?? Array.Empty<string>())
+            .Select(item => item?.Trim())
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Select(item => item!)
+            .ToArray();
         var hasTestHostSetup = testHost?.SetUpStatements != null && testHost.SetUpStatements.Length > 0;
         var hasGeneratedSetup = hasTestHostSetup || model.SetUpActions.Any();
         var classLayout = DotNetTestFileScaffoldRenderer.CreateClassLayout(model, _targetTestFramework, hasGeneratedSetup);
@@ -118,8 +133,13 @@ public partial class PlaywrightDotNetRenderer : IRenderer
             sb.AppendLine();
         }
 
-        sb.AppendLine("}");
+        if (_usedMigrationScaffold)
+        {
+            sb.AppendLine();
+            AppendMigrationScaffoldRuntime(sb);
+        }
 
+        sb.AppendLine("}");
         return sb.ToString();
     }
 
@@ -465,6 +485,11 @@ public partial class PlaywrightDotNetRenderer : IRenderer
     {
         var sourceText = GetActionSourceText(action);
         var declaredVariables = ExtractVariableNames(sourceText).ToArray();
+
+        // Scaffolding is explicit and narrow. It never happens merely because a call is
+        // unknown or suppressed: adapter config must name the helper/POM boundary.
+        if (TryRenderConfiguredMigrationScaffold(sb, action, sourceText))
+            return;
 
         if (IsSuppressedAction(action, sourceText))
         {
@@ -850,6 +875,233 @@ public partial class PlaywrightDotNetRenderer : IRenderer
         return $"\"{trimmed.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"";
     }
 
+    bool TryRenderConfiguredMigrationScaffold(StringBuilder sb, TestAction action, string sourceText)
+    {
+        if (!TryGetScaffoldMember(action, out var member))
+            return false;
+
+        var explicitlyNamed = _scaffoldMethods.Contains(member.QualifiedMember)
+            || (member.IsUnqualified && _scaffoldMethods.Contains(member.MethodName));
+        var patternMatched = _scaffoldMethodPatterns.Any(pattern =>
+            GlobMatches(member.QualifiedMember, pattern));
+
+        if (!explicitlyNamed && !patternMatched)
+            return false;
+
+        return TryRenderMigrationScaffold(
+            sb,
+            action,
+            sourceText,
+            "explicit project-helper/POM scaffold policy");
+    }
+
+    static bool TryGetScaffoldMember(TestAction action, out ScaffoldMember member)
+    {
+        if (action is MethodInvocationAction method)
+        {
+            var qualified = string.IsNullOrWhiteSpace(method.ReceiverExpression)
+                ? method.MethodName
+                : method.ReceiverExpression.Trim() + "." + method.MethodName;
+            member = new ScaffoldMember(method.MethodName, qualified, string.IsNullOrWhiteSpace(method.ReceiverExpression));
+            return true;
+        }
+
+        if (action is LocalDeclarationAction local
+            && TryParseProjectInvocation(local.InitializationValue, out var receiver, out var methodName, out _))
+        {
+            var plainMethodName = Regex.Replace(methodName, @"\s*<.*>$", string.Empty);
+            var qualified = string.IsNullOrWhiteSpace(receiver)
+                ? plainMethodName
+                : receiver.Trim() + "." + plainMethodName;
+            member = new ScaffoldMember(plainMethodName, qualified, string.IsNullOrWhiteSpace(receiver));
+            return true;
+        }
+
+        // Scaffolding is deliberately limited to invocation-shaped IR nodes.
+        // Do not infer a method from arbitrary source text: that would let a broad
+        // rule suppress assertions, control flow, or framework calls by accident.
+        member = default;
+        return false;
+    }
+
+    bool TryRenderMigrationScaffold(StringBuilder sb, TestAction action, string sourceText, string reason)
+    {
+        if (action is MethodInvocationAction method
+            && IsScaffoldableProjectInvocation(method.ReceiverExpression, method.MethodName))
+        {
+            var genericSuffix = method.GenericArgumentTexts.Count == 0
+                ? string.Empty
+                : "<" + string.Join(", ", method.GenericArgumentTexts) + ">";
+            RenderMigrationScaffoldInvocation(
+                sb,
+                method.ReceiverExpression,
+                method.MethodName + genericSuffix,
+                method.ResultVariable,
+                method.IsAwaited,
+                sourceText,
+                action.SourceLine,
+                reason);
+            return true;
+        }
+
+        if (action is LocalDeclarationAction local
+            && TryParseProjectInvocation(local.InitializationValue, out var receiver, out var methodName, out var isAwaited)
+            && IsScaffoldableProjectInvocation(receiver, methodName))
+        {
+            RenderMigrationScaffoldInvocation(
+                sb,
+                receiver,
+                methodName,
+                local.VariableName,
+                isAwaited,
+                sourceText,
+                action.SourceLine,
+                reason);
+            return true;
+        }
+
+        return false;
+    }
+
+    bool IsScaffoldableProjectInvocation(string? receiverExpression, string methodName)
+    {
+        if (string.IsNullOrWhiteSpace(methodName))
+            return false;
+
+        if (string.IsNullOrWhiteSpace(receiverExpression))
+            return true;
+
+        var receiver = Regex.Replace(receiverExpression.Trim(), @"\s+", string.Empty);
+        var rootMatch = Regex.Match(receiver, @"^@?(?<root>[A-Za-z_][A-Za-z0-9_]*)");
+        if (!rootMatch.Success)
+            return false;
+
+        var root = rootMatch.Groups["root"].Value;
+        if (string.Equals(root, _pageVariable, StringComparison.OrdinalIgnoreCase)
+            || root is "this" or "base"
+            || _targetKnownTypes.Contains(root)
+            || _targetKnownIdentifiers.Contains(root))
+            return false;
+
+        // Direct framework/Selenium calls need a real recognizer or mapping. Scaffolding is
+        // reserved for project helpers and POM boundaries, not for hiding missing core API work.
+        if (root is "driver" or "WebDriver" or "By"
+            or "Assert" or "ClassicAssert" or "CollectionAssert" or "StringAssert" or "Expect"
+            or "Task" or "Thread" or "Console" or "Math" or "Enumerable"
+            or "DateTime" or "DateTimeOffset" or "TimeSpan" or "Guid" or "Convert"
+            or "Regex" or "JsonSerializer")
+            return false;
+
+        return !IsKnownType(root) && !IsFrameworkBuiltIn(root);
+    }
+
+    static bool IsLikelyProjectHelperOrPomInvocation(string? receiverExpression)
+    {
+        if (string.IsNullOrWhiteSpace(receiverExpression))
+            return false;
+
+        var receiver = Regex.Replace(receiverExpression.Trim(), @"\s+", string.Empty);
+        var owner = receiver
+            .Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .LastOrDefault()?
+            .TrimStart('@');
+        if (string.IsNullOrWhiteSpace(owner))
+            return false;
+
+        // Keep candidate discovery conservative. Generic page/service calls remain
+        // MANUAL_REVIEW until source evidence or explicit config names the boundary.
+        return owner.EndsWith("Helper", StringComparison.Ordinal)
+            || owner.EndsWith("Helpers", StringComparison.Ordinal)
+            || owner.EndsWith("Page", StringComparison.Ordinal)
+            || owner.EndsWith("PageObject", StringComparison.Ordinal)
+            || owner.EndsWith("Pom", StringComparison.OrdinalIgnoreCase)
+            || owner.EndsWith("Steps", StringComparison.Ordinal)
+            || owner.EndsWith("Workflow", StringComparison.Ordinal);
+    }
+
+    static bool TryParseProjectInvocation(string expression, out string receiver, out string methodName, out bool isAwaited)
+    {
+        receiver = string.Empty;
+        methodName = string.Empty;
+        var text = expression.Trim().TrimEnd(';').Trim();
+        isAwaited = text.StartsWith("await ", StringComparison.Ordinal);
+        if (isAwaited)
+            text = text["await ".Length..].TrimStart();
+
+        if (text.StartsWith("new ", StringComparison.Ordinal))
+            return false;
+
+        var match = Regex.Match(
+            text,
+            @"^(?:(?<receiver>@?[A-Za-z_][A-Za-z0-9_]*(?:\s*\.\s*@?[A-Za-z_][A-Za-z0-9_]*)*)\s*\.\s*)?(?<method>@?[A-Za-z_][A-Za-z0-9_]*)(?<generic>\s*<[^;(){}]+>)?\s*\(",
+            RegexOptions.Singleline);
+        if (!match.Success)
+            return false;
+
+        receiver = Regex.Replace(match.Groups["receiver"].Value, @"\s+", string.Empty);
+        methodName = match.Groups["method"].Value + Regex.Replace(match.Groups["generic"].Value, @"\s+", " ").Trim();
+        return true;
+    }
+
+    void RenderMigrationScaffoldInvocation(
+        StringBuilder sb,
+        string? receiver,
+        string methodName,
+        string? resultVariable,
+        bool isAwaited,
+        string sourceText,
+        int sourceLine,
+        string reason)
+    {
+        _usedMigrationScaffold = true;
+        var member = string.IsNullOrWhiteSpace(receiver) ? methodName : receiver.Trim() + "." + methodName;
+        var escapedMember = EscapeStringLiteral(member);
+        var escapedSource = EscapeStringLiteral(sourceText);
+        var call = isAwaited
+            ? $"await __MigratorScaffoldRuntime.InvokeAsync(\"{escapedMember}\", \"{escapedSource}\")"
+            : $"__MigratorScaffoldRuntime.Invoke(\"{escapedMember}\", \"{escapedSource}\")";
+
+        sb.AppendLine($"{_indent}{_indent}// MIGRATOR_SCAFFOLD: {EscapeComment(reason)}; implement this project helper/POM separately [MIGRATOR:SCAFFOLD]");
+        sb.AppendLine($"{_indent}{_indent}// Original: {EscapeComment(sourceText)} // line {sourceLine}");
+
+        if (!string.IsNullOrWhiteSpace(resultVariable)
+            && Regex.IsMatch(resultVariable, @"^@?[A-Za-z_][A-Za-z0-9_]*$"))
+        {
+            var variable = resultVariable.Trim();
+            if (_targetLocals.Contains(variable))
+                sb.AppendLine($"{_indent}{_indent}{variable} = {call};");
+            else
+                sb.AppendLine($"{_indent}{_indent}dynamic {variable} = {call};");
+
+            RegisterSourceVar(variable.TrimStart('@'), variable);
+            RegisterTargetLocal(variable);
+            _localAliases.Add(variable);
+            return;
+        }
+
+        sb.AppendLine($"{_indent}{_indent}{call};");
+    }
+
+    void AppendMigrationScaffoldRuntime(StringBuilder sb)
+    {
+        sb.AppendLine($"{_indent}// Explicit compile scaffold. Calls always fail at runtime and must never be treated as implemented behavior.");
+        sb.AppendLine($"{_indent}private static class __MigratorScaffoldRuntime");
+        sb.AppendLine($"{_indent}{{");
+        sb.AppendLine($"{_indent}{_indent}// [MIGRATOR:SCAFFOLD] intentional runtime blocker for unsupported project helper/POM boundaries");
+        sb.AppendLine($"{_indent}{_indent}public static object Invoke(string member, string source) =>");
+        sb.AppendLine($"{_indent}{_indent}{_indent}throw CreateException(member, source);");
+        sb.AppendLine();
+        sb.AppendLine($"{_indent}{_indent}// [MIGRATOR:SCAFFOLD] asynchronous form preserves awaited call sites without implementing behavior");
+        sb.AppendLine($"{_indent}{_indent}public static global::System.Threading.Tasks.Task<object> InvokeAsync(string member, string source) =>");
+        sb.AppendLine($"{_indent}{_indent}{_indent}global::System.Threading.Tasks.Task.FromException<object>(CreateException(member, source));");
+        sb.AppendLine();
+        sb.AppendLine($"{_indent}{_indent}private static global::System.NotImplementedException CreateException(string member, string source) =>");
+        sb.AppendLine($"{_indent}{_indent}{_indent}new($\"MIGRATOR_SCAFFOLD: '{{member}}' was structurally migrated but its project-specific behavior is not implemented. Source: {{source}}\");");
+        sb.AppendLine($"{_indent}}}");
+    }
+
+    readonly record struct ScaffoldMember(string MethodName, string QualifiedMember, bool IsUnqualified);
+
     void RenderPress(StringBuilder sb, PressAction action)
     {
         var target = action.Target;
@@ -878,7 +1130,23 @@ public partial class PlaywrightDotNetRenderer : IRenderer
                 $"helper method requires mapping: {action.MethodName}",
                 "HELPER_METHOD_REQUIRES_MAPPING",
                 "Receiverless project/helper invocation was preserved structurally, but no target mapping was found. Its body may contain Selenium or business-specific side effects.",
-                "Run --mode helper-inventory or inspect the helper body, then add MethodSemantics, Methods, or ParameterizedMethods mapping. Do not suppress unknown helpers without source evidence.",
+                "Run --mode helper-inventory (or inspect the helper body), then make one bounded source-backed attempt using MethodSemantics, Methods, ParameterizedMethods, or a simple POM migration. If the exact root records NO_PROGRESS, scaffold it instead of starting open-ended research.",
+                action.FullSourceText);
+            return;
+        }
+
+        if (IsLikelyProjectHelperOrPomInvocation(action.ReceiverExpression)
+            && IsScaffoldableProjectInvocation(action.ReceiverExpression, action.MethodName))
+        {
+            var member = string.IsNullOrWhiteSpace(action.ReceiverExpression)
+                ? action.MethodName
+                : action.ReceiverExpression.Trim() + "." + action.MethodName;
+            AppendSmartTodo(
+                sb,
+                $"project helper/POM method requires mapping: {member}",
+                "HELPER_METHOD_REQUIRES_MAPPING",
+                "A project-owned helper or Page Object boundary was preserved structurally, but no deterministic target mapping was found.",
+                "Make one bounded source-backed implementation attempt. Only after measured NO_PROGRESS may this exact helper/POM root become a runtime-failing migration scaffold.",
                 action.FullSourceText);
             return;
         }

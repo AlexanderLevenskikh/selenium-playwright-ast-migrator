@@ -52,6 +52,22 @@
       "default": [],
       "description": "Glob-like source method patterns that should be preserved as source comments before source-only safety checks. This field is not regex-based: patterns containing regex-looking tokens such as .*, \\., ^, $, [], +, ?, {}, or \\( are reported by config-validate."
     },
+    "ScaffoldMethods": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Exact project helper/POM methods that may be replaced by explicit runtime-failing compile scaffolds after bounded remediation shows no progress."
+    },
+    "ScaffoldMethodPatterns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Narrow qualified helper/POM patterns eligible for explicit runtime-failing scaffolds. Catch-all patterns are rejected by config validation."
+    },
     "TargetKnownTypes": {
       "type": "array",
       "items": {
@@ -660,6 +676,20 @@
           "uniqueItems": true,
           "default": [],
           "description": "Scope-specific glob-like suppression patterns. Not regex-based; config-validate warns on regex-looking tokens."
+        },
+        "ScaffoldMethods": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "ScaffoldMethodPatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
         },
         "Tables": {
           "type": "array",

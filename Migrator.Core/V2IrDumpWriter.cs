@@ -206,6 +206,7 @@ public static class V2IrDumpWriter
                 props["arguments"] = method.Arguments.Select(DumpValue).ToArray();
                 props["sourceText"] = method.SourceText;
                 props["resultVariable"] = method.ResultVariable;
+                props["isAwaited"] = method.IsAwaited;
                 break;
             case MappedMethodStatementIr mapped:
                 kind = "MappedMethod";

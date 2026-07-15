@@ -91,6 +91,8 @@ public static class GenerationPolicy
             TargetKnownIdentifiers = scope.TargetKnownIdentifiers,
             SuppressedMethods = scope.SuppressedMethods,
             SuppressedMethodPatterns = scope.SuppressedMethodPatterns,
+            ScaffoldMethods = scope.ScaffoldMethods ?? Array.Empty<string>(),
+            ScaffoldMethodPatterns = scope.ScaffoldMethodPatterns ?? Array.Empty<string>(),
             Tables = scope.Tables,
             Pagination = scope.Pagination
         };
@@ -177,6 +179,8 @@ public static class GenerationPolicy
             SourceOnlyIdentifiers = config.SourceOnlyIdentifiers,
             SuppressedMethods = config.SuppressedMethods,
             SuppressedMethodPatterns = config.SuppressedMethodPatterns,
+            ScaffoldMethods = config.ScaffoldMethods ?? Array.Empty<string>(),
+            ScaffoldMethodPatterns = config.ScaffoldMethodPatterns ?? Array.Empty<string>(),
             ParameterizedMethods = parameterizedMethods ?? config.ParameterizedMethods,
             NavigationUrls = config.NavigationUrls,
             NavigationTargetStatement = config.NavigationTargetStatement,

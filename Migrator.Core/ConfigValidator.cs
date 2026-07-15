@@ -46,6 +46,13 @@ public static class ConfigValidator
         ValidateIdentifierList(config.SourceOnlyIdentifiers, "SourceOnlyIdentifiers", errors);
         ValidateIdentifierList(config.TargetKnownTypes, "TargetKnownTypes", errors);
         ValidateIdentifierList(config.TargetKnownIdentifiers, "TargetKnownIdentifiers", errors);
+        ValidateScaffoldRules(
+            config.ScaffoldMethods,
+            config.ScaffoldMethodPatterns,
+            config.SuppressedMethods,
+            config.SuppressedMethodPatterns,
+            "Scaffolding",
+            errors);
 
         if (errors.Count > 0)
             throw new ConfigValidationError(errors);
@@ -398,7 +405,84 @@ public static class ConfigValidator
 
             ValidateIdentifierList(scope.TargetKnownTypes, $"{prefix}.TargetKnownTypes", errors);
             ValidateIdentifierList(scope.TargetKnownIdentifiers, $"{prefix}.TargetKnownIdentifiers", errors);
+            ValidateScaffoldRules(
+                scope.ScaffoldMethods,
+                scope.ScaffoldMethodPatterns,
+                scope.SuppressedMethods,
+                scope.SuppressedMethodPatterns,
+                $"{prefix}.Scaffolding",
+                errors);
         }
+    }
+
+    static void ValidateScaffoldRules(
+        string[] methods,
+        string[] patterns,
+        string[] suppressedMethods,
+        string[] suppressedPatterns,
+        string section,
+        List<string> errors)
+    {
+        methods ??= Array.Empty<string>();
+        patterns ??= Array.Empty<string>();
+        suppressedMethods ??= Array.Empty<string>();
+        suppressedPatterns ??= Array.Empty<string>();
+
+        var exact = new HashSet<string>(StringComparer.Ordinal);
+        for (var i = 0; i < methods.Length; i++)
+        {
+            var value = methods[i]?.Trim() ?? string.Empty;
+            if (value.Length == 0)
+            {
+                errors.Add($"{section}.ScaffoldMethods[{i}] is empty.");
+                continue;
+            }
+
+            if (!System.Text.RegularExpressions.Regex.IsMatch(value, @"^@?[A-Za-z_]\w*(?:\.@?[A-Za-z_]\w*)*$"))
+                errors.Add($"{section}.ScaffoldMethods[{i}] must be an exact method name or qualified member, got '{value}'.");
+            if (!exact.Add(value))
+                errors.Add($"{section}.ScaffoldMethods contains duplicate '{value}'.");
+            if (suppressedMethods.Any(item => string.Equals(item?.Trim(), value, StringComparison.Ordinal))
+                || suppressedPatterns.Any(pattern => SimpleGlobMatches(value, pattern)))
+            {
+                errors.Add($"{section}.ScaffoldMethods '{value}' is also suppressed by an exact rule or pattern. Choose one explicit policy; scaffolding and suppression cannot both own the same method.");
+            }
+        }
+
+        var patternSet = new HashSet<string>(StringComparer.Ordinal);
+        for (var i = 0; i < patterns.Length; i++)
+        {
+            var value = patterns[i]?.Trim() ?? string.Empty;
+            if (value.Length == 0)
+            {
+                errors.Add($"{section}.ScaffoldMethodPatterns[{i}] is empty.");
+                continue;
+            }
+
+            var qualifiedBoundaryPattern = @"^@?[A-Za-z_]\w*(?:\.@?[A-Za-z_]\w*)*\.(?:\*|@?[A-Za-z_]\w*\*?)$";
+            if (!System.Text.RegularExpressions.Regex.IsMatch(value, qualifiedBoundaryPattern))
+                errors.Add($"{section}.ScaffoldMethodPatterns[{i}] = '{value}' is too broad. Use an exact qualified helper/POM owner with a wildcard only in the final method segment, such as 'TariffSettingsHelper.*' or 'CheckoutPage.Select*'.");
+            if (!patternSet.Add(value))
+                errors.Add($"{section}.ScaffoldMethodPatterns contains duplicate '{value}'.");
+            if (suppressedPatterns.Any(item => string.Equals(item?.Trim(), value, StringComparison.Ordinal))
+                || suppressedMethods.Any(method => SimpleGlobMatches(method, value)))
+            {
+                errors.Add($"{section}.ScaffoldMethodPatterns '{value}' overlaps a suppressed exact rule or pattern. Choose one explicit policy; scaffolding and suppression cannot both own the same method family.");
+            }
+        }
+    }
+
+    static bool SimpleGlobMatches(string? text, string? pattern)
+    {
+        var candidate = text?.Trim();
+        var glob = pattern?.Trim();
+        if (string.IsNullOrWhiteSpace(candidate) || string.IsNullOrWhiteSpace(glob))
+            return false;
+
+        var regex = "^" + System.Text.RegularExpressions.Regex.Escape(glob)
+            .Replace("\\*", ".*", StringComparison.Ordinal)
+            .Replace("\\?", ".", StringComparison.Ordinal) + "$";
+        return System.Text.RegularExpressions.Regex.IsMatch(candidate, regex);
     }
 
     private static void ValidateQualityGates(QualityGatesConfig? gates, List<string> errors)

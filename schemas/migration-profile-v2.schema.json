@@ -67,6 +67,18 @@
             "type": "string"
           }
         },
+        "ScaffoldMethods": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ScaffoldMethodPatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "RecognizerAliases": {
           "type": "object"
         },

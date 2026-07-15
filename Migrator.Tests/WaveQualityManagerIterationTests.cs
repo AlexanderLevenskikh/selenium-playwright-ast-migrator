@@ -90,7 +90,13 @@ public sealed class WaveQualityManagerIterationTests
             "ForbiddenPlaceholderCount",
             "UnexpectedGeneratedTests",
             "MissingGeneratedTests",
-            "ExpectedPayoff"
+            "ExpectedPayoff",
+            "CascadeOccurrences",
+            "ScaffoldCallCount",
+            "ScaffoldRootCount",
+            "ScaffoldOnlyTests",
+            "RuntimeReady",
+            "MaxScaffoldRoots"
         })
         {
             Assert.Contains(metric, controller, StringComparison.Ordinal);
@@ -141,7 +147,9 @@ public sealed class WaveQualityManagerIterationTests
         foreach (var token in new[]
         {
             "ACCEPT_WAVE",
+            "ACCEPT_WITH_SCAFFOLDING",
             "REMEDIATE_CURRENT_WAVE",
+            "SCAFFOLD_CURRENT_ROOT",
             "SPLIT_WAVE",
             "DEFER_SOFT_DEBT",
             "STOP_BUDGET_EXHAUSTED",
@@ -275,6 +283,201 @@ public class Sample
     }
 
     [Fact]
+    public void WaveQualityCli_RequiresMeasuredNoProgressBeforeBoundedScaffolding()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "migrator-wave-scaffolding-" + Guid.NewGuid().ToString("N"));
+        var wave = Path.Combine(temp, "migration", "runs", "wave-001");
+        var source = Path.Combine(wave, "source-scope");
+        var generated = Path.Combine(wave, "generated");
+        Directory.CreateDirectory(source);
+        Directory.CreateDirectory(generated);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(wave, "input-scope.json"), """{"waveId":"wave-001"}""");
+            File.WriteAllText(Path.Combine(wave, "selected-tests.txt"), "Sample.cs::Sample.Works\n");
+            File.WriteAllText(Path.Combine(wave, "execution-policy.json"), """{"profile":"fast","waveQualityBoundary":{"maxRemediationCycles":2,"maxScaffoldRoots":2,"maxScaffoldOnlyTestRatio":0.5}}""");
+            File.WriteAllText(Path.Combine(wave, "wave-validation.json"), """{"status":"PASS"}""");
+            WriteBoundaryInputs(wave, source, generated);
+            File.WriteAllText(Path.Combine(source, "Sample.cs"), """
+using NUnit.Framework;
+public class Sample
+{
+    [Test]
+    public void Works()
+    {
+        TariffSettingsHelper.FindTariff("base");
+        Assert.That(true, Is.True);
+    }
+}
+""");
+            File.WriteAllText(Path.Combine(generated, "Sample.cs"), """
+using NUnit.Framework;
+public class Sample
+{
+    [Test]
+    public async Task Works()
+    {
+        // TODO: helper method requires mapping: FindTariff [MIGRATOR:HELPER_METHOD_REQUIRES_MAPPING]
+        Assert.That(true, Is.True);
+    }
+}
+""");
+
+            var firstMeasure = CliTestRunner.Run($"migration measure-wave --out \"{wave}\"");
+            Assert.Equal(3, firstMeasure.ExitCode);
+            using var initialMetrics = JsonDocument.Parse(File.ReadAllText(Path.Combine(wave, "wave-quality-metrics.json")));
+            var pattern = initialMetrics.RootElement.GetProperty("candidates")[0].GetProperty("pattern").GetString();
+            Assert.False(string.IsNullOrWhiteSpace(pattern));
+
+            var prematureScaffold = CliTestRunner.Run($"migration record-wave-decision --out \"{wave}\" --decision SCAFFOLD_CURRENT_ROOT --pattern \"{pattern}\"");
+            Assert.Equal(3, prematureScaffold.ExitCode);
+            Assert.Contains("REQUIRES_MEASURED_NO_PROGRESS", prematureScaffold.StdErr, StringComparison.OrdinalIgnoreCase);
+
+            var implementationAttempt = CliTestRunner.Run($"migration record-wave-decision --out \"{wave}\" --decision REMEDIATE_CURRENT_WAVE --pattern \"{pattern}\"");
+            Assert.Equal(0, implementationAttempt.ExitCode);
+            var noProgress = CliTestRunner.Run($"migration record-wave-remediation --out \"{wave}\" --result COMPLETED");
+            Assert.Equal(0, noProgress.ExitCode);
+            Assert.Contains("Measured result: NO_PROGRESS", noProgress.StdOut, StringComparison.OrdinalIgnoreCase);
+
+            var staleDecision = CliTestRunner.Run($"migration record-wave-decision --out \"{wave}\" --decision REMEDIATE_CURRENT_WAVE --pattern \"{pattern}\"");
+            Assert.Equal(3, staleDecision.ExitCode);
+            Assert.Contains("METRICS_STALE_AFTER_REMEDIATION", staleDecision.StdErr, StringComparison.OrdinalIgnoreCase);
+
+            var duplicateRemediation = CliTestRunner.Run($"migration record-wave-remediation --out \"{wave}\" --result COMPLETED");
+            Assert.Equal(3, duplicateRemediation.ExitCode);
+            Assert.Contains("REMEDIATION_METRICS_STALE", duplicateRemediation.StdErr, StringComparison.OrdinalIgnoreCase);
+
+            var secondMeasure = CliTestRunner.Run($"migration measure-wave --out \"{wave}\"");
+            Assert.Equal(3, secondMeasure.ExitCode);
+            using (var metrics = JsonDocument.Parse(File.ReadAllText(Path.Combine(wave, "wave-quality-metrics.json"))))
+            {
+                Assert.Equal("SCAFFOLD_CURRENT_ROOT", metrics.RootElement.GetProperty("recommendedDecision").GetString());
+            }
+
+            var repeatedResearch = CliTestRunner.Run($"migration record-wave-decision --out \"{wave}\" --decision REMEDIATE_CURRENT_WAVE --pattern \"{pattern}\"");
+            Assert.Equal(3, repeatedResearch.ExitCode);
+            Assert.Contains("REPEATED_ROOT_RESEARCH_DENIED", repeatedResearch.StdErr, StringComparison.OrdinalIgnoreCase);
+
+            var scaffoldDecision = CliTestRunner.Run($"migration record-wave-decision --out \"{wave}\" --decision SCAFFOLD_CURRENT_ROOT --pattern \"{pattern}\"");
+            Assert.Equal(0, scaffoldDecision.ExitCode);
+
+            File.WriteAllText(Path.Combine(generated, "Sample.cs"), """
+using System;
+using System.Threading.Tasks;
+using NUnit.Framework;
+public class Sample
+{
+    [Test]
+    public async Task Works()
+    {
+        await __MigratorScaffoldRuntime.InvokeAsync("TariffSettingsHelper.FindTariff", "TariffSettingsHelper.FindTariff(\"base\")");
+        Assert.That(true, Is.True);
+    }
+}
+internal static class __MigratorScaffoldRuntime
+{
+    // [MIGRATOR:SCAFFOLD] intentional runtime blocker
+    public static Task<dynamic> InvokeAsync(string member, string source) =>
+        Task.FromException<dynamic>(new NotImplementedException($"MIGRATOR_SCAFFOLD: {member}; {source}"));
+}
+""");
+
+            var scaffoldRemediation = CliTestRunner.Run($"migration record-wave-remediation --out \"{wave}\" --result COMPLETED");
+            Assert.Equal(0, scaffoldRemediation.ExitCode);
+            Assert.Contains("Measured result: COMPLETED", scaffoldRemediation.StdOut, StringComparison.OrdinalIgnoreCase);
+
+            var scaffoldMeasure = CliTestRunner.Run($"migration measure-wave --out \"{wave}\"");
+            Assert.Equal(0, scaffoldMeasure.ExitCode);
+            using (var metrics = JsonDocument.Parse(File.ReadAllText(Path.Combine(wave, "wave-quality-metrics.json"))))
+            {
+                Assert.True(metrics.RootElement.GetProperty("hardGatePassed").GetBoolean());
+                Assert.False(metrics.RootElement.GetProperty("runtimeReady").GetBoolean());
+                Assert.Equal(1, metrics.RootElement.GetProperty("scaffoldRootCount").GetInt32());
+                Assert.Equal("ACCEPT_WITH_SCAFFOLDING", metrics.RootElement.GetProperty("recommendedDecision").GetString());
+            }
+
+            var misleadingAcceptance = CliTestRunner.Run($"migration record-wave-decision --out \"{wave}\" --decision ACCEPT_WAVE");
+            Assert.Equal(3, misleadingAcceptance.ExitCode);
+            Assert.Contains("SCAFFOLD_ACKNOWLEDGEMENT_REQUIRED", misleadingAcceptance.StdErr, StringComparison.OrdinalIgnoreCase);
+
+            var honestAcceptance = CliTestRunner.Run($"migration record-wave-decision --out \"{wave}\" --decision ACCEPT_WITH_SCAFFOLDING");
+            Assert.Equal(0, honestAcceptance.ExitCode);
+        }
+        finally
+        {
+            if (Directory.Exists(temp)) Directory.Delete(temp, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void WaveQualityCli_RejectsMassScaffoldingBeyondTheConfiguredRootBudget()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "migrator-wave-scaffold-budget-" + Guid.NewGuid().ToString("N"));
+        var wave = Path.Combine(temp, "migration", "runs", "wave-001");
+        var source = Path.Combine(wave, "source-scope");
+        var generated = Path.Combine(wave, "generated");
+        Directory.CreateDirectory(source);
+        Directory.CreateDirectory(generated);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(wave, "input-scope.json"), """{"waveId":"wave-001"}""");
+            File.WriteAllText(Path.Combine(wave, "selected-tests.txt"), "Sample.cs::Sample.Works\n");
+            File.WriteAllText(Path.Combine(wave, "execution-policy.json"), """{"profile":"fast","waveQualityBoundary":{"maxScaffoldRoots":1,"maxScaffoldOnlyTestRatio":1.0}}""");
+            File.WriteAllText(Path.Combine(wave, "wave-validation.json"), """{"status":"PASS"}""");
+            WriteBoundaryInputs(wave, source, generated);
+            File.WriteAllText(Path.Combine(source, "Sample.cs"), """
+using NUnit.Framework;
+public class Sample
+{
+    [Test]
+    public void Works()
+    {
+        TariffSettingsHelper.FindTariff("base");
+        PromoHelper.OpenPromo();
+        Assert.That(true, Is.True);
+    }
+}
+""");
+            File.WriteAllText(Path.Combine(generated, "Sample.cs"), """
+using System;
+using System.Threading.Tasks;
+using NUnit.Framework;
+public class Sample
+{
+    [Test]
+    public async Task Works()
+    {
+        await __MigratorScaffoldRuntime.InvokeAsync("TariffSettingsHelper.FindTariff", "source");
+        await __MigratorScaffoldRuntime.InvokeAsync("PromoHelper.OpenPromo", "source");
+        Assert.That(true, Is.True);
+    }
+}
+internal static class __MigratorScaffoldRuntime
+{
+    // [MIGRATOR:SCAFFOLD] intentional runtime blocker
+    public static Task<dynamic> InvokeAsync(string member, string source) =>
+        Task.FromException<dynamic>(new NotImplementedException($"MIGRATOR_SCAFFOLD: {member}; {source}"));
+}
+""");
+
+            var measured = CliTestRunner.Run($"migration measure-wave --out \"{wave}\"");
+
+            Assert.Equal(3, measured.ExitCode);
+            using var metrics = JsonDocument.Parse(File.ReadAllText(Path.Combine(wave, "wave-quality-metrics.json")));
+            Assert.Equal(2, metrics.RootElement.GetProperty("scaffoldRootCount").GetInt32());
+            Assert.Equal("SPLIT_WAVE", metrics.RootElement.GetProperty("recommendedDecision").GetString());
+            Assert.Contains(metrics.RootElement.GetProperty("hardGateFailures").EnumerateArray(),
+                item => (item.GetString() ?? string.Empty).Contains("scaffolding spans", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(temp)) Directory.Delete(temp, recursive: true);
+        }
+    }
+
+    [Fact]
     public void WaveQualityCli_DerivesNoProgressAndAllowsHonestBudgetStop()
     {
         var temp = Path.Combine(Path.GetTempPath(), "migrator-wave-no-progress-" + Guid.NewGuid().ToString("N"));
@@ -311,6 +514,7 @@ public class Sample
     public async Task Works()
     {
         // TODO: UNRESOLVED_SYMBOL sharedPage
+        // TODO: helper method requires mapping: TariffSettingsHelper.FindTariff [MIGRATOR:HELPER_METHOD_REQUIRES_MAPPING]
     }
 }
 """);
@@ -319,7 +523,15 @@ public class Sample
             {
                 var measured = CliTestRunner.Run($"migration measure-wave --out \"{wave}\"");
                 Assert.Equal(3, measured.ExitCode);
-                var decision = CliTestRunner.Run($"migration record-wave-decision --out \"{wave}\" --decision REMEDIATE_CURRENT_WAVE");
+                using var measuredMetrics = JsonDocument.Parse(File.ReadAllText(Path.Combine(wave, "wave-quality-metrics.json")));
+                var nextFreshRoot = measuredMetrics.RootElement
+                    .GetProperty("candidates")
+                    .EnumerateArray()
+                    .First(candidate => candidate.GetProperty("priorNoProgress").GetInt32() == 0)
+                    .GetProperty("pattern")
+                    .GetString();
+                Assert.False(string.IsNullOrWhiteSpace(nextFreshRoot));
+                var decision = CliTestRunner.Run($"migration record-wave-decision --out \"{wave}\" --decision REMEDIATE_CURRENT_WAVE --pattern \"{nextFreshRoot}\"");
                 Assert.Equal(0, decision.ExitCode);
                 var recorded = CliTestRunner.Run($"migration record-wave-remediation --out \"{wave}\" --result COMPLETED");
                 Assert.Equal(0, recorded.ExitCode);

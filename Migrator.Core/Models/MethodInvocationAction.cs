@@ -6,6 +6,7 @@ public sealed class MethodInvocationAction : TestAction
     public string MethodName { get; }
     public string FullSourceText { get; }
     public IReadOnlyList<string> ArgumentTexts { get; }
+    public bool IsAwaited { get; }
 
     /// <summary>
     /// Generic type argument texts from invocations such as Method&lt;TPage&gt;(...).
@@ -22,17 +23,17 @@ public sealed class MethodInvocationAction : TestAction
     public string? ResultVariable { get; }
 
     public MethodInvocationAction(int sourceLine, string receiverExpression, string methodName, string fullSourceText, RecognitionConfidence confidence = RecognitionConfidence.Semantic)
-        : this(sourceLine, receiverExpression, methodName, fullSourceText, Array.Empty<string>(), Array.Empty<string>(), null, confidence)
+        : this(sourceLine, receiverExpression, methodName, fullSourceText, Array.Empty<string>(), Array.Empty<string>(), null, confidence, false)
     {
     }
 
     public MethodInvocationAction(int sourceLine, string receiverExpression, string methodName, string fullSourceText, IReadOnlyList<string> argumentTexts, RecognitionConfidence confidence = RecognitionConfidence.Semantic)
-        : this(sourceLine, receiverExpression, methodName, fullSourceText, argumentTexts, Array.Empty<string>(), null, confidence)
+        : this(sourceLine, receiverExpression, methodName, fullSourceText, argumentTexts, Array.Empty<string>(), null, confidence, false)
     {
     }
 
     public MethodInvocationAction(int sourceLine, string receiverExpression, string methodName, string fullSourceText, IReadOnlyList<string> argumentTexts, string? resultVariable, RecognitionConfidence confidence = RecognitionConfidence.Semantic)
-        : this(sourceLine, receiverExpression, methodName, fullSourceText, argumentTexts, Array.Empty<string>(), resultVariable, confidence)
+        : this(sourceLine, receiverExpression, methodName, fullSourceText, argumentTexts, Array.Empty<string>(), resultVariable, confidence, false)
     {
     }
 
@@ -44,7 +45,8 @@ public sealed class MethodInvocationAction : TestAction
         IReadOnlyList<string> argumentTexts,
         IReadOnlyList<string> genericArgumentTexts,
         string? resultVariable,
-        RecognitionConfidence confidence = RecognitionConfidence.Semantic)
+        RecognitionConfidence confidence = RecognitionConfidence.Semantic,
+        bool isAwaited = false)
         : base(sourceLine, confidence)
     {
         ReceiverExpression = receiverExpression;
@@ -53,5 +55,6 @@ public sealed class MethodInvocationAction : TestAction
         ArgumentTexts = argumentTexts;
         GenericArgumentTexts = genericArgumentTexts;
         ResultVariable = resultVariable;
+        IsAwaited = isAwaited;
     }
 }

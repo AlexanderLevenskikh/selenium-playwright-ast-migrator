@@ -232,7 +232,7 @@ function New-DashboardSnapshot {
         $acceptanceFingerprintMatches = $null -ne $waveAcceptance -and $null -ne $waveOutcomeMetrics -and
             [string](Get-PropertyValue $waveAcceptance @("metricsFingerprint") "") -eq [string](Get-PropertyValue $waveOutcomeMetrics @("metricsFingerprint") "") -and
             [string](Get-PropertyValue $waveAcceptance @("generatedTreeHash") "") -eq [string](Get-PropertyValue $waveOutcomeMetrics @("generatedTreeHash") "")
-        $isAccepted = $acceptanceStatus -in @("ACCEPTED", "ACCEPTED_WITH_DEFERRED_SOFT_DEBT") -and $acceptanceFingerprintMatches
+        $isAccepted = $acceptanceStatus -in @("ACCEPTED", "ACCEPTED_WITH_SCAFFOLDING", "ACCEPTED_WITH_DEFERRED_SOFT_DEBT", "ACCEPTED_WITH_SCAFFOLDING_AND_DEFERRED_SOFT_DEBT") -and $acceptanceFingerprintMatches
         if ($isAccepted) {
             $rawStatus = $acceptanceStatus
             $kind = "success"

@@ -396,16 +396,17 @@ public class RoslynTestFileParser : ITestFileParser
             AwaitExpressionSyntax { Expression: InvocationExpressionSyntax ie } => ie,
             _ => null
         };
+        var isAwaited = expression is AwaitExpressionSyntax;
 
         if (invocation == null) return null;
 
         if (TryExtractCollectionForEach(invocation, semanticModel, line) is { } collectionForEach)
             return collectionForEach;
 
-        return TryExtractFromInvocation(invocation, semanticModel, line);
+        return TryExtractFromInvocation(invocation, semanticModel, line, isAwaited);
     }
 
-    TestAction? TryExtractFromInvocation(InvocationExpressionSyntax invocation, SemanticModel semanticModel, int line)
+    TestAction? TryExtractFromInvocation(InvocationExpressionSyntax invocation, SemanticModel semanticModel, int line, bool isAwaited)
     {
         var methodSymbol = semanticModel.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
         var methodName = GetMethodName(invocation);
@@ -418,7 +419,7 @@ public class RoslynTestFileParser : ITestFileParser
             .ToArray();
         var genericArgumentTexts = GetGenericArgumentTexts(invocation);
 
-        var ctx = new InvocationContext(methodName, receiverText, fullText, line, symbolResolved, argumentTexts, genericArgumentTexts);
+        var ctx = new InvocationContext(methodName, receiverText, fullText, line, symbolResolved, argumentTexts, genericArgumentTexts, isAwaited);
 
         if (TryExtractAssertThatBinary(invocation, line) is { } assertThatBinary)
             return assertThatBinary;
@@ -465,7 +466,8 @@ public class RoslynTestFileParser : ITestFileParser
                 argumentTexts,
                 genericArgumentTexts,
                 resultVariable: null,
-                confidence: RecognitionConfidence.SyntaxFallback);
+                confidence: RecognitionConfidence.SyntaxFallback,
+                isAwaited: isAwaited);
         }
 
         return new UnsupportedAction(line, fullText, symbolResolved
@@ -668,9 +670,15 @@ public class RoslynTestFileParser : ITestFileParser
 
             case ExpressionSyntax expression:
                 var line = expression.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
-                if (expression is InvocationExpressionSyntax invocation)
+                var invocation = expression switch
                 {
-                    if (TryExtractFromInvocation(invocation, semanticModel, line) is { } action)
+                    InvocationExpressionSyntax direct => direct,
+                    AwaitExpressionSyntax { Expression: InvocationExpressionSyntax awaited } => awaited,
+                    _ => null
+                };
+                if (invocation != null)
+                {
+                    if (TryExtractFromInvocation(invocation, semanticModel, line, expression is AwaitExpressionSyntax) is { } action)
                         yield return action;
                     yield break;
                 }
@@ -854,6 +862,7 @@ public class RoslynTestFileParser : ITestFileParser
             AwaitExpressionSyntax { Expression: InvocationExpressionSyntax awaited } => awaited,
             _ => null
         };
+        var isAwaited = variable.Initializer?.Value is AwaitExpressionSyntax;
 
         if (invocation == null)
             return null;
@@ -880,7 +889,8 @@ public class RoslynTestFileParser : ITestFileParser
             argumentTexts,
             genericArgumentTexts,
             variable.Identifier.Text,
-            RecognitionConfidence.SyntaxFallback);
+            RecognitionConfidence.SyntaxFallback,
+            isAwaited);
     }
 
     TestAction? TryExtractUnqualifiedHelperInvocationAssignment(AssignmentExpressionSyntax assignment, SemanticModel semanticModel, int line)
@@ -894,6 +904,7 @@ public class RoslynTestFileParser : ITestFileParser
             AwaitExpressionSyntax { Expression: InvocationExpressionSyntax awaited } => awaited,
             _ => null
         };
+        var isAwaited = assignment.Right is AwaitExpressionSyntax;
 
         if (invocation == null)
             return null;
@@ -924,7 +935,8 @@ public class RoslynTestFileParser : ITestFileParser
             argumentTexts,
             genericArgumentTexts,
             targetVariable,
-            RecognitionConfidence.SyntaxFallback);
+            RecognitionConfidence.SyntaxFallback,
+            isAwaited);
     }
 
     TestAction? TryExtractGenericInvocationAssignment(AssignmentExpressionSyntax assignment, int line)
@@ -942,6 +954,7 @@ public class RoslynTestFileParser : ITestFileParser
             AwaitExpressionSyntax { Expression: InvocationExpressionSyntax awaited } => awaited,
             _ => null
         };
+        var isAwaited = assignment.Right is AwaitExpressionSyntax;
 
         if (invocation == null)
             return null;
@@ -968,7 +981,8 @@ public class RoslynTestFileParser : ITestFileParser
             argumentTexts,
             genericArgumentTexts,
             targetVariable,
-            RecognitionConfidence.SyntaxFallback);
+            RecognitionConfidence.SyntaxFallback,
+            isAwaited);
     }
 
     TestAction? TryExtractGenericInvocationDeclaration(LocalDeclarationStatementSyntax lds, int line)
@@ -984,6 +998,7 @@ public class RoslynTestFileParser : ITestFileParser
             AwaitExpressionSyntax { Expression: InvocationExpressionSyntax awaited } => awaited,
             _ => null
         };
+        var isAwaited = initializer is AwaitExpressionSyntax;
 
         if (invocation == null) return null;
 
@@ -1009,7 +1024,8 @@ public class RoslynTestFileParser : ITestFileParser
             argumentTexts,
             genericArgumentTexts,
             variable.Identifier.Text,
-            RecognitionConfidence.SyntaxFallback);
+            RecognitionConfidence.SyntaxFallback,
+            isAwaited);
     }
 
     static bool IsGenericInvocation(InvocationExpressionSyntax invocation)

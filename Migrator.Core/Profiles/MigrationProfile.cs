@@ -18,6 +18,8 @@ public sealed record SourceProfile(
     IReadOnlyList<string> SourceOnlyIdentifiers,
     IReadOnlyList<string> SuppressedMethods,
     IReadOnlyList<string> SuppressedMethodPatterns,
+    IReadOnlyList<string> ScaffoldMethods,
+    IReadOnlyList<string> ScaffoldMethodPatterns,
     RecognizerAliasOptions RecognizerAliases,
     IReadOnlyList<string> GenericResultMethods,
     IReadOnlyList<WaitPolicyMapping> WaitPolicies

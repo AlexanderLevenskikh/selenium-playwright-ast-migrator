@@ -135,6 +135,12 @@ If the research review is missing or not approved, stop with `BLOCKED_RESEARCH_N
 
 Do not stop because the report says `Developer action`, `manual work`, or `post-final research complete`. Those phrases are inputs to slicing. Stop only when the research review is missing/not approved or when every candidate is classified non-agent-executable with evidence.
 
+## Balanced helper/POM scaffolding
+
+When the manager decision is `SCAFFOLD_CURRENT_ROOT`, create exactly one narrow scaffold ticket for the selected candidate. Require evidence that the same exact pattern has at least one measured `NO_PROGRESS` entry. The ticket may add only an exact `ScaffoldMethods` member or a qualified owner pattern such as `TariffSettingsHelper.*`; never `*`, `*.Method`, assertions, framework APIs, selectors, waits, or broad source-text patterns. Preserve call/result/await shape, require a runtime-failing `[MIGRATOR:SCAFFOLD]`, regenerate the same wave, and verify scaffold-root/scaffold-only limits. Do not research or implement the helper body in that ticket.
+
+For the first encounter with a helper/POM root, slice one ordinary bounded implementation attempt instead: migrate simple deterministic side effects, mappings, or POM members. A second research-heavy attempt is not automatic. `NO_PROGRESS` routes to exact scaffolding, split, or honest stop—never to “100% at any cost.”
+
 ## Slicing rules
 
 1. `MANUAL_REVIEW` is agent-executable when source truth, selector evidence, and a verification plan exist. Do not automatically hand it to the human.

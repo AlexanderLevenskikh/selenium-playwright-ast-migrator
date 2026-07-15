@@ -22,7 +22,8 @@ public class PageObjectMethodRecognizer : IInvocationRecognizer
                 ctx.ArgumentTexts,
                 ctx.GenericArgumentTexts ?? Array.Empty<string>(),
                 resultVariable: null,
-                confidence: RecognitionConfidence.SyntaxFallback);
+                confidence: RecognitionConfidence.SyntaxFallback,
+                isAwaited: ctx.IsAwaited);
 
         return null;
     }

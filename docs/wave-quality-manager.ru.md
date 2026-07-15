@@ -60,7 +60,9 @@ selenium-pw-migrator migration check-wave-acceptance --out migration/runs/wave-0
 `migration-wave-manager` может выбрать:
 
 - `ACCEPT_WAVE`;
+- `ACCEPT_WITH_SCAFFOLDING`;
 - `REMEDIATE_CURRENT_WAVE`;
+- `SCAFFOLD_CURRENT_ROOT`;
 - `SPLIT_WAVE`;
 - `DEFER_SOFT_DEBT`;
 - `STOP_BUDGET_EXHAUSTED`;
@@ -95,3 +97,17 @@ expected payoff = occurrences × affected tests × severity × confidence / esti
 ## Dashboard
 
 Live dashboard читает `wave-quality-metrics.json`, `wave-manager-decision.json` и `wave-acceptance.json`. Он показывает ready/draft тесты, корневые блокирующие паттерны, решение менеджера и наличие валидной квитанции принятия.
+
+## Сбалансированный протокол scaffolding
+
+Контроллер специально не разрешает две крайности: глушить все сложные зависимости подряд и тратить весь бюджет на достижение 100% runtime-готовности любой ценой.
+
+1. Для helper/POM-корня сначала выполняется одна ограниченная попытка `REMEDIATE_CURRENT_WAVE`. Простые, детерминированные маппинги, методы и побочные эффекты мигрируются нормально.
+2. CLI записывает `COMPLETED` только если исчез именно выбранный точный корень; посторонняя или частичная уборка считается `NO_PROGRESS`. Только после этого manager может выбрать `SCAFFOLD_CURRENT_ROOT`, раньше это решение запрещено.
+3. Executor добавляет один точный `ScaffoldMethods` или узкий квалифицированный шаблон с wildcard только в имени метода, например `TariffSettingsHelper.*`. Catch-all и `*.Method` запрещены.
+4. Renderer сохраняет присваивание и `await`, ставит `[MIGRATOR:SCAFFOLD]` и гарантированно падает при запуске. Правдоподобные `default`, `false`, пустые коллекции и `Task.CompletedTask` запрещены.
+5. Assertions, API Selenium/Playwright, селекторы, ожидания и произвольные неизвестные выражения scaffold-ить нельзя. Suppression остаётся отдельной политикой с доказательствами.
+6. `maxScaffoldRoots` и `maxScaffoldOnlyTestRatio` ограничивают этот выход. Превышение ведёт к `SPLIT_WAVE`, реализации или честной остановке.
+7. Структурно завершённая wave с заглушками принимается только через `ACCEPT_WITH_SCAFFOLDING`; `runtimeReady` остаётся `false`.
+
+В результате мигратор закрывает массовую рутину переписывания тестов, а редкие проектные helper-ы остаются компактной и явно обозначенной очередью для отдельного умного агента или разработчика.

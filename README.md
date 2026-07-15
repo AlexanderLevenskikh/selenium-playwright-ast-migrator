@@ -557,7 +557,7 @@ selenium-pw-migrator migration validate --out migration/runs/wave-001 --validati
 # validation-plan + record-validation remain available only for recovery/import of external evidence
 selenium-pw-migrator migration build-review-bundle --out migration/runs/wave-001
 selenium-pw-migrator migration measure-wave --out migration/runs/wave-001
-# migration-wave-manager records one bounded decision; remediation is regenerated + validated first
+# manager first attempts cheap deterministic implementation; after measured NO_PROGRESS it may scaffold only the exact helper/POM root
 selenium-pw-migrator migration accept-wave --out migration/runs/wave-001
 selenium-pw-migrator migration check-wave-acceptance --out migration/runs/wave-001
 selenium-pw-migrator migration resume-wave --out migration/runs/wave-001
@@ -568,6 +568,8 @@ selenium-pw-migrator migration cache-stats --workspace migration
 selenium-pw-migrator migration cache-verify --workspace migration
 selenium-pw-migrator migration cache-prune --workspace migration --cache-max-age-days 30 --cache-max-size-mb 2048 --cache-apply false
 ```
+Migration scaffolding keeps structurally migrated tests readable and compile-connected without pretending that rare project helpers are implemented. It is bounded by exact-root, no-progress, root-count, and scaffold-only-test guards; see [migration scaffolding](docs/migration-scaffolding.md).
+
 
 `migration run-wave` materializes an immutable `wave-manifest.json`, `execution-policy.json`, `run-context.json`, `source-scope/`, `generated/`, `input-scope.json`, `preflight-budget.json`, `config-delta.json`, `memory-delta.jsonl`, `wave-validation.json`, `performance-trace.json`, `run-summary.md`, `wave-status.json`, and migrate scripts. It is project-scoped only: it does not promote memory, merge config, or publish cross-project/org knowledge packs. Existing run directories are validated and reused rather than rematerialized; execute them through the generated wrapper. `validate-wave` rejects manifest/source/test/policy/context drift, while `check-progress` stops repeated identical fix cycles and requests a watchdog or strategy change. The single `migration validate` host calculates changed-output impact, executes the minimum safe checks, records process evidence, reuses only PASS validation matching both exact inputs and the exact validation contract, and creates a recoverable checkpoint. The remaining incremental commands choose the next action and build a compact reviewer bundle. See [migration fast path](docs/migration-fast-path.md), [incremental migration pipeline](docs/migration-incremental-pipeline.md), [single validation host](docs/migration-validation-host.md), and [performance/cache hardening](docs/performance-cache-hardening.md). Both generated migrate wrappers refresh `wave-status.json` and write `validation-plan.json`, so a populated `generated/` directory cannot remain falsely marked `prepared` and unchanged validation is not repeated.
 

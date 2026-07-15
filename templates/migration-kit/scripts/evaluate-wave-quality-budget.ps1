@@ -429,7 +429,7 @@ else {
     if ($null -ne $waveAcceptance -and $null -ne $outcomeMetrics) {
         $acceptedStatus = [string]$waveAcceptance.status
         $acceptanceValid = $acceptanceCliValidated -and
-            $acceptedStatus -in @("ACCEPTED", "ACCEPTED_WITH_DEFERRED_SOFT_DEBT") -and
+            $acceptedStatus -in @("ACCEPTED", "ACCEPTED_WITH_SCAFFOLDING", "ACCEPTED_WITH_DEFERRED_SOFT_DEBT", "ACCEPTED_WITH_SCAFFOLDING_AND_DEFERRED_SOFT_DEBT") -and
             [string]$waveAcceptance.metricsFingerprint -eq [string]$outcomeMetrics.metricsFingerprint -and
             [string]$waveAcceptance.generatedTreeHash -eq [string]$outcomeMetrics.generatedTreeHash
     }
@@ -501,7 +501,7 @@ else {
         $nextAction = "Preserve the full-project output under migration/runs/$RunId/full-project-rerun/, restore the bounded wave generated directory, and rerun runs/$($waveDir.Name)/run-migrate.ps1 or run-migrate.sh so input-scope.json and selected-tests.txt remain authoritative."
     }
     elseif ((-not $remediationBudgetExhausted) -and $qualityBlocked) {
-        $nextAction = "Run selenium-pw-migrator migration measure-wave --out $waveRoot, invoke migration-wave-manager on wave-manager-packet.json, and obey its bounded decision. For REMEDIATE_CURRENT_WAVE, run migration/scripts/collect-mapping-research-memory.ps1 and slice exactly one highest-payoff root-pattern ticket before regenerating the same wave."
+        $nextAction = "Run selenium-pw-migrator migration measure-wave --out $waveRoot, invoke migration-wave-manager on wave-manager-packet.json, and obey its bounded decision. For REMEDIATE_CURRENT_WAVE, slice one bounded normal implementation attempt. For SCAFFOLD_CURRENT_ROOT, add only one exact measured-no-progress helper/POM scaffold and keep runtimeReady=false. If no deterministic root candidate exists, run migration/scripts/collect-mapping-research-memory.ps1 (or .sh) once to produce bounded evidence; do not start open-ended repeated research."
     }
 
     # Materialize the generic list before assigning it into an ordered hashtable.

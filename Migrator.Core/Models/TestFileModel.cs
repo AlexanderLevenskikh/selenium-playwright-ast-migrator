@@ -60,6 +60,17 @@ public sealed record TestFileModel
     /// </summary>
     public IReadOnlyList<string> SuppressedMethodPatterns { get; init; } = Array.Empty<string>();
 
+    /// <summary>
+    /// Exact project helper/POM methods intentionally represented by explicit compile scaffolds.
+    /// Scaffolds preserve structure and compilation, but are runtime blockers.
+    /// </summary>
+    public IReadOnlyList<string> ScaffoldMethods { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Glob-like project helper/POM patterns intentionally represented by explicit compile scaffolds.
+    /// </summary>
+    public IReadOnlyList<string> ScaffoldMethodPatterns { get; init; } = Array.Empty<string>();
+
     public TestFileModel(
         string FilePath,
         string Namespace,

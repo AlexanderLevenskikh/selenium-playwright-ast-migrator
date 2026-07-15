@@ -112,6 +112,8 @@ internal static class MigrationFastPath
             {
                 ["maxRemediationCycles"] = profile switch { "audit" => 6, "standard" => 4, _ => 2 },
                 ["maxConsecutiveNoProgressCycles"] = 2,
+                ["maxScaffoldRoots"] = profile switch { "audit" => 5, "standard" => 3, _ => 2 },
+                ["maxScaffoldOnlyTestRatio"] = 0.5d,
                 ["budgetExhaustionStatus"] = "DRAFT_WITH_DEBT",
                 ["qualityThresholdsProfileIndependent"] = true
             },

@@ -11,6 +11,7 @@ This project uses preview SemVer-style versions while the public API is still st
 - Added cache statistics, verification, dry-run/apply pruning, active-run reference protection, and concrete tool/recognizer/renderer/adapter compatibility fingerprints.
 
 ### Added
+- Added balanced migration scaffolding for stalled project helpers and page objects: the migrator first performs one normal implementation attempt, requires measured `NO_PROGRESS` for the exact root, then may emit a narrow runtime-failing compile scaffold instead of cascading TODOs. Repeating research for the same stalled root is rejected, scaffold count and scaffold-only test ratio are budgeted, and accepted waves now distinguish structural migration from runtime readiness.
 - Added a deterministic quality-driven wave boundary with generated-code outcome measurement, root/cascade TODO analysis, payoff-ranked remediation candidates, an immutable `wave-acceptance.json` receipt, and a read-only `migration-wave-manager` role that cannot override hard gates. Acceptance now requires a current manager role receipt, metrics-bound reviewer/sentinel receipts, fresh scope audit, current-input validation fingerprint, and a valid hash-chained remediation ledger.
 - Added representative calibration waves before scale-out; `--representatives-per-cluster` now affects the actual plan instead of metadata only.
 - Added a live, bilingual Migration Progress dashboard with five plain-language process stages, draft-vs-accepted progress, current-wave and next-action explanations, contextual `?` hints, generated Playwright test previews, and file-based auto-refresh.
@@ -49,6 +50,7 @@ This project uses preview SemVer-style versions while the public API is still st
 
 ### Fixed
 
+- Fixed balanced-scaffolding regressions: ordinary unknown `page.*`/service calls keep their established `MANUAL_REVIEW` diagnostics, helper guidance again names `--mode helper-inventory`, generated scaffold runtime methods no longer expose `dynamic` in member signatures, bounded mapping-memory routing remains discoverable, and the no-progress scenario now spends separate cycles only on separate root patterns.
 - Fixed generic helper mappings so `Method<T>(...)` invocations match generic-free `ParameterizedMethods`, declaration-like exact `Methods` signatures can bind by method name, and `{T}`, `{T0}`, `{arg0}`, `{result}`, plus named signature parameters are substituted without losing helper semantics.
 - Fixed active class-field availability, `foreach`/`ForEach` lambda item scope, and FluentAssertions `BeDisabled`/`BeEnabled` lowering to native Playwright assertions.
 - Prevented full Playwright locator expressions configured as `TestId`/`Locator` from being nested as selector literals; collection and control-state actions now remain visible in migration metrics.

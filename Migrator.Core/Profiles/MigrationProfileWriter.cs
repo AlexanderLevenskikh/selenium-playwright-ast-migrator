@@ -33,6 +33,8 @@ public static class MigrationProfileWriter
                 profile.Source.SourceOnlyIdentifiers,
                 profile.Source.SuppressedMethods,
                 profile.Source.SuppressedMethodPatterns,
+                profile.Source.ScaffoldMethods,
+                profile.Source.ScaffoldMethodPatterns,
                 profile.Source.RecognizerAliases,
                 profile.Source.GenericResultMethods,
                 profile.Source.WaitPolicies),
@@ -186,6 +188,8 @@ public sealed record MigrationProfileSourceDocument(
     IReadOnlyList<string> SourceOnlyIdentifiers,
     IReadOnlyList<string> SuppressedMethods,
     IReadOnlyList<string> SuppressedMethodPatterns,
+    IReadOnlyList<string> ScaffoldMethods,
+    IReadOnlyList<string> ScaffoldMethodPatterns,
     RecognizerAliasOptions RecognizerAliases,
     IReadOnlyList<string> GenericResultMethods,
     IReadOnlyList<WaitPolicyMapping> WaitPolicies

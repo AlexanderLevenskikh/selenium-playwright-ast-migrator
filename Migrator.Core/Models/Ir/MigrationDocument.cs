@@ -45,7 +45,7 @@ public sealed record PressStatementIr(LocatorRef Target, string KeyName, SourceS
 public sealed record DeclarationStatementIr(string VariableName, string VariableType, ValueExpr Initializer, SourceSpan SourceSpan) : TestStatementIr(SourceSpan);
 public sealed record LocatorDeclarationStatementIr(string VariableName, LocatorRef Locator, string SourceText, SourceSpan SourceSpan) : TestStatementIr(SourceSpan);
 public sealed record PageObjectFieldStatementIr(string FieldName, string FieldType, ValueExpr? Initializer, string FullDeclaration, bool RequiresSemicolon, SourceSpan SourceSpan) : TestStatementIr(SourceSpan);
-public sealed record MethodInvocationStatementIr(string ReceiverExpression, string MethodName, IReadOnlyList<ValueExpr> Arguments, string SourceText, string? ResultVariable, SourceSpan SourceSpan) : TestStatementIr(SourceSpan);
+public sealed record MethodInvocationStatementIr(string ReceiverExpression, string MethodName, IReadOnlyList<ValueExpr> Arguments, string SourceText, string? ResultVariable, SourceSpan SourceSpan, bool IsAwaited = false) : TestStatementIr(SourceSpan);
 public sealed record MappedMethodStatementIr(
     string SourceText,
     IReadOnlyList<string> TargetStatements,
