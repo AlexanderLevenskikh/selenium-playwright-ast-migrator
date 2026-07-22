@@ -34,13 +34,10 @@ jobs:
       - name: Test full suite
         run: dotnet test Migrator.sln --no-build --configuration Release --verbosity normal
 
-      - name: Enforce orchestration and validation-host performance budgets
+      - name: Enforce standard migration performance budget
         shell: pwsh
         run: ./scripts/run-performance-tests.ps1 -Root . -Configuration Release -Output artifacts/performance -Enforce -NoBuild
 
-      - name: Verify performance, cache, and scope hardening
-        shell: pwsh
-        run: ./scripts/run-performance-cache-hardening-smoke.ps1 -Root . -Configuration Release -Output artifacts/performance-cache-hardening
 
       - name: Release doctor
         run: dotnet Migrator.Cli/bin/Release/net10.0/Migrator.Cli.dll --mode release-doctor --input . --out artifacts/release-doctor --format both
@@ -80,7 +77,6 @@ jobs:
           path: |
             artifacts/release-doctor/**
             artifacts/performance/**
-            artifacts/performance-cache-hardening/**
             artifacts/nuget/*.nupkg
             artifacts/release/*.tar.gz
             artifacts/release/checksums.sha256

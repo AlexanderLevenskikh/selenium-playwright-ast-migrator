@@ -1,158 +1,40 @@
-# Migrator Agent Harness Kit
+# Standard Migration Agent Kit
 
-This is a reference document, not a second launch procedure. The canonical guarded OpenCode Desktop launch procedure remains `docs/guarded-opencode-desktop-runbook.ru.md`.
+The retained kit name is for package compatibility. Its behavior is a thin safety layer around the ordinary Migrator CLI, with no separate migration scheduler or lifecycle state machine.
 
-## Purpose
-
-The kit turns a migration run into a controlled file-based workflow:
-
-1. A machine-readable policy says what the agent can do automatically and what is denied.
-2. A run bootstrapper creates `Prompt.md`, `Plan.md`, `Implement.md`, `Documentation.md`, and trace files under `migration/runs/<run-id>/`.
-3. Guard scripts verify scope, final quality, and harness configuration.
-4. The agent works autonomously only inside this boundary.
-
-## Design principle
-
-Prompts guide behavior; scripts enforce behavior.
-
-The agent may say it followed rules, but the final answer is not trusted until deterministic checks pass.
-
-
-## Bootstrap
-
-For cross-environment setup details, see [Agent environments](agent-environments.md). contract
-
-The user should not manually create `migration/` subfolders or `migration/runs/<run-id>/`. The preferred OpenCode bootstrap is one command from the product repository root:
-
-```powershell
-dotnet tool run selenium-pw-migrator -- kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --opencode-install auto
-```
-
-This installs or updates the migration workspace, includes OpenCode team templates, runs `kit doctor`, and installs the project-local OpenCode Desktop config. Manual fallback:
+## Install
 
 ```bash
-dotnet tool run selenium-pw-migrator -- kit update --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.json --backup --with-team
-dotnet tool run selenium-pw-migrator -- kit doctor --workspace migration
+selenium-pw-migrator kit bootstrap-opencode \
+  --workspace migration \
+  --source ./LegacyTests \
+  --opencode-install auto
 ```
 
-```powershell
-.\migration\opencode-team\scripts\install-windows.ps1 -Mode ProjectDesktop
+## Run
+
+```bash
+selenium-pw-migrator run \
+  --input ./LegacyTests \
+  --config migration/profiles/adapter-config.json \
+  --out migration/runs/run-001 \
+  --format both
+
+selenium-pw-migrator verify-project \
+  --input ./LegacyTests \
+  --config migration/profiles/adapter-config.json \
+  --out migration/runs/run-001/verify-project \
+  --format both
 ```
 
-After that, `/supervised-task` or `/harness-run` owns the run lifecycle. The orchestrator must call `migration/scripts/new-harness-run.ps1` when no matching active run exists, then continue from the generated run files.
+Then run the installed scope, artifact, and final-gate checks. The optional `/supervised-task` command performs the same sequence and may apply at most one bounded high-payoff repair before rerunning the complete source scope.
 
-So the answer to “can the agent start from zero?” is: after the tool and project-local OpenCode config are bootstrapped, yes for migration workspace lifecycle and run artifacts. The first OpenCode config installation remains a one-time bootstrap step because the agent cannot use project-local roles before they exist.
+## What remains
 
-## Minimal lifecycle
+- project-local adapter config and memory;
+- source-scope contract;
+- real project verification;
+- artifact hygiene and final gate;
+- four roles: orchestrator, executor, reviewer, watchdog.
 
-```text
-new-harness-run.ps1
-  -> creates run artifacts
-  -> updates agent-state/current-ticket/run-ledger/handoff
-agent reads autopilot-loop-prompt.txt
-  -> works inside migration/**
-  -> records trace events
-  -> runs scope/final/policy checks
-check-final-gate.ps1
-  -> decides PASS/FAIL for final claims
-```
-
-## Autopilot rule
-
-The agent should not ask the user for permission to do actions already allowed by `state/harness-policy.json` and the OpenCode permission configuration.
-
-It must stop with a concrete blocker for:
-
-- writes outside allowed roots;
-- edits to guard scripts/checksums/permissions;
-- package installs or dependency upgrades;
-- network access;
-- git commit/push/reset/clean;
-- destructive delete/move operations;
-- changes to real product/POM/Playwright project files in artifact-only mode.
-
-## Files
-
-```text
-migration/
-  AGENT_CONTRACT.md
-  agent-state.md
-  current-ticket.md
-  state/
-    harness-policy.json
-    harness-run.json
-    harness-events.jsonl
-    harness-policy-result.md/json
-    run-ledger.md
-    handoff.md
-    final-gate.md
-  runs/
-    run-001/
-      Prompt.md
-      Plan.md
-      Implement.md
-      Documentation.md
-      trace.jsonl
-```
-
-## Why this helps
-
-Without this harness, the agent behaves like a nervous junior developer asking about every shell command.
-
-With the harness, the allowed lane is explicit: read/search/build/test/migrate/write migration artifacts. The dangerous lane is also explicit: real project edits, guardrail edits, git push, dependency changes, secrets, network.
-
-## Dogfood smoke
-
-Use `docs/migrator-agent-harness-dogfood.md` and `scripts/run-harness-dogfood-smoke.ps1` for the first repository-level validation pass. The smoke installs the kit into `.dogfood/migration`, creates a run, writes events, and verifies `check-harness-policy.ps1` with explicit dogfood allowed roots.
-
-## English-first and dashboard i18n
-
-English is canonical for public Harness Kit docs, prompts, report labels, event codes, and dashboard terminology.
-
-Russian is supported as a secondary localization through `*.ru.md` docs and dashboard dictionaries such as `en.json` / `ru.json`.
-
-Machine-readable data must stay language-neutral. Store stable English codes such as `final-gate-pass`, `scope-guard-failed`, or `harness-policy-pass`; localize only UI labels and documentation.
-
-Future dashboard work should default to English and provide a language switch:
-
-```text
-Language: English / Русский
-```
-
-
-## Harness dashboard
-
-Use `docs/migrator-agent-harness-dashboard.md` and `scripts/run-harness-dashboard-smoke.ps1` to generate a static dashboard from the active harness run.
-
-The installed workspace contains:
-
-```text
-migration/dashboard/
-  i18n/
-    en.json
-    ru.json
-  harness/
-    index.html
-    harness-dashboard.json
-    harness-dashboard.md
-```
-
-English is the default dashboard language. Russian is available through the `languageSelect` switch. Dashboard JSON remains language-neutral.
-
-
-Windows OpenCode Desktop shortcut: `--project-desktop` remains an alias for `--opencode-install project-desktop`.
-
-
-## Harness continuation strict protocol
-
-After a non-final final gate, read `migration/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, `NOT FINAL` is not a stopping point: execute exactly one next bounded action under `migration/**` before a user-facing handoff. A fresh `FINAL` checkpoint stops once for review in default mode. If this invocation used `continuous` or `--continuation auto`, persist the checkpoint and immediately enter another guarded bounded cycle or eligible next wave. Any later `/supervised-task` where `harness-run.json` is already `FINAL_STOPPED_FOR_REVIEW` resumes the closed post-final loop automatically. Stop for guard/scope/policy blocker, human decision, critical risk, malformed evidence, missing input, no-progress/plateau, limitations, or max autonomous budget.
-
-
-## `/supervised-task` auto-next dispatch
-
-`/supervised-task` is intended to be the tester-facing button for migration work. It can be invoked with no arguments. The command reads `continuation-decision.json`, `final-gate-result.json`, `current-ticket.md`, and the latest run evidence, then continues a required non-final action or stops for review after a FINAL checkpoint.
-
-After a fresh FINAL, default mode must not ask the tester to choose from a broad menu and must not start a new ticket in the same checkpoint; it reports the checkpoint and one recommended `/supervised-task continue` command. Continuous mode records that checkpoint and may begin the next guarded cycle without a user-facing pause. On any later invocation where the workspace is already `FINAL_STOPPED_FOR_REVIEW`, zero-argument `/supervised-task` starts/resumes the closed post-final research/research-lead/task-slicing/change-review loop; implementation starts only after approved research, `migration/current-ticket.md`, change-review approval, a concrete implementation request, or bounded auto-continuation.
-
-When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. In default mode, report why the SUCCESS checkpoint paused and recommend `/supervised-task continue`. In `continuous` / `--continuation auto` mode, persist the same checkpoint but immediately re-read state and continue until a real terminal condition.
-
+No command may manufacture validation evidence or treat a pilot as final project coverage.

@@ -1,5 +1,7 @@
 # Migrator User Guide
 
+> **Execution model:** one standard full-project run is supported. `pilot` is optional calibration; partition-specific planning and acceptance state are not used.
+
 Migrator is a command-line toolkit for moving Selenium end-to-end tests to Playwright in a controlled, reviewable way.
 
 It does not try to pretend that a whole test suite can be converted perfectly in one click. Instead, it gives you a repeatable loop:
@@ -12,7 +14,7 @@ The main production path is Selenium C# to Playwright .NET. NUnit is the default
 
 ## Happy path
 
-Harness run lifecycle is owned by `new-harness-run.ps1`; agents use the installed Harness Kit scripts instead of inventing migration/runs folders.
+A standard run is created directly by `selenium-pw-migrator run`; agents must not invent or reconstruct validation artifacts.
 
 
 Install the CLI first. The recommended public path is the npm wrapper, which downloads the matching standalone CLI and does not require the .NET SDK:
@@ -245,45 +247,20 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Old
 
 On an existing workspace this command updates the managed `migration/opencode-team/**` pack first, then resynchronizes repository-root `.opencode/agents` and `.opencode/commands`. New `/supervised-task` modes should therefore appear without `--force`; a stale `unchanged` command pack indicates an older affected build.
 
-Then run `/supervised-task`. After a successful FINAL/PASS checkpoint, `/supervised-task` stops for review by default. Use `/supervised-task continue` to start post-final TODO/source-truth research without writing a detailed supervisor prompt. The supervised agent should read `current-ticket.md` and `state/start-dispatch.json`, create or resume `migration/runs/<run-id>/`, and avoid asking the user broad menu questions when the state is clear.
+Then run `/supervised-task`. It performs one complete configured migration run, matching project verification, and final-gate evaluation, then stops with evidence. Use `/supervised-task continue` only to apply one bounded, source-backed repair to the latest result and rerun the complete source scope. The agent reads `current-ticket.md` and `state/start-dispatch.json`; it does not create hidden source partitions, advance background state, or manufacture validation artifacts.
 
-### OpenCode `/supervised-task` launch modes
+### OpenCode `/supervised-task`
 
-| Launch | Purpose |
+There are only two normal invocations:
+
+| Command | Meaning |
 |---|---|
-| `/supervised-task` | Resume the next safe bounded action from persisted state. |
-| `/supervised-task <bounded request>` | Run a specific bounded task without bypassing current state or gates. |
-| `/supervised-task waves` | Bootstrap/resume affinity-aware wavefront migration. Aliases: `wave`, `wavefront`, `start waves`. |
-| `/supervised-task waves fresh` | Archive the current pilot, preserve memory/scope, and replan. Aliases: `fresh waves`, `restart waves`. |
-| `/supervised-task continue` | Resume the post-final research → review → slicing → bounded execution loop. |
-| `/supervised-task continue <topic or task>` | Continue with a named research topic or bounded request. |
-| `/supervised-task sentinel` | Run one forensic process inspection. Aliases: `inspect`, `qa`. |
+| `/supervised-task` | Start or resume one standard full-project run. |
+| `/supervised-task continue` | Fix one repeated highest-payoff root cause from the latest run and rerun the complete pipeline. |
 
-Choose Harness depth with `--execution-profile`:
+The command reads the configured source scope, project-local memory, and adapter config; runs optional pilot calibration only when missing; executes `selenium-pw-migrator run`; and performs a real matching `verify-project` when possible. There are no execution profiles, batch aliases, automatic partition advancement, or synthetic validation files.
 
-| Profile | Meaning | Example |
-|---|---|---|
-| `fast` | Lightweight and default; expensive roles are risk-triggered. | `/supervised-task waves --execution-profile fast` |
-| `standard` | Executor plus reviewer; watchdog/sentinel remain conditional. | `/supervised-task waves --execution-profile standard` |
-| `audit` | Full Harness; executor, reviewer, watchdog and sentinel are required. | `/supervised-task waves --execution-profile audit` |
-
-The modifier also works with ordinary resume, `continue`, bounded requests and `continuous`. Existing waves keep their immutable `execution-policy.json`; use a fresh run to change profile.
-
-Add `continuous` or `--continuation auto` to ordinary resume, bounded requests, `continue`, `waves`, or `waves fresh` when the current invocation should automatically consume safe checkpoints:
-
-```text
-/supervised-task continuous
-/supervised-task --continuation auto
-/supervised-task continue continuous
-/supervised-task continue --continuation auto
-/supervised-task waves continuous
-/supervised-task waves --continuation auto
-/supervised-task waves fresh continuous
-```
-
-Continuous mode records every checkpoint but does not pause merely to request another `continue`. It stops on DONE, limitations, blockers, human decisions, critical risk, scope violations, malformed evidence, no-progress, missing input, exhausted budgets, or an explicit stop. `sentinel`, `inspect`, and `qa` remain one-shot. See [`docs/supervised-task-modes.md`](docs/supervised-task-modes.md) for the complete contract.
-
-For Codex, CI, or another agent, use the explicit handoff path:
+For Codex, CI, or another agent use the explicit handoff:
 
 ```shell
 selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --source ./OldTests --config migration/profiles/adapter-config.start.json
@@ -291,16 +268,6 @@ selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration -
 ```
 
 `bootstrap-opencode --opencode-install ci` remains supported as a legacy compatibility mode, but new non-OpenCode setups should use `bootstrap-agent`.
-
-If you are working without an agent and only want the older starter config/scaffold, `init --wizard` is still available as the manual scaffold path:
-
-```shell
-selenium-pw-migrator init --wizard \
-  --source-path ./OldTests \
-  --target dotnet \
-  --target-test-framework nunit \
-  --workspace migration
-```
 
 ## 4. The Normal Migration Loop
 
@@ -420,7 +387,7 @@ selenium-pw-migrator --mode verify \
 For Playwright .NET, run project-aware verification:
 
 ```bash
-selenium-pw-migrator --mode verify-project \
+selenium-pw-migrator verify-project \
   --input ./OldTests \
   --config migration/profiles/adapter-config.json \
   --target-test-framework nunit \
@@ -466,7 +433,7 @@ Guard is useful in CI and agent loops because it catches regressions in TODOs, u
 When the basic setup is ready, `orchestrate` runs the common dry-run workflow:
 
 ```bash
-selenium-pw-migrator --mode orchestrate \
+selenium-pw-migrator run \
   --input ./OldTests \
   --config migration/profiles/adapter-config.json \
   --target dotnet \
@@ -545,7 +512,7 @@ selenium-pw-migrator memory doctor --workspace migration
 
 `config-merge`
 
-Merges reviewed wave-local `config-delta.json` files into a candidate config and validates the result before any promotion. This is the safe bridge between divide-and-conquer wave runs and the main `adapter-config.json`.
+Merges reviewed run-local `config-delta.json` files into a candidate config and validates the result before any promotion. This is the safe bridge between evidence-backed ordinary runs and the main `adapter-config.json`.
 
 ```bash
 selenium-pw-migrator config merge-deltas --base migration/adapter-config.json --deltas migration/state/memory/config-deltas --out migration/config-merge
@@ -675,7 +642,7 @@ selenium-pw-migrator --mode dump-ir --input ./OldTests --config ./adapter-config
 Runs analyze, migrate, verify, and proposal generation as one dry-run flow.
 
 ```bash
-selenium-pw-migrator --mode orchestrate --input ./OldTests --config ./adapter-config.json --out run-001
+selenium-pw-migrator run --input ./OldTests --config ./adapter-config.json --out run-001
 ```
 
 ### Verification and quality gates
@@ -693,7 +660,7 @@ selenium-pw-migrator --mode verify --input migration/generated --config ./adapte
 Builds generated Playwright .NET output in a temporary project-aware harness.
 
 ```bash
-selenium-pw-migrator --mode verify-project --input ./OldTests --config ./adapter-config.json --out verify-project
+selenium-pw-migrator verify-project --input ./OldTests --config ./adapter-config.json --out verify-project
 ```
 
 `verify-ts-project`
@@ -1064,19 +1031,14 @@ pwsh .\scripts\run-kitroot-shadow-smoke.ps1 -Clean
 
 The smoke creates a fake product repo with a shadow `templates/migration-kit` directory and fails if that directory is used as the kit root.
 
-When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. In default mode, report why the SUCCESS checkpoint paused and recommend `/supervised-task continue`. In `continuous` / `--continuation auto` mode, persist the same checkpoint but immediately re-read state and continue until a real terminal condition.
+A standard run is complete only when its concrete artifacts are present and internally consistent. The final gate never reconstructs missing results.
 
+### Standard run / memory / config-merge snapshot
 
-### Wavefront / memory / config-merge snapshot
-
-When you are using project-scoped memory and divide-and-conquer waves, still start review from the dashboard:
+Start review from the dashboard:
 
 ```bash
-selenium-pw-migrator report serve --input migration/runs/latest --static-only --out migration/dashboard/latest --format both
+selenium-pw-migrator report serve --input migration/runs/run-001 --static-only --out migration/dashboard/run-001 --format both
 ```
 
-The report includes a **Wavefront / memory / config-merge snapshot**. It summarizes project-scoped memory, wavefront progress, next wave candidates, candidate config status, and open `conflicts.jsonl` items. This is read-only: it does not promote memory, merge config into the active adapter config, or mark a wave complete.
-
-### Resume after an interrupted agent role
-
-Run `selenium-pw-migrator migration plan-agent-recovery --out <run-dir>`. Wait when it reports `WAIT_FOR_ROLE`; run `recover-agent-runtime` only for `SAFE_REPAIR_AVAILABLE`; stop for human review on `BLOCKED`. Use `heartbeat-agent-role` for a role that legitimately runs longer than its lease. Freshness is based on the latest heartbeat; individual leases are capped at two hours, and malformed or contradictory ownership evidence is not repaired automatically.
+The report summarizes the latest ordinary run, project-local memory, real project-verification status, config-merge candidate, and open conflicts. Memory remains guidance rather than proof. After an interrupted agent or CLI process, preserve logs and rerun the ordinary command into a clean run directory; do not manufacture recovery state or verification JSON.

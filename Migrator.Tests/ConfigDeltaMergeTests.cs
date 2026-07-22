@@ -43,7 +43,6 @@ public class ConfigDeltaMergeTests
         var command = File.ReadAllText(FindRepositoryFile("Migrator.Cli/Commands/ConfigDeltaCommand.cs"));
         var contract = File.ReadAllText(FindRepositoryFile("templates/migration-kit/AGENT_CONTRACT.md"));
         var supervised = File.ReadAllText(FindRepositoryFile("templates/opencode-team/global/.config/opencode/commands/supervised-task.md"));
-        var finalGate = File.ReadAllText(FindRepositoryFile("templates/migration-kit/scripts/check-final-gate.ps1"));
 
         Assert.Contains("merge-deltas is candidate-only", command);
         Assert.Contains("never edits the base adapter-config.json", command);
@@ -52,9 +51,7 @@ public class ConfigDeltaMergeTests
         Assert.Contains("Keep POM uncertainty reviewable", command);
         Assert.Contains("config merge-deltas --base migration/adapter-config.json", contract);
         Assert.Contains("config validate-merge --base migration/adapter-config.json", contract);
-        Assert.Contains("conflicts.jsonl", supervised);
-        Assert.Contains("Test-ConfigDeltaMerge", finalGate);
-        Assert.Contains("config-delta-merge", finalGate);
+        Assert.Contains("highest-payoff root cause", supervised, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

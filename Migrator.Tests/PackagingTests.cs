@@ -53,7 +53,7 @@ public class PackagingTests
         Assert.True(File.Exists(FindRepositoryFile("scripts/install-migration-kit.sh")));
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/README.md")));
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/prompts/kickoff-prompt.txt")));
-        Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/prompts/loop-batch-prompt.txt")));
+        Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/prompts/bounded-repair-prompt.txt")));
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/state/handoff.md")));
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/state/stop-policy-checklist.md")));
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/state/run-ledger.md")));
@@ -95,7 +95,7 @@ public class PackagingTests
         var readmeRu = File.ReadAllText(FindRepositoryFile("README.ru.md"));
         var rootAgents = File.ReadAllText(FindRepositoryFile("AGENTS.md"));
         var projectAgents = File.ReadAllText(FindRepositoryFile("templates/opencode-team/project-template/AGENTS.md"));
-        var checkpoint = File.ReadAllText(FindRepositoryFile("templates/opencode-team/global/.config/opencode/commands/checkpoint.md"));
+        var supervisedTask = File.ReadAllText(FindRepositoryFile("templates/opencode-team/global/.config/opencode/commands/supervised-task.md"));
         var docsIndex = File.ReadAllText(FindRepositoryFile("docs/README.md"));
 
         Assert.Contains("Do not start diagnostics with dotnet tool list only", diagnosePs1);
@@ -129,7 +129,7 @@ public class PackagingTests
         Assert.Contains("одного `dotnet tool list` недостаточно", readmeRu);
         Assert.Contains("## CLI installation diagnostics", rootAgents);
         Assert.Contains("Get-Command selenium-pw-migrator -All", projectAgents);
-        Assert.Contains("rather than `dotnet tool list` only", checkpoint);
+        Assert.Contains("Run install diagnostics", supervisedTask);
         Assert.Contains("Install diagnostics", docsIndex);
     }
 
@@ -186,7 +186,7 @@ public class PackagingTests
         Assert.Contains("TODO_SHA256_OSX_ARM64", brew);
         Assert.Contains("selenium-pw-migrator", brew);
         Assert.Contains("Package manager templates", docsIndex);
-        Assert.Contains("Final distribution verification", changelog);
+        Assert.Contains("standard full-project migration", changelog, StringComparison.OrdinalIgnoreCase);
     }
 
 
@@ -894,9 +894,9 @@ public class PackagingTests
 
         Assert.StartsWith("# Changelog", changelog);
         Assert.Equal(1, changelog.Split("## [Unreleased]", StringSplitOptions.None).Length - 1);
-        Assert.Contains("Fast, standard, and audit execution profiles", changelog);
-        Assert.Contains("A single `migration validate` host", changelog);
-        Assert.Contains("Layered Unit/Contract/Scenario/E2E test runners", changelog);
+        Assert.Contains("Removed the Waves/partition runtime", changelog);
+        Assert.Contains("stable direct `selenium-pw-migrator run` entry point", changelog);
+        Assert.Contains("strict standard final gate", changelog);
 
         Assert.Contains("docs/release-notes/v$VERSION.md", extractor);
         Assert.Contains("RELEASE_NOTES_NOT_FOUND", extractor);

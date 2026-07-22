@@ -29,5 +29,5 @@ Use this checklist before keeping a batch.
 ## Stop-policy gate
 
 - [ ] `state/stop-policy-checklist.md` was updated before stop/handoff.
-- [ ] If status is `CONTINUE_AUTONOMOUSLY`, the agent continued without asking the user whether to continue.
+- [ ] The agent stopped after the full run or after one bounded repair plus a complete rerun.
 - [ ] In `migration-artifact` mode, no migrator repository source code was edited.

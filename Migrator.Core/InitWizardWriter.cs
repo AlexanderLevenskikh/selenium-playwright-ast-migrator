@@ -285,13 +285,13 @@ Use it to keep agents inside ticket boundaries:
 ");
         File.WriteAllText(Path.Combine(prompts, "kickoff-prompt.txt"), @"You are working inside a Selenium-to-Playwright migration workspace. Read current-ticket.md, profiles/adapter-config.json, state/run-ledger.md, and next-commands.md. Do not edit source tests. Do not invent selectors. Run config-validate before trusting config changes.
 ");
-        File.WriteAllText(Path.Combine(prompts, "resume-prompt.txt"), @"Resume from state/run-ledger.md and current-ticket.md. Continue only the current ticket. Preserve generated evidence and report all failed checks honestly.
+        File.WriteAllText(Path.Combine(prompts, "continue-run-prompt.txt"), @"Resume from state/run-ledger.md and current-ticket.md. Continue only the current ticket. Preserve generated evidence and report all failed checks honestly.
 ");
         File.WriteAllText(Path.Combine(state, "current-migration-batch.md"), "# Current Migration Batch\n\nInitialized by init --wizard.\n");
 
         created.Add(Path.Combine("agent-prompts", "README.md"));
         created.Add(Path.Combine("agent-prompts", "kickoff-prompt.txt"));
-        created.Add(Path.Combine("agent-prompts", "resume-prompt.txt"));
+        created.Add(Path.Combine("agent-prompts", "continue-run-prompt.txt"));
         created.Add(Path.Combine(".agent-state", "current-migration-batch.md"));
     }
 

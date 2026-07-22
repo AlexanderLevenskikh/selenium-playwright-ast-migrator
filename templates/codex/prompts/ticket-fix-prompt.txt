@@ -5,7 +5,7 @@ Task: fix exactly the current ticket in `migration/current-ticket.md`.
 Rules:
 - Do not broaden scope.
 - Do not edit generated output as the final solution.
-- Prefer config or migrator engine fixes with regression tests.
+- In a product workspace, prefer adapter-config or generated-helper/POM fixes. Report a suspected Migrator engine defect with a minimal reproduction; edit Migrator engine code and add regression tests only when this task explicitly authorizes repository-source changes.
 - Preserve safety: no false-green tests, no blind suppressions, no source-only identifiers emitted as active code.
 
 After changes:

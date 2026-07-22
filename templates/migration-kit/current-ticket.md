@@ -2,7 +2,7 @@
 
 ## Title
 
-<fill in after first board analysis>
+<fill in after first standard-run analysis>
 
 ## Root cause
 
@@ -24,10 +24,10 @@
 ## Required checks
 
 - Unit/regression tests:
-- Migrate/verify:
-- Project verify:
-- Migration board:
+- Full migration run:
+- Project verification:
+- Final gate:
 
 ## Stop condition
 
-Stop only if the batch is verified, unsafe, or blocked by missing source truth/environment. Apply `state/stop-policy-checklist.md` before stopping. Do not ask whether to continue when status is `CONTINUE_AUTONOMOUSLY`.
+Complete at most one bounded, source-backed repair for this ticket, rerun the complete configured source scope, and then stop with evidence. Stop earlier only when the repair is unsafe, required input/tooling is missing, or the repeated full run shows no progress.

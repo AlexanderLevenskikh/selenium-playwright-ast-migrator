@@ -184,7 +184,7 @@ if ($PermissionProfile -eq "TrustedProject") {
 if ($Mode -eq "ProjectDesktop") {
     Write-Host "2. Open this repository folder in OpenCode Desktop:"
     Write-Host "   $Target"
-    Write-Host "3. Use /supervised-task waves for a fresh wavefront start, or /supervised-task for existing workspace state."
+    Write-Host "3. Use /supervised-task to start or resume the standard migration flow."
     Write-Host "4. Existing OpenCode project config is backed up unless -Force is used."
 }
 elseif ($Mode -eq "ProjectLocal") {
@@ -194,5 +194,5 @@ elseif ($Mode -eq "ProjectLocal") {
 }
 else {
     Write-Host "2. In opencode, try:"
-    Write-Host "   /supervised-task waves"
+    Write-Host "   /supervised-task"
 }

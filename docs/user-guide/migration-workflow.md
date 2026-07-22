@@ -205,7 +205,7 @@ See [Reports & Quality Gates](reports-and-quality-gates.md) for details.
 For iterative development, use orchestrate mode to run the full pipeline:
 
 ```bash
-dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode orchestrate --input "./SeleniumTests" --config "./adapter-config.json" --out "./orchestration" --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- run --input "./SeleniumTests" --config "./adapter-config.json" --out "./orchestration" --format both
 ```
 
 Review `orchestration/orchestration-report.md` after each run. Apply one high-priority proposal, then re-run.

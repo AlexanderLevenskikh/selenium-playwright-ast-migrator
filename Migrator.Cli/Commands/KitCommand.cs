@@ -100,7 +100,7 @@ internal static class KitCommand
         Console.WriteLine("Next:");
         Console.WriteLine("  1. Give AGENT_HANDOFF.md plus AGENT_CONTRACT.md to the selected agent.");
         Console.WriteLine("  2. Start with prompts/kickoff-prompt.txt unless the agent supports /supervised-task.");
-        Console.WriteLine("  3. Let the agent create or resume the active harness run; do not hand-create migration/runs/<run-id>.");
+        Console.WriteLine("  3. Let the agent create or resume the standard migration run; do not hand-create migration/runs/<run-id>.");
         return 0;
     }
 
@@ -118,7 +118,7 @@ internal static class KitCommand
     {
         var extra = agent == "codex"
             ? $"- Codex-specific pack: `{Path.Combine(options.Workspace, "codex", "CODEX.md")}` and `{Path.Combine(options.Workspace, "codex", "prompts", "ticket-fix-prompt.txt")}`."
-            : "- Generic agents should use only the contract, kickoff prompt, harness README, and current-ticket.md unless a project-specific prompt says otherwise.";
+            : "- Generic agents should use the contract, kickoff prompt, standard-run guide, and current-ticket.md unless a project-specific prompt says otherwise.";
 
         var handoff = $$"""
 # Agent Handoff Pack
@@ -132,38 +132,39 @@ Adapter config: `{{options.Config}}`
 
 1. `{{Path.Combine(options.Workspace, "AGENT_CONTRACT.md")}}` — non-negotiable migration contract.
 2. `{{Path.Combine(options.Workspace, "prompts", "kickoff-prompt.txt")}}` — first task prompt.
-3. `{{Path.Combine(options.Workspace, "harness", "README.md")}}` — run lifecycle and gates.
-4. `{{Path.Combine(options.Workspace, "state", "harness-policy.json")}}` — policy enforced by final gates.
+3. `{{Path.Combine(options.Workspace, "harness", "README.md")}}` — scope, verification, and final-gate rules.
+4. `{{Path.Combine(options.Workspace, "state", "harness-policy.json")}}` — standard-run safety policy.
 
 {{extra}}
 
 ## Operating rule
 
-The agent must create or resume a harness run through the provided scripts. Do not manually create `{{Path.Combine(options.Workspace, "runs", "run-001")}}`.
-
-PowerShell:
-
-```powershell
-.\{{Path.Combine(options.Workspace, "scripts", "new-harness-run.ps1")}} -TaskTitle "Pilot migration batch" -Goal "Run one bounded Selenium to Playwright migration batch."
-.\{{Path.Combine(options.Workspace, "scripts", "check-harness-policy.ps1")}} -Workspace "{{options.Workspace}}" -RepoRoot .
-```
-
-Bash:
+Run the configured source through one ordinary full-project migration command. Do not manufacture reports or validation evidence.
 
 ```bash
-./{{Path.Combine(options.Workspace, "scripts", "new-harness-run.sh")}} -TaskTitle "Pilot migration batch" -Goal "Run one bounded Selenium to Playwright migration batch."
+{{options.ToolCommand}} run --input "{{options.Source}}" --config "{{options.Config}}" --out "{{options.Output}}" --format both
+{{options.ToolCommand}} verify-project --input "{{options.Source}}" --config "{{options.Config}}" --format both --out "{{options.Output}}/verify-project"
+```
+
+PowerShell and Bash safety checks are available after the real run:
+
+```powershell
+.\{{Path.Combine(options.Workspace, "scripts", "check-harness-policy.ps1")}} -Workspace "{{options.Workspace}}" -RepoRoot .
+.\{{Path.Combine(options.Workspace, "scripts", "check-final-gate.ps1")}} -Workspace "{{options.Workspace}}" -Run "{{options.Output}}" -RepoRoot .
+```
+
+```bash
 ./{{Path.Combine(options.Workspace, "scripts", "check-harness-policy.sh")}} -Workspace "{{options.Workspace}}" -RepoRoot .
+./{{Path.Combine(options.Workspace, "scripts", "check-final-gate.sh")}} -Workspace "{{options.Workspace}}" -Run "{{options.Output}}" -RepoRoot .
 ```
 
 ## Review surface
 
-Open the dashboard first after a run:
-
 ```bash
-{{options.ToolCommand}} report serve --input {{Path.Combine(options.Workspace, "runs", "latest")}} --static-only --out {{Path.Combine(options.Workspace, "dashboard", "latest")}} --format both
+{{options.ToolCommand}} report serve --input "{{options.Output}}" --static-only --out "{{Path.Combine(options.Workspace, "dashboard", "latest")}}" --format both
 ```
 
-The dashboard is the primary review surface for readiness, TODO categories, unsupported actions, generated files, next actions, and evidence links.
+The dashboard summarizes readiness, TODO categories, unsupported actions, generated files, next actions, and concrete evidence links.
 """;
         WriteTextFileSafe(Path.Combine(workspacePath, "AGENT_HANDOFF.md"), handoff, workspacePath, options, neverOverwrite: false);
     }
@@ -218,8 +219,8 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         Console.WriteLine("BOOTSTRAP_OPENCODE_READY");
         Console.WriteLine("Next:");
         Console.WriteLine("  1. Open the repository root in OpenCode.");
-        Console.WriteLine("  2. Run /supervised-task waves for one-command wavefront planning and the first bounded wave.");
-        Console.WriteLine("  3. Let the orchestrator ask only for missing source/target/framework details; do not hand-create migration/runs/<run-id>.");
+        Console.WriteLine("  2. Run /supervised-task to execute the standard full-project migration flow.");
+        Console.WriteLine("  3. Let the orchestrator resolve configured scope, run the optional pilot, and create the ordinary run directory.");
         return 0;
     }
 
@@ -265,7 +266,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
 
         WriteOpenCodeProjectConfigMetadata(workspacePath, options);
         Console.WriteLine("OPENCODE_PROJECT_CONFIG_APPLIED");
-        Console.WriteLine("OpenCode commands are installed in the repository root. Next: open the repo in OpenCode and run /supervised-task waves.");
+        Console.WriteLine("OpenCode commands are installed in the repository root. Next: open the repo in OpenCode and run /supervised-task.");
         return 0;
     }
 
@@ -336,7 +337,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
             ["source"] = options.Source,
             ["permissionProfile"] = options.PermissionProfile,
             ["command"] = "kit bootstrap-opencode",
-            ["nextCommand"] = "/supervised-task waves"
+            ["nextCommand"] = "/supervised-task"
         };
         File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"write: {path}");
@@ -509,7 +510,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         if (mode == "ProjectDesktop")
         {
             Console.WriteLine("  Open the repository root in OpenCode Desktop.");
-            Console.WriteLine("  Run /supervised-task waves for a fresh wavefront start, or /supervised-task for an existing workspace.");
+            Console.WriteLine("  Run /supervised-task to start or resume the standard migration flow.");
         }
         else if (mode == "ProjectLocal")
         {
@@ -517,11 +518,11 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
             Console.WriteLine(RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
                 ? $"  $env:OPENCODE_CONFIG = {ProcessQuote(Path.Combine(target, "opencode.jsonc"))}; opencode"
                 : $"  OPENCODE_CONFIG={ProcessQuote(Path.Combine(target, "opencode.jsonc"))} opencode");
-            Console.WriteLine("  Then run /supervised-task waves for a fresh wavefront start, or /supervised-task for an existing workspace.");
+            Console.WriteLine("  Then run /supervised-task to start or resume the standard migration flow.");
         }
         else
         {
-            Console.WriteLine("  Open OpenCode and run /supervised-task waves for a fresh wavefront start, or /supervised-task for an existing workspace.");
+            Console.WriteLine("  Open OpenCode and run /supervised-task to start or resume the standard migration flow.");
         }
     }
 
@@ -564,8 +565,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         foreach (var dir in new[]
         {
             "runs", "reports", "logs", "profiles", "prompts", "schemas", "state",
-            "state/claims", "state/claims/active", "state/claims/completed", "state/claims/stale",
-            "tickets", "evidence", "proposals", "scripts", "codex", "harness", "dashboard", "agent-skills", ".migration-kit"
+            "tickets", "evidence", "proposals", "scripts", "codex", "harness", "agent-skills", ".migration-kit"
         })
         {
             Directory.CreateDirectory(Path.Combine(workspacePath, dir));
@@ -639,7 +639,7 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         AddCheck(checks, "version", File.Exists(Path.Combine(workspacePath, ".migration-kit", "version.json")), Path.Combine(workspacePath, ".migration-kit", "version.json"), "Run `migrator kit update --workspace <path>`.");
         AddCheck(checks, "adapter-config", File.Exists(ToAbsolutePath(options.Config, projectRoot)), ToAbsolutePath(options.Config, projectRoot), "Create or copy adapter-config.json into migration/profiles/.");
         AddCheck(checks, "kickoff-prompt", File.Exists(Path.Combine(workspacePath, "prompts", "kickoff-prompt.txt")), Path.Combine(workspacePath, "prompts", "kickoff-prompt.txt"), "Run `migrator kit update --backup`.");
-        AddCheck(checks, "loop-batch-prompt", File.Exists(Path.Combine(workspacePath, "prompts", "loop-batch-prompt.txt")), Path.Combine(workspacePath, "prompts", "loop-batch-prompt.txt"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "bounded-repair-prompt", File.Exists(Path.Combine(workspacePath, "prompts", "bounded-repair-prompt.txt")), Path.Combine(workspacePath, "prompts", "bounded-repair-prompt.txt"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "state-handoff", File.Exists(Path.Combine(workspacePath, "state", "handoff.md")), Path.Combine(workspacePath, "state", "handoff.md"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "stop-policy-checklist", File.Exists(Path.Combine(workspacePath, "state", "stop-policy-checklist.md")), Path.Combine(workspacePath, "state", "stop-policy-checklist.md"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "schema", File.Exists(Path.Combine(workspacePath, "schemas", "adapter-config.schema.json")), Path.Combine(workspacePath, "schemas", "adapter-config.schema.json"), "Run `migrator kit update --backup`.");
@@ -654,33 +654,20 @@ The dashboard is the primary review surface for readiness, TODO categories, unsu
         AddCheck(checks, "agent-skills-map", File.Exists(Path.Combine(workspacePath, "agent-skills", "skill-map.md")), Path.Combine(workspacePath, "agent-skills", "skill-map.md"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "agent-skills-manifest", File.Exists(Path.Combine(workspacePath, "agent-skills", "manifest.json")), Path.Combine(workspacePath, "agent-skills", "manifest.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "agent-skills-core", File.Exists(Path.Combine(workspacePath, "agent-skills", "plow-ahead", "SKILL.md")) && File.Exists(Path.Combine(workspacePath, "agent-skills", "agent-watchdog", "SKILL.md")) && File.Exists(Path.Combine(workspacePath, "agent-skills", "read-the-damn-docs", "SKILL.md")), Path.Combine(workspacePath, "agent-skills"), "Run `migrator kit update --backup`.");
-        AddCheck(checks, "wave-manager-skills", File.Exists(Path.Combine(workspacePath, "agent-skills", "quality-profit-arbitration", "SKILL.md")) && File.Exists(Path.Combine(workspacePath, "agent-skills", "root-cause-prioritization", "SKILL.md")) && File.Exists(Path.Combine(workspacePath, "agent-skills", "adaptive-wave-sizing", "SKILL.md")), Path.Combine(workspacePath, "agent-skills"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "agent-skills-usage-writer", File.Exists(Path.Combine(workspacePath, "scripts", "write-agent-skill-usage.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "write-agent-skill-usage.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "record-agent-skill-profile.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "record-agent-skill-profile.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
-        AddCheck(checks, "gate-followup-slicer", File.Exists(Path.Combine(workspacePath, "scripts", "slice-gate-followups.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "slice-gate-followups.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
-        AddCheck(checks, "wave-quality-budget", File.Exists(Path.Combine(workspacePath, "scripts", "evaluate-wave-quality-budget.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "evaluate-wave-quality-budget.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
-        AddCheck(checks, "fresh-wavefront-restart", File.Exists(Path.Combine(workspacePath, "scripts", "start-fresh-wavefront-run.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "start-fresh-wavefront-run.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "mapping-research-memory", File.Exists(Path.Combine(workspacePath, "scripts", "collect-mapping-research-memory.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "collect-mapping-research-memory.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "feedback-bundle-packer", File.Exists(Path.Combine(workspacePath, "scripts", "create-feedback-bundle.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "create-feedback-bundle.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "installed-script-validator", File.Exists(Path.Combine(workspacePath, "scripts", "validate-installed-scripts.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "validate-installed-scripts.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "artifact-hygiene", File.Exists(Path.Combine(workspacePath, "scripts", "validate-run-artifacts.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "validate-run-artifacts.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "current-ticket-lifecycle", File.Exists(Path.Combine(workspacePath, "scripts", "update-current-ticket-status.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "update-current-ticket-status.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "jsonl-ledger-repair", File.Exists(Path.Combine(workspacePath, "scripts", "repair-jsonl-ledger.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "repair-jsonl-ledger.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
-        AddCheck(checks, "sentinel-finding-lifecycle", File.Exists(Path.Combine(workspacePath, "scripts", "update-sentinel-finding-status.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "update-sentinel-finding-status.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
-        AddCheck(checks, "harness-policy", File.Exists(Path.Combine(workspacePath, "state", "harness-policy.json")), Path.Combine(workspacePath, "state", "harness-policy.json"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "standard-policy", File.Exists(Path.Combine(workspacePath, "state", "harness-policy.json")), Path.Combine(workspacePath, "state", "harness-policy.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "scope-contract", File.Exists(Path.Combine(workspacePath, "state", "scope-contract.json")), Path.Combine(workspacePath, "state", "scope-contract.json"), "Run `migrator kit update --backup --source <source-root>` or pass --source on bootstrap.");
-        AddCheck(checks, "harness-run-template", File.Exists(Path.Combine(workspacePath, "state", "harness-run-template.json")), Path.Combine(workspacePath, "state", "harness-run-template.json"), "Run `migrator kit update --backup`.");
-        AddCheck(checks, "harness-policy-script", File.Exists(Path.Combine(workspacePath, "scripts", "check-harness-policy.ps1")), Path.Combine(workspacePath, "scripts", "check-harness-policy.ps1"), "Run `migrator kit update --backup`.");
-        AddCheck(checks, "harness-run-script", File.Exists(Path.Combine(workspacePath, "scripts", "new-harness-run.ps1")), Path.Combine(workspacePath, "scripts", "new-harness-run.ps1"), "Run `migrator kit update --backup`.");
-        AddCheck(checks, "harness-event-script", File.Exists(Path.Combine(workspacePath, "scripts", "write-harness-event.ps1")), Path.Combine(workspacePath, "scripts", "write-harness-event.ps1"), "Run `migrator kit update --backup`.");
-        AddCheck(checks, "harness-dashboard-script", File.Exists(Path.Combine(workspacePath, "scripts", "build-harness-dashboard.ps1")), Path.Combine(workspacePath, "scripts", "build-harness-dashboard.ps1"), "Run `migrator kit update --backup`.");
-        AddCheck(checks, "harness-shell-wrappers", File.Exists(Path.Combine(workspacePath, "scripts", "new-harness-run.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "check-harness-policy.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "write-harness-event.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "build-harness-dashboard.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
-        AddCheck(checks, "claim-lifecycle-scripts", File.Exists(Path.Combine(workspacePath, "scripts", "new-claim.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "new-claim.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "update-claim-heartbeat.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "update-claim-heartbeat.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "complete-claim.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "complete-claim.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "claim-doctor.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "claim-doctor.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "move-stale-claims.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "move-stale-claims.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
-        AddCheck(checks, "evidence-bundle-scripts", File.Exists(Path.Combine(workspacePath, "scripts", "record-run-evidence.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "record-run-evidence.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "write-memory-compaction-receipt.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "write-memory-compaction-receipt.sh")) && File.Exists(Path.Combine(workspacePath, "scripts", "evaluate-command-policy.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "evaluate-command-policy.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
-        AddCheck(checks, "harness-dashboard-i18n-en", File.Exists(Path.Combine(workspacePath, "dashboard", "i18n", "en.json")), Path.Combine(workspacePath, "dashboard", "i18n", "en.json"), "Run `migrator kit update --backup`.");
-        AddCheck(checks, "harness-dashboard-i18n-ru", File.Exists(Path.Combine(workspacePath, "dashboard", "i18n", "ru.json")), Path.Combine(workspacePath, "dashboard", "i18n", "ru.json"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "standard-policy-script", File.Exists(Path.Combine(workspacePath, "scripts", "check-harness-policy.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "check-harness-policy.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "command-policy", File.Exists(Path.Combine(workspacePath, "scripts", "evaluate-command-policy.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "evaluate-command-policy.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "guard-checksums", File.Exists(Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json")), Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json"), "Run `migrator kit update --backup`.");
 
-        AddCheck(checks, "nested-workspace", !HasNestedMigrationWorkspace(projectRoot, workspacePath, out var nestedWorkspaceDetail), nestedWorkspaceDetail, "Remove nested migration workspaces such as Web/**/migration/** and run kit/wave commands from the repository root.");
+        AddCheck(checks, "nested-workspace", !HasNestedMigrationWorkspace(projectRoot, workspacePath, out var nestedWorkspaceDetail), nestedWorkspaceDetail, "Remove nested migration workspaces such as Web/**/migration/** and run kit commands from the repository root.");
 
         var dotnet = RunProcess("dotnet", "--version");
         AddCheck(checks, "dotnet", dotnet.ExitCode == 0, dotnet.ExitCode == 0 ? dotnet.StdOut.Trim() : dotnet.StdErr.Trim(), "Install .NET SDK or use a self-contained migrator bundle.");
@@ -960,52 +947,26 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
     {
         var normalized = relativePath.Replace('\\', '/');
 
-        // These files are part of the migration-kit runtime, not project migration state.
-        // `kit update` must apply them in place; otherwise safety fixes land only as
-        // `.migration-kit/updates/*.new`, while the workspace keeps executing stale
-        // guard scripts/prompts. Mutable files such as current-ticket.md, handoff.md,
-        // run-ledger.md and profiles/adapter-config.json still use conflict snapshots.
+        // Runtime scripts and prompts are kit-owned and updated in place. Mutable
+        // project state such as current-ticket.md, handoff.md, run-ledger.md and
+        // profiles/adapter-config.json still uses conflict snapshots.
         return normalized is
             "scripts/check-scope.ps1" or
             "scripts/check-scope.sh" or
             "scripts/check-harness-policy.ps1" or
             "scripts/check-harness-policy.sh" or
-            "scripts/new-claim.ps1" or
-            "scripts/new-claim.sh" or
-            "scripts/update-claim-heartbeat.ps1" or
-            "scripts/update-claim-heartbeat.sh" or
-            "scripts/complete-claim.ps1" or
-            "scripts/complete-claim.sh" or
-            "scripts/claim-doctor.ps1" or
-            "scripts/claim-doctor.sh" or
-            "scripts/move-stale-claims.ps1" or
-            "scripts/move-stale-claims.sh" or
-            "scripts/record-run-evidence.ps1" or
-            "scripts/record-run-evidence.sh" or
+            "scripts/check-final-gate.ps1" or
+            "scripts/check-final-gate.sh" or
             "scripts/write-memory-compaction-receipt.ps1" or
             "scripts/write-memory-compaction-receipt.sh" or
             "scripts/evaluate-command-policy.ps1" or
             "scripts/evaluate-command-policy.sh" or
-            "scripts/check-loop-guard.ps1" or
-            "scripts/check-loop-guard.sh" or
-            "scripts/check-final-gate.ps1" or
-            "scripts/check-final-gate.sh" or
-            "scripts/build-harness-dashboard.ps1" or
-            "scripts/build-harness-dashboard.sh" or
-            "scripts/new-harness-run.ps1" or
-            "scripts/new-harness-run.sh" or
-            "scripts/write-harness-event.ps1" or
-            "scripts/write-harness-event.sh" or
+            "scripts/export-opencode-session.ps1" or
+            "scripts/export-opencode-session.sh" or
             "scripts/write-agent-skill-usage.ps1" or
             "scripts/write-agent-skill-usage.sh" or
             "scripts/record-agent-skill-profile.ps1" or
             "scripts/record-agent-skill-profile.sh" or
-            "scripts/slice-gate-followups.ps1" or
-            "scripts/slice-gate-followups.sh" or
-            "scripts/evaluate-wave-quality-budget.ps1" or
-            "scripts/evaluate-wave-quality-budget.sh" or
-            "scripts/start-fresh-wavefront-run.ps1" or
-            "scripts/start-fresh-wavefront-run.sh" or
             "scripts/collect-mapping-research-memory.ps1" or
             "scripts/collect-mapping-research-memory.sh" or
             "scripts/create-feedback-bundle.ps1" or
@@ -1017,16 +978,7 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
             "scripts/update-current-ticket-status.ps1" or
             "scripts/update-current-ticket-status.sh" or
             "scripts/repair-jsonl-ledger.ps1" or
-            "scripts/repair-jsonl-ledger.sh" or
-            "scripts/update-sentinel-finding-status.ps1" or
-            "scripts/update-sentinel-finding-status.sh" or
-            "scripts/export-opencode-session.ps1" or
-            "scripts/export-opencode-session.sh" or
-            "scripts/write-sentinel-finding.ps1" or
-            "scripts/write-sentinel-finding.sh" or
-            "scripts/complete-sentinel-inspection.ps1" or
-            "scripts/complete-sentinel-inspection.sh" or
-            "state/continuation-contract.md"
+            "scripts/repair-jsonl-ledger.sh"
             || normalized.StartsWith("prompts/", StringComparison.Ordinal)
             || normalized.StartsWith("agent-skills/", StringComparison.Ordinal)
             || normalized.StartsWith("opencode-team/", StringComparison.Ordinal);
@@ -1133,13 +1085,13 @@ For non-OpenCode agents, prefer the explicit handoff command instead of using an
 
 This writes `{{Path.Combine(options.Workspace, "AGENT_HANDOFF.md")}}`, then gives the agent `{{Path.Combine(options.Workspace, "AGENT_CONTRACT.md")}}`, `{{Path.Combine(options.Workspace, "prompts", "kickoff-prompt.txt")}}`, and `{{Path.Combine(options.Workspace, "harness", "README.md")}}`.
 
-After bootstrap, open the repository in OpenCode and start the user-friendly wavefront mode:
+After bootstrap, open the repository in OpenCode and start the standard migration flow:
 
 ```text
-/supervised-task waves
+/supervised-task
 ```
 
-That mode should auto-detect the source/target/framework, run `kit doctor`, create `migration/plan`, materialize `wave-001`, and run only the wave-local migration. Manual repair scripts remain available if project config was skipped or an older workspace is being repaired:
+That mode resolves the configured source, runs `kit doctor`, creates an optional representative pilot, and executes one full standard migration run. Manual repair scripts remain available if project config was skipped or an older workspace is being repaired:
 
 ```powershell
 .\{{Path.Combine(options.Workspace, "scripts", "apply-opencode-project-config.ps1")}} -RepoRoot . -Workspace "{{options.Workspace}}"
@@ -1149,7 +1101,7 @@ That mode should auto-detect the source/target/framework, run `kit doctor`, crea
 ./{{Path.Combine(options.Workspace, "scripts", "apply-opencode-project-config.sh")}} --repo-root . --workspace "{{options.Workspace}}"
 ```
 
-For non-OpenCode agents, give the same kickoff prompt to Codex/CI/another agent. The agent should create or resume the active harness run itself with `{{Path.Combine(options.Workspace, "scripts", "new-harness-run.sh")}}` from bash or `{{Path.Combine(options.Workspace, "scripts", "new-harness-run.ps1")}}` from PowerShell; you should not manually create `{{Path.Combine(options.Workspace, "runs", "run-001")}}`.
+For non-OpenCode agents, give the same kickoff prompt to Codex/CI/another agent. The agent should use the configured source scope and create the ordinary run directory through `selenium-pw-migrator run`; do not fabricate run evidence by hand.
 
 ## Open this first after a run
 
@@ -1172,13 +1124,13 @@ Kickoff:
 Resume:
 
 ```text
-{{Path.Combine(options.Workspace, "prompts", "resume-prompt.txt")}}
+{{Path.Combine(options.Workspace, "prompts", "continue-run-prompt.txt")}}
 ```
 
-One bounded loop batch:
+One bounded repair:
 
 ```text
-{{Path.Combine(options.Workspace, "prompts", "loop-batch-prompt.txt")}}
+{{Path.Combine(options.Workspace, "prompts", "bounded-repair-prompt.txt")}}
 ```
 
 Stop-policy checklist before any stop/handoff:
@@ -1201,50 +1153,20 @@ Recommended first skills for OpenCode/Codex-style runs:
 {{Path.Combine(options.Workspace, "agent-skills", "read-the-damn-docs", "SKILL.md")}}
 ```
 
-Wave-boundary management skills:
-
-```text
-{{Path.Combine(options.Workspace, "agent-skills", "quality-profit-arbitration", "SKILL.md")}}
-{{Path.Combine(options.Workspace, "agent-skills", "root-cause-prioritization", "SKILL.md")}}
-{{Path.Combine(options.Workspace, "agent-skills", "adaptive-wave-sizing", "SKILL.md")}}
-```
-
-Harness autopilot run from bash:
+Standard full-project run:
 
 ```bash
-./{{Path.Combine(options.Workspace, "scripts", "new-harness-run.sh")}} -TaskTitle "Pilot migration batch" -Goal "Run one bounded artifact-only Selenium to Playwright migration batch."
-./{{Path.Combine(options.Workspace, "scripts", "check-harness-policy.sh")}} -Workspace "{{options.Workspace}}" -RepoRoot .
+{{options.ToolCommand}} run --input "{{options.Source}}" --config "{{options.Config}}" --out "{{options.Output}}" --format both
+{{options.ToolCommand}} verify-project --input "{{options.Source}}" --config "{{options.Config}}" --format both --out "{{options.Output}}/verify-project"
+./{{Path.Combine(options.Workspace, "scripts", "check-final-gate.sh")}} -Workspace "{{options.Workspace}}" -Run "{{options.Output}}" -RepoRoot .
 ```
 
-Harness autopilot run from PowerShell:
+PowerShell uses the same CLI commands and `check-final-gate.ps1`.
 
-```powershell
-.\{{Path.Combine(options.Workspace, "scripts", "new-harness-run.ps1")}} -TaskTitle "Pilot migration batch" -Goal "Run one bounded artifact-only Selenium to Playwright migration batch."
-.\{{Path.Combine(options.Workspace, "scripts", "check-harness-policy.ps1")}} -Workspace "{{options.Workspace}}" -RepoRoot .
-```
-
-Harness Kit dogfood smoke from the Migrator repository root:
+Repository smoke test for this standard path:
 
 ```bash
-scripts/run-harness-dogfood-smoke.sh -Clean
-```
-
-or on PowerShell:
-
-```powershell
-.\scripts\run-harness-dogfood-smoke.ps1 -Clean
-```
-
-Generate Harness dashboard from bash:
-
-```bash
-./{{Path.Combine(options.Workspace, "scripts", "build-harness-dashboard.sh")}} -Workspace "{{options.Workspace}}" -Out dashboard/harness -Language en
-```
-
-or on PowerShell:
-
-```powershell
-.\{{Path.Combine(options.Workspace, "scripts", "build-harness-dashboard.ps1")}} -Workspace "{{options.Workspace}}" -Out dashboard/harness -Language en
+scripts/run-standard-migration-smoke.sh
 ```
 
 Codex bounded ticket:
@@ -1435,7 +1357,6 @@ Fix only the current ticket.
                 "migrator-verify-project",
                 "migrator-kit-doctor",
                 "git-diff-readonly",
-                "claim-heartbeat",
                 "evidence-write"
             },
             ["forbiddenCommandPatterns"] = new[]
@@ -1448,7 +1369,6 @@ Fix only the current ticket.
             },
             ["maxChangedFiles"] = 50,
             ["requiresEvidence"] = true,
-            ["requiresClaim"] = false,
             ["warnings"] = warnings.ToArray(),
             ["notes"] = "Agent must not inspect, test, or edit outside this scope-contract unless a new contract explicitly allows it."
         };
@@ -1526,42 +1446,16 @@ Fix only the current ticket.
             "scripts/check-final-gate.sh",
             "scripts/check-harness-policy.ps1",
             "scripts/check-harness-policy.sh",
-            "scripts/new-claim.ps1",
-            "scripts/new-claim.sh",
-            "scripts/update-claim-heartbeat.ps1",
-            "scripts/update-claim-heartbeat.sh",
-            "scripts/complete-claim.ps1",
-            "scripts/complete-claim.sh",
-            "scripts/claim-doctor.ps1",
-            "scripts/claim-doctor.sh",
-            "scripts/move-stale-claims.ps1",
-            "scripts/move-stale-claims.sh",
-            "scripts/record-run-evidence.ps1",
-            "scripts/record-run-evidence.sh",
             "scripts/write-memory-compaction-receipt.ps1",
             "scripts/write-memory-compaction-receipt.sh",
             "scripts/evaluate-command-policy.ps1",
             "scripts/evaluate-command-policy.sh",
-            "scripts/check-loop-guard.ps1",
-            "scripts/check-loop-guard.sh",
-            "scripts/build-harness-dashboard.ps1",
-            "scripts/build-harness-dashboard.sh",
             "scripts/export-opencode-session.ps1",
             "scripts/export-opencode-session.sh",
-            "scripts/write-sentinel-finding.ps1",
-            "scripts/write-sentinel-finding.sh",
-            "scripts/complete-sentinel-inspection.ps1",
-            "scripts/complete-sentinel-inspection.sh",
             "scripts/write-agent-skill-usage.ps1",
             "scripts/write-agent-skill-usage.sh",
             "scripts/record-agent-skill-profile.ps1",
             "scripts/record-agent-skill-profile.sh",
-            "scripts/slice-gate-followups.ps1",
-            "scripts/slice-gate-followups.sh",
-            "scripts/evaluate-wave-quality-budget.ps1",
-            "scripts/evaluate-wave-quality-budget.sh",
-            "scripts/start-fresh-wavefront-run.ps1",
-            "scripts/start-fresh-wavefront-run.sh",
             "scripts/collect-mapping-research-memory.ps1",
             "scripts/collect-mapping-research-memory.sh",
             "scripts/create-feedback-bundle.ps1",
@@ -1573,9 +1467,7 @@ Fix only the current ticket.
             "scripts/update-current-ticket-status.ps1",
             "scripts/update-current-ticket-status.sh",
             "scripts/repair-jsonl-ledger.ps1",
-            "scripts/repair-jsonl-ledger.sh",
-            "scripts/update-sentinel-finding-status.ps1",
-            "scripts/update-sentinel-finding-status.sh"
+            "scripts/repair-jsonl-ledger.sh"
         };
         var entries = guardFiles.Select(relative =>
         {
@@ -1693,10 +1585,7 @@ Fix only the current ticket.
             || normalized.StartsWith("state/handoff.md", StringComparison.Ordinal)
             || normalized.StartsWith("state/stop-policy-checklist.md", StringComparison.Ordinal)
             || normalized.StartsWith("state/final-gate.md", StringComparison.Ordinal)
-            || normalized.StartsWith("state/harness-run.json", StringComparison.Ordinal)
-            || normalized.StartsWith("state/harness-events.jsonl", StringComparison.Ordinal)
             || normalized.StartsWith("state/scope-contract.json", StringComparison.Ordinal)
-            || normalized.StartsWith("state/claims/", StringComparison.Ordinal)
             || normalized.StartsWith("state/memory/", StringComparison.Ordinal)
             || normalized.StartsWith("state/harness-policy-result.", StringComparison.Ordinal);
     }
@@ -1880,9 +1769,9 @@ Examples:
   selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --source ./OldTests
   selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration --source ./OldTests
 
-Generated orchestration files:
-  migration/state/scope-contract.json fixes allowed source/workspace roots for waves.
-  migration/scripts/new-claim.* and claim-doctor.* provide file-based claim/lease MVP.
+Generated standard-run files:
+  migration/state/scope-contract.json fixes the allowed source and workspace roots.
+  migration/scripts/check-final-gate.* validates concrete migration and project-verification artifacts.
 """);
     }
 

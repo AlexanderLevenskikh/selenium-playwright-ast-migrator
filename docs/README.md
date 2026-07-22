@@ -1,5 +1,7 @@
 # Documentation index
 
+> **Execution model:** one standard full-project run is supported. `pilot` is optional calibration; partition-specific planning and acceptance state are not used.
+
 This index keeps the current workflow short and avoids legacy agent-launch noise.
 
 ## Start here
@@ -7,10 +9,7 @@ This index keeps the current workflow short and avoids legacy agent-launch noise
 - [Quick start](quick-start.md) — first successful local run, including guarded agent bootstrap.
 - [Guarded OpenCode Desktop migration runbook](guarded-opencode-desktop-runbook.ru.md) — canonical guarded agent workflow: local tool build/update, `kit bootstrap-opencode`, `/supervised-task`, approve/deny rules, scope/final gates, and forensic export.
 - [Migration runbook](migration-runbook.md) — production migration plan, pilot scope, risks, and command chain.
-- [Wave mode operator runbook](wave-mode-operator-runbook.md) / [RU](wave-mode-operator-runbook.ru.md) — operating guide for an already bootstrapped wave workspace: blocked gates, current tickets, sentinel finding lifecycle, wave quality budget, mapping research memory, and feedback bundle handoff.
-- [Wave-plan tuning without agents](wave-plan-tuning.md) / [RU](wave-plan-tuning.ru.md) — deterministic budget experiment, auto profile, affinity-aware batching, and calibration of role overhead.
-- [Quality-driven wave controller and migration wave manager](wave-quality-manager.md) / [RU](wave-quality-manager.ru.md) — outcome metrics, root/cascade TODOs, profit-aware remediation, immutable acceptance receipts, and hard next-wave locks.
-- [Protected fast agent runtime](migration-agent-runtime.md) / [RU](migration-agent-runtime.ru.md) — deterministic single-action role routing, hash-chained role receipts, bounded agent turns, and lifecycle performance evidence.
+- [Run mode operator runbook](standard-migration-flow.md) / [RU](standard-migration-flow.ru.md) — operating guide for an already bootstrapped run workspace: blocked gates, bounded repair tickets, project verification, mapping research memory, and feedback bundle handoff.
 - [Tool installation](tool-installation.md) — install from a packed dotnet tool or run from source.
 - [Standalone installation](standalone-installation.md) / [RU](standalone-installation.ru.md) — install the CLI without .NET SDK/runtime.
 - [npm wrapper](npm-wrapper.md) — install the standalone CLI through npm for frontend-heavy teams.
@@ -36,7 +35,7 @@ This index keeps the current workflow short and avoids legacy agent-launch noise
 - [Migration learning pack](migration-learning-pack.md) — guided learning material for users adopting the migrator.
 - [Migration PR pack](migration-pr-pack.md) — Migration PR pack for reviewable migration pull requests.
 - [Config Authoring Assistant](config-authoring-assistant.md) — helper workflow for generating and normalizing project config.
-- [Project-scoped Migration Memory RFC](rfcs/project-scoped-migration-memory.md) — project-local memory for decisions, warnings, final-gate lessons, divide-and-conquer wave planning, bounded wave runs, and config-delta merge validation.
+- [Project-scoped Migration Memory RFC](rfcs/project-scoped-migration-memory.md) — project-local memory for decisions, warnings, final-gate lessons, divide-and-conquer run planning, bounded run runs, and config-delta merge validation.
 
 ## Examples and demos
 
@@ -62,8 +61,8 @@ This index keeps the current workflow short and avoids legacy agent-launch noise
 - [Report serve dashboard](report-serve-dashboard.md)
 - [Evidence pack workflow](evidence-pack.md)
 - [Migration feedback bundles](migration-feedback-bundles.md) — `create-feedback-bundle` user flow for redacted `feedback-bundle/v1` artifacts that turn TODO/unresolved-symbol/verify blockers into migrator fixtures and product fixes.
-- [Wave mode operator runbook](wave-mode-operator-runbook.md) — end-to-end operations reference for gate-followup loops, noisy waves, mapping memory, and safe escalation.
-- [Public preview flow](public-preview-flow.md) / [RU](public-preview-flow.ru.md) — `public-preview-flow/v1` end-to-end safe-by-default route from install to wave follow-ups and `feedback-bundle/v1`.
+- [Run mode operator runbook](standard-migration-flow.md) — end-to-end operations reference for gate-followup loops, noisy standard runs, mapping memory, and safe escalation.
+- [Public preview flow](public-preview-flow.md) / [RU](public-preview-flow.ru.md) — `public-preview-flow/v1` end-to-end safe-by-default route from install to run follow-ups and `feedback-bundle/v1`.
 
 ## Agent/guardrail references
 
@@ -71,10 +70,8 @@ The current launch procedure is only the guarded Desktop runbook above. Detailed
 
 - [Agent docs audit](agent-docs-audit.md)
 - [Migration safety playbook](migration-safety-playbook.md)
-- [Migrator Agent Harness Kit](migrator-agent-harness-kit.md) / [RU](migrator-agent-harness-kit.ru.md) — English-first reference for autopilot policy, run artifacts, gates, and dashboard i18n.
+- [Migrator Agent Harness Kit](migrator-agent-harness-kit.md) / [RU](migrator-agent-harness-kit.ru.md) — standard-run safety, project verification, memory, and final-gate rules.
 - [Agent environments](agent-environments.md) / [RU](agent-environments.ru.md) — portable bootstrap matrix for Windows OpenCode Desktop, macOS/Linux/WSL OpenCode CLI, Codex, CI, and other agents.
-- [Migrator Agent Harness Dogfood](migrator-agent-harness-dogfood.md) / [RU](migrator-agent-harness-dogfood.ru.md) — reproducible smoke pass for installing the kit, creating a run, writing events, and validating harness policy.
-- [Migrator Agent Harness Dashboard](migrator-agent-harness-dashboard.md) / [RU](migrator-agent-harness-dashboard.ru.md) — live-capable, human-friendly dashboard with Russian switch, wave progress, hints, current/next work, and generated-test previews.
 - [`templates/migration-kit/AGENT_CONTRACT.md`](../templates/migration-kit/AGENT_CONTRACT.md)
 - [`templates/migration-kit/state/final-gate.md`](../templates/migration-kit/state/final-gate.md)
 - [`templates/opencode-team/INSTALLATION-SAFETY.md`](../templates/opencode-team/INSTALLATION-SAFETY.md)
@@ -117,8 +114,6 @@ or create a deep-dive/reference doc that links back to that runbook.
 
 - [OpenCode TrustedProject permissions](opencode-trusted-project-permissions.md)
 
-- [Harness continuation strict protocol](harness-continuation-strict.md)
 
-- [Harness supervised task dispatch](harness-supervised-task-autonext.md) — `/supervised-task` zero-argument dispatcher, persisted `FINAL_STOPPED_FOR_REVIEW` closed loop, and stop-for-review after fresh SUCCESS.
 
-- [Agent orchestration primitives](agent-orchestration.md) — scope contracts, claims/leases, safe autopilot categories, and final-gate scope failures.
+- [Agent orchestration primitives](agent-orchestration.md) — the four-role standard flow, scope contracts, evidence rules, and recovery.

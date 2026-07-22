@@ -1,5 +1,7 @@
 # Troubleshooting
 
+> **Execution model:** one standard full-project run is supported. `pilot` is optional calibration; partition-specific planning and acceptance state are not used.
+
 ## Installation diagnostics starts with PATH, not dotnet tool list
 
 Do not start diagnostics with `dotnet tool list` only. The CLI can be installed as standalone, npm wrapper, dotnet global tool, or dotnet local tool. First check what the current shell actually resolves:
@@ -199,8 +201,8 @@ selenium-pw-migrator --version
 Check both managed copies:
 
 ```powershell
-Select-String -Path migration/opencode-team/global/.config/opencode/commands/supervised-task.md -Pattern continuous
-Select-String -Path .opencode/commands/supervised-task.md -Pattern continuous
+Select-String -Path migration/opencode-team/global/.config/opencode/commands/supervised-task.md -Pattern "selenium-pw-migrator run"
+Select-String -Path .opencode/commands/supervised-task.md -Pattern "selenium-pw-migrator run"
 ```
 
 Current builds treat `migration/opencode-team/**` as kit-owned during update. A normal bootstrap must refresh that workspace command pack first and then resync the repository-root `.opencode` directories:
@@ -214,9 +216,9 @@ selenium-pw-migrator kit bootstrap-opencode `
 
 Expected update markers include `kit-overwrite: ...migration/opencode-team/...` and `sync: .../.opencode/commands`. Older builds had a defect where the workspace copy was preserved and the stale file was copied back to `.opencode`; for that older version only, `--force` is a one-time workaround.
 
-## Harness continuation strict protocol
+## Standard-run recovery
 
-After a non-final final gate, read `migration/state/continuation-decision.json`. If it says `CONTINUE_REQUIRED`, `NOT FINAL` is not a stopping point: execute exactly one next bounded action under `migration/**` before a user-facing handoff. A fresh `FINAL` checkpoint stops once for review in default mode. If this invocation used `continuous` or `--continuation auto`, persist the checkpoint and immediately enter another guarded bounded cycle or eligible next wave. Any later `/supervised-task` where `harness-run.json` is already `FINAL_STOPPED_FOR_REVIEW` resumes the closed post-final loop automatically. Stop for guard/scope/policy blocker, human decision, critical risk, malformed evidence, missing input, no-progress/plateau, limitations, or max autonomous budget.
+After an interruption, inspect the latest `migration/runs/run-*` directory, current reports, `current-ticket.md`, and git diff. Resume from concrete artifacts. Never recreate missing verification JSON or copy a PASS receipt from another run. Apply one bounded fix, then repeat the complete configured source scope.
 
 ## `artifact-hygiene` reports a PowerShell syntax error, but `validate-scripts.ps1` passed
 

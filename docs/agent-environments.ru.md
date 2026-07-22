@@ -1,5 +1,7 @@
 # Агентские окружения
 
+> **Execution model:** one standard full-project run is supported. `pilot` is optional calibration; partition-specific planning and acceptance state are not used.
+
 Migrator Agent Harness Kit не привязан к конкретному агенту. OpenCode сегодня поддержан лучше всего как UI, но настоящий контракт — это установленный workspace `migration/`. Codex, CI и generic agents могут работать по тому же контракту, если читают установленные файлы, остаются внутри allowed roots и запускают gates.
 
 ## Рекомендуемый маршрут
@@ -11,7 +13,7 @@ selenium-pw-migrator start --input ./SeleniumTests --agent opencode --workspace 
 selenium-pw-migrator pilot --input ./SeleniumTests --max-tests 10 --out migration/pilot
 ```
 
-`start` пишет `migration/current-ticket.md`, `migration/next-commands.md` и `migration/state/start-dispatch.json`. Агент должен считать эти файлы активной bounded task. Если state понятен, агент не должен снова спрашивать пользователя широким меню “что делать дальше”.
+`start` пишет `migration/current-ticket.md`, `migration/next-commands.md` и `migration/state/start-dispatch.json`. Агент должен считать эти файлы активной bounded task. Если state понятен, он продолжает её напрямую, не предлагает широкое меню и не переключается на посторонний рефакторинг/документацию. Если source не настроен, агент останавливается с `SOURCE_SCOPE_MISSING`, а не угадывает путь.
 
 ## OpenCode Desktop или OpenCode CLI
 
@@ -35,13 +37,13 @@ Legacy Windows shortcut всё ещё поддержан:
 selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --config migration/profiles/adapter-config.start.json --project-desktop
 ```
 
-После этого откройте корень product repo в OpenCode и запустите one-command wavefront start:
+После этого откройте корень product repo в OpenCode и запустите one-command standard flow start:
 
 ```text
-/supervised-task waves
+/supervised-task
 ```
 
-`bootstrap-opencode` применяет repository-root command pack (`opencode.jsonc`, `.opencode/agents`, `.opencode/commands` и `AGENTS.md`, если его ещё нет) до запуска OpenCode. Orchestrator должен по возможности автоматически определить source/target/framework, запустить doctor, создать wavefront plan, материализовать первую wave и выполнить только wave-local migration. Он обязан создать или возобновить `migration/runs/<run-id>/` через `migration/scripts/new-harness-run.ps1` или `.sh`; пользователь не должен вручную создавать run folders. Для существующего workspace обычный `/supervised-task` возобновляет active bounded state.
+`bootstrap-opencode` применяет repository-root command pack (`opencode.jsonc`, `.opencode/agents`, `.opencode/commands` и `AGENTS.md`, если его ещё нет) до запуска OpenCode. Orchestrator определяет source/target/framework, запускает doctor, при необходимости делает небольшой pilot, затем выполняет один полный `selenium-pw-migrator run` и реальный `verify-project`. Папка run создаётся CLI, а не агентом вручную.
 
 ## Codex, CI или другой coding agent
 
@@ -128,6 +130,6 @@ selenium-pw-migrator report serve --input migration/runs/latest --static-only --
 
 - Английские docs — canonical; русские docs — secondary localization.
 - Machine-readable events и report status codes остаются language-neutral.
-- Агент может продолжать автономно только для действий, разрешённых `harness-policy.json` и `AGENT_CONTRACT.md`.
-- Агент должен спрашивать перед package installs, network access, broad shell operations или edits outside allowed roots.
+- Агент может выполнять только ограниченные действия, разрешённые `harness-policy.json` и `AGENT_CONTRACT.md`, после чего должен остановиться с evidence.
+- Агент должен остановиться и запросить явное разрешение пользователя перед package installs, network access, broad shell operations или edits outside allowed roots; нельзя угадывать согласие или обходить ограничение.
 - Финальный успех требует evidence и gates, а не уверенный ответ в чате.

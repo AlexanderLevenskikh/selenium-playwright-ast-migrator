@@ -41,7 +41,7 @@ migration/
 Можно переопределить:
 
 ```powershell
-dotnet run --project .\Migrator.Cli -- --mode orchestrate --input "<tests>" --out run-1 --workspace ".migration" --format both
+dotnet run --project .\Migrator.Cli -- run --input "<tests>" --out run-1 --workspace ".migration" --format both
 ```
 
 Тогда результат будет в:

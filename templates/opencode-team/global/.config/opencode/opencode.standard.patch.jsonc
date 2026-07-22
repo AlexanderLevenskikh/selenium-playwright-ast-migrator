@@ -1,6 +1,8 @@
 {
-  "$schema": "https://opencode.ai/config.json",
-  "default_agent": "orchestrator",
+  // Reference profile for low-noise autopilot migration runs.
+  // This is now the default policy shape used by opencode.jsonc:
+  // allow routine repository work by default and deny only destructive,
+  // publishing, broad VCS reset, external-directory, and network fetch actions.
   "permission": {
     "read": "allow",
     "glob": "allow",

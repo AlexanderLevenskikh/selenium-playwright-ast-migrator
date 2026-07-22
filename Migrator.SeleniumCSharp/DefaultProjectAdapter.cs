@@ -1883,12 +1883,17 @@ public class DefaultProjectAdapter : IProjectAdapter
         string statement,
         Dictionary<string, PlaceholderValue> placeholders)
     {
-        // Result bindings are target-language syntax. For example, the same C#
-        // deconstruction `(_, actual)` must render as `(_, actual)` in C# but
-        // `[, actual]` in TypeScript. Keep {result} unresolved until the target
-        // renderer can apply its own binding syntax; resolve all other invocation
-        // placeholders here as before.
-        if (!placeholders.ContainsKey("result"))
+        if (!placeholders.TryGetValue("result", out var resultPlaceholder))
+            return SubstitutePlaceholders(statement, placeholders);
+
+        // A plain local name is target-neutral and should already be visible in the
+        // adapted action. This keeps adapter reports and downstream tests concrete:
+        // `var {result} = ...` becomes `var page = ...`.
+        //
+        // Tuple/deconstruction bindings are target-language syntax. The same C#
+        // binding `(_, actual)` must become `[, actual]` for TypeScript, so complex
+        // bindings intentionally remain unresolved until the target renderer.
+        if (Regex.IsMatch(resultPlaceholder.RawText.Trim(), @"^@?[A-Za-z_]\w*$"))
             return SubstitutePlaceholders(statement, placeholders);
 
         var nonResultPlaceholders = placeholders

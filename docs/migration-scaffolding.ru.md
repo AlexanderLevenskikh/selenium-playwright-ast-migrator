@@ -45,8 +45,8 @@ Renderer заменяет выбранный вызов на явный `__Migra
 - assertions, API Selenium/Playwright, селекторы, waits и произвольные выражения запрещены;
 - suppression и scaffolding не могут владеть одним методом или шаблоном;
 - catch-all и wildcard в owner отклоняются валидатором;
-- количество scaffold-корней и полностью scaffold-зависимых тестов ограничено на wave;
-- при наличии scaffold `ACCEPT_WAVE` запрещён, используется `ACCEPT_WITH_SCAFFOLDING`;
+- количество scaffold-корней и полностью scaffold-зависимых тестов ограничено на стандартный запуск;
+- при наличии scaffold нельзя заявлять runtime-ready acceptance; результат маркируется как structural-only;
 - `runtimeReady` при этом всегда остаётся `false`.
 
 Целевой результат — `MIGRATED_WITH_SCAFFOLDING`: массовая структура тестов переписана и компиляционно связана, а небольшой честный список runtime-blocker-ов остаётся для изолированной доработки.

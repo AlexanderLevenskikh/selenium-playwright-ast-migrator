@@ -7,11 +7,11 @@ Overall status: NOT_STARTED
 Allowed values:
 
 - NOT_STARTED
-- CONTINUE_AUTONOMOUSLY
-- READY_FOR_ACCEPTANCE
-- TICKET_NEEDED
-- BLOCKED_BY_ENVIRONMENT
-- BLOCKED_BY_MISSING_INPUT
+- RUNNING
+- READY_FOR_REVIEW
+- BLOCKED
+- COMPLETE_WITH_LIMITATIONS
+- COMPLETE
 
 ## Scope
 
@@ -21,32 +21,30 @@ Allowed values:
 - Workspace: {{WORKSPACE}}
 - Latest run: {{OUTPUT}}
 
-## Last checkpoint
+## Latest full run
 
 - Date/time:
 - Command:
-- Project verify:
+- Output directory:
+- Project verification:
 - Compile errors:
 - TODO:
 - Runtime-ready:
 - Kit version: {{KIT_VERSION}}
 - Notes:
 
-## Current board summary
+## Evidence summary
 
-- Project verify:
-- Compile errors:
-- TODO:
-- Top categories:
-- Runtime-ready candidates:
+- Orchestration report:
+- Generated report:
+- Project verify report:
+- Final gate:
+- Scope check:
+- Memory doctor:
 
-## Completed batches
+## Last bounded repair
 
-### Batch 1
-
-Goal:
-
-Result:
+Root cause:
 
 Files changed:
 
@@ -72,7 +70,7 @@ Decision:
 
 - kept / reverted / blocked
 
-## Stateful loop files
+## Supporting state
 
 - Handoff: `{{WORKSPACE}}/state/handoff.md`
 - Run ledger: `{{WORKSPACE}}/state/run-ledger.md`
@@ -82,8 +80,8 @@ Decision:
 
 ## Remaining work
 
-- 
+-
 
 ## Blockers
 
-- 
+-

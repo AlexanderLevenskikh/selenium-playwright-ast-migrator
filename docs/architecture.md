@@ -139,7 +139,7 @@ dotnet run --project .\Migrator.Cli -- --mode index-pom --input "<Selenium proje
 
 Читать подробности: `docs/pom-indexing.md`.
 
-Правило: найденные POM-факты являются source truth, а `inferred-pom-candidates.json` — только черновик. Inferred candidates нельзя автоматически переносить в `adapter-config.json`: сначала найти POM/helper/source truth; если это невозможно безопасно вывести из кода, классифицировать как `TICKET_NEEDED`.
+Правило: найденные POM-факты являются source truth, а `inferred-pom-candidates.json` — только черновик. Inferred candidates нельзя автоматически переносить в `adapter-config.json`: сначала найти POM/helper/source truth; если это невозможно безопасно вывести из кода, классифицировать как `NEED_MORE_EVIDENCE`.
 
 
 ## CLI decomposition

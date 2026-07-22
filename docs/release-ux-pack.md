@@ -105,9 +105,6 @@ selenium-pw-migrator doctor release --out release-doctor --format both
 The release doctor verifies package metadata, publish workflows, npm/standalone smoke script presence, install diagnostics, `self update`, `bootstrap-agent`, dashboard-first docs, and repository hygiene before heavier CI/publish jobs run.
 
 
-## SUCCESS checkpoint / explicit continue
+## Standard completion checkpoint
 
-SUCCESS checkpoints default to stop-for-review. After FINAL/PASS, `/supervised-task` reports evidence, remaining risks, and one recommended `/supervised-task continue` command. Plain continue starts the closed post-final research/research-lead/task-slicing loop; implementation requires approved research/current-ticket, a concrete implementation request, or bounded auto-continuation.
-
-When a final gate passes, `check-final-gate.ps1` updates `migration/state/harness-run.json` to `FINAL_STOPPED_FOR_REVIEW` when that file exists. In default mode, report why the SUCCESS checkpoint paused and recommend `/supervised-task continue`. In `continuous` / `--continuation auto` mode, persist the same checkpoint but immediately re-read state and continue until a real terminal condition.
-
+A successful handoff requires current run reports, matching `verify-project` evidence, artifact hygiene, and final gate. The agent reports remaining limitations and stops. A later `/supervised-task continue` may apply one bounded high-payoff repair and rerun the complete source scope; there is no persistent continuation state machine.

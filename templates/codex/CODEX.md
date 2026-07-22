@@ -5,11 +5,11 @@ Use this file when a migration task is delegated to Codex instead of the default
 ## Boundary
 
 - Work on one bounded ticket at a time.
-- Prefer engine/config fixes over editing generated output.
+- In a product migration workspace, prefer adapter-config or generated-helper/POM fixes over editing generated output. Treat a suspected Migrator engine defect as a reproducible bug report unless this task explicitly authorizes edits in the Migrator repository.
 - Do not hide TODOs by adding broad suppressions.
 - Do not add `page` or `pagef` to `TargetKnownIdentifiers` just to silence unresolved symbols.
 - Keep generated tests compile-safe and deterministic.
-- Add focused regression tests for engine changes when a suitable test area exists.
+- When explicitly working in the Migrator repository, add focused regression tests for engine changes when a suitable test area exists.
 
 ## Required inputs
 

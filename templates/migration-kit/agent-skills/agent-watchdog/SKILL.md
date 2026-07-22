@@ -1,41 +1,25 @@
 # Skill: agent-watchdog
 
-Purpose: audit another agent's work by checking real artifacts, not summaries.
-
-## Use when
-
-- An executor, researcher, or orchestrator claims a task is done.
-- A run is about to be handed to the user.
-- A previous agent produced a plan, diff, migration run, research artifact, or final status.
+Purpose: audit another agent's work against current artifacts rather than summaries.
 
 ## Audit inputs
 
-Read or request:
-
-- the user's latest request;
-- active `harness-run.json` and `continuation-decision.json`;
-- active run files: `Prompt.md`, `Plan.md`, `Implement.md`, `Documentation.md`, `trace.jsonl`;
-- `harness-events.jsonl`;
+- latest user request and source-scope contract;
+- current run reports and generated test bodies;
 - git status/diff when available;
-- generated reports, quality dashboards, config deltas, memory deltas, and final-gate result;
-- verification logs the agent says it ran.
+- adapter config and memory deltas;
+- real `verify-project` output and final-gate result.
 
-## Checks
+## Block on
 
-Return `PASS`, `WARN`, or `BLOCK`.
+- writes outside the permitted scope;
+- fabricated, copied, stale, or missing verification evidence presented as PASS;
+- TODO reduction through assertion suppression, empty tests, or hidden user interactions;
+- repeated expensive reruns with no code/config/evidence change;
+- runtime-ready claims without fresh matching project verification;
+- a pilot being presented as full-project coverage.
 
-Block on:
-
-- forbidden writes outside the migration workspace;
-- missing active run for implementation work;
-- fake or missing verification evidence;
-- TODO reduction through assertion suppression, empty tests, or hidden interactions;
-- routine continuation questions despite an allowed next action;
-- repeated expensive verification without a new diff/evidence;
-- final-ready claims without final gate or explicit `NOT RUNTIME READY` evidence;
-- state contradictions between run status, continuation decision, task-slice result, and final gate.
-
-## Output format
+## Output
 
 ```text
 Verdict: PASS|WARN|BLOCK
@@ -48,4 +32,4 @@ Next bounded action:
 - ...
 ```
 
-Do not fix issues unless the caller explicitly asked for a narrow watchdog fix and the write is permitted.
+Do not fix issues unless explicitly delegated a narrow write scope.

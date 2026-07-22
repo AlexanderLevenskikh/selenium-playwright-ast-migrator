@@ -83,22 +83,22 @@ The dashboard is now meant to be a working triage surface, not only a status pag
 Decision meaning:
 
 - `create-ticket` — needs a focused migration ticket with evidence and acceptance checks.
-- `defer` — track later; not a first-wave blocker unless it appears in pilot/runtime tests.
+- `defer` — track later; not a initial blocker unless it appears in pilot/runtime tests.
 - `accept` — known/acceptable risk with evidence.
 
 The current implementation deliberately does not persist browser edits. That keeps the command safe for public use and CI artifacts. A future server-backed mode can add authenticated decision writes if needed.
 
-## Wavefront / memory / config-merge snapshot
+## Standard flow / memory / config-merge snapshot
 
-When `report serve` is opened for a run inside a migration workspace, it also renders a **Wavefront / memory / config-merge snapshot**. This keeps the divide-and-conquer iteration visible on the same dashboard as TODO/root-cause/runtime data.
+When `report serve` is opened for a run inside a migration workspace, it also renders a **Standard flow / memory / config-merge snapshot**. This keeps the divide-and-conquer iteration visible on the same dashboard as TODO/root-cause/runtime data.
 
 The snapshot is project-scoped only. It looks for nearby workspace artifacts such as:
 
 - `migration/state/memory/memory-summary.md`, `decisions.jsonl`, `warnings.jsonl`, `antipatterns.jsonl`, and `final-gate-lessons.jsonl`;
-- `migration/plan/waves.json`, `plan.md`, `selected-tests.txt`, and `memory-recall.md`;
+- `migration/plan/standard runs.json`, `plan.md`, `selected-tests.txt`, and `memory-recall.md`;
 - `migration/state/memory/config-deltas/*.json`;
 - `migration/config-merge/adapter-config.merged.json`, `merge-report.md/json`, `validate-merge-report.md/json`, and `conflicts.jsonl`.
 
-The dashboard does not promote or apply any rule. It only shows the current state, next wave candidates, suggested next commands, and whether config merge validation still has conflicts.
+The dashboard does not promote or apply any rule. It only shows the current state, next run candidates, suggested next commands, and whether config merge validation still has conflicts.
 
-`report-dashboard-evidence.zip` now includes these project-scoped memory, wavefront, and config-merge artifacts under `workspace/` entries when they are near the source run. The zip manifest marks this with `ProjectScopedMemoryAndWavefrontArtifactsIncluded` so reviewers can tell that the pack contains migration-state evidence, not only run-local reports.
+`report-dashboard-evidence.zip` now includes these project-scoped memory, standard flow, and config-merge artifacts under `workspace/` entries when they are near the source run. The zip manifest marks this with `ProjectScopedMemoryAndStandard flowArtifactsIncluded` so reviewers can tell that the pack contains migration-state evidence, not only run-local reports.

@@ -51,12 +51,6 @@ required_patterns = [
     r'^templates/migration-kit/scripts/write-agent-skill-usage\.sh$',
     r'^templates/migration-kit/scripts/record-agent-skill-profile\.ps1$',
     r'^templates/migration-kit/scripts/record-agent-skill-profile\.sh$',
-    r'^templates/migration-kit/scripts/slice-gate-followups\.ps1$',
-    r'^templates/migration-kit/scripts/slice-gate-followups\.sh$',
-    r'^templates/migration-kit/scripts/evaluate-wave-quality-budget\.ps1$',
-    r'^templates/migration-kit/scripts/evaluate-wave-quality-budget\.sh$',
-    r'^templates/migration-kit/scripts/start-fresh-wavefront-run\.ps1$',
-    r'^templates/migration-kit/scripts/start-fresh-wavefront-run\.sh$',
     r'^templates/migration-kit/scripts/collect-mapping-research-memory\.ps1$',
     r'^templates/migration-kit/scripts/collect-mapping-research-memory\.sh$',
     r'^templates/migration-kit/scripts/create-feedback-bundle\.ps1$',
@@ -69,8 +63,6 @@ required_patterns = [
     r'^templates/migration-kit/scripts/repair-jsonl-ledger\.sh$',
     r'^templates/migration-kit/scripts/update-current-ticket-status\.ps1$',
     r'^templates/migration-kit/scripts/update-current-ticket-status\.sh$',
-    r'^templates/migration-kit/scripts/update-sentinel-finding-status\.ps1$',
-    r'^templates/migration-kit/scripts/update-sentinel-finding-status\.sh$',
     r'^scripts/install-migration-kit\.ps1$',
 ]
 for pattern in required_patterns:

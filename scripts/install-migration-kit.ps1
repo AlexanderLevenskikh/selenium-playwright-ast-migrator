@@ -154,22 +154,10 @@ function Test-AutoUpdatedKitOwnedFile([string]$RelativePath) {
         $normalized -eq "scripts/check-harness-policy.sh" -or
         $normalized -eq "scripts/check-final-gate.ps1" -or
         $normalized -eq "scripts/check-final-gate.sh" -or
-        $normalized -eq "scripts/build-harness-dashboard.ps1" -or
-        $normalized -eq "scripts/build-harness-dashboard.sh" -or
-        $normalized -eq "scripts/new-harness-run.ps1" -or
-        $normalized -eq "scripts/new-harness-run.sh" -or
-        $normalized -eq "scripts/write-harness-event.ps1" -or
-        $normalized -eq "scripts/write-harness-event.sh" -or
         $normalized -eq "scripts/write-agent-skill-usage.ps1" -or
         $normalized -eq "scripts/write-agent-skill-usage.sh" -or
         $normalized -eq "scripts/record-agent-skill-profile.ps1" -or
         $normalized -eq "scripts/record-agent-skill-profile.sh" -or
-        $normalized -eq "scripts/slice-gate-followups.ps1" -or
-        $normalized -eq "scripts/slice-gate-followups.sh" -or
-        $normalized -eq "scripts/evaluate-wave-quality-budget.ps1" -or
-        $normalized -eq "scripts/evaluate-wave-quality-budget.sh" -or
-        $normalized -eq "scripts/start-fresh-wavefront-run.ps1" -or
-        $normalized -eq "scripts/start-fresh-wavefront-run.sh" -or
         $normalized -eq "scripts/collect-mapping-research-memory.ps1" -or
         $normalized -eq "scripts/collect-mapping-research-memory.sh" -or
         $normalized -eq "scripts/create-feedback-bundle.ps1" -or
@@ -182,9 +170,6 @@ function Test-AutoUpdatedKitOwnedFile([string]$RelativePath) {
         $normalized -eq "scripts/repair-jsonl-ledger.sh" -or
         $normalized -eq "scripts/update-current-ticket-status.ps1" -or
         $normalized -eq "scripts/update-current-ticket-status.sh" -or
-        $normalized -eq "scripts/update-sentinel-finding-status.ps1" -or
-        $normalized -eq "scripts/update-sentinel-finding-status.sh" -or
-        $normalized -eq "state/continuation-contract.md" -or
         $normalized.StartsWith("prompts/") -or
         $normalized.StartsWith("agent-skills/") -or
         $normalized.StartsWith("opencode-team/")
@@ -205,8 +190,6 @@ function Test-WorkspaceMutableFile([string]$RelativePath) {
         $normalized.StartsWith("state/handoff.md") -or
         $normalized.StartsWith("state/stop-policy-checklist.md") -or
         $normalized.StartsWith("state/final-gate.md") -or
-        $normalized.StartsWith("state/harness-run.json") -or
-        $normalized.StartsWith("state/harness-events.jsonl") -or
         $normalized.StartsWith("state/harness-policy-result.")
     )
 }
@@ -339,18 +322,10 @@ function Write-GuardChecksums([string]$WorkspacePath) {
         "scripts/check-final-gate.sh",
         "scripts/check-harness-policy.ps1",
         "scripts/check-harness-policy.sh",
-        "scripts/build-harness-dashboard.ps1",
-        "scripts/build-harness-dashboard.sh",
         "scripts/write-agent-skill-usage.ps1",
         "scripts/write-agent-skill-usage.sh",
         "scripts/record-agent-skill-profile.ps1",
         "scripts/record-agent-skill-profile.sh",
-        "scripts/slice-gate-followups.ps1",
-        "scripts/slice-gate-followups.sh",
-        "scripts/evaluate-wave-quality-budget.ps1",
-        "scripts/evaluate-wave-quality-budget.sh",
-        "scripts/start-fresh-wavefront-run.ps1",
-        "scripts/start-fresh-wavefront-run.sh",
         "scripts/collect-mapping-research-memory.ps1",
         "scripts/collect-mapping-research-memory.sh",
         "scripts/create-feedback-bundle.ps1",
@@ -363,8 +338,6 @@ function Write-GuardChecksums([string]$WorkspacePath) {
         "scripts/repair-jsonl-ledger.sh",
         "scripts/update-current-ticket-status.ps1",
         "scripts/update-current-ticket-status.sh",
-        "scripts/update-sentinel-finding-status.ps1",
-        "scripts/update-sentinel-finding-status.sh"
     )
 
     $entries = @()
@@ -515,7 +488,7 @@ $quickStartLines = @(
     "",
     "## 2. Apply OpenCode project config when using OpenCode",
     "",
-    "If you prepared a divide-and-conquer wavefront manually or used an install mode that did not copy OpenCode files into the project root, run:",
+    "If your install mode did not copy OpenCode files into the project root, run:",
     "",
     '```powershell',
     ".\$(Join-Path $Workspace 'scripts/apply-opencode-project-config.ps1') -RepoRoot . -Workspace `"$Workspace`"",
@@ -536,58 +509,32 @@ $quickStartLines = @(
     "## 4. Resume after interruptions",
     "",
     '```text',
-    "$(Join-Path $Workspace 'prompts/resume-prompt.txt')",
+    "$(Join-Path $Workspace 'prompts/continue-run-prompt.txt')",
     '```',
     "",
-    "## 5. Run one stateful loop batch",
+    "## 5. Run one bounded repair",
     "",
     '```text',
-    "$(Join-Path $Workspace 'prompts/loop-batch-prompt.txt')",
+    "$(Join-Path $Workspace 'prompts/bounded-repair-prompt.txt')",
     '```',
     "",
-    "## 6. Start an autopilot harness run",
-    "",
-    "Bash:",
+    "## 6. Run the standard migration",
     "",
     '```bash',
-    "./$(Join-Path $Workspace 'scripts/new-harness-run.sh') -TaskTitle `"Pilot migration batch`" -Goal `"Run one bounded artifact-only Selenium to Playwright migration batch.`"",
-    "./$(Join-Path $Workspace 'scripts/check-harness-policy.sh') -Workspace `"$Workspace`" -RepoRoot .",
+    "selenium-pw-migrator run --input `"$Source`" --config `"$Config`" --out `"$Output`" --format both",
+    "selenium-pw-migrator verify-project --input `"$Source`" --config `"$Config`" --out `"$(Join-Path $Output 'verify-project')`" --format both",
+    "./$(Join-Path $Workspace 'scripts/check-final-gate.sh') -Workspace `"$Workspace`" -Run `"$Output`" -RepoRoot .",
     '```',
     "",
-    "PowerShell:",
+    "PowerShell uses the same CLI commands and `check-final-gate.ps1`.",
     "",
-    '```powershell',
-    ".\$(Join-Path $Workspace 'scripts/new-harness-run.ps1') -TaskTitle `"Pilot migration batch`" -Goal `"Run one bounded artifact-only Selenium to Playwright migration batch.`"",
-    ".\$(Join-Path $Workspace 'scripts/check-harness-policy.ps1') -Workspace `"$Workspace`" -RepoRoot .",
-    '```',
-    "",
-    "## 7. Run Harness Kit dogfood smoke",
-    "",
-    "From the Migrator repository root:",
+    "Repository smoke test:",
     "",
     '```bash',
-    "scripts/run-harness-dogfood-smoke.sh -Clean",
+    "scripts/run-standard-migration-smoke.sh",
     '```',
     "",
-    "PowerShell:",
-    "",
-    '```powershell',
-    ".\scripts\run-harness-dogfood-smoke.ps1 -Clean",
-    '```',
-    "",
-    "## 8. Generate Harness dashboard",
-    "",
-    '```bash',
-    "./$(Join-Path $Workspace 'scripts/build-harness-dashboard.sh') -Workspace `"$Workspace`" -Out dashboard/harness -Language en",
-    '```',
-    "",
-    "PowerShell:",
-    "",
-    '```powershell',
-    ".\$(Join-Path $Workspace 'scripts/build-harness-dashboard.ps1') -Workspace `"$Workspace`" -Out dashboard/harness -Language en",
-    '```',
-    "",
-    "## 9. Ask for next ticket",
+    "## 8. Ask for next ticket",
     "",
     '```text',
     "$(Join-Path $Workspace 'prompts/next-ticket-prompt.txt')",

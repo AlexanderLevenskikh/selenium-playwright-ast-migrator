@@ -512,7 +512,7 @@ internal static class MemoryCommand
         sb.AppendLine();
         if (entries.Count == 0)
         {
-            sb.AppendLine("No active project-local memory entries matched this file. Use global decisions carefully and inspect the current wave artifacts.");
+            sb.AppendLine("No active project-local memory entries matched this file. Use global decisions carefully and inspect the current run artifacts.");
         }
         else
         {
@@ -522,7 +522,7 @@ internal static class MemoryCommand
         sb.AppendLine();
         sb.AppendLine("Safety reminders:");
         sb.AppendLine("- Memory is guidance, not authority.");
-        sb.AppendLine("- Apply an entry only when its scope and conditions match the current file/wave.");
+        sb.AppendLine("- Apply an entry only when its scope and conditions match the current file/run.");
         sb.AppendLine("- Reviewer, Watchdog, and Final Gate can reject any memory-backed shortcut.");
         return sb.ToString();
     }
@@ -806,7 +806,7 @@ Files:
 - `final-gate-lessons.jsonl` — lessons from failed/passed gates;
 - `selector-map.json` — project-local selector knowledge with evidence;
 - `recall-index.json` / `recall-ledger.jsonl` — machine-readable evidence that scoped memory was actually recalled;
-- `config-deltas/` — run/wave config deltas, not the global adapter config.
+- `config-deltas/` — run-local config deltas, not the global adapter config.
 """;
 
     static string QuoteForShell(string value) => value.Contains(' ') ? $"\"{value}\"" : value;
@@ -837,7 +837,7 @@ Commands:
   explain       Print active migration memory for humans and agents.
   doctor        Validate memory invariants for final gate / watchdog use.
   summarize     Refresh memory-summary.md and optionally record a run lesson.
-  recall        Print active memory for one file/wave scope and record a recall receipt.
+  recall        Print active memory for one file/run scope and record a recall receipt.
 
 Kinds:
   decision | warning | antipattern | final-gate-lesson | user-note | preference | constraint

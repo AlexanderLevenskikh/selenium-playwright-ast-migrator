@@ -205,7 +205,7 @@ dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode propose --inpu
 Для итеративной разработки используйте режим orchestrate:
 
 ```bash
-dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- --mode orchestrate --input "./SeleniumTests" --config "./adapter-config.json" --out "./orchestration" --format both
+dotnet run --project ./Migrator.Cli/Migrator.Cli.csproj -- run --input "./SeleniumTests" --config "./adapter-config.json" --out "./orchestration" --format both
 ```
 
 Проверяйте `orchestration/orchestration-report.md` после каждого прогона. Применяйте одно high-priority предложение, затем реран.

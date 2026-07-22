@@ -1,11 +1,11 @@
 # Skill: efficient-frontier
 
-Purpose: keep the strongest/most expensive model or role focused on judgment while bounded helper roles perform token-heavy work.
+Purpose: keep the orchestrator focused on judgment while bounded read-only scans or one delegated write task reduce token-heavy work without creating a second scheduler.
 
 ## Use when
 
-- The task spans many files, waves, TODOs, logs, or generated artifacts.
-- Multiple independent scans can run without sharing mutable state.
+- The task spans many files, runs, TODOs, logs, or generated artifacts.
+- One or more independent read-only scans can run without sharing mutable state.
 - The hard part is deciding strategy, not reading every line personally.
 
 ## Orchestration pattern
@@ -14,8 +14,8 @@ The frontier/orchestrator role owns:
 
 - task framing;
 - risk tradeoffs;
-- decomposition into bounded work packets;
-- selection of helpers;
+- decomposition into bounded read-only evidence scans and at most one active write task;
+- selection from the installed executor, reviewer, and watchdog roles only;
 - integration of findings;
 - final verification strategy;
 - reviewer/watchdog/final-gate handoff.
@@ -31,9 +31,10 @@ Helper roles own:
 ## Rules
 
 - Give each helper one input scope, one output artifact, and one stop condition.
-- Do not let helpers write shared machine state unless their role owns it.
-- Prefer wave-local artifacts over global config edits.
-- Integrate findings before starting the next wave.
+- Do not create a queue of hidden execution batches. Only one delegated task may mutate files before the full run is repeated.
+- Read-only scans may run independently, but helpers must not write shared machine state.
+- Prefer run-local artifacts over global config edits.
+- Integrate findings before starting the next run.
 - Stop broad parallelism when state becomes contradictory or permission denied.
 
 ## Output expected from orchestrator

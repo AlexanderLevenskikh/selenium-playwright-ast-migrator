@@ -1,5 +1,7 @@
 # Quick start
 
+> **Execution model:** one standard full-project run is supported. `pilot` is optional calibration; partition-specific planning and acceptance state are not used.
+
 This is the public first-run route. It keeps the user path short: install, diagnose, choose one of three entries, run a representative pilot, and open the dashboard only after real run artifacts exist.
 
 ## Install and diagnose
@@ -36,7 +38,7 @@ For a project-pinned .NET tool, see [Tool installation](tool-installation.md).
 
 ## Choose one of three entries
 
-Harness run lifecycle is owned by the installed scripts such as `new-harness-run.ps1`, `write-harness-event.ps1`, and `check-final-gate.ps1`; agents should not hand-create run folders.
+A standard run is created directly by `selenium-pw-migrator run`; agents must not hand-create reports or validation evidence.
 
 
 OpenCode auto install can choose `project-local` on macOS/Linux/WSL, `project-desktop` on Windows Desktop, or `ci` for workspace-only compatibility. Codex and other non-OpenCode agents should use `bootstrap-agent`, not the `ci` OpenCode compatibility path.
@@ -64,15 +66,20 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Sel
 selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./SeleniumTests --project-desktop
 ```
 
-Then open the repository in OpenCode and run the one-command wavefront start:
+Then open the repository in OpenCode and run the one-command standard flow start:
 
 ```text
-/supervised-task waves
+/supervised-task
 ```
 
-`bootstrap-opencode` applies `opencode.jsonc`, `.opencode/agents`, `.opencode/commands`, and `AGENTS.md` into the repository root. `/supervised-task waves` must auto-detect the Selenium source path, target backend/framework, and existing Playwright target when possible; ask only for missing required inputs; run kit doctor, `migration plan --strategy wavefront --wave-profile auto` (including the no-agent tuning experiment), inspect `wave-tuning.md`, run `migration run-wave`, and then the wave-local migration. It must not start a full-source migration before a wave workspace exists. For existing workspaces, plain `/supervised-task` resumes the active bounded task from `migration/current-ticket.md` or continuation state.
+`bootstrap-opencode` applies `opencode.jsonc`, `.opencode/agents`, `.opencode/commands`, and `AGENTS.md` into the repository root. `/supervised-task` resolves the configured source, runs doctor, optionally calibrates on a small pilot, then executes one complete `selenium-pw-migrator run`, real `verify-project`, and the final gate. It may apply at most one highest-payoff bounded repair before repeating the complete source scope.
 
-After a fresh FINAL/PASS checkpoint, `/supervised-task` stops once for review by default and prints one recommended `/supervised-task continue` command. Add `continuous` or `--continuation auto` to ordinary `/supervised-task`, `continue`, `waves`, or `waves fresh` to keep the current invocation running through safe checkpoints and eligible next waves. Continuous mode still stops on DONE, limitations, blockers, human decisions, critical risk, scope violations, no-progress and exhausted budgets. On any later invocation where the workspace is already `FINAL_STOPPED_FOR_REVIEW`, zero-argument `/supervised-task` resumes post-final TODO/source-truth research, research-lead review, task slicing, change review, and one bounded executor task automatically. The full command/alias/modifier table is in [`supervised-task-modes.md`](supervised-task-modes.md).
+The same flow can be run manually:
+
+```shell
+selenium-pw-migrator run --input ./SeleniumTests --config migration/profiles/adapter-config.start.json --out migration/runs/run-001 --format both
+selenium-pw-migrator verify-project --input ./SeleniumTests --config migration/profiles/adapter-config.start.json --out migration/runs/run-001/verify-project --format both
+```
 
 ### 3. Migrate with Codex, CI, or another agent
 

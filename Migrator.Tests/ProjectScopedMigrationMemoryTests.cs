@@ -62,26 +62,20 @@ public class ProjectScopedMigrationMemoryTests
     }
 
     [Fact]
-    public void HarnessPromptsAndFinalGate_ReadAndValidateMemory()
+    public void HarnessPrompts_UseProjectMemoryWithoutTreatingItAsValidation()
     {
         var supervised = File.ReadAllText(FindRepositoryFile("templates/opencode-team/global/.config/opencode/commands/supervised-task.md"));
         var kickoff = File.ReadAllText(FindRepositoryFile("templates/migration-kit/prompts/kickoff-prompt.txt"));
-        var finalGate = File.ReadAllText(FindRepositoryFile("templates/migration-kit/scripts/check-final-gate.ps1"));
 
         Assert.Contains("migration/state/memory/memory-summary.md", supervised);
         Assert.Contains("selenium-pw-migrator memory explain --workspace migration", supervised);
         Assert.Contains("selenium-pw-migrator memory doctor --workspace migration", supervised);
-        Assert.Contains("{{WORKSPACE}}/state/memory/memory-summary.md", kickoff);
-        Assert.Contains("memory doctor --workspace {{WORKSPACE}}", kickoff);
-        Assert.Contains("Test-MigrationMemory", finalGate);
-        Assert.Contains("memory-doctor", finalGate);
-        Assert.Contains("active memory appears to allow assertion suppression", finalGate);
-        Assert.Contains("selector-map.json selector[$index] requires sourceExpression, targetLocator, and evidence[]", finalGate);
-        Assert.Contains("Write-Output -NoEnumerate $property.Value", finalGate);
+        Assert.Contains("memory", kickoff, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("real `verify-project`", kickoff, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void Rfc_DocumentsLocalOnlyScopeAndFutureWavefrontBoundary()
+    public void Rfc_DocumentsLocalOnlyScopeAndStandardRunBoundary()
     {
         var rfc = File.ReadAllText(FindRepositoryFile("docs/rfcs/project-scoped-migration-memory.md"));
 
@@ -90,7 +84,7 @@ public class ProjectScopedMigrationMemoryTests
         Assert.Contains("No cross-project/org knowledge pack", rfc);
         Assert.Contains("memory is guidance, not authority", rfc.ToLowerInvariant());
         Assert.Contains("Final gate must validate project memory", rfc);
-        Assert.Contains("Future: divide-and-conquer wavefront", rfc);
+        Assert.Contains("Standard runs remain project-local", rfc);
     }
 
     static string FindRepositoryFile(string relativePath)

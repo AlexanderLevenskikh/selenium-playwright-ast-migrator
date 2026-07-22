@@ -31,7 +31,7 @@ The goal is not to blindly translate every old POM class 1:1. The goal is to pre
 
 ## Missing target POM is not a blocker
 
-If the existing Playwright target project has low POM coverage, do not immediately stop with `TICKET_NEEDED`.
+If the existing Playwright target project has low POM coverage, do not immediately stop with `NEED_MORE_EVIDENCE`.
 
 Use this decision order:
 

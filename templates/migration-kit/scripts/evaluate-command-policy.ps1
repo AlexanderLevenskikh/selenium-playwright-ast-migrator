@@ -53,18 +53,13 @@ foreach ($pattern in $reviewPatterns) {
     }
 }
 
-$safePatterns = @("git status", "git diff", "git log", "kit doctor", "verify-project", "check-harness-policy", "check-final-gate", "check-scope", "record-run-evidence", "new-claim", "claim-doctor", "update-claim-heartbeat", "complete-claim")
+$safePatterns = @("git status", "git diff", "git log", "kit doctor", "verify-project", "check-harness-policy", "check-final-gate", "check-scope", "selenium-pw-migrator run", "report serve")
 $safeMatch = @($safePatterns | Where-Object { $lower.Contains($_.ToLowerInvariant()) })
 if ($decision -eq "safe" -and $safeMatch.Count -eq 0) {
     $decision = "review-required"
-    $reasons += "command did not match known safe autopilot command classes"
+    $reasons += "command did not match known safe standard-migration command classes"
 }
 
-if ($policy -ne $null -and $policy.PSObject.Properties["autopilot"]) {
-    if ($decision -eq "forbidden" -and [string]$policy.autopilot.dangerousDestructiveCommands -ne "forbidden") {
-        $reasons += "policy does not explicitly forbid dangerousDestructiveCommands"
-    }
-}
 
 $result = [ordered]@{
     schemaVersion = 1

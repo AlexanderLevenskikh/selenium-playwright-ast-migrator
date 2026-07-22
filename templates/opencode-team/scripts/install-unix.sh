@@ -90,5 +90,5 @@ if [[ "$MODE" == "ProjectLocal" ]]; then
   echo "   OPENCODE_CONFIG=\"$TARGET/opencode.jsonc\" opencode"
 else
   echo "2. In opencode, try:"
-  echo "   /supervised-task waves"
+  echo "   /supervised-task"
 fi

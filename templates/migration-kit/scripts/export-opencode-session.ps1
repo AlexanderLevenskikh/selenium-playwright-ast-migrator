@@ -60,7 +60,7 @@ $exportStatus = "REAL_EXPORT"
 $unavailableReason = ""
 if ([string]::IsNullOrWhiteSpace($inputText)) {
     $exportStatus = "UNAVAILABLE_WITH_REASON"
-    $unavailableReason = "Native OpenCode transcript was not provided to export-opencode-session. Use trace.jsonl, harness-events.jsonl, session-observations.jsonl, and sentinel findings as forensic evidence; do not treat this file as a transcript."
+    $unavailableReason = "Native OpenCode transcript was not provided to export-opencode-session. Use run reports, project verification, and session-observations.jsonl as forensic evidence; do not treat this file as a transcript."
     $inputText = "Transcript unavailable. Reason: $unavailableReason"
 }
 

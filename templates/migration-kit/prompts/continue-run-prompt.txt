@@ -1,0 +1,1 @@
+Resume the latest standard migration run. Read its reports, choose one highest-impact agent-executable root cause, complete one bounded fix, rerun the complete source scope, and compare evidence. Stop on blocker or no progress. Never manufacture validation artifacts.

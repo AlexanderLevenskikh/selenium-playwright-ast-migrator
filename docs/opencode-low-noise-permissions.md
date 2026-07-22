@@ -1,78 +1,15 @@
 # OpenCode low-noise permissions
 
-This profile is tuned for migration-artifact autopilot runs where routine repository inspection should not interrupt the user.
+The bundled project config exposes only four task roles: `orchestrator`, `executor`, `reviewer`, and `watchdog`.
 
-## Intent
+The standard migration flow needs read access to repository files and write access to the configured migration workspace. Destructive cleanup, package publishing, unrestricted external-directory access, and broad dependency installation remain denied or review-required.
 
-The agent should not ask for permission for routine read-only diagnostics, including:
-
-```powershell
-Get-Command selenium-pw-migrator -All
-where.exe selenium-pw-migrator
-dotnet tool list --global
-dotnet tool list --local
-npm list -g selenium-pw-migrator --depth=0
-git status --short --untracked-files=all
-git diff --stat
-git diff
-Get-ChildItem migration/runs -ErrorAction SilentlyContinue
-Get-Content migration/state/harness-run.json
-Select-String -Path migration/**/*.md -Pattern TODO
-```
-
-```bash
-command -v selenium-pw-migrator
-git status --short --untracked-files=all
-git diff --stat
-git diff
-rg "TODO|requiresReview" migration
-```
-
-The profile explicitly allows OpenCode read/navigation tools:
-
-- `read`
-- `glob`
-- `grep`
-- `list`
-- `lsp`
-- `todowrite`
-
-It also allows routine bash/PowerShell inspection commands such as `git status*`, `git diff*`, `git show*`, `git log*`, `git ls-files*`, `Get-ChildItem*`, `Get-Content*`, `Test-Path*`, `Select-String*`, and `rg *`.
-
-## Known migration subagents
-
-The orchestrator may call known migration subagents without asking each time:
-
-- `executor`
-- `watchdog`
-- `reviewer`
-- `migration-researcher`
-- `migration-research-lead`
-- `migration-task-slicer`
-- `migration-change-reviewer`
-- `harness-sentinel`
-
-Sentinel is allowed so `/supervised-task sentinel` can inspect session exports, trace/events, state, prompts, and OpenCode config for process-smell findings before final handoff.
-
-The `general` subagent remains denied because the migration harness expects named roles with scoped responsibilities.
-
-## Safety boundary
-
-The low-noise profile is not a replacement for scope guards. It reduces interactive prompts, while these checks remain mandatory:
+Useful read-only checks include:
 
 ```powershell
-migration/scripts/check-scope.ps1
-migration/scripts/check-harness-policy.ps1
-migration/scripts/check-final-gate.ps1
+Get-Content migration/state/scope-contract.json
+Get-Content migration/state/final-gate-result.json
+Get-ChildItem migration/runs
 ```
 
-Default allowed edits are still limited to `migration/**`. Guard scripts, checksum manifests, OpenCode permissions, and `AGENTS.md` remain protected.
-
-Do not weaken the profile during a migration run. If a task requires broader writes, write a proposal under `migration/proposals/**` and stop with a blocker.
-
-
-## Optional TrustedProject mode
-
-For local dogfood runs, maintainers can opt into `TrustedProject` permissions. That profile allows `edit`, `bash`, and known subagents inside the project directory to eliminate approval noise, while keeping `external_directory: deny`.
-
-See `docs/opencode-trusted-project-permissions.md`.
+The executor may write only the bounded files explicitly delegated by the orchestrator. The reviewer and watchdog inspect current reports, diffs, generated test bodies, and real verification logs; they do not create replacement evidence.

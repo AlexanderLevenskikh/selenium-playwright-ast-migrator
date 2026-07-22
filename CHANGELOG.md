@@ -6,71 +6,29 @@ This project uses preview SemVer-style versions while the public API is still st
 
 ## [Unreleased]
 
-### Performance
-- Added one correlated end-to-end performance report that aggregates wave materialization, validation host, agent lifecycle, risk, cache-hit status, and the largest measured component.
-- Added cache statistics, verification, dry-run/apply pruning, active-run reference protection, and concrete tool/recognizer/renderer/adapter compatibility fingerprints.
+### Breaking changes
+
+- Removed the Waves/partition runtime, its CLI command family, wave state machine, claims, leases, acceptance receipts, quality-manager/sentinel roles, dashboard lifecycle, recovery commands, and related packaging requirements. Existing historical release notes remain as history, but new workspaces no longer install or execute that mode.
+- `/supervised-task` now has one ordinary full-project flow. `/supervised-task continue` may apply one bounded source-backed repair and then reruns the complete configured source scope; it never advances a hidden partition.
 
 ### Added
-- Added balanced migration scaffolding for stalled project helpers and page objects: the migrator first performs one normal implementation attempt, requires measured `NO_PROGRESS` for the exact root, then may emit a narrow runtime-failing compile scaffold instead of cascading TODOs. Repeating research for the same stalled root is rejected, scaffold count and scaffold-only test ratio are budgeted, and accepted waves now distinguish structural migration from runtime readiness.
-- Added a deterministic quality-driven wave boundary with generated-code outcome measurement, root/cascade TODO analysis, payoff-ranked remediation candidates, an immutable `wave-acceptance.json` receipt, and a read-only `migration-wave-manager` role that cannot override hard gates. Acceptance now requires a current manager role receipt, metrics-bound reviewer/sentinel receipts, fresh scope audit, current-input validation fingerprint, and a valid hash-chained remediation ledger.
-- Added representative calibration waves before scale-out; `--representatives-per-cluster` now affects the actual plan instead of metadata only.
-- Added a live, bilingual Migration Progress dashboard with five plain-language process stages, draft-vs-accepted progress, current-wave and next-action explanations, contextual `?` hints, generated Playwright test previews, and file-based auto-refresh.
-- Continuous `/supervised-task` invocation mode through either `continuous` or `--continuation auto`, supported for ordinary resume, bounded requests, `continue`, `waves`, and `waves fresh`; successful checkpoints are consumed automatically while blockers, critical risk, scope, no-progress, permission, evidence-integrity, and budget stops remain mandatory.
-- Durable agent recovery with bounded active-role leases, latest-heartbeat freshness, serialized runtime mutations, deterministic recovery planning, append-only stale-role closure, safe ledger-head rebuild, orphan lease archival, atomic-temp quarantine, and fail-closed handling of malformed or contradictory role evidence.
 
-- Fast, standard, and audit execution profiles for bounded migration waves, with immutable wave manifests, performance traces, scope enforcement, and no-progress detection.
-- Incremental wave state through `run-context.json`, change sets, validation plans/results, content-addressed validation cache, checkpoints/resume, and review bundles.
-- A single `migration validate` host that owns impact analysis, process execution, immutable evidence, timeout handling, generated-source checks, and cache admission.
-- Layered Unit/Contract/Scenario/E2E test runners plus orchestration and validation-host performance budgets.
-- Protected fast agent runtime with deterministic `next-agent-action` routing, hash-chained role receipts, bounded role budgets, and agent lifecycle performance reports.
-- Adaptive deterministic risk routing with explainable `low`/`medium`/`high`/`critical` assessments, stale-dispatch rejection, compact low-risk budgets, watchdog escalation, and critical-risk human handoff.
-- Optional OpenCode `TrustedProject` permission profile for local dogfood runs and an expanded default install diagnostics allowlist.
-- Public preview flow docs (`public-preview-flow/v1`) that tie install diagnostics, playground/product start, wave gates, current-ticket follow-ups, mapping research memory, verify harness evidence, artifact hygiene, and safe feedback bundles into one user-facing story.
-- Installation diagnostics scripts and docs that start from PATH resolution before package-manager-specific checks.
-- Final distribution verification scripts/checklist for repository, npm/Nexus, release, and project-pilot readiness.
-- npm Trusted Publishing handoff docs plus Scoop/Homebrew package-manager templates.
-- Isolated npm registry smoke scripts for validating published wrapper installs through npmjs or corporate Nexus without changing global npm state.
-- Documentation for Nexus npm proxy plus internal standalone mirror post-publish smoke.
-
-### Reliability and scope
-- Added role scope-access receipts and a final handoff scope audit. Declared out-of-scope access always fails; missing declarations warn only in `fast` and fail in `standard`/`audit`.
+- Added the stable direct `selenium-pw-migrator run` entry point for the linear analyze → migrate → verify → propose pipeline.
+- Added standard-run contract tests and repository smoke scripts that exercise the ordinary full-source command without wave artifacts.
+- Added a strict standard final gate backed by the current orchestration report, generated report, and real matching `verify-project` report. Missing verification fails by default instead of being represented by synthetic evidence.
 
 ### Changed
 
-- Deferred `{result}` binding substitution to target renderers so C# tuple deconstruction such as `(_, actual)` becomes valid TypeScript array destructuring `[, actual]` instead of leaking C# syntax into TS output.
-- `fast`, `standard`, and `audit` now share the same hard wave-quality thresholds. Profiles vary bounded remediation cycles and ceremony only; exhausted/no-progress work stops honestly as `DRAFT_WITH_DEBT` / `FINAL_WITH_LIMITATIONS`.
-- Later waves are physically locked until every prior wave has a current outcome-bound acceptance receipt backed by generated-code metrics, executed validation, the manager/reviewer/sentinel role chain, and a fresh scope audit; quality/final evaluation revalidates the complete materialized wave chain.
-- Legacy semantic-action, syntax-fallback, TODO, action, and unmapped-target metrics remain visible for diagnosis and trends but no longer grant acceptance.
-- Continuous run intent is now persisted in harness state and restored after chat compaction or session resume; an exhausted completed backlog automatically routes blocked quality-budget work through deterministic gate-followup slicing.
-
-- Fixed continuous `/supervised-task` dispatch so the one-bounded-action rule is per cycle rather than per invocation; user-facing handoff is vetoed while continuation/current-ticket/remediation work remains, and `BLOCKED_BY_WAVE_QUALITY_BUDGET` blocks only wave advancement when actionable remediation is available.
-- `/supervised-task` now accepts `--execution-profile fast|standard|audit` for ordinary, `continue`, `waves`, `waves fresh`, and `continuous` invocations. New runs default to lightweight `fast`; existing wave policy remains immutable.
-- Reworked wavefront planning around a deterministic no-agent tuning experiment. `migration tune-wave-plan` and `plan --wave-profile auto` now search batching profiles, account for same-file/POM reuse with marginal complexity, use soft targets plus broad hard ceilings, and avoid pathological one-test-per-wave plans.
-- Added state-aware zero-argument `/supervised-task` auto-next dispatch for tester-friendly follow-up migration tasks after FINAL checkpoints.
-- Standalone Windows installer now moves `%USERPROFILE%\.selenium-pw-migrator\bin` to the front of user/current-session `PATH` even when it was already present later, and supports `-RemoveDotnetTool` to remove an older global dotnet tool channel.
+- Simplified the installed OpenCode team to four roles: orchestrator, executor, reviewer, and watchdog.
+- The standard full-project migration is now the only supported execution model: one configured source scope, one generated result, real project verification, and one final report.
+- Kept project-scoped migration memory, reviewable config-delta merging, scope checks, artifact hygiene, no-progress detection, and project verification as optional optimizations and safeguards around the ordinary run.
+- Simplified onboarding, installation, packaging, CI, docs, and handoff templates so they point to `pilot` (optional calibration), `run`, `verify-project`, and final-gate checks only.
+- A failed CLI command, missing SDK, or unavailable target project is now reported as a blocker; agents are explicitly forbidden from reconstructing PASS/NOT_RUNNABLE evidence by hand.
 
 ### Fixed
 
-- Fixed the wave-002 remediation regressions found by the focused test run: files with adjacent helper/DTO classes now select the class that owns `[Test]`/`[TestCase]` methods, intentionally ignored resolved `System.*` calls no longer reappear as `UnsupportedAction`, and input expressions such as `ComboBox.Enter(value)` preserve `value` as an expression instead of rendering the literal `"value"`.
-- Fixed wave-002 product gaps: all `RecognizerAliases` families now reach their recognizers, resolved receiverless project helpers remain available to adapter mappings, awaited tuple deconstruction preserves `{result}` bindings without cascade TODOs, receiver-qualified generic result mappings are inferred correctly, safe FluentAssertions data checks lower to NUnit/xUnit, and TypeScript renders tuple results as array destructuring.
-- Fixed balanced-scaffolding regressions: ordinary unknown `page.*`/service calls keep their established `MANUAL_REVIEW` diagnostics, helper guidance again names `--mode helper-inventory`, generated scaffold runtime methods no longer expose `dynamic` in member signatures, bounded mapping-memory routing remains discoverable, and the no-progress scenario now spends separate cycles only on separate root patterns.
-- Fixed generic helper mappings so `Method<T>(...)` invocations match generic-free `ParameterizedMethods`, declaration-like exact `Methods` signatures can bind by method name, and `{T}`, `{T0}`, `{arg0}`, `{result}`, plus named signature parameters are substituted without losing helper semantics.
-- Fixed active class-field availability, `foreach`/`ForEach` lambda item scope, and FluentAssertions `BeDisabled`/`BeEnabled` lowering to native Playwright assertions.
-- Prevented full Playwright locator expressions configured as `TestId`/`Locator` from being nested as selector literals; collection and control-state actions now remain visible in migration metrics.
-- Fixed `verify-project` false `NU1015` restore blockers in Central Package Management repositories by skipping repo-wide `Directory.Build.props/targets` inside the isolated temporary harness while preserving project-reference evaluation.
-- Fixed Windows `dotnet build` diagnostics mojibake in `project-verify-report.md/json` by decoding redirected stdout/stderr as UTF-8 and writing report artifacts as UTF-8 without BOM.
-- Prevented direct full-project migrations from writing into materialized `wave-*/generated` directories, added wave-scope contamination detection and repair routing, and stopped quality metrics from summing duplicate report snapshots.
-- Fixed Windows PowerShell 5.1 generic-list handling in mapping-research collection by materializing lists before count, serialization, and ticket generation.
-- Clarified artifact-only POM scope: Selenium source/POM reads are allowed, target-side Playwright POMs under `migration/**` are executable, and mixed source-write/local-artifact candidates must be split instead of wholly blocked.
-
-- Fixed `evaluate-wave-quality-budget.ps1` on Windows PowerShell 5.1 and PowerShell 7 by materializing generic violation lists before assigning them to ordered hashtables; CI now parses and executes the script under Windows PowerShell 5.1.
-- Fixed existing-workspace `bootstrap-opencode` updates so the managed `migration/opencode-team/**` pack is refreshed before repository-root `.opencode/agents` and `.opencode/commands` are reapplied; new commands no longer remain hidden behind stale workspace copies, and users no longer need `--force` for managed command-pack updates.
-- Restored the exact zero-argument and post-final prompt contract wording required by existing OpenCode lifecycle tests while retaining continuous-mode normalization and behavior.
-- Fixed `kit update` timestamp churn so `.migration-kit/version.json` and `.migration-kit/guard-checksums.json` are not rewritten when only volatile timestamps change; harness policy now accepts checksum metadata-only changes when guard file hashes still match.
-- Test-layer and performance runners now work from the current PowerShell host, fail when a layer discovers zero tests, and avoid PowerShell 7-only process APIs when running under Windows PowerShell compatibility mode.
-- Windows custom validation commands now prefer PowerShell 7 but fall back to `powershell.exe`, so validation-host E2E does not require a separate `pwsh` command when Windows PowerShell is available.
-- Validation-host smoke now captures expected nonzero CLI exits through `ProcessStartInfo`, preventing Windows PowerShell 5.1 from turning the intentional `CONFIGURATION_REQUIRED` stderr into a terminating `NativeCommandError`; performance reports also include smoke log paths and a bounded failure summary.
-- Validation evidence is append-only per host invocation, and cache hits require an exact validation-contract fingerprint while still rerunning cheap internal integrity checks.
+- Corrected standard-run examples so `verify-project` receives the original Selenium source and matching config rather than the generated output directory.
+- Corrected the generated final-gate command contract to accept `-Run` and `-RepoRoot`, and made project-verification evidence mandatory by default.
 
 ## [0.0.0-preview.8]
 

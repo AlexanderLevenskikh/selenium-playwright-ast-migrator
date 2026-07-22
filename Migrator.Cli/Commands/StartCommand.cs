@@ -112,10 +112,23 @@ internal static class StartCommand
         commands.Add($"selenium-pw-migrator pilot --input {Quote(source)} --max-tests 10 --out {Quote(ToCommandPath(Path.Combine(workspace, "pilot")))}");
         commands.Add($"selenium-pw-migrator --mode doctor --input {Quote(source)} --out {Quote(ToCommandPath(Path.Combine(workspace, "doctor")))}");
 
+        var runOutput = ToCommandPath(Path.Combine(workspace, "runs", "run-001"));
+        var configPath = ToCommandPath(Path.Combine(workspace, "profiles", "adapter-config.start.json"));
+        var standardRun = target == "ts"
+            ? $"selenium-pw-migrator --mode migrate --input {Quote(source)} --config {Quote(configPath)} --target ts --target-test-framework {framework} --generation-policy {policy} --out {Quote(runOutput)}"
+            : $"selenium-pw-migrator run --input {Quote(source)} --config {Quote(configPath)} --target dotnet --target-test-framework {framework} --generation-policy {policy} --out {Quote(runOutput)} --format both";
         if (string.Equals(agent, "manual", StringComparison.OrdinalIgnoreCase) || string.Equals(agent, "none", StringComparison.OrdinalIgnoreCase))
-            commands.Add($"selenium-pw-migrator --mode migrate --input {Quote(source)} --config {Quote(ToCommandPath(Path.Combine(workspace, "profiles", "adapter-config.start.json")))} --target {target} --target-test-framework {framework} --generation-policy {policy} --out {Quote(ToCommandPath(Path.Combine(workspace, "run-001")))}");
+        {
+            commands.Add(standardRun);
+            if (target == "ts")
+                commands.Add($"selenium-pw-migrator --mode verify-ts-project --input {Quote(runOutput)} --out {Quote(ToCommandPath(Path.Combine(workspace, "runs", "run-001", "verify-ts-project")))} --format both");
+            else
+                commands.Add($"selenium-pw-migrator verify-project --input {Quote(source)} --config {Quote(configPath)} --out {Quote(ToCommandPath(Path.Combine(workspace, "runs", "run-001", "verify-project")))} --format both");
+        }
         else
-            commands.Add("# After bootstrap, open the agent environment and run /supervised-task. It should use migration/current-ticket.md instead of asking what to do.");
+        {
+            commands.Add("# After bootstrap, open the agent environment and run /supervised-task. It executes the same standard full-project run without batch planning.");
+        }
 
         if (!string.IsNullOrWhiteSpace(targetProjectPath))
             commands.Add($"selenium-pw-migrator --mode discover-target --input {Quote(ToCommandPath(targetProjectPath!))} --out {Quote(ToCommandPath(Path.Combine(workspace, "target-discovery")))}");
@@ -182,7 +195,7 @@ internal static class StartCommand
         var sb = new StringBuilder();
         sb.AppendLine("# Next Commands");
         sb.AppendLine();
-        sb.AppendLine("Run these in order. The pilot comes before full migration so you can fix high-impact mappings first.");
+        sb.AppendLine("Run these in order. The pilot is an optional optimization step before one full-project migration run; there is no batch planner or partition state.");
         sb.AppendLine();
         for (var i = 0; i < report.NextCommands.Length; i++)
         {
@@ -253,15 +266,15 @@ internal static class StartCommand
         sb.AppendLine();
         sb.AppendLine("## Goal");
         sb.AppendLine();
-        sb.AppendLine("Create a bounded pilot slice, inspect the first migration evidence, and fix only the highest-impact mapping/scaffold issue before scaling.");
+        sb.AppendLine("Run one complete standard migration over the configured source scope, verify the generated project, and fix at most one highest-impact root cause before rerunning.");
         sb.AppendLine();
         sb.AppendLine("## First safe actions");
         sb.AppendLine();
         sb.AppendLine("1. Run `selenium-pw-migrator doctor install`.");
         if (!string.Equals(report.Agent, "manual", StringComparison.OrdinalIgnoreCase))
             sb.AppendLine($"2. Ensure the agent handoff is bootstrapped for `{report.Agent}` with `kit bootstrap-agent` if `AGENT_CONTRACT.md` is missing.");
-        sb.AppendLine("3. Run the pilot command from `next-commands.md` and use `pilot/selected-input` as the first migration input.");
-        sb.AppendLine("4. Do not ask the user to choose among unrelated repository maintenance tasks unless these migration artifacts are missing or contradictory.");
+        sb.AppendLine("3. Optionally use the pilot command from `next-commands.md` to calibrate mappings; the pilot is not final coverage.");
+        sb.AppendLine("4. Run the complete source scope and real project verification. Do not reconstruct missing reports by hand.");
         sb.AppendLine();
         sb.AppendLine("## Allowed roots");
         sb.AppendLine();
@@ -284,7 +297,7 @@ internal static class StartCommand
             report.Agent,
             report.SourcePath,
             report.WorkspacePath,
-            NextAction = "Run doctor install, ensure agent handoff bootstrap exists, then run pilot on the selected slice.",
+            NextAction = "Run doctor install, ensure agent handoff bootstrap exists, then execute the standard full-project migration flow.",
             DoNotAskMenu = true,
             NextCommands = report.NextCommands
         };

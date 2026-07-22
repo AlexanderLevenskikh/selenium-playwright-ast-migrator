@@ -59,7 +59,7 @@ public class OrchestratorTests
             Assert.True(File.Exists(Path.Combine(tmp, "orchestration-report.md")), "orchestration-report.md missing");
 
             var md = File.ReadAllText(Path.Combine(tmp, "orchestration-report.md"));
-            Assert.Contains("# Orchestration Report", md);
+            Assert.Contains("# Standard Migration Run Report", md);
             Assert.Contains("## Stages", md);
             Assert.Contains("## Metrics", md);
             Assert.Contains("## Recommended Next Actions", md);

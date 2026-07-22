@@ -1,65 +1,10 @@
-# Stop-Policy Checklist
+# Stop policy checklist
 
-Fill this before stopping or handing off a migration batch. This file is `state/stop-policy-checklist.md` in a generated migration kit.
+Stop and report when any of these is true:
 
-## Batch context
-
-- Status: <CONTINUE_AUTONOMOUSLY | READY_FOR_ACCEPTANCE | TICKET_NEEDED | BLOCKED_BY_ENVIRONMENT | BLOCKED_BY_MISSING_INPUT | MAX_ITERATIONS_REACHED | UNSAFE_REVERTED>
-- Current mode: <migration-artifact | migrator-code | strict-ticket | other>
-- Batch goal:
-- Allowed input paths inspected:
-- Allowed write paths used:
-- Commands run:
-- Continuation decision status: <FINAL | CONTINUE_REQUIRED | BLOCKED_BY_GATE | BLOCKED_NO_ALLOWED_NEXT_ACTION>
-- Artifacts inspected:
-- Files changed:
-- Scope guard command/result:
-- Forbidden changed paths:
-- TODO count before/after and why this is real migration progress:
-- Suppression categories before/after:
-- Meaningful generated actions/assertions preserved: yes/no/evidence
-
-## Valid stop reason
-
-At least one must be checked before stopping:
-
-- [ ] Selected batch is complete and verified.
-- [ ] Max autonomous batch budget or explicit fix-review cycle limit was reached after writing the next concrete ticket.
-- [ ] Source truth / selector evidence / helper semantics is missing and cannot be proven from allowed inputs.
-- [ ] Product or business semantics are required.
-- [ ] Required tool/dependency is unavailable and no useful static verification remains.
-- [ ] Required input files/configs are missing.
-- [ ] Needed source edit is forbidden by the current mode/path contract.
-- [ ] Max iterations reached.
-- [ ] Unsafe change was reverted.
-- [ ] Forbidden write path was detected and the batch was rejected.
-- [ ] TODO decrease was caused by source-backed mappings or explicit classification, not by suppression/empty tests.
-
-## Must not be true
-
-- [ ] I am not asking the user whether to continue.
-- [ ] I am not stopping while `state/continuation-decision.json` says `CONTINUE_REQUIRED`.
-- [ ] In continuous mode, I re-read persisted `harness-run.json` continuation mode plus continuation, task-slice, current-ticket, backlog, and wave-quality-budget state after the latest bounded action.
-- [ ] In continuous mode, no selected `AGENT_EXECUTABLE` ticket is `READY`, `IN_PROGRESS`, or `REVIEW_READY`, `mustContinueBeforeUserMessage` is not `true`, and a blocked quality budget with remaining remediation has already been passed through `slice-gate-followups` rather than treated as an empty-backlog stop.
-- [ ] I did not treat `BLOCKED_BY_WAVE_QUALITY_BUDGET` as terminal when an actionable in-scope remediation `nextAction` and budget remained.
-- [ ] I am not stopping only because the latest report says `NOT FINAL - INVESTIGATION RESULT ONLY` or `NOT RUNTIME READY` while an allowed next config/scaffold/evidence action exists.
-- [ ] I am not stopping only because compile/project verify is green while actionable migration work remains.
-- [ ] I did not edit migrator source code in `migration-artifact` mode.
-- [ ] I did not search for migrator source in compiled-tool-only mode.
-- [ ] I did not invent selectors from names.
-- [ ] I did not hide behavior through broad suppressions or target-known declarations.
-- [ ] I did not add or broaden FluentAssertions/NUnit/business assertion suppression.
-- [ ] I did not count TODO removed by suppression as progress.
-- [ ] I did not accept `0 TODO` without config-validate/quality gate evidence and meaningful generated actions/assertions.
-- [ ] I did not change real target/POM project files, real Playwright tests, `.csproj`, `nuget.config`, or root-level generated files in artifact-only mode.
-- [ ] I did not edit generated files as the final fix unless generated-output edits were explicitly allowed.
-
-## Evidence
-
-
-## One concrete next action
-
-## SUCCESS checkpoint stop rule
-
-- [ ] If the latest continuation status is `FINAL`, I am stopping after FINAL/PASS because SUCCESS checkpoints default to STOP_FOR_REVIEW, unless this exact invocation explicitly enabled `continuous` / `--continuation auto` and another runtime-authorized bounded cycle exists.
-- [ ] I am not starting another run/ticket unless the user explicitly requested `continue`, enabled continuous mode for this invocation, or bounded auto-continuation is recorded in `state/continuation-decision.json`.
+- configured source or config is missing;
+- the CLI crashes or required SDK/tooling is unavailable;
+- the requested change would edit a protected product/source path;
+- a human product decision is required;
+- the same full-run comparison shows no measurable progress twice;
+- project verification fails and no bounded source-backed fix is available.

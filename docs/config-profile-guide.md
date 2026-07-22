@@ -7,7 +7,7 @@ The Migrator is profile-driven. Good migration output depends on reviewable mapp
 The common file name is `adapter-config.json`. Larger migrations usually use layered configs:
 
 ```bash
-selenium-pw-migrator --mode orchestrate \
+selenium-pw-migrator run \
   --input ./SeleniumTests \
   --config ./profiles/infrastructure-base.adapter.json \
   --config ./profiles/projects/billing.adapter.json \

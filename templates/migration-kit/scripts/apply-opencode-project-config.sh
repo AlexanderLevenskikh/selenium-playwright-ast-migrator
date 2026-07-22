@@ -192,4 +192,4 @@ echo "  $REPO_ROOT_FULL/opencode.jsonc"
 echo "  $TARGET_AGENTS"
 echo "  $TARGET_COMMANDS"
 echo
-echo "Next: open this repository folder in OpenCode and run /supervised-task waves."
+echo "Next: open this repository folder in OpenCode and run /supervised-task."

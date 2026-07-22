@@ -4,9 +4,9 @@ Purpose: keep a supervised migration run moving through ordinary ambiguity witho
 
 ## Use when
 
-- The user explicitly wants autopilot behavior.
+- The user asked for the ordinary migration flow to proceed without routine permission questions.
 - The next action is bounded, reversible, and inside `migration/**`.
-- The active run, policy, and continuation decision already permit the next step.
+- The active standard run and policy already permit the next bounded step.
 - The question would only ask the user to choose a routine implementation detail.
 
 ## Behavior
@@ -15,7 +15,7 @@ Convert routine ambiguity into conservative assumptions and continue. Record the
 
 Good plow-ahead assumptions:
 
-- choose the smallest bounded wave or ticket;
+- choose the smallest bounded remediation inside the current full-project run;
 - prefer low-risk files first;
 - reuse existing naming/style nearby;
 - run focused verification before broad verification;
@@ -37,8 +37,8 @@ When you made assumptions, include a short recap:
 
 ```text
 Assumptions made:
-- Chose wave-001 because it is the smallest low-risk pending wave.
-- Kept output under migration/runs/wave-001 because artifact-only mode forbids real target edits.
+- Chose the repeated helper-mapping root cause because it affects the most tests with one bounded config change.
+- Kept output under the active migration/runs/run-001 directory because product files are read-only.
 ```
 
-Never use this skill to bypass OpenCode permissions or harness gates.
+Never use this skill to bypass OpenCode permissions, scope checks, project verification, or the final gate.

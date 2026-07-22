@@ -21,8 +21,8 @@ public sealed class BootstrapOpenCodeRefreshTests
 
             var workspaceCommand = Path.Combine(root, "migration", "opencode-team", "global", ".config", "opencode", "commands", "supervised-task.md");
             var repositoryCommand = Path.Combine(root, ".opencode", "commands", "supervised-task.md");
-            Assert.Contains("continuous", File.ReadAllText(workspaceCommand), StringComparison.Ordinal);
-            Assert.Contains("continuous", File.ReadAllText(repositoryCommand), StringComparison.Ordinal);
+            Assert.Contains("selenium-pw-migrator run", File.ReadAllText(workspaceCommand), StringComparison.Ordinal);
+            Assert.Contains("selenium-pw-migrator run", File.ReadAllText(repositoryCommand), StringComparison.Ordinal);
 
             File.WriteAllText(workspaceCommand, "STALE_WORKSPACE_COMMAND\n");
             File.WriteAllText(repositoryCommand, "STALE_REPOSITORY_COMMAND\n");
@@ -35,8 +35,8 @@ public sealed class BootstrapOpenCodeRefreshTests
             var repositoryText = File.ReadAllText(repositoryCommand);
             Assert.DoesNotContain("STALE_WORKSPACE_COMMAND", workspaceText, StringComparison.Ordinal);
             Assert.DoesNotContain("STALE_REPOSITORY_COMMAND", repositoryText, StringComparison.Ordinal);
-            Assert.Contains("continuous", workspaceText, StringComparison.Ordinal);
-            Assert.Contains("continuous", repositoryText, StringComparison.Ordinal);
+            Assert.Contains("selenium-pw-migrator run", workspaceText, StringComparison.Ordinal);
+            Assert.Contains("selenium-pw-migrator run", repositoryText, StringComparison.Ordinal);
             Assert.Contains("kit-overwrite:", second.StdOut, StringComparison.Ordinal);
             Assert.Contains("opencode-team", second.StdOut, StringComparison.Ordinal);
             Assert.Contains("sync:", second.StdOut, StringComparison.Ordinal);

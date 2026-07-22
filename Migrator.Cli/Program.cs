@@ -31,9 +31,6 @@ if (args.Length > 0 && string.Equals(args[0], "self", StringComparison.OrdinalIg
 if (args.Length > 0 && string.Equals(args[0], "memory", StringComparison.OrdinalIgnoreCase))
     return MemoryCommand.Run(args.Skip(1).ToArray());
 
-if (args.Length > 0 && string.Equals(args[0], "migration", StringComparison.OrdinalIgnoreCase))
-    return MigrationCommand.Run(args.Skip(1).ToArray());
-
 if (args.Length > 1
     && string.Equals(args[0], "config", StringComparison.OrdinalIgnoreCase)
     && (string.Equals(args[1], "merge-deltas", StringComparison.OrdinalIgnoreCase)
@@ -88,12 +85,6 @@ string renderIr = opts.RenderIr;
 string validationMode = opts.ValidationMode;
 string? targetTestFramework = opts.TargetTestFramework;
 string generationPolicy = GenerationPolicy.NormalizeOrDefault(opts.GenerationPolicy);
-
-if (mode == "migrate" && !ValidateWaveLocalMigrationInvocation(inputPath, outPath, selectedTestsFile, out var waveScopeError))
-{
-    Console.Error.WriteLine(waveScopeError);
-    return 2;
-}
 
 if (mode == "memory")
 {
@@ -1107,92 +1098,6 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
 
     PrintSummary(summaryWithGenerated);
     Console.WriteLine($"Migration written to: {Path.GetFullPath(outPath)} ({generated} files generated)");
-}
-
-static bool ValidateWaveLocalMigrationInvocation(string inputPath, string outPath, string? selectedTestsFile, out string error)
-{
-    error = string.Empty;
-    var fullOut = Path.GetFullPath(outPath);
-    var cursor = new DirectoryInfo(fullOut);
-    FileInfo? scopeFile = null;
-
-    for (var depth = 0; cursor != null && depth < 3; depth++, cursor = cursor.Parent)
-    {
-        var candidate = new FileInfo(Path.Combine(cursor.FullName, "input-scope.json"));
-        if (candidate.Exists)
-        {
-            scopeFile = candidate;
-            break;
-        }
-    }
-
-    if (scopeFile == null)
-        return true;
-
-    try
-    {
-        using var document = JsonDocument.Parse(File.ReadAllText(scopeFile.FullName));
-        var root = document.RootElement;
-        var waveRoot = scopeFile.Directory!.FullName;
-        var expectedSourceScope = GetJsonString(root, "SourceScopePath", "sourceScopePath")
-            ?? Path.Combine(waveRoot, "source-scope");
-        var expectedGenerated = GetJsonString(root, "GeneratedOutputPath", "generatedOutputPath")
-            ?? Path.Combine(waveRoot, "generated");
-        var expectedSelectedTests = Path.Combine(waveRoot, "selected-tests.txt");
-
-        var inputMatches = !string.IsNullOrWhiteSpace(expectedSourceScope)
-            && IsSamePathOrChild(Path.GetFullPath(inputPath), Path.GetFullPath(expectedSourceScope!));
-        var outputMatches = !string.IsNullOrWhiteSpace(expectedGenerated)
-            && PathsEqual(fullOut, Path.GetFullPath(expectedGenerated!));
-        var selectedTestsMatch = !string.IsNullOrWhiteSpace(selectedTestsFile)
-            && PathsEqual(Path.GetFullPath(selectedTestsFile!), Path.GetFullPath(expectedSelectedTests));
-
-        if (inputMatches && outputMatches && selectedTestsMatch)
-            return true;
-
-        var waveId = GetJsonString(root, "WaveId", "waveId") ?? scopeFile.Directory!.Name;
-        error = string.Join(Environment.NewLine, new[]
-        {
-            $"WAVE_LOCAL_SCOPE_GUARD_FAILED: output '{fullOut}' belongs to bounded wave '{waveId}'.",
-            "A wave generated directory may only be written by its materialized run-migrate.ps1/run-migrate.sh wrapper using source-scope/ and selected-tests.txt.",
-            $"Expected input under: {expectedSourceScope}",
-            $"Expected selected tests: {expectedSelectedTests}",
-            "For a full-project exploratory rerun, choose a separate artifact location such as migration/runs/<run-id>/full-project-rerun/generated; do not write it into runs/wave-*/generated."
-        });
-        return false;
-    }
-    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-    {
-        error = $"WAVE_LOCAL_SCOPE_GUARD_FAILED: could not read '{scopeFile.FullName}': {ex.Message}";
-        return false;
-    }
-}
-
-static string? GetJsonString(JsonElement root, params string[] names)
-{
-    foreach (var name in names)
-    {
-        if (root.TryGetProperty(name, out var node) && node.ValueKind == JsonValueKind.String)
-            return node.GetString();
-    }
-
-    return null;
-}
-
-static bool PathsEqual(string left, string right)
-{
-    var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-    return Path.TrimEndingDirectorySeparator(Path.GetFullPath(left))
-        .Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)), comparison);
-}
-
-static bool IsSamePathOrChild(string candidate, string root)
-{
-    var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-    var normalizedCandidate = Path.TrimEndingDirectorySeparator(Path.GetFullPath(candidate));
-    var normalizedRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
-    return normalizedCandidate.Equals(normalizedRoot, comparison)
-        || normalizedCandidate.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, comparison);
 }
 
 static TargetBackendRegistry CreateBuiltInTargetBackendRegistry()
@@ -5622,7 +5527,7 @@ static string WriteAgentRuntimeNextTaskMarkdown(SmokePlanReport report)
     sb.AppendLine("- Не редактируй generated `.cs` вручную как финальное решение.");
     sb.AppendLine("- Если нужен mapping — добавляй его в adapter-config/profile.");
     sb.AppendLine("- Если runtime failure связан с generic behavior мигратора — классифицируй blocker в migration/state/stop-policy-checklist.md или переходи к отдельному migrator-code режиму с явным scope.");
-    sb.AppendLine("- После этапа дай краткий отчёт. Если статус `CONTINUE_AUTONOMOUSLY`, продолжай без вопроса пользователю.");
+    sb.AppendLine("- После этапа дай краткий отчёт и остановись. Следующий bounded repair запускается отдельной командой после review.");
     return sb.ToString();
 }
 
@@ -5750,17 +5655,17 @@ static MigrationIterationSnapshot BuildMigrationIterationSnapshot(string artifac
     if (workspaceRoot == null)
     {
         var emptyMemory = new ProjectMemoryDashboardSnapshot(false, "", 0, 0, 0, 0, 0, "selenium-pw-migrator memory doctor --workspace migration");
-        var emptyWavefront = new WavefrontDashboardSnapshot(false, "", 0, 0, Array.Empty<string>(), "");
+        var emptyRun = new StandardRunDashboardSnapshot(false, "", 0, "not-run", "not-run");
         var emptyMerge = new ConfigMergeDashboardSnapshot(false, false, 0, "not-found", "", "", "");
-        return new MigrationIterationSnapshot("", emptyMemory, emptyWavefront, emptyMerge, Array.Empty<string>(), Array.Empty<string>());
+        return new MigrationIterationSnapshot("", emptyMemory, emptyRun, emptyMerge, Array.Empty<string>(), Array.Empty<string>());
     }
 
     var memory = BuildProjectMemorySnapshot(workspaceRoot);
-    var wavefront = BuildWavefrontSnapshot(workspaceRoot);
+    var standardRun = BuildStandardRunSnapshot(workspaceRoot);
     var merge = BuildConfigMergeSnapshot(workspaceRoot);
-    var nextCommands = BuildIterationNextCommands(workspaceRoot, memory, wavefront, merge).ToArray();
-    var evidenceFiles = CollectIterationEvidenceFiles(workspaceRoot, memory, wavefront, merge).ToArray();
-    return new MigrationIterationSnapshot(Path.GetFullPath(workspaceRoot), memory, wavefront, merge, nextCommands, evidenceFiles);
+    var nextCommands = BuildIterationNextCommands(workspaceRoot, memory, standardRun, merge).ToArray();
+    var evidenceFiles = CollectIterationEvidenceFiles(workspaceRoot, memory, standardRun, merge).ToArray();
+    return new MigrationIterationSnapshot(Path.GetFullPath(workspaceRoot), memory, standardRun, merge, nextCommands, evidenceFiles);
 }
 
 static string? FindMigrationWorkspaceRoot(string artifactDir)
@@ -5769,7 +5674,7 @@ static string? FindMigrationWorkspaceRoot(string artifactDir)
     while (current != null)
     {
         if (Directory.Exists(Path.Combine(current.FullName, "state", "memory"))
-            || File.Exists(Path.Combine(current.FullName, "plan", "waves.json"))
+            || Directory.Exists(Path.Combine(current.FullName, "runs"))
             || Directory.Exists(Path.Combine(current.FullName, "config-merge")))
             return current.FullName;
         current = current.Parent;
@@ -5796,20 +5701,48 @@ static ProjectMemoryDashboardSnapshot BuildProjectMemorySnapshot(string workspac
         DoctorCommand: $"selenium-pw-migrator memory doctor --workspace {QuoteIfNeeded(workspaceRoot)}");
 }
 
-static WavefrontDashboardSnapshot BuildWavefrontSnapshot(string workspaceRoot)
+static StandardRunDashboardSnapshot BuildStandardRunSnapshot(string workspaceRoot)
 {
-    var planPath = Path.Combine(workspaceRoot, "plan", "waves.json");
-    var recallPath = Path.Combine(workspaceRoot, "plan", "memory-recall.md");
-    var waves = ReadWaveIds(planPath).ToArray();
-    var completed = CountCompletedWaveRuns(workspaceRoot, waves);
-    var next = waves.Where(id => !WaveRunExists(workspaceRoot, id)).Take(3).ToArray();
-    return new WavefrontDashboardSnapshot(
-        PlanExists: File.Exists(planPath),
-        PlanPath: File.Exists(planPath) ? planPath : "",
-        Waves: waves.Length,
-        CompletedWaveRuns: completed,
-        NextWaveIds: next,
-        MemoryRecallPath: File.Exists(recallPath) ? recallPath : "");
+    var runsRoot = Path.Combine(workspaceRoot, "runs");
+    if (!Directory.Exists(runsRoot))
+        return new StandardRunDashboardSnapshot(false, "", 0, "not-run", "not-run");
+
+    var runs = Directory.EnumerateDirectories(runsRoot)
+        .Where(path => File.Exists(Path.Combine(path, "orchestration-report.json"))
+            || File.Exists(Path.Combine(path, "generated", "report.json")))
+        .Select(path => new DirectoryInfo(path))
+        .OrderByDescending(dir => dir.LastWriteTimeUtc)
+        .ToArray();
+    if (runs.Length == 0)
+        return new StandardRunDashboardSnapshot(false, "", 0, "not-run", "not-run");
+
+    var latest = runs[0].FullName;
+    var latestStatus = ReadJsonStatus(Path.Combine(latest, "orchestration-report.json")) ?? "unknown";
+    var verificationStatus = ReadJsonStatus(Path.Combine(latest, "verify-project", "project-verify-report.json")) ?? "not-run";
+    return new StandardRunDashboardSnapshot(true, latest, runs.Length, latestStatus, verificationStatus);
+}
+
+static string? ReadJsonStatus(string path)
+{
+    if (!File.Exists(path))
+        return null;
+    try
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        var root = document.RootElement;
+        return ReadStringProperty(root, "status") ?? ReadStringProperty(root, "Status");
+    }
+    catch
+    {
+        return "invalid";
+    }
+}
+
+static string? ReadStringProperty(JsonElement element, string name)
+{
+    return element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String
+        ? property.GetString()
+        : null;
 }
 
 static ConfigMergeDashboardSnapshot BuildConfigMergeSnapshot(string workspaceRoot)
@@ -5834,19 +5767,22 @@ static ConfigMergeDashboardSnapshot BuildConfigMergeSnapshot(string workspaceRoo
         ConflictsPath: File.Exists(conflicts) ? conflicts : "");
 }
 
-static IEnumerable<string> BuildIterationNextCommands(string workspaceRoot, ProjectMemoryDashboardSnapshot memory, WavefrontDashboardSnapshot wavefront, ConfigMergeDashboardSnapshot merge)
+static IEnumerable<string> BuildIterationNextCommands(string workspaceRoot, ProjectMemoryDashboardSnapshot memory, StandardRunDashboardSnapshot standardRun, ConfigMergeDashboardSnapshot merge)
 {
     if (memory.Exists)
         yield return memory.DoctorCommand;
-    if (wavefront.PlanExists && wavefront.NextWaveIds.Length > 0)
-        yield return $"selenium-pw-migrator migration run-wave --plan {QuoteIfNeeded(Path.Combine(workspaceRoot, "plan"))} --wave {wavefront.NextWaveIds[0]} --workspace {QuoteIfNeeded(workspaceRoot)} --out {QuoteIfNeeded(Path.Combine(workspaceRoot, "runs", wavefront.NextWaveIds[0]))}";
+    if (!standardRun.RunsExist)
+        yield return "selenium-pw-migrator start --input <selenium-source> --workspace " + QuoteIfNeeded(workspaceRoot);
+    else if (!string.Equals(standardRun.VerificationStatus, "PASS", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(standardRun.VerificationStatus, "PASSED", StringComparison.OrdinalIgnoreCase))
+        yield return "selenium-pw-migrator --mode verify-project --input <selenium-source> --config <adapter-config> --out " + QuoteIfNeeded(Path.Combine(standardRun.LatestRunPath, "verify-project")) + " --format both";
     if (memory.ConfigDeltas > 0 && !merge.CandidateExists)
         yield return $"selenium-pw-migrator config merge-deltas --base {QuoteIfNeeded(Path.Combine(workspaceRoot, "adapter-config.json"))} --deltas {QuoteIfNeeded(Path.Combine(workspaceRoot, "state", "memory", "config-deltas"))} --out {QuoteIfNeeded(Path.Combine(workspaceRoot, "config-merge"))}";
     if (merge.CandidateExists && !merge.ValidateReportExists)
         yield return $"selenium-pw-migrator config validate-merge --base {QuoteIfNeeded(Path.Combine(workspaceRoot, "adapter-config.json"))} --candidate {QuoteIfNeeded(merge.CandidatePath)} --out {QuoteIfNeeded(Path.Combine(workspaceRoot, "config-merge"))}";
 }
 
-static IEnumerable<string> CollectIterationEvidenceFiles(string workspaceRoot, ProjectMemoryDashboardSnapshot memory, WavefrontDashboardSnapshot wavefront, ConfigMergeDashboardSnapshot merge)
+static IEnumerable<string> CollectIterationEvidenceFiles(string workspaceRoot, ProjectMemoryDashboardSnapshot memory, StandardRunDashboardSnapshot standardRun, ConfigMergeDashboardSnapshot merge)
 {
     foreach (var path in new[]
     {
@@ -5856,11 +5792,9 @@ static IEnumerable<string> CollectIterationEvidenceFiles(string workspaceRoot, P
         Path.Combine(workspaceRoot, "state", "memory", "antipatterns.jsonl"),
         Path.Combine(workspaceRoot, "state", "memory", "final-gate-lessons.jsonl"),
         Path.Combine(workspaceRoot, "state", "memory", "selector-map.json"),
-        wavefront.PlanPath,
-        Path.Combine(workspaceRoot, "plan", "plan.md"),
-        Path.Combine(workspaceRoot, "plan", "selected-tests.txt"),
-        wavefront.MemoryRecallPath,
-        Path.Combine(workspaceRoot, "plan", "next-commands.md"),
+        string.IsNullOrWhiteSpace(standardRun.LatestRunPath) ? "" : Path.Combine(standardRun.LatestRunPath, "orchestration-report.json"),
+        string.IsNullOrWhiteSpace(standardRun.LatestRunPath) ? "" : Path.Combine(standardRun.LatestRunPath, "generated", "report.json"),
+        string.IsNullOrWhiteSpace(standardRun.LatestRunPath) ? "" : Path.Combine(standardRun.LatestRunPath, "verify-project", "project-verify-report.json"),
         merge.CandidatePath,
         Path.Combine(workspaceRoot, "config-merge", "merge-report.md"),
         Path.Combine(workspaceRoot, "config-merge", "merge-report.json"),
@@ -5891,48 +5825,6 @@ static int CountJsonLines(string path)
     {
         return 0;
     }
-}
-
-static IEnumerable<string> ReadWaveIds(string planPath)
-{
-    if (!File.Exists(planPath))
-        return Array.Empty<string>();
-    try
-    {
-        using var doc = JsonDocument.Parse(File.ReadAllText(planPath));
-        if (!doc.RootElement.TryGetProperty("waves", out var waves) || waves.ValueKind != JsonValueKind.Array)
-            return Array.Empty<string>();
-        return waves.EnumerateArray()
-            .Select(wave => ReadStringProperty(wave, "id") ?? ReadStringProperty(wave, "waveId") ?? ReadStringProperty(wave, "Id") ?? ReadStringProperty(wave, "WaveId"))
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Cast<string>()
-            .ToArray();
-    }
-    catch
-    {
-        return Array.Empty<string>();
-    }
-}
-
-static string? ReadStringProperty(JsonElement element, string name)
-{
-    return element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String
-        ? property.GetString()
-        : null;
-}
-
-static int CountCompletedWaveRuns(string workspaceRoot, string[] waveIds)
-{
-    if (waveIds.Length == 0)
-        return 0;
-    return waveIds.Count(id => WaveRunExists(workspaceRoot, id));
-}
-
-static bool WaveRunExists(string workspaceRoot, string waveId)
-{
-    var runRoot = Path.Combine(workspaceRoot, "runs", waveId);
-    return File.Exists(Path.Combine(runRoot, "input-scope.json"))
-        || File.Exists(Path.Combine(runRoot, "wave-status.json"));
 }
 
 static string QuoteIfNeeded(string value)
@@ -6416,7 +6308,7 @@ static string WriteReportServeTriageMarkdown(ReportServeDashboardReport report)
 static void AppendReportServeIterationMarkdown(StringBuilder sb, ReportServeDashboardReport report)
 {
     var state = report.IterationSnapshot;
-    sb.AppendLine("## Wavefront / memory / config-merge snapshot");
+    sb.AppendLine("## Standard run / memory / config-merge snapshot");
     if (string.IsNullOrWhiteSpace(state.WorkspaceRoot))
     {
         sb.AppendLine("No project-scoped migration workspace was detected near this artifact directory.");
@@ -6426,10 +6318,10 @@ static void AppendReportServeIterationMarkdown(StringBuilder sb, ReportServeDash
 
     sb.AppendLine($"- **Workspace**: `{EscapeMd(PathRedaction.Redact(state.WorkspaceRoot))}`");
     sb.AppendLine($"- **Project memory**: `{(state.Memory.Exists ? "present" : "missing")}`; decisions `{state.Memory.Decisions}`, warnings `{state.Memory.Warnings}`, antipatterns `{state.Memory.Antipatterns}`, final-gate lessons `{state.Memory.FinalGateLessons}`, config deltas `{state.Memory.ConfigDeltas}`");
-    sb.AppendLine($"- **Wavefront plan**: `{(state.Wavefront.PlanExists ? "present" : "missing")}`; waves `{state.Wavefront.Waves}`, completed wave runs `{state.Wavefront.CompletedWaveRuns}`");
+    sb.AppendLine($"- **Standard runs**: `{state.StandardRun.Runs}`; latest status `{EscapeMd(state.StandardRun.LatestStatus)}`; project verification `{EscapeMd(state.StandardRun.VerificationStatus)}`");
+    if (!string.IsNullOrWhiteSpace(state.StandardRun.LatestRunPath))
+        sb.AppendLine($"- **Latest run**: `{EscapeMd(PathRedaction.Redact(state.StandardRun.LatestRunPath))}`");
     sb.AppendLine($"- **Config merge**: `{state.ConfigMerge.Status}`; conflicts `{state.ConfigMerge.Conflicts}`");
-    if (state.Wavefront.NextWaveIds.Length > 0)
-        sb.AppendLine($"- **Next wave candidates**: {string.Join(", ", state.Wavefront.NextWaveIds.Select(id => "`" + EscapeMd(id) + "`"))}");
     if (state.NextCommands.Length > 0)
     {
         sb.AppendLine("- **Suggested next commands**:");
@@ -6479,7 +6371,7 @@ static int DecisionSortOrder(string decision) => decision switch
 static string DescribeTriageDecision(string decision) => decision switch
 {
     "accept" => "Known/acceptable item; keep evidence and do not open a blocker.",
-    "defer" => "Track later; not a first-wave blocker unless it appears in selected pilot tests.",
+    "defer" => "Track later; not an immediate blocker unless it appears in selected pilot tests.",
     "create-ticket" => "Create a focused migration ticket with evidence and acceptance checks.",
     _ => "Review manually."
 };
@@ -6560,7 +6452,7 @@ static string WriteReportServeHtml(ReportServeDashboardReport report)
 static void AppendReportServeIterationHtml(StringBuilder sb, ReportServeDashboardReport report)
 {
     var state = report.IterationSnapshot;
-    sb.AppendLine("<h2 class=\"section\">Wavefront / memory / config-merge snapshot</h2>");
+    sb.AppendLine("<h2 class=\"section\">Standard run / memory / config-merge snapshot</h2>");
     if (string.IsNullOrWhiteSpace(state.WorkspaceRoot))
     {
         sb.AppendLine("<div class=\"card empty\">No project-scoped migration workspace was detected near this artifact directory.</div>");
@@ -6569,7 +6461,10 @@ static void AppendReportServeIterationHtml(StringBuilder sb, ReportServeDashboar
 
     sb.AppendLine("<div class=\"grid\">");
     sb.AppendLine($"<div class=\"card\"><strong>Project memory</strong><div class=\"small\">{Html(state.Memory.Exists ? "present" : "missing")}</div><div>decisions: <strong>{state.Memory.Decisions}</strong> · warnings: <strong>{state.Memory.Warnings}</strong> · antipatterns: <strong>{state.Memory.Antipatterns}</strong> · final-gate lessons: <strong>{state.Memory.FinalGateLessons}</strong> · config deltas: <strong>{state.Memory.ConfigDeltas}</strong></div></div>");
-    sb.AppendLine($"<div class=\"card\"><strong>Wavefront plan</strong><div class=\"small\">{Html(state.Wavefront.PlanExists ? "present" : "missing")}</div><div>waves: <strong>{state.Wavefront.Waves}</strong> · completed: <strong>{state.Wavefront.CompletedWaveRuns}</strong></div><div class=\"small\">next: {Html(state.Wavefront.NextWaveIds.Length == 0 ? "none" : string.Join(", ", state.Wavefront.NextWaveIds))}</div></div>");
+    var latestRunPath = string.IsNullOrWhiteSpace(state.StandardRun.LatestRunPath)
+        ? "no run yet"
+        : PathRedaction.Redact(state.StandardRun.LatestRunPath);
+    sb.AppendLine($"<div class=\"card\"><strong>Standard runs</strong><div class=\"small\">count: {state.StandardRun.Runs}</div><div>latest: <strong>{Html(state.StandardRun.LatestStatus)}</strong> · verify-project: <strong>{Html(state.StandardRun.VerificationStatus)}</strong></div><div class=\"small\">{Html(latestRunPath)}</div></div>");
     sb.AppendLine($"<div class=\"card\"><strong>Config merge</strong><div class=\"small\">status: <code>{Html(state.ConfigMerge.Status)}</code></div><div>conflicts: <strong>{state.ConfigMerge.Conflicts}</strong></div></div>");
     sb.AppendLine("</div>");
 
@@ -6773,7 +6668,7 @@ static string CreateReportServeEvidenceZip(string inputPath, string outPath, Rep
                 ZipEntryNamesAreRelative = true,
                 SourceRepositoryFilesIncluded = false,
                 GeneratedMigrationArtifactsIncluded = true,
-                ProjectScopedMemoryAndWavefrontArtifactsIncluded = true
+                ProjectScopedMemoryAndStandardRunArtifactsIncluded = true
             },
             Entries = manifestEntries
         };
@@ -9191,7 +9086,7 @@ static string BuildBootstrapAgentNextTask(string projectName, string inputPath, 
     sb.AppendLine("- project-specific mappings клади в project profile;");
     sb.AppendLine("- не дублируй правило в project profile, если оно уже корректно покрыто base profile;");
     sb.AppendLine("- после итерации запускай config-validate и guard;");
-    sb.AppendLine("- если статус `CONTINUE_AUTONOMOUSLY`, продолжай без вопроса пользователю; останавливайся только по migration/AGENT_CONTRACT.md и migration/state/stop-policy-checklist.md.");
+    sb.AppendLine("- после полной проверки остановись и передай evidence; следующий bounded repair запускается отдельно после review.");
     return sb.ToString();
 }
 
@@ -9261,7 +9156,7 @@ static int WriteEmergencyOrchestrationReport(string inputPath, string outPath, s
 
 static int RunOrchestrate(string inputPath, string outPath, string? configPath, string format, ITestFileParser parser, IRenderer renderer, IProjectAdapter? adapter, ProjectAdapterConfig? config, ITargetBackend targetBackend)
 {
-    Console.WriteLine("=== Orchestrator Dry-Run ===");
+    Console.WriteLine("=== Standard Migration Run ===");
     Console.WriteLine();
 
     // Sub-directories for each stage
@@ -9712,7 +9607,7 @@ static List<string> GenerateRecommendedNextActions(List<OrchestrationStage> stag
         actions.Add("All stages passed. Attempt compile smoke test and manual runtime proof on 3-5 tests.");
     }
 
-    actions.Add("Re-run orchestrator after applying changes to verify improvement.");
+    actions.Add("Re-run `selenium-pw-migrator run` after applying changes to verify improvement.");
 
     return actions;
 }
@@ -9721,7 +9616,7 @@ static string ToOrchestrationReportMarkdown(OrchestrationReport report)
 {
     var sb = new System.Text.StringBuilder();
 
-    sb.AppendLine("# Orchestration Report");
+    sb.AppendLine("# Standard Migration Run Report");
     sb.AppendLine();
     sb.AppendLine($"**Status:** {report.Status}");
     sb.AppendLine($"**Input:** {report.InputPath}");
@@ -11942,6 +11837,15 @@ static string[] NormalizeDirectCommand(string[] args)
     if (string.Equals(args[0], "start", StringComparison.OrdinalIgnoreCase))
         return new[] { "--mode", "start" }.Concat(args.Skip(1)).ToArray();
 
+    if (string.Equals(args[0], "run", StringComparison.OrdinalIgnoreCase))
+        return new[] { "--mode", "orchestrate" }.Concat(args.Skip(1)).ToArray();
+
+    if (string.Equals(args[0], "verify-project", StringComparison.OrdinalIgnoreCase))
+        return new[] { "--mode", "verify-project" }.Concat(args.Skip(1)).ToArray();
+
+    if (string.Equals(args[0], "verify-ts-project", StringComparison.OrdinalIgnoreCase))
+        return new[] { "--mode", "verify-ts-project" }.Concat(args.Skip(1)).ToArray();
+
     if (string.Equals(args[0], "pilot", StringComparison.OrdinalIgnoreCase))
         return new[] { "--mode", "pilot" }.Concat(args.Skip(1)).ToArray();
 
@@ -12210,8 +12114,8 @@ static StandaloneVersionManifest? ReadStandaloneVersionManifest()
         var root = document.RootElement;
 
         return new StandaloneVersionManifest(
-            Runtime: GetJsonString(root, "runtime"),
-            GeneratedAtUtc: GetJsonString(root, "generatedAtUtc"),
+            Runtime: ReadStringProperty(root, "runtime"),
+            GeneratedAtUtc: ReadStringProperty(root, "generatedAtUtc"),
             SelfContained: GetJsonBool(root, "selfContained"),
             PublishSingleFile: GetJsonBool(root, "publishSingleFile"));
     }

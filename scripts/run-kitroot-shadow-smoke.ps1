@@ -66,11 +66,8 @@ $required = @(
     "harness/README.md",
     "state/harness-policy.json",
     "scripts/check-harness-policy.ps1",
-    "scripts/new-harness-run.ps1",
-    "scripts/write-harness-event.ps1",
-    "scripts/build-harness-dashboard.ps1",
-    "dashboard/i18n/en.json",
-    "dashboard/i18n/ru.json",
+    "scripts/check-final-gate.ps1",
+    "scripts/validate-run-artifacts.ps1",
     "opencode-team/global/.config/opencode/opencode.jsonc"
 )
 

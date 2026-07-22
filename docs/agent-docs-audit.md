@@ -1,64 +1,59 @@
-# Agent documentation audit
+# Agent instruction audit
 
-This audit prevents the agent workflow from being split across contradictory documents.
+This document defines which files control agent behavior after removal of the Waves/partition runtime. The goal is to prevent a second hidden workflow from reappearing through stale prompts, templates, or guides.
 
-## Canonical entrypoint
+## Canonical behavior
 
-| Document | Status | Notes |
+The executable instruction contract is defined by these files, in this order:
+
+| File | Authority | Purpose |
 |---|---|---|
-| `docs/guarded-opencode-desktop-runbook.ru.md` | Canonical | Single launch procedure for guarded OpenCode Desktop migration runs. Includes local tool build/update, kit update, ProjectDesktop install, `/supervised-task` prompt, approve/deny rules, final gate, and forensic export. |
+| `templates/migration-kit/AGENT_CONTRACT.md` | Canonical workspace contract | Defines the standard full-source flow, safety boundary, evidence rules, and one-remediation limit. |
+| `templates/opencode-team/global/.config/opencode/commands/supervised-task.md` | Canonical OpenCode command | Executes the contract without a broad menu or partition state. |
+| `templates/opencode-team/global/.config/opencode/agents/*.md` | Canonical role instructions | Defines orchestrator, executor, reviewer, and watchdog responsibilities. |
+| `templates/opencode-team/global/.config/opencode/opencode.jsonc` | Canonical OpenCode permissions | Restricts writes and destructive operations in a product migration workspace. |
+| `templates/opencode-team/project-template/AGENTS.md` | Canonical repository handoff | Gives non-OpenCode/repository agents the same standard-mode rules. |
 
-## Template/runtime source of truth
-
-These files are copied into product repositories and are part of the executable guardrail layer.
-
-| Document/file | Status | Notes |
-|---|---|---|
-| `templates/migration-kit/AGENT_CONTRACT.md` | Source of truth | Operational contract for artifact-only runs. |
-| `templates/migration-kit/prompts/kickoff-prompt.txt` | Source of truth | Agent kickoff wrapper installed into `migration/prompts/`. |
-| `templates/migration-kit/prompts/loop-batch-prompt.txt` | Source of truth | Bounded batch prompt. |
-| `templates/migration-kit/state/final-gate.md` | Source of truth | Human-readable final gate checklist. Script is authoritative for machine checks. |
-| `templates/migration-kit/scripts/check-scope.ps1` | Source of truth | Machine scope guard. |
-| `templates/migration-kit/scripts/check-final-gate.ps1` | Source of truth | Machine final gate. |
-| `templates/opencode-team/global/.config/opencode/opencode.jsonc` | Source of truth | OpenCode permissions and default agent setup. |
-| `templates/opencode-team/INSTALLATION-SAFETY.md` | Source of truth | Safe install modes, including Desktop. |
-| `templates/opencode-team/scripts/install-windows.ps1` | Source of truth | Windows installer for ProjectLocal/ProjectDesktop/Global. |
-| `templates/opencode-team/README.md` | Template guide | Overview of the OpenCode team template; links to canonical runbook. |
-| `templates/migration-kit/README.md` | Template guide | Workspace layout; links to canonical runbook. |
-
-## Deep dive / reference docs
-
-These documents may explain concepts but must not be treated as the current launch procedure.
-
-| Document | Status | Notes |
-|---|---|---|
-| `docs/tool-installation.md` | Reference | General tool install docs. |
-| `docs/packaging-and-distribution.md` | Reference | Packaging/release details. |
-| `docs/migration-runbook.md` | Reference | Product migration planning; not OpenCode Desktop launch procedure. |
-| `docs/project-verification.md` | Reference | Project verification details. |
-| `docs/explain-todo.md` | Reference | TODO explanation artifacts. |
-| `docs/evidence-pack.md` | Reference | Evidence pack workflow. |
-| `templates/migration-kit/AGENT_CONTRACT.md` | Runtime reference | Installed operational agent contract. |
-| `templates/opencode-team/INSTALLATION-SAFETY.md` | Runtime reference | OpenCode installation safety. |
-
-## Removed legacy/noisy docs
-
-The following old launch surfaces were removed because they duplicated or contradicted the guarded Desktop workflow:
-
-- root `.agent-loops/` prompt pack;
-- `FIRST_AUTOPILOT_LOOP_PROMPT_TEMPLATE.md`;
-- `examples/agent-first/` prompts;
-- older broad agent/autopilot launch docs and agent playbooks;
-- duplicate public-launch demo copy.
-
-Use git history if any removed material is needed for archaeology.
-
-## Rule for future docs
-
-Do not add another “how to launch the agent” document. Add details to:
+Installed repository-root copies must remain byte-for-byte equal to their template sources:
 
 ```text
-docs/guarded-opencode-desktop-runbook.ru.md
+AGENTS.md
+opencode.jsonc
+.opencode/commands/supervised-task.md
+.opencode/agents/*.md
 ```
 
-or make the new document a deep dive that links back to the canonical runbook.
+`Migrator.Tests/StandardInstructionContractTests.cs` enforces this equality and rejects removed command names, old run paths, and internal `--mode verify-project` examples in active instructions.
+
+## Operator guides
+
+| File | Status | Purpose |
+|---|---|---|
+| `docs/standard-migration-flow.md` | Primary English operator reference | Manual standard run, verification, gate, and one-remediation loop. |
+| `docs/standard-migration-flow.ru.md` | Russian localization | Localized operator reference; behavior must match the English document. |
+| `docs/agent-environments.md` | Environment reference | OpenCode, Codex, generic-agent, and CI bootstrap paths. |
+| `docs/agent-environments.ru.md` | Russian localization | Localized environment reference. |
+| `docs/guarded-opencode-desktop-runbook.ru.md` | OpenCode Desktop supplement | Windows/Desktop-specific launch and recovery steps. It does not override the canonical contract. |
+| `docs/agent-orchestration.md` | Architecture reference | Explains why agent orchestration is a thin wrapper around the CLI. |
+
+## Required invariants
+
+All active instructions must preserve these rules:
+
+1. One configured Selenium source scope and one active `migration/runs/run-NNN` directory at a time.
+2. `pilot` is optional calibration and never final coverage evidence.
+3. The ordinary entry point is `selenium-pw-migrator run`.
+4. Project validation uses the public `selenium-pw-migrator verify-project` command.
+5. Missing source configuration stops with `SOURCE_SCOPE_MISSING`; the agent does not guess or offer an unrelated menu.
+6. Missing SDK, target project, package source, or a CLI crash is a blocker. No result JSON may be manufactured by hand.
+7. In a product workspace, automatic edits stay under `migration/**`. Suspected parser/recognizer/renderer defects are reported with a minimal reproduction unless the user explicitly authorizes Migrator repository edits.
+8. At most one highest-payoff, evidence-backed remediation is applied before the complete source scope is rerun.
+9. Historical completed runs may remain read-only; there is no partition advance, acceptance receipt, lease, sentinel, or continuation state machine.
+
+## Historical documents
+
+Versioned release notes and archived ticket/RFC documents may mention Waves as historical behavior. They are not launch instructions and must not be copied into a product workspace as current guidance.
+
+## Rule for future changes
+
+Do not add another independent agent launch workflow. Update the canonical templates first, synchronize their installed copies, update both standard-flow operator guides, and extend `StandardInstructionContractTests` when a new invariant is introduced.

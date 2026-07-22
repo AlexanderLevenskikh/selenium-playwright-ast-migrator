@@ -49,7 +49,7 @@ New-Item -ItemType Directory -Force -Path $memoryDir | Out-Null
 $createdAt = [DateTimeOffset]::UtcNow.ToString("o")
 
 if ([string]::IsNullOrWhiteSpace($Summary)) {
-    $Summary = "Compaction checkpoint for $RunId. Preserve current ticket, scope contract, active blockers, failing tests, and final-gate/claim status before continuing."
+    $Summary = "Compaction checkpoint for $RunId. Preserve current ticket, scope contract, active blockers, failing tests, and final-gate status before continuing."
 }
 
 $quickRecapPath = Join-Path $memoryDir "quick-recap.md"
@@ -96,7 +96,7 @@ $errorsText
 
 $normalizedSources = @($SourceArtifacts | ForEach-Object { Normalize-RelativePath $workspacePath $_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 if ($normalizedSources.Count -eq 0) {
-    foreach ($candidate in @("runs/$RunId/events.jsonl", "runs/$RunId/evidence/index.json", "state/final-gate-result.json", "state/claim-doctor-result.json")) {
+    foreach ($candidate in @("runs/$RunId/events.jsonl", "runs/$RunId/evidence/index.json", "state/final-gate-result.json")) {
         if (Test-Path (Join-Path $workspacePath $candidate)) { $normalizedSources += $candidate }
     }
 }

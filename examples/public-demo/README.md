@@ -1,6 +1,6 @@
 # Public demo: Selenium C# → Playwright .NET
 
-This is a small, public, copyable demo for the Migrator growth wave. It now includes a tiny static fake web app, so the demo is not just a code-shaped example: the Playwright proof can open real HTML and exercise the same selectors used by the generated output.
+This is a small, public, copyable demo for the Migrator growth phase. It now includes a tiny static fake web app, so the demo is not just a code-shaped example: the Playwright proof can open real HTML and exercise the same selectors used by the generated output.
 
 Supported slices:
 

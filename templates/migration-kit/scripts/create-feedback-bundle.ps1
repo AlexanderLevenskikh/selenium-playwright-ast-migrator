@@ -3,9 +3,8 @@
 Create a redacted migration feedback bundle for sharing migrator improvement evidence.
 
 .DESCRIPTION
-create-feedback-bundle collects migration-kit reports, gate evidence, wave quality budget,
-mapping/research memory, verify-project harness snapshots, sentinel findings, and related
-forensic artifacts into a safe feedback-bundle/v1 package under state/feedback-bundles.
+create-feedback-bundle collects migration-kit reports, gate evidence, standard-run reports,
+mapping/research memory, verify-project reports, and related forensic artifacts into a safe feedback-bundle/v1 package under state/feedback-bundles.
 By default it excludes project source files and generated C# samples. Use -IncludeGeneratedSamples only when the user has
 reviewed the generated snippets and wants to include a small capped sample set.
 #>
@@ -26,19 +25,6 @@ function Read-TextIfExists([string]$Path) {
 }
 
 function Read-LatestRunId([string]$WorkspacePath) {
-    $stateRun = Join-Path $WorkspacePath "state/harness-run.json"
-    if (Test-Path $stateRun) {
-        try {
-            $json = Get-Content -Raw -Path $stateRun | ConvertFrom-Json -ErrorAction Stop
-            if (-not [string]::IsNullOrWhiteSpace([string]$json.runId)) { return [string]$json.runId }
-        } catch { }
-    }
-
-    $agentState = Join-Path $WorkspacePath "agent-state.md"
-    $text = Read-TextIfExists $agentState
-    $m = [regex]::Match($text, '(?im)^\s*Latest run\s*:\s*(run-[0-9A-Za-z][0-9A-Za-z._-]*)\s*$')
-    if ($m.Success) { return $m.Groups[1].Value }
-
     $runsPath = Join-Path $WorkspacePath "runs"
     if (Test-Path $runsPath) {
         $latest = Get-ChildItem -Path $runsPath -Directory -Filter "run-*" -ErrorAction SilentlyContinue |
@@ -46,7 +32,6 @@ function Read-LatestRunId([string]$WorkspacePath) {
             Select-Object -First 1
         if ($latest -ne $null) { return $latest.Name }
     }
-
     return ""
 }
 
@@ -175,20 +160,13 @@ $explicit = @(
     "agent-state.md",
     "current-ticket.md",
     "state/final-gate-result.json",
-    "state/continuation-decision.json",
-    "state/harness-run.json",
     "state/current-ticket-status.json",
     "state/current-ticket-ledger.jsonl",
-    "state/sentinel-finding-status.json",
-    "state/sentinel-finding-ledger.jsonl",
-    "state/wave-quality-budget.json",
-    "state/wave-quality-budget.md",
     "state/mapping-research-memory.json",
     "state/mapping-research-memory.md",
     "state/mapping-research-candidates.jsonl",
     "state/artifact-hygiene.json",
     "state/artifact-hygiene.md",
-    "state/sentinel-ledger.jsonl",
     "state/agent-skill-usage.jsonl"
 )
 foreach ($relative in $explicit) {
@@ -199,30 +177,23 @@ Add-GlobFiles $workspacePath $bundleRoot "state/backlog/*.md" $included $exclude
 Add-GlobFiles $workspacePath $bundleRoot "state/backlog/*.json" $included $excluded "backlog" 50
 Add-GlobFiles $workspacePath $bundleRoot "state/backlog/*.jsonl" $included $excluded "backlog" 50
 
-# Run and wave evidence. Keep reports/snapshots, not source trees.
+# Standard run evidence. Keep reports/snapshots, not source trees.
 Add-GlobFiles $workspacePath $bundleRoot "runs/*/Documentation.md" $included $excluded "run-documentation" 50
 Add-GlobFiles $workspacePath $bundleRoot "runs/*/artifact-hygiene.*" $included $excluded "artifact-hygiene" 50
 Add-GlobFiles $workspacePath $bundleRoot "runs/*/research/mapping-research-memory.*" $included $excluded "mapping-research" 50
-Add-GlobFiles $workspacePath $bundleRoot "runs/*/sentinel/sentinel-report.md" $included $excluded "sentinel" 50
-Add-GlobFiles $workspacePath $bundleRoot "runs/*/sentinel/sentinel-findings.jsonl" $included $excluded "sentinel" 50
-Add-GlobFiles $workspacePath $bundleRoot "runs/*/sentinel/sentinel-inspection.json" $included $excluded "sentinel" 50
-Add-GlobFiles $workspacePath $bundleRoot "runs/*/sentinel/sentinel-finding-status.json" $included $excluded "sentinel" 50
-Add-GlobFiles $workspacePath $bundleRoot "runs/*/sentinel/sentinel-finding-lifecycle.jsonl" $included $excluded "sentinel" 50
 Add-GlobFiles $workspacePath $bundleRoot "runs/*/opencode-session-export.json" $included $excluded "session-export" 50
 Add-GlobFiles $workspacePath $bundleRoot "runs/*/opencode-session-export.md" $included $excluded "session-export" 50
 Add-GlobFiles $workspacePath $bundleRoot "runs/*/project-verify-report.json" $included $excluded "verify-project" 50
 Add-GlobFiles $workspacePath $bundleRoot "runs/*/project-verify-report.md" $included $excluded "verify-project" 50
 Add-GlobFiles $workspacePath $bundleRoot "runs/*/project-verify-harness.csproj" $included $excluded "verify-project-harness" 50
-Add-GlobFiles $workspacePath $bundleRoot "runs/*/wave-quality-budget.*" $included $excluded "wave-quality" 50
-Add-GlobFiles $workspacePath $bundleRoot "runs/wave-*/generated/migration-board.md" $included $excluded "wave-dashboard" 50
-Add-GlobFiles $workspacePath $bundleRoot "runs/wave-*/generated/migration-board.json" $included $excluded "wave-dashboard" 50
-Add-GlobFiles $workspacePath $bundleRoot "runs/wave-*/generated/explain-todo.md" $included $excluded "todo-explanation" 50
-Add-GlobFiles $workspacePath $bundleRoot "runs/wave-*/wave-status.json" $included $excluded "wave-status" 50
+Add-GlobFiles $workspacePath $bundleRoot "runs/run-*/generated/migration-board.md" $included $excluded "run-dashboard" 50
+Add-GlobFiles $workspacePath $bundleRoot "runs/run-*/generated/migration-board.json" $included $excluded "run-dashboard" 50
+Add-GlobFiles $workspacePath $bundleRoot "runs/run-*/generated/explain-todo.md" $included $excluded "todo-explanation" 50
 
 if ($IncludeGeneratedSamples) {
     $sampleCount = 0
     $generatedFiles = @(Get-ChildItem -Path $workspacePath -Recurse -File -Filter "*.cs" -ErrorAction SilentlyContinue |
-        Where-Object { (Convert-ToRelativePath $workspacePath $_.FullName) -like "runs/wave-*/generated/*.cs" } |
+        Where-Object { (Convert-ToRelativePath $workspacePath $_.FullName) -like "runs/run-*/generated/*.cs" } |
         Sort-Object Length -Descending |
         Select-Object -First $MaxGeneratedSamples)
     foreach ($file in $generatedFiles) {
@@ -232,7 +203,7 @@ if ($IncludeGeneratedSamples) {
     }
 } else {
     $excluded.Add([ordered]@{
-        path = "runs/wave-*/generated/*.cs"
+        path = "runs/run-*/generated/*.cs"
         kind = "generated-sample-opt-in"
         reason = "generated C# samples excluded by default; rerun with -IncludeGeneratedSamples after review"
     }) | Out-Null
@@ -286,11 +257,10 @@ $readmeLines = @(
     "",
     "- ``state/mapping-research-memory.json``",
     "- ``state/mapping-research-candidates.jsonl``",
-    "- ``state/wave-quality-budget.json``",
     "- ``runs/*/project-verify-report.json``",
     "- ``runs/*/project-verify-harness.csproj``",
-    "- ``runs/wave-*/generated/migration-board.md``",
-    "- ``runs/wave-*/generated/explain-todo.md``",
+    "- ``runs/run-*/generated/migration-board.md``",
+    "- ``runs/run-*/generated/explain-todo.md``",
     "",
     "## Generated samples",
     "",

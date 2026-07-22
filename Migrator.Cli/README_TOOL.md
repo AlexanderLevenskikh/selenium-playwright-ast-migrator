@@ -1,5 +1,7 @@
 # SeleniumPlaywrightMigrator
 
+> **Execution model:** one standard full-project run is supported. `pilot` is optional calibration; partition-specific planning and acceptance state are not used.
+
 Dotnet tool for agent-assisted and human-reviewed migration of Selenium tests toward Playwright.
 
 The stable public path is Selenium C# to Playwright .NET with NUnit as the default target framework and xUnit as a supported target framework. Playwright TypeScript, Java Selenium, and Python Selenium paths are available as experimental preview capabilities; check the repository documentation before using them for production migrations.
@@ -69,8 +71,7 @@ Commands are grouped as stable public, experimental preview, and internal/mainta
 - `runbook` — generate pilot scope, command chain, risk map, artifacts, and acceptance checklist before the first migration run.
 - `start` — product-repo onboarding wizard that writes a profile skeleton and next command chain.
 - `pilot` — select a representative bounded migration slice before scaling.
-- `migration` — build read-only wavefront plans for divide-and-conquer supervised migration.
-- `migration` — build read-only wavefront plans for divide-and-conquer supervised migration.
+- `run` — execute the complete configured source through the standard full-project pipeline.
 - `doctor install` / `install-doctor` — explain the active install channel and update command.
 - `doctor` — preflight input, config, tooling, and source-truth hints.
 - `analyze` — inspect Selenium tests without generating target files.
@@ -163,59 +164,23 @@ selenium-pw-migrator doctor release --out release-doctor --format both
 
 The release doctor checks PackageId/version metadata, README_TOOL packaging docs, release scripts, publish workflow dry-run support, NuGet/npm/standalone smoke coverage, install diagnostics, agent handoff UX, changelog consistency, and basic repository hygiene.
 
-## Wavefront planning
+## Standard full-project run
 
-Install/update the guarded OpenCode project config before the first agent run:
+Install or update the OpenCode project command pack once:
 
 ```bash
 selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./OldTests --opencode-install auto
 ```
 
-`bootstrap-opencode` copies the repository-root OpenCode command pack automatically. After that, the most user-friendly path is to open the repository in OpenCode and run:
-
-```text
-/supervised-task waves
-```
-
-That mode should run the wavefront setup itself from the repository root. If the workspace was bootstrapped with `--source`, that configured source is the hard wavefront boundary; agents and CLI validation must not discover or plan sibling functional-test projects. Manual plan commands remain available for debugging or CI; `migration/**` paths are repository-root artifacts and must not be created under source subdirectories such as `Web/**/migration/**`:
-
+Then use `/supervised-task`, or execute the same pipeline manually:
 
 ```bash
-selenium-pw-migrator migration tune-wave-plan --input ./OldTests --workspace migration --out migration/plan-tuning
-selenium-pw-migrator migration plan --input ./OldTests --strategy wavefront --workspace migration --out migration/plan --wave-profile auto --smoke-wave-size 1
-selenium-pw-migrator migration plan show --plan migration/plan
+selenium-pw-migrator pilot --input ./OldTests --max-tests 10 --out migration/pilot
+selenium-pw-migrator run --input ./OldTests --config migration/profiles/adapter-config.json --out migration/runs/run-001 --format both
+selenium-pw-migrator --mode verify-project --input ./OldTests --config migration/profiles/adapter-config.json --out migration/runs/run-001/verify-project --format both
 ```
 
-This is a read-only divide-and-conquer planner. `tune-wave-plan` evaluates deterministic profiles without agents; `plan --wave-profile auto` performs the same experiment automatically and writes `wave-tuning.md/json`. The first wave is a one-test smoke validation; later waves use source-file/POM affinity, same-file marginal complexity, soft targets, and broad hard ceilings to amortize role overhead. `/supervised-task waves` should run this automatically. Use `migration run-wave` manually only when debugging or CI needs to materialize a selected wave as a bounded workspace without editing the original project.
-
-## Wave run workspace
-
-```bash
-selenium-pw-migrator migration run-wave --plan migration/plan --wave wave-001 --workspace migration --out migration/runs/wave-001 --execution-profile fast
-selenium-pw-migrator migration validate-wave --out migration/runs/wave-001
-# execute the immutable workspace through run-migrate.ps1 or run-migrate.sh
-selenium-pw-migrator migration validation-plan --out migration/runs/wave-001
-selenium-pw-migrator migration record-validation --out migration/runs/wave-001 --validation-id target-checks --validation-exit-code 0 --validation-scope changed-files --validation-command "<executed command>"
-selenium-pw-migrator migration checkpoint-wave --out migration/runs/wave-001 --checkpoint-label validated --checkpoint-stage validation
-selenium-pw-migrator migration build-review-bundle --out migration/runs/wave-001
-selenium-pw-migrator migration resume-wave --out migration/runs/wave-001
-selenium-pw-migrator migration check-progress --out migration/runs/wave-001 --max-identical-snapshots 3
-selenium-pw-migrator migration next-agent-action --out migration/runs/wave-001
-selenium-pw-migrator migration assess-agent-risk --out migration/runs/wave-001
-selenium-pw-migrator migration record-agent-role --out migration/runs/wave-001 --role executor --role-phase execution --role-status STARTED
-selenium-pw-migrator migration check-agent-budget --out migration/runs/wave-001
-selenium-pw-migrator migration agent-perf-report --out migration/runs/wave-001
-selenium-pw-migrator migration perf-report --out migration/runs/wave-001
-selenium-pw-migrator migration scope-audit --out migration/runs/wave-001
-selenium-pw-migrator migration cache-stats --workspace migration
-selenium-pw-migrator migration cache-verify --workspace migration
-selenium-pw-migrator migration cache-prune --workspace migration --cache-max-age-days 30 --cache-max-size-mb 2048 --cache-apply false
-selenium-pw-migrator migration refresh-wave-status --out migration/runs/wave-001 --migrate-exit-code 0
-```
-
-`run-wave` writes immutable `wave-manifest.json`, `execution-policy.json`, `run-context.json`, `source-scope/`, `generated/`, `input-scope.json`, `preflight-budget.json`, `selected-tests.txt`, `config-delta.json`, `memory-delta.jsonl`, `wave-validation.json`, `performance-trace.json`, `run-summary.md`, `wave-status.json`, `run-migrate.sh`, and `run-migrate.ps1`. After migration and validation, run `migration measure-wave`; it writes outcome metrics and a compact quality/profit packet for `migration-wave-manager`. The manager records one bounded decision. Remediation progress is derived from regenerated/validated before-and-after outcomes, not an agent-declared status. `migration accept-wave` writes the immutable receipt required before `run-wave` will materialize the next planned wave, and `migration check-wave-acceptance` fully recomputes and validates that receipt for scripts/final gates. Semantic/fallback/TODO/unmapped counters remain available as diagnostics but cannot grant acceptance. `fast` reduces ceremony and caps remediation cycles; it does not weaken hard quality gates. The generated migrate command passes `--selected-tests selected-tests.txt`; this keeps execution bounded to the tests in the wave even when a copied source file contains additional tests. Profiles are `fast` (default), `standard`, and `audit`. `validate-wave` verifies the manifest fingerprint, copied hashes, selected tests, run context, and non-weakened policy invariants. Existing run directories are never recopied: use their wrapper to execute. `validation-plan` creates a deterministic change set and exact-input cache decision; `record-validation` requires real command evidence for a reusable PASS; `checkpoint-wave` and `resume-wave` support recovery; `build-review-bundle` prepares cumulative and checkpoint-local deltas for the reviewer. `check-progress` fingerprints generated/evidence/TODO/unmapped/validation state and returns `NO_PROGRESS_DETECTED` after repeated identical snapshots. `next-agent-action` selects exactly one bounded role/command/final handoff from current evidence; `assess-agent-risk` writes an explainable risk score and adaptive budget; `record-agent-role` writes hash-chained role receipts and rejects a stale `riskAssessmentFingerprint`; `check-agent-budget` blocks unbounded role loops; `agent-perf-report` reports role counts, risk, and lifecycle budget status. `run-migrate.ps1` and `run-migrate.sh` refresh `wave-status.json` and `validation-plan.json`; the explicit commands remain available for recovery or older workspaces. Full details: `docs/migration-fast-path.md`, `docs/migration-incremental-pipeline.md`, `docs/performance-cache-hardening.md`, and `docs/wave-quality-manager.md`.
-
-Safety boundary: `run-wave` does not promote memory, does not merge config, and does not publish any cross-project/org knowledge pack. `config-delta.json` is an observed/reviewable placeholder until Reviewer, Watchdog, and Final Gate evidence exists.
+`run` is the only full migration entry point. It performs analyze, generate, verify, and mapping-proposal stages in one ordinary directory. The configured source remains the hard boundary. Missing target tooling or a CLI failure must be reported; never create replacement verification JSON manually.
 
 ## Config delta merge
 
@@ -227,13 +192,10 @@ selenium-pw-migrator config validate-merge --base migration/adapter-config.json 
 `config merge-deltas` creates a candidate `adapter-config.merged.json` plus `merge-report.md/json` and `conflicts.jsonl`. `config validate-merge` writes `validate-merge-report.md/json` and checks duplicate/conflicting stable keys, removed base entries, assertion-like suppressions, and broad POM suppression warnings. The candidate is not promoted automatically.
 
 
-### Dashboard/evidence polish for project-scoped memory
+### Dashboard and project-scoped memory
 
-`report serve` detects nearby project-scoped migration state and adds a **Wavefront / memory / config-merge snapshot** to `report-dashboard.html/md/json`. The generated `report-dashboard-evidence.zip` can include workspace entries for `state/memory`, `plan/waves.json`, `memory-recall.md`, `adapter-config.merged.json`, `validate-merge-report.md/json`, and `conflicts.jsonl`. The evidence manifest marks this with `ProjectScopedMemoryAndWavefrontArtifactsIncluded`.
+`report serve` detects nearby project-scoped memory and ordinary run artifacts and adds a **Standard run / memory / config-merge snapshot** to the generated dashboard. The evidence ZIP may include `state/memory`, the latest `orchestration-report.json`, generated reports, real project-verification evidence, and config-merge artifacts.
 
+## Agent safety rails
 
-## Agent orchestration rails
-
-`kit init` / `kit bootstrap-opencode` write `migration/state/scope-contract.json` from `--source`. Use `migration/scripts/new-claim.*`, `update-claim-heartbeat.*`, `complete-claim.*`, and `claim-doctor.*` for lightweight wave leases before parallel agent work.
-
-Interrupted agent roles use `agent-role-lease.json`. Renew long-running work with `migration heartbeat-agent-role`; after a crash or lost session run `migration plan-agent-recovery` and execute `recover-agent-runtime` only when the plan says `SAFE_REPAIR_AVAILABLE`. Recovery is append-only for role history and refuses to rewrite malformed hash-chained JSONL.
+`kit init` and `kit bootstrap-opencode` write the configured source scope and protected project command files. `/supervised-task` runs one complete project pipeline, chooses at most one bounded highest-payoff remediation, and reruns the full pipeline. Scope checks and final gates operate on concrete artifacts; missing evidence remains a blocker.

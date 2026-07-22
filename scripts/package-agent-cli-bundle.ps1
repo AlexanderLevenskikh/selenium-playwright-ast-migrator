@@ -126,24 +126,14 @@ if (Test-Path $installMigrationKit) {
     Copy-Item $installMigrationKit (Join-Path $scriptsDir "install-migration-kit.ps1") -Force
 }
 
-$dogfoodSmoke = Join-Path (Join-Path $root "scripts") "run-harness-dogfood-smoke.ps1"
-if (Test-Path $dogfoodSmoke) {
-    Copy-Item $dogfoodSmoke (Join-Path $scriptsDir "run-harness-dogfood-smoke.ps1") -Force
+$standardSmoke = Join-Path (Join-Path $root "scripts") "run-standard-migration-smoke.ps1"
+if (Test-Path $standardSmoke) {
+    Copy-Item $standardSmoke (Join-Path $scriptsDir "run-standard-migration-smoke.ps1") -Force
 }
 
-$dogfoodSmokeSh = Join-Path (Join-Path $root "scripts") "run-harness-dogfood-smoke.sh"
-if (Test-Path $dogfoodSmokeSh) {
-    Copy-Item $dogfoodSmokeSh (Join-Path $scriptsDir "run-harness-dogfood-smoke.sh") -Force
-}
-
-$dashboardSmoke = Join-Path (Join-Path $root "scripts") "run-harness-dashboard-smoke.ps1"
-if (Test-Path $dashboardSmoke) {
-    Copy-Item $dashboardSmoke (Join-Path $scriptsDir "run-harness-dashboard-smoke.ps1") -Force
-}
-
-$dashboardSmokeSh = Join-Path (Join-Path $root "scripts") "run-harness-dashboard-smoke.sh"
-if (Test-Path $dashboardSmokeSh) {
-    Copy-Item $dashboardSmokeSh (Join-Path $scriptsDir "run-harness-dashboard-smoke.sh") -Force
+$standardSmokeSh = Join-Path (Join-Path $root "scripts") "run-standard-migration-smoke.sh"
+if (Test-Path $standardSmokeSh) {
+    Copy-Item $standardSmokeSh (Join-Path $scriptsDir "run-standard-migration-smoke.sh") -Force
 }
 
 $installMigrationKitSh = Join-Path (Join-Path $root "scripts") "install-migration-kit.sh"
@@ -155,7 +145,7 @@ $runTemplatePath = Join-Path $templatesDir "run-migrator-template.ps1"
 $runTemplateLines = @(
     'param(',
     '    [Parameter(Mandatory=$true)]',
-    '    [ValidateSet("doctor", "config-validate", "migrate", "verify", "verify-project", "explain-todo", "guard", "config-diff", "migration-board", "smoke-plan", "runtime-classify", "profile-match")]',
+    '    [ValidateSet("doctor", "config-validate", "orchestrate", "migrate", "verify", "verify-project", "explain-todo", "guard", "config-diff", "migration-board", "smoke-plan", "runtime-classify", "profile-match")]',
     '    [string]$Mode,',
     '',
     '    [Parameter(Mandatory=$true)]',
@@ -217,8 +207,7 @@ $readmeLines = @(
     '  edit migration/migration-progress.md',
     '  edit migration/pom-recovery.md',
     '  edit migration/migrator-tickets.md',
-    '  create migration/run-* outputs',
-    '  create migration/runs/<run-id>/ harness artifacts',
+    '  create migration/runs/<run-id>/ standard run artifacts',
     '  run this CLI',
     '',
     'Forbidden:',
@@ -250,60 +239,40 @@ $readmeLines = @(
     'Refresh migration kit:',
     '  scripts/install-migration-kit.ps1 -Workspace migration -Update -Backup',
     '',
-    'Harness autopilot kit:',
+    'Standard migration kit:',
     '  templates/migration-kit/harness/README.md',
     '  templates/migration-kit/agent-skills/skill-map.md',
     '  templates/migration-kit/agent-skills/manifest.json',
     '  templates/migration-kit/state/harness-policy.json',
-    '  templates/migration-kit/scripts/new-harness-run.ps1 / new-harness-run.sh',
     '  templates/migration-kit/scripts/check-harness-policy.ps1 / check-harness-policy.sh',
     '  templates/migration-kit/scripts/check-final-gate.ps1 / check-final-gate.sh',
-    '  templates/migration-kit/scripts/build-harness-dashboard.ps1 / build-harness-dashboard.sh',
     '  templates/migration-kit/scripts/write-agent-skill-usage.ps1 / write-agent-skill-usage.sh',
     '  templates/migration-kit/scripts/record-agent-skill-profile.ps1 / record-agent-skill-profile.sh',
-    '  templates/migration-kit/scripts/slice-gate-followups.ps1 / slice-gate-followups.sh',
-    '  templates/migration-kit/scripts/evaluate-wave-quality-budget.ps1 / evaluate-wave-quality-budget.sh',
-    '  templates/migration-kit/scripts/start-fresh-wavefront-run.ps1 / start-fresh-wavefront-run.sh',
     '  templates/migration-kit/scripts/collect-mapping-research-memory.ps1 / collect-mapping-research-memory.sh',
     '  templates/migration-kit/scripts/create-feedback-bundle.ps1 / create-feedback-bundle.sh',
     '  templates/migration-kit/scripts/validate-installed-scripts.ps1 / validate-installed-scripts.sh',
     '  templates/migration-kit/scripts/validate-run-artifacts.ps1 / validate-run-artifacts.sh',
     '  templates/migration-kit/scripts/repair-jsonl-ledger.ps1 / repair-jsonl-ledger.sh',
     '  templates/migration-kit/scripts/update-current-ticket-status.ps1 / update-current-ticket-status.sh',
-    '  templates/migration-kit/scripts/update-sentinel-finding-status.ps1 / update-sentinel-finding-status.sh',
-    '  templates/migration-kit/dashboard/i18n/en.json',
-    '  templates/migration-kit/dashboard/i18n/ru.json',
-    '  docs/migrator-agent-harness-dogfood.md',
-    '  docs/migrator-agent-harness-dashboard.md',
-    '  scripts/run-harness-dogfood-smoke.ps1',
-    '  scripts/run-harness-dogfood-smoke.sh',
-    '  docs/migrator-agent-harness-dashboard.md',
-    '  scripts/run-harness-dashboard-smoke.ps1',
-    '  scripts/run-harness-dashboard-smoke.sh',
+    '  scripts/run-standard-migration-smoke.ps1',
+    '  scripts/run-standard-migration-smoke.sh',
     '',
     'Read first:',
     '  docs/guarded-opencode-desktop-runbook.ru.md',
     '  docs/pom-recovery-policy.md',
     '  templates/migration-kit/prompts/kickoff-prompt.txt',
-    '  templates/migration-kit/prompts/loop-batch-prompt.txt',
-    '  templates/migration-kit/prompts/autopilot-loop-prompt.txt',
+    '  templates/migration-kit/prompts/bounded-repair-prompt.txt',
     '  templates/migration-kit/agent-skills/plow-ahead/SKILL.md',
     '  templates/migration-kit/scripts/write-agent-skill-usage.ps1',
     '  templates/migration-kit/scripts/record-agent-skill-profile.ps1',
-    '  templates/migration-kit/scripts/slice-gate-followups.ps1',
-    '  templates/migration-kit/scripts/evaluate-wave-quality-budget.ps1',
-    '  templates/migration-kit/scripts/start-fresh-wavefront-run.ps1',
     '  templates/migration-kit/scripts/collect-mapping-research-memory.ps1',
     '  templates/migration-kit/scripts/create-feedback-bundle.ps1',
     '  templates/migration-kit/scripts/validate-installed-scripts.ps1',
     '  templates/migration-kit/scripts/validate-run-artifacts.ps1',
     '  templates/migration-kit/scripts/repair-jsonl-ledger.ps1',
     '  templates/migration-kit/scripts/update-current-ticket-status.ps1',
-    '  templates/migration-kit/scripts/update-sentinel-finding-status.ps1',
     '  templates/migration-kit/harness/README.md',
     '  templates/migration-kit/agent-skills/skill-map.md',
-    '  docs/migrator-agent-harness-dogfood.md',
-    '  docs/migrator-agent-harness-dashboard.md',
     '  schemas/adapter-config.schema.json',
     '',
     'Windows PowerShell execution policy:',

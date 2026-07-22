@@ -25,12 +25,6 @@ $requiredFiles = @(
     "templates/migration-kit/scripts/write-agent-skill-usage.sh",
     "templates/migration-kit/scripts/record-agent-skill-profile.ps1",
     "templates/migration-kit/scripts/record-agent-skill-profile.sh",
-    "templates/migration-kit/scripts/slice-gate-followups.ps1",
-    "templates/migration-kit/scripts/slice-gate-followups.sh",
-    "templates/migration-kit/scripts/evaluate-wave-quality-budget.ps1",
-    "templates/migration-kit/scripts/evaluate-wave-quality-budget.sh",
-    "templates/migration-kit/scripts/start-fresh-wavefront-run.ps1",
-    "templates/migration-kit/scripts/start-fresh-wavefront-run.sh",
     "templates/migration-kit/scripts/collect-mapping-research-memory.ps1",
     "templates/migration-kit/scripts/collect-mapping-research-memory.sh",
     "templates/migration-kit/scripts/create-feedback-bundle.ps1",
@@ -43,10 +37,10 @@ $requiredFiles = @(
     "templates/migration-kit/scripts/repair-jsonl-ledger.sh",
     "templates/migration-kit/scripts/update-current-ticket-status.ps1",
     "templates/migration-kit/scripts/update-current-ticket-status.sh",
-    "templates/migration-kit/scripts/update-sentinel-finding-status.ps1",
-    "templates/migration-kit/scripts/update-sentinel-finding-status.sh",
     "scripts/install-migration-kit.ps1",
-    "scripts/install-migration-kit.sh"
+    "scripts/install-migration-kit.sh",
+    "scripts/run-standard-migration-smoke.ps1",
+    "scripts/run-standard-migration-smoke.sh"
 )
 
 foreach ($relative in $requiredFiles) {

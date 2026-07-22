@@ -45,8 +45,8 @@ The renderer replaces the selected invocation with an explicit `__MigratorScaffo
 - assertions, Selenium/Playwright APIs, selectors, waits, and arbitrary statements are ineligible;
 - suppression and scaffolding cannot own the same exact method or pattern;
 - catch-all patterns and wildcard owners are rejected by config validation;
-- scaffold roots and scaffold-only tests are counted and bounded per wave;
-- `ACCEPT_WAVE` is rejected while scaffolds remain; use `ACCEPT_WITH_SCAFFOLDING`;
+- scaffold roots and scaffold-only tests are counted and bounded per standard run;
+- runtime-ready acceptance is rejected while scaffolds remain; report structural-only readiness instead;
 - accepted scaffolding never changes `runtimeReady` to true.
 
 The intended result is `MIGRATED_WITH_SCAFFOLDING`: the repetitive test structure is migrated and compile-connected, while a small, honest runtime-blocker list remains for isolated follow-up.
