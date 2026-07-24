@@ -114,6 +114,21 @@ public sealed class StandardMigrationModeTests
         Assert.Contains("selenium-pw-migrator run", guide);
     }
 
+    [Fact]
+    public void StandardSmoke_UsesSupportedCompileSafeSeleniumShape()
+    {
+        var smoke = Read("scripts/run-standard-migration-smoke.ps1");
+        var performance = Read("scripts/run-performance-tests.ps1");
+
+        Assert.Contains("WebDriver.FindElement(By.CssSelector", smoke);
+        Assert.Contains("submit.Click()", smoke);
+        Assert.DoesNotContain("driver.Navigate()", smoke);
+        Assert.DoesNotContain("driver.FindElement(", smoke);
+        Assert.Contains("syntax errors: $syntaxErrors", smoke);
+        Assert.Contains("standardMigrationSmokeError", performance);
+        Assert.Contains("catch", performance);
+    }
+
     static string Read(string relativePath) => File.ReadAllText(FindRepositoryPath(relativePath));
 
     static string FindRepositoryPath(string relativePath)

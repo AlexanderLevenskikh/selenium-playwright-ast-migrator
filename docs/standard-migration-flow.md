@@ -33,6 +33,7 @@ Optimization is deliberately simple and reviewable:
 - read project-scoped migration memory before changing mappings;
 - rank repeated TODO/root causes by expected payoff;
 - make at most one bounded source-backed adapter-config, generated-helper, or generated-POM improvement inside the product workspace; report a suspected Migrator recognizer/renderer defect with a minimal reproduction unless repository-source edits were explicitly authorized;
+- do not stop after routine analysis to ask whether to continue: execute that one safe agent-executable improvement in the same invocation, and ask only for a human product decision or new write authorization;
 - rerun the complete configured source and compare the reports;
 - stop after success, a concrete blocker, or repeated no progress.
 

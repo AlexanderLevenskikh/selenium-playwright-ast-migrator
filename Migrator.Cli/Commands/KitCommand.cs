@@ -139,7 +139,7 @@ Adapter config: `{{options.Config}}`
 
 ## Operating rule
 
-Run the configured source through one ordinary full-project migration command. Do not manufacture reports or validation evidence.
+Run the configured source through one ordinary full-project migration command. Do not manufacture reports or validation evidence. Do not end routine POM/config analysis by asking whether to continue; complete one safe bounded remediation under the migration workspace when evidence and permissions allow it, then rerun and report.
 
 ```bash
 {{options.ToolCommand}} run --input "{{options.Source}}" --config "{{options.Config}}" --out "{{options.Output}}" --format both

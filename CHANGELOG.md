@@ -29,6 +29,10 @@ This project uses preview SemVer-style versions while the public API is still st
 
 - Corrected standard-run examples so `verify-project` receives the original Selenium source and matching config rather than the generated output directory.
 - Corrected the generated final-gate command contract to accept `-Run` and `-RepoRoot`, and made project-verification evidence mandatory by default.
+- Enforced `QualityGates.FailOnMultipleMatchingScopes` (fail-closed by default); overlapping profile scopes no longer silently select the first scope unless compatibility mode is explicitly enabled.
+- Replaced the regex-only exact method-signature parser with balanced parsing for nested generic arguments, tuple parameter types, attributes, and default values.
+- Adapter config validation now rejects duplicate `UiTargets.SourceExpression`, `Methods.SourceMethod`, and `ParameterizedMethods.SourceMethodPattern` keys instead of silently overwriting them.
+- Suppression-only tests guarded by `EMPTY_TEST_AFTER_SUPPRESSION` are no longer counted as successfully converted in migration reports.
 
 ## [0.0.0-preview.8]
 

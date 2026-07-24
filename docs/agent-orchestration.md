@@ -23,6 +23,8 @@ kit doctor
 
 `migration/state/scope-contract.json` is the machine-readable boundary. Generated files belong under the configured workspace/output. Source Selenium projects and product code remain read-only unless the user explicitly authorizes a narrow edit.
 
+A routine agent-executable POM/config repair is part of the same invocation, not a follow-up permission question. The agent must not end with `Want me to continue?` when one safe bounded remediation is already supported by evidence and allowed under `migration/**`. It asks only for a human product decision or new write authorization.
+
 ## Evidence rule
 
 A report is evidence only when produced by the matching command from current inputs. Missing `verify-project` output is a blocker or an explicit `NOT RUNNABLE` result; it must never be reconstructed from a previous run or handwritten to satisfy a gate.

@@ -24,15 +24,11 @@ using OpenQA.Selenium;
 
 public class LoginTests
 {
-    private IWebDriver driver = null!;
-
     [Test]
-    public void OpensLogin()
+    public void ClicksSubmit()
     {
-        driver.Navigate().GoToUrl("https://example.test/login");
-        driver.FindElement(By.Id("email")).SendKeys("user@example.test");
-        driver.FindElement(By.CssSelector("button[type=submit]")).Click();
-        Assert.That(driver.Title, Is.Not.Empty);
+        var submit = WebDriver.FindElement(By.CssSelector("[data-test='submit-button']"));
+        submit.Click();
     }
 }
 '@ | Set-Content -Encoding UTF8 (Join-Path $sourceDir 'LoginTests.cs')
@@ -42,6 +38,18 @@ $exitCode = $LASTEXITCODE
 $watch.Stop()
 $reportPath = Join-Path $runDir 'orchestration-report.json'
 $generatedReportPath = Join-Path $runDir 'generated/report.json'
+$verifyReportPath = Join-Path $runDir 'verify/verify-report.json'
+$syntaxErrors = $null
+$todoComments = $null
+if (Test-Path $verifyReportPath) {
+    try {
+        $verifyData = Get-Content -Raw $verifyReportPath | ConvertFrom-Json
+        $syntaxErrors = $verifyData.summary.syntaxErrors
+        $todoComments = $verifyData.summary.todoComments
+    } catch {
+        Write-Warning "Could not parse verify report: $($_.Exception.Message)"
+    }
+}
 $partitionDirectories = @(Get-ChildItem -Path $runDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^(wave|partition)-' })
 $status = if ($exitCode -eq 0 -and (Test-Path $reportPath) -and (Test-Path $generatedReportPath) -and $partitionDirectories.Count -eq 0) { 'PASS' } else { 'FAIL' }
 $summary = [ordered]@{
@@ -53,10 +61,13 @@ $summary = [ordered]@{
     run = $runDir
     orchestrationReport = $reportPath
     generatedReport = $generatedReportPath
+    verifyReport = $verifyReportPath
+    syntaxErrors = $syntaxErrors
+    todoComments = $todoComments
     hiddenPartitionDirectories = @($partitionDirectories | ForEach-Object { $_.FullName })
     generatedAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
 }
 $summary | ConvertTo-Json -Depth 10 | Set-Content -Encoding UTF8 (Join-Path $outputPath 'standard-migration-smoke.json')
-if ($status -ne 'PASS') { throw "Standard migration smoke failed with exit code $exitCode; orchestration report: $(Test-Path $reportPath); generated report: $(Test-Path $generatedReportPath); hidden partitions: $($partitionDirectories.Count)" }
+if ($status -ne 'PASS') { throw "Standard migration smoke failed with exit code $exitCode; orchestration report: $(Test-Path $reportPath); generated report: $(Test-Path $generatedReportPath); verify report: $(Test-Path $verifyReportPath); syntax errors: $syntaxErrors; TODOs: $todoComments; hidden partitions: $($partitionDirectories.Count)" }
 Write-Host 'STANDARD_MIGRATION_SMOKE_PASS'
 Write-Host "Report: $(Join-Path $outputPath 'standard-migration-smoke.json')"

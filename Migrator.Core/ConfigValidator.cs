@@ -202,6 +202,12 @@ public static class ConfigValidator
 
     private static void ValidateUiTargets(UiTargetMapping[] targets, string section, List<string> errors)
     {
+        ValidateDuplicateMappingKeys(
+            targets.Select(target => target.SourceExpression),
+            section,
+            "SourceExpression",
+            errors);
+
         for (int i = 0; i < targets.Length; i++)
         {
             var t = targets[i];
@@ -231,6 +237,12 @@ public static class ConfigValidator
 
     private static void ValidateMethods(MethodMapping[] methods, string section, List<string> errors)
     {
+        ValidateDuplicateMappingKeys(
+            methods.Select(method => method.SourceMethod),
+            section,
+            "SourceMethod",
+            errors);
+
         for (int i = 0; i < methods.Length; i++)
         {
             var m = methods[i];
@@ -266,6 +278,12 @@ public static class ConfigValidator
 
     private static void ValidateParameterizedMethods(ParameterizedMethodMapping[] methods, string section, List<string> errors)
     {
+        ValidateDuplicateMappingKeys(
+            methods.Select(method => method.SourceMethodPattern),
+            section,
+            "SourceMethodPattern",
+            errors);
+
         for (int i = 0; i < methods.Length; i++)
         {
             var m = methods[i];
@@ -298,6 +316,33 @@ public static class ConfigValidator
             return false;
 
         return targets.Any(kvp => kvp.Value?.TargetStatements != null && kvp.Value.TargetStatements.Length > 0);
+    }
+
+    private static void ValidateDuplicateMappingKeys(
+        IEnumerable<string?> values,
+        string section,
+        string field,
+        List<string> errors)
+    {
+        var seen = new Dictionary<string, int>(StringComparer.Ordinal);
+        var index = 0;
+        foreach (var raw in values)
+        {
+            var value = raw?.Trim();
+            if (!string.IsNullOrEmpty(value))
+            {
+                if (seen.TryGetValue(value, out var firstIndex))
+                {
+                    errors.Add($"{section}[{index}].{field} duplicates {section}[{firstIndex}].{field} = '{value}'. Duplicate mapping keys are ambiguous; keep one mapping or move the override into an explicit scope.");
+                }
+                else
+                {
+                    seen[value] = index;
+                }
+            }
+
+            index++;
+        }
     }
 
     private static void ValidateTargetStatementMappings(Dictionary<string, TargetStatementMapping> targets, string section, List<string> errors)

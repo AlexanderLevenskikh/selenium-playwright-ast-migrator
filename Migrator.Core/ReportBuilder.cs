@@ -21,13 +21,19 @@ public static class ReportBuilder
             line.TrimStart().StartsWith("// TODO:"));
 
         var setupHasUnsupported = allSetupActions.Any(a => a is UnsupportedAction);
+        var convertedWithoutUnsupported = model.Tests.Count(t =>
+            !FlattenActions(t.BodyActions).Any(a => a is UnsupportedAction));
+        var emptyAfterSuppression = generatedOutput.Split(
+            "[MIGRATOR:EMPTY_TEST_AFTER_SUPPRESSION]",
+            StringSplitOptions.None).Length - 1;
+        var successfullyConverted = setupHasUnsupported
+            ? 0
+            : Math.Max(0, convertedWithoutUnsupported - emptyAfterSuppression);
 
         return new MigrationReport(
             SourceFilePath: model.FilePath,
             TotalTests: model.Tests.Count(),
-            SuccessfullyConvertedTests: setupHasUnsupported
-                ? 0
-                : model.Tests.Count(t => !FlattenActions(t.BodyActions).Any(a => a is UnsupportedAction)),
+            SuccessfullyConvertedTests: successfullyConverted,
             UnsupportedActions: unsupportedActions,
             GeneratedOutput: generatedOutput,
             SemanticActions: semanticCount,

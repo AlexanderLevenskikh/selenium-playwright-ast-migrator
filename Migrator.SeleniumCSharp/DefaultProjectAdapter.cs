@@ -73,10 +73,7 @@ public class DefaultProjectAdapter : IProjectAdapter
             return null;
 
         if (matching.Length > 1)
-        {
-            Console.Error.WriteLine($"Warning: multiple profile scopes matched source file '{Path.GetFileName(sourceFilePath)}': " +
-                string.Join(", ", matching.Select(s => s.Name)));
-        }
+            HandleMultipleMatchingScopes(sourceFilePath, matching);
 
         return matching[0].Name;
     }
@@ -149,10 +146,7 @@ public class DefaultProjectAdapter : IProjectAdapter
             return ResolveGlobalConfig();
 
         if (matchingScopes.Length > 1)
-        {
-            Console.Error.WriteLine($"Warning: multiple profile scopes matched source file '{Path.GetFileName(sourceFilePath)}': " +
-                string.Join(", ", matchingScopes.Select(s => s.Name)));
-        }
+            HandleMultipleMatchingScopes(sourceFilePath, matchingScopes);
 
         var scope = matchingScopes[0];
 
@@ -324,26 +318,211 @@ public class DefaultProjectAdapter : IProjectAdapter
         if (string.IsNullOrWhiteSpace(sourceMethod))
             return false;
 
-        var match = Regex.Match(
-            sourceMethod.Trim(),
-            @"^(?:(?<receiver>@?[A-Za-z_]\w*(?:\s*\.\s*@?[A-Za-z_]\w*)*)\s*\.\s*)?(?<name>[A-Za-z_]\w*)(?:\s*<(?<genericArguments>[^>]+)>)?\s*\((?<parameters>.*)\)$",
-            RegexOptions.CultureInvariant);
-        if (!match.Success)
+        var signature = sourceMethod.Trim();
+        var openParen = FindTopLevelParameterListStart(signature);
+        if (openParen < 0 || !HasOnlyWhitespaceAfterMatchingCloseParen(signature, openParen, out var closeParen))
             return false;
 
-        receiver = match.Groups["receiver"].Success
-            ? Regex.Replace(match.Groups["receiver"].Value, @"\s*\.\s*", ".")
-            : null;
-        methodName = match.Groups["name"].Value;
-        genericArity = match.Groups["genericArguments"].Success
-            ? SplitTopLevelArguments(match.Groups["genericArguments"].Value).Count()
-            : 0;
-        parameterNames = SplitTopLevelArguments(match.Groups["parameters"].Value)
-            .Select(parameter => Regex.Match(parameter.Trim(), @"(?<name>[A-Za-z_]\w*)\s*$", RegexOptions.CultureInvariant))
-            .Where(parameterMatch => parameterMatch.Success)
-            .Select(parameterMatch => parameterMatch.Groups["name"].Value)
+        var head = signature[..openParen].Trim();
+        var parametersText = signature[(openParen + 1)..closeParen];
+        string? genericArguments = null;
+
+        if (head.EndsWith('>'))
+        {
+            var genericOpen = FindMatchingGenericOpen(head);
+            if (genericOpen < 0)
+                return false;
+
+            genericArguments = head[(genericOpen + 1)..^1];
+            head = head[..genericOpen].TrimEnd();
+        }
+
+        var lastDot = head.LastIndexOf('.');
+        var receiverText = lastDot >= 0 ? head[..lastDot].Trim() : null;
+        var methodText = lastDot >= 0 ? head[(lastDot + 1)..].Trim() : head;
+
+        if (!IsSimpleIdentifier(methodText))
+            return false;
+        if (!string.IsNullOrWhiteSpace(receiverText) && !IsQualifiedIdentifier(receiverText))
+            return false;
+
+        receiver = string.IsNullOrWhiteSpace(receiverText)
+            ? null
+            : Regex.Replace(receiverText, @"\s*\.\s*", ".");
+        methodName = methodText;
+        genericArity = genericArguments == null
+            ? 0
+            : SplitTopLevelArguments(genericArguments).Count();
+        parameterNames = SplitTopLevelArguments(parametersText)
+            .Select(ExtractParameterName)
+            .Where(name => name != null)
+            .Select(name => name!)
             .ToArray();
         return methodName.Length > 0;
+    }
+
+    void HandleMultipleMatchingScopes(string sourceFilePath, ProfileScope[] matchingScopes)
+    {
+        var message = $"Multiple profile scopes matched source file '{Path.GetFileName(sourceFilePath)}': " +
+            string.Join(", ", matchingScopes.Select(scope => scope.Name));
+        var fail = _globalConfig?.QualityGates?.FailOnMultipleMatchingScopes ?? true;
+        if (fail)
+        {
+            throw new ConfigValidationError(new[]
+            {
+                message + ". Make SourcePathPatterns mutually exclusive or set QualityGates.FailOnMultipleMatchingScopes=false for first-match compatibility."
+            });
+        }
+
+        Console.Error.WriteLine("Warning: " + message + ". Using the first matching scope because FailOnMultipleMatchingScopes=false.");
+    }
+
+    static int FindTopLevelParameterListStart(string text)
+    {
+        var angleDepth = 0;
+        var bracketDepth = 0;
+        for (var i = 0; i < text.Length; i++)
+        {
+            switch (text[i])
+            {
+                case '<':
+                    angleDepth++;
+                    break;
+                case '>':
+                    if (angleDepth == 0)
+                        return -1;
+                    angleDepth--;
+                    break;
+                case '[':
+                    bracketDepth++;
+                    break;
+                case ']':
+                    if (bracketDepth == 0)
+                        return -1;
+                    bracketDepth--;
+                    break;
+                case '(' when angleDepth == 0 && bracketDepth == 0:
+                    return i;
+            }
+        }
+
+        return -1;
+    }
+
+    static bool HasOnlyWhitespaceAfterMatchingCloseParen(string text, int openParen, out int closeParen)
+    {
+        closeParen = -1;
+        var depth = 0;
+        var inString = false;
+        var quote = '\0';
+        for (var i = openParen; i < text.Length; i++)
+        {
+            var ch = text[i];
+            if (inString)
+            {
+                if (ch == '\\')
+                {
+                    i++;
+                    continue;
+                }
+                if (ch == quote)
+                    inString = false;
+                continue;
+            }
+
+            if (ch is '\'' or '"')
+            {
+                inString = true;
+                quote = ch;
+                continue;
+            }
+
+            if (ch == '(')
+                depth++;
+            else if (ch == ')' && --depth == 0)
+            {
+                closeParen = i;
+                return text[(i + 1)..].All(char.IsWhiteSpace);
+            }
+        }
+
+        return false;
+    }
+
+    static int FindMatchingGenericOpen(string text)
+    {
+        var depth = 0;
+        for (var i = text.Length - 1; i >= 0; i--)
+        {
+            if (text[i] == '>')
+                depth++;
+            else if (text[i] == '<' && --depth == 0)
+                return i;
+        }
+        return -1;
+    }
+
+    static bool IsSimpleIdentifier(string value) =>
+        Regex.IsMatch(value, @"^@?[A-Za-z_]\w*$", RegexOptions.CultureInvariant);
+
+    static bool IsQualifiedIdentifier(string value) =>
+        Regex.IsMatch(value, @"^@?[A-Za-z_]\w*(?:\s*\.\s*@?[A-Za-z_]\w*)*$", RegexOptions.CultureInvariant);
+
+    static string? ExtractParameterName(string parameter)
+    {
+        var withoutDefault = SplitAtTopLevelEquals(parameter).Trim();
+        if (withoutDefault.Length == 0)
+            return null;
+
+        // Strip leading attributes and common parameter modifiers before taking the final identifier.
+        while (withoutDefault.StartsWith('['))
+        {
+            var close = FindMatchingBracket(withoutDefault);
+            if (close < 0)
+                return null;
+            withoutDefault = withoutDefault[(close + 1)..].TrimStart();
+        }
+
+        var match = Regex.Match(withoutDefault, @"(?<name>@?[A-Za-z_]\w*)\s*$", RegexOptions.CultureInvariant);
+        return match.Success ? match.Groups["name"].Value : null;
+    }
+
+    static string SplitAtTopLevelEquals(string parameter)
+    {
+        var paren = 0;
+        var bracket = 0;
+        var brace = 0;
+        var angle = 0;
+        for (var i = 0; i < parameter.Length; i++)
+        {
+            switch (parameter[i])
+            {
+                case '(': paren++; break;
+                case ')': paren--; break;
+                case '[': bracket++; break;
+                case ']': bracket--; break;
+                case '{': brace++; break;
+                case '}': brace--; break;
+                case '<': angle++; break;
+                case '>': angle--; break;
+                case '=' when paren == 0 && bracket == 0 && brace == 0 && angle == 0:
+                    return parameter[..i];
+            }
+        }
+        return parameter;
+    }
+
+    static int FindMatchingBracket(string text)
+    {
+        var depth = 0;
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '[')
+                depth++;
+            else if (text[i] == ']' && --depth == 0)
+                return i;
+        }
+        return -1;
     }
 
     static UiTargetMapping[] MergeUiTargets(UiTargetMapping[] global, UiTargetMapping[] scope)

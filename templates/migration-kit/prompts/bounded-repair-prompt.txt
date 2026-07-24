@@ -1,1 +1,1 @@
-Run at most one bounded improvement cycle: inspect the latest standard run, fix one repeated root cause, rerun the complete pipeline, and report the delta. Do not partition the source and do not bypass failed verification.
+Run at most one bounded improvement cycle: inspect the latest standard run, fix one repeated root cause, rerun the complete pipeline, and report the delta. Do not partition the source and do not bypass failed verification. Do not turn the recommended repair into an opt-in question; execute it when it is inside scope and agent-executable.

@@ -12,6 +12,7 @@ Produce a reviewable Playwright migration draft for the complete configured Sele
 4. Execute a real matching `verify-project`; missing target project/toolchain is a blocker, not a passing result.
 5. Run scope, policy, artifact, and final-gate checks for that exact run. Matching project verification is required by default.
 6. Select at most one repeated highest-payoff root cause supported by current evidence, make one bounded improvement under `migration/**`, and rerun the full standard flow. A suspected Migrator engine defect is reported with a minimal reproduction unless repository-source edits were explicitly authorized.
+7. Do not end a routine run with an opt-in question such as `Want me to continue?`. If the selected remediation is agent-executable, reversible, and permitted under `migration/**`, complete it as the single bounded improvement in the current invocation. Ask only when a human product decision or new write authorization is genuinely required.
 
 ## Project-scoped migration memory
 

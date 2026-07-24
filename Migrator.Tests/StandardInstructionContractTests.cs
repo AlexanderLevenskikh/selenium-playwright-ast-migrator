@@ -77,6 +77,20 @@ public sealed class StandardInstructionContractTests
         Assert.Contains("Never write a synthetic PASS", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("migration/runs/run-001", command);
         Assert.Contains("selenium-pw-migrator verify-project", command);
+        Assert.Contains("Do not end a routine run with an opt-in question", command);
+        Assert.Contains("complete it as the single bounded improvement", command);
+
+        var orchestrator = Read(".opencode/agents/orchestrator.md");
+        var contract = Read("templates/migration-kit/AGENT_CONTRACT.md");
+        var kickoff = Read("templates/migration-kit/prompts/kickoff-prompt.txt");
+        var plowAhead = Read("templates/migration-kit/agent-skills/plow-ahead/SKILL.md");
+        var codex = Read("templates/codex/CODEX.md");
+        var genericHandoff = Read("Migrator.Cli/Commands/KitCommand.cs");
+        foreach (var instruction in new[] { orchestrator, contract, kickoff, plowAhead, codex, genericHandoff })
+        {
+            Assert.Contains("ask", instruction, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("bounded", instruction, StringComparison.OrdinalIgnoreCase);
+        }
 
         var config = Read("opencode.jsonc");
         Assert.Contains("\"question\": \"deny\"", config);

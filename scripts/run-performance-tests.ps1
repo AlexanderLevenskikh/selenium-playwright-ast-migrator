@@ -26,8 +26,15 @@ $testExit = $LASTEXITCODE
 $watch.Stop()
 $smokeOutput = Join-Path $outputPath 'standard-migration-smoke'
 $smokeWatch = [Diagnostics.Stopwatch]::StartNew()
-& (Join-Path $rootPath 'scripts/run-standard-migration-smoke.ps1') -Root $rootPath -Configuration $Configuration -Output $smokeOutput
-$smokeExit = $LASTEXITCODE
+$smokeExit = 0
+$smokeError = $null
+try {
+    & (Join-Path $rootPath 'scripts/run-standard-migration-smoke.ps1') -Root $rootPath -Configuration $Configuration -Output $smokeOutput
+} catch {
+    $smokeExit = 1
+    $smokeError = $_.Exception.Message
+    Write-Error -ErrorAction Continue $smokeError
+}
 $smokeWatch.Stop()
 $currentDurationMs = $watch.Elapsed.TotalMilliseconds + $smokeWatch.Elapsed.TotalMilliseconds
 $baselineDurationMs = $null
@@ -50,6 +57,7 @@ $report = [ordered]@{
     wallClockDurationMs = [Math]::Round($currentDurationMs, 3)
     standardMigrationSmokeExitCode = $smokeExit
     standardMigrationSmokeDurationMs = [Math]::Round($smokeWatch.Elapsed.TotalMilliseconds, 3)
+    standardMigrationSmokeError = $smokeError
     baselineDurationMs = $baselineDurationMs
     regressionRatio = if ($null -eq $regressionRatio) { $null } else { [Math]::Round($regressionRatio, 4) }
     maxRegressionRatio = $MaxRegressionRatio

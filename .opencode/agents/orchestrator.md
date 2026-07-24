@@ -26,4 +26,6 @@ Use only the standard full-project mode. Work against one configured Selenium so
 
 Do not create batch plans, acceptance receipts, quality ledgers, role leases, or synthetic validation evidence. Do not ask the user to operate internal CLI plumbing that you can run yourself.
 
+Do not end a routine run with an opt-in question such as `Want me to continue?`. If the selected remediation is agent-executable, reversible, and permitted under `migration/**`, complete it as the single bounded improvement in the current invocation. Ask only when a human product decision or new write authorization is genuinely required.
+
 A CLI crash, missing SDK, unavailable target project, or failed verification is an explicit blocker. Preserve logs; never fabricate a replacement result.

@@ -13,6 +13,17 @@
 Semantic — более надёжный, так как опирается на типизированную информацию из SemanticModel.
 Syntax fallback работает без SemanticModel и может давать менее точные результаты.
 
+### Граница проектной семантики
+
+Roslyn-парсер строит semantic model для анализируемого C#-файла и базовых runtime-сборок.
+Он не загружает автоматически всю исходную solution и все пользовательские assembly references
+на этапе parse. Поэтому вызовы проектных helper/POM-методов могут не получить полный `IMethodSymbol`
+и переходят в честный syntax fallback. Для них используются `Methods`, `ParameterizedMethods`,
+`PageObjects`, helper inventory и POM index. Финальная корректность проверяется отдельно через
+`verify-project`, который умеет подключать реальные project/package/assembly references.
+
+Это текущее ограничение точности распознавания, а не отсутствие проектной верификации.
+
 ## Compile-smoke: что проверяет и чего не проверяет
 
 `CompileChecker` в тестах использует Roslyn `CSharpCompilation` для проверки, что
@@ -29,6 +40,30 @@ Syntax fallback работает без SemanticModel и может давать
 - Является заменой `dotnet build` полноценного Playwright-проекта
 
 Это лёгкая проверка: «код выглядит как C#», а не «код работает в браузере».
+
+Для Playwright TypeScript предусмотрен отдельный `verify-ts-project`, который запускает
+проверку в реальном TS-проекте/host-контексте. TypeScript target остаётся experimental,
+поэтому наличие этой команды не означает полного паритета с Playwright .NET.
+
+## Async/await
+
+Playwright .NET renderer генерирует async setup/test methods (`Task`) и добавляет `await`
+для Playwright-действий (`ClickAsync`, `FillAsync`, assertions, waits, navigation). Значение
+`IsAwaited` у исходного helper-вызова сохраняется для config-driven mappings, но базовая
+Selenium-синхронность не блокирует генерацию async Playwright API.
+
+## Пока не покрытые Selenium API
+
+Некоторые браузерные сценарии по-прежнему требуют явного mapping или ручной миграции:
+
+- `SwitchTo().Frame(...)` и сложные multi-window flows;
+- alerts/dialog lifecycle;
+- cookie management;
+- `ExecuteScript` / arbitrary JavaScript;
+- hover/drag-and-drop и составные mouse actions;
+- screenshot-specific behavior.
+
+Такие операции должны оставаться видимыми как TODO/unsupported, а не угадываться.
 
 ## PageObjectProperty
 

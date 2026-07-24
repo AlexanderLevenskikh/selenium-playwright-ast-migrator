@@ -5,6 +5,7 @@ Use this file when a migration task is delegated to Codex instead of the default
 ## Boundary
 
 - Work on one bounded ticket at a time.
+- Do not ask whether to continue when the current ticket is safe, agent-executable, and inside `migration/**`; complete it, run the required checks, and report. Ask only for a human product decision or new write authorization.
 - In a product migration workspace, prefer adapter-config or generated-helper/POM fixes over editing generated output. Treat a suspected Migrator engine defect as a reproducible bug report unless this task explicitly authorizes edits in the Migrator repository.
 - Do not hide TODOs by adding broad suppressions.
 - Do not add `page` or `pagef` to `TargetKnownIdentifiers` just to silence unresolved symbols.

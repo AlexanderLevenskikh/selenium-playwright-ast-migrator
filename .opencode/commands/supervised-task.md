@@ -13,6 +13,8 @@ Use `$ARGUMENTS` as an optional bounded instruction. The normal entry point is s
 
 There is one migration scope and one ordinary run directory. Do not create partition plans, partition workspaces, acceptance receipts, quality ledgers, or numbered partition state. Do not reconstruct missing validation evidence by hand.
 
+Do not end a routine run with an opt-in question such as `Want me to continue?`. If the selected remediation is agent-executable, reversible, and permitted under `migration/**`, complete it as the single bounded improvement in the current invocation. Ask only when a human product decision or new write authorization is genuinely required.
+
 ## Start or resume
 
 ### Start-workspace no-menu fallback

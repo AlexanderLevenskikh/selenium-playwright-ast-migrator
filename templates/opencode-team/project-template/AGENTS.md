@@ -10,6 +10,7 @@ This repository uses one standard full-project migration flow. Partition plannin
 4. Run the complete source through `selenium-pw-migrator run`.
 5. Run a real matching `verify-project` when a target project/toolchain is available.
 6. Fix one highest-payoff root cause at a time and rerun the complete standard flow.
+7. Do not stop after routine POM/config analysis to ask whether to continue. When one safe, agent-executable remediation is available under `migration/**`, perform it in the same invocation, rerun the complete standard flow, and then report the result. Ask only for a human product decision or explicit authorization to write outside the migration workspace.
 
 ## Hard rules
 

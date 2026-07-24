@@ -142,7 +142,7 @@ dotnet tool update SeleniumPlaywrightMigrator --local --add-source .\artifacts\l
 
 ## The agent keeps asking whether to continue
 
-Use `docs/guarded-opencode-desktop-runbook.ru.md` as the launch procedure. In guarded mode, routine continuation decisions should be made by the agent inside `migration/**`. The agent should stop only for a classified blocker, scope violation, loop/plateau, or failed final gate evidence.
+Use `docs/guarded-opencode-desktop-runbook.ru.md` as the launch procedure and refresh the installed kit/OpenCode command pack. In standard mode, routine continuation decisions are made by the agent inside `migration/**`: when one safe bounded POM/config repair is supported by evidence, it performs that repair and reruns the full flow in the same invocation. It must not end with `Want me to continue?`. The agent stops only for a human product decision, new write authorization, classified blocker, scope violation, loop/plateau, or failed final-gate evidence.
 
 ## Runtime Playwright tests fail after generated code compiles
 

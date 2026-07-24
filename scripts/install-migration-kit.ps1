@@ -534,7 +534,7 @@ $quickStartLines = @(
     "scripts/run-standard-migration-smoke.sh",
     '```',
     "",
-    "## 8. Ask for next ticket",
+    "## 8. Run the next bounded ticket",
     "",
     '```text',
     "$(Join-Path $Workspace 'prompts/next-ticket-prompt.txt')",

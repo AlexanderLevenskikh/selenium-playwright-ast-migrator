@@ -41,6 +41,7 @@ Final gate:
 - Do not edit migrator source code in `migration-artifact` mode.
 - Do not mark empty tests as runtime-ready.
 - Do not continue indefinitely: apply at most one bounded repair before a complete rerun and handoff.
+- Do not hand off a routine agent-executable repair as an opt-in question; complete the allowed bounded repair first.
 
 ## Open questions
 

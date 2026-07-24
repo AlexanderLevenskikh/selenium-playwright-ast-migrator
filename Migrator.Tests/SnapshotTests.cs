@@ -1401,6 +1401,7 @@ public class SnapshotTests
             Array.Empty<PageObjectMapping>(),
             Array.Empty<MethodMapping>(),
             TestHost: new TestHostConfig { BaseClass = "DefaultBase" },
+            QualityGates: new QualityGatesConfig { FailOnMultipleMatchingScopes = false },
             Scopes: new[]
             {
                 new ProfileScope
