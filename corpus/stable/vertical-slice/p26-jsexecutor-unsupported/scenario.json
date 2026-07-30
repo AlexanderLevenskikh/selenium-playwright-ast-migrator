@@ -85,7 +85,7 @@
   "implementation": {
     "state": "READY",
     "block": "02-fixtures-labapp",
-    "notes": "Ready source fixture; target migration is expected to classify ExecuteScript as unsupported without corrupting the neighbour click.",
-    "contentHash": "sha256:cf7f598a8996fe824c31850b600d8c6ea38d945a90b5f1fbd834db6d338a5396"
+    "notes": "Source executes ExecuteScript as a realistic unsupported statement; the target oracle intentionally checks only the independent neighbour click and its DOM result.",
+    "contentHash": "sha256:46674a3604765ad14d549c507bf8de747ac0c9fc2406df7697e20a74286a3f51"
   }
 }

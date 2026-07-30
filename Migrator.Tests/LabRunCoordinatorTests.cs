@@ -57,6 +57,44 @@ public sealed class LabRunCoordinatorTests
     }
 
     [Fact]
+    public async Task Coordinator_PassesScenarioAdapterConfigAndMergesVerificationSettings()
+    {
+        var artifacts = Path.Combine(Path.GetTempPath(), "migrator-lab-adapter-config-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var runner = new SuccessfulFakeProcessRunner();
+            var coordinator = new LabRunCoordinator(runner);
+            var result = await coordinator.RunAsync(new LabRunOptions
+            {
+                CorpusRoot = VerticalSliceRoot(),
+                ArtifactsRoot = artifacts,
+                ProjectIds = new[] { "p09-helper-extension-mapping" },
+                DotNetExecutable = "fake-dotnet",
+                MigratorCommand = LabProcessCommand.Create("fake-migrator"),
+                CommandTimeout = TimeSpan.FromSeconds(5)
+            });
+
+            var migrationRequest = Assert.Single(runner.Requests.Where(request => request.Arguments.Contains("run", StringComparer.Ordinal)));
+            var configIndex = Array.IndexOf(migrationRequest.Arguments, "--config");
+            Assert.True(configIndex >= 0 && configIndex + 1 < migrationRequest.Arguments.Length);
+            Assert.Equal("adapter-config.json", Path.GetFileName(migrationRequest.Arguments[configIndex + 1]));
+
+            var project = Assert.Single(result.Projects);
+            var configPath = Path.Combine(project.ArtifactsDirectory, "project-verify-config.json");
+            using var document = JsonDocument.Parse(File.ReadAllText(configPath));
+            Assert.Equal("Migrator.Lab.P09", document.RootElement.GetProperty("SourceProjectName").GetString());
+            Assert.Equal(1, document.RootElement.GetProperty("ParameterizedMethods").GetArrayLength());
+            Assert.True(document.RootElement.TryGetProperty("Verification", out var verification));
+            Assert.Equal("net10.0", verification.GetProperty("TargetFramework").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(artifacts))
+                Directory.Delete(artifacts, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Coordinator_WritesAllDeclaredProjectReferencesDeterministically()
     {
         var artifacts = Path.Combine(Path.GetTempPath(), "migrator-lab-project-refs-" + Guid.NewGuid().ToString("N"));
@@ -97,8 +135,11 @@ public sealed class LabRunCoordinatorTests
 
     sealed class SuccessfulFakeProcessRunner : ILabProcessRunner
     {
+        public List<LabProcessRequest> Requests { get; } = new();
+
         public async Task<LabProcessResult> RunAsync(LabProcessRequest request, CancellationToken cancellationToken = default)
         {
+            Requests.Add(request);
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(request.StandardOutputPath))!);
             File.WriteAllText(request.StandardOutputPath, "fake command passed" + Environment.NewLine);
             File.WriteAllText(request.StandardErrorPath, "");

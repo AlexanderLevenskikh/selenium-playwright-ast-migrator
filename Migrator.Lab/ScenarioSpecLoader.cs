@@ -163,7 +163,7 @@ public static partial class ScenarioSpecLoader
                 source,
                 "$.source",
                 required: new[] { "language", "testFramework", "template", "features", "migrationFiles" },
-                allowed: new[] { "language", "testFramework", "template", "features", "migrationFiles" },
+                allowed: new[] { "language", "testFramework", "template", "features", "migrationFiles", "adapterConfig" },
                 issues);
         }
 
@@ -303,8 +303,11 @@ public static partial class ScenarioSpecLoader
         ValidateRelativePaths("project.files", scenario.Project.Files, scenarioDirectory, scenario.Implementation.State, issues);
         ValidateRelativePaths("project.entryProject", new[] { scenario.Project.EntryProject }, scenarioDirectory, ScenarioImplementationState.Planned, issues);
         ValidateRelativePaths("source.migrationFiles", scenario.Source.MigrationFiles, scenarioDirectory, ScenarioImplementationState.Planned, issues);
+        if (!string.IsNullOrWhiteSpace(scenario.Source.AdapterConfig))
+            ValidateRelativePaths("source.adapterConfig", new[] { scenario.Source.AdapterConfig }, scenarioDirectory, ScenarioImplementationState.Planned, issues);
         ValidateRelativePaths("project.references", scenario.Project.References, scenarioDirectory, ScenarioImplementationState.Planned, issues);
         ValidateMigrationFiles(scenario, issues);
+        ValidateAdapterConfig(scenario, issues);
         ValidateEntryProject(scenario, issues);
         ValidateProjectReferences(scenario, issues);
         ValidateBudgets(scenario.QualityBudget, issues);
@@ -335,6 +338,20 @@ public static partial class ScenarioSpecLoader
         }
     }
 
+
+
+    static void ValidateAdapterConfig(ScenarioSpec scenario, List<ScenarioValidationIssue> issues)
+    {
+        var adapterConfig = scenario.Source.AdapterConfig;
+        if (string.IsNullOrWhiteSpace(adapterConfig))
+            return;
+
+        if (!scenario.Project.Files.Contains(adapterConfig, StringComparer.OrdinalIgnoreCase))
+            issues.Add(Error("ADAPTER_CONFIG_NOT_IN_PROJECT", $"source.adapterConfig is not listed in project.files: {adapterConfig}"));
+
+        if (!string.Equals(Path.GetExtension(adapterConfig), ".json", StringComparison.OrdinalIgnoreCase))
+            issues.Add(Error("ADAPTER_CONFIG_NOT_JSON", $"source.adapterConfig must reference a .json file: {adapterConfig}"));
+    }
 
     static void ValidateEntryProject(ScenarioSpec scenario, List<ScenarioValidationIssue> issues)
     {

@@ -377,6 +377,11 @@ public partial class PlaywrightDotNetRenderer
                 sb.AppendLine($"{_indent}{_indent}{prefix}var {nv3} = await {locator}.CountAsync(); // line {action.SourceLine}");
                 sb.AppendLine($"{_indent}{_indent}{prefix}Assert.That({nv3}, Is.GreaterThanOrEqualTo({countExpr}));");
                 break;
+            case TableCountKind.CountLessThan:
+                var nv4 = NextTempVar("tableCount");
+                sb.AppendLine($"{_indent}{_indent}{prefix}var {nv4} = await {locator}.CountAsync(); // line {action.SourceLine}");
+                sb.AppendLine($"{_indent}{_indent}{prefix}Assert.That({nv4}, Is.LessThan({countExpr}));");
+                break;
             default:
                 AppendSmartTodo(
                     sb,

@@ -971,7 +971,34 @@ public class DefaultProjectAdapter : IProjectAdapter
         if (localElementAt is MappedTarget)
             return localElementAt;
 
+        var localIndexedAccess = ResolveLocalIndexedAccess(sourceExpression, localVariableMappings);
+        if (localIndexedAccess is MappedTarget)
+            return localIndexedAccess;
+
         return ResolveTarget(sourceExpression, resolved);
+    }
+
+    TargetExpression ResolveLocalIndexedAccess(
+        string sourceExpression,
+        Dictionary<string, TargetExpression> localVariableMappings)
+    {
+        var match = Regex.Match(sourceExpression, @"^(@?[A-Za-z_][A-Za-z0-9_]*)\s*\[\s*(\d+)\s*\]");
+        if (!match.Success)
+            return new UnresolvedTarget(sourceExpression);
+
+        var receiver = match.Groups[1].Value;
+        if (!int.TryParse(match.Groups[2].Value, out var literalIndex))
+            return new UnresolvedTarget(sourceExpression);
+
+        if (!localVariableMappings.TryGetValue(receiver, out var receiverTarget) || receiverTarget is not MappedTarget mappedReceiver)
+            return new UnresolvedTarget(sourceExpression);
+
+        var locatorExpr = BuildLocatorExpression(mappedReceiver);
+        return new MappedTarget(
+            sourceExpression,
+            $"{locatorExpr}.Nth({literalIndex})",
+            TargetKind.RawExpression,
+            null);
     }
 
     TargetExpression ResolveLocalElementAt(
@@ -1295,6 +1322,20 @@ public class DefaultProjectAdapter : IProjectAdapter
             };
         }
 
+        if (TryConvertAssertThatCountConstraint(action, out var countTarget, out var countKind, out var expectedCount))
+        {
+            return new[]
+            {
+                new TableCountAssertionAction(
+                    action.SourceLine,
+                    ResolveTarget(countTarget, resolved),
+                    countKind,
+                    expectedCount,
+                    $"Assert.That({action.ActualExpression}, {action.ConstraintExpression})",
+                    action.Confidence)
+            };
+        }
+
         if (!TryConvertAssertThatTextConstraint(action, out var textAssertion))
             return new[] { action };
 
@@ -1318,6 +1359,20 @@ public class DefaultProjectAdapter : IProjectAdapter
             };
         }
 
+        if (TryConvertAssertThatCountConstraint(action, out var countTarget, out var countKind, out var expectedCount))
+        {
+            return new[]
+            {
+                new TableCountAssertionAction(
+                    action.SourceLine,
+                    ResolveTargetWithLocalVars(countTarget, resolved, localVariableMappings),
+                    countKind,
+                    expectedCount,
+                    $"Assert.That({action.ActualExpression}, {action.ConstraintExpression})",
+                    action.Confidence)
+            };
+        }
+
         if (!TryConvertAssertThatTextConstraint(action, out var textAssertion))
             return new[] { action };
 
@@ -1325,6 +1380,62 @@ public class DefaultProjectAdapter : IProjectAdapter
             textAssertion,
             resolved,
             ResolveTargetWithLocalVars(textAssertion.Target.SourceExpression, resolved, localVariableMappings));
+    }
+
+    static bool TryConvertAssertThatCountConstraint(
+        AssertThatAction action,
+        out string target,
+        out TableCountKind kind,
+        out string? expectedCount)
+    {
+        target = string.Empty;
+        kind = TableCountKind.CountEquals;
+        expectedCount = null;
+
+        var actual = action.ActualExpression.Trim();
+        foreach (var suffix in new[] { ".Count.Get()", ".Count()", ".Count" })
+        {
+            if (!actual.EndsWith(suffix, StringComparison.Ordinal))
+                continue;
+
+            target = actual[..^suffix.Length].Trim();
+            break;
+        }
+
+        if (target.Length == 0)
+            return false;
+
+        var constraint = action.ConstraintExpression.Trim();
+        if (TryExtractConstraintArgument(constraint, "Is.EqualTo", out var equalTo))
+        {
+            kind = TableCountKind.CountEquals;
+            expectedCount = equalTo;
+            return true;
+        }
+
+        if (TryExtractConstraintArgument(constraint, "Is.GreaterThanOrEqualTo", out var greaterOrEqual))
+        {
+            kind = TableCountKind.CountGreaterThanOrEqualTo;
+            expectedCount = greaterOrEqual;
+            return true;
+        }
+
+        if (TryExtractConstraintArgument(constraint, "Is.GreaterThan", out var greaterThan))
+        {
+            kind = TableCountKind.CountGreaterThan;
+            expectedCount = greaterThan;
+            return true;
+        }
+
+        if (TryExtractConstraintArgument(constraint, "Is.LessThan", out var lessThan))
+        {
+            kind = TableCountKind.CountLessThan;
+            expectedCount = lessThan;
+            return true;
+        }
+
+        target = string.Empty;
+        return false;
     }
 
     static bool TryConvertAssertThatVisibilityConstraint(

@@ -1,0 +1,456 @@
+diff --git a/Migrator.Lab/Contracts/ScenarioSpec.cs b/Migrator.Lab/Contracts/ScenarioSpec.cs
+index 17b41dc..6f70580 100644
+--- a/Migrator.Lab/Contracts/ScenarioSpec.cs
++++ b/Migrator.Lab/Contracts/ScenarioSpec.cs
+@@ -24,6 +24,7 @@ public sealed record ScenarioSourceSpec
+     public string Template { get; init; } = "";
+     public string[] Features { get; init; } = Array.Empty<string>();
+     public string[] MigrationFiles { get; init; } = Array.Empty<string>();
++    public string AdapterConfig { get; init; } = "";
+ }
+ 
+ public sealed record ScenarioProjectSpec
+diff --git a/Migrator.Lab/Execution/LabRunCoordinator.cs b/Migrator.Lab/Execution/LabRunCoordinator.cs
+index cc85708..10fae9d 100644
+--- a/Migrator.Lab/Execution/LabRunCoordinator.cs
++++ b/Migrator.Lab/Execution/LabRunCoordinator.cs
+@@ -1,6 +1,7 @@
+ using System.Diagnostics;
+ using System.Text;
+ using System.Text.Json;
++using System.Text.Json.Nodes;
+ using Migrator.Lab.Contracts;
+ using Migrator.Lab.LabApp;
+ using Migrator.Lab.Reports;
+@@ -209,6 +210,7 @@ public sealed class LabRunCoordinator
+             {
+                 Directory.CreateDirectory(migrationInput);
+                 CopyDeclaredProject(workspace, migrationInput, scenario.Source.MigrationFiles);
++                var adapterConfigPath = ResolveScenarioAdapterConfigPath(workspace, scenario);
+                 var commandArguments = options.MigratorCommand.PrefixArguments
+                     .Concat(new[]
+                     {
+@@ -220,12 +222,17 @@ public sealed class LabRunCoordinator
+                         "--target", "dotnet",
+                         "--target-test-framework", "nunit"
+                     })
+-                    .ToArray();
++                    .ToList();
++                if (adapterConfigPath != null)
++                {
++                    commandArguments.Add("--config");
++                    commandArguments.Add(adapterConfigPath);
++                }
+ 
+                 stages.Add(await RunProcessStageAsync(
+                     LabRunStage.Migration,
+                     options.MigratorCommand.FileName,
+-                    commandArguments,
++                    commandArguments.ToArray(),
+                     workspace,
+                     scenarioArtifacts,
+                     "migration-process",
+@@ -525,28 +532,42 @@ public sealed class LabRunCoordinator
+                 Path.GetFullPath(Path.Combine(workspace, reference.Replace('/', Path.DirectorySeparatorChar)))))
+             .Distinct(StringComparer.OrdinalIgnoreCase)
+             .ToArray();
+-        var config = new
++        var sourceConfigPath = ResolveScenarioAdapterConfigPath(workspace, scenario);
++        var config = sourceConfigPath == null
++            ? new JsonObject()
++            : JsonNode.Parse(File.ReadAllText(sourceConfigPath)) as JsonObject
++              ?? throw new InvalidOperationException($"Scenario adapter config must contain a JSON object: {sourceConfigPath}");
++
++        config["SchemaVersion"] ??= "adapter-config/v1";
++        config["SourceProjectName"] ??= "Migrator.Lab." + scenario.Id;
++        config["Verification"] = JsonSerializer.SerializeToNode(new
+         {
+-            SchemaVersion = "adapter-config/v1",
+-            SourceProjectName = "Migrator.Lab." + scenario.Id,
+-            Verification = new
+-            {
+-                TargetFramework = "net10.0",
+-                BaseDirectory = Path.GetFullPath(workspace),
+-                BuildWorkingDirectory = Path.GetFullPath(workspace),
+-                ProjectReferences = projectReferences,
+-                AutoDiscoverNearestProject = false,
+-                AutoDiscoverProjectReferences = false,
+-                AutoDiscoverBuildFiles = true,
+-                AutoDiscoverPackageReferences = false,
+-                NoRestore = false,
+-                Configuration = options.Configuration
+-            }
+-        };
+-        File.WriteAllText(configPath, JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
++            TargetFramework = "net10.0",
++            BaseDirectory = Path.GetFullPath(workspace),
++            BuildWorkingDirectory = Path.GetFullPath(workspace),
++            ProjectReferences = projectReferences,
++            AutoDiscoverNearestProject = false,
++            AutoDiscoverProjectReferences = false,
++            AutoDiscoverBuildFiles = true,
++            AutoDiscoverPackageReferences = false,
++            NoRestore = false,
++            Configuration = options.Configuration
++        });
++
++        File.WriteAllText(configPath, config.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
+         return Path.GetFullPath(configPath);
+     }
+ 
++    static string? ResolveScenarioAdapterConfigPath(string workspace, ScenarioSpec scenario)
++    {
++        if (string.IsNullOrWhiteSpace(scenario.Source.AdapterConfig))
++            return null;
++
++        return Path.GetFullPath(Path.Combine(
++            workspace,
++            scenario.Source.AdapterConfig.Replace('/', Path.DirectorySeparatorChar)));
++    }
++
+     static string ReadScenarioRoute(ScenarioSpec scenario)
+     {
+         foreach (var page in scenario.App.Pages)
+diff --git a/Migrator.Lab/ScenarioSpecLoader.cs b/Migrator.Lab/ScenarioSpecLoader.cs
+index 9e9e951..65a3c96 100644
+--- a/Migrator.Lab/ScenarioSpecLoader.cs
++++ b/Migrator.Lab/ScenarioSpecLoader.cs
+@@ -163,7 +163,7 @@ public static partial class ScenarioSpecLoader
+                 source,
+                 "$.source",
+                 required: new[] { "language", "testFramework", "template", "features", "migrationFiles" },
+-                allowed: new[] { "language", "testFramework", "template", "features", "migrationFiles" },
++                allowed: new[] { "language", "testFramework", "template", "features", "migrationFiles", "adapterConfig" },
+                 issues);
+         }
+ 
+@@ -303,8 +303,11 @@ public static partial class ScenarioSpecLoader
+         ValidateRelativePaths("project.files", scenario.Project.Files, scenarioDirectory, scenario.Implementation.State, issues);
+         ValidateRelativePaths("project.entryProject", new[] { scenario.Project.EntryProject }, scenarioDirectory, ScenarioImplementationState.Planned, issues);
+         ValidateRelativePaths("source.migrationFiles", scenario.Source.MigrationFiles, scenarioDirectory, ScenarioImplementationState.Planned, issues);
++        if (!string.IsNullOrWhiteSpace(scenario.Source.AdapterConfig))
++            ValidateRelativePaths("source.adapterConfig", new[] { scenario.Source.AdapterConfig }, scenarioDirectory, ScenarioImplementationState.Planned, issues);
+         ValidateRelativePaths("project.references", scenario.Project.References, scenarioDirectory, ScenarioImplementationState.Planned, issues);
+         ValidateMigrationFiles(scenario, issues);
++        ValidateAdapterConfig(scenario, issues);
+         ValidateEntryProject(scenario, issues);
+         ValidateProjectReferences(scenario, issues);
+         ValidateBudgets(scenario.QualityBudget, issues);
+@@ -336,6 +339,20 @@ public static partial class ScenarioSpecLoader
+     }
+ 
+ 
++
++    static void ValidateAdapterConfig(ScenarioSpec scenario, List<ScenarioValidationIssue> issues)
++    {
++        var adapterConfig = scenario.Source.AdapterConfig;
++        if (string.IsNullOrWhiteSpace(adapterConfig))
++            return;
++
++        if (!scenario.Project.Files.Contains(adapterConfig, StringComparer.OrdinalIgnoreCase))
++            issues.Add(Error("ADAPTER_CONFIG_NOT_IN_PROJECT", $"source.adapterConfig is not listed in project.files: {adapterConfig}"));
++
++        if (!string.Equals(Path.GetExtension(adapterConfig), ".json", StringComparison.OrdinalIgnoreCase))
++            issues.Add(Error("ADAPTER_CONFIG_NOT_JSON", $"source.adapterConfig must reference a .json file: {adapterConfig}"));
++    }
++
+     static void ValidateEntryProject(ScenarioSpec scenario, List<ScenarioValidationIssue> issues)
+     {
+         if (string.IsNullOrWhiteSpace(scenario.Project.EntryProject))
+diff --git a/Migrator.Tests/LabRunCoordinatorTests.cs b/Migrator.Tests/LabRunCoordinatorTests.cs
+index 29038e7..a587534 100644
+--- a/Migrator.Tests/LabRunCoordinatorTests.cs
++++ b/Migrator.Tests/LabRunCoordinatorTests.cs
+@@ -56,6 +56,44 @@ public sealed class LabRunCoordinatorTests
+         }
+     }
+ 
++    [Fact]
++    public async Task Coordinator_PassesScenarioAdapterConfigAndMergesVerificationSettings()
++    {
++        var artifacts = Path.Combine(Path.GetTempPath(), "migrator-lab-adapter-config-" + Guid.NewGuid().ToString("N"));
++        try
++        {
++            var runner = new SuccessfulFakeProcessRunner();
++            var coordinator = new LabRunCoordinator(runner);
++            var result = await coordinator.RunAsync(new LabRunOptions
++            {
++                CorpusRoot = VerticalSliceRoot(),
++                ArtifactsRoot = artifacts,
++                ProjectIds = new[] { "p09-helper-extension-mapping" },
++                DotNetExecutable = "fake-dotnet",
++                MigratorCommand = LabProcessCommand.Create("fake-migrator"),
++                CommandTimeout = TimeSpan.FromSeconds(5)
++            });
++
++            var migrationRequest = Assert.Single(runner.Requests.Where(request => request.Arguments.Contains("run", StringComparer.Ordinal)));
++            var configIndex = Array.IndexOf(migrationRequest.Arguments, "--config");
++            Assert.True(configIndex >= 0 && configIndex + 1 < migrationRequest.Arguments.Length);
++            Assert.Equal("adapter-config.json", Path.GetFileName(migrationRequest.Arguments[configIndex + 1]));
++
++            var project = Assert.Single(result.Projects);
++            var configPath = Path.Combine(project.ArtifactsDirectory, "project-verify-config.json");
++            using var document = JsonDocument.Parse(File.ReadAllText(configPath));
++            Assert.Equal("Migrator.Lab.P09", document.RootElement.GetProperty("SourceProjectName").GetString());
++            Assert.Equal(1, document.RootElement.GetProperty("ParameterizedMethods").GetArrayLength());
++            Assert.True(document.RootElement.TryGetProperty("Verification", out var verification));
++            Assert.Equal("net10.0", verification.GetProperty("TargetFramework").GetString());
++        }
++        finally
++        {
++            if (Directory.Exists(artifacts))
++                Directory.Delete(artifacts, recursive: true);
++        }
++    }
++
+     [Fact]
+     public async Task Coordinator_WritesAllDeclaredProjectReferencesDeterministically()
+     {
+@@ -97,8 +135,11 @@ public sealed class LabRunCoordinatorTests
+ 
+     sealed class SuccessfulFakeProcessRunner : ILabProcessRunner
+     {
++        public List<LabProcessRequest> Requests { get; } = new();
++
+         public async Task<LabProcessResult> RunAsync(LabProcessRequest request, CancellationToken cancellationToken = default)
+         {
++            Requests.Add(request);
+             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(request.StandardOutputPath))!);
+             File.WriteAllText(request.StandardOutputPath, "fake command passed" + Environment.NewLine);
+             File.WriteAllText(request.StandardErrorPath, "");
+diff --git a/Migrator.Tests/LabScenarioContractTests.cs b/Migrator.Tests/LabScenarioContractTests.cs
+index ca38911..a376752 100644
+--- a/Migrator.Tests/LabScenarioContractTests.cs
++++ b/Migrator.Tests/LabScenarioContractTests.cs
+@@ -86,6 +86,32 @@ public sealed class LabScenarioContractTests
+         }
+     }
+ 
++    [Fact]
++    public void HelperScenario_UsesReviewedSourceBackedAdapterConfig()
++    {
++        var entry = ScenarioCatalog.Load(VerticalSliceRoot()).Entries
++            .Single(item => item.Scenario!.Id == "p09-helper-extension-mapping");
++        var scenario = entry.Scenario!;
++
++        Assert.Equal("adapter-config.json", scenario.Source.AdapterConfig);
++        Assert.Contains(scenario.Source.AdapterConfig, scenario.Project.Files);
++
++        var helperSource = File.ReadAllText(Path.Combine(entry.ScenarioDirectory, "Helpers", "ElementExtensions.cs"));
++        Assert.Contains("ClickAndWaitForText", helperSource, StringComparison.Ordinal);
++        Assert.Contains("FindElement(button).Click()", helperSource, StringComparison.Ordinal);
++        Assert.Contains("FindElement(status).Text == expectedText", helperSource, StringComparison.Ordinal);
++
++        using var config = JsonDocument.Parse(File.ReadAllText(Path.Combine(entry.ScenarioDirectory, scenario.Source.AdapterConfig)));
++        var mapping = Assert.Single(config.RootElement.GetProperty("ParameterizedMethods").EnumerateArray());
++        Assert.Equal(
++            "WebDriver.ClickAndWaitForText(By.Id({buttonId}), By.Id({statusId}), {expectedText})",
++            mapping.GetProperty("SourceMethodPattern").GetString());
++        Assert.False(mapping.GetProperty("RequiresReview").GetBoolean());
++        var statements = mapping.GetProperty("TargetStatements").EnumerateArray().Select(item => item.GetString()!).ToArray();
++        Assert.Contains(statements, statement => statement.Contains("ClickAsync", StringComparison.Ordinal));
++        Assert.Contains(statements, statement => statement.Contains("ToHaveTextAsync", StringComparison.Ordinal));
++    }
++
+     [Fact]
+     public void TransitiveWarningScenario_HasOneUnambiguousPositiveExpectation()
+     {
+diff --git a/Migrator.Tests/SnapshotTests.cs b/Migrator.Tests/SnapshotTests.cs
+index aadd771..1cba8f5 100644
+--- a/Migrator.Tests/SnapshotTests.cs
++++ b/Migrator.Tests/SnapshotTests.cs
+@@ -4423,6 +4423,45 @@ public class PipelineIntegrationTests
+             CompileChecker.FormatErrors(output));
+     }
+ 
++    [Fact]
++    public void ReviewedExtensionHelperMapping_FullPipelineRendersClickWaitAndAssertions()
++    {
++        var config = new ProjectAdapterConfig(
++            "Migrator.Tests.HelperMapping",
++            Array.Empty<UiTargetMapping>(),
++            Array.Empty<PageObjectMapping>(),
++            Array.Empty<MethodMapping>(),
++            ParameterizedMethods: new[]
++            {
++                new ParameterizedMethodMapping(
++                    "WebDriver.ClickAndWaitForText(By.Id({buttonId}), By.Id({statusId}), {expectedText})",
++                    new[]
++                    {
++                        "await Page.Locator(\"#{buttonId}\").ClickAsync();",
++                        "await Expect(Page.Locator(\"#{statusId}\")).ToHaveTextAsync({expectedText});"
++                    },
++                    requiresReview: false)
++            });
++        var pipeline = new MigrationPipeline(
++            new RoslynTestFileParser(config),
++            new PlaywrightDotNetRenderer(),
++            new DefaultProjectAdapter(config));
++
++        var result = pipeline.ProcessFile(Path.Combine(_testFilesDir, "PipelineWebDriverHelperMappingTests.cs"));
++        var output = result.GeneratedOutput;
++
++        Assert.Contains("await Page.Locator(\"#helper-button\").ClickAsync();", output);
++        Assert.Contains("await Expect(Page.Locator(\"#helper-status\")).ToHaveTextAsync(\"done\");", output);
++        Assert.Contains("await Expect(Page.Locator(\"#lab-event-log\")).ToContainTextAsync(\"helper:click\");", output);
++        Assert.DoesNotContain("HELPER_METHOD_REQUIRES_MAPPING", output);
++        Assert.DoesNotContain("MANUAL_REVIEW", output);
++        Assert.DoesNotContain("UNAVAILABLE_SYMBOLS", output);
++        Assert.DoesNotContain("UNRESOLVED_SYMBOL", output);
++        Assert.DoesNotContain("TODO", output);
++        Assert.True(CompileChecker.CompilesWithoutErrors(output),
++            CompileChecker.FormatErrors(output));
++    }
++
+     [Fact]
+     public void DynamicCssSelector_FullPipeline_RemainsTodo()
+     {
+diff --git a/Migrator.Tests/TestFiles/PipelineWebDriverHelperMappingTests.cs b/Migrator.Tests/TestFiles/PipelineWebDriverHelperMappingTests.cs
+new file mode 100644
+index 0000000..1042ce6
+--- /dev/null
++++ b/Migrator.Tests/TestFiles/PipelineWebDriverHelperMappingTests.cs
+@@ -0,0 +1,16 @@
++using NUnit.Framework;
++using OpenQA.Selenium;
++
++namespace Migrator.Tests.TestFiles;
++
++public class PipelineWebDriverHelperMappingTests
++{
++    [Test]
++    public void HelperClickPreservesBusinessEvent()
++    {
++        WebDriver.ClickAndWaitForText(By.Id("helper-button"), By.Id("helper-status"), "done");
++
++        Assert.That(WebDriver.FindElement(By.Id("helper-status")).Text, Is.EqualTo("done"));
++        Assert.That(WebDriver.FindElement(By.Id("lab-event-log")).Text, Does.Contain("helper:click"));
++    }
++}
+diff --git a/corpus/stable/vertical-slice/p09-helper-extension-mapping/adapter-config.json b/corpus/stable/vertical-slice/p09-helper-extension-mapping/adapter-config.json
+new file mode 100644
+index 0000000..ea1b6e4
+--- /dev/null
++++ b/corpus/stable/vertical-slice/p09-helper-extension-mapping/adapter-config.json
+@@ -0,0 +1,14 @@
++{
++  "SchemaVersion": "adapter-config/v1",
++  "SourceProjectName": "Migrator.Lab.P09",
++  "ParameterizedMethods": [
++    {
++      "SourceMethodPattern": "WebDriver.ClickAndWaitForText(By.Id({buttonId}), By.Id({statusId}), {expectedText})",
++      "TargetStatements": [
++        "await Page.Locator(\"#{buttonId}\").ClickAsync();",
++        "await Expect(Page.Locator(\"#{statusId}\")).ToHaveTextAsync({expectedText});"
++      ],
++      "RequiresReview": false
++    }
++  ]
++}
+diff --git a/corpus/stable/vertical-slice/p09-helper-extension-mapping/scenario.json b/corpus/stable/vertical-slice/p09-helper-extension-mapping/scenario.json
+index 8631173..088580f 100644
+--- a/corpus/stable/vertical-slice/p09-helper-extension-mapping/scenario.json
++++ b/corpus/stable/vertical-slice/p09-helper-extension-mapping/scenario.json
+@@ -21,11 +21,13 @@
+     "migrationFiles": [
+       "Helpers/ElementExtensions.cs",
+       "Tests/HelperTests.cs"
+-    ]
++    ],
++    "adapterConfig": "adapter-config.json"
+   },
+   "project": {
+     "files": [
+       "Scenario.csproj",
++      "adapter-config.json",
+       "Infrastructure/LabSeleniumTestBase.cs",
+       "Helpers/ElementExtensions.cs",
+       "Tests/HelperTests.cs"
+@@ -77,8 +79,8 @@
+   },
+   "implementation": {
+     "state": "READY",
+-    "block": "02-fixtures-labapp",
+-    "notes": "Ready helper-mapping fixture; helper body is part of the migration input.",
+-    "contentHash": "sha256:32dcc481b7635b13f88556d0bb12b4924249b3c1a775fe0e86e37583faf6811d"
++    "block": "04-remediation-03-helper-mapping",
++    "notes": "Ready helper-mapping fixture; reviewed adapter config is backed by the declared helper body and preserves click plus wait semantics.",
++    "contentHash": "sha256:bc8832f25bd5302fed90c581771fdc077929393d65d02e704eb0576e554baed9"
+   }
+ }
+diff --git a/docs/lab/BLOCK_04_REMEDIATION_03_RESULT.ru.md b/docs/lab/BLOCK_04_REMEDIATION_03_RESULT.ru.md
+new file mode 100644
+index 0000000..61ef2f7
+--- /dev/null
++++ b/docs/lab/BLOCK_04_REMEDIATION_03_RESULT.ru.md
+@@ -0,0 +1,56 @@
++# Блок 4 — ремедиация 03: source-backed helper mapping
++
++## Цель
++
++Закрыть сценарий `p09-helper-extension-mapping`, в котором вызов extension-helper
++`WebDriver.ClickAndWaitForText(...)` оставался generic invocation и блокировал следующие
++assertions через `UNAVAILABLE_SYMBOLS` и `UNRESOLVED_SYMBOL`.
++
++## Причина
++
++Тело helper-а хранится в отдельном source-файле и является проектно-специфичным.
++Автоматически угадывать его семантику по имени небезопасно. В миграторе уже существует
++правильный механизм для таких границ — reviewed `ParameterizedMethods` в adapter config,
++но Lab до этого не умел прикладывать конфигурацию конкретного сценария к `run` и
++`verify-project`.
++
++## Реализация
++
++- в контракт сценария добавлено необязательное поле `source.adapterConfig`;
++- loader проверяет безопасный относительный путь, JSON-расширение и включение файла в
++  `project.files`;
++- `lab run` передаёт scenario adapter config в обычную команду мигратора;
++- конфигурация `verify-project` теперь строится поверх scenario config и сохраняет
++  `ParameterizedMethods`, добавляя только секцию `Verification`;
++- для p09 добавлен reviewed mapping, подтверждённый телом `ElementExtensions.cs`;
++- добавлены contract, coordinator и full-pipeline regression tests.
++
++## Mapping p09
++
++```csharp
++WebDriver.ClickAndWaitForText(
++    By.Id("helper-button"),
++    By.Id("helper-status"),
++    "done");
++```
++
++преобразуется в:
++
++```csharp
++await Page.Locator("#helper-button").ClickAsync();
++await Expect(Page.Locator("#helper-status")).ToHaveTextAsync("done");
++```
++
++Это не name-based guess: mapping хранится рядом с fixture, входит в content hash и
++имеет прямое доказательство в исходном helper body.
++
++## Ожидаемый результат
++
++Для `p09` ожидаются:
++
++- `TODO = 0`;
++- `unmapped = 0`;
++- отсутствие `HELPER_METHOD_REQUIRES_MAPPING`;
++- target test `1/1`;
++- событие `helper:click` в semantic oracle;
++- итоговый статус `PASS`.
+diff --git a/schemas/lab-scenario.schema.json b/schemas/lab-scenario.schema.json
+index 48df7b8..1e4cdb9 100644
+--- a/schemas/lab-scenario.schema.json
++++ b/schemas/lab-scenario.schema.json
+@@ -76,6 +76,9 @@
+           "items": {
+             "$ref": "#/$defs/relativePath"
+           }
++        },
++        "adapterConfig": {
++          "$ref": "#/$defs/relativePath"
+         }
+       }
+     },

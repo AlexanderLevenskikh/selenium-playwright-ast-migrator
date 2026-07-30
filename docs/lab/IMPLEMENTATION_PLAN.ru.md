@@ -117,7 +117,7 @@ Block 3 passed: 7 source projects validated, existing migration run executed, su
 
 После этого пишет: `Классификация стадий верна, продолжай блок 4`.
 
-## Блок 4. Verify-project, Playwright runtime и поведенческий oracle — реализован, ожидает проверки
+## Блок 4. Verify-project, Playwright runtime и поведенческий oracle — реализован, идёт ремедиация найденных дефектов
 
 Цель: доказать не только синтаксическую корректность generated-кода, но и сохранение
 исполняемого поведения.
@@ -154,6 +154,16 @@ expected status или ослаблять oracle.
 Если suite обнаружит регрессии, присылает `artifacts/lab/block-04/lab-summary.md` и архив
 папки `artifacts/lab/block-04`. После устранения найденных дефектов и полного совпадения
 статусов пишет: `Oracle понятен, продолжай блок 5`.
+
+Текущий прогресс ремедиации vertical slice:
+
+- `p01-basic-id-login` — PASS;
+- `p04-findelements-count-text` — PASS;
+- `p09-helper-extension-mapping` — PASS;
+- `p23-cpm-isolation` — PASS;
+- `p24a-transitive-warning-isolated` — PASS;
+- `p15-webdriverwait-visible` — исправление подготовлено в remediation 04;
+- `p26-jsexecutor-unsupported` — следующий оставшийся сценарий.
 
 ## Блок 5. Suite report, replay и baseline diff
 

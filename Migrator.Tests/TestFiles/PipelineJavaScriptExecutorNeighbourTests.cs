@@ -1,9 +1,9 @@
 using NUnit.Framework;
 using OpenQA.Selenium;
 
-namespace Migrator.Lab.Corpus.P26;
+namespace Migrator.Tests.TestFiles;
 
-public partial class JsExecutorTests
+public class PipelineJavaScriptExecutorNeighbourTests
 {
     [Test]
     public void UnsupportedScriptDoesNotHideNeighbourAction()

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Migrator.Lab.Contracts;
 using Migrator.Lab.LabApp;
 using Migrator.Lab.Reports;
@@ -209,6 +210,7 @@ public sealed class LabRunCoordinator
             {
                 Directory.CreateDirectory(migrationInput);
                 CopyDeclaredProject(workspace, migrationInput, scenario.Source.MigrationFiles);
+                var adapterConfigPath = ResolveScenarioAdapterConfigPath(workspace, scenario);
                 var commandArguments = options.MigratorCommand.PrefixArguments
                     .Concat(new[]
                     {
@@ -220,12 +222,17 @@ public sealed class LabRunCoordinator
                         "--target", "dotnet",
                         "--target-test-framework", "nunit"
                     })
-                    .ToArray();
+                    .ToList();
+                if (adapterConfigPath != null)
+                {
+                    commandArguments.Add("--config");
+                    commandArguments.Add(adapterConfigPath);
+                }
 
                 stages.Add(await RunProcessStageAsync(
                     LabRunStage.Migration,
                     options.MigratorCommand.FileName,
-                    commandArguments,
+                    commandArguments.ToArray(),
                     workspace,
                     scenarioArtifacts,
                     "migration-process",
@@ -525,26 +532,40 @@ public sealed class LabRunCoordinator
                 Path.GetFullPath(Path.Combine(workspace, reference.Replace('/', Path.DirectorySeparatorChar)))))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var config = new
+        var sourceConfigPath = ResolveScenarioAdapterConfigPath(workspace, scenario);
+        var config = sourceConfigPath == null
+            ? new JsonObject()
+            : JsonNode.Parse(File.ReadAllText(sourceConfigPath)) as JsonObject
+              ?? throw new InvalidOperationException($"Scenario adapter config must contain a JSON object: {sourceConfigPath}");
+
+        config["SchemaVersion"] ??= "adapter-config/v1";
+        config["SourceProjectName"] ??= "Migrator.Lab." + scenario.Id;
+        config["Verification"] = JsonSerializer.SerializeToNode(new
         {
-            SchemaVersion = "adapter-config/v1",
-            SourceProjectName = "Migrator.Lab." + scenario.Id,
-            Verification = new
-            {
-                TargetFramework = "net10.0",
-                BaseDirectory = Path.GetFullPath(workspace),
-                BuildWorkingDirectory = Path.GetFullPath(workspace),
-                ProjectReferences = projectReferences,
-                AutoDiscoverNearestProject = false,
-                AutoDiscoverProjectReferences = false,
-                AutoDiscoverBuildFiles = true,
-                AutoDiscoverPackageReferences = false,
-                NoRestore = false,
-                Configuration = options.Configuration
-            }
-        };
-        File.WriteAllText(configPath, JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
+            TargetFramework = "net10.0",
+            BaseDirectory = Path.GetFullPath(workspace),
+            BuildWorkingDirectory = Path.GetFullPath(workspace),
+            ProjectReferences = projectReferences,
+            AutoDiscoverNearestProject = false,
+            AutoDiscoverProjectReferences = false,
+            AutoDiscoverBuildFiles = true,
+            AutoDiscoverPackageReferences = false,
+            NoRestore = false,
+            Configuration = options.Configuration
+        });
+
+        File.WriteAllText(configPath, config.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
         return Path.GetFullPath(configPath);
+    }
+
+    static string? ResolveScenarioAdapterConfigPath(string workspace, ScenarioSpec scenario)
+    {
+        if (string.IsNullOrWhiteSpace(scenario.Source.AdapterConfig))
+            return null;
+
+        return Path.GetFullPath(Path.Combine(
+            workspace,
+            scenario.Source.AdapterConfig.Replace('/', Path.DirectorySeparatorChar)));
     }
 
     static string ReadScenarioRoute(ScenarioSpec scenario)

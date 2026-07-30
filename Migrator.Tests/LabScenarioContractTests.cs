@@ -87,6 +87,32 @@ public sealed class LabScenarioContractTests
     }
 
     [Fact]
+    public void HelperScenario_UsesReviewedSourceBackedAdapterConfig()
+    {
+        var entry = ScenarioCatalog.Load(VerticalSliceRoot()).Entries
+            .Single(item => item.Scenario!.Id == "p09-helper-extension-mapping");
+        var scenario = entry.Scenario!;
+
+        Assert.Equal("adapter-config.json", scenario.Source.AdapterConfig);
+        Assert.Contains(scenario.Source.AdapterConfig, scenario.Project.Files);
+
+        var helperSource = File.ReadAllText(Path.Combine(entry.ScenarioDirectory, "Helpers", "ElementExtensions.cs"));
+        Assert.Contains("ClickAndWaitForText", helperSource, StringComparison.Ordinal);
+        Assert.Contains("FindElement(button).Click()", helperSource, StringComparison.Ordinal);
+        Assert.Contains("FindElement(status).Text == expectedText", helperSource, StringComparison.Ordinal);
+
+        using var config = JsonDocument.Parse(File.ReadAllText(Path.Combine(entry.ScenarioDirectory, scenario.Source.AdapterConfig)));
+        var mapping = Assert.Single(config.RootElement.GetProperty("ParameterizedMethods").EnumerateArray());
+        Assert.Equal(
+            "WebDriver.ClickAndWaitForText(By.Id({buttonId}), By.Id({statusId}), {expectedText})",
+            mapping.GetProperty("SourceMethodPattern").GetString());
+        Assert.False(mapping.GetProperty("RequiresReview").GetBoolean());
+        var statements = mapping.GetProperty("TargetStatements").EnumerateArray().Select(item => item.GetString()!).ToArray();
+        Assert.Contains(statements, statement => statement.Contains("ClickAsync", StringComparison.Ordinal));
+        Assert.Contains(statements, statement => statement.Contains("ToHaveTextAsync", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void TransitiveWarningScenario_HasOneUnambiguousPositiveExpectation()
     {
         var scenario = ScenarioCatalog.Load(VerticalSliceRoot()).Entries

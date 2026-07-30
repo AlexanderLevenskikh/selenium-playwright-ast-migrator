@@ -213,10 +213,12 @@ public partial class PlaywrightDotNetRenderer : IRenderer
         var unavailableRefs = FindUnavailableSymbolsForAction(action, sourceText, declaredVariables);
         if (unavailableRefs.Count > 0)
         {
+            // The unknown statement can invalidate values it declares, but merely
+            // referencing an unavailable/source-side receiver does not make that receiver
+            // globally unusable. Otherwise a raw Selenium statement mentioning WebDriver
+            // poisons independent, semantically mapped actions in every generated test.
             foreach (var variable in declaredVariables)
                 BlockSymbol(variable);
-            foreach (var refName in unavailableRefs)
-                BlockSymbol(refName);
         }
     }
 
@@ -718,10 +720,12 @@ public partial class PlaywrightDotNetRenderer : IRenderer
         var unavailableRefs = FindUnavailableSymbolsForAction(action, sourceText, declaredVariables);
         if (unavailableRefs.Count > 0)
         {
+            // Block only values produced by the unsafe statement. The referenced root
+            // itself may still be the source form of a later action that has a fully
+            // resolved Playwright target (for example WebDriver.FindElement(By.Id(...))).
+            // Marking that root as blocked would corrupt unrelated neighbour actions.
             foreach (var variable in declaredVariables)
                 BlockSymbol(variable);
-            foreach (var refName in unavailableRefs)
-                BlockSymbol(refName);
 
             var refList = string.Join(", ", unavailableRefs.Select(r => $"'{r}'"));
             AppendSmartTodo(

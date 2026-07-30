@@ -4400,6 +4400,114 @@ public class PipelineIntegrationTests
     }
 
     [Fact]
+    public void WebDriverFindElements_IndexedCountAndText_FullPipelineRendersLocatorAssertions()
+    {
+        var result = RunPipeline("PipelineWebDriverFindElementsIndexedTests.cs");
+        var output = result.GeneratedOutput;
+        var model = result.TargetModel;
+
+        var test = model.Tests.Single();
+        Assert.Contains(test.BodyActions, action => action is LocatorDeclarationAction declaration && declaration.VariableName == "items");
+        Assert.Contains(test.BodyActions, action => action is TableCountAssertionAction count && count.Kind == TableCountKind.CountEquals);
+        Assert.Equal(3, test.BodyActions.OfType<TextAssertionAction>().Count());
+
+        Assert.Contains("var items = Page.Locator(\"#items .item\");", output);
+        Assert.Contains("await Expect(items).ToHaveCountAsync(3);", output);
+        Assert.Contains("await Expect(items.Nth(0)).ToHaveTextAsync(\"alpha\");", output);
+        Assert.Contains("await Expect(items.Nth(1)).ToHaveTextAsync(\"beta\");", output);
+        Assert.Contains("await Expect(items.Nth(2)).ToHaveTextAsync(\"gamma\");", output);
+        Assert.DoesNotContain("ASSERTION_CONSTRAINT", output);
+        Assert.DoesNotContain("MISSING_MAPPING", output);
+        Assert.DoesNotContain("TODO", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void ReviewedExtensionHelperMapping_FullPipelineRendersClickWaitAndAssertions()
+    {
+        var config = new ProjectAdapterConfig(
+            "Migrator.Tests.HelperMapping",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "WebDriver.ClickAndWaitForText(By.Id({buttonId}), By.Id({statusId}), {expectedText})",
+                    new[]
+                    {
+                        "await Page.Locator(\"#{buttonId}\").ClickAsync();",
+                        "await Expect(Page.Locator(\"#{statusId}\")).ToHaveTextAsync({expectedText});"
+                    },
+                    requiresReview: false)
+            });
+        var pipeline = new MigrationPipeline(
+            new RoslynTestFileParser(config),
+            new PlaywrightDotNetRenderer(),
+            new DefaultProjectAdapter(config));
+
+        var result = pipeline.ProcessFile(Path.Combine(_testFilesDir, "PipelineWebDriverHelperMappingTests.cs"));
+        var output = result.GeneratedOutput;
+
+        Assert.Contains("await Page.Locator(\"#helper-button\").ClickAsync();", output);
+        Assert.Contains("await Expect(Page.Locator(\"#helper-status\")).ToHaveTextAsync(\"done\");", output);
+        Assert.Contains("await Expect(Page.Locator(\"#lab-event-log\")).ToContainTextAsync(\"helper:click\");", output);
+        Assert.DoesNotContain("HELPER_METHOD_REQUIRES_MAPPING", output);
+        Assert.DoesNotContain("MANUAL_REVIEW", output);
+        Assert.DoesNotContain("UNAVAILABLE_SYMBOLS", output);
+        Assert.DoesNotContain("UNRESOLVED_SYMBOL", output);
+        Assert.DoesNotContain("TODO", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void WebDriverWaitUntilDisplayed_FullPipelineRendersVisibleWaitAndPreservesFollowingActions()
+    {
+        var result = RunPipeline("PipelineWebDriverWaitVisibleTests.cs");
+        var output = result.GeneratedOutput;
+        var test = result.TargetModel.Tests.Single();
+
+        Assert.Contains(test.BodyActions, action =>
+            action is WaitForAction wait
+            && wait.Kind == WaitForKind.ActionabilityElided
+            && wait.SourceMethod == "WebDriverWait");
+        Assert.Contains(test.BodyActions, action =>
+            action is WaitForAction wait
+            && wait.Kind == WaitForKind.ProductStateVisible
+            && wait.Target.RenderLocator() == "Page.Locator(\"#wait-button\")");
+
+        Assert.Contains("source wait elided: var wait = new WebDriverWait", output);
+        Assert.Contains("await Expect(Page.Locator(\"#wait-button\")).ToBeVisibleAsync();", output);
+        Assert.Contains("await Page.Locator(\"#wait-button\").ClickAsync();", output);
+        Assert.Contains("await Expect(Page.Locator(\"#wait-status\")).ToHaveTextAsync(\"clicked\");", output);
+        Assert.Contains("await Expect(Page.Locator(\"#lab-event-log\")).ToContainTextAsync(\"wait:visible\");", output);
+        Assert.DoesNotContain("RAW_STATEMENT", output);
+        Assert.DoesNotContain("UNRESOLVED_SYMBOL", output);
+        Assert.DoesNotContain("UNAVAILABLE_SYMBOLS", output);
+        Assert.DoesNotContain("TODO", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void UnsupportedJavaScriptExecutor_DoesNotBlockIndependentMappedNeighbourActions()
+    {
+        var result = RunPipeline("PipelineJavaScriptExecutorNeighbourTests.cs");
+        var output = result.GeneratedOutput;
+
+        Assert.Contains("[MIGRATOR:RAW_STATEMENT]", output);
+        Assert.Contains("depends on unresolved symbol 'script'", output);
+        Assert.Contains("await Page.Locator(\"#unsupported-button\").ClickAsync();", output);
+        Assert.Contains("await Expect(Page.Locator(\"#unsupported-status\")).ToHaveTextAsync(\"ok\");", output);
+        Assert.DoesNotContain("depends on unresolved symbol 'WebDriver'", output);
+        Assert.Equal(3, System.Text.RegularExpressions.Regex.Matches(output, @"// TODO:").Count);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
     public void DynamicCssSelector_FullPipeline_RemainsTodo()
     {
         var result = RunPipeline("PipelineDynamicSelectorTests.cs");

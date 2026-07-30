@@ -21,11 +21,13 @@
     "migrationFiles": [
       "Helpers/ElementExtensions.cs",
       "Tests/HelperTests.cs"
-    ]
+    ],
+    "adapterConfig": "adapter-config.json"
   },
   "project": {
     "files": [
       "Scenario.csproj",
+      "adapter-config.json",
       "Infrastructure/LabSeleniumTestBase.cs",
       "Helpers/ElementExtensions.cs",
       "Tests/HelperTests.cs"
@@ -77,8 +79,8 @@
   },
   "implementation": {
     "state": "READY",
-    "block": "02-fixtures-labapp",
-    "notes": "Ready helper-mapping fixture; helper body is part of the migration input.",
-    "contentHash": "sha256:32dcc481b7635b13f88556d0bb12b4924249b3c1a775fe0e86e37583faf6811d"
+    "block": "04-remediation-03-helper-mapping",
+    "notes": "Ready helper-mapping fixture; reviewed adapter config is backed by the declared helper body and preserves click plus wait semantics.",
+    "contentHash": "sha256:bc8832f25bd5302fed90c581771fdc077929393d65d02e704eb0576e554baed9"
   }
 }

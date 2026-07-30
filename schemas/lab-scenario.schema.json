@@ -76,6 +76,9 @@
           "items": {
             "$ref": "#/$defs/relativePath"
           }
+        },
+        "adapterConfig": {
+          "$ref": "#/$defs/relativePath"
         }
       }
     },

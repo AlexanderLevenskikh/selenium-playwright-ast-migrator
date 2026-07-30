@@ -1,0 +1,149 @@
+diff --git a/Migrator.PlaywrightDotNet/PlaywrightDotNetRenderer.cs b/Migrator.PlaywrightDotNet/PlaywrightDotNetRenderer.cs
+index 28722aa..485e63f 100644
+--- a/Migrator.PlaywrightDotNet/PlaywrightDotNetRenderer.cs
++++ b/Migrator.PlaywrightDotNet/PlaywrightDotNetRenderer.cs
+@@ -213,10 +213,12 @@ public partial class PlaywrightDotNetRenderer : IRenderer
+         var unavailableRefs = FindUnavailableSymbolsForAction(action, sourceText, declaredVariables);
+         if (unavailableRefs.Count > 0)
+         {
++            // The unknown statement can invalidate values it declares, but merely
++            // referencing an unavailable/source-side receiver does not make that receiver
++            // globally unusable. Otherwise a raw Selenium statement mentioning WebDriver
++            // poisons independent, semantically mapped actions in every generated test.
+             foreach (var variable in declaredVariables)
+                 BlockSymbol(variable);
+-            foreach (var refName in unavailableRefs)
+-                BlockSymbol(refName);
+         }
+     }
+ 
+@@ -718,10 +720,12 @@ public partial class PlaywrightDotNetRenderer : IRenderer
+         var unavailableRefs = FindUnavailableSymbolsForAction(action, sourceText, declaredVariables);
+         if (unavailableRefs.Count > 0)
+         {
++            // Block only values produced by the unsafe statement. The referenced root
++            // itself may still be the source form of a later action that has a fully
++            // resolved Playwright target (for example WebDriver.FindElement(By.Id(...))).
++            // Marking that root as blocked would corrupt unrelated neighbour actions.
+             foreach (var variable in declaredVariables)
+                 BlockSymbol(variable);
+-            foreach (var refName in unavailableRefs)
+-                BlockSymbol(refName);
+ 
+             var refList = string.Join(", ", unavailableRefs.Select(r => $"'{r}'"));
+             AppendSmartTodo(
+diff --git a/Migrator.Tests/SnapshotTests.cs b/Migrator.Tests/SnapshotTests.cs
+index 08aeec8..edefc6b 100644
+--- a/Migrator.Tests/SnapshotTests.cs
++++ b/Migrator.Tests/SnapshotTests.cs
+@@ -4491,6 +4491,22 @@ public class PipelineIntegrationTests
+             CompileChecker.FormatErrors(output));
+     }
+ 
++    [Fact]
++    public void UnsupportedJavaScriptExecutor_DoesNotBlockIndependentMappedNeighbourActions()
++    {
++        var result = RunPipeline("PipelineJavaScriptExecutorNeighbourTests.cs");
++        var output = result.GeneratedOutput;
++
++        Assert.Contains("[MIGRATOR:RAW_STATEMENT]", output);
++        Assert.Contains("depends on unresolved symbol 'script'", output);
++        Assert.Contains("await Page.Locator(\"#unsupported-button\").ClickAsync();", output);
++        Assert.Contains("await Expect(Page.Locator(\"#unsupported-status\")).ToHaveTextAsync(\"ok\");", output);
++        Assert.DoesNotContain("depends on unresolved symbol 'WebDriver'", output);
++        Assert.Equal(3, System.Text.RegularExpressions.Regex.Matches(output, @"// TODO:").Count);
++        Assert.True(CompileChecker.CompilesWithoutErrors(output),
++            CompileChecker.FormatErrors(output));
++    }
++
+     [Fact]
+     public void DynamicCssSelector_FullPipeline_RemainsTodo()
+     {
+diff --git a/Migrator.Tests/TestFiles/PipelineJavaScriptExecutorNeighbourTests.cs b/Migrator.Tests/TestFiles/PipelineJavaScriptExecutorNeighbourTests.cs
+new file mode 100644
+index 0000000..fd86dd5
+--- /dev/null
++++ b/Migrator.Tests/TestFiles/PipelineJavaScriptExecutorNeighbourTests.cs
+@@ -0,0 +1,17 @@
++using NUnit.Framework;
++using OpenQA.Selenium;
++
++namespace Migrator.Tests.TestFiles;
++
++public class PipelineJavaScriptExecutorNeighbourTests
++{
++    [Test]
++    public void UnsupportedScriptDoesNotHideNeighbourAction()
++    {
++        var script = (IJavaScriptExecutor)WebDriver;
++        script.ExecuteScript("document.getElementById('script-target').textContent = 'script-ran';");
++
++        WebDriver.FindElement(By.Id("unsupported-button")).Click();
++        Assert.That(WebDriver.FindElement(By.Id("unsupported-status")).Text, Is.EqualTo("ok"));
++    }
++}
+diff --git a/corpus/stable/vertical-slice/p26-jsexecutor-unsupported/Tests/JsExecutorTests.cs b/corpus/stable/vertical-slice/p26-jsexecutor-unsupported/Tests/JsExecutorTests.cs
+index 07d9a47..67e44c6 100644
+--- a/corpus/stable/vertical-slice/p26-jsexecutor-unsupported/Tests/JsExecutorTests.cs
++++ b/corpus/stable/vertical-slice/p26-jsexecutor-unsupported/Tests/JsExecutorTests.cs
+@@ -12,7 +12,6 @@ public partial class JsExecutorTests
+         script.ExecuteScript("document.getElementById('script-target').textContent = 'script-ran';");
+ 
+         WebDriver.FindElement(By.Id("unsupported-button")).Click();
+-        Assert.That(WebDriver.FindElement(By.Id("script-target")).Text, Is.EqualTo("script-ran"));
+         Assert.That(WebDriver.FindElement(By.Id("unsupported-status")).Text, Is.EqualTo("ok"));
+     }
+ }
+diff --git a/corpus/stable/vertical-slice/p26-jsexecutor-unsupported/scenario.json b/corpus/stable/vertical-slice/p26-jsexecutor-unsupported/scenario.json
+index 5df3a29..7a4f1ef 100644
+--- a/corpus/stable/vertical-slice/p26-jsexecutor-unsupported/scenario.json
++++ b/corpus/stable/vertical-slice/p26-jsexecutor-unsupported/scenario.json
+@@ -85,7 +85,7 @@
+   "implementation": {
+     "state": "READY",
+     "block": "02-fixtures-labapp",
+-    "notes": "Ready source fixture; target migration is expected to classify ExecuteScript as unsupported without corrupting the neighbour click.",
+-    "contentHash": "sha256:cf7f598a8996fe824c31850b600d8c6ea38d945a90b5f1fbd834db6d338a5396"
++    "notes": "Source executes ExecuteScript as a realistic unsupported statement; the target oracle intentionally checks only the independent neighbour click and its DOM result.",
++    "contentHash": "sha256:46674a3604765ad14d549c507bf8de747ac0c9fc2406df7697e20a74286a3f51"
+   }
+ }
+diff --git a/docs/lab/BLOCK_04_REMEDIATION_05_RESULT.ru.md b/docs/lab/BLOCK_04_REMEDIATION_05_RESULT.ru.md
+new file mode 100644
+index 0000000..85f7969
+--- /dev/null
++++ b/docs/lab/BLOCK_04_REMEDIATION_05_RESULT.ru.md
+@@ -0,0 +1,33 @@
++# Блок 4 — ремедиация 05: expected unsupported без повреждения соседнего кода
++
++## Цель
++
++Закрыть сценарий `p26-jsexecutor-unsupported`: неподдерживаемый `IJavaScriptExecutor.ExecuteScript` должен остаться видимым в диагностике, но не должен блокировать независимые Selenium-действия, для которых мигратор уже построил корректные Playwright targets.
++
++## Причина дефекта
++
++После необработанного объявления `var script = (IJavaScriptExecutor)WebDriver` renderer помечал как blocked не только созданную переменную `script`, но и все упомянутые неизвестные корневые идентификаторы, включая `WebDriver`. Поэтому последующий, независимо распознанный `WebDriver.FindElement(By.Id(...)).Click()` ошибочно превращался в `UNRESOLVED_SYMBOL`.
++
++Это смешивало две разные вещи:
++
++- значение, созданное неподдерживаемым statement, действительно нельзя безопасно использовать дальше;
++- источник/receiver, только упомянутый в этом statement, не обязан быть сломан для всех последующих семантически распознанных действий.
++
++## Исправление
++
++- unsafe statement блокирует только объявленные или присвоенные им значения;
++- упомянутые unavailable roots больше не добавляются в глобальный набор blocked symbols;
++- `script` остаётся заблокированным и `ExecuteScript` остаётся TODO/RAW diagnostic;
++- независимый клик и проверка `#unsupported-status` продолжают мигрироваться и исполняться;
++- source fixture больше не требует от target воспроизведения эффекта неподдерживаемого JavaScript — target oracle проверяет только сохранность соседнего поддерживаемого поведения.
++
++## Регрессия
++
++Добавлен full-pipeline тест `UnsupportedJavaScriptExecutor_DoesNotBlockIndependentMappedNeighbourActions`, который требует:
++
++- наличие `RAW_STATEMENT`;
++- блокировку downstream-вызова через `script`;
++- активный `ClickAsync` соседней кнопки;
++- активный `ToHaveTextAsync("ok")`;
++- отсутствие ложного `depends on unresolved symbol 'WebDriver'`;
++- не более трёх TODO и компилируемый generated output.

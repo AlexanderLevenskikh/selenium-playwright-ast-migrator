@@ -338,6 +338,13 @@ public class RoslynTestFileParser : ITestFileParser
         // Local declarations — try to extract meaningful declarations
         if (statement is LocalDeclarationStatementSyntax lds)
         {
+            // A local WebDriverWait variable only configures the following Selenium wait.
+            // Keep it as an explicitly elided wait action instead of a raw statement so it
+            // does not poison symbol-safety tracking for the real Click/Assert actions that
+            // follow it in the same test method.
+            if (TryExtractWebDriverWaitDeclaration(lds, line) is { } waitDeclaration)
+                return waitDeclaration;
+
             // First try to extract navigation declarations (Navigation.OpenPage<T>)
             if (TryExtractNavigationDeclaration(lds, line) is { } navDecl)
                 return navDecl;
@@ -442,6 +449,15 @@ public class RoslynTestFileParser : ITestFileParser
         // wrap the whole Assert.Multiple(...) call in Expect(...).
         if (TryExtractAssertMultiple(invocation, semanticModel, line) is { } assertMultiple)
             return assertMultiple;
+
+        // Canonical Selenium explicit wait:
+        //   wait.Until(driver => driver.FindElement(By.Id("save")).Displayed)
+        // This is a state wait, not an arbitrary helper invocation. Recognize it from
+        // syntax before the generic recognizer pipeline so the lambda target is retained
+        // as a concrete Playwright locator even when Selenium assemblies are not part of
+        // the lightweight parser compilation.
+        if (TryExtractWebDriverWaitUntilDisplayed(invocation, line) is { } visibleWait)
+            return visibleWait;
 
         // --- Semantic path: try recognizers with symbol info ---
         if (symbolResolved)
@@ -616,6 +632,138 @@ public class RoslynTestFileParser : ITestFileParser
         }
 
         return null;
+    }
+
+    static WaitForAction? TryExtractWebDriverWaitDeclaration(LocalDeclarationStatementSyntax declaration, int line)
+    {
+        if (declaration.Declaration.Variables.Count != 1)
+            return null;
+
+        var variable = declaration.Declaration.Variables[0];
+        if (variable.Initializer?.Value is not ObjectCreationExpressionSyntax creation)
+            return null;
+
+        var typeName = creation.Type.ToString();
+        if (!string.Equals(typeName, "WebDriverWait", StringComparison.Ordinal)
+            && !typeName.EndsWith(".WebDriverWait", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return new WaitForAction(
+            line,
+            TargetExpression.Unresolved(variable.Identifier.Text),
+            RecognitionConfidence.SyntaxFallback,
+            sourceMethod: "WebDriverWait",
+            fullSourceText: declaration.ToString().Trim().TrimEnd(';'),
+            kind: WaitForKind.ActionabilityElided);
+    }
+
+    static WaitForAction? TryExtractWebDriverWaitUntilDisplayed(InvocationExpressionSyntax invocation, int line)
+    {
+        if (!string.Equals(GetMethodName(invocation), "Until", StringComparison.Ordinal))
+            return null;
+
+        if (invocation.ArgumentList.Arguments.Count != 1)
+            return null;
+
+        if (!TryGetSingleParameterLambda(invocation.ArgumentList.Arguments[0].Expression, out var parameterName, out var lambdaBody))
+            return null;
+
+        var body = UnwrapParenthesizedExpression(lambdaBody);
+        if (body is not MemberAccessExpressionSyntax displayedAccess
+            || !string.Equals(displayedAccess.Name.Identifier.ValueText, "Displayed", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var findExpression = UnwrapParenthesizedExpression(displayedAccess.Expression);
+        if (findExpression is not InvocationExpressionSyntax findElement
+            || !string.Equals(GetMethodName(findElement), "FindElement", StringComparison.Ordinal)
+            || !string.Equals(GetReceiverText(findElement), parameterName, StringComparison.Ordinal)
+            || findElement.ArgumentList.Arguments.Count != 1)
+        {
+            return null;
+        }
+
+        var byExpression = findElement.ArgumentList.Arguments[0].Expression;
+        if (!TryRenderStaticByLocator(byExpression, out var locatorExpression))
+            return null;
+
+        // Normalize the lambda parameter back to the canonical WebDriver root used by
+        // the adapter's inline FindElement resolver. The full original lambda remains in
+        // FullSourceText for evidence, while the normalized target survives Adapt().
+        var normalizedSourceTarget = $"WebDriver.FindElement({byExpression})";
+
+        return new WaitForAction(
+            line,
+            TargetExpression.Mapped(normalizedSourceTarget, locatorExpression, TargetKind.PlaywrightLocator),
+            RecognitionConfidence.SyntaxFallback,
+            sourceMethod: "WebDriverWait.Until.Displayed",
+            fullSourceText: invocation.ToString().Trim().TrimEnd(';'),
+            kind: WaitForKind.ProductStateVisible);
+    }
+
+    static bool TryGetSingleParameterLambda(
+        ExpressionSyntax expression,
+        out string parameterName,
+        out ExpressionSyntax body)
+    {
+        switch (expression)
+        {
+            case SimpleLambdaExpressionSyntax simple when simple.Body is ExpressionSyntax simpleBody:
+                parameterName = simple.Parameter.Identifier.ValueText;
+                body = simpleBody;
+                return !string.IsNullOrWhiteSpace(parameterName);
+
+            case ParenthesizedLambdaExpressionSyntax parenthesized
+                when parenthesized.ParameterList.Parameters.Count == 1
+                     && parenthesized.Body is ExpressionSyntax parenthesizedBody:
+                parameterName = parenthesized.ParameterList.Parameters[0].Identifier.ValueText;
+                body = parenthesizedBody;
+                return !string.IsNullOrWhiteSpace(parameterName);
+
+            default:
+                parameterName = string.Empty;
+                body = null!;
+                return false;
+        }
+    }
+
+    static ExpressionSyntax UnwrapParenthesizedExpression(ExpressionSyntax expression)
+    {
+        while (expression is ParenthesizedExpressionSyntax parenthesized)
+            expression = parenthesized.Expression;
+
+        return expression;
+    }
+
+    static bool TryRenderStaticByLocator(ExpressionSyntax expression, out string locatorExpression)
+    {
+        locatorExpression = string.Empty;
+        expression = UnwrapParenthesizedExpression(expression);
+
+        if (expression is not InvocationExpressionSyntax byInvocation
+            || byInvocation.Expression is not MemberAccessExpressionSyntax byMember
+            || !string.Equals(byMember.Expression.ToString(), "By", StringComparison.Ordinal)
+            || byInvocation.ArgumentList.Arguments.Count != 1
+            || byInvocation.ArgumentList.Arguments[0].Expression is not LiteralExpressionSyntax literal
+            || !literal.IsKind(SyntaxKind.StringLiteralExpression))
+        {
+            return false;
+        }
+
+        var selector = literal.Token.ValueText;
+        var escaped = EscapeString(selector);
+        locatorExpression = byMember.Name.Identifier.ValueText switch
+        {
+            "Id" => $"Page.Locator(\"#{escaped}\")",
+            "CssSelector" => $"Page.Locator(\"{escaped}\")",
+            "XPath" => $"Page.Locator(\"xpath={escaped}\")",
+            _ => string.Empty
+        };
+
+        return locatorExpression.Length > 0;
     }
 
     static bool TryStripAnySuffix(string expression, out string target, params string[] suffixes)

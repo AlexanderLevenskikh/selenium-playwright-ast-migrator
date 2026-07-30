@@ -24,6 +24,7 @@ public sealed record ScenarioSourceSpec
     public string Template { get; init; } = "";
     public string[] Features { get; init; } = Array.Empty<string>();
     public string[] MigrationFiles { get; init; } = Array.Empty<string>();
+    public string AdapterConfig { get; init; } = "";
 }
 
 public sealed record ScenarioProjectSpec

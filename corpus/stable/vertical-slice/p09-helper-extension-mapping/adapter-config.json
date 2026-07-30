@@ -1,0 +1,14 @@
+{
+  "SchemaVersion": "adapter-config/v1",
+  "SourceProjectName": "Migrator.Lab.P09",
+  "ParameterizedMethods": [
+    {
+      "SourceMethodPattern": "WebDriver.ClickAndWaitForText(By.Id({buttonId}), By.Id({statusId}), {expectedText})",
+      "TargetStatements": [
+        "await Page.Locator(\"#{buttonId}\").ClickAsync();",
+        "await Expect(Page.Locator(\"#{statusId}\")).ToHaveTextAsync({expectedText});"
+      ],
+      "RequiresReview": false
+    }
+  ]
+}
