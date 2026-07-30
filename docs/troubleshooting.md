@@ -1,6 +1,6 @@
 # Troubleshooting
 
-> **Execution model:** one standard full-project run is supported. `pilot` is optional calibration; partition-specific planning and acceptance state are not used.
+> **Execution model:** one complete source scope is supported. `pilot` is optional calibration; `/supervised-task` can execute up to five autonomous remediation cycles without partitioning the source.
 
 ## Installation diagnostics starts with PATH, not dotnet tool list
 
@@ -218,7 +218,7 @@ Expected update markers include `kit-overwrite: ...migration/opencode-team/...` 
 
 ## Standard-run recovery
 
-After an interruption, inspect the latest `migration/runs/run-*` directory, current reports, `current-ticket.md`, and git diff. Resume from concrete artifacts. Never recreate missing verification JSON or copy a PASS receipt from another run. Apply one bounded fix, then repeat the complete configured source scope.
+After an interruption, inspect the latest `migration/runs/run-*` directory, current reports, `current-ticket.md`, and git diff. Resume from concrete artifacts. Never recreate missing verification JSON or copy a PASS receipt from another run. Start a fresh invocation budget, apply one bounded fix per cycle, and repeat the complete configured source scope. Continue after progress; do not retry exhausted candidates without new evidence.
 
 ## `artifact-hygiene` reports a PowerShell syntax error, but `validate-scripts.ps1` passed
 

@@ -42,7 +42,7 @@ Allowed values:
 - Scope check:
 - Memory doctor:
 
-## Last bounded repair
+## Latest remediation cycle
 
 Root cause:
 
@@ -70,8 +70,18 @@ Decision:
 
 - kept / reverted / blocked
 
+## Invocation autonomy
+
+- Mode:
+- Invocation ID:
+- Cycle budget: 5
+- Cycles completed:
+- No-progress streak:
+- Exhausted candidate fingerprints:
+
 ## Supporting state
 
+- Autonomy state: `{{WORKSPACE}}/state/autonomy-state.json`
 - Handoff: `{{WORKSPACE}}/state/handoff.md`
 - Run ledger: `{{WORKSPACE}}/state/run-ledger.md`
 - Decision log: `{{WORKSPACE}}/state/decision-log.md`

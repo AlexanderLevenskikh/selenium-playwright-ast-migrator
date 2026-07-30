@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "standard-migration-policy/v1",
+  "schemaVersion": "standard-migration-policy/v2",
   "mode": "standard-full-project",
   "sourceProjectReadOnly": true,
   "productProjectReadOnly": true,
@@ -7,6 +7,13 @@
   "pilotIsCalibrationOnly": true,
   "requireRealVerificationEvidence": true,
   "forbidSyntheticValidationEvidence": true,
-  "maxRepairPassesPerRun": 1,
-  "stopAfterRepeatedNoProgress": 2
+  "maxRemediationCyclesPerInvocation": 5,
+  "maxRepairPassesPerRun": 5,
+  "maxChangesPerCycle": 1,
+  "continueStartsFreshBudget": true,
+  "continuousAutoAdvanceAfterProgress": true,
+  "continuousRollsOverCycleBudget": true,
+  "noProgressStopThreshold": 2,
+  "requireDistinctNoProgressCandidates": true,
+  "verificationDimensionsIndependent": true
 }

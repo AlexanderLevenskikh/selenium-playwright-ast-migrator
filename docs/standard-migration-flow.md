@@ -1,6 +1,6 @@
 # Standard migration flow
 
-The supported workflow uses one configured source scope and one ordinary run directory at a time. It does not partition the source or maintain a second execution state machine.
+The supported workflow uses one configured source scope and one ordinary run lineage. It does not partition the source. Autonomy is implemented as bounded remediation cycles over the complete source.
 
 ## First run
 
@@ -11,11 +11,11 @@ selenium-pw-migrator run --input ./SeleniumTests --config migration/profiles/ada
 selenium-pw-migrator verify-project --input ./SeleniumTests --config migration/profiles/adapter-config.start.json --out migration/runs/run-001/verify-project --format both
 ```
 
-The pilot is optional calibration. It helps expose missing mappings early, but it is not an execution partition and never replaces the complete run.
+The pilot is optional calibration. It never replaces the complete run.
 
 ## Validation
 
-Run the installed checks against the same concrete run:
+Run installed checks against the same concrete run:
 
 ```shell
 ./migration/scripts/check-harness-policy.sh -Workspace migration -RepoRoot .
@@ -24,21 +24,37 @@ Run the installed checks against the same concrete run:
 ./migration/scripts/check-final-gate.sh -Workspace migration -Run migration/runs/run-001 -RepoRoot .
 ```
 
-Use the `.ps1` equivalents on Windows. The final gate requires a real passing `verify-project` report by default. A missing SDK, target project, or package source is a blocker, not a reason to create a replacement JSON file.
+Use `.ps1` equivalents on Windows. Preserve missing or failed project verification honestly.
 
-## Optimized continuation
+## Autonomous remediation
 
-Optimization is deliberately simple and reviewable:
+An ordinary, `continue`, or `continuous` invocation receives up to five remediation cycles. The baseline run does not consume a cycle.
 
-- read project-scoped migration memory before changing mappings;
-- rank repeated TODO/root causes by expected payoff;
-- make at most one bounded source-backed adapter-config, generated-helper, or generated-POM improvement inside the product workspace; report a suspected Migrator recognizer/renderer defect with a minimal reproduction unless repository-source edits were explicitly authorized;
-- do not stop after routine analysis to ask whether to continue: execute that one safe agent-executable improvement in the same invocation, and ask only for a human product decision or new write authorization;
-- rerun the complete configured source and compare the reports;
-- stop after success, a concrete blocker, or repeated no progress.
+Each cycle:
 
-This removes coordination overhead while preserving the useful safeguards: optional pilot calibration, project memory, reviewable config deltas, scope checks, artifact hygiene, project verification, and an honest final gate.
+1. chooses one non-exhausted, source-backed root cause;
+2. records a stable candidate fingerprint and baseline metrics;
+3. makes one bounded adapter-config, generated-helper, generated-POM, or other permitted change;
+4. reviews the change;
+5. reruns the complete configured source and all available checks;
+6. classifies the result as `PROGRESS`, `NO_PROGRESS`, or `BLOCKED`.
+
+Progress resets the no-progress streak and starts the next safe cycle automatically. The first no-progress cycle exhausts that candidate and tries a different independent candidate. Stop after two consecutive distinct no-progress cycles, a real blocker, a human-only decision, or five completed cycles.
+
+`/supervised-task continue` starts a fresh five-cycle invocation budget while retaining run evidence and exhausted candidate fingerprints. `/supervised-task continuous` advances automatically between cycles and across five-cycle checkpoints without another user command.
+
+## Validation dimensions
+
+Keep generated syntax, migration metrics, project restore/build verification, and runtime/smoke verification separate. A known CPM or transitive-build verification-harness defect may leave project verification blocked without preventing source-backed mappings or helper improvements that remain measurable through diffs, TODO/unmapped deltas, and syntax checks.
+
+Zero C# syntax errors does not prove that the project compiles.
+
+## Handoff
+
+Rewrite `state/handoff.md` completely, keep one status and one stop reason, synchronize it with `state/autonomy-state.json`, then run `scripts/validate-handoff.ps1` or `.sh`. At a cycle-budget boundary, report `AUTONOMOUS_CYCLE_BUDGET_REACHED`, rank remaining safe candidates, and do not claim completion.
 
 ## Upgrading an old workspace
 
-Archive old run/state artifacts and bootstrap the workspace again. Do not reconstruct old partition state or copy validation evidence into the new run.
+Run kit update, keep a backup, and let the new kit add `state/autonomy-state.json` and the handoff validator. Existing real run evidence remains usable; do not reconstruct or copy validation evidence.
+
+> In `continuous` mode, the five-cycle limit is a checkpoint rather than a stop: the agent automatically starts the next five-cycle batch without requiring another `continue` command and works until a real terminal condition.

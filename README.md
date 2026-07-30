@@ -1,6 +1,6 @@
 # Selenium → Playwright AST Migrator
 
-> **Execution model:** one standard full-project run is supported. `pilot` is optional calibration; partition-specific planning and acceptance state are not used.
+> **Execution model:** one complete source scope is supported. `pilot` is optional calibration; `/supervised-task` may execute up to five autonomous remediation cycles without partitioning the source.
 
 [![npm preview](https://img.shields.io/npm/v/selenium-pw-migrator/preview?label=npm%20preview)](https://www.npmjs.com/package/selenium-pw-migrator)
 [![NuGet preview](https://img.shields.io/nuget/vpre/SeleniumPlaywrightMigrator?label=NuGet)](https://www.nuget.org/packages/SeleniumPlaywrightMigrator)
@@ -25,7 +25,7 @@ The goal is not magic conversion. The goal is to make migration uncertainty visi
 
 `public-preview-flow/v1` is the recommended public-preview route: install, run `doctor install`, start with playground or product `start`, migrate through an optional pilot and ordinary full-project runs, stop on gates, extract mapping research from noisy ordinary runs, and share a safe `feedback-bundle/v1` instead of a private repository dump.
 
-The safe-by-default rule is simple: generated output is a draft until the standard run report, real project verification, final gate, and artifact hygiene agree. When the run is red, fix one highest-payoff root cause, then rerun the complete configured source scope. For the compact end-to-end route, see [Public preview flow](docs/public-preview-flow.md).
+The safe-by-default rule is simple: generated output is a draft until the standard run report, real project verification, final gate, and artifact hygiene agree. When the run is red, fix one highest-payoff root cause per cycle, rerun the complete configured source scope, and continue automatically while progress and cycle budget remain. For the compact end-to-end route, see [Public preview flow](docs/public-preview-flow.md).
 
 
 ## Choose your path
@@ -72,9 +72,9 @@ The command uses the configured source as a hard boundary and executes the same 
 2. run install diagnostics and an optional representative `pilot`;
 3. run the complete source through `selenium-pw-migrator run`;
 4. run a fresh matching `verify-project` when a target project is available;
-5. fix at most one repeated highest-payoff root cause and rerun the complete pipeline.
+5. execute up to five one-change remediation cycles, rerunning the complete pipeline after each cycle.
 
-Plain `/supervised-task` starts or resumes this flow. `/supervised-task continue` performs one bounded improvement cycle against the latest ordinary run. There are no execution profiles, automatic partition advancement, acceptance receipts, or synthetic validation records. A CLI crash, missing SDK, or unavailable target project is reported as a blocker.
+Plain `/supervised-task` starts or resumes this flow. `/supervised-task continue` opens a fresh five-cycle budget from the latest evidence. `/supervised-task continuous` advances automatically after progress. The first no-progress cycle switches to another independent candidate; two consecutive distinct no-progress cycles stop. There is no automatic source partition advancement or synthetic validation evidence. Tooling or verification failures are global blockers only when they prevent truthful progress on every remaining candidate.
 
 For day-to-day details, see [Standard migration flow](docs/standard-migration-flow.md) and the compact [`/supervised-task` reference](docs/supervised-task-modes.md).
 
@@ -549,3 +549,5 @@ The standard final gate checks concrete run artifacts (`orchestration-report.jso
 
 - [Performance testing](docs/performance-testing.md)
 - [Test layers](docs/test-layers.md)
+
+> In `continuous` mode, the five-cycle limit is a checkpoint rather than a stop: the agent automatically starts the next five-cycle batch without requiring another `continue` command and works until a real terminal condition.

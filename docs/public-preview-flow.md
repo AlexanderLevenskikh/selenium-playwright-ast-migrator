@@ -7,7 +7,7 @@
 5. Run one complete `selenium-pw-migrator run` over the configured source scope.
 6. Run `verify-project` against the generated project.
 7. Review the dashboard, TODO root causes, unsupported actions, artifact hygiene, and final gate.
-8. Fix at most one highest-payoff root cause, then repeat the complete run.
+8. Fix one highest-payoff root cause per remediation cycle, repeat the complete run, and continue automatically for up to five cycles while progress remains.
 
 A pilot is calibration, not final coverage. A missing project-verification report is not a pass. Feedback bundles contain reports, mapping memory, TODO explanations, and verification evidence but exclude private source by default.
 

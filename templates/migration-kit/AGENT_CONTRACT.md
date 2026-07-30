@@ -2,25 +2,34 @@
 
 ## Goal
 
-Produce a reviewable Playwright migration draft for the complete configured Selenium source scope using one ordinary run directory.
+Produce a reviewable Playwright migration draft for the complete configured Selenium source scope, using bounded autonomous remediation cycles backed by current evidence.
 
 ## Required flow
 
-1. Read `state/source-scope.json` and the active adapter config.
+1. Read `state/source-scope.json`, `state/autonomy-state.json`, the active adapter config, current run reports, and project-local memory.
 2. Run doctor; run a representative pilot once when calibration is missing.
 3. Execute `selenium-pw-migrator run` for the full configured source.
-4. Execute a real matching `verify-project`; missing target project/toolchain is a blocker, not a passing result.
-5. Run scope, policy, artifact, and final-gate checks for that exact run. Matching project verification is required by default.
-6. Select at most one repeated highest-payoff root cause supported by current evidence, make one bounded improvement under `migration/**`, and rerun the full standard flow. A suspected Migrator engine defect is reported with a minimal reproduction unless repository-source edits were explicitly authorized.
-7. Do not end a routine run with an opt-in question such as `Want me to continue?`. If the selected remediation is agent-executable, reversible, and permitted under `migration/**`, complete it as the single bounded improvement in the current invocation. Ask only when a human product decision or new write authorization is genuinely required.
+4. Execute a real matching `verify-project` when possible. Missing target project/toolchain or a verification-harness defect is recorded honestly, not converted into passing evidence.
+5. Run scope, policy, artifact, and final-gate checks for the exact run.
+6. Rank repeated root causes by payoff, source confidence, reversibility, and independence from known blockers.
+7. Execute remediation in five-cycle batches. Ordinary, `continue`, and bounded modes receive one batch; `continuous` automatically opens the next batch at every budget checkpoint. Each cycle contains one bounded source-backed improvement under `migration/**`, review, a complete rerun, and evidence comparison.
+8. Continue automatically after progress. After one no-progress cycle, try a different independent candidate. Stop only after two consecutive no-progress cycles on distinct candidate fingerprints, a real blocker, a human-only decision, or the batch budget in non-continuous mode. A continuous budget boundary is a checkpoint, not a stop.
+9. `continue` starts a fresh five-cycle invocation budget while preserving real evidence and exhausted candidate fingerprints. `continuous` automatically advances between safe cycles and automatically opens the next five-cycle batch at each budget checkpoint, without requiring another user command.
+10. Rewrite `state/handoff.md` completely and validate it before handoff. Never append duplicate status fields or sections.
+11. Do not end routine work with an opt-in question. Ask only when every remaining useful candidate requires a human product decision, missing source truth, or new write authorization.
+
+## Evidence dimensions
+
+Track generated syntax, migration-quality metrics, project restore/build verification, and runtime/smoke verification separately. Failure in one dimension does not automatically block safe measurable work in another.
+
+Never describe code as compiling cleanly unless fresh project verification passed. Zero C# syntax errors proves syntax only.
 
 ## Project-scoped migration memory
 
 - Read `state/memory/memory-summary.md` before choosing a remediation.
-- Run `selenium-pw-migrator memory explain --workspace migration` to inspect applicable project-local guidance.
+- Run `selenium-pw-migrator memory explain --workspace migration` to inspect applicable guidance.
 - Run `selenium-pw-migrator memory doctor --workspace migration` before final handoff.
-- Memory cannot justify assertion suppression, weaker gates, fabricated evidence, or a source-scope change.
-- Memory is guidance, not authority; every result still requires current run artifacts and fresh verification.
+- Memory cannot justify assertion suppression, weaker gates, fabricated evidence, or source-scope changes.
 
 ## Reviewable config optimization
 
@@ -31,14 +40,16 @@ selenium-pw-migrator config merge-deltas --base migration/adapter-config.json --
 selenium-pw-migrator config validate-merge --base migration/adapter-config.json --candidate migration/config-merge/adapter-config.merged.json --out migration/config-merge
 ```
 
-Never edit or promote the base adapter config automatically. Keep POM uncertainty and conflicting candidates reviewable.
+Never promote uncertain mappings or broad suppressions automatically.
 
 ## Prohibited
 
-- Do not create partition plans.
+- Do not create hidden source partitions.
 - Do not edit source/product projects unless explicitly authorized.
-- Do not fabricate verification JSON or copy stale PASS evidence after a CLI failure.
+- Do not fabricate verification JSON or copy stale PASS evidence.
 - Do not reduce TODO by deleting actions, suppressing assertions, or inventing mappings.
+- Do not retry an exhausted no-progress candidate without new evidence.
+- Do not report `COMPLETE` when the cycle budget ended with safe candidates remaining.
 - Do not claim runtime readiness without fresh matching evidence.
 
 All generated/proposed files remain under `migration/**` until review.

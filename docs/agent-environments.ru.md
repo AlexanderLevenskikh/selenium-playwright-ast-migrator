@@ -1,6 +1,6 @@
 # Агентские окружения
 
-> **Execution model:** one standard full-project run is supported. `pilot` is optional calibration; partition-specific planning and acceptance state are not used.
+> **Модель выполнения:** используется один полный source scope. `pilot` — необязательная калибровка; один вызов `/supervised-task` может выполнить до пяти автономных циклов исправлений без разделения исходников на части.
 
 Migrator Agent Harness Kit не привязан к конкретному агенту. OpenCode сегодня поддержан лучше всего как UI, но настоящий контракт — это установленный workspace `migration/`. Codex, CI и generic agents могут работать по тому же контракту, если читают установленные файлы, остаются внутри allowed roots и запускают gates.
 
@@ -43,7 +43,7 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Sel
 /supervised-task
 ```
 
-`bootstrap-opencode` применяет repository-root command pack (`opencode.jsonc`, `.opencode/agents`, `.opencode/commands` и `AGENTS.md`, если его ещё нет) до запуска OpenCode. Orchestrator определяет source/target/framework, запускает doctor, при необходимости делает небольшой pilot, затем выполняет один полный `selenium-pw-migrator run` и реальный `verify-project`. Папка run создаётся CLI, а не агентом вручную.
+`bootstrap-opencode` применяет repository-root command pack (`opencode.jsonc`, `.opencode/agents`, `.opencode/commands` и `AGENTS.md`, если его ещё нет) до запуска OpenCode. Orchestrator определяет source/target/framework, запускает doctor, при необходимости делает небольшой pilot, затем выполняет полный `selenium-pw-migrator run`, реальный `verify-project` и до пяти циклов исправлений. После прогресса следующий цикл начинается автоматически; первый no-progress переключает агента на другой кандидат. Папка run создаётся CLI, а не агентом вручную.
 
 ## Codex, CI или другой coding agent
 

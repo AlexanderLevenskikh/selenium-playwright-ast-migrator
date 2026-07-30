@@ -2,24 +2,26 @@
 
 ## Canonical migration workflow
 
-This repository uses one standard full-project migration flow. Partition planning and partition-local execution are not supported.
+This repository uses one standard full-project source scope. Hidden partition planning and partition-local execution are not supported.
 
 1. Run focused repository checks for code changes.
-2. For a product migration, resolve the configured Selenium source from `migration/state/source-scope.json`; if it is missing, stop and report `SOURCE_SCOPE_MISSING` instead of guessing or offering an unrelated task menu.
+2. For a product migration, resolve the configured Selenium source from `migration/state/source-scope.json`; if it is missing, stop with `SOURCE_SCOPE_MISSING` instead of guessing.
 3. Run an optional representative `pilot` once for calibration.
-4. Run the complete source through `selenium-pw-migrator run`.
-5. Run a real matching `verify-project` when a target project/toolchain is available.
-6. Fix one highest-payoff root cause at a time and rerun the complete standard flow.
-7. Do not stop after routine POM/config analysis to ask whether to continue. When one safe, agent-executable remediation is available under `migration/**`, perform it in the same invocation, rerun the complete standard flow, and then report the result. Ask only for a human product decision or explicit authorization to write outside the migration workspace.
+4. Run the complete source through `selenium-pw-migrator run` and run real matching `verify-project` when available.
+5. Rank repeated root causes and fix one highest-payoff root cause per remediation cycle.
+6. An ordinary, `continue`, or `continuous` `/supervised-task` invocation may execute up to five cycles. After progress, continue automatically; after one no-progress cycle, try a different independent candidate; stop only after two consecutive distinct no-progress cycles or another mandatory stop.
+7. Keep generated syntax, migration metrics, project build verification, and runtime verification separate. A known verification-harness defect does not block independent measurable migration improvements.
+8. Do not ask whether to continue while safe agent-executable candidates remain and invocation budget is available. Ask only for a concrete human product decision or authorization.
 
 ## Hard rules
 
 1. Do not edit source/product files during a migration-artifact run unless explicitly authorized.
 2. Generated or proposed target/POM code belongs under `migration/**` until reviewed.
-3. Do not treat low TODO count as success without syntax, quality, and project-verification evidence.
+3. Do not treat low TODO count or zero syntax errors as a passing project build.
 4. Do not reduce TODO by suppressing assertions, deleting actions, hiding empty tests, or inventing mappings.
-5. Never create validation-result JSON manually to bypass a failed CLI command. Preserve the crash/error as evidence and report the blocker.
-6. Keep changed PowerShell scripts paired with a `.sh` companion when they are distributed cross-platform.
+5. Never create validation-result JSON manually to bypass a failed CLI command.
+6. Keep changed PowerShell scripts paired with a `.sh` companion when distributed cross-platform.
+7. Rewrite `migration/state/handoff.md` completely and validate it; never append duplicate fields or sections.
 
 ## Verification
 

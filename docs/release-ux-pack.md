@@ -107,4 +107,4 @@ The release doctor verifies package metadata, publish workflows, npm/standalone 
 
 ## Standard completion checkpoint
 
-A successful handoff requires current run reports, matching `verify-project` evidence, artifact hygiene, and final gate. The agent reports remaining limitations and stops. A later `/supervised-task continue` may apply one bounded high-payoff repair and rerun the complete source scope; there is no persistent continuation state machine.
+A successful handoff requires current run reports, matching `verify-project` evidence, artifact hygiene, and final gate. The agent reports remaining limitations and stops. A later `/supervised-task continue` opens a fresh five-cycle budget and reruns the complete source after each one-change cycle. A small `autonomy-state.json` persists cycle evidence and exhausted candidates; it does not partition the source.

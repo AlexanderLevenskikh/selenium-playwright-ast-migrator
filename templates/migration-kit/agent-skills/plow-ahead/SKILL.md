@@ -13,7 +13,7 @@ Purpose: keep a supervised migration run moving through ordinary ambiguity witho
 
 Convert routine ambiguity into conservative assumptions and continue. Record the assumption where the run evidence lives.
 
-Do not finish routine POM/config analysis with `Want me to continue?`. If one safe bounded remediation is already supported by evidence and permitted under `migration/**`, perform it before handoff.
+Do not finish routine POM/config analysis with `Want me to continue?`. Perform one safe bounded remediation per cycle and return control to the orchestrator, which continues automatically while budget and safe candidates remain.
 
 Good plow-ahead assumptions:
 

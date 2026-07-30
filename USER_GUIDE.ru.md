@@ -1,6 +1,6 @@
 # Руководство пользователя Migrator
 
-> **Execution model:** one standard full-project run is supported. `pilot` is optional calibration; partition-specific planning and acceptance state are not used.
+> **Модель выполнения:** используется один полный source scope. `pilot` — необязательная калибровка; `/supervised-task` может выполнить до пяти автономных циклов исправлений без разделения исходников.
 
 Migrator - это CLI-инструмент для управляемого переноса Selenium end-to-end тестов на Playwright.
 
@@ -247,18 +247,19 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Old
 
 Для существующего workspace команда сначала обновляет управляемый pack `migration/opencode-team/**`, а затем заново синхронизирует `.opencode/agents` и `.opencode/commands` в корне репозитория. Новые режимы `/supervised-task` должны появляться без `--force`; если старая команда остаётся `unchanged`, используется более ранняя версия с этим дефектом.
 
-Потом запустите `/supervised-task`. Команда выполняет один полный настроенный запуск миграции, соответствующий `verify-project` и final gate, после чего останавливается с evidence. `/supervised-task continue` нужен только для одного bounded source-backed исправления по результатам последнего запуска с последующим полным повтором исходного scope. Агент читает `current-ticket.md` и `state/start-dispatch.json`, но не создаёт скрытые части source scope, не двигает фоновый state и не фабрикует validation-артефакты.
+Потом запустите `/supervised-task`. Команда выполняет полный настроенный запуск и может провести до пяти source-backed циклов: одно ограниченное изменение и полный повтор source scope на цикл. `/supervised-task continue` открывает новый бюджет из пяти циклов по последним evidence; `/supervised-task continuous` автоматически продолжает после прогресса. Агент читает `current-ticket.md`, `state/start-dispatch.json` и `state/autonomy-state.json`, но не создаёт скрытые части source scope и не фабрикует validation-артефакты.
 
 ### OpenCode `/supervised-task`
 
-Обычных вариантов запуска два:
+Обычные варианты запуска:
 
 | Команда | Значение |
 |---|---|
-| `/supervised-task` | Запустить или возобновить одну полную миграцию проекта. |
-| `/supervised-task continue` | Исправить одну повторяющуюся первопричину с максимальным эффектом и полностью перезапустить pipeline. |
+| `/supervised-task` | Запустить или возобновить полный scope и выполнить до пяти циклов. |
+| `/supervised-task continue` | Продолжить по последним evidence с новым бюджетом в пять циклов. |
+| `/supervised-task continuous` | Автоматически переходить через контрольные точки по пять циклов до успеха или настоящей обязательной остановки; повторно вызывать `continue` не нужно. |
 
-Команда читает настроенный source scope, project-local memory и adapter config; запускает необязательный pilot только при отсутствии калибровки; выполняет `selenium-pw-migrator run`; затем запускает настоящий соответствующий `verify-project`, когда это возможно. Профилей выполнения, batch aliases, автоматического перехода между частями и синтетических validation-файлов нет.
+Команда читает настроенный source scope, project-local memory и adapter config; запускает необязательный pilot только при отсутствии калибровки; выполняет `selenium-pw-migrator run`; затем запускает настоящий соответствующий `verify-project`, когда это возможно. Одно ограниченное изменение делается на цикл, а не на весь вызов. Прогресс сбрасывает no-progress; после первого no-progress выбирается другой кандидат; два подряд разных no-progress останавливают вызов. Автоматического разделения source scope и синтетических validation-файлов нет.
 
 Для Codex, CI или другого агента используйте явный handoff:
 
@@ -1041,3 +1042,5 @@ selenium-pw-migrator report serve --input migration/runs/run-001 --static-only -
 ```
 
 Отчёт показывает последний обычный запуск, project-local memory, настоящий статус project verification, candidate config merge и открытые conflicts. Memory остаётся подсказкой, а не доказательством. После обрыва агента или CLI сохраните логи и заново выполните обычную команду в чистую run-директорию; не создавайте recovery state или verification JSON вручную.
+
+> В режиме `continuous` лимит в пять циклов является контрольной точкой, а не остановкой: агент автоматически начинает следующую пятёрку без повторного вызова `continue` и работает до настоящего условия остановки.

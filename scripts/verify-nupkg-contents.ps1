@@ -59,6 +59,11 @@ try {
         '^templates/migration-kit/scripts/repair-jsonl-ledger\.sh$',
         '^templates/migration-kit/scripts/update-current-ticket-status\.ps1$',
         '^templates/migration-kit/scripts/update-current-ticket-status\.sh$',
+        '^templates/migration-kit/scripts/validate-handoff\.ps1$',
+        '^templates/migration-kit/scripts/validate-handoff\.sh$',
+        '^templates/migration-kit/scripts/update-autonomy-state\.ps1$',
+        '^templates/migration-kit/scripts/update-autonomy-state\.sh$',
+        '^templates/migration-kit/state/autonomy-state\.json$',
         '^scripts/install-migration-kit\.ps1$'
     )
 

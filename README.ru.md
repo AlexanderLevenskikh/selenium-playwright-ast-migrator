@@ -1,6 +1,6 @@
 # Selenium → Playwright AST Migrator
 
-> **Execution model:** one standard full-project run is supported. `pilot` is optional calibration; partition-specific planning and acceptance state are not used.
+> **Модель выполнения:** используется один полный source scope. `pilot` — необязательная калибровка; `/supervised-task` может выполнить до пяти автономных циклов исправлений без разделения исходников.
 
 [![npm preview](https://img.shields.io/npm/v/selenium-pw-migrator/preview?label=npm%20preview)](https://www.npmjs.com/package/selenium-pw-migrator)
 [![NuGet preview](https://img.shields.io/nuget/vpre/SeleniumPlaywrightMigrator?label=NuGet)](https://www.nuget.org/packages/SeleniumPlaywrightMigrator)
@@ -25,7 +25,7 @@ Migrator парсит Selenium-тесты, строит промежуточну
 
 `public-preview-flow/v1` — рекомендуемый публичный preview-маршрут: установить инструмент, запустить `doctor install`, начать с playground или product `start`, мигрировать через необязательный pilot и обычные полные запуски, останавливаться на gates, извлекать mapping research из шумных обычных запусков и отправлять безопасный `feedback-bundle/v1` вместо приватного репозитория.
 
-Safe-by-default правило простое: generated output — черновик, пока standard run report, реальный `verify-project`, final gate и artifact hygiene не согласованы. Если run красный, исправь одну самую выгодную первопричину и повтори полный запуск на настроенном source scope. Короткий end-to-end маршрут: [Public preview flow](docs/public-preview-flow.ru.md).
+Safe-by-default правило простое: generated output — черновик, пока standard run report, реальный `verify-project`, final gate и artifact hygiene не согласованы. Если run красный, исправляй по одной выгодной первопричине за цикл, полностью повторяй source scope и продолжай автоматически, пока есть прогресс и бюджет. Короткий end-to-end маршрут: [Public preview flow](docs/public-preview-flow.ru.md).
 
 
 ## Три входа
@@ -75,9 +75,9 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Sel
 2. запускает диагностику установки и необязательный representative `pilot`;
 3. прогоняет весь source через `selenium-pw-migrator run`;
 4. запускает свежий соответствующий `verify-project`, когда доступен target project;
-5. исправляет не более одной повторяющейся первопричины с максимальным эффектом и полностью перезапускает pipeline.
+5. выполняет до пяти циклов с одним ограниченным изменением и полным повтором pipeline после каждого цикла.
 
-Обычный `/supervised-task` запускает или возобновляет этот процесс. `/supervised-task continue` выполняет один ограниченный цикл улучшения последнего обычного запуска. Профилей выполнения, автоматического перехода между частями, acceptance receipts и синтетических validation-записей больше нет. CLI crash, отсутствующий SDK или недоступный target project честно фиксируются как blocker.
+Обычный `/supervised-task` запускает или возобновляет процесс. `/supervised-task continue` открывает новый бюджет из пяти циклов по последним evidence. `/supervised-task continuous` автоматически переходит дальше после прогресса. После первого no-progress выбирается другой независимый кандидат; два подряд разных no-progress останавливают вызов. Разделения source scope и синтетических validation-записей нет. Ошибка tooling или verify-project считается глобальным блокером только если мешает честно улучшать все оставшиеся кандидаты.
 
 Подробности: [обычный migration flow](docs/standard-migration-flow.ru.md) и краткий [справочник `/supervised-task`](docs/supervised-task-modes.ru.md).
 

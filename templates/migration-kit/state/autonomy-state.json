@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "standard-migration-autonomy/v1",
+  "invocationId": null,
+  "mode": "standard",
+  "status": "NOT_STARTED",
+  "cycleBudget": 5,
+  "batchNumber": 1,
+  "cyclesCompleted": 0,
+  "totalCyclesCompleted": 0,
+  "completedBatches": 0,
+  "noProgressStreak": 0,
+  "lastCandidateFingerprint": null,
+  "lastCycleResult": null,
+  "lastCheckpointReason": null,
+  "exhaustedCandidateFingerprints": [],
+  "completedCycles": [],
+  "cycleHistory": [],
+  "stopReason": null
+}

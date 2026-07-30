@@ -33,9 +33,12 @@ required=(
   "AGENT_CONTRACT.md"
   "harness/README.md"
   "state/harness-policy.json"
+  "state/autonomy-state.json"
   "scripts/check-harness-policy.ps1"
   "scripts/check-final-gate.ps1"
   "scripts/validate-run-artifacts.ps1"
+  "scripts/validate-handoff.ps1"
+  "scripts/update-autonomy-state.ps1"
   "opencode-team/global/.config/opencode/opencode.jsonc"
 )
 

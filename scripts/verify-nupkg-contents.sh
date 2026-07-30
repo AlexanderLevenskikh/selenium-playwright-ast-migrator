@@ -63,6 +63,11 @@ required_patterns = [
     r'^templates/migration-kit/scripts/repair-jsonl-ledger\.sh$',
     r'^templates/migration-kit/scripts/update-current-ticket-status\.ps1$',
     r'^templates/migration-kit/scripts/update-current-ticket-status\.sh$',
+    r'^templates/migration-kit/scripts/validate-handoff\.ps1$',
+    r'^templates/migration-kit/scripts/validate-handoff\.sh$',
+    r'^templates/migration-kit/scripts/update-autonomy-state\.ps1$',
+    r'^templates/migration-kit/scripts/update-autonomy-state\.sh$',
+    r'^templates/migration-kit/state/autonomy-state\.json$',
     r'^scripts/install-migration-kit\.ps1$',
 ]
 for pattern in required_patterns:

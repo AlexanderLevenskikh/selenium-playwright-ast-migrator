@@ -78,7 +78,13 @@ public sealed class StandardInstructionContractTests
         Assert.Contains("migration/runs/run-001", command);
         Assert.Contains("selenium-pw-migrator verify-project", command);
         Assert.Contains("Do not end a routine run with an opt-in question", command);
-        Assert.Contains("complete it as the single bounded improvement", command);
+        Assert.Contains("one bounded change is allowed **per cycle**, not per invocation", command);
+        Assert.Contains("fresh budget of up to **5 remediation cycles**", command);
+        Assert.Contains("`continuous` means automatically begin the next safe cycle after progress", command);
+        Assert.Contains("first `NO_PROGRESS`", command);
+        Assert.Contains("distinct candidate fingerprints", command);
+        Assert.Contains("Independent validation dimensions", command);
+        Assert.Contains("validate-handoff.ps1", command);
 
         var orchestrator = Read(".opencode/agents/orchestrator.md");
         var contract = Read("templates/migration-kit/AGENT_CONTRACT.md");
@@ -96,6 +102,60 @@ public sealed class StandardInstructionContractTests
         Assert.Contains("\"question\": \"deny\"", config);
         Assert.Contains("stop with `SOURCE_SCOPE_MISSING`", command);
     }
+
+
+    [Fact]
+    public void AutonomousContinuation_UsesFreshBoundedBudgetAndDoesNotStopAfterOneFailedCycle()
+    {
+        var command = Read(".opencode/commands/supervised-task.md");
+        var orchestrator = Read(".opencode/agents/orchestrator.md");
+        var continuePrompt = Read("templates/migration-kit/prompts/continue-run-prompt.txt");
+        var stopPolicy = Read("templates/migration-kit/state/stop-policy-checklist.md");
+
+        foreach (var text in new[] { command, orchestrator, continuePrompt })
+        {
+            Assert.Contains("five", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("continue", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("continuous", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("no-progress", text, StringComparison.OrdinalIgnoreCase);
+        }
+
+        Assert.Contains("one bounded change is allowed **per cycle**, not per invocation", command);
+        Assert.Contains("On the first `NO_PROGRESS`", command);
+        Assert.Contains("try a different independent candidate", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("A failed `verify-project` is not by itself a global stop", command);
+        Assert.Contains("AUTONOMOUS_CYCLE_BUDGET_REACHED", stopPolicy);
+        Assert.Contains("two consecutive completed cycles on distinct candidate fingerprints", stopPolicy);
+    }
+
+    [Fact]
+    public void HandoffTemplate_HasOneCanonicalStatusAndSeparateValidationDimensions()
+    {
+        var handoff = Read("templates/migration-kit/state/handoff.md");
+        var autonomy = Read("templates/migration-kit/state/autonomy-state.json");
+        var validator = Read("templates/migration-kit/scripts/validate-handoff.ps1");
+        var updater = Read("templates/migration-kit/scripts/update-autonomy-state.ps1");
+
+        Assert.Equal(1, CountLine(handoff, "Status:"));
+        Assert.Equal(1, CountLine(handoff, "Stop reason:"));
+        Assert.Equal(1, CountLine(handoff, "Generated syntax:"));
+        Assert.Equal(1, CountLine(handoff, "Project verification:"));
+        Assert.Equal(1, CountLine(handoff, "Runtime verification:"));
+        Assert.Equal(1, CountLine(handoff, "## Autonomous next actions"));
+        Assert.Equal(1, CountLine(handoff, "## What not to do"));
+        Assert.DoesNotContain("Status: COMPLETE", handoff);
+        Assert.Contains("standard-migration-autonomy/v1", autonomy);
+        Assert.Contains("HANDOFF_COMPLETE_CONTRADICTION", validator);
+        Assert.Contains("HANDOFF_VALIDATION_OVERCLAIM", validator);
+        Assert.Contains("AUTONOMY_STATE_NO_PROGRESS_CANDIDATES_NOT_DISTINCT", validator);
+        Assert.Contains("AUTONOMY_CANDIDATE_ALREADY_EXHAUSTED", updater);
+        Assert.Contains("AUTONOMY_NO_PROGRESS_CANDIDATES_NOT_DISTINCT", updater);
+        Assert.Contains("AUTONOMOUS_CYCLE_BUDGET_REACHED", updater);
+    }
+
+    static int CountLine(string text, string prefix) => text
+        .Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)
+        .Count(line => line.StartsWith(prefix, StringComparison.Ordinal));
 
     static string Read(string relativePath) => File.ReadAllText(Path.Combine(FindRepositoryRoot(), relativePath.Replace('/', Path.DirectorySeparatorChar)));
 

@@ -2,7 +2,11 @@
 
 ## Title
 
-<fill in after first standard-run analysis>
+<fill in after current-run analysis>
+
+## Candidate fingerprint
+
+<stable root-cause identifier; do not reuse after NO_PROGRESS without new evidence>
 
 ## Root cause
 
@@ -13,6 +17,7 @@
 - Generated snippet:
 - Config snippet:
 - Diagnostics:
+- Baseline metrics:
 
 ## Fix type
 
@@ -25,9 +30,15 @@
 
 - Unit/regression tests:
 - Full migration run:
+- Generated syntax:
 - Project verification:
-- Final gate:
+- Runtime/smoke verification:
+- Relevant metric delta:
+
+## Cycle result
+
+<NOT_STARTED | PROGRESS | NO_PROGRESS | BLOCKED>
 
 ## Stop condition
 
-Complete at most one bounded, source-backed repair for this ticket, rerun the complete configured source scope, and then stop with evidence. Stop earlier only when the repair is unsafe, required input/tooling is missing, or the repeated full run shows no progress.
+Complete exactly one bounded, source-backed repair for this cycle, rerun the complete configured source scope, compare all relevant evidence dimensions, record the result in `state/autonomy-state.json`, and return control to the orchestrator. This cycle belongs to a five-cycle invocation budget. Do not stop the whole invocation merely because this one cycle produced no progress; in `continuous` mode the orchestrator also rolls over to the next five-cycle batch automatically.

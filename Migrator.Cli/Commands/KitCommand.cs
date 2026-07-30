@@ -134,12 +134,14 @@ Adapter config: `{{options.Config}}`
 2. `{{Path.Combine(options.Workspace, "prompts", "kickoff-prompt.txt")}}` — first task prompt.
 3. `{{Path.Combine(options.Workspace, "harness", "README.md")}}` — scope, verification, and final-gate rules.
 4. `{{Path.Combine(options.Workspace, "state", "harness-policy.json")}}` — standard-run safety policy.
+5. `{{Path.Combine(options.Workspace, "state", "autonomy-state.json")}}` — invocation budget, cycle history, and exhausted candidates.
+6. `{{Path.Combine(options.Workspace, "state", "handoff.md")}}` — canonical handoff that must be rewritten, not appended.
 
 {{extra}}
 
 ## Operating rule
 
-Run the configured source through one ordinary full-project migration command. Do not manufacture reports or validation evidence. Do not end routine POM/config analysis by asking whether to continue; complete one safe bounded remediation under the migration workspace when evidence and permissions allow it, then rerun and report.
+Run the configured source through one ordinary full-project migration command. Do not manufacture reports or validation evidence. Do not end routine POM/config analysis by asking whether to continue. Execute one bounded change per remediation cycle and continue automatically for up to five cycles while evidence, permissions, and stop policy allow it.
 
 ```bash
 {{options.ToolCommand}} run --input "{{options.Source}}" --config "{{options.Config}}" --out "{{options.Output}}" --format both
@@ -165,6 +167,8 @@ PowerShell and Bash safety checks are available after the real run:
 ```
 
 The dashboard summarizes readiness, TODO categories, unsupported actions, generated files, next actions, and concrete evidence links.
+
+Before final handoff, update autonomy state with `scripts/update-autonomy-state.ps1` (or `.sh`) and run `scripts/validate-handoff.ps1 -Workspace {{options.Workspace}}`.
 """;
         WriteTextFileSafe(Path.Combine(workspacePath, "AGENT_HANDOFF.md"), handoff, workspacePath, options, neverOverwrite: false);
     }
@@ -573,6 +577,9 @@ The dashboard summarizes readiness, TODO categories, unsupported actions, genera
 
         CopyDirectoryContents(templateRoot, workspacePath, tokens, workspacePath, options);
 
+        if (options.Update)
+            UpgradeKnownMutableAutonomyContracts(workspacePath);
+
         var schemaSource = Path.Combine(kitRoot, "schemas", "adapter-config.schema.json");
         if (File.Exists(schemaSource))
         {
@@ -641,6 +648,7 @@ The dashboard summarizes readiness, TODO categories, unsupported actions, genera
         AddCheck(checks, "kickoff-prompt", File.Exists(Path.Combine(workspacePath, "prompts", "kickoff-prompt.txt")), Path.Combine(workspacePath, "prompts", "kickoff-prompt.txt"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "bounded-repair-prompt", File.Exists(Path.Combine(workspacePath, "prompts", "bounded-repair-prompt.txt")), Path.Combine(workspacePath, "prompts", "bounded-repair-prompt.txt"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "state-handoff", File.Exists(Path.Combine(workspacePath, "state", "handoff.md")), Path.Combine(workspacePath, "state", "handoff.md"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "autonomy-state", File.Exists(Path.Combine(workspacePath, "state", "autonomy-state.json")), Path.Combine(workspacePath, "state", "autonomy-state.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "stop-policy-checklist", File.Exists(Path.Combine(workspacePath, "state", "stop-policy-checklist.md")), Path.Combine(workspacePath, "state", "stop-policy-checklist.md"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "schema", File.Exists(Path.Combine(workspacePath, "schemas", "adapter-config.schema.json")), Path.Combine(workspacePath, "schemas", "adapter-config.schema.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "codex-files", File.Exists(Path.Combine(workspacePath, "codex", "CODEX.md")), Path.Combine(workspacePath, "codex", "CODEX.md"), "Run `migrator kit update --backup` without --no-codex-files.");
@@ -664,6 +672,8 @@ The dashboard summarizes readiness, TODO categories, unsupported actions, genera
         AddCheck(checks, "standard-policy", File.Exists(Path.Combine(workspacePath, "state", "harness-policy.json")), Path.Combine(workspacePath, "state", "harness-policy.json"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "scope-contract", File.Exists(Path.Combine(workspacePath, "state", "scope-contract.json")), Path.Combine(workspacePath, "state", "scope-contract.json"), "Run `migrator kit update --backup --source <source-root>` or pass --source on bootstrap.");
         AddCheck(checks, "standard-policy-script", File.Exists(Path.Combine(workspacePath, "scripts", "check-harness-policy.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "check-harness-policy.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "handoff-validator", File.Exists(Path.Combine(workspacePath, "scripts", "validate-handoff.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "validate-handoff.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
+        AddCheck(checks, "autonomy-state-updater", File.Exists(Path.Combine(workspacePath, "scripts", "update-autonomy-state.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "update-autonomy-state.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "command-policy", File.Exists(Path.Combine(workspacePath, "scripts", "evaluate-command-policy.ps1")) && File.Exists(Path.Combine(workspacePath, "scripts", "evaluate-command-policy.sh")), Path.Combine(workspacePath, "scripts"), "Run `migrator kit update --backup`.");
         AddCheck(checks, "guard-checksums", File.Exists(Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json")), Path.Combine(workspacePath, ".migration-kit", "guard-checksums.json"), "Run `migrator kit update --backup`.");
 
@@ -977,6 +987,10 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
             "scripts/validate-run-artifacts.sh" or
             "scripts/update-current-ticket-status.ps1" or
             "scripts/update-current-ticket-status.sh" or
+            "scripts/validate-handoff.ps1" or
+            "scripts/validate-handoff.sh" or
+            "scripts/update-autonomy-state.ps1" or
+            "scripts/update-autonomy-state.sh" or
             "scripts/repair-jsonl-ledger.ps1" or
             "scripts/repair-jsonl-ledger.sh"
             || normalized.StartsWith("prompts/", StringComparison.Ordinal)
@@ -1466,6 +1480,10 @@ Fix only the current ticket.
             "scripts/validate-run-artifacts.sh",
             "scripts/update-current-ticket-status.ps1",
             "scripts/update-current-ticket-status.sh",
+            "scripts/validate-handoff.ps1",
+            "scripts/validate-handoff.sh",
+            "scripts/update-autonomy-state.ps1",
+            "scripts/update-autonomy-state.sh",
             "scripts/repair-jsonl-ledger.ps1",
             "scripts/repair-jsonl-ledger.sh"
         };
@@ -1571,6 +1589,35 @@ Fix only the current ticket.
         }
     }
 
+    static void UpgradeKnownMutableAutonomyContracts(string workspacePath)
+    {
+        var currentTicketPath = Path.Combine(workspacePath, "current-ticket.md");
+        if (!File.Exists(currentTicketPath))
+            return;
+
+        var existing = File.ReadAllText(currentTicketPath);
+        const string legacySentence = "Complete at most one bounded, source-backed repair for this ticket, rerun the complete configured source scope, and then stop with evidence. Stop earlier only when the repair is unsafe, required input/tooling is missing, or the repeated full run shows no progress.";
+        const string legacyMarker = "Complete at most one bounded, source-backed repair";
+        const string upgradedSentence = "Complete exactly one bounded, source-backed repair for this cycle, rerun the complete configured source scope, compare all relevant evidence dimensions, and return control to the orchestrator. This cycle belongs to a five-cycle invocation budget. Do not stop the whole invocation merely because this cycle made no progress; in `continuous` mode the orchestrator automatically opens the next five-cycle batch.";
+
+        string upgraded;
+        if (existing.Contains(legacySentence, StringComparison.Ordinal))
+        {
+            upgraded = existing.Replace(legacySentence, upgradedSentence, StringComparison.Ordinal);
+        }
+        else if (existing.Contains(legacyMarker, StringComparison.Ordinal))
+        {
+            upgraded = existing.Replace(legacyMarker, upgradedSentence + " Legacy text follows only where project-owned details were appended: ", StringComparison.Ordinal);
+        }
+        else
+        {
+            return;
+        }
+
+        File.WriteAllText(currentTicketPath, upgraded);
+        Console.WriteLine($"kit-contract-upgrade: {currentTicketPath} (five-cycle invocation budget)");
+    }
+
     static bool IsWorkspaceMutableFile(string relativePath)
     {
         var normalized = relativePath.Replace('\\', '/');
@@ -1583,6 +1630,7 @@ Fix only the current ticket.
             || normalized.StartsWith("state/run-ledger.md", StringComparison.Ordinal)
             || normalized.StartsWith("state/decision-log.md", StringComparison.Ordinal)
             || normalized.StartsWith("state/handoff.md", StringComparison.Ordinal)
+            || normalized.StartsWith("state/autonomy-state.json", StringComparison.Ordinal)
             || normalized.StartsWith("state/stop-policy-checklist.md", StringComparison.Ordinal)
             || normalized.StartsWith("state/final-gate.md", StringComparison.Ordinal)
             || normalized.StartsWith("state/scope-contract.json", StringComparison.Ordinal)

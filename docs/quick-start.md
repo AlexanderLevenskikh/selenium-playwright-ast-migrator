@@ -1,6 +1,6 @@
 # Quick start
 
-> **Execution model:** one standard full-project run is supported. `pilot` is optional calibration; partition-specific planning and acceptance state are not used.
+> **Execution model:** one complete source scope is supported. `pilot` is optional calibration; `/supervised-task` can execute up to five autonomous remediation cycles without partitioning the source.
 
 This is the public first-run route. It keeps the user path short: install, diagnose, choose one of three entries, run a representative pilot, and open the dashboard only after real run artifacts exist.
 
@@ -72,7 +72,7 @@ Then open the repository in OpenCode and run the one-command standard flow start
 /supervised-task
 ```
 
-`bootstrap-opencode` applies `opencode.jsonc`, `.opencode/agents`, `.opencode/commands`, and `AGENTS.md` into the repository root. `/supervised-task` resolves the configured source, runs doctor, optionally calibrates on a small pilot, then executes one complete `selenium-pw-migrator run`, real `verify-project`, and the final gate. It may apply at most one highest-payoff bounded repair before repeating the complete source scope.
+`bootstrap-opencode` applies `opencode.jsonc`, `.opencode/agents`, `.opencode/commands`, and `AGENTS.md` into the repository root. `/supervised-task` resolves the configured source, runs doctor, optionally calibrates on a small pilot, then executes one complete `selenium-pw-migrator run`, real `verify-project`, and the final gate. It may execute up to five one-change remediation cycles, repeating the complete source scope after each cycle. `continue` starts a fresh budget and `continuous` advances automatically after progress.
 
 The same flow can be run manually:
 

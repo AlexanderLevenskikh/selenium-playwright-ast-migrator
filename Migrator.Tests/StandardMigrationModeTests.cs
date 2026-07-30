@@ -110,8 +110,28 @@ public sealed class StandardMigrationModeTests
         var guide = Read("USER_GUIDE.md");
 
         Assert.Contains("selenium-pw-migrator run", start);
-        Assert.Contains("one standard full-project run", readme, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("one complete source scope", readme, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("selenium-pw-migrator run", guide);
+    }
+
+
+    [Fact]
+    public void StandardPolicy_UsesFiveCycleAutonomyAndIndependentValidationDimensions()
+    {
+        var policy = Read("templates/migration-kit/state/harness-policy.json");
+        var state = Read("templates/migration-kit/state/autonomy-state.json");
+        var updater = Read("templates/migration-kit/scripts/update-autonomy-state.ps1");
+
+        Assert.Contains("standard-migration-policy/v2", policy);
+        Assert.Contains("\"maxRemediationCyclesPerInvocation\": 5", policy);
+        Assert.Contains("\"maxChangesPerCycle\": 1", policy);
+        Assert.Contains("\"continueStartsFreshBudget\": true", policy);
+        Assert.Contains("\"continuousAutoAdvanceAfterProgress\": true", policy);
+        Assert.Contains("\"requireDistinctNoProgressCandidates\": true", policy);
+        Assert.Contains("\"verificationDimensionsIndependent\": true", policy);
+        Assert.Contains("standard-migration-autonomy/v1", state);
+        Assert.Contains("AUTONOMY_CANDIDATE_ALREADY_EXHAUSTED", updater);
+        Assert.Contains("STOPPED_TWO_CONSECUTIVE_NO_PROGRESS", updater);
     }
 
     [Fact]

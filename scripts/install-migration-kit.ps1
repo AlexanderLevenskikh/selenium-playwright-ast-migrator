@@ -170,6 +170,10 @@ function Test-AutoUpdatedKitOwnedFile([string]$RelativePath) {
         $normalized -eq "scripts/repair-jsonl-ledger.sh" -or
         $normalized -eq "scripts/update-current-ticket-status.ps1" -or
         $normalized -eq "scripts/update-current-ticket-status.sh" -or
+        $normalized -eq "scripts/validate-handoff.ps1" -or
+        $normalized -eq "scripts/validate-handoff.sh" -or
+        $normalized -eq "scripts/update-autonomy-state.ps1" -or
+        $normalized -eq "scripts/update-autonomy-state.sh" -or
         $normalized.StartsWith("prompts/") -or
         $normalized.StartsWith("agent-skills/") -or
         $normalized.StartsWith("opencode-team/")
@@ -188,6 +192,7 @@ function Test-WorkspaceMutableFile([string]$RelativePath) {
         $normalized.StartsWith("state/run-ledger.md") -or
         $normalized.StartsWith("state/decision-log.md") -or
         $normalized.StartsWith("state/handoff.md") -or
+        $normalized.StartsWith("state/autonomy-state.json") -or
         $normalized.StartsWith("state/stop-policy-checklist.md") -or
         $normalized.StartsWith("state/final-gate.md") -or
         $normalized.StartsWith("state/harness-policy-result.")
@@ -212,6 +217,29 @@ function Copy-DirectoryContents(
         $neverOverwrite = Test-WorkspaceMutableFile $relative
         Set-TemplatedFile -SourcePath $_.FullName -DestinationPath $destination -Tokens $script:tokens -ForceWrite:$ForceCopy -UpdateMode:$UpdateMode -NeverOverwrite:$neverOverwrite
     }
+}
+
+function Update-KnownMutableAutonomyContracts([string]$WorkspacePath) {
+    $currentTicketPath = Join-Path $WorkspacePath "current-ticket.md"
+    if (-not (Test-Path -LiteralPath $currentTicketPath)) { return }
+
+    $existing = Get-Content -LiteralPath $currentTicketPath -Raw
+    $legacySentence = "Complete at most one bounded, source-backed repair for this ticket, rerun the complete configured source scope, and then stop with evidence. Stop earlier only when the repair is unsafe, required input/tooling is missing, or the repeated full run shows no progress."
+    $legacyMarker = "Complete at most one bounded, source-backed repair"
+    $upgradedSentence = 'Complete exactly one bounded, source-backed repair for this cycle, rerun the complete configured source scope, compare all relevant evidence dimensions, and return control to the orchestrator. This cycle belongs to a five-cycle invocation budget. Do not stop the whole invocation merely because this cycle made no progress; in `continuous` mode the orchestrator automatically opens the next five-cycle batch.'
+
+    if ($existing.Contains($legacySentence)) {
+        $upgraded = $existing.Replace($legacySentence, $upgradedSentence)
+    }
+    elseif ($existing.Contains($legacyMarker)) {
+        $upgraded = $existing.Replace($legacyMarker, $upgradedSentence + " Legacy text follows only where project-owned details were appended: ")
+    }
+    else {
+        return
+    }
+
+    Set-Content -LiteralPath $currentTicketPath -Value $upgraded -Encoding UTF8
+    Write-Host "kit-contract-upgrade: $currentTicketPath (five-cycle invocation budget)"
 }
 
 function Copy-RootAgentDirectorySafe([string]$SourceDirectory, [string]$DestinationDirectory, [switch]$ForceCopy, [switch]$UpdateMode) {
@@ -338,6 +366,10 @@ function Write-GuardChecksums([string]$WorkspacePath) {
         "scripts/repair-jsonl-ledger.sh",
         "scripts/update-current-ticket-status.ps1",
         "scripts/update-current-ticket-status.sh",
+        "scripts/validate-handoff.ps1",
+        "scripts/validate-handoff.sh",
+        "scripts/update-autonomy-state.ps1",
+        "scripts/update-autonomy-state.sh"
     )
 
     $entries = @()
@@ -402,6 +434,10 @@ foreach ($dir in @("runs", "reports", "logs", "profiles", "prompts", "schemas", 
 }
 
 Copy-DirectoryContents -SourceDirectory $templateRoot -DestinationDirectory $script:workspacePath -ForceCopy:$Force -UpdateMode:$Update
+
+if ($Update) {
+    Update-KnownMutableAutonomyContracts -WorkspacePath $script:workspacePath
+}
 
 $schemaSource = Join-Path $kitRoot "schemas/adapter-config.schema.json"
 if (Test-Path $schemaSource) {

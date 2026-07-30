@@ -55,6 +55,11 @@ public class PackagingTests
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/prompts/kickoff-prompt.txt")));
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/prompts/bounded-repair-prompt.txt")));
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/state/handoff.md")));
+        Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/state/autonomy-state.json")));
+        Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/scripts/validate-handoff.ps1")));
+        Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/scripts/validate-handoff.sh")));
+        Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/scripts/update-autonomy-state.ps1")));
+        Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/scripts/update-autonomy-state.sh")));
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/state/stop-policy-checklist.md")));
         Assert.True(File.Exists(FindRepositoryFile("templates/migration-kit/state/run-ledger.md")));
         Assert.True(File.Exists(FindRepositoryFile("templates/codex/CODEX.md")));

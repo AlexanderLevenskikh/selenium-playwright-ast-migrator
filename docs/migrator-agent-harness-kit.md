@@ -27,7 +27,7 @@ selenium-pw-migrator verify-project \
   --format both
 ```
 
-Then run the installed scope, artifact, and final-gate checks. The optional `/supervised-task` command performs the same sequence and may apply at most one bounded high-payoff repair before rerunning the complete source scope.
+Then run the installed scope, artifact, and final-gate checks. The optional `/supervised-task` command performs the same sequence and may execute up to five one-change remediation cycles, rerunning the complete source scope after each cycle.
 
 ## What remains
 

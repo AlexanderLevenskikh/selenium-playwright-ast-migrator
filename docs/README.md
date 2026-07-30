@@ -1,6 +1,6 @@
 # Documentation index
 
-> **Execution model:** one standard full-project run is supported. `pilot` is optional calibration; partition-specific planning and acceptance state are not used.
+> **Execution model:** one complete source scope is supported. `pilot` is optional calibration; `/supervised-task` can execute up to five autonomous remediation cycles without partitioning the source.
 
 This index keeps the current workflow short and avoids legacy agent-launch noise.
 

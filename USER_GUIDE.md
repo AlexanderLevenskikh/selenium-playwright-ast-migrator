@@ -1,6 +1,6 @@
 # Migrator User Guide
 
-> **Execution model:** one standard full-project run is supported. `pilot` is optional calibration; partition-specific planning and acceptance state are not used.
+> **Execution model:** one complete source scope is supported. `pilot` is optional calibration; `/supervised-task` can execute up to five autonomous remediation cycles without partitioning the source.
 
 Migrator is a command-line toolkit for moving Selenium end-to-end tests to Playwright in a controlled, reviewable way.
 
@@ -247,18 +247,19 @@ selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./Old
 
 On an existing workspace this command updates the managed `migration/opencode-team/**` pack first, then resynchronizes repository-root `.opencode/agents` and `.opencode/commands`. New `/supervised-task` modes should therefore appear without `--force`; a stale `unchanged` command pack indicates an older affected build.
 
-Then run `/supervised-task`. It performs one complete configured migration run, matching project verification, and final-gate evaluation, then stops with evidence. Use `/supervised-task continue` only to apply one bounded, source-backed repair to the latest result and rerun the complete source scope. The agent reads `current-ticket.md` and `state/start-dispatch.json`; it does not create hidden source partitions, advance background state, or manufacture validation artifacts.
+Then run `/supervised-task`. It performs the complete configured migration run and may execute up to five source-backed remediation cycles, with one bounded change and one complete rerun per cycle. `/supervised-task continue` opens a fresh five-cycle budget from the latest evidence; `/supervised-task continuous` advances automatically after progress. The agent reads `current-ticket.md`, `state/start-dispatch.json`, and `state/autonomy-state.json`; it does not create hidden source partitions or manufacture validation artifacts.
 
 ### OpenCode `/supervised-task`
 
-There are only two normal invocations:
+Normal invocations are:
 
 | Command | Meaning |
 |---|---|
-| `/supervised-task` | Start or resume one standard full-project run. |
-| `/supervised-task continue` | Fix one repeated highest-payoff root cause from the latest run and rerun the complete pipeline. |
+| `/supervised-task` | Start or resume the full source and use up to five remediation cycles. |
+| `/supervised-task continue` | Resume the latest evidence with a fresh five-cycle budget. |
+| `/supervised-task continuous` | Automatically advance across five-cycle checkpoints until success or a real mandatory stop; no repeated `continue` command is required. |
 
-The command reads the configured source scope, project-local memory, and adapter config; runs optional pilot calibration only when missing; executes `selenium-pw-migrator run`; and performs a real matching `verify-project` when possible. There are no execution profiles, batch aliases, automatic partition advancement, or synthetic validation files.
+The command reads the configured source scope, project-local memory, and adapter config; runs optional pilot calibration only when missing; executes `selenium-pw-migrator run`; and performs a real matching `verify-project` when possible. One bounded change is allowed per cycle, not per invocation. Progress resets no-progress; the first no-progress switches to another candidate; two consecutive distinct no-progress cycles stop. There is no automatic source partition advancement or synthetic validation evidence.
 
 For Codex, CI, or another agent use the explicit handoff:
 
@@ -1042,3 +1043,5 @@ selenium-pw-migrator report serve --input migration/runs/run-001 --static-only -
 ```
 
 The report summarizes the latest ordinary run, project-local memory, real project-verification status, config-merge candidate, and open conflicts. Memory remains guidance rather than proof. After an interrupted agent or CLI process, preserve logs and rerun the ordinary command into a clean run directory; do not manufacture recovery state or verification JSON.
+
+> In `continuous` mode, the five-cycle limit is a checkpoint rather than a stop: the agent automatically starts the next five-cycle batch without requiring another `continue` command and works until a real terminal condition.

@@ -6,7 +6,7 @@ The installed OpenCode pack exposes one user command:
 /supervised-task
 ```
 
-It resolves the configured Selenium source, runs an optional representative pilot, executes one full standard migration run, performs real project verification when possible, and then fixes at most one highest-payoff root cause per continuation cycle.
+It resolves the configured Selenium source, runs an optional representative pilot, executes the complete standard migration run, performs real project verification when possible, and then runs up to five one-change remediation cycles per invocation. Progress advances automatically; the first no-progress result switches candidates.
 
 There is no partition planner, partition manager, partition acceptance state, or partition-advance command.
 

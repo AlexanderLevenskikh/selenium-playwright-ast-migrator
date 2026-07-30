@@ -1,6 +1,6 @@
 # Agent environments
 
-> **Execution model:** one standard full-project run is supported. `pilot` is optional calibration; partition-specific planning and acceptance state are not used.
+> **Execution model:** one complete source scope is supported. `pilot` is optional calibration; one `/supervised-task` invocation may execute up to five autonomous remediation cycles without partitioning the source.
 
 Migrator Agent Harness Kit is agent-agnostic. OpenCode is the best-supported UI today, but the installed `migration/` workspace is the contract. Other agents can use the same contract as long as they read the installed files, stay inside allowed roots, and run the gates.
 
@@ -43,7 +43,7 @@ Then open the product repository root in OpenCode and run the one-command standa
 /supervised-task
 ```
 
-`bootstrap-opencode` applies the repository-root command pack (`opencode.jsonc`, `.opencode/agents`, `.opencode/commands`, and `AGENTS.md` when missing) before OpenCode starts. The orchestrator resolves source/target/framework, runs doctor, optionally calibrates with a small pilot, then executes one complete `selenium-pw-migrator run` and real `verify-project`. The CLI creates the run directory; the agent does not reconstruct it by hand.
+`bootstrap-opencode` applies the repository-root command pack (`opencode.jsonc`, `.opencode/agents`, `.opencode/commands`, and `AGENTS.md` when missing) before OpenCode starts. The orchestrator resolves source/target/framework, runs doctor, optionally calibrates with a small pilot, then executes the complete `selenium-pw-migrator run`, real `verify-project`, and up to five remediation cycles. Progress advances automatically; the first no-progress result switches to a different candidate. The CLI creates the run directory; the agent does not reconstruct it by hand.
 
 ## Codex, CI, or another coding agent
 
