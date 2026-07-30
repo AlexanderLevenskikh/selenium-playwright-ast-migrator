@@ -106,6 +106,69 @@ public sealed class LabRunStatusPolicyTests
         Assert.Equal(14, LabRunStatusPolicy.GetSuiteExitCode(new[] { Project(ScenarioStatus.NonDeterministic) }));
     }
 
+
+    [Fact]
+    public void ProjectVerifyCompilerFailure_IsRegression()
+    {
+        var stages = AcceptedStages(migrationExitCode: 0)
+            .Concat(new[]
+            {
+                Stage(LabRunStage.ProjectVerify) with { Outcome = LabStageOutcome.Failed, ExitCode = 2 },
+                Stage(LabRunStage.TargetBuild),
+                Stage(LabRunStage.TargetTest)
+            })
+            .ToArray();
+
+        var actual = LabRunStatusPolicy.ClassifyScenario(
+            ScenarioStatus.Pass,
+            stages,
+            new LabMigrationSummary { MandatoryArtifactsPresent = true, OrchestrationStatus = "Passed" },
+            new LabProjectVerifySummary { ReportPresent = true, Status = "failed", ExitCode = 2 },
+            new LabQualityEvaluation { Passed = true },
+            new LabSemanticOracleSummary { Passed = true },
+            sourceContentPreserved: true);
+
+        Assert.Equal(ScenarioStatus.Regression, actual);
+    }
+
+    [Fact]
+    public void TargetMissingPlaywrightBrowser_IsInfrastructureFailure()
+    {
+        var process = new LabProcessResult { ExitCode = 1 };
+        var outcome = LabRunStatusPolicy.ClassifyTargetProcess(
+            LabRunStage.TargetTest,
+            process,
+            "Executable doesn't exist at C:/ms-playwright/chromium/headless_shell.exe. Please run playwright install.");
+
+        Assert.Equal(LabStageOutcome.InfrastructureFailure, outcome);
+    }
+
+    [Fact]
+    public void FailedQualityOrSemanticOracle_IsRegression()
+    {
+        var stages = AcceptedStages(migrationExitCode: 0)
+            .Concat(new[]
+            {
+                Stage(LabRunStage.ProjectVerify),
+                Stage(LabRunStage.TargetBuild),
+                Stage(LabRunStage.TargetTest),
+                Stage(LabRunStage.QualityEvaluation) with { Outcome = LabStageOutcome.Failed },
+                Stage(LabRunStage.SemanticOracle) with { Outcome = LabStageOutcome.Failed }
+            })
+            .ToArray();
+
+        var actual = LabRunStatusPolicy.ClassifyScenario(
+            ScenarioStatus.Pass,
+            stages,
+            new LabMigrationSummary { MandatoryArtifactsPresent = true, OrchestrationStatus = "Passed" },
+            new LabProjectVerifySummary { ReportPresent = true, Status = "passed", ExitCode = 0 },
+            new LabQualityEvaluation { Passed = false },
+            new LabSemanticOracleSummary { Passed = false },
+            sourceContentPreserved: true);
+
+        Assert.Equal(ScenarioStatus.Regression, actual);
+    }
+
     static LabStageResult[] AcceptedStages(int migrationExitCode) => new[]
     {
         Stage(LabRunStage.SourceRestore),

@@ -1490,7 +1490,7 @@ static string? NormalizeTargetTestFramework(string? value)
 
 static IEnumerable<PackageReferenceConfig> GetDefaultVerificationPackageReferences(IEnumerable<string> targetTestFrameworks)
 {
-    yield return new PackageReferenceConfig { Include = "Microsoft.NET.Test.Sdk", Version = "17.12.0" };
+    yield return new PackageReferenceConfig { Include = "Microsoft.NET.Test.Sdk", Version = "18.7.0" };
 
     foreach (var targetTestFramework in targetTestFrameworks.Distinct(StringComparer.OrdinalIgnoreCase))
     {
@@ -1700,7 +1700,8 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
         assemblyReferences,
         packageReferences,
         targetFramework,
-        importedBuildFiles);
+        importedBuildFiles,
+        centralPackageManagementDetected);
     File.WriteAllText(csprojPath, csprojText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
     var harnessSnapshotPath = Path.Combine(outPath, "project-verify-harness.csproj");
@@ -2160,18 +2161,19 @@ static string BuildVerificationCsproj(
     IReadOnlyList<string> assemblyReferences,
     IReadOnlyList<PackageReferenceConfig> packageReferences,
     string targetFramework,
-    IReadOnlyList<string> buildFiles)
+    IReadOnlyList<string> buildFiles,
+    bool centralPackageManagementDetected)
 {
     var generatedGlob = Path.Combine(generatedDir, "**", "*.cs");
-    var directoryPackageFiles = buildFiles
-        .Where(x => Path.GetFileName(x).Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase))
-        .ToArray();
     var props = buildFiles
         .Where(x => x.EndsWith(".props", StringComparison.OrdinalIgnoreCase))
         .Where(x => !Path.GetFileName(x).Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase))
         .ToArray();
     var targets = buildFiles.Where(x => x.EndsWith(".targets", StringComparison.OrdinalIgnoreCase)).ToArray();
-    var isolateCentralPackageManagement = directoryPackageFiles.Length > 0;
+    // Directory.Packages.props is deliberately excluded from imported build files.
+    // Use the discovery signal, not the filtered import list, to isolate CPM in the
+    // temporary harness and keep inline PackageReference versions legal.
+    var isolateCentralPackageManagement = centralPackageManagementDetected;
     var centralPackageNames = isolateCentralPackageManagement
         ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         : ReadCentralPackageNames(buildFiles);
@@ -2224,7 +2226,12 @@ static string BuildVerificationCsproj(
         sb.AppendLine();
         sb.AppendLine("  <ItemGroup>");
         foreach (var r in projectReferences)
-            sb.AppendLine($"    <ProjectReference Include=\"{EscapeXml(r)}\" />");
+        {
+            // ImportDirectoryBuildProps/Targets are command-line global properties for the
+            // temporary harness. Do not leak them into referenced source projects: those
+            // projects must still evaluate their own Directory.Build.props/targets.
+            sb.AppendLine($"    <ProjectReference Include=\"{EscapeXml(r)}\" GlobalPropertiesToRemove=\"ImportDirectoryBuildProps;ImportDirectoryBuildTargets\" />");
+        }
         sb.AppendLine("  </ItemGroup>");
     }
 

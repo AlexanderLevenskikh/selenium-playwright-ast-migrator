@@ -58,9 +58,17 @@
     },
     "semantic": {
       "events": [
-        "wait:visible"
+        "wait:visible",
+        "wait:click"
       ],
-      "timeoutMaxMs": 3000
+      "timeoutMaxMs": 3000,
+      "dom": [
+        {
+          "selector": "#wait-status",
+          "text": "clicked",
+          "visible": true
+        }
+      ]
     }
   },
   "qualityBudget": {

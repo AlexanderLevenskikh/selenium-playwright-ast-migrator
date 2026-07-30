@@ -446,10 +446,11 @@ internal static class LabCommand
         Console.WriteLine("  --out <path>             Suite artifact directory (default: artifacts/lab/run).");
         Console.WriteLine("  --project <id[,id]>      Run only selected scenario ids; may be repeated.");
         Console.WriteLine("  --tag <tag>              Run READY scenarios carrying the tag.");
-        Console.WriteLine("  --timeout-seconds <n>    Timeout for each restore/build/test/migration command.");
-        Console.WriteLine("  --configuration <name>   Source build configuration (default: Release).");
-        Console.WriteLine("  --dotnet <path>          dotnet host used for source validation.");
+        Console.WriteLine("  --timeout-seconds <n>    Timeout for each restore/build/test/migration/verify command.");
+        Console.WriteLine("  --configuration <name>   Source and target build configuration (default: Release).");
+        Console.WriteLine("  --dotnet <path>          dotnet host used for source, verify-project harness, and target runtime.");
         Console.WriteLine("  --keep-workspaces        Preserve copied source workspaces for diagnostics.");
+        Console.WriteLine("  Runtime output includes project-verify reports, target TRX, semantic diff, quality budgets, and failure-only trace/screenshot artifacts.");
     }
 
     static void WriteAppHelp()

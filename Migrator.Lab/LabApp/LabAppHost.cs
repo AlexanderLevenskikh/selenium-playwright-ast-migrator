@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 
 namespace Migrator.Lab.LabApp;
 
@@ -10,6 +11,7 @@ public sealed class LabAppHost : IAsyncDisposable
     readonly TcpListener listener;
     readonly CancellationTokenSource lifetime = new();
     readonly ConcurrentDictionary<int, Task> activeClients = new();
+    readonly LabAppObservationStore observationStore = new();
     readonly Task acceptLoop;
     int nextClientId;
 
@@ -22,6 +24,10 @@ public sealed class LabAppHost : IAsyncDisposable
     }
 
     public Uri BaseUri { get; }
+
+    public void ResetObservations() => observationStore.Reset();
+
+    public LabAppObservation[] SnapshotObservations() => observationStore.Snapshot();
 
     public static Task<LabAppHost> StartAsync(int port = 0, CancellationToken cancellationToken = default)
     {
@@ -88,7 +94,7 @@ public sealed class LabAppHost : IAsyncDisposable
         }
     }
 
-    static async Task HandleClientSafelyAsync(TcpClient client, CancellationToken cancellationToken)
+    async Task HandleClientSafelyAsync(TcpClient client, CancellationToken cancellationToken)
     {
         try
         {
@@ -102,15 +108,15 @@ public sealed class LabAppHost : IAsyncDisposable
         }
     }
 
-    static async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
+    async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
     {
         using var clientToDispose = client;
         await using var stream = client.GetStream();
         using var reader = new StreamReader(
             stream,
-            Encoding.ASCII,
+            Encoding.UTF8,
             detectEncodingFromByteOrderMarks: false,
-            bufferSize: 1024,
+            bufferSize: 4096,
             leaveOpen: true);
         using var requestTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         requestTimeout.CancelAfter(TimeSpan.FromSeconds(10));
@@ -120,12 +126,17 @@ public sealed class LabAppHost : IAsyncDisposable
         if (string.IsNullOrWhiteSpace(requestLine))
             return;
 
-        string? header;
-        do
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        while (true)
         {
-            header = await reader.ReadLineAsync(requestToken).ConfigureAwait(false);
+            var header = await reader.ReadLineAsync(requestToken).ConfigureAwait(false);
+            if (string.IsNullOrEmpty(header))
+                break;
+
+            var separator = header.IndexOf(':');
+            if (separator > 0)
+                headers[header[..separator].Trim()] = header[(separator + 1)..].Trim();
         }
-        while (!string.IsNullOrEmpty(header));
 
         var parts = requestLine.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 2)
@@ -140,6 +151,27 @@ public sealed class LabAppHost : IAsyncDisposable
 
         var method = parts[0];
         var path = ExtractPath(parts[1]);
+        var body = await ReadRequestBodyAsync(reader, headers, requestToken).ConfigureAwait(false);
+
+        if (string.Equals(method, "POST", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(path, "/__lab/events", StringComparison.Ordinal))
+        {
+            var accepted = observationStore.TryAppend(body, out var error);
+            var response = accepted
+                ? new LabAppResponse(202, "application/json; charset=utf-8", Encoding.UTF8.GetBytes("{\"accepted\":true}\n"))
+                : new LabAppResponse(400, "application/json; charset=utf-8", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { accepted = false, error }) + "\n"));
+            await WriteResponseAsync(stream, response, includeBody: true, requestToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(path, "/__lab/events", StringComparison.Ordinal))
+        {
+            var json = JsonSerializer.Serialize(observationStore.Snapshot(), new JsonSerializerOptions { WriteIndented = true }) + "\n";
+            await WriteResponseAsync(stream, LabAppResponse.Json(json), includeBody: true, requestToken).ConfigureAwait(false);
+            return;
+        }
+
         if (!string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(method, "HEAD", StringComparison.OrdinalIgnoreCase))
         {
@@ -151,12 +183,36 @@ public sealed class LabAppHost : IAsyncDisposable
             return;
         }
 
-        var response = LabAppPageCatalog.Resolve(path);
+        var pageResponse = LabAppPageCatalog.Resolve(path);
         await WriteResponseAsync(
             stream,
-            response,
+            pageResponse,
             includeBody: !string.Equals(method, "HEAD", StringComparison.OrdinalIgnoreCase),
             requestToken).ConfigureAwait(false);
+    }
+
+    static async Task<string> ReadRequestBodyAsync(
+        StreamReader reader,
+        IReadOnlyDictionary<string, string> headers,
+        CancellationToken cancellationToken)
+    {
+        if (!headers.TryGetValue("Content-Length", out var rawLength)
+            || !int.TryParse(rawLength, out var length)
+            || length <= 0)
+        {
+            return "";
+        }
+
+        var buffer = new char[length];
+        var read = 0;
+        while (read < buffer.Length)
+        {
+            var count = await reader.ReadAsync(buffer.AsMemory(read, buffer.Length - read), cancellationToken).ConfigureAwait(false);
+            if (count == 0)
+                break;
+            read += count;
+        }
+        return new string(buffer, 0, read);
     }
 
     static string ExtractPath(string requestTarget)
@@ -178,6 +234,7 @@ public sealed class LabAppHost : IAsyncDisposable
         var reason = response.StatusCode switch
         {
             200 => "OK",
+            202 => "Accepted",
             400 => "Bad Request",
             404 => "Not Found",
             405 => "Method Not Allowed",

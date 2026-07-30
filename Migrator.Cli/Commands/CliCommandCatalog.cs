@@ -65,7 +65,7 @@ internal static class CliCommandCatalog
             "selenium-pw-migrator --mode playground-verify --input playground --format both"),
         StableCommand("lab", "artifacts/lab", false, false,
             "Validate and inspect the deterministic migration test corpus.",
-            "Direct command family: `selenium-pw-migrator lab run|validate|list|app serve`. Block 3 adds suite orchestration over READY fixtures: isolated source restore/build/test, the existing migration `run`, stage-aware classification, and JSON/Markdown reports. Later blocks add project verification, runtime oracle, replay, diff, and minimize without creating a separate product binary.",
+            "Direct command family: `selenium-pw-migrator lab run|validate|list|app serve`. Block 4 extends suite orchestration over READY fixtures with the existing migration `run`, `verify-project`, an isolated Playwright .NET runtime project, semantic event/DOM checks, quality budgets, and failure-only traces/screenshots. Later blocks add replay, baseline diff, clustering, generation, and minimize without creating a separate product binary.",
             "No source --input. Use --corpus <path> with the direct lab command family.",
             "selenium-pw-migrator lab run --corpus ./corpus/stable/vertical-slice --out ./artifacts/lab/run",
             "selenium-pw-migrator lab validate --corpus ./corpus/stable/vertical-slice --out ./artifacts/lab/contracts --fail-on-planned",

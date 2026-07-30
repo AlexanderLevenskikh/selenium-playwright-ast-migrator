@@ -1283,6 +1283,18 @@ public class DefaultProjectAdapter : IProjectAdapter
 
     IEnumerable<TestAction> TryResolveAssertThat(AssertThatAction action, ResolvedFileConfig resolved)
     {
+        if (TryConvertAssertThatVisibilityConstraint(action, out var visibilityTarget, out var visibilityKind))
+        {
+            return new[]
+            {
+                new VisibilityAssertionAction(
+                    action.SourceLine,
+                    ResolveTarget(visibilityTarget, resolved),
+                    visibilityKind,
+                    action.Confidence)
+            };
+        }
+
         if (!TryConvertAssertThatTextConstraint(action, out var textAssertion))
             return new[] { action };
 
@@ -1294,6 +1306,18 @@ public class DefaultProjectAdapter : IProjectAdapter
         ResolvedFileConfig resolved,
         Dictionary<string, TargetExpression> localVariableMappings)
     {
+        if (TryConvertAssertThatVisibilityConstraint(action, out var visibilityTarget, out var visibilityKind))
+        {
+            return new[]
+            {
+                new VisibilityAssertionAction(
+                    action.SourceLine,
+                    ResolveTargetWithLocalVars(visibilityTarget, resolved, localVariableMappings),
+                    visibilityKind,
+                    action.Confidence)
+            };
+        }
+
         if (!TryConvertAssertThatTextConstraint(action, out var textAssertion))
             return new[] { action };
 
@@ -1301,6 +1325,46 @@ public class DefaultProjectAdapter : IProjectAdapter
             textAssertion,
             resolved,
             ResolveTargetWithLocalVars(textAssertion.Target.SourceExpression, resolved, localVariableMappings));
+    }
+
+    static bool TryConvertAssertThatVisibilityConstraint(
+        AssertThatAction action,
+        out string target,
+        out VisibilityKind kind)
+    {
+        var actual = action.ActualExpression.Trim();
+        target = string.Empty;
+        foreach (var suffix in new[] { ".Displayed", ".Visible" })
+        {
+            if (!actual.EndsWith(suffix, StringComparison.Ordinal))
+                continue;
+
+            target = actual[..^suffix.Length].Trim();
+            break;
+        }
+
+        if (target.Length == 0)
+        {
+            kind = VisibilityKind.Visible;
+            return false;
+        }
+
+        var constraint = Regex.Replace(action.ConstraintExpression, @"\s+", string.Empty);
+        if (constraint is "Is.True" or "Is.EqualTo(true)")
+        {
+            kind = VisibilityKind.Visible;
+            return true;
+        }
+
+        if (constraint is "Is.False" or "Is.EqualTo(false)")
+        {
+            kind = VisibilityKind.Hidden;
+            return true;
+        }
+
+        kind = VisibilityKind.Visible;
+        target = string.Empty;
+        return false;
     }
 
     static bool TryConvertAssertThatTextConstraint(AssertThatAction action, out TextAssertionAction textAssertion)

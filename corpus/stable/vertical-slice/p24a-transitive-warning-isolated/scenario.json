@@ -65,7 +65,17 @@
       "classifiedAsCodeRegression": false
     },
     "semantic": {
-      "harnessEvidence": "transitive-warning-isolated"
+      "harnessEvidence": "transitive-warning-isolated",
+      "events": [
+        "smoke:click"
+      ],
+      "dom": [
+        {
+          "selector": "#smoke-status",
+          "text": "ok",
+          "visible": true
+        }
+      ]
     }
   },
   "qualityBudget": {

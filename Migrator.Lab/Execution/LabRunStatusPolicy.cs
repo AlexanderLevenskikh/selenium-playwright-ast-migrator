@@ -30,7 +30,18 @@ public static class LabRunStatusPolicy
         "session not created",
         "selenium manager binary",
         "error sending request for url",
-        "driver location must be a directory"
+        "driver location must be a directory",
+        "executable doesn't exist at",
+        "please run the following command to download new browsers",
+        "playwright install",
+        "browsertype.launch"
+    };
+
+    static readonly LabRunStage[] SourceStages =
+    {
+        LabRunStage.SourceRestore,
+        LabRunStage.SourceBuild,
+        LabRunStage.SourceTest
     };
 
     public static LabStageOutcome ClassifySourceProcess(
@@ -53,19 +64,81 @@ public static class LabRunStatusPolicy
         return LabStageOutcome.Failed;
     }
 
+    public static LabStageOutcome ClassifyProjectVerifyProcess(
+        LabProcessResult result,
+        string combinedOutput)
+    {
+        if (result.TimedOut)
+            return LabStageOutcome.TimedOut;
+        if (result.StartFailed)
+            return LabStageOutcome.InfrastructureFailure;
+        if (result.ExitCode == 0)
+            return LabStageOutcome.Passed;
+        if (ContainsAny(combinedOutput, GeneralInfrastructureMarkers))
+            return LabStageOutcome.InfrastructureFailure;
+        return LabStageOutcome.Failed;
+    }
+
+    public static LabStageOutcome ClassifyTargetProcess(
+        LabRunStage stage,
+        LabProcessResult result,
+        string combinedOutput)
+    {
+        if (result.TimedOut)
+            return LabStageOutcome.TimedOut;
+        if (result.StartFailed)
+            return LabStageOutcome.InfrastructureFailure;
+        if (result.ExitCode == 0)
+            return LabStageOutcome.Passed;
+        if (ContainsAny(combinedOutput, GeneralInfrastructureMarkers))
+            return LabStageOutcome.InfrastructureFailure;
+        if (stage == LabRunStage.TargetTest && ContainsAny(combinedOutput, BrowserInfrastructureMarkers))
+            return LabStageOutcome.InfrastructureFailure;
+        return LabStageOutcome.Failed;
+    }
+
     public static ScenarioStatus ClassifyScenario(
         ScenarioStatus expectedStatus,
         IReadOnlyList<LabStageResult> stages,
         LabMigrationSummary migration,
         bool sourceContentPreserved)
     {
-        var sourceStages = stages.Where(stage => stage.Stage != LabRunStage.Migration).ToArray();
+        var completedStages = stages
+            .Concat(new[]
+            {
+                new LabStageResult { Stage = LabRunStage.ProjectVerify, Outcome = LabStageOutcome.Passed },
+                new LabStageResult { Stage = LabRunStage.TargetBuild, Outcome = LabStageOutcome.Passed },
+                new LabStageResult { Stage = LabRunStage.TargetTest, Outcome = LabStageOutcome.Passed },
+                new LabStageResult { Stage = LabRunStage.SemanticOracle, Outcome = LabStageOutcome.Passed },
+                new LabStageResult { Stage = LabRunStage.QualityEvaluation, Outcome = LabStageOutcome.Passed }
+            })
+            .ToArray();
+        return ClassifyScenario(
+            expectedStatus,
+            completedStages,
+            migration,
+            new LabProjectVerifySummary { ReportPresent = true, Status = "passed", ExitCode = 0 },
+            new LabQualityEvaluation { Passed = true },
+            new LabSemanticOracleSummary { Passed = true },
+            sourceContentPreserved);
+    }
+
+    public static ScenarioStatus ClassifyScenario(
+        ScenarioStatus expectedStatus,
+        IReadOnlyList<LabStageResult> stages,
+        LabMigrationSummary migration,
+        LabProjectVerifySummary projectVerify,
+        LabQualityEvaluation quality,
+        LabSemanticOracleSummary oracle,
+        bool sourceContentPreserved)
+    {
+        var sourceStages = stages.Where(stage => SourceStages.Contains(stage.Stage)).ToArray();
         if (sourceStages.Any(stage => stage.Outcome is LabStageOutcome.InfrastructureFailure or LabStageOutcome.TimedOut))
             return ScenarioStatus.InfrastructureFailure;
         if (sourceStages.Any(stage => stage.Outcome == LabStageOutcome.Failed))
             return ScenarioStatus.SourceInvalid;
 
-        var migrationStage = stages.FirstOrDefault(stage => stage.Stage == LabRunStage.Migration);
+        var migrationStage = Find(stages, LabRunStage.Migration);
         if (migrationStage == null || migrationStage.Outcome == LabStageOutcome.Skipped)
             return ScenarioStatus.MigratorFailure;
         if (migrationStage.Outcome is LabStageOutcome.InfrastructureFailure or LabStageOutcome.TimedOut)
@@ -76,6 +149,33 @@ public static class LabRunStatusPolicy
             return ScenarioStatus.Regression;
         if (migrationStage.Outcome == LabStageOutcome.Failed && migrationStage.ExitCode is not 1)
             return ScenarioStatus.MigratorFailure;
+
+        var projectVerifyStage = Find(stages, LabRunStage.ProjectVerify);
+        if (projectVerifyStage == null || projectVerifyStage.Outcome == LabStageOutcome.Skipped)
+            return ScenarioStatus.MigratorFailure;
+        if (projectVerifyStage.Outcome is LabStageOutcome.InfrastructureFailure or LabStageOutcome.TimedOut)
+            return ScenarioStatus.InfrastructureFailure;
+        if (!projectVerify.ReportPresent)
+            return ScenarioStatus.MigratorFailure;
+        if (projectVerifyStage.Outcome == LabStageOutcome.Failed
+            || !string.Equals(projectVerify.Status, "passed", StringComparison.OrdinalIgnoreCase))
+        {
+            return ScenarioStatus.Regression;
+        }
+
+        foreach (var stageName in new[] { LabRunStage.TargetBuild, LabRunStage.TargetTest })
+        {
+            var stage = Find(stages, stageName);
+            if (stage == null || stage.Outcome == LabStageOutcome.Skipped)
+                return ScenarioStatus.Regression;
+            if (stage.Outcome is LabStageOutcome.InfrastructureFailure or LabStageOutcome.TimedOut)
+                return ScenarioStatus.InfrastructureFailure;
+            if (stage.Outcome == LabStageOutcome.Failed)
+                return ScenarioStatus.Regression;
+        }
+
+        if (!quality.Passed || !oracle.Passed)
+            return ScenarioStatus.Regression;
 
         if (expectedStatus == ScenarioStatus.UnsupportedAsExpected)
         {
@@ -89,13 +189,12 @@ public static class LabRunStatusPolicy
                 : ScenarioStatus.Regression;
         }
 
-        if (migrationStage.ExitCode == 0
-            && string.Equals(migration.OrchestrationStatus, "Passed", StringComparison.OrdinalIgnoreCase))
-        {
-            return ScenarioStatus.Pass;
-        }
-
-        return ScenarioStatus.PassWithWarnings;
+        var hasWarnings = migration.TodoComments > 0
+            || migration.UnmappedTargets > 0
+            || migration.UnsupportedActions > 0
+            || migration.Warnings > 0
+            || string.Equals(migration.OrchestrationStatus, "PassedWithWarnings", StringComparison.OrdinalIgnoreCase);
+        return hasWarnings ? ScenarioStatus.PassWithWarnings : ScenarioStatus.Pass;
     }
 
     public static int GetSuiteExitCode(IEnumerable<LabScenarioRunResult> projects)
@@ -113,6 +212,9 @@ public static class LabRunStatusPolicy
             return 14;
         return 0;
     }
+
+    static LabStageResult? Find(IEnumerable<LabStageResult> stages, LabRunStage stage) =>
+        stages.LastOrDefault(item => item.Stage == stage);
 
     static bool ContainsAny(string value, IEnumerable<string> markers) =>
         markers.Any(marker => value.Contains(marker, StringComparison.OrdinalIgnoreCase));

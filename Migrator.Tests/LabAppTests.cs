@@ -20,6 +20,8 @@ public sealed class LabAppTests
             Assert.Equal(200, response.StatusCode);
             Assert.Contains("id=\"lab-event-log\"", html);
             Assert.Contains("window.__migratorLab", html);
+            Assert.Contains("/__lab/events", html);
+            Assert.Contains("labSnapshot", html);
         }
     }
 
@@ -59,4 +61,25 @@ public sealed class LabAppTests
         Assert.Contains("250", wait);
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
     }
+
+    [Fact]
+    public async Task Host_StoresPostedBusinessEventsAndDomSnapshots()
+    {
+        await using var host = await LabAppHost.StartAsync();
+        using var client = new HttpClient { BaseAddress = host.BaseUri };
+        var payload = """
+        {"event":"auth:success","path":"/login","dom":{"result":{"text":"ok","value":"","visible":true,"enabled":true,"checked":false}}}
+        """;
+
+        using var response = await client.PostAsync("__lab/events", new StringContent(payload, System.Text.Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        var observation = Assert.Single(host.SnapshotObservations());
+        Assert.Equal("auth:success", observation.Event);
+        Assert.Equal("ok", observation.Dom["result"].Text);
+        Assert.True(observation.Dom["result"].Visible);
+        host.ResetObservations();
+        Assert.Empty(host.SnapshotObservations());
+    }
+
 }

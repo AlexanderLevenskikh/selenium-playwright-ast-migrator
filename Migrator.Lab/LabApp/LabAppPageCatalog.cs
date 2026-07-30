@@ -105,6 +105,7 @@ public static class LabAppPageCatalog
         """,
         """
         const waitButton = document.getElementById('wait-button');
+        labEmit('wait:start');
         setTimeout(() => {
           waitButton.hidden = false;
           labEmit('wait:visible');
@@ -166,9 +167,29 @@ public static class LabAppPageCatalog
           <pre id="lab-event-log">[]</pre>
           <script>
             window.__migratorLab = { events: [] };
+            window.labSnapshot = function() {
+              const dom = {};
+              document.querySelectorAll('[id]').forEach(element => {
+                const style = window.getComputedStyle(element);
+                dom[element.id] = {
+                  text: element.textContent || '',
+                  value: 'value' in element ? String(element.value || '') : '',
+                  visible: !element.hidden && style.display !== 'none' && style.visibility !== 'hidden',
+                  enabled: !('disabled' in element) || !element.disabled,
+                  checked: 'checked' in element && Boolean(element.checked)
+                };
+              });
+              return dom;
+            };
             window.labEmit = function(name) {
               window.__migratorLab.events.push(name);
               document.getElementById('lab-event-log').textContent = JSON.stringify(window.__migratorLab.events);
+              const payload = JSON.stringify({ event: name, path: window.location.pathname, dom: window.labSnapshot() });
+              if (navigator.sendBeacon) {
+                navigator.sendBeacon('/__lab/events', payload);
+              } else {
+                fetch('/__lab/events', { method: 'POST', body: payload, keepalive: true }).catch(() => {});
+              }
             };
             {{pageScript}}
           </script>

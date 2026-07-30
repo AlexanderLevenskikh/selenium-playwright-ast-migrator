@@ -4390,7 +4390,9 @@ public class PipelineIntegrationTests
         Assert.Contains("Page.Locator(\"#username\").FillAsync(\"john\")", output);
         Assert.Contains("Page.Locator(\"#login\").ClickAsync()", output);
         Assert.Contains("var result = Page.Locator(\"#result\");", output);
-        Assert.Contains("Expect(result)", output);
+        Assert.Contains("await Expect(result).ToBeVisibleAsync();", output);
+        Assert.Contains("await Expect(result).ToHaveTextAsync(\"ok\");", output);
+        Assert.DoesNotContain("ASSERTION_CONSTRAINT", output);
         Assert.DoesNotContain("WebDriver.FindElement", output);
         Assert.DoesNotContain("MISSING_MAPPING", output);
         Assert.True(CompileChecker.CompilesWithoutErrors(output),

@@ -75,7 +75,7 @@ selenium-pw-migrator lab list `
 подбирает ChromeDriver. При успехе пишет:
 `Фикстуры и LabApp прошли, продолжай блок 3`.
 
-## Блок 3. Source validation и stage-aware orchestration — реализован, ожидает проверки
+## Блок 3. Source validation и stage-aware orchestration — проверен
 
 Цель: выполнить первые стадии настоящего `lab run` без подмены существующего CLI.
 
@@ -117,26 +117,43 @@ Block 3 passed: 7 source projects validated, existing migration run executed, su
 
 После этого пишет: `Классификация стадий верна, продолжай блок 4`.
 
-## Блок 4. Verify, verify-project и поведенческий oracle
+## Блок 4. Verify-project, Playwright runtime и поведенческий oracle — реализован, ожидает проверки
 
-Цель: доказать не только компиляцию, но и сохранение поведения.
+Цель: доказать не только синтаксическую корректность generated-кода, но и сохранение
+исполняемого поведения.
 
 Состав:
 
-- вызов существующих `verify` и `verify-project`;
-- runtime Playwright .NET;
-- сравнение числа test cases;
-- сравнение event log и конечного DOM/app state;
-- особый oracle для `UNSUPPORTED_AS_EXPECTED`;
-- traces/screenshots только при runtime-падении;
-- бюджеты TODO, unmapped, unsupported и warnings.
+- повторное использование существующего `verify` внутри `run` и отдельный вызов
+  существующего `verify-project`;
+- чтение `project-verify-report.json`, classified diagnostics и `HarnessEvidence`;
+- isolated Playwright .NET/NUnit runtime-проект из точных generated-файлов текущего run;
+- runtime navigation на страницу сценария через общий LabApp;
+- сравнение числа target test cases с контрактом;
+- серверный event log и snapshots конечного DOM после каждого business event;
+- ordered-event, DOM, test-count, generated-assertion и timeout oracles;
+- отдельный oracle для `UNSUPPORTED_AS_EXPECTED`: ожидаемая диагностика плюс сохранность
+  соседнего поддерживаемого действия;
+- бюджеты TODO, unmapped, unsupported и warning-bearing files;
+- trace ZIP и screenshot только при падении target-теста;
+- `runtime-validation.json`, `semantic-diff.json`, `quality-evaluation.json` и расширенный
+  suite report.
 
-Критерий: все семь сценариев получают строго ожидаемые статусы, неожиданных — 0.
+Критерий: каждый сценарий получает ровно ожидаемый статус. Первый запуск может честно
+обнаружить регрессии самого мигратора; это результат работы полигона, а не повод менять
+expected status или ослаблять oracle.
 
 ### Что делает владелец после блока 4
 
-Просматривает один успешный и один неуспешный отчёт, убеждается, что из него понятно,
-что именно сломалось. Затем пишет: `Oracle понятен, продолжай блок 5`.
+На Windows из корня репозитория запускает:
+
+```powershell
+.\scripts\run-lab-block4.ps1
+```
+
+Если suite обнаружит регрессии, присылает `artifacts/lab/block-04/lab-summary.md` и архив
+папки `artifacts/lab/block-04`. После устранения найденных дефектов и полного совпадения
+статусов пишет: `Oracle понятен, продолжай блок 5`.
 
 ## Блок 5. Suite report, replay и baseline diff
 
@@ -214,12 +231,19 @@ Block 3 passed: 7 source projects validated, existing migration run executed, su
 Утверждает policy: какие кластеры агент исправляет автоматически, а какие требуют
 ручного решения. После этого полигон считается введённым в постоянную эксплуатацию.
 
-## Текущая проверка после блока 3
+## Текущая проверка после блока 4
 
 Из корня репозитория на Windows:
 
 ```powershell
-.\scripts\run-lab-block3.ps1
+.\scripts\run-lab-block4.ps1
+```
+
+Скрипт собирает решение, запускает полный набор `Migrator.Tests`, устанавливает Chromium
+для Playwright и выполняет вертикальный suite. Для уже установленного Chromium:
+
+```powershell
+.\scripts\run-lab-block4.ps1 -SkipBrowserInstall
 ```
 
 Ручной эквивалент основного запуска:
@@ -228,20 +252,21 @@ Block 3 passed: 7 source projects validated, existing migration run executed, su
 dotnet run --project Migrator.Cli -c Release --no-build -- lab run `
   --suite vertical `
   --corpus ./corpus/stable/vertical-slice `
-  --out ./artifacts/lab/block-03 `
+  --out ./artifacts/lab/block-04 `
   --timeout-seconds 600
 ```
 
-Для быстрой проверки только smoke-сценариев:
+Для воспроизведения одного сценария с сохранением workspace:
 
 ```powershell
 dotnet run --project Migrator.Cli -c Release --no-build -- lab run `
-  --suite smoke `
-  --out ./artifacts/lab/smoke
+  --project p15-webdriverwait-visible `
+  --out ./artifacts/lab/repro-p15 `
+  --keep-workspaces
 ```
 
 Bash:
 
 ```bash
-./scripts/run-lab-block3.sh
+./scripts/run-lab-block4.sh
 ```

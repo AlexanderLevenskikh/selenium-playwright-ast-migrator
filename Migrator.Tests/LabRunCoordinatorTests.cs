@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using Migrator.Lab.Contracts;
 using Migrator.Lab.Execution;
 using Xunit;
@@ -8,7 +10,7 @@ namespace Migrator.Tests;
 public sealed class LabRunCoordinatorTests
 {
     [Fact]
-    public async Task Coordinator_RunsVerticalSliceThroughSourceAndExistingMigrationStages()
+    public async Task Coordinator_RunsVerticalSliceThroughProjectVerifyRuntimeAndOracle()
     {
         var artifacts = Path.Combine(Path.GetTempPath(), "migrator-lab-run-" + Guid.NewGuid().ToString("N"));
         try
@@ -27,19 +29,64 @@ public sealed class LabRunCoordinatorTests
             var project = Assert.Single(result.Projects);
             Assert.Equal(ScenarioStatus.Pass, project.ActualStatus);
             Assert.Equal(1, project.SourceTests.Passed);
+            Assert.Equal(1, project.TargetTests.Passed);
             Assert.True(project.SourceContentPreserved);
-            Assert.Equal(4, project.Stages.Length);
+            Assert.True(project.ProjectVerify.ReportPresent);
+            Assert.True(project.Quality.Passed);
+            Assert.True(project.Oracle.Passed);
+            Assert.Equal(9, project.Stages.Length);
             Assert.All(project.Stages, stage => Assert.Equal(LabStageOutcome.Passed, stage.Outcome));
             var summaryJsonPath = Path.Combine(artifacts, "lab-summary.json");
             Assert.True(File.Exists(summaryJsonPath));
             Assert.True(File.Exists(Path.Combine(artifacts, "lab-summary.md")));
             var summaryJson = File.ReadAllText(summaryJsonPath);
-            Assert.Contains("\"schemaVersion\": \"migrator-lab-run/v1\"", summaryJson);
-            Assert.Contains("\"summary\"", summaryJson);
+            Assert.Contains("\"schemaVersion\": \"migrator-lab-run/v2\"", summaryJson);
             Assert.Contains("\"actualStatus\": \"PASS\"", summaryJson);
             Assert.True(File.Exists(Path.Combine(project.ArtifactsDirectory, "scenario-result.json")));
             Assert.True(File.Exists(Path.Combine(project.ArtifactsDirectory, "source", "source-validation.json")));
+            Assert.True(File.Exists(Path.Combine(project.ArtifactsDirectory, "target", "runtime-validation.json")));
+            Assert.True(File.Exists(Path.Combine(project.ArtifactsDirectory, "target", "semantic-diff.json")));
+            Assert.True(File.Exists(Path.Combine(project.ArtifactsDirectory, "target", "quality-evaluation.json")));
             Assert.False(Directory.Exists(project.WorkspaceDirectory));
+        }
+        finally
+        {
+            if (Directory.Exists(artifacts))
+                Directory.Delete(artifacts, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Coordinator_WritesAllDeclaredProjectReferencesDeterministically()
+    {
+        var artifacts = Path.Combine(Path.GetTempPath(), "migrator-lab-project-refs-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var coordinator = new LabRunCoordinator(new SuccessfulFakeProcessRunner());
+            var result = await coordinator.RunAsync(new LabRunOptions
+            {
+                CorpusRoot = VerticalSliceRoot(),
+                ArtifactsRoot = artifacts,
+                ProjectIds = new[] { "p24a-transitive-warning-isolated" },
+                DotNetExecutable = "fake-dotnet",
+                MigratorCommand = LabProcessCommand.Create("fake-migrator"),
+                CommandTimeout = TimeSpan.FromSeconds(5)
+            });
+
+            var project = Assert.Single(result.Projects);
+            var configPath = Path.Combine(project.ArtifactsDirectory, "project-verify-config.json");
+            using var document = JsonDocument.Parse(File.ReadAllText(configPath));
+            var verification = document.RootElement.GetProperty("Verification");
+            var references = verification.GetProperty("ProjectReferences")
+                .EnumerateArray()
+                .Select(item => item.GetString()!)
+                .Select(Path.GetFileName)
+                .ToArray();
+
+            Assert.Contains("Tests.csproj", references, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("A.csproj", references, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("B.csproj", references, StringComparer.OrdinalIgnoreCase);
+            Assert.False(verification.GetProperty("AutoDiscoverProjectReferences").GetBoolean());
         }
         finally
         {
@@ -50,31 +97,42 @@ public sealed class LabRunCoordinatorTests
 
     sealed class SuccessfulFakeProcessRunner : ILabProcessRunner
     {
-        public Task<LabProcessResult> RunAsync(LabProcessRequest request, CancellationToken cancellationToken = default)
+        public async Task<LabProcessResult> RunAsync(LabProcessRequest request, CancellationToken cancellationToken = default)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(request.StandardOutputPath))!);
             File.WriteAllText(request.StandardOutputPath, "fake command passed" + Environment.NewLine);
             File.WriteAllText(request.StandardErrorPath, "");
 
-            if (request.Arguments.Contains("test", StringComparer.Ordinal))
-                WriteTrx(request.Arguments);
-            if (request.Arguments.Contains("run", StringComparer.Ordinal))
+            if (request.Arguments.Contains("verify-project", StringComparer.Ordinal))
+            {
+                WriteProjectVerifyArtifacts(request.Arguments);
+            }
+            else if (request.Arguments.Contains("run", StringComparer.Ordinal))
+            {
                 WriteMigrationArtifacts(request.Arguments);
+            }
+            else if (request.Arguments.Contains("test", StringComparer.Ordinal))
+            {
+                var target = ReadOption(request.Arguments, "--logger").Contains("target-tests.trx", StringComparison.Ordinal);
+                WriteTrx(request.Arguments, target ? "target-tests.trx" : "source-tests.trx");
+                if (target)
+                    await PostTargetObservationsAsync(request.Environment, cancellationToken);
+            }
 
-            return Task.FromResult(new LabProcessResult
+            return new LabProcessResult
             {
                 ExitCode = 0,
                 DurationMs = 1,
                 StandardOutputPath = Path.GetFullPath(request.StandardOutputPath),
                 StandardErrorPath = Path.GetFullPath(request.StandardErrorPath)
-            });
+            };
         }
 
-        static void WriteTrx(string[] arguments)
+        static void WriteTrx(string[] arguments, string fileName)
         {
             var resultsDirectory = ReadOption(arguments, "--results-directory");
             Directory.CreateDirectory(resultsDirectory);
-            File.WriteAllText(Path.Combine(resultsDirectory, "source-tests.trx"), """
+            File.WriteAllText(Path.Combine(resultsDirectory, fileName), """
             <TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
               <ResultSummary outcome="Completed">
                 <Counters total="1" executed="1" passed="1" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" notRunnable="0" notExecuted="0" />
@@ -99,11 +157,81 @@ public sealed class LabRunCoordinatorTests
               ]
             }
             """);
+            File.WriteAllText(Path.Combine(output, "generated", "LoginTestsPlaywright.cs"), """
+            using Microsoft.Playwright.NUnit;
+            using NUnit.Framework;
+            namespace Migrator.Lab.Corpus.P01;
+            public class LoginTestsPlaywright : PageTest
+            {
+                [Test]
+                public async Task UserCanLogin()
+                {
+                    await Page.Locator("#login").ClickAsync();
+                }
+            }
+            """);
             File.WriteAllText(Path.Combine(output, "generated", "report.json"), """
-            { "UnsupportedActions": 0, "TodoComments": 0, "UnmappedTargets": 0 }
+            { "UnsupportedActions": 0, "TodoComments": 0, "UnmappedTargets": 0, "FilesWithWarnings": 0 }
             """);
             File.WriteAllText(Path.Combine(output, "generated", "unsupported-actions.json"), "[]");
-            File.WriteAllText(Path.Combine(output, "verify", "verify-report.json"), "{}");
+            File.WriteAllText(Path.Combine(output, "verify", "verify-report.json"), "{\"summary\":{\"status\":\"passed\"}}");
+        }
+
+        static void WriteProjectVerifyArtifacts(string[] arguments)
+        {
+            var output = ReadOption(arguments, "--out");
+            Directory.CreateDirectory(output);
+            File.WriteAllText(Path.Combine(output, "project-verify-report.json"), """
+            {
+              "Status": "passed",
+              "ExitCode": 0,
+              "HarnessProject": "fake.csproj",
+              "ProjectReferences": [],
+              "Diagnostics": [],
+              "ClassifiedDiagnostics": [],
+              "HarnessEvidence": {
+                "SchemaVersion": "verify-project-harness/v1",
+                "CentralPackageManagementDetected": false,
+                "CentralPackageManagementMode": "not-detected",
+                "ManagePackageVersionsCentrallyDisabled": true,
+                "DirectoryPackagesPropsPathPinned": true,
+                "ImportedBuildFiles": [],
+                "SkippedBuildFiles": []
+              }
+            }
+            """);
+        }
+
+        static async Task PostTargetObservationsAsync(
+            IReadOnlyDictionary<string, string?> environment,
+            CancellationToken cancellationToken)
+        {
+            var baseUrl = environment["MIGRATOR_LAB_APP_URL"]!;
+            using var client = new HttpClient { BaseAddress = new Uri(baseUrl) };
+            await Post("auth:attempt", "");
+            await Post("auth:success", "ok");
+
+            async Task Post(string eventName, string resultText)
+            {
+                var json = JsonSerializer.Serialize(new
+                {
+                    @event = eventName,
+                    path = "/login",
+                    dom = new
+                    {
+                        result = new
+                        {
+                            text = resultText,
+                            value = string.Empty,
+                            visible = true,
+                            enabled = true,
+                            @checked = false
+                        }
+                    }
+                });
+                using var response = await client.PostAsync("__lab/events", new StringContent(json, Encoding.UTF8, "application/json"), cancellationToken);
+                response.EnsureSuccessStatusCode();
+            }
         }
 
         static string ReadOption(string[] arguments, string option)

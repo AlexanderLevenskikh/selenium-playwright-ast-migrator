@@ -74,21 +74,32 @@ public static class LabMigrationArtifactReader
 
         var unsupportedActions = CountJsonArray(Path.Combine(generatedDirectory, "unsupported-actions.json"), issues);
         var generatedReport = ReadGeneratedMetrics(Path.Combine(generatedDirectory, "report.json"), issues);
+        var verifyStatus = ReadVerifyStatus(verifyReportPath, issues);
+        var generatedFiles = Directory.Exists(generatedDirectory)
+            ? Directory.GetFiles(generatedDirectory, "*.cs", SearchOption.TopDirectoryOnly)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .Select(Path.GetFullPath)
+                .ToArray()
+            : Array.Empty<string>();
 
         return new LabMigrationSummary
         {
             OrchestrationStatus = orchestrationStatus,
+            VerifyStatus = verifyStatus,
             UnsupportedActions = Math.Max(unsupportedActions, generatedReport.UnsupportedActions),
             TodoComments = generatedReport.TodoComments,
             UnmappedTargets = generatedReport.UnmappedTargets,
+            Warnings = generatedReport.Warnings,
             MandatoryArtifactsPresent = mandatoryArtifactsPresent,
             OrchestrationReportPath = Path.GetFullPath(reportPath),
+            VerifyReportPath = Path.GetFullPath(verifyReportPath),
+            GeneratedFiles = generatedFiles,
             FailedStages = failedStages.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
             Issues = issues.ToArray()
         };
     }
 
-    static (int UnsupportedActions, int TodoComments, int UnmappedTargets) ReadGeneratedMetrics(
+    static (int UnsupportedActions, int TodoComments, int UnmappedTargets, int Warnings) ReadGeneratedMetrics(
         string path,
         List<string> issues)
     {
@@ -102,12 +113,33 @@ public static class LabMigrationArtifactReader
             return (
                 GetInt(root, "UnsupportedActions", "unsupportedActions"),
                 GetInt(root, "TodoComments", "todoComments"),
-                GetInt(root, "UnmappedTargets", "unmappedTargets"));
+                GetInt(root, "UnmappedTargets", "unmappedTargets"),
+                GetInt(root, "FilesWithWarnings", "filesWithWarnings", "Warnings", "warnings"));
         }
         catch (Exception ex) when (ex is JsonException or IOException or InvalidOperationException)
         {
             issues.Add($"generated/report.json could not be inspected: {ex.Message}");
             return default;
+        }
+    }
+
+    static string? ReadVerifyStatus(string path, List<string> issues)
+    {
+        if (!File.Exists(path))
+            return null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            var root = document.RootElement;
+            if (TryGetProperty(root, out var summary, "summary", "Summary") && summary.ValueKind == JsonValueKind.Object)
+                return GetString(summary, "status", "Status");
+            return GetString(root, "status", "Status");
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or InvalidOperationException)
+        {
+            issues.Add($"verify/verify-report.json could not be inspected: {ex.Message}");
+            return null;
         }
     }
 
@@ -148,12 +180,15 @@ public static class LabMigrationArtifactReader
 
     static bool TryGetProperty(JsonElement element, out JsonElement value, params string[] names)
     {
-        foreach (var property in element.EnumerateObject())
+        if (element.ValueKind == JsonValueKind.Object)
         {
-            if (names.Any(name => string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)))
+            foreach (var property in element.EnumerateObject())
             {
-                value = property.Value;
-                return true;
+                if (names.Any(name => string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    value = property.Value;
+                    return true;
+                }
             }
         }
 

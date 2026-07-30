@@ -26,10 +26,11 @@ public sealed class LabMigrationArtifactReaderTests
             }
             """);
             File.WriteAllText(Path.Combine(root, "generated", "report.json"), """
-            { "UnsupportedActions": 2, "TodoComments": 3, "UnmappedTargets": 4 }
+            { "UnsupportedActions": 2, "TodoComments": 3, "UnmappedTargets": 4, "FilesWithWarnings": 5 }
             """);
             File.WriteAllText(Path.Combine(root, "generated", "unsupported-actions.json"), "[{}, {}]");
-            File.WriteAllText(Path.Combine(root, "verify", "verify-report.json"), "{}");
+            File.WriteAllText(Path.Combine(root, "verify", "verify-report.json"), "{\"summary\":{\"status\":\"passed_with_warnings\"}}");
+            File.WriteAllText(Path.Combine(root, "generated", "ExamplePlaywright.cs"), "public class ExamplePlaywright {}");
 
             var result = LabMigrationArtifactReader.Read(root);
 
@@ -38,6 +39,9 @@ public sealed class LabMigrationArtifactReaderTests
             Assert.Equal(2, result.UnsupportedActions);
             Assert.Equal(3, result.TodoComments);
             Assert.Equal(4, result.UnmappedTargets);
+            Assert.Equal(5, result.Warnings);
+            Assert.Equal("passed_with_warnings", result.VerifyStatus);
+            Assert.Single(result.GeneratedFiles);
             Assert.Empty(result.FailedStages); // propose is intentionally non-critical
         }
         finally

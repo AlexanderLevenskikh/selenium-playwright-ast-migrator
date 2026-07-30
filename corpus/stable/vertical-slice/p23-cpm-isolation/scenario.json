@@ -60,7 +60,17 @@
       ]
     },
     "semantic": {
-      "harnessEvidence": "cpm-isolated"
+      "harnessEvidence": "cpm-isolated",
+      "events": [
+        "smoke:click"
+      ],
+      "dom": [
+        {
+          "selector": "#smoke-status",
+          "text": "ok",
+          "visible": true
+        }
+      ]
     }
   },
   "qualityBudget": {

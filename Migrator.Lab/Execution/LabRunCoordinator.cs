@@ -33,7 +33,7 @@ public sealed class LabRunCoordinator
         foreach (var entry in selected)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var result = await RunScenarioAsync(entry, options, artifactsRoot, app.BaseUri, cancellationToken).ConfigureAwait(false);
+            var result = await RunScenarioAsync(entry, options, artifactsRoot, app, cancellationToken).ConfigureAwait(false);
             projects.Add(result);
         }
 
@@ -99,7 +99,7 @@ public sealed class LabRunCoordinator
         ScenarioCatalogEntry entry,
         LabRunOptions options,
         string artifactsRoot,
-        Uri appBaseUri,
+        LabAppHost app,
         CancellationToken cancellationToken)
     {
         var startedAt = Stopwatch.GetTimestamp();
@@ -117,14 +117,19 @@ public sealed class LabRunCoordinator
 
         var stages = new List<LabStageResult>();
         var issues = new List<string>();
-        var sourceSummary = new LabSourceTestSummary { ExpectedPassed = ReadExpectedSourcePassCount(scenario) };
+        var sourceSummary = new LabSourceTestSummary { ExpectedPassed = ReadExpectedPassCount(scenario.Oracle.Source) };
+        var targetSummary = new LabSourceTestSummary { ExpectedPassed = ReadExpectedPassCount(scenario.Oracle.Target) };
         var migrationSummary = new LabMigrationSummary();
+        var projectVerifySummary = new LabProjectVerifySummary();
+        var quality = new LabQualityEvaluation();
+        var oracle = new LabSemanticOracleSummary();
+        string? runtimeArtifactsDirectory = null;
         var initialHash = ScenarioContentHasher.Compute(workspace, scenario.Project.Files);
         var sourceDirectory = Path.Combine(scenarioArtifacts, "source");
         Directory.CreateDirectory(sourceDirectory);
         var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
-            [scenario.App.BaseUrlEnvironmentVariable] = appBaseUri.AbsoluteUri,
+            [scenario.App.BaseUrlEnvironmentVariable] = app.BaseUri.AbsoluteUri,
             ["DOTNET_NOLOGO"] = "1",
             ["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1",
             ["DOTNET_CLI_UI_LANGUAGE"] = "en-US"
@@ -142,12 +147,13 @@ public sealed class LabRunCoordinator
                 "restore",
                 environment,
                 options.CommandTimeout,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                LabProcessClassification.Source).ConfigureAwait(false);
             stages.Add(restore);
 
             if (restore.Outcome == LabStageOutcome.Passed)
             {
-                var build = await RunProcessStageAsync(
+                stages.Add(await RunProcessStageAsync(
                     LabRunStage.SourceBuild,
                     options.DotNetExecutable,
                     new[] { "build", entryProject, "--configuration", options.Configuration, "--no-restore", "--nologo" },
@@ -156,15 +162,15 @@ public sealed class LabRunCoordinator
                     "build",
                     environment,
                     options.CommandTimeout,
-                    cancellationToken).ConfigureAwait(false);
-                stages.Add(build);
+                    cancellationToken,
+                    LabProcessClassification.Source).ConfigureAwait(false));
             }
             else
             {
                 stages.Add(Skipped(LabRunStage.SourceBuild, "Skipped because source restore did not pass."));
             }
 
-            if (stages.Last(stage => stage.Stage == LabRunStage.SourceBuild).Outcome == LabStageOutcome.Passed)
+            if (GetStage(stages, LabRunStage.SourceBuild).Outcome == LabStageOutcome.Passed)
             {
                 var trxDirectory = Path.Combine(sourceDirectory, "test-results");
                 Directory.CreateDirectory(trxDirectory);
@@ -184,20 +190,12 @@ public sealed class LabRunCoordinator
                     "test",
                     environment,
                     options.CommandTimeout,
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken,
+                    LabProcessClassification.Source).ConfigureAwait(false);
 
                 var trxPath = Path.Combine(trxDirectory, "source-tests.trx");
                 sourceSummary = TrxResultReader.Read(trxPath, sourceSummary.ExpectedPassed);
-                if (test.Outcome == LabStageOutcome.Passed
-                    && (sourceSummary.Passed != sourceSummary.ExpectedPassed
-                        || sourceSummary.Total != sourceSummary.ExpectedPassed))
-                {
-                    test = test with
-                    {
-                        Outcome = LabStageOutcome.Failed,
-                        Message = $"Source test count mismatch: expected {sourceSummary.ExpectedPassed} passing tests, got {sourceSummary.Passed}/{sourceSummary.Total}."
-                    };
-                }
+                test = ApplyTestCountContract(test, sourceSummary, "Source");
                 stages.Add(test);
             }
             else
@@ -205,12 +203,12 @@ public sealed class LabRunCoordinator
                 stages.Add(Skipped(LabRunStage.SourceTest, "Skipped because source build did not pass."));
             }
 
-            if (stages.Last(stage => stage.Stage == LabRunStage.SourceTest).Outcome == LabStageOutcome.Passed)
+            var migrationInput = Path.Combine(workspace, ".migration-input");
+            var migrationDirectory = Path.Combine(scenarioArtifacts, "migration");
+            if (GetStage(stages, LabRunStage.SourceTest).Outcome == LabStageOutcome.Passed)
             {
-                var migrationInput = Path.Combine(workspace, ".migration-input");
                 Directory.CreateDirectory(migrationInput);
                 CopyDeclaredProject(workspace, migrationInput, scenario.Source.MigrationFiles);
-                var migrationDirectory = Path.Combine(scenarioArtifacts, "migration");
                 var commandArguments = options.MigratorCommand.PrefixArguments
                     .Concat(new[]
                     {
@@ -224,7 +222,7 @@ public sealed class LabRunCoordinator
                     })
                     .ToArray();
 
-                var migration = await RunProcessStageAsync(
+                stages.Add(await RunProcessStageAsync(
                     LabRunStage.Migration,
                     options.MigratorCommand.FileName,
                     commandArguments,
@@ -234,8 +232,7 @@ public sealed class LabRunCoordinator
                     environment,
                     options.CommandTimeout,
                     cancellationToken,
-                    migrationAware: true).ConfigureAwait(false);
-                stages.Add(migration);
+                    LabProcessClassification.Migration).ConfigureAwait(false));
                 migrationSummary = LabMigrationArtifactReader.Read(migrationDirectory);
                 issues.AddRange(migrationSummary.Issues);
             }
@@ -243,19 +240,140 @@ public sealed class LabRunCoordinator
             {
                 stages.Add(Skipped(LabRunStage.Migration, "Skipped because source validation did not pass."));
             }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or JsonException)
-        {
-            issues.Add($"Lab runner error: {ex.Message}");
-            if (stages.All(stage => stage.Stage != LabRunStage.Migration))
+
+            if (CanContinueAfterMigration(stages, migrationSummary))
             {
+                quality = LabQualityEvaluator.Evaluate(scenario, migrationSummary);
                 stages.Add(new LabStageResult
                 {
-                    Stage = LabRunStage.Migration,
-                    Outcome = LabStageOutcome.InfrastructureFailure,
-                    Message = ex.Message
+                    Stage = LabRunStage.QualityEvaluation,
+                    Outcome = quality.Passed ? LabStageOutcome.Passed : LabStageOutcome.Failed,
+                    Message = quality.Passed ? "Migration quality budgets passed." : string.Join(" ", quality.Issues)
                 });
+                issues.AddRange(quality.Issues);
+
+                var projectVerifyDirectory = Path.Combine(scenarioArtifacts, "project-verify");
+                var verifyConfigPath = WriteProjectVerifyConfig(workspace, entryProject, scenario, options, scenarioArtifacts);
+                var verifyArguments = options.MigratorCommand.PrefixArguments
+                    .Concat(new[]
+                    {
+                        "verify-project",
+                        "--input", migrationInput,
+                        "--config", verifyConfigPath,
+                        "--out", projectVerifyDirectory,
+                        "--format", "both",
+                        "--source", "selenium-csharp",
+                        "--target", "dotnet",
+                        "--target-test-framework", "nunit"
+                    })
+                    .ToArray();
+                stages.Add(await RunProcessStageAsync(
+                    LabRunStage.ProjectVerify,
+                    options.MigratorCommand.FileName,
+                    verifyArguments,
+                    workspace,
+                    scenarioArtifacts,
+                    "project-verify-process",
+                    environment,
+                    options.CommandTimeout,
+                    cancellationToken,
+                    LabProcessClassification.ProjectVerify).ConfigureAwait(false));
+                projectVerifySummary = LabProjectVerifyArtifactReader.Read(projectVerifyDirectory);
+                issues.AddRange(projectVerifySummary.Issues);
             }
+            else
+            {
+                stages.Add(Skipped(LabRunStage.QualityEvaluation, "Skipped because migration did not complete."));
+                stages.Add(Skipped(LabRunStage.ProjectVerify, "Skipped because migration did not complete."));
+            }
+
+            if (GetStage(stages, LabRunStage.ProjectVerify).Outcome == LabStageOutcome.Passed
+                && projectVerifySummary.ReportPresent
+                && string.Equals(projectVerifySummary.Status, "passed", StringComparison.OrdinalIgnoreCase))
+            {
+                var targetRoot = Path.Combine(scenarioArtifacts, "target");
+                var targetProject = LabTargetProjectBuilder.Prepare(
+                    migrationDirectory,
+                    targetRoot,
+                    ReadScenarioRoute(scenario));
+                runtimeArtifactsDirectory = targetProject.RuntimeArtifactsDirectory;
+                var targetEnvironment = new Dictionary<string, string?>(environment, StringComparer.OrdinalIgnoreCase)
+                {
+                    ["MIGRATOR_LAB_TARGET_ROUTE"] = targetProject.Route,
+                    ["MIGRATOR_LAB_RUNTIME_ARTIFACTS"] = targetProject.RuntimeArtifactsDirectory
+                };
+
+                stages.Add(await RunProcessStageAsync(
+                    LabRunStage.TargetBuild,
+                    options.DotNetExecutable,
+                    new[] { "build", targetProject.ProjectPath, "--configuration", options.Configuration, "--nologo" },
+                    targetProject.RootDirectory,
+                    targetRoot,
+                    "target-build",
+                    targetEnvironment,
+                    options.CommandTimeout,
+                    cancellationToken,
+                    LabProcessClassification.Target).ConfigureAwait(false));
+
+                if (GetStage(stages, LabRunStage.TargetBuild).Outcome == LabStageOutcome.Passed)
+                {
+                    app.ResetObservations();
+                    var targetResultsDirectory = Path.Combine(targetRoot, "test-results");
+                    Directory.CreateDirectory(targetResultsDirectory);
+                    var targetTest = await RunProcessStageAsync(
+                        LabRunStage.TargetTest,
+                        options.DotNetExecutable,
+                        new[]
+                        {
+                            "test", targetProject.ProjectPath,
+                            "--configuration", options.Configuration,
+                            "--no-build", "--no-restore", "--nologo",
+                            "--logger", "trx;LogFileName=target-tests.trx",
+                            "--results-directory", targetResultsDirectory
+                        },
+                        targetProject.RootDirectory,
+                        targetRoot,
+                        "target-test",
+                        targetEnvironment,
+                        options.CommandTimeout,
+                        cancellationToken,
+                        LabProcessClassification.Target).ConfigureAwait(false);
+                    var targetTrxPath = Path.Combine(targetResultsDirectory, "target-tests.trx");
+                    targetSummary = TrxResultReader.Read(targetTrxPath, targetSummary.ExpectedPassed);
+                    targetTest = ApplyTestCountContract(targetTest, targetSummary, "Target");
+                    stages.Add(targetTest);
+
+                    await Task.Delay(TimeSpan.FromMilliseconds(200), cancellationToken).ConfigureAwait(false);
+                    var observations = app.SnapshotObservations();
+                    File.WriteAllText(
+                        Path.Combine(targetRoot, "runtime-observations.json"),
+                        JsonSerializer.Serialize(observations, new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
+                    oracle = LabSemanticOracle.Evaluate(scenario, targetSummary, migrationSummary, projectVerifySummary, observations);
+                    stages.Add(new LabStageResult
+                    {
+                        Stage = LabRunStage.SemanticOracle,
+                        Outcome = oracle.Passed ? LabStageOutcome.Passed : LabStageOutcome.Failed,
+                        Message = oracle.Passed ? "Semantic oracle passed." : string.Join(" ", oracle.Issues)
+                    });
+                    issues.AddRange(oracle.Issues);
+                }
+                else
+                {
+                    stages.Add(Skipped(LabRunStage.TargetTest, "Skipped because target runtime project did not build."));
+                    stages.Add(Skipped(LabRunStage.SemanticOracle, "Skipped because target runtime project did not build."));
+                }
+            }
+            else
+            {
+                stages.Add(Skipped(LabRunStage.TargetBuild, "Skipped because verify-project did not pass."));
+                stages.Add(Skipped(LabRunStage.TargetTest, "Skipped because verify-project did not pass."));
+                stages.Add(Skipped(LabRunStage.SemanticOracle, "Skipped because verify-project did not pass."));
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or JsonException or InvalidOperationException)
+        {
+            issues.Add($"Lab runner error: {ex.Message}");
+            AddMissingFailureStage(stages, ex.Message);
         }
 
         var sourceContentPreserved = false;
@@ -276,6 +394,9 @@ public sealed class LabRunCoordinator
             scenario.Expected.Status,
             stages,
             migrationSummary,
+            projectVerifySummary,
+            quality,
+            oracle,
             sourceContentPreserved);
         var result = new LabScenarioRunResult
         {
@@ -285,12 +406,17 @@ public sealed class LabRunCoordinator
             ScenarioDirectory = entry.ScenarioDirectory,
             ArtifactsDirectory = scenarioArtifacts,
             WorkspaceDirectory = workspace,
+            RuntimeArtifactsDirectory = runtimeArtifactsDirectory,
             DurationMs = (long)Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds,
             SourceContentPreserved = sourceContentPreserved,
             SourceTests = sourceSummary,
+            TargetTests = targetSummary,
             Migration = migrationSummary,
+            ProjectVerify = projectVerifySummary,
+            Quality = quality,
+            Oracle = oracle,
             Stages = stages.ToArray(),
-            Issues = issues.ToArray()
+            Issues = issues.Distinct(StringComparer.Ordinal).ToArray()
         };
 
         if (!options.KeepWorkspaces)
@@ -299,7 +425,7 @@ public sealed class LabRunCoordinator
         File.WriteAllText(
             Path.Combine(scenarioArtifacts, "status.txt"),
             ToContractName(actualStatus) + Environment.NewLine);
-        return result with { Issues = issues.ToArray() };
+        return result with { Issues = issues.Distinct(StringComparer.Ordinal).ToArray() };
     }
 
     async Task<LabStageResult> RunProcessStageAsync(
@@ -312,7 +438,7 @@ public sealed class LabRunCoordinator
         Dictionary<string, string?> environment,
         TimeSpan timeout,
         CancellationToken cancellationToken,
-        bool migrationAware = false)
+        LabProcessClassification classification)
     {
         var stdout = Path.Combine(logDirectory, logPrefix + ".stdout.log");
         var stderr = Path.Combine(logDirectory, logPrefix + ".stderr.log");
@@ -330,9 +456,14 @@ public sealed class LabRunCoordinator
             cancellationToken).ConfigureAwait(false);
 
         var combined = ReadProcessOutput(result);
-        var outcome = migrationAware
-            ? ClassifyMigrationProcess(result)
-            : LabRunStatusPolicy.ClassifySourceProcess(stage, result, combined);
+        var outcome = classification switch
+        {
+            LabProcessClassification.Source => LabRunStatusPolicy.ClassifySourceProcess(stage, result, combined),
+            LabProcessClassification.Migration => ClassifyMigrationProcess(result),
+            LabProcessClassification.ProjectVerify => LabRunStatusPolicy.ClassifyProjectVerifyProcess(result, combined),
+            LabProcessClassification.Target => LabRunStatusPolicy.ClassifyTargetProcess(stage, result, combined),
+            _ => LabStageOutcome.Failed
+        };
         return new LabStageResult
         {
             Stage = stage,
@@ -358,6 +489,79 @@ public sealed class LabRunCoordinator
             : LabStageOutcome.Failed;
     }
 
+    static LabStageResult ApplyTestCountContract(LabStageResult stage, LabSourceTestSummary summary, string label)
+    {
+        if (stage.Outcome == LabStageOutcome.Passed
+            && (summary.Passed != summary.ExpectedPassed || summary.Total != summary.ExpectedPassed))
+        {
+            return stage with
+            {
+                Outcome = LabStageOutcome.Failed,
+                Message = $"{label} test count mismatch: expected {summary.ExpectedPassed} passing tests, got {summary.Passed}/{summary.Total}."
+            };
+        }
+        return stage;
+    }
+
+    static bool CanContinueAfterMigration(IReadOnlyCollection<LabStageResult> stages, LabMigrationSummary migration)
+    {
+        var stage = GetStage(stages, LabRunStage.Migration);
+        return stage.Outcome == LabStageOutcome.Passed
+            && migration.MandatoryArtifactsPresent
+            && migration.FailedStages.Length == 0
+            && !string.Equals(migration.OrchestrationStatus, "Failed", StringComparison.OrdinalIgnoreCase);
+    }
+
+    static string WriteProjectVerifyConfig(
+        string workspace,
+        string entryProject,
+        ScenarioSpec scenario,
+        LabRunOptions options,
+        string scenarioArtifacts)
+    {
+        var configPath = Path.Combine(scenarioArtifacts, "project-verify-config.json");
+        var projectReferences = new[] { Path.GetFullPath(entryProject) }
+            .Concat(scenario.Project.References.Select(reference =>
+                Path.GetFullPath(Path.Combine(workspace, reference.Replace('/', Path.DirectorySeparatorChar)))))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var config = new
+        {
+            SchemaVersion = "adapter-config/v1",
+            SourceProjectName = "Migrator.Lab." + scenario.Id,
+            Verification = new
+            {
+                TargetFramework = "net10.0",
+                BaseDirectory = Path.GetFullPath(workspace),
+                BuildWorkingDirectory = Path.GetFullPath(workspace),
+                ProjectReferences = projectReferences,
+                AutoDiscoverNearestProject = false,
+                AutoDiscoverProjectReferences = false,
+                AutoDiscoverBuildFiles = true,
+                AutoDiscoverPackageReferences = false,
+                NoRestore = false,
+                Configuration = options.Configuration
+            }
+        };
+        File.WriteAllText(configPath, JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
+        return Path.GetFullPath(configPath);
+    }
+
+    static string ReadScenarioRoute(ScenarioSpec scenario)
+    {
+        foreach (var page in scenario.App.Pages)
+        {
+            if (page.ValueKind == JsonValueKind.Object
+                && page.TryGetProperty("path", out var path)
+                && path.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(path.GetString()))
+            {
+                return path.GetString()!;
+            }
+        }
+        return "/";
+    }
+
     static string ReadProcessOutput(LabProcessResult result)
     {
         var builder = new StringBuilder();
@@ -371,11 +575,10 @@ public sealed class LabRunCoordinator
         return builder.ToString();
     }
 
-    static int ReadExpectedSourcePassCount(ScenarioSpec scenario)
+    static int ReadExpectedPassCount(JsonElement element)
     {
-        var source = scenario.Oracle.Source;
-        if (source.ValueKind == JsonValueKind.Object
-            && source.TryGetProperty("mustPassTests", out var count)
+        if (element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty("mustPassTests", out var count)
             && count.TryGetInt32(out var value)
             && value >= 0)
         {
@@ -384,12 +587,40 @@ public sealed class LabRunCoordinator
         return 0;
     }
 
+    static LabStageResult GetStage(IEnumerable<LabStageResult> stages, LabRunStage stage) =>
+        stages.Last(item => item.Stage == stage);
+
     static LabStageResult Skipped(LabRunStage stage, string message) => new()
     {
         Stage = stage,
         Outcome = LabStageOutcome.Skipped,
         Message = message
     };
+
+    static void AddMissingFailureStage(List<LabStageResult> stages, string message)
+    {
+        var ordered = new[]
+        {
+            LabRunStage.Migration,
+            LabRunStage.ProjectVerify,
+            LabRunStage.TargetBuild,
+            LabRunStage.TargetTest,
+            LabRunStage.SemanticOracle
+        };
+        var missing = ordered
+            .Where(stage => stages.All(item => item.Stage != stage))
+            .Cast<LabRunStage?>()
+            .FirstOrDefault();
+        if (!missing.HasValue)
+            return;
+
+        stages.Add(new LabStageResult
+        {
+            Stage = missing.Value,
+            Outcome = LabStageOutcome.InfrastructureFailure,
+            Message = message
+        });
+    }
 
     static LabSuiteSummary BuildSummary(IEnumerable<LabScenarioRunResult> projects)
     {
@@ -461,11 +692,18 @@ public sealed class LabRunCoordinator
         var builder = new StringBuilder();
         for (var index = 0; index < text.Length; index++)
         {
-            var character = text[index];
-            if (index > 0 && char.IsUpper(character) && !char.IsUpper(text[index - 1]))
+            if (index > 0 && char.IsUpper(text[index]))
                 builder.Append('_');
-            builder.Append(char.ToUpperInvariant(character));
+            builder.Append(char.ToUpperInvariant(text[index]));
         }
         return builder.ToString();
+    }
+
+    enum LabProcessClassification
+    {
+        Source,
+        Migration,
+        ProjectVerify,
+        Target
     }
 }
