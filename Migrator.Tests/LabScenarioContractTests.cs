@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Migrator.Lab;
 using Migrator.Lab.Contracts;
 using Migrator.Lab.Reports;
@@ -32,6 +33,19 @@ public sealed class LabScenarioContractTests
         Assert.Contains(scenarios, scenario => scenario.Tags.Contains("real-failure"));
         Assert.Contains(scenarios, scenario => scenario.Tags.Contains("msbuild"));
         Assert.Contains(scenarios, scenario => scenario.Tags.Contains("runtime-pass"));
+    }
+
+    [Fact]
+    public void ReadyFixtures_DeclareTheExpectedPassingSourceTestCount()
+    {
+        var scenarios = ScenarioCatalog.Load(VerticalSliceRoot()).Entries.Select(entry => entry.Scenario!).ToArray();
+
+        foreach (var scenario in scenarios)
+        {
+            Assert.Equal(JsonValueKind.Object, scenario.Oracle.Source.ValueKind);
+            Assert.True(scenario.Oracle.Source.TryGetProperty("mustPassTests", out var count), $"{scenario.Id} must declare oracle.source.mustPassTests.");
+            Assert.Equal(1, count.GetInt32());
+        }
     }
 
     [Fact]
@@ -82,6 +96,28 @@ public sealed class LabScenarioContractTests
         Assert.Equal(ScenarioStatus.Pass, scenario.Expected.Status);
         Assert.Contains("positive", scenario.Implementation.Notes, StringComparison.OrdinalIgnoreCase);
         Assert.False(scenario.Id.Contains("sabotage", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void TransitiveWarningScenario_KeepsDependencyProofOutsideMigrationInput()
+    {
+        var entry = ScenarioCatalog.Load(VerticalSliceRoot()).Entries
+            .Single(item => item.Scenario!.Id == "p24a-transitive-warning-isolated");
+        var scenario = entry.Scenario!;
+
+        var migratedSource = string.Join(
+            Environment.NewLine,
+            scenario.Source.MigrationFiles.Select(file => File.ReadAllText(Path.Combine(entry.ScenarioDirectory, file))));
+        var sourceOnlyInfrastructure = File.ReadAllText(Path.Combine(
+            entry.ScenarioDirectory,
+            "Tests",
+            "Infrastructure",
+            "LabSeleniumTestBase.cs"));
+
+        Assert.DoesNotContain("SmokeContract", migratedSource, StringComparison.Ordinal);
+        Assert.Contains("SmokeContract", sourceOnlyInfrastructure, StringComparison.Ordinal);
+        Assert.Contains("A/A.csproj", scenario.Project.References);
+        Assert.Contains("B/B.csproj", scenario.Project.References);
     }
 
     [Fact]

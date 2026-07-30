@@ -4378,6 +4378,26 @@ public class PipelineIntegrationTests
     }
 
     [Fact]
+    public void WebDriverId_FullPipeline_ParsesMapsLocalAndRenders()
+    {
+        var result = RunPipeline("PipelineWebDriverIdTests.cs");
+        var output = result.GeneratedOutput;
+        var model = result.TargetModel;
+
+        var test = model.Tests.First();
+        Assert.Contains(test.BodyActions, a => a is LocatorDeclarationAction decl && decl.VariableName == "result");
+
+        Assert.Contains("Page.Locator(\"#username\").FillAsync(\"john\")", output);
+        Assert.Contains("Page.Locator(\"#login\").ClickAsync()", output);
+        Assert.Contains("var result = Page.Locator(\"#result\");", output);
+        Assert.Contains("Expect(result)", output);
+        Assert.DoesNotContain("WebDriver.FindElement", output);
+        Assert.DoesNotContain("MISSING_MAPPING", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
     public void DynamicCssSelector_FullPipeline_RemainsTodo()
     {
         var result = RunPipeline("PipelineDynamicSelectorTests.cs");

@@ -45,6 +45,9 @@
     "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
   },
   "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
     "diagnostics": {
       "mustContainAny": [
         "MANUAL_REVIEW",

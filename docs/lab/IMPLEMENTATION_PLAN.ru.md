@@ -45,7 +45,7 @@ selenium-pw-migrator lab list `
 3. Присылает полный вывод только при ошибке. При успехе достаточно написать:
    `Блок 1 прошёл, продолжай блок 2`.
 
-## Блок 2. Семь настоящих фикстур и LabApp v0 — реализован, ожидает проверки
+## Блок 2. Семь настоящих фикстур и LabApp v0 — проверен
 
 Цель: заменить плановые записи реальными, детерминированными проектами.
 
@@ -75,29 +75,47 @@ selenium-pw-migrator lab list `
 подбирает ChromeDriver. При успехе пишет:
 `Фикстуры и LabApp прошли, продолжай блок 3`.
 
-## Блок 3. Source validation и stage-aware orchestration
+## Блок 3. Source validation и stage-aware orchestration — реализован, ожидает проверки
 
-Цель: выполнить первые стадии настоящего lab-run без подмены существующего CLI.
+Цель: выполнить первые стадии настоящего `lab run` без подмены существующего CLI.
 
 Состав:
 
-- `lab run --suite smoke|vertical`;
-- отдельные временные директории;
-- restore/build/test исходного проекта;
-- запуск существующего `run`;
-- проверка обязательных stage-артефактов;
-- `source-validation.json` и журнал процессов;
-- timeout, отмена и завершение дерева процессов;
+- `lab run --suite vertical|smoke|pr` и выбор отдельных проектов через `--project`;
+- отдельная копия исходного fixture для каждого запуска;
+- последовательные `dotnet restore`, `dotnet build`, `dotnet test`;
+- единый LabApp на случайном свободном порту на весь suite;
+- TRX-проверка ожидаемого числа исходных тестов;
+- запуск уже существующего `selenium-pw-migrator run` на `source.migrationFiles`;
+- проверка `orchestration-report.json`, generated и verify-артефактов;
+- защита от изменения заявленных исходных файлов;
+- stdout/stderr и длительность каждой стадии;
+- `source-validation.json`, `scenario-result.json`, `lab-summary.json` и `.md`;
+- timeout и принудительное завершение дерева процессов;
 - первичная классификация `SOURCE_INVALID`, `MIGRATOR_FAILURE`,
-  `INFRASTRUCTURE_FAILURE`.
+  `INFRASTRUCTURE_FAILURE`, `REGRESSION` и `UNSUPPORTED_AS_EXPECTED`;
+- стабильные suite exit codes 0/10–15;
+- unit/scenario-тесты классификатора и оркестратора с поддельным process runner.
 
-Критерий: runner правильно различает сломанный исходник, падение CLI и проблему среды.
+Критерий: семь fixture проходят source validation; существующий migration run создаёт
+обязательные артефакты; нет ложного смешивания проблем исходника, мигратора и среды.
 
 ### Что делает владелец после блока 3
 
-Запускает `lab run --suite vertical` и проверяет, что причины искусственно внесённых
-сбоев классифицируются разными статусами. Затем пишет:
-`Классификация стадий верна, продолжай блок 4`.
+На Windows из корня репозитория запускает:
+
+```powershell
+.\scripts\run-lab-block3.ps1
+```
+
+Скрипт собирает решение, запускает полный тестовый набор Migrator и выполняет полный вертикальный suite.
+При успехе последняя строка:
+
+```text
+Block 3 passed: 7 source projects validated, existing migration run executed, suite statuses classified.
+```
+
+После этого пишет: `Классификация стадий верна, продолжай блок 4`.
 
 ## Блок 4. Verify, verify-project и поведенческий oracle
 
@@ -196,33 +214,34 @@ selenium-pw-migrator lab list `
 Утверждает policy: какие кластеры агент исправляет автоматически, а какие требуют
 ручного решения. После этого полигон считается введённым в постоянную эксплуатацию.
 
-## Текущая проверка после блока 2
+## Текущая проверка после блока 3
 
 Из корня репозитория на Windows:
 
 ```powershell
-.\scripts\run-lab-block2.ps1
+.\scripts\run-lab-block3.ps1
 ```
 
-Скрипт выполняет сборку основного решения, запускает `lab app serve`, проверяет `/health`,
-последовательно запускает семь Selenium/NUnit-проектов и завершает командой
-`lab validate --fail-on-planned`.
-
-Отдельная проверка контрактов:
+Ручной эквивалент основного запуска:
 
 ```powershell
-dotnet run --project Migrator.Cli -- lab validate `
+dotnet run --project Migrator.Cli -c Release --no-build -- lab run `
+  --suite vertical `
   --corpus ./corpus/stable/vertical-slice `
-  --out ./artifacts/lab/contracts `
-  --fail-on-planned
+  --out ./artifacts/lab/block-03 `
+  --timeout-seconds 600
+```
 
-dotnet run --project Migrator.Cli -- lab list `
-  --corpus ./corpus/stable/vertical-slice `
-  --state ready
+Для быстрой проверки только smoke-сценариев:
+
+```powershell
+dotnet run --project Migrator.Cli -c Release --no-build -- lab run `
+  --suite smoke `
+  --out ./artifacts/lab/smoke
 ```
 
 Bash:
 
 ```bash
-./scripts/run-lab-block2.sh
+./scripts/run-lab-block3.sh
 ```

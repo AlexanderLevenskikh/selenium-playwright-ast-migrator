@@ -1357,6 +1357,10 @@ public class RoslynTestFileParser : ITestFileParser
         @"^\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*CssSelector\s*\(\s*""([^""]*)""\s*\)\s*\)\s*;?",
         RegexOptions.Compiled);
 
+    static readonly Regex WebDriverIdRegex = new(
+        @"^\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*Id\s*\(\s*""([^""]*)""\s*\)\s*\)\s*;?",
+        RegexOptions.Compiled);
+
     static LocatorDeclarationAction? TryExtractLocatorDeclaration(LocalDeclarationStatementSyntax lds, int line)
     {
         var declaration = lds.Declaration;
@@ -1381,6 +1385,15 @@ public class RoslynTestFileParser : ITestFileParser
         {
             var selector = cssMatch.Groups[1].Value;
             var locatorExpr = $"Page.Locator(\"{EscapeString(selector)}\")";
+            return new LocatorDeclarationAction(line, varName, locatorExpr, initValue);
+        }
+
+        // Check for WebDriver.FindElement(s)(By.Id("..."))
+        var idMatch = WebDriverIdRegex.Match(initValue);
+        if (idMatch.Success)
+        {
+            var selector = idMatch.Groups[1].Value;
+            var locatorExpr = $"Page.Locator(\"#{EscapeString(selector)}\")";
             return new LocatorDeclarationAction(line, varName, locatorExpr, initValue);
         }
 

@@ -860,6 +860,10 @@ public class DefaultProjectAdapter : IProjectAdapter
         @"^\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*CssSelector\s*\(\s*""([^""]*)""\s*\)\s*\)\s*$",
         RegexOptions.Compiled);
 
+    static readonly Regex FindElementIdPattern = new(
+        @"^\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*Id\s*\(\s*""([^""]*)""\s*\)\s*\)\s*$",
+        RegexOptions.Compiled);
+
     static readonly Regex FindElementXPathAssignmentPattern = new(
         @"^\s*(\w+)\s*=\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*XPath\s*\(\s*""([^""]*)""\s*\)\s*\)\s*$",
         RegexOptions.Compiled);
@@ -868,12 +872,16 @@ public class DefaultProjectAdapter : IProjectAdapter
         @"^\s*(\w+)\s*=\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*CssSelector\s*\(\s*""([^""]*)""\s*\)\s*\)\s*$",
         RegexOptions.Compiled);
 
+    static readonly Regex FindElementIdAssignmentPattern = new(
+        @"^\s*(\w+)\s*=\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*Id\s*\(\s*""([^""]*)""\s*\)\s*\)\s*$",
+        RegexOptions.Compiled);
+
     static readonly Regex AssignmentPattern = new(
         @"^\s*(\w+)\s*=",
         RegexOptions.Compiled);
 
     /// <summary>
-    /// Resolves target expressions that are inline WebDriver.FindElement(s)(By.XPath/CssSelector(...)) calls.
+    /// Resolves target expressions that are inline WebDriver.FindElement(s)(By.XPath/CssSelector/Id(...)) calls.
     /// Handles: WebDriver.FindElement(By.XPath("//div//input")).Click()
     /// </summary>
     TargetExpression ResolveInlineFindElementTarget(string sourceExpression)
@@ -891,6 +899,14 @@ public class DefaultProjectAdapter : IProjectAdapter
         {
             var selector = cssMatch.Groups[1].Value;
             var locatorExpr = $"Page.Locator(\"{EscapeForLocator(selector)}\")";
+            return TargetExpression.Mapped(sourceExpression, locatorExpr, TargetKind.RawExpression);
+        }
+
+        var idMatch = FindElementIdPattern.Match(sourceExpression);
+        if (idMatch.Success)
+        {
+            var selector = idMatch.Groups[1].Value;
+            var locatorExpr = $"Page.Locator(\"#{EscapeForLocator(selector)}\")";
             return TargetExpression.Mapped(sourceExpression, locatorExpr, TargetKind.RawExpression);
         }
 
@@ -923,6 +939,15 @@ public class DefaultProjectAdapter : IProjectAdapter
         {
             var selector = cssMatch.Groups[2].Value;
             var locatorExpr = $"Page.Locator(\"{EscapeForLocator(selector)}\")";
+            localVariableMappings[variableName] = TargetExpression.Mapped(variableName, locatorExpr, TargetKind.RawExpression);
+            return;
+        }
+
+        var idMatch = FindElementIdAssignmentPattern.Match(text);
+        if (idMatch.Success)
+        {
+            var selector = idMatch.Groups[2].Value;
+            var locatorExpr = $"Page.Locator(\"#{EscapeForLocator(selector)}\")";
             localVariableMappings[variableName] = TargetExpression.Mapped(variableName, locatorExpr, TargetKind.RawExpression);
         }
     }

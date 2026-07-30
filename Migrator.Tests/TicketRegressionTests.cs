@@ -442,6 +442,38 @@ public class SampleTests
     }
 
     [Fact]
+    public void WebDriverFindElement_StaticId_ParsesAsLocatorDeclaration()
+    {
+        var file = Path.GetTempFileName() + ".cs";
+        try
+        {
+            File.WriteAllText(file, @"
+using NUnit.Framework;
+using OpenQA.Selenium;
+
+public class SampleTests
+{
+    [Test]
+    public void GeneratedTest()
+    {
+        var result = WebDriver.FindElement(By.Id(""result""));
+    }
+}
+");
+
+            var model = new RoslynTestFileParser().Parse(file);
+            var action = Assert.IsType<LocatorDeclarationAction>(model.Tests.Single().BodyActions.Single());
+
+            Assert.Equal("result", action.VariableName);
+            Assert.Equal("Page.Locator(\"#result\")", action.LocatorExpression);
+        }
+        finally
+        {
+            if (File.Exists(file)) File.Delete(file);
+        }
+    }
+
+    [Fact]
     public void WebDriverFindElements_LocalElementAt_CanResolveDownstreamTextAssertion()
     {
         var sourceModel = CreateModel(new TestAction[]

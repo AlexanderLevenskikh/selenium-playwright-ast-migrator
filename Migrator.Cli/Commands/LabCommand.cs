@@ -1,6 +1,8 @@
 using System.Net.Sockets;
+using System.Reflection;
 using Migrator.Lab;
 using Migrator.Lab.Contracts;
+using Migrator.Lab.Execution;
 using Migrator.Lab.LabApp;
 using Migrator.Lab.Reports;
 
@@ -17,6 +19,8 @@ internal static class LabCommand
         var subcommand = args[0].Trim().ToLowerInvariant();
         if (subcommand == "app")
             return RunApp(args.Skip(1).ToArray());
+        if (subcommand == "run")
+            return RunSuite(args.Skip(1).ToArray());
 
         if (args.Skip(1).Any(IsHelp))
         {
@@ -34,6 +38,163 @@ internal static class LabCommand
             "list" => RunList(options),
             _ => UnknownSubcommand(subcommand)
         };
+    }
+
+    static int RunSuite(string[] args)
+    {
+        if (args.Any(IsHelp))
+        {
+            WriteRunHelp();
+            return 0;
+        }
+
+        var options = ParseRunOptions(args);
+        if (options == null)
+            return 15;
+
+        try
+        {
+            var coordinator = new LabRunCoordinator();
+            var result = coordinator.RunAsync(options).GetAwaiter().GetResult();
+
+            Console.WriteLine($"Migrator Lab run: {result.Summary.Projects} project(s).");
+            foreach (var project in result.Projects)
+            {
+                Console.WriteLine($"  {project.Id}: {ToContractName(project.ActualStatus)} " +
+                                  $"(expected {ToContractName(project.ExpectedStatus)}, source {project.SourceTests.Passed}/{project.SourceTests.ExpectedPassed})");
+            }
+            Console.WriteLine($"Reports: {result.ArtifactsRoot}");
+            return LabRunStatusPolicy.GetSuiteExitCode(result.Projects);
+        }
+        catch (LabRunConfigurationException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 15;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
+            Console.Error.WriteLine($"Lab run failed before a suite report could be completed: {ex.Message}");
+            return 15;
+        }
+    }
+
+    static LabRunOptions? ParseRunOptions(string[] args)
+    {
+        var suite = "vertical";
+        var corpus = Path.Combine("corpus", "stable", "vertical-slice");
+        var outDirectory = Path.Combine("artifacts", "lab", "run");
+        var projectIds = new List<string>();
+        string? tag = null;
+        var timeout = TimeSpan.FromMinutes(10);
+        var keepWorkspaces = false;
+        var dotnetExecutable = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet";
+        var configuration = "Release";
+
+        for (var index = 0; index < args.Length; index++)
+        {
+            switch (args[index])
+            {
+                case "--suite":
+                    if (!TryReadValue(args, ref index, out suite))
+                        return null;
+                    suite = suite.Trim().ToLowerInvariant();
+                    if (suite is not ("vertical" or "smoke" or "pr"))
+                    {
+                        Console.Error.WriteLine("--suite requires: vertical|smoke|pr");
+                        return null;
+                    }
+                    break;
+                case "--corpus":
+                    if (!TryReadValue(args, ref index, out corpus))
+                        return null;
+                    break;
+                case "--out":
+                    if (!TryReadValue(args, ref index, out outDirectory))
+                        return null;
+                    break;
+                case "--project":
+                case "--projects":
+                    if (!TryReadValue(args, ref index, out var rawProjects))
+                        return null;
+                    projectIds.AddRange(rawProjects.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+                    break;
+                case "--tag":
+                    if (!TryReadValue(args, ref index, out tag))
+                        return null;
+                    tag = tag.Trim();
+                    break;
+                case "--timeout-seconds":
+                    if (!TryReadValue(args, ref index, out var rawTimeout)
+                        || !int.TryParse(rawTimeout, out var timeoutSeconds)
+                        || timeoutSeconds < 1)
+                    {
+                        Console.Error.WriteLine("--timeout-seconds requires a positive integer");
+                        return null;
+                    }
+                    timeout = TimeSpan.FromSeconds(timeoutSeconds);
+                    break;
+                case "--keep-workspaces":
+                    keepWorkspaces = true;
+                    break;
+                case "--dotnet":
+                    if (!TryReadValue(args, ref index, out dotnetExecutable))
+                        return null;
+                    break;
+                case "--configuration":
+                    if (!TryReadValue(args, ref index, out configuration))
+                        return null;
+                    break;
+                default:
+                    Console.Error.WriteLine($"Unknown lab run option: {args[index]}");
+                    return null;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(tag) && suite != "vertical")
+        {
+            Console.Error.WriteLine("Use either --suite smoke|pr or --tag, not both.");
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(tag) && suite is "smoke" or "pr")
+            tag = suite;
+
+        return new LabRunOptions
+        {
+            Suite = suite,
+            CorpusRoot = corpus,
+            ArtifactsRoot = outDirectory,
+            ProjectIds = projectIds.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            Tag = tag,
+            DotNetExecutable = dotnetExecutable,
+            Configuration = configuration,
+            CommandTimeout = timeout,
+            KeepWorkspaces = keepWorkspaces,
+            MigratorCommand = BuildCurrentMigratorCommand()
+        };
+    }
+
+    static LabProcessCommand BuildCurrentMigratorCommand()
+    {
+        var processPath = Environment.ProcessPath;
+        var entryAssembly = Assembly.GetEntryAssembly()?.Location;
+
+        if (!string.IsNullOrWhiteSpace(processPath))
+        {
+            var processName = Path.GetFileNameWithoutExtension(processPath);
+            if (string.Equals(processName, "dotnet", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(entryAssembly))
+            {
+                return LabProcessCommand.Create(processPath, entryAssembly);
+            }
+
+            return LabProcessCommand.Create(processPath);
+        }
+
+        if (!string.IsNullOrWhiteSpace(entryAssembly))
+            return LabProcessCommand.Create("dotnet", entryAssembly);
+
+        throw new InvalidOperationException("Could not resolve the current Migrator CLI executable for lab orchestration.");
     }
 
     static int RunValidate(LabCatalogCommandOptions options)
@@ -258,6 +419,7 @@ internal static class LabCommand
         Console.WriteLine("Migrator Lab — deterministic Selenium → Playwright migration test corpus.");
         Console.WriteLine();
         Console.WriteLine("Usage:");
+        Console.WriteLine("  selenium-pw-migrator lab run [options]");
         Console.WriteLine("  selenium-pw-migrator lab validate [options]");
         Console.WriteLine("  selenium-pw-migrator lab list [options]");
         Console.WriteLine("  selenium-pw-migrator lab app serve [options]");
@@ -270,7 +432,24 @@ internal static class LabCommand
         Console.WriteLine("  --state <state>       Filter `lab list` by planned|ready.");
         Console.WriteLine("  --fail-on-planned     Make validation fail until every scenario is READY.");
         Console.WriteLine();
-        Console.WriteLine("Exit code 15 means a lab schema/config/catalog/app error.");
+        Console.WriteLine("Run exit codes: 0=accepted, 10=regression, 11=migrator failure, 12=source invalid, 13=infrastructure, 14=non-deterministic, 15=lab error.");
+    }
+
+    static void WriteRunHelp()
+    {
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  selenium-pw-migrator lab run [options]");
+        Console.WriteLine();
+        Console.WriteLine("Options:");
+        Console.WriteLine("  --suite <name>           vertical|smoke|pr (default: vertical).");
+        Console.WriteLine("  --corpus <path>          Corpus root (default: corpus/stable/vertical-slice).");
+        Console.WriteLine("  --out <path>             Suite artifact directory (default: artifacts/lab/run).");
+        Console.WriteLine("  --project <id[,id]>      Run only selected scenario ids; may be repeated.");
+        Console.WriteLine("  --tag <tag>              Run READY scenarios carrying the tag.");
+        Console.WriteLine("  --timeout-seconds <n>    Timeout for each restore/build/test/migration command.");
+        Console.WriteLine("  --configuration <name>   Source build configuration (default: Release).");
+        Console.WriteLine("  --dotnet <path>          dotnet host used for source validation.");
+        Console.WriteLine("  --keep-workspaces        Preserve copied source workspaces for diagnostics.");
     }
 
     static void WriteAppHelp()

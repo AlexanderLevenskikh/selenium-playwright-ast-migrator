@@ -80,7 +80,7 @@
   "implementation": {
     "state": "READY",
     "block": "02-fixtures-labapp",
-    "notes": "Ready positive transitive ProjectReference fixture with TreatWarningsAsErrors.",
-    "contentHash": "sha256:fec32187a359d2d9bd4acd9a703f1ea2576f74adad1bc7bc8d22f358e910d87d"
+    "notes": "Ready positive transitive ProjectReference fixture; dependency proof stays in source-only infrastructure while migration input remains self-contained.",
+    "contentHash": "sha256:e4f68a75da8ce00e9a45bb4bd19dfef4df3c7a461a24d3eb6f0b52181c9d0871"
   }
 }

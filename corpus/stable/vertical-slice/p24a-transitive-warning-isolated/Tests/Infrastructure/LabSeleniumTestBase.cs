@@ -1,3 +1,4 @@
+using Migrator.Lab.Corpus.P24.A;
 using NUnit.Framework;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
@@ -12,6 +13,8 @@ public abstract class LabSeleniumTestBase
     [SetUp]
     public void StartBrowser()
     {
+        Assert.That(SmokeContract.ExpectedText, Is.EqualTo("ok"));
+
         var options = new ChromeOptions();
         options.AddArgument("--headless=new");
         options.AddArgument("--disable-gpu");

@@ -13,6 +13,9 @@ public sealed class LabCliContractTests
         var project = Read("Migrator.Cli/Migrator.Cli.csproj");
 
         Assert.Contains("string.Equals(args[0], \"lab\"", program);
+        Assert.Contains("selenium-pw-migrator lab run", command);
+        Assert.Contains("LabRunCoordinator", command);
+        Assert.Contains("--suite <name>", command);
         Assert.Contains("selenium-pw-migrator lab validate", command);
         Assert.Contains("selenium-pw-migrator lab list", command);
         Assert.Contains("selenium-pw-migrator lab app serve", command);
