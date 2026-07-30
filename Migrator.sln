@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Migrator.PlaywrightDotNet",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Migrator.PlaywrightTypeScript", "Migrator.PlaywrightTypeScript\Migrator.PlaywrightTypeScript.csproj", "{9257C5B9-49D0-43D3-9B40-77AEF6046B65}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Migrator.Lab", "Migrator.Lab\Migrator.Lab.csproj", "{D7BA447D-1C44-4B98-A164-CB4206819F5E}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Migrator.Cli", "Migrator.Cli\Migrator.Cli.csproj", "{6A6EF8DB-31D1-437D-A3EF-0845AD924E8F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Migrator.Tests", "Migrator.Tests\Migrator.Tests.csproj", "{B0F86246-5CD2-4FB7-9B3A-14D0F5D6C106}"
@@ -46,6 +48,10 @@ Global
 		{9257C5B9-49D0-43D3-9B40-77AEF6046B65}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9257C5B9-49D0-43D3-9B40-77AEF6046B65}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9257C5B9-49D0-43D3-9B40-77AEF6046B65}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D7BA447D-1C44-4B98-A164-CB4206819F5E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D7BA447D-1C44-4B98-A164-CB4206819F5E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D7BA447D-1C44-4B98-A164-CB4206819F5E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D7BA447D-1C44-4B98-A164-CB4206819F5E}.Release|Any CPU.Build.0 = Release|Any CPU
 		{6A6EF8DB-31D1-437D-A3EF-0845AD924E8F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{6A6EF8DB-31D1-437D-A3EF-0845AD924E8F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6A6EF8DB-31D1-437D-A3EF-0845AD924E8F}.Release|Any CPU.ActiveCfg = Release|Any CPU

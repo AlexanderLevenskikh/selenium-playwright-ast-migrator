@@ -17,9 +17,11 @@ public class ArchitectureDependencyTests
         ["Migrator.SeleniumCSharp"] = new[] { "Migrator.Core" },
         ["Migrator.PlaywrightDotNet"] = new[] { "Migrator.Core" },
         ["Migrator.PlaywrightTypeScript"] = new[] { "Migrator.Core" },
+        ["Migrator.Lab"] = Array.Empty<string>(),
         ["Migrator.Cli"] = new[]
         {
             "Migrator.Core",
+            "Migrator.Lab",
             "Migrator.Roslyn",
             "Migrator.SeleniumCSharp",
             "Migrator.PlaywrightDotNet",
@@ -28,6 +30,7 @@ public class ArchitectureDependencyTests
         ["Migrator.Tests"] = new[]
         {
             "Migrator.Core",
+            "Migrator.Lab",
             "Migrator.Roslyn",
             "Migrator.SeleniumCSharp",
             "Migrator.PlaywrightDotNet",
@@ -72,7 +75,8 @@ public class ArchitectureDependencyTests
             "using Migrator.Roslyn",
             "using Migrator.SeleniumCSharp",
             "using Migrator.PlaywrightDotNet",
-            "using Migrator.PlaywrightTypeScript"
+            "using Migrator.PlaywrightTypeScript",
+            "using Migrator.Lab"
         };
 
         var violations = Directory.GetFiles(coreDir, "*.cs", SearchOption.AllDirectories)

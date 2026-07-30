@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p26-jsexecutor-unsupported",
+  "seed": 126,
+  "tags": ["pr", "unsupported", "javascript-executor", "vertical-slice"],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": ["IJavaScriptExecutor", "ExecuteScript", "RawStatement"]
+  },
+  "project": {
+    "files": ["Scenario.csproj", "Tests/JsExecutorTests.cs"],
+    "references": [],
+    "msBuild": { "nullable": true, "implicitUsings": true, "fileScopedNamespace": true }
+  },
+  "app": {
+    "pages": [{ "path": "/unsupported", "model": "button-status" }]
+  },
+  "oracle": {
+    "diagnostics": { "mustContainAny": ["MANUAL_REVIEW", "RAW_STATEMENT"] },
+    "mustNot": { "corruptNeighbourCode": true }
+  },
+  "qualityBudget": { "todoMax": 3, "unmappedMax": 0, "unsupportedMax": 1, "warningsMax": 1 },
+  "expected": { "status": "UNSUPPORTED_AS_EXPECTED" },
+  "implementation": {
+    "state": "PLANNED",
+    "block": "03-source-migration-build",
+    "notes": "Unsupported oracle requires precise diagnostics and intact neighbouring code."
+  }
+}

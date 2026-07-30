@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p23-cpm-isolation",
+  "seed": 123,
+  "tags": ["pr", "msbuild", "cpm", "verify-project", "vertical-slice"],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "cpm-project",
+    "features": ["Directory.Packages.props", "ProjectReference", "VerifyProject"]
+  },
+  "project": {
+    "files": ["Directory.Packages.props", "Scenario.csproj", "Tests/SmokeTests.cs"],
+    "references": [],
+    "msBuild": { "nullable": true, "implicitUsings": true, "fileScopedNamespace": true }
+  },
+  "app": {
+    "pages": [{ "path": "/smoke", "model": "button-status" }]
+  },
+  "oracle": {
+    "source": { "mustPassTests": 1 },
+    "target": { "mustPassTests": 1 },
+    "diagnostics": { "mustNotContain": ["NU1008", "NU1015"] },
+    "semantic": { "harnessEvidence": "cpm-isolated" }
+  },
+  "qualityBudget": { "todoMax": 0, "unmappedMax": 0, "unsupportedMax": 0, "warningsMax": 0 },
+  "expected": { "status": "PASS" },
+  "implementation": {
+    "state": "PLANNED",
+    "block": "03-source-migration-build",
+    "notes": "Positive verify-project isolation contract."
+  }
+}

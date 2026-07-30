@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p15-webdriverwait-visible",
+  "seed": 115,
+  "tags": ["waits", "runtime-pass", "real-failure", "vertical-slice"],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": ["WebDriverWait", "Until", "Displayed", "Click"]
+  },
+  "project": {
+    "files": ["Scenario.csproj", "Tests/WaitVisibleTests.cs"],
+    "references": [],
+    "msBuild": { "nullable": true, "implicitUsings": true, "fileScopedNamespace": true }
+  },
+  "app": {
+    "pages": [{ "path": "/wait", "model": "delayed-visibility", "delayMs": 250, "events": ["wait:visible"] }]
+  },
+  "oracle": {
+    "source": { "mustPassTests": 1 },
+    "target": { "mustPassTests": 1 },
+    "semantic": { "events": ["wait:visible"], "timeoutMaxMs": 3000 }
+  },
+  "qualityBudget": { "todoMax": 0, "unmappedMax": 0, "unsupportedMax": 0, "warningsMax": 0 },
+  "expected": { "status": "PASS" },
+  "implementation": {
+    "state": "PLANNED",
+    "block": "02-fixtures-labapp",
+    "notes": "Canonical visible wait with deterministic delay."
+  }
+}

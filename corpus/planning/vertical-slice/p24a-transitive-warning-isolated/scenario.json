@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p24a-transitive-warning-isolated",
+  "seed": 124,
+  "tags": ["pr", "msbuild", "transitive-reference", "verify-project", "vertical-slice"],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "multi-project",
+    "features": ["Directory.Build.props", "ProjectReference", "TreatWarningsAsErrors", "VerifyProject"]
+  },
+  "project": {
+    "files": ["Directory.Build.props", "A/A.csproj", "B/B.csproj", "Tests/Tests.csproj", "Tests/SmokeTests.cs"],
+    "references": ["A/A.csproj", "B/B.csproj"],
+    "msBuild": { "nullable": true, "implicitUsings": true, "fileScopedNamespace": true }
+  },
+  "app": {
+    "pages": [{ "path": "/smoke", "model": "button-status" }]
+  },
+  "oracle": {
+    "source": { "mustPassTests": 1 },
+    "target": { "mustPassTests": 1 },
+    "diagnostics": { "classifiedAsCodeRegression": false },
+    "semantic": { "harnessEvidence": "transitive-warning-isolated" }
+  },
+  "qualityBudget": { "todoMax": 0, "unmappedMax": 0, "unsupportedMax": 0, "warningsMax": 0 },
+  "expected": { "status": "PASS" },
+  "implementation": {
+    "state": "PLANNED",
+    "block": "03-source-migration-build",
+    "notes": "Positive half of the split p24 contract; sabotage fixture will be separate."
+  }
+}

@@ -31,6 +31,9 @@ if (args.Length > 0 && string.Equals(args[0], "self", StringComparison.OrdinalIg
 if (args.Length > 0 && string.Equals(args[0], "memory", StringComparison.OrdinalIgnoreCase))
     return MemoryCommand.Run(args.Skip(1).ToArray());
 
+if (args.Length > 0 && string.Equals(args[0], "lab", StringComparison.OrdinalIgnoreCase))
+    return LabCommand.Run(args.Skip(1).ToArray());
+
 if (args.Length > 1
     && string.Equals(args[0], "config", StringComparison.OrdinalIgnoreCase)
     && (string.Equals(args[1], "merge-deltas", StringComparison.OrdinalIgnoreCase)
@@ -91,6 +94,12 @@ if (mode == "memory")
     Console.WriteLine("Use the direct memory command family: selenium-pw-migrator memory init|add|explain|doctor|summarize");
     MemoryCommand.Run(Array.Empty<string>());
     return 0;
+}
+
+if (mode == "lab")
+{
+    Console.WriteLine("Use the direct lab command family: selenium-pw-migrator lab validate|list");
+    return LabCommand.Run(Array.Empty<string>());
 }
 
 // Agent-safety modes operate on config/report artifacts and do not process source files.

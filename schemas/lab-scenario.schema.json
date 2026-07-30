@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/schemas/lab-scenario.schema.json",
+  "title": "Migrator Lab Scenario",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "tags",
+    "source",
+    "project",
+    "app",
+    "oracle",
+    "qualityBudget",
+    "expected",
+    "implementation"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "lab-scenario/v1" },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,78}[a-z0-9]$"
+    },
+    "seed": { "type": ["integer", "null"] },
+    "tags": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["language", "testFramework", "template", "features"],
+      "properties": {
+        "language": { "const": "csharp" },
+        "testFramework": { "const": "nunit" },
+        "template": { "type": "string", "minLength": 1 },
+        "features": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files"],
+      "properties": {
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relativePath" }
+        },
+        "references": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relativePath" },
+          "default": []
+        },
+        "msBuild": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "nullable": { "type": "boolean" },
+            "implicitUsings": { "type": "boolean" },
+            "fileScopedNamespace": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pages"],
+      "properties": {
+        "pages": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "oracle": { "type": "object" },
+    "qualityBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "todoMax": { "type": "integer", "minimum": 0, "default": 0 },
+        "unmappedMax": { "type": "integer", "minimum": 0, "default": 0 },
+        "unsupportedMax": { "type": "integer", "minimum": 0, "default": 0 },
+        "warningsMax": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "enum": [
+            "PASS",
+            "PASS_WITH_WARNINGS",
+            "REGRESSION",
+            "MIGRATOR_FAILURE",
+            "SOURCE_INVALID",
+            "INFRASTRUCTURE_FAILURE",
+            "NON_DETERMINISTIC",
+            "UNSUPPORTED_AS_EXPECTED"
+          ]
+        }
+      }
+    },
+    "implementation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "block"],
+      "properties": {
+        "state": { "enum": ["PLANNED", "READY"] },
+        "block": { "type": "string", "minLength": 1 },
+        "notes": { "type": "string" }
+      }
+    }
+  },
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "not": {
+        "anyOf": [
+          { "pattern": "^[A-Za-z]:" },
+          { "pattern": "^/" },
+          { "pattern": "(^|/)\\.\\.(/|$)" }
+        ]
+      }
+    }
+  }
+}

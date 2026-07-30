@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p09-helper-extension-mapping",
+  "seed": 109,
+  "tags": ["helpers", "extensions", "real-failure", "vertical-slice"],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "multi-file",
+    "features": ["ExtensionMethod", "FindElement", "Click", "WebDriverWait"]
+  },
+  "project": {
+    "files": ["Scenario.csproj", "Helpers/ElementExtensions.cs", "Tests/HelperTests.cs"],
+    "references": [],
+    "msBuild": { "nullable": true, "implicitUsings": true, "fileScopedNamespace": true }
+  },
+  "app": {
+    "pages": [{ "path": "/helper", "model": "button-status", "events": ["helper:click"] }]
+  },
+  "oracle": {
+    "source": { "mustPassTests": 1 },
+    "target": { "mustPassTests": 1 },
+    "semantic": { "events": ["helper:click"], "forbiddenDiagnostics": ["HELPER_METHOD_REQUIRES_MAPPING"] }
+  },
+  "qualityBudget": { "todoMax": 0, "unmappedMax": 0, "unsupportedMax": 0, "warningsMax": 0 },
+  "expected": { "status": "PASS" },
+  "implementation": {
+    "state": "PLANNED",
+    "block": "02-fixtures-labapp",
+    "notes": "Minimal real-failure family for helper mapping."
+  }
+}

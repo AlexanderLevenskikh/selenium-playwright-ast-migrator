@@ -63,6 +63,12 @@ internal static class CliCommandCatalog
             "Optional playground root via --input <path>; defaults to ./playground.",
             "selenium-pw-migrator playground verify --input playground --out playground-verify",
             "selenium-pw-migrator --mode playground-verify --input playground --format both"),
+        StableCommand("lab", "artifacts/lab", false, false,
+            "Validate and inspect the deterministic migration test corpus.",
+            "Direct command family: `selenium-pw-migrator lab validate|list`. Block 1 validates lab-scenario/v1 contracts and lists planned/ready scenarios. Later blocks add run, replay, diff, and minimize without creating a separate product binary.",
+            "No source --input. Use --corpus <path> with the direct lab command family.",
+            "selenium-pw-migrator lab validate --corpus ./corpus/planning/vertical-slice --out ./artifacts/lab/contracts",
+            "selenium-pw-migrator lab list --corpus ./corpus/planning/vertical-slice --state planned"),
         StableCommand("memory", "memory", false, false,
             "Manage project-scoped migration memory for supervised runs.",
             "Direct command family: `selenium-pw-migrator memory init|add|explain|doctor|summarize|recall`. Stores inspectable JSON/JSONL under migration/state/memory so later bounded actions, Reviewer, Watchdog, and Final Gate can reuse project-local decisions without relying on chat memory.",
@@ -453,6 +459,7 @@ internal static class CliCommandCatalog
         sb.AppendLine("  2  Invalid config, invalid source/target/mode, unsupported gate, or preflight failure.");
         sb.AppendLine("  3  TODO quality gate or stage failure.");
         sb.AppendLine("  4  Generated syntax errors detected.");
+        sb.AppendLine("  15 Migrator Lab schema, config, or corpus contract error.");
         sb.AppendLine();
     }
 }

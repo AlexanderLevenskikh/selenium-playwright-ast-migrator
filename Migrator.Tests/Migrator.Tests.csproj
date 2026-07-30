@@ -22,6 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Migrator.Lab\Migrator.Lab.csproj" />
     <ProjectReference Include="..\Migrator.Core\Migrator.Core.csproj" />
     <ProjectReference Include="..\Migrator.Roslyn\Migrator.Roslyn.csproj" />
     <ProjectReference Include="..\Migrator.SeleniumCSharp\Migrator.SeleniumCSharp.csproj" />

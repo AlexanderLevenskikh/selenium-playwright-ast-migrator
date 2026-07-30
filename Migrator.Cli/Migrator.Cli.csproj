@@ -48,6 +48,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" />
+    <ProjectReference Include="..\Migrator.Lab\Migrator.Lab.csproj" />
     <ProjectReference Include="..\Migrator.Core\Migrator.Core.csproj" />
     <ProjectReference Include="..\Migrator.Roslyn\Migrator.Roslyn.csproj" />
     <ProjectReference Include="..\Migrator.SeleniumCSharp\Migrator.SeleniumCSharp.csproj" />
@@ -63,6 +64,7 @@
     <None Include="..\CHANGELOG.md" Pack="true" PackagePath="\" />
     <None Include="..\assets\icon.png" Link="assets\icon.png" Pack="true" PackagePath="assets\" />
     <None Include="..\schemas\adapter-config.schema.json" Link="schemas\adapter-config.schema.json" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="schemas\" />
+    <None Include="..\schemas\lab-scenario.schema.json" Link="schemas\lab-scenario.schema.json" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="schemas\" />
     <None Include="..\templates\**\*" Link="templates\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="templates\%(RecursiveDir)%(Filename)%(Extension)" />
     <None Include="..\scripts\install-migration-kit.ps1" Link="scripts\install-migration-kit.ps1" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="scripts\" />
     <None Include="..\scripts\install-migration-kit.sh" Link="scripts\install-migration-kit.sh" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="scripts\" Condition="Exists('..\scripts\install-migration-kit.sh')" />

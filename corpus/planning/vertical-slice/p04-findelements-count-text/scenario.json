@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p04-findelements-count-text",
+  "seed": 104,
+  "tags": ["smoke", "collections", "runtime-pass", "vertical-slice"],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": ["FindElements", "By.CssSelector", "Count", "Text", "Assert.That"]
+  },
+  "project": {
+    "files": ["Scenario.csproj", "Tests/ListTests.cs"],
+    "references": [],
+    "msBuild": { "nullable": true, "implicitUsings": true, "fileScopedNamespace": true }
+  },
+  "app": {
+    "pages": [{ "path": "/list", "model": "list", "items": ["alpha", "beta", "gamma"] }]
+  },
+  "oracle": {
+    "source": { "mustPassTests": 1 },
+    "target": { "mustPassTests": 1 },
+    "semantic": { "count": 3, "orderedTexts": ["alpha", "beta", "gamma"] }
+  },
+  "qualityBudget": { "todoMax": 0, "unmappedMax": 0, "unsupportedMax": 0, "warningsMax": 0 },
+  "expected": { "status": "PASS" },
+  "implementation": {
+    "state": "PLANNED",
+    "block": "02-fixtures-labapp",
+    "notes": "Collection handling and ordered text oracle."
+  }
+}
