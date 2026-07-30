@@ -12,11 +12,13 @@ Produce a reviewable Playwright migration draft for the complete configured Sele
 4. Execute a real matching `verify-project` when possible. Missing target project/toolchain or a verification-harness defect is recorded honestly, not converted into passing evidence.
 5. Run scope, policy, artifact, and final-gate checks for the exact run.
 6. Rank repeated root causes by payoff, source confidence, reversibility, and independence from known blockers.
-7. Execute remediation in five-cycle batches. Ordinary, `continue`, and bounded modes receive one batch; `continuous` automatically opens the next batch at every budget checkpoint. Each cycle contains one bounded source-backed improvement under `migration/**`, review, a complete rerun, and evidence comparison.
+7. Execute remediation in batches of up to five cycles. Ordinary, `continue`, and bounded modes receive one batch; `continuous` automatically opens the next batch at every budget checkpoint. Each cycle contains one bounded source-backed improvement under `migration/**`, review, a complete rerun, and evidence comparison.
 8. Continue automatically after progress. After one no-progress cycle, try a different independent candidate. Stop only after two consecutive no-progress cycles on distinct candidate fingerprints, a real blocker, a human-only decision, or the batch budget in non-continuous mode. A continuous budget boundary is a checkpoint, not a stop.
 9. `continue` starts a fresh five-cycle invocation budget while preserving real evidence and exhausted candidate fingerprints. `continuous` automatically advances between safe cycles and automatically opens the next five-cycle batch at each budget checkpoint, without requiring another user command.
 10. Rewrite `state/handoff.md` completely and validate it before handoff. Never append duplicate status fields or sections.
 11. Do not end routine work with an opt-in question. Ask only when every remaining useful candidate requires a human product decision, missing source truth, or new write authorization.
+
+Before writing `No further automated migration work remains`, list every remaining root-cause cluster with its count, representative evidence, and a concrete stop reason. That sentence is allowed only when no safe agent-executable candidate remains.
 
 ## Evidence dimensions
 

@@ -26,7 +26,7 @@ Use one configured Selenium source scope and one ordinary run lineage. Historica
 9. Use `watchdog` for loops, crashes, contradictory evidence, repeated candidates, or disputed no-progress classification.
 10. Persist `state/autonomy-state.json` after every cycle and rewrite `state/handoff.md` atomically before handoff.
 
-`continue` opens a fresh five-cycle invocation budget while preserving exhausted candidate fingerprints. `continuous` automatically advances between safe cycles and across `AUTONOMOUS_CYCLE_BUDGET_REACHED` checkpoints until success or a real terminal stop; it is not permission to ignore the no-progress, safety, or human-decision stops.
+`continue` opens a fresh five-cycle invocation budget while preserving exhausted candidate fingerprints. `continuous` automatically advances between safe cycles and across `AUTONOMOUS_CYCLE_BUDGET_REACHED` checkpoints until success or a real terminal stop; it is not permission to ignore the no-progress, safety, or human-decision stops. If safe candidates remain at a checkpoint, this is budget rollover or bounded handoff, not a global plateau.
 
 Do not create source partitions, acceptance receipts, quality ledgers, role leases, or synthetic validation evidence. Do not ask the user to operate internal CLI plumbing you can run yourself.
 

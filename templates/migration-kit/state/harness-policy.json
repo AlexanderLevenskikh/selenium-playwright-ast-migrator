@@ -15,5 +15,10 @@
   "continuousRollsOverCycleBudget": true,
   "noProgressStopThreshold": 2,
   "requireDistinctNoProgressCandidates": true,
-  "verificationDimensionsIndependent": true
+  "verificationDimensionsIndependent": true,
+  "maxAutonomousRemediationCyclesPerInvocation": 5,
+  "oneWriteChangePerCycle": true,
+  "requireFullRerunAfterEachCycle": true,
+  "requireRemainingClusterClassificationBeforeManualHandoff": true,
+  "cycleBudgetStopReason": "AUTONOMOUS_CYCLE_BUDGET_REACHED"
 }

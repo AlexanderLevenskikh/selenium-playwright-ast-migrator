@@ -14,7 +14,7 @@ Total cycles completed: 0
 Continuous batches completed: 0
 No-progress streak: 0
 
-The five-cycle invocation budget is a final stop for ordinary, `continue`, and bounded modes. In `continuous` mode it is only a checkpoint: persist evidence and automatically start the next five-cycle batch without asking the user to run `continue`.
+The five-cycle invocation budget ends an ordinary, `continue`, or bounded invocation with stop reason `AUTONOMOUS_CYCLE_BUDGET_REACHED`. If safe candidates remain, rank them without claiming a global plateau. In `continuous` mode the same boundary is only a checkpoint: persist evidence and automatically start the next five-cycle batch without asking the user to run `continue`.
 
 ## Latest run evidence
 

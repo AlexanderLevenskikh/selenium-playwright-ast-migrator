@@ -12,6 +12,15 @@ Use this file when a migration task is delegated to Codex instead of the default
 - Keep generated tests compile-safe and deterministic.
 - When explicitly working in the Migrator repository, add focused regression tests for engine changes when a suitable test area exists.
 
+
+## Autonomous remediation cycles
+
+- One bounded write change is allowed per remediation cycle.
+- An ordinary or `continue` invocation may execute up to five cycles, with a complete rerun and evidence comparison after every cycle.
+- After progress, continue automatically while safe candidates and budget remain. After the first no-progress cycle, try a different independent candidate.
+- In `continuous` mode, the five-cycle boundary is a checkpoint: persist evidence and automatically open the next batch without asking the user to invoke `continue`.
+- Do not report `AUTONOMOUS_CYCLE_BUDGET_REACHED` as completion when safe candidates remain.
+
 ## Required inputs
 
 Read these before making changes:

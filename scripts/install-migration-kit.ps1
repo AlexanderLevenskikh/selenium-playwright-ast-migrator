@@ -174,6 +174,7 @@ function Test-AutoUpdatedKitOwnedFile([string]$RelativePath) {
         $normalized -eq "scripts/validate-handoff.sh" -or
         $normalized -eq "scripts/update-autonomy-state.ps1" -or
         $normalized -eq "scripts/update-autonomy-state.sh" -or
+        $normalized -eq "state/harness-policy.json" -or
         $normalized.StartsWith("prompts/") -or
         $normalized.StartsWith("agent-skills/") -or
         $normalized.StartsWith("opencode-team/")
@@ -219,27 +220,48 @@ function Copy-DirectoryContents(
     }
 }
 
-function Update-KnownMutableAutonomyContracts([string]$WorkspacePath) {
-    $currentTicketPath = Join-Path $WorkspacePath "current-ticket.md"
-    if (-not (Test-Path -LiteralPath $currentTicketPath)) { return }
+function Update-KnownStandardModeWorkspaceState([string]$WorkspacePath, [string]$ProjectRoot) {
+    $changed = $false
 
-    $existing = Get-Content -LiteralPath $currentTicketPath -Raw
-    $legacySentence = "Complete at most one bounded, source-backed repair for this ticket, rerun the complete configured source scope, and then stop with evidence. Stop earlier only when the repair is unsafe, required input/tooling is missing, or the repeated full run shows no progress."
-    $legacyMarker = "Complete at most one bounded, source-backed repair"
-    $upgradedSentence = 'Complete exactly one bounded, source-backed repair for this cycle, rerun the complete configured source scope, compare all relevant evidence dimensions, and return control to the orchestrator. This cycle belongs to a five-cycle invocation budget. Do not stop the whole invocation merely because this cycle made no progress; in `continuous` mode the orchestrator automatically opens the next five-cycle batch.'
+    $replacements = @(
+        @{
+            Path = (Join-Path $WorkspacePath "current-ticket.md")
+            Legacy = "Complete at most one bounded, source-backed repair for this ticket, rerun the complete configured source scope, and then stop with evidence. Stop earlier only when the repair is unsafe, required input/tooling is missing, or the repeated full run shows no progress."
+            Current = 'Complete exactly one bounded, source-backed repair for this cycle, rerun the complete configured source scope, compare all relevant evidence dimensions, and return control to the orchestrator. This cycle belongs to a five-cycle invocation budget. Do not stop the whole invocation merely because this cycle made no progress; in `continuous` mode the orchestrator automatically opens the next five-cycle batch.'
+        },
+        @{
+            Path = (Join-Path $ProjectRoot "AGENTS.md")
+            Legacy = "6. Fix one highest-payoff root cause at a time and rerun the complete standard flow."
+            Current = '6. Fix one highest-payoff root cause per remediation cycle and rerun the complete standard flow. An ordinary or `continue` invocation may execute up to five cycles; `continuous` automatically opens the next five-cycle batch while safe candidates remain.'
+        },
+        @{
+            Path = (Join-Path $ProjectRoot "AGENTS.md")
+            Legacy = "7. Do not stop after routine POM/config analysis to ask whether to continue. When one safe, agent-executable remediation is available under `migration/**`, perform it in the same invocation, rerun the complete standard flow, and then report the result. Ask only for a human product decision or explicit authorization to write outside the migration workspace."
+            Current = '7. Do not stop after routine POM/config analysis to ask whether to continue. Continue automatically after progress; after the first no-progress cycle, try a different independent candidate. Ask only for a concrete human product decision, missing source truth, or explicit authorization to write outside the migration workspace.'
+        },
+        @{
+            Path = (Join-Path $WorkspacePath "state/handoff.md")
+            Legacy = "- Do not continue indefinitely: apply at most one bounded repair before a complete rerun and handoff."
+            Current = '- Apply one bounded repair per cycle and perform a complete rerun after each cycle. At the five-cycle boundary use `AUTONOMOUS_CYCLE_BUDGET_REACHED`; if safe candidates remain, ordinary mode hands off and `continuous` automatically opens the next batch.'
+        },
+        @{
+            Path = (Join-Path $WorkspacePath "state/safety-checklist.md")
+            Legacy = "- [ ] The agent stopped after the full run or after one bounded repair plus a complete rerun."
+            Current = '- [ ] The agent used the five-cycle budget correctly: one bounded write change per cycle, a complete rerun after every cycle, and automatic rollover in `continuous` mode.'
+        }
+    )
 
-    if ($existing.Contains($legacySentence)) {
-        $upgraded = $existing.Replace($legacySentence, $upgradedSentence)
-    }
-    elseif ($existing.Contains($legacyMarker)) {
-        $upgraded = $existing.Replace($legacyMarker, $upgradedSentence + " Legacy text follows only where project-owned details were appended: ")
-    }
-    else {
-        return
+    foreach ($item in $replacements) {
+        if (-not (Test-Path -LiteralPath $item.Path)) { continue }
+        $existing = Get-Content -LiteralPath $item.Path -Raw
+        if (-not $existing.Contains($item.Legacy)) { continue }
+        Set-Content -LiteralPath $item.Path -Value ($existing.Replace($item.Legacy, $item.Current)) -Encoding UTF8
+        $changed = $true
     }
 
-    Set-Content -LiteralPath $currentTicketPath -Value $upgraded -Encoding UTF8
-    Write-Host "kit-contract-upgrade: $currentTicketPath (five-cycle invocation budget)"
+    if ($changed) {
+        Write-Host "upgrade-standard-mode-state: $WorkspacePath (five-cycle invocation budget)"
+    }
 }
 
 function Copy-RootAgentDirectorySafe([string]$SourceDirectory, [string]$DestinationDirectory, [switch]$ForceCopy, [switch]$UpdateMode) {
@@ -436,7 +458,7 @@ foreach ($dir in @("runs", "reports", "logs", "profiles", "prompts", "schemas", 
 Copy-DirectoryContents -SourceDirectory $templateRoot -DestinationDirectory $script:workspacePath -ForceCopy:$Force -UpdateMode:$Update
 
 if ($Update) {
-    Update-KnownMutableAutonomyContracts -WorkspacePath $script:workspacePath
+    Update-KnownStandardModeWorkspaceState -WorkspacePath $script:workspacePath -ProjectRoot $projectRoot
 }
 
 $schemaSource = Join-Path $kitRoot "schemas/adapter-config.schema.json"

@@ -578,7 +578,7 @@ Before final handoff, update autonomy state with `scripts/update-autonomy-state.
         CopyDirectoryContents(templateRoot, workspacePath, tokens, workspacePath, options);
 
         if (options.Update)
-            UpgradeKnownMutableAutonomyContracts(workspacePath);
+            UpgradeKnownStandardModeWorkspaceState(workspacePath, projectRoot);
 
         var schemaSource = Path.Combine(kitRoot, "schemas", "adapter-config.schema.json");
         if (File.Exists(schemaSource))
@@ -991,6 +991,7 @@ Estimate TODO/build/runtime-readiness impact and how to verify it.
             "scripts/validate-handoff.sh" or
             "scripts/update-autonomy-state.ps1" or
             "scripts/update-autonomy-state.sh" or
+            "state/harness-policy.json" or
             "scripts/repair-jsonl-ledger.ps1" or
             "scripts/repair-jsonl-ledger.sh"
             || normalized.StartsWith("prompts/", StringComparison.Ordinal)
@@ -1589,33 +1590,50 @@ Fix only the current ticket.
         }
     }
 
-    static void UpgradeKnownMutableAutonomyContracts(string workspacePath)
+    static void UpgradeKnownStandardModeWorkspaceState(string workspacePath, string projectRoot)
     {
-        var currentTicketPath = Path.Combine(workspacePath, "current-ticket.md");
-        if (!File.Exists(currentTicketPath))
-            return;
+        var changed = false;
 
-        var existing = File.ReadAllText(currentTicketPath);
-        const string legacySentence = "Complete at most one bounded, source-backed repair for this ticket, rerun the complete configured source scope, and then stop with evidence. Stop earlier only when the repair is unsafe, required input/tooling is missing, or the repeated full run shows no progress.";
-        const string legacyMarker = "Complete at most one bounded, source-backed repair";
-        const string upgradedSentence = "Complete exactly one bounded, source-backed repair for this cycle, rerun the complete configured source scope, compare all relevant evidence dimensions, and return control to the orchestrator. This cycle belongs to a five-cycle invocation budget. Do not stop the whole invocation merely because this cycle made no progress; in `continuous` mode the orchestrator automatically opens the next five-cycle batch.";
+        changed |= ReplaceKnownText(
+            Path.Combine(workspacePath, "current-ticket.md"),
+            "Complete at most one bounded, source-backed repair for this ticket, rerun the complete configured source scope, and then stop with evidence. Stop earlier only when the repair is unsafe, required input/tooling is missing, or the repeated full run shows no progress.",
+            "Complete exactly one bounded, source-backed repair for this cycle, rerun the complete configured source scope, compare all relevant evidence dimensions, and return control to the orchestrator. This cycle belongs to a five-cycle invocation budget. Do not stop the whole invocation merely because this cycle made no progress; in `continuous` mode the orchestrator automatically opens the next five-cycle batch.");
 
-        string upgraded;
-        if (existing.Contains(legacySentence, StringComparison.Ordinal))
-        {
-            upgraded = existing.Replace(legacySentence, upgradedSentence, StringComparison.Ordinal);
-        }
-        else if (existing.Contains(legacyMarker, StringComparison.Ordinal))
-        {
-            upgraded = existing.Replace(legacyMarker, upgradedSentence + " Legacy text follows only where project-owned details were appended: ", StringComparison.Ordinal);
-        }
-        else
-        {
-            return;
-        }
+        changed |= ReplaceKnownText(
+            Path.Combine(projectRoot, "AGENTS.md"),
+            "6. Fix one highest-payoff root cause at a time and rerun the complete standard flow.",
+            "6. Fix one highest-payoff root cause per remediation cycle and rerun the complete standard flow. An ordinary or `continue` invocation may execute up to five cycles; `continuous` automatically opens the next five-cycle batch while safe candidates remain.");
 
-        File.WriteAllText(currentTicketPath, upgraded);
-        Console.WriteLine($"kit-contract-upgrade: {currentTicketPath} (five-cycle invocation budget)");
+        changed |= ReplaceKnownText(
+            Path.Combine(projectRoot, "AGENTS.md"),
+            "7. Do not stop after routine POM/config analysis to ask whether to continue. When one safe, agent-executable remediation is available under `migration/**`, perform it in the same invocation, rerun the complete standard flow, and then report the result. Ask only for a human product decision or explicit authorization to write outside the migration workspace.",
+            "7. Do not stop after routine POM/config analysis to ask whether to continue. Continue automatically after progress; after the first no-progress cycle, try a different independent candidate. Ask only for a concrete human product decision, missing source truth, or explicit authorization to write outside the migration workspace.");
+
+        changed |= ReplaceKnownText(
+            Path.Combine(workspacePath, "state", "handoff.md"),
+            "- Do not continue indefinitely: apply at most one bounded repair before a complete rerun and handoff.",
+            "- Apply one bounded repair per cycle and perform a complete rerun after each cycle. At the five-cycle boundary use `AUTONOMOUS_CYCLE_BUDGET_REACHED`; if safe candidates remain, ordinary mode hands off and `continuous` automatically opens the next batch.");
+
+        changed |= ReplaceKnownText(
+            Path.Combine(workspacePath, "state", "safety-checklist.md"),
+            "- [ ] The agent stopped after the full run or after one bounded repair plus a complete rerun.",
+            "- [ ] The agent used the five-cycle budget correctly: one bounded write change per cycle, a complete rerun after every cycle, and automatic rollover in `continuous` mode.");
+
+        if (changed)
+            Console.WriteLine($"upgrade-standard-mode-state: {workspacePath} (five-cycle invocation budget)");
+    }
+
+    static bool ReplaceKnownText(string path, string legacyText, string replacement)
+    {
+        if (!File.Exists(path))
+            return false;
+
+        var existing = File.ReadAllText(path);
+        if (!existing.Contains(legacyText, StringComparison.Ordinal))
+            return false;
+
+        File.WriteAllText(path, existing.Replace(legacyText, replacement, StringComparison.Ordinal));
+        return true;
     }
 
     static bool IsWorkspaceMutableFile(string relativePath)

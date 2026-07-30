@@ -30,6 +30,8 @@ Autonomy is bounded by **remediation cycles**, not by user turns:
 
 Do not end a routine run with an opt-in question such as `Want me to continue?`. Ask only when every remaining useful candidate requires a human product decision, missing source truth, or new write authorization.
 
+Before writing `No further automated migration work remains`, list every remaining root-cause cluster with its count, representative evidence, and a concrete stop reason. That sentence is allowed only when no safe agent-executable candidate remains.
+
 ## Invocation state
 
 Read and update `migration/state/autonomy-state.json` before the first cycle and after every completed cycle. At invocation start:
@@ -56,7 +58,7 @@ When `current-ticket.md`, `start-dispatch.json`, or `next-commands.md` already i
 4. Use the configured source from `source-scope.json` as authoritative. If absent or still a placeholder, stop with `SOURCE_SCOPE_MISSING`; do not guess.
 5. Run install diagnostics and `kit doctor` after installation or update.
 6. If no representative pilot exists, run `selenium-pw-migrator pilot` once. The pilot is calibration only and does not split execution.
-7. Run the complete source scope through the standard command using the next free `run-NNN` directory, or a clearly archived/clean deliberate rerun directory:
+7. Run the complete source scope through the full standard flow using the next free `run-NNN` directory, or a clearly archived/clean deliberate rerun directory:
 
 ```shell
 selenium-pw-migrator run --input <selenium-source> --config <adapter-config> --out migration/runs/run-001 --format both
