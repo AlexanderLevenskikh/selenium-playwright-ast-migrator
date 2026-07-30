@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p24a-transitive-warning-isolated",
+  "seed": 124,
+  "tags": [
+    "pr",
+    "msbuild",
+    "transitive-reference",
+    "verify-project",
+    "vertical-slice"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "multi-project",
+    "features": [
+      "Directory.Build.props",
+      "ProjectReference",
+      "TreatWarningsAsErrors",
+      "VerifyProject"
+    ],
+    "migrationFiles": [
+      "Tests/SmokeTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Directory.Build.props",
+      "A/A.csproj",
+      "A/SmokeContract.cs",
+      "B/B.csproj",
+      "B/ExpectedStatus.cs",
+      "Tests/Tests.csproj",
+      "Tests/Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/SmokeTests.cs"
+    ],
+    "references": [
+      "A/A.csproj",
+      "B/B.csproj"
+    ],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Tests/Tests.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/smoke",
+        "model": "button-status"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "diagnostics": {
+      "classifiedAsCodeRegression": false
+    },
+    "semantic": {
+      "harnessEvidence": "transitive-warning-isolated"
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "02-fixtures-labapp",
+    "notes": "Ready positive transitive ProjectReference fixture with TreatWarningsAsErrors.",
+    "contentHash": "sha256:fec32187a359d2d9bd4acd9a703f1ea2576f74adad1bc7bc8d22f358e910d87d"
+  }
+}

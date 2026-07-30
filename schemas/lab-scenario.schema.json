@@ -17,58 +17,108 @@
     "implementation"
   ],
   "properties": {
-    "schemaVersion": { "const": "lab-scenario/v1" },
+    "schemaVersion": {
+      "const": "lab-scenario/v1"
+    },
     "id": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9-]{1,78}[a-z0-9]$"
     },
-    "seed": { "type": ["integer", "null"] },
+    "seed": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
     "tags": {
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" }
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      }
     },
     "source": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["language", "testFramework", "template", "features"],
+      "required": [
+        "language",
+        "testFramework",
+        "template",
+        "features",
+        "migrationFiles"
+      ],
       "properties": {
-        "language": { "const": "csharp" },
-        "testFramework": { "const": "nunit" },
-        "template": { "type": "string", "minLength": 1 },
+        "language": {
+          "const": "csharp"
+        },
+        "testFramework": {
+          "const": "nunit"
+        },
+        "template": {
+          "type": "string",
+          "minLength": 1
+        },
         "features": {
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": { "type": "string", "minLength": 1 }
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "migrationFiles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/relativePath"
+          }
         }
       }
     },
     "project": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["files"],
+      "required": [
+        "entryProject",
+        "files"
+      ],
       "properties": {
+        "entryProject": {
+          "$ref": "#/$defs/relativePath"
+        },
         "files": {
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/relativePath" }
+          "items": {
+            "$ref": "#/$defs/relativePath"
+          }
         },
         "references": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/relativePath" },
+          "items": {
+            "$ref": "#/$defs/relativePath"
+          },
           "default": []
         },
         "msBuild": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "nullable": { "type": "boolean" },
-            "implicitUsings": { "type": "boolean" },
-            "fileScopedNamespace": { "type": "boolean" }
+            "nullable": {
+              "type": "boolean"
+            },
+            "implicitUsings": {
+              "type": "boolean"
+            },
+            "fileScopedNamespace": {
+              "type": "boolean"
+            }
           }
         }
       }
@@ -76,26 +126,58 @@
     "app": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["pages"],
+      "required": [
+        "baseUrlEnvironmentVariable",
+        "pages"
+      ],
       "properties": {
-        "pages": { "type": "array", "items": { "type": "object" } }
+        "pages": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "baseUrlEnvironmentVariable": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        }
       }
     },
-    "oracle": { "type": "object" },
+    "oracle": {
+      "type": "object"
+    },
     "qualityBudget": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "todoMax": { "type": "integer", "minimum": 0, "default": 0 },
-        "unmappedMax": { "type": "integer", "minimum": 0, "default": 0 },
-        "unsupportedMax": { "type": "integer", "minimum": 0, "default": 0 },
-        "warningsMax": { "type": "integer", "minimum": 0, "default": 0 }
+        "todoMax": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        },
+        "unmappedMax": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        },
+        "unsupportedMax": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        },
+        "warningsMax": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        }
       }
     },
     "expected": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status"],
+      "required": [
+        "status"
+      ],
       "properties": {
         "status": {
           "enum": [
@@ -114,11 +196,28 @@
     "implementation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["state", "block"],
+      "required": [
+        "state",
+        "block"
+      ],
       "properties": {
-        "state": { "enum": ["PLANNED", "READY"] },
-        "block": { "type": "string", "minLength": 1 },
-        "notes": { "type": "string" }
+        "state": {
+          "enum": [
+            "PLANNED",
+            "READY"
+          ]
+        },
+        "block": {
+          "type": "string",
+          "minLength": 1
+        },
+        "notes": {
+          "type": "string"
+        },
+        "contentHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
       }
     }
   },
@@ -128,9 +227,15 @@
       "minLength": 1,
       "not": {
         "anyOf": [
-          { "pattern": "^[A-Za-z]:" },
-          { "pattern": "^/" },
-          { "pattern": "(^|/)\\.\\.(/|$)" }
+          {
+            "pattern": "^[A-Za-z]:"
+          },
+          {
+            "pattern": "^/"
+          },
+          {
+            "pattern": "(^|/)\\.\\.(/|$)"
+          }
         ]
       }
     }

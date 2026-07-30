@@ -1,5 +1,7 @@
+using System.Net.Sockets;
 using Migrator.Lab;
 using Migrator.Lab.Contracts;
+using Migrator.Lab.LabApp;
 using Migrator.Lab.Reports;
 
 internal static class LabCommand
@@ -13,13 +15,16 @@ internal static class LabCommand
         }
 
         var subcommand = args[0].Trim().ToLowerInvariant();
+        if (subcommand == "app")
+            return RunApp(args.Skip(1).ToArray());
+
         if (args.Skip(1).Any(IsHelp))
         {
             WriteHelp();
             return 0;
         }
 
-        var options = ParseOptions(args.Skip(1).ToArray());
+        var options = ParseCatalogOptions(args.Skip(1).ToArray());
         if (options == null)
             return 15;
 
@@ -31,7 +36,7 @@ internal static class LabCommand
         };
     }
 
-    static int RunValidate(LabCommandOptions options)
+    static int RunValidate(LabCatalogCommandOptions options)
     {
         ScenarioCatalogResult result;
         try
@@ -63,7 +68,7 @@ internal static class LabCommand
         return 0;
     }
 
-    static int RunList(LabCommandOptions options)
+    static int RunList(LabCatalogCommandOptions options)
     {
         ScenarioCatalogResult result;
         try
@@ -100,9 +105,63 @@ internal static class LabCommand
         return result.HasErrors ? 15 : 0;
     }
 
-    static LabCommandOptions? ParseOptions(string[] args)
+    static int RunApp(string[] args)
     {
-        var corpus = Path.Combine("corpus", "planning", "vertical-slice");
+        if (args.Length == 0 || IsHelp(args[0]))
+        {
+            WriteAppHelp();
+            return 0;
+        }
+
+        var action = args[0].Trim().ToLowerInvariant();
+        if (action != "serve")
+        {
+            Console.Error.WriteLine($"Unknown lab app action: {action}");
+            WriteAppHelp();
+            return 15;
+        }
+
+        var port = 5057;
+        string? readyFile = null;
+        for (var index = 1; index < args.Length; index++)
+        {
+            switch (args[index])
+            {
+                case "--port":
+                    if (!TryReadValue(args, ref index, out var rawPort) || !int.TryParse(rawPort, out port) || port is < 0 or > 65535)
+                    {
+                        Console.Error.WriteLine("--port requires an integer in range 0-65535");
+                        return 15;
+                    }
+                    break;
+                case "--ready-file":
+                    if (!TryReadValue(args, ref index, out readyFile))
+                        return 15;
+                    break;
+                case "--help":
+                case "-h":
+                    WriteAppHelp();
+                    return 0;
+                default:
+                    Console.Error.WriteLine($"Unknown lab app option: {args[index]}");
+                    return 15;
+            }
+        }
+
+        try
+        {
+            return LabAppServeRunner.Run(port, readyFile);
+        }
+        catch (Exception ex) when (ex is IOException or SocketException or UnauthorizedAccessException or ArgumentException)
+        {
+            Console.Error.WriteLine($"LabApp could not start: {ex.Message}");
+            return 15;
+        }
+    }
+
+    static LabCatalogCommandOptions? ParseCatalogOptions(string[] args)
+    {
+        var corpus = Path.Combine("corpus", "stable", "vertical-slice");
         var outDirectory = Path.Combine("artifacts", "lab", "contract-validation");
         var format = "both";
         string? tag = null;
@@ -149,17 +208,13 @@ internal static class LabCommand
                 case "--fail-on-planned":
                     failOnPlanned = true;
                     break;
-                case "--help":
-                case "-h":
-                    WriteHelp();
-                    return null;
                 default:
                     Console.Error.WriteLine($"Unknown lab option: {args[index]}");
                     return null;
             }
         }
 
-        return new LabCommandOptions(corpus, outDirectory, format, tag, state, failOnPlanned);
+        return new LabCatalogCommandOptions(corpus, outDirectory, format, tag, state, failOnPlanned);
     }
 
     static bool TryReadValue(string[] args, ref int index, out string value)
@@ -205,19 +260,28 @@ internal static class LabCommand
         Console.WriteLine("Usage:");
         Console.WriteLine("  selenium-pw-migrator lab validate [options]");
         Console.WriteLine("  selenium-pw-migrator lab list [options]");
+        Console.WriteLine("  selenium-pw-migrator lab app serve [options]");
         Console.WriteLine();
-        Console.WriteLine("Options:");
-        Console.WriteLine("  --corpus <path>       Corpus root (default: corpus/planning/vertical-slice).");
+        Console.WriteLine("Catalog options:");
+        Console.WriteLine("  --corpus <path>       Corpus root (default: corpus/stable/vertical-slice).");
         Console.WriteLine("  --out <path>          Validation report directory.");
         Console.WriteLine("  --format <value>      text|json|both (default: both).");
         Console.WriteLine("  --tag <tag>           Filter `lab list` by tag.");
         Console.WriteLine("  --state <state>       Filter `lab list` by planned|ready.");
         Console.WriteLine("  --fail-on-planned     Make validation fail until every scenario is READY.");
         Console.WriteLine();
-        Console.WriteLine("Exit code 15 means a lab schema/config/catalog error.");
+        Console.WriteLine("Exit code 15 means a lab schema/config/catalog/app error.");
     }
 
-    sealed record LabCommandOptions(
+    static void WriteAppHelp()
+    {
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  selenium-pw-migrator lab app serve [--port <0-65535>] [--ready-file <path>]");
+        Console.WriteLine();
+        Console.WriteLine("The default port is 5057. Port 0 asks the OS to choose a free port.");
+    }
+
+    sealed record LabCatalogCommandOptions(
         string Corpus,
         string Out,
         string Format,

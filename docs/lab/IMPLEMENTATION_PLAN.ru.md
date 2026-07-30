@@ -9,7 +9,7 @@
 критерием, потому что часть фикстур обязана завершаться как
 `UNSUPPORTED_AS_EXPECTED` или намеренно воспроизводить инфраструктурный сбой.
 
-## Блок 1. Контракт и реестр сценариев — реализован, ожидает проверки
+## Блок 1. Контракт и реестр сценариев — проверен
 
 Состав:
 
@@ -27,12 +27,12 @@
 
 ```powershell
 selenium-pw-migrator lab validate `
-  --corpus ./corpus/planning/vertical-slice `
+  --corpus ./corpus/stable/vertical-slice `
   --out ./artifacts/lab/contracts
 
 selenium-pw-migrator lab list `
-  --corpus ./corpus/planning/vertical-slice `
-  --state planned
+  --corpus ./corpus/stable/vertical-slice `
+  --state ready
 ```
 
 Переход к следующему блоку разрешён, когда решение собирается, все тесты проходят,
@@ -45,7 +45,7 @@ selenium-pw-migrator lab list `
 3. Присылает полный вывод только при ошибке. При успехе достаточно написать:
    `Блок 1 прошёл, продолжай блок 2`.
 
-## Блок 2. Семь настоящих фикстур и LabApp v0
+## Блок 2. Семь настоящих фикстур и LabApp v0 — реализован, ожидает проверки
 
 Цель: заменить плановые записи реальными, детерминированными проектами.
 
@@ -65,8 +65,15 @@ selenium-pw-migrator lab list `
 
 ### Что делает владелец после блока 2
 
-Запускает проверку исходных фикстур на своей машине с установленным браузером. При
-успехе пишет: `Фикстуры и LabApp прошли, продолжай блок 3`.
+На Windows из корня репозитория запускает:
+
+```powershell
+.\scripts\run-lab-block2.ps1
+```
+
+Нужны .NET SDK 10 и установленный Google Chrome. Selenium Manager автоматически
+подбирает ChromeDriver. При успехе пишет:
+`Фикстуры и LabApp прошли, продолжай блок 3`.
 
 ## Блок 3. Source validation и stage-aware orchestration
 
@@ -189,36 +196,33 @@ selenium-pw-migrator lab list `
 Утверждает policy: какие кластеры агент исправляет автоматически, а какие требуют
 ручного решения. После этого полигон считается введённым в постоянную эксплуатацию.
 
-## Проверка блока 1
+## Текущая проверка после блока 2
 
-Из корня репозитория:
+Из корня репозитория на Windows:
 
 ```powershell
-dotnet restore
-dotnet build -c Release --no-restore
-dotnet test Migrator.Tests\Migrator.Tests.csproj -c Release --no-build
+.\scripts\run-lab-block2.ps1
+```
 
+Скрипт выполняет сборку основного решения, запускает `lab app serve`, проверяет `/health`,
+последовательно запускает семь Selenium/NUnit-проектов и завершает командой
+`lab validate --fail-on-planned`.
+
+Отдельная проверка контрактов:
+
+```powershell
 dotnet run --project Migrator.Cli -- lab validate `
-  --corpus ./corpus/planning/vertical-slice `
-  --out ./artifacts/lab/contracts
+  --corpus ./corpus/stable/vertical-slice `
+  --out ./artifacts/lab/contracts `
+  --fail-on-planned
 
 dotnet run --project Migrator.Cli -- lab list `
-  --corpus ./corpus/planning/vertical-slice `
-  --state planned
+  --corpus ./corpus/stable/vertical-slice `
+  --state ready
 ```
 
 Bash:
 
 ```bash
-dotnet restore
-dotnet build -c Release --no-restore
-dotnet test Migrator.Tests/Migrator.Tests.csproj -c Release --no-build
-
-dotnet run --project Migrator.Cli -- lab validate \
-  --corpus ./corpus/planning/vertical-slice \
-  --out ./artifacts/lab/contracts
-
-dotnet run --project Migrator.Cli -- lab list \
-  --corpus ./corpus/planning/vertical-slice \
-  --state planned
+./scripts/run-lab-block2.sh
 ```

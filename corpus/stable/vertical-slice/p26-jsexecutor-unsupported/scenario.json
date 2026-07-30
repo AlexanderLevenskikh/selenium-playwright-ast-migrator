@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p26-jsexecutor-unsupported",
+  "seed": 126,
+  "tags": [
+    "pr",
+    "unsupported",
+    "javascript-executor",
+    "vertical-slice"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "IJavaScriptExecutor",
+      "ExecuteScript",
+      "RawStatement"
+    ],
+    "migrationFiles": [
+      "Tests/JsExecutorTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/JsExecutorTests.cs"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/unsupported",
+        "model": "button-status"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "diagnostics": {
+      "mustContainAny": [
+        "MANUAL_REVIEW",
+        "RAW_STATEMENT"
+      ]
+    },
+    "mustNot": {
+      "corruptNeighbourCode": true
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 3,
+    "unmappedMax": 0,
+    "unsupportedMax": 1,
+    "warningsMax": 1
+  },
+  "expected": {
+    "status": "UNSUPPORTED_AS_EXPECTED"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "02-fixtures-labapp",
+    "notes": "Ready source fixture; target migration is expected to classify ExecuteScript as unsupported without corrupting the neighbour click.",
+    "contentHash": "sha256:cf7f598a8996fe824c31850b600d8c6ea38d945a90b5f1fbd834db6d338a5396"
+  }
+}

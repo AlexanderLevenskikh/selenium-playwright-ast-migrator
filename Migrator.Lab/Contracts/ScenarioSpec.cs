@@ -23,10 +23,12 @@ public sealed record ScenarioSourceSpec
     public string TestFramework { get; init; } = "";
     public string Template { get; init; } = "";
     public string[] Features { get; init; } = Array.Empty<string>();
+    public string[] MigrationFiles { get; init; } = Array.Empty<string>();
 }
 
 public sealed record ScenarioProjectSpec
 {
+    public string EntryProject { get; init; } = "";
     public string[] Files { get; init; } = Array.Empty<string>();
     public string[] References { get; init; } = Array.Empty<string>();
     public ScenarioMsBuildSpec MsBuild { get; init; } = new();
@@ -41,6 +43,7 @@ public sealed record ScenarioMsBuildSpec
 
 public sealed record ScenarioAppSpec
 {
+    public string BaseUrlEnvironmentVariable { get; init; } = "MIGRATOR_LAB_APP_URL";
     public JsonElement[] Pages { get; init; } = Array.Empty<JsonElement>();
 }
 
@@ -71,4 +74,5 @@ public sealed record ScenarioImplementationSpec
     public ScenarioImplementationState State { get; init; } = ScenarioImplementationState.Planned;
     public string Block { get; init; } = "";
     public string Notes { get; init; } = "";
+    public string ContentHash { get; init; } = "";
 }

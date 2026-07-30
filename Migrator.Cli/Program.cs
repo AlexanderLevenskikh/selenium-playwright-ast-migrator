@@ -98,7 +98,7 @@ if (mode == "memory")
 
 if (mode == "lab")
 {
-    Console.WriteLine("Use the direct lab command family: selenium-pw-migrator lab validate|list");
+    Console.WriteLine("Use the direct lab command family: selenium-pw-migrator lab validate|list|app serve");
     return LabCommand.Run(Array.Empty<string>());
 }
 

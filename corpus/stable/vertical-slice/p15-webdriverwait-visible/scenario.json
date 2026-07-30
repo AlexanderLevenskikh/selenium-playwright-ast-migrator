@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p15-webdriverwait-visible",
+  "seed": 115,
+  "tags": [
+    "waits",
+    "runtime-pass",
+    "real-failure",
+    "vertical-slice"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "WebDriverWait",
+      "Until",
+      "Displayed",
+      "Click"
+    ],
+    "migrationFiles": [
+      "Tests/WaitVisibleTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/WaitVisibleTests.cs"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/wait",
+        "model": "delayed-visibility",
+        "delayMs": 250,
+        "events": [
+          "wait:visible"
+        ]
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "wait:visible"
+      ],
+      "timeoutMaxMs": 3000
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "02-fixtures-labapp",
+    "notes": "Ready deterministic visible-wait fixture backed by a 250 ms LabApp transition.",
+    "contentHash": "sha256:ffa825ef7257607ea27911ad5dc607a74b8298bf3e3bf122b3cc577d85e48c29"
+  }
+}

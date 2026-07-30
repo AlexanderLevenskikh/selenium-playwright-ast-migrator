@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p09-helper-extension-mapping",
+  "seed": 109,
+  "tags": [
+    "helpers",
+    "extensions",
+    "real-failure",
+    "vertical-slice"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "multi-file",
+    "features": [
+      "ExtensionMethod",
+      "FindElement",
+      "Click",
+      "WebDriverWait"
+    ],
+    "migrationFiles": [
+      "Helpers/ElementExtensions.cs",
+      "Tests/HelperTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Helpers/ElementExtensions.cs",
+      "Tests/HelperTests.cs"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/helper",
+        "model": "button-status",
+        "events": [
+          "helper:click"
+        ]
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "helper:click"
+      ],
+      "forbiddenDiagnostics": [
+        "HELPER_METHOD_REQUIRES_MAPPING"
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "02-fixtures-labapp",
+    "notes": "Ready helper-mapping fixture; helper body is part of the migration input.",
+    "contentHash": "sha256:32dcc481b7635b13f88556d0bb12b4924249b3c1a775fe0e86e37583faf6811d"
+  }
+}

@@ -15,6 +15,7 @@ public sealed class LabCliContractTests
         Assert.Contains("string.Equals(args[0], \"lab\"", program);
         Assert.Contains("selenium-pw-migrator lab validate", command);
         Assert.Contains("selenium-pw-migrator lab list", command);
+        Assert.Contains("selenium-pw-migrator lab app serve", command);
         Assert.Contains("Migrator.Lab\\Migrator.Lab.csproj", project);
         Assert.DoesNotContain("<OutputType>Exe</OutputType>", Read("Migrator.Lab/Migrator.Lab.csproj"));
     }
@@ -29,6 +30,8 @@ public sealed class LabCliContractTests
         Assert.Contains("lab-scenario/v1", schema);
         Assert.Contains("UNSUPPORTED_AS_EXPECTED", schema);
         Assert.Contains("INFRASTRUCTURE_FAILURE", schema);
+        Assert.Contains("migrationFiles", schema);
+        Assert.Contains("contentHash", schema);
     }
 
     static string Read(string relativePath) => File.ReadAllText(Path.Combine(FindRepositoryRoot(), relativePath.Replace('/', Path.DirectorySeparatorChar)));

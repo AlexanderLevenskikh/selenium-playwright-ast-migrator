@@ -63,8 +63,6 @@ public static partial class ScenarioSpecLoader
         return new ScenarioCatalogEntry(fullPath, directory, scenario, issues.ToArray());
     }
 
-
-
     static ScenarioSpec NormalizeNullValues(ScenarioSpec scenario, List<ScenarioValidationIssue> issues)
     {
         var source = scenario.Source;
@@ -119,14 +117,24 @@ public static partial class ScenarioSpecLoader
         return scenario with
         {
             Tags = scenario.Tags ?? Array.Empty<string>(),
-            Source = source with { Features = source.Features ?? Array.Empty<string>() },
+            Source = source with
+            {
+                Features = source.Features ?? Array.Empty<string>(),
+                MigrationFiles = source.MigrationFiles ?? Array.Empty<string>()
+            },
             Project = project with
             {
                 Files = project.Files ?? Array.Empty<string>(),
                 References = project.References ?? Array.Empty<string>(),
                 MsBuild = project.MsBuild ?? new ScenarioMsBuildSpec()
             },
-            App = app with { Pages = app.Pages ?? Array.Empty<JsonElement>() },
+            App = app with
+            {
+                BaseUrlEnvironmentVariable = string.IsNullOrWhiteSpace(app.BaseUrlEnvironmentVariable)
+                    ? "MIGRATOR_LAB_APP_URL"
+                    : app.BaseUrlEnvironmentVariable,
+                Pages = app.Pages ?? Array.Empty<JsonElement>()
+            },
             Oracle = oracle,
             QualityBudget = qualityBudget,
             Expected = expected,
@@ -154,8 +162,8 @@ public static partial class ScenarioSpecLoader
             ValidateObject(
                 source,
                 "$.source",
-                required: new[] { "language", "testFramework", "template", "features" },
-                allowed: new[] { "language", "testFramework", "template", "features" },
+                required: new[] { "language", "testFramework", "template", "features", "migrationFiles" },
+                allowed: new[] { "language", "testFramework", "template", "features", "migrationFiles" },
                 issues);
         }
 
@@ -164,8 +172,8 @@ public static partial class ScenarioSpecLoader
             ValidateObject(
                 project,
                 "$.project",
-                required: new[] { "files" },
-                allowed: new[] { "files", "references", "msBuild" },
+                required: new[] { "entryProject", "files" },
+                allowed: new[] { "entryProject", "files", "references", "msBuild" },
                 issues);
 
             if (TryGetObject(project, "msBuild", "$.project.msBuild", issues, out var msBuild))
@@ -184,8 +192,8 @@ public static partial class ScenarioSpecLoader
             ValidateObject(
                 app,
                 "$.app",
-                required: new[] { "pages" },
-                allowed: new[] { "pages" },
+                required: new[] { "baseUrlEnvironmentVariable", "pages" },
+                allowed: new[] { "baseUrlEnvironmentVariable", "pages" },
                 issues);
         }
 
@@ -215,7 +223,7 @@ public static partial class ScenarioSpecLoader
                 implementation,
                 "$.implementation",
                 required: new[] { "state", "block" },
-                allowed: new[] { "state", "block", "notes" },
+                allowed: new[] { "state", "block", "notes", "contentHash" },
                 issues);
         }
     }
@@ -289,15 +297,118 @@ public static partial class ScenarioSpecLoader
         if (scenario.Project.Files.Length == 0)
             issues.Add(Error("PROJECT_FILES_MISSING", "project.files must contain at least one file."));
 
+        if (scenario.Source.MigrationFiles.Length == 0)
+            issues.Add(Error("MIGRATION_FILES_MISSING", "source.migrationFiles must contain at least one source file."));
+
         ValidateRelativePaths("project.files", scenario.Project.Files, scenarioDirectory, scenario.Implementation.State, issues);
+        ValidateRelativePaths("project.entryProject", new[] { scenario.Project.EntryProject }, scenarioDirectory, ScenarioImplementationState.Planned, issues);
+        ValidateRelativePaths("source.migrationFiles", scenario.Source.MigrationFiles, scenarioDirectory, ScenarioImplementationState.Planned, issues);
         ValidateRelativePaths("project.references", scenario.Project.References, scenarioDirectory, ScenarioImplementationState.Planned, issues);
+        ValidateMigrationFiles(scenario, issues);
+        ValidateEntryProject(scenario, issues);
+        ValidateProjectReferences(scenario, issues);
         ValidateBudgets(scenario.QualityBudget, issues);
+
+        if (string.IsNullOrWhiteSpace(scenario.App.BaseUrlEnvironmentVariable))
+            issues.Add(Error("APP_BASE_URL_ENV_MISSING", "app.baseUrlEnvironmentVariable is required."));
 
         if (scenario.App.Pages.Length == 0 && scenario.Expected.Status is ScenarioStatus.Pass or ScenarioStatus.PassWithWarnings)
             issues.Add(Warning("APP_PAGES_EMPTY", "Passing runtime scenarios should define at least one app page before they become ready."));
 
         if (string.IsNullOrWhiteSpace(scenario.Implementation.Block))
             issues.Add(Warning("IMPLEMENTATION_BLOCK_MISSING", "implementation.block should identify the delivery block that owns this scenario."));
+
+        ValidateReadyFileInventory(scenario, scenarioDirectory, issues);
+        ValidateReadyContentHash(scenario, scenarioDirectory, issues);
+    }
+
+    static void ValidateMigrationFiles(ScenarioSpec scenario, List<ScenarioValidationIssue> issues)
+    {
+        var projectFiles = scenario.Project.Files.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var migrationFile in scenario.Source.MigrationFiles)
+        {
+            if (!projectFiles.Contains(migrationFile))
+                issues.Add(Error("MIGRATION_FILE_NOT_IN_PROJECT", $"source.migrationFiles entry is not listed in project.files: {migrationFile}"));
+
+            if (!string.Equals(Path.GetExtension(migrationFile), ".cs", StringComparison.OrdinalIgnoreCase))
+                issues.Add(Error("MIGRATION_FILE_NOT_CSHARP", $"source.migrationFiles must contain C# source files: {migrationFile}"));
+        }
+    }
+
+
+    static void ValidateEntryProject(ScenarioSpec scenario, List<ScenarioValidationIssue> issues)
+    {
+        if (string.IsNullOrWhiteSpace(scenario.Project.EntryProject))
+        {
+            issues.Add(Error("ENTRY_PROJECT_MISSING", "project.entryProject is required."));
+            return;
+        }
+
+        if (!scenario.Project.Files.Contains(scenario.Project.EntryProject, StringComparer.OrdinalIgnoreCase))
+            issues.Add(Error("ENTRY_PROJECT_NOT_IN_FILES", $"project.entryProject is not listed in project.files: {scenario.Project.EntryProject}"));
+
+        if (!string.Equals(Path.GetExtension(scenario.Project.EntryProject), ".csproj", StringComparison.OrdinalIgnoreCase))
+            issues.Add(Error("ENTRY_PROJECT_NOT_CSPROJ", $"project.entryProject must reference a .csproj file: {scenario.Project.EntryProject}"));
+    }
+
+    static void ValidateProjectReferences(ScenarioSpec scenario, List<ScenarioValidationIssue> issues)
+    {
+        foreach (var reference in scenario.Project.References)
+        {
+            if (!scenario.Project.Files.Contains(reference, StringComparer.OrdinalIgnoreCase))
+                issues.Add(Error("PROJECT_REFERENCE_NOT_IN_FILES", $"project.references entry is not listed in project.files: {reference}"));
+
+            if (!string.Equals(Path.GetExtension(reference), ".csproj", StringComparison.OrdinalIgnoreCase))
+                issues.Add(Error("PROJECT_REFERENCE_NOT_CSPROJ", $"project.references must contain .csproj paths: {reference}"));
+        }
+    }
+
+
+    static void ValidateReadyFileInventory(ScenarioSpec scenario, string scenarioDirectory, List<ScenarioValidationIssue> issues)
+    {
+        if (scenario.Implementation.State != ScenarioImplementationState.Ready || !Directory.Exists(scenarioDirectory))
+            return;
+
+        var declared = scenario.Project.Files.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var actual = Directory.EnumerateFiles(scenarioDirectory, "*", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(scenarioDirectory, path).Replace('\\', '/'))
+            .Where(path => !string.Equals(path, "scenario.json", StringComparison.OrdinalIgnoreCase))
+            .Where(path => !path.Split('/').Any(part =>
+                part.Equals("bin", StringComparison.OrdinalIgnoreCase)
+                || part.Equals("obj", StringComparison.OrdinalIgnoreCase)
+                || part.Equals("TestResults", StringComparison.OrdinalIgnoreCase)
+                || part.Equals(".vs", StringComparison.OrdinalIgnoreCase)))
+            .Where(path => !string.Equals(Path.GetFileName(path), ".DS_Store", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        foreach (var path in actual.Where(path => !declared.Contains(path)))
+            issues.Add(Error("READY_PROJECT_FILE_UNLISTED", $"Ready scenario contains an unlisted fixture file: {path}"));
+    }
+
+    static void ValidateReadyContentHash(ScenarioSpec scenario, string scenarioDirectory, List<ScenarioValidationIssue> issues)
+    {
+        if (scenario.Implementation.State != ScenarioImplementationState.Ready)
+            return;
+
+        if (!ScenarioContentHasher.IsWellFormed(scenario.Implementation.ContentHash))
+        {
+            issues.Add(Error("READY_CONTENT_HASH_INVALID", "Ready scenarios require implementation.contentHash in lowercase sha256:<64 hex> form."));
+            return;
+        }
+
+        if (scenario.Project.Files.Any(path => !File.Exists(Path.Combine(scenarioDirectory, path.Replace('/', Path.DirectorySeparatorChar)))))
+            return;
+
+        try
+        {
+            var actual = ScenarioContentHasher.Compute(scenarioDirectory, scenario.Project.Files);
+            if (!string.Equals(actual, scenario.Implementation.ContentHash, StringComparison.Ordinal))
+                issues.Add(Error("READY_CONTENT_HASH_MISMATCH", $"Ready scenario content changed. Expected {scenario.Implementation.ContentHash}, actual {actual}."));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            issues.Add(Error("READY_CONTENT_HASH_FAILED", $"Could not hash ready scenario files: {ex.Message}"));
+        }
     }
 
     static void ValidateBudgets(ScenarioQualityBudget budget, List<ScenarioValidationIssue> issues)

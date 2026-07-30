@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p01-basic-id-login",
+  "seed": 101,
+  "tags": [
+    "smoke",
+    "selectors",
+    "runtime-pass",
+    "vertical-slice"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "FindElement",
+      "By.Id",
+      "SendKeys",
+      "Click",
+      "Assert.That"
+    ],
+    "migrationFiles": [
+      "Tests/LoginTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/LoginTests.cs"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/login",
+        "model": "form",
+        "elements": [
+          "username",
+          "password",
+          "login",
+          "result"
+        ],
+        "events": [
+          "auth:attempt",
+          "auth:success"
+        ]
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "auth:attempt",
+        "auth:success"
+      ],
+      "dom": [
+        {
+          "selector": "#result",
+          "text": "ok",
+          "visible": true
+        }
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "02-fixtures-labapp",
+    "notes": "Ready happy-path source/runtime fixture backed by LabApp /login.",
+    "contentHash": "sha256:eebb45cee088a651c40eb3ac3b737af3b392d7294089eb0007540d71d56a2cb0"
+  }
+}

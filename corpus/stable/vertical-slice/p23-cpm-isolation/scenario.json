@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p23-cpm-isolation",
+  "seed": 123,
+  "tags": [
+    "pr",
+    "msbuild",
+    "cpm",
+    "verify-project",
+    "vertical-slice"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "cpm-project",
+    "features": [
+      "Directory.Packages.props",
+      "CentralPackageManagement",
+      "VerifyProject"
+    ],
+    "migrationFiles": [
+      "Tests/SmokeTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Directory.Packages.props",
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/SmokeTests.cs"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/smoke",
+        "model": "button-status"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "diagnostics": {
+      "mustNotContain": [
+        "NU1008",
+        "NU1015"
+      ]
+    },
+    "semantic": {
+      "harnessEvidence": "cpm-isolated"
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "02-fixtures-labapp",
+    "notes": "Ready positive CPM fixture; later blocks inspect verify-project harness evidence.",
+    "contentHash": "sha256:52ac65e7ee658260c145c27a3a4b90de66810a3e33edfcda09bc69977fc9ae78"
+  }
+}
