@@ -14,7 +14,11 @@ public sealed class LabCliContractTests
 
         Assert.Contains("string.Equals(args[0], \"lab\"", program);
         Assert.Contains("selenium-pw-migrator lab run", command);
+        Assert.Contains("selenium-pw-migrator lab replay", command);
+        Assert.Contains("selenium-pw-migrator lab baseline", command);
+        Assert.Contains("selenium-pw-migrator lab diff", command);
         Assert.Contains("LabRunCoordinator", command);
+        Assert.Contains("LabDiffEngine", command);
         Assert.Contains("--suite <name>", command);
         Assert.Contains("selenium-pw-migrator lab validate", command);
         Assert.Contains("selenium-pw-migrator lab list", command);

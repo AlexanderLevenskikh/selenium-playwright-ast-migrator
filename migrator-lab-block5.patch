@@ -1,0 +1,2071 @@
+diff --git a/Migrator.Cli/Commands/LabCommand.cs b/Migrator.Cli/Commands/LabCommand.cs
+index a394eb3..4cdd0ff 100644
+--- a/Migrator.Cli/Commands/LabCommand.cs
++++ b/Migrator.Cli/Commands/LabCommand.cs
+@@ -13,7 +13,7 @@ internal static class LabCommand
+         if (args.Length == 0 || IsHelp(args[0]))
+         {
+             WriteHelp();
+-            return 0;
++            return LabExitCodes.Accepted;
+         }
+ 
+         var subcommand = args[0].Trim().ToLowerInvariant();
+@@ -21,16 +21,22 @@ internal static class LabCommand
+             return RunApp(args.Skip(1).ToArray());
+         if (subcommand == "run")
+             return RunSuite(args.Skip(1).ToArray());
++        if (subcommand == "replay")
++            return RunReplay(args.Skip(1).ToArray());
++        if (subcommand == "baseline")
++            return RunBaseline(args.Skip(1).ToArray());
++        if (subcommand == "diff")
++            return RunDiff(args.Skip(1).ToArray());
+ 
+         if (args.Skip(1).Any(IsHelp))
+         {
+             WriteHelp();
+-            return 0;
++            return LabExitCodes.Accepted;
+         }
+ 
+         var options = ParseCatalogOptions(args.Skip(1).ToArray());
+         if (options == null)
+-            return 15;
++            return LabExitCodes.LabError;
+ 
+         return subcommand switch
+         {
+@@ -45,19 +51,54 @@ internal static class LabCommand
+         if (args.Any(IsHelp))
+         {
+             WriteRunHelp();
+-            return 0;
++            return LabExitCodes.Accepted;
+         }
+ 
+         var options = ParseRunOptions(args);
++        return options == null ? LabExitCodes.LabError : ExecuteRun(options, "run");
++    }
++
++    static int RunReplay(string[] args)
++    {
++        if (args.Any(IsHelp))
++        {
++            WriteReplayHelp();
++            return LabExitCodes.Accepted;
++        }
++
++        var options = ParseRunOptions(args, allowSuiteOption: false, defaultArtifactsRoot: Path.Combine("artifacts", "lab", "replay"));
+         if (options == null)
+-            return 15;
++            return LabExitCodes.LabError;
++        if (options.ProjectIds.Length != 1)
++        {
++            Console.Error.WriteLine("lab replay requires exactly one --project <id>.");
++            return LabExitCodes.LabError;
++        }
++        if (!string.IsNullOrWhiteSpace(options.Tag))
++        {
++            Console.Error.WriteLine("lab replay does not accept --tag; select exactly one --project.");
++            return LabExitCodes.LabError;
++        }
+ 
++        var explicitOut = args.Contains("--out", StringComparer.Ordinal);
++        options = options with
++        {
++            Suite = "replay",
++            ArtifactsRoot = explicitOut
++                ? options.ArtifactsRoot
++                : Path.Combine(options.ArtifactsRoot, options.ProjectIds[0])
++        };
++        return ExecuteRun(options, "replay");
++    }
++
++    static int ExecuteRun(LabRunOptions options, string operation)
++    {
+         try
+         {
+             var coordinator = new LabRunCoordinator();
+             var result = coordinator.RunAsync(options).GetAwaiter().GetResult();
+ 
+-            Console.WriteLine($"Migrator Lab run: {result.Summary.Projects} project(s).");
++            Console.WriteLine($"Migrator Lab {operation}: {result.Summary.Projects} project(s).");
+             foreach (var project in result.Projects)
+             {
+                 Console.WriteLine($"  {project.Id}: {ToContractName(project.ActualStatus)} " +
+@@ -69,20 +110,158 @@ internal static class LabCommand
+         catch (LabRunConfigurationException ex)
+         {
+             Console.Error.WriteLine(ex.Message);
+-            return 15;
++            return LabExitCodes.LabError;
+         }
+         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+         {
+-            Console.Error.WriteLine($"Lab run failed before a suite report could be completed: {ex.Message}");
+-            return 15;
++            Console.Error.WriteLine($"Lab {operation} failed before a suite report could be completed: {ex.Message}");
++            return LabExitCodes.LabError;
+         }
+     }
+ 
+-    static LabRunOptions? ParseRunOptions(string[] args)
++    static int RunBaseline(string[] args)
++    {
++        if (args.Any(IsHelp))
++        {
++            WriteBaselineHelp();
++            return LabExitCodes.Accepted;
++        }
++
++        string? input = null;
++        var output = Path.Combine("artifacts", "lab", "baselines", "main");
++        var label = "main";
++        for (var index = 0; index < args.Length; index++)
++        {
++            switch (args[index])
++            {
++                case "--input":
++                    if (!TryReadValue(args, ref index, out input))
++                        return LabExitCodes.LabError;
++                    break;
++                case "--out":
++                    if (!TryReadValue(args, ref index, out output))
++                        return LabExitCodes.LabError;
++                    break;
++                case "--label":
++                    if (!TryReadValue(args, ref index, out label))
++                        return LabExitCodes.LabError;
++                    break;
++                default:
++                    Console.Error.WriteLine($"Unknown lab baseline option: {args[index]}");
++                    return LabExitCodes.LabError;
++            }
++        }
++
++        if (string.IsNullOrWhiteSpace(input))
++        {
++            Console.Error.WriteLine("lab baseline requires --input <lab run directory|lab-summary.json>.");
++            return LabExitCodes.LabError;
++        }
++
++        try
++        {
++            var run = LabRunArtifactLoader.LoadRun(input);
++            var unexpected = run.Projects
++                .Where(project => project.ActualStatus != project.ExpectedStatus)
++                .Select(project => $"{project.Id}: expected {ToContractName(project.ExpectedStatus)}, actual {ToContractName(project.ActualStatus)}")
++                .ToArray();
++            if (unexpected.Length > 0)
++            {
++                Console.Error.WriteLine("Refusing to create a baseline from a run with unexpected scenario outcomes:");
++                foreach (var item in unexpected)
++                    Console.Error.WriteLine($"  {item}");
++                return LabExitCodes.Regression;
++            }
++
++            var baseline = LabBaselineService.Create(run, label);
++            LabBaselineReportWriter.Write(baseline, output);
++            Console.WriteLine($"Migrator Lab baseline: {baseline.Projects.Length} project(s), label '{baseline.Label}'.");
++            Console.WriteLine($"Baseline: {Path.GetFullPath(output)}");
++            return LabExitCodes.Accepted;
++        }
++        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
++        {
++            Console.Error.WriteLine($"Lab baseline failed: {ex.Message}");
++            return LabExitCodes.LabError;
++        }
++    }
++
++    static int RunDiff(string[] args)
++    {
++        if (args.Any(IsHelp))
++        {
++            WriteDiffHelp();
++            return LabExitCodes.Accepted;
++        }
++
++        string? baselinePath = null;
++        string? currentPath = null;
++        var output = Path.Combine("artifacts", "lab", "diff");
++        var durationPercent = 20d;
++        for (var index = 0; index < args.Length; index++)
++        {
++            switch (args[index])
++            {
++                case "--baseline":
++                    if (!TryReadValue(args, ref index, out baselinePath))
++                        return LabExitCodes.LabError;
++                    break;
++                case "--current":
++                    if (!TryReadValue(args, ref index, out currentPath))
++                        return LabExitCodes.LabError;
++                    break;
++                case "--out":
++                    if (!TryReadValue(args, ref index, out output))
++                        return LabExitCodes.LabError;
++                    break;
++                case "--duration-regression-percent":
++                    if (!TryReadValue(args, ref index, out var rawPercent)
++                        || !double.TryParse(rawPercent, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out durationPercent)
++                        || durationPercent < 0)
++                    {
++                        Console.Error.WriteLine("--duration-regression-percent requires a non-negative number using '.' as decimal separator.");
++                        return LabExitCodes.LabError;
++                    }
++                    break;
++                default:
++                    Console.Error.WriteLine($"Unknown lab diff option: {args[index]}");
++                    return LabExitCodes.LabError;
++            }
++        }
++
++        if (string.IsNullOrWhiteSpace(baselinePath) || string.IsNullOrWhiteSpace(currentPath))
++        {
++            Console.Error.WriteLine("lab diff requires --baseline <path> and --current <path>.");
++            return LabExitCodes.LabError;
++        }
++
++        try
++        {
++            var baseline = LabRunArtifactLoader.LoadBaseline(baselinePath);
++            var current = LabRunArtifactLoader.LoadRun(currentPath);
++            var diff = LabDiffEngine.Compare(baseline, current, baselinePath, currentPath, durationPercent);
++            LabDiffReportWriter.Write(diff, output);
++            Console.WriteLine($"Migrator Lab diff: {diff.Summary.Regressions} regression(s), {diff.Summary.Improvements} improvement(s), {diff.Summary.Unchanged} unchanged.");
++            foreach (var project in diff.Projects.Where(project => project.Kind != LabDiffKind.Unchanged))
++                Console.WriteLine($"  {project.Id}: {ToContractName(project.Kind)} — {string.Join(" ", project.Reasons)}");
++            Console.WriteLine($"Reports: {Path.GetFullPath(output)}");
++            return diff.Summary.Regressions > 0 ? LabExitCodes.Regression : LabExitCodes.Accepted;
++        }
++        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
++        {
++            Console.Error.WriteLine($"Lab diff failed: {ex.Message}");
++            return LabExitCodes.LabError;
++        }
++    }
++
++    static LabRunOptions? ParseRunOptions(
++        string[] args,
++        bool allowSuiteOption = true,
++        string? defaultArtifactsRoot = null)
+     {
+         var suite = "vertical";
+         var corpus = Path.Combine("corpus", "stable", "vertical-slice");
+-        var outDirectory = Path.Combine("artifacts", "lab", "run");
++        var outDirectory = defaultArtifactsRoot ?? Path.Combine("artifacts", "lab", "run");
+         var projectIds = new List<string>();
+         string? tag = null;
+         var timeout = TimeSpan.FromMinutes(10);
+@@ -95,6 +274,11 @@ internal static class LabCommand
+             switch (args[index])
+             {
+                 case "--suite":
++                    if (!allowSuiteOption)
++                    {
++                        Console.Error.WriteLine("--suite is not valid for lab replay.");
++                        return null;
++                    }
+                     if (!TryReadValue(args, ref index, out suite))
+                         return null;
+                     suite = suite.Trim().ToLowerInvariant();
+@@ -208,7 +392,7 @@ internal static class LabCommand
+         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+         {
+             Console.Error.WriteLine($"Lab validation could not read the corpus or write reports: {ex.Message}");
+-            return 15;
++            return LabExitCodes.LabError;
+         }
+ 
+         Console.WriteLine($"Migrator Lab contract validation: {result.ValidCount} valid, {result.InvalidCount} invalid, {result.ReadyCount} ready, {result.PlannedCount} planned.");
+@@ -217,16 +401,16 @@ internal static class LabCommand
+         if (result.HasErrors)
+         {
+             Console.Error.WriteLine("Lab contract validation failed. See lab-contract-validation.md/json.");
+-            return 15;
++            return LabExitCodes.LabError;
+         }
+ 
+         if (options.FailOnPlanned && result.PlannedCount > 0)
+         {
+             Console.Error.WriteLine($"Lab contract validation found {result.PlannedCount} planned scenario(s); --fail-on-planned requires all scenarios to be READY.");
+-            return 15;
++            return LabExitCodes.LabError;
+         }
+ 
+-        return 0;
++        return LabExitCodes.Accepted;
+     }
+ 
+     static int RunList(LabCatalogCommandOptions options)
+@@ -239,7 +423,7 @@ internal static class LabCommand
+         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+         {
+             Console.Error.WriteLine($"Lab list could not read the corpus: {ex.Message}");
+-            return 15;
++            return LabExitCodes.LabError;
+         }
+ 
+         var entries = result.Entries
+@@ -263,7 +447,7 @@ internal static class LabCommand
+         foreach (var issue in result.CatalogIssues)
+             Console.Error.WriteLine($"{issue.Severity} {issue.Code}: {issue.Message}");
+ 
+-        return result.HasErrors ? 15 : 0;
++        return result.HasErrors ? LabExitCodes.LabError : LabExitCodes.Accepted;
+     }
+ 
+     static int RunApp(string[] args)
+@@ -271,7 +455,7 @@ internal static class LabCommand
+         if (args.Length == 0 || IsHelp(args[0]))
+         {
+             WriteAppHelp();
+-            return 0;
++            return LabExitCodes.Accepted;
+         }
+ 
+         var action = args[0].Trim().ToLowerInvariant();
+@@ -279,7 +463,7 @@ internal static class LabCommand
+         {
+             Console.Error.WriteLine($"Unknown lab app action: {action}");
+             WriteAppHelp();
+-            return 15;
++            return LabExitCodes.LabError;
+         }
+ 
+         var port = 5057;
+@@ -292,20 +476,20 @@ internal static class LabCommand
+                     if (!TryReadValue(args, ref index, out var rawPort) || !int.TryParse(rawPort, out port) || port is < 0 or > 65535)
+                     {
+                         Console.Error.WriteLine("--port requires an integer in range 0-65535");
+-                        return 15;
++                        return LabExitCodes.LabError;
+                     }
+                     break;
+                 case "--ready-file":
+                     if (!TryReadValue(args, ref index, out readyFile))
+-                        return 15;
++                        return LabExitCodes.LabError;
+                     break;
+                 case "--help":
+                 case "-h":
+                     WriteAppHelp();
+-                    return 0;
++                    return LabExitCodes.Accepted;
+                 default:
+                     Console.Error.WriteLine($"Unknown lab app option: {args[index]}");
+-                    return 15;
++                    return LabExitCodes.LabError;
+             }
+         }
+ 
+@@ -316,7 +500,7 @@ internal static class LabCommand
+         catch (Exception ex) when (ex is IOException or SocketException or UnauthorizedAccessException or ArgumentException)
+         {
+             Console.Error.WriteLine($"LabApp could not start: {ex.Message}");
+-            return 15;
++            return LabExitCodes.LabError;
+         }
+     }
+ 
+@@ -395,7 +579,7 @@ internal static class LabCommand
+     {
+         Console.Error.WriteLine($"Unknown lab subcommand: {subcommand}");
+         WriteHelp();
+-        return 15;
++        return LabExitCodes.LabError;
+     }
+ 
+     static bool IsHelp(string value) => value is "help" or "--help" or "-h";
+@@ -420,6 +604,9 @@ internal static class LabCommand
+         Console.WriteLine();
+         Console.WriteLine("Usage:");
+         Console.WriteLine("  selenium-pw-migrator lab run [options]");
++        Console.WriteLine("  selenium-pw-migrator lab replay --project <id> [options]");
++        Console.WriteLine("  selenium-pw-migrator lab baseline --input <run> [options]");
++        Console.WriteLine("  selenium-pw-migrator lab diff --baseline <path> --current <run> [options]");
+         Console.WriteLine("  selenium-pw-migrator lab validate [options]");
+         Console.WriteLine("  selenium-pw-migrator lab list [options]");
+         Console.WriteLine("  selenium-pw-migrator lab app serve [options]");
+@@ -450,7 +637,35 @@ internal static class LabCommand
+         Console.WriteLine("  --configuration <name>   Source and target build configuration (default: Release).");
+         Console.WriteLine("  --dotnet <path>          dotnet host used for source, verify-project harness, and target runtime.");
+         Console.WriteLine("  --keep-workspaces        Preserve copied source workspaces for diagnostics.");
+-        Console.WriteLine("  Runtime output includes project-verify reports, target TRX, semantic diff, quality budgets, and failure-only trace/screenshot artifacts.");
++        Console.WriteLine("  Runtime output includes JSON/Markdown/HTML suite reports, project-verify reports, target TRX, semantic diff, quality budgets, and failure-only trace/screenshot artifacts.");
++    }
++
++    static void WriteReplayHelp()
++    {
++        Console.WriteLine("Usage:");
++        Console.WriteLine("  selenium-pw-migrator lab replay --project <id> [options]");
++        Console.WriteLine();
++        Console.WriteLine("Runs exactly one READY scenario through the same source, migration, verify-project, Playwright runtime, quality, and oracle pipeline as lab run.");
++        Console.WriteLine("Options are the same as lab run except --suite and --tag. Default output: artifacts/lab/replay/<id>.");
++    }
++
++    static void WriteBaselineHelp()
++    {
++        Console.WriteLine("Usage:");
++        Console.WriteLine("  selenium-pw-migrator lab baseline --input <run directory|lab-summary.json> [--out <directory>] [--label <name>]");
++        Console.WriteLine();
++        Console.WriteLine("Creates a normalized baseline containing statuses, diagnostics, quality metrics, semantic evidence, duration, and generated-code fingerprints.");
++    }
++
++    static void WriteDiffHelp()
++    {
++        Console.WriteLine("Usage:");
++        Console.WriteLine("  selenium-pw-migrator lab diff --baseline <baseline directory|json> --current <run directory|lab-summary.json> [options]");
++        Console.WriteLine();
++        Console.WriteLine("Options:");
++        Console.WriteLine("  --out <directory>                         Diff report directory (default: artifacts/lab/diff).");
++        Console.WriteLine("  --duration-regression-percent <number>    Performance regression threshold (default: 20).");
++        Console.WriteLine("Produces lab-diff.json, lab-diff.md, and lab-diff.html. Exit code 10 means at least one regression.");
+     }
+ 
+     static void WriteAppHelp()
+diff --git a/Migrator.Lab/Contracts/LabComparisonModels.cs b/Migrator.Lab/Contracts/LabComparisonModels.cs
+new file mode 100644
+index 0000000..09bf483
+--- /dev/null
++++ b/Migrator.Lab/Contracts/LabComparisonModels.cs
+@@ -0,0 +1,118 @@
++namespace Migrator.Lab.Contracts;
++
++public static class LabExitCodes
++{
++    public const int Accepted = 0;
++    public const int Regression = 10;
++    public const int MigratorFailure = 11;
++    public const int SourceInvalid = 12;
++    public const int InfrastructureFailure = 13;
++    public const int NonDeterministic = 14;
++    public const int LabError = 15;
++}
++
++public enum LabDiffKind
++{
++    Unchanged,
++    Changed,
++    Added,
++    Removed,
++    Improved,
++    Regressed
++}
++
++public sealed record LabBaselineScenario
++{
++    public string Id { get; init; } = "";
++    public ScenarioStatus ExpectedStatus { get; init; }
++    public ScenarioStatus ActualStatus { get; init; }
++    public int SourcePassed { get; init; }
++    public int SourceExpected { get; init; }
++    public int TargetPassed { get; init; }
++    public int TargetExpected { get; init; }
++    public int TodoComments { get; init; }
++    public int UnmappedTargets { get; init; }
++    public int UnsupportedActions { get; init; }
++    public int WarningFiles { get; init; }
++    public bool QualityPassed { get; init; }
++    public bool OraclePassed { get; init; }
++    public string[] DiagnosticCategories { get; init; } = Array.Empty<string>();
++    public string[] Diagnostics { get; init; } = Array.Empty<string>();
++    public string[] SemanticChecks { get; init; } = Array.Empty<string>();
++    public string? GeneratedSemanticHash { get; init; }
++    public long DurationMs { get; init; }
++}
++
++public sealed record LabBaselineSnapshot
++{
++    public string SchemaVersion { get; init; } = "migrator-lab-baseline/v1";
++    public string Label { get; init; } = "main";
++    public DateTimeOffset CreatedAtUtc { get; init; }
++    public DateTimeOffset SourceRunStartedAtUtc { get; init; }
++    public string Suite { get; init; } = "vertical";
++    public string CorpusIdentity { get; init; } = "";
++    public LabBaselineScenario[] Projects { get; init; } = Array.Empty<LabBaselineScenario>();
++}
++
++public sealed record LabMetricDelta
++{
++    public int Baseline { get; init; }
++    public int Current { get; init; }
++    public int Delta => Current - Baseline;
++}
++
++public sealed record LabScenarioDiff
++{
++    public string Id { get; init; } = "";
++    public LabDiffKind Kind { get; init; }
++    public bool IsRegression { get; init; }
++    public bool IsImprovement { get; init; }
++    public ScenarioStatus? BaselineExpectedStatus { get; init; }
++    public ScenarioStatus? CurrentExpectedStatus { get; init; }
++    public ScenarioStatus? BaselineStatus { get; init; }
++    public ScenarioStatus? CurrentStatus { get; init; }
++    public LabMetricDelta TodoComments { get; init; } = new();
++    public LabMetricDelta UnmappedTargets { get; init; } = new();
++    public LabMetricDelta UnsupportedActions { get; init; } = new();
++    public LabMetricDelta WarningFiles { get; init; } = new();
++    public bool? BaselineQualityPassed { get; init; }
++    public bool? CurrentQualityPassed { get; init; }
++    public bool? BaselineOraclePassed { get; init; }
++    public bool? CurrentOraclePassed { get; init; }
++    public string[] AddedDiagnostics { get; init; } = Array.Empty<string>();
++    public string[] RemovedDiagnostics { get; init; } = Array.Empty<string>();
++    public string[] AddedSemanticChecks { get; init; } = Array.Empty<string>();
++    public string[] RemovedSemanticChecks { get; init; } = Array.Empty<string>();
++    public string? BaselineGeneratedSemanticHash { get; init; }
++    public string? CurrentGeneratedSemanticHash { get; init; }
++    public bool GeneratedSemanticChanged { get; init; }
++    public long? BaselineDurationMs { get; init; }
++    public long? CurrentDurationMs { get; init; }
++    public long? DurationDeltaMs { get; init; }
++    public double? DurationDeltaPercent { get; init; }
++    public string[] Reasons { get; init; } = Array.Empty<string>();
++}
++
++public sealed record LabDiffSummary
++{
++    public int Projects { get; init; }
++    public int Unchanged { get; init; }
++    public int Changed { get; init; }
++    public int Added { get; init; }
++    public int Removed { get; init; }
++    public int Improvements { get; init; }
++    public int Regressions { get; init; }
++}
++
++public sealed record LabSuiteDiffResult
++{
++    public string SchemaVersion { get; init; } = "migrator-lab-diff/v1";
++    public DateTimeOffset GeneratedAtUtc { get; init; }
++    public string BaselineLabel { get; init; } = "main";
++    public string BaselinePath { get; init; } = "";
++    public string CurrentPath { get; init; } = "";
++    public double DurationRegressionPercent { get; init; } = 20;
++    public LabDiffSummary Summary { get; init; } = new();
++    public LabScenarioDiff[] Projects { get; init; } = Array.Empty<LabScenarioDiff>();
++    public string[] Issues { get; init; } = Array.Empty<string>();
++}
+diff --git a/Migrator.Lab/Contracts/LabJson.cs b/Migrator.Lab/Contracts/LabJson.cs
+new file mode 100644
+index 0000000..21d81db
+--- /dev/null
++++ b/Migrator.Lab/Contracts/LabJson.cs
+@@ -0,0 +1,17 @@
++using System.Text.Json;
++using System.Text.Json.Serialization;
++
++namespace Migrator.Lab.Contracts;
++
++public static class LabJson
++{
++    public static JsonSerializerOptions Options { get; } = CreateOptions();
++
++    static JsonSerializerOptions CreateOptions() => new()
++    {
++        WriteIndented = true,
++        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
++        PropertyNameCaseInsensitive = true,
++        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseUpper) }
++    };
++}
+diff --git a/Migrator.Lab/Execution/LabBaselineService.cs b/Migrator.Lab/Execution/LabBaselineService.cs
+new file mode 100644
+index 0000000..be104e4
+--- /dev/null
++++ b/Migrator.Lab/Execution/LabBaselineService.cs
+@@ -0,0 +1,51 @@
++using Migrator.Lab.Contracts;
++
++namespace Migrator.Lab.Execution;
++
++public static class LabBaselineService
++{
++    public static LabBaselineSnapshot Create(LabSuiteRunResult run, string label)
++    {
++        ArgumentNullException.ThrowIfNull(run);
++        if (string.IsNullOrWhiteSpace(label))
++            throw new ArgumentException("Baseline label must not be empty.", nameof(label));
++
++        var roots = new[] { run.ArtifactsRoot, run.CorpusRoot };
++        return new LabBaselineSnapshot
++        {
++            Label = label.Trim(),
++            CreatedAtUtc = DateTimeOffset.UtcNow,
++            SourceRunStartedAtUtc = run.StartedAtUtc,
++            Suite = run.Suite,
++            CorpusIdentity = Path.GetFileName(Path.TrimEndingDirectorySeparator(run.CorpusRoot)),
++            Projects = run.Projects
++                .OrderBy(project => project.Id, StringComparer.OrdinalIgnoreCase)
++                .Select(project => new LabBaselineScenario
++                {
++                    Id = project.Id,
++                    ExpectedStatus = project.ExpectedStatus,
++                    ActualStatus = project.ActualStatus,
++                    SourcePassed = project.SourceTests.Passed,
++                    SourceExpected = project.SourceTests.ExpectedPassed,
++                    TargetPassed = project.TargetTests.Passed,
++                    TargetExpected = project.TargetTests.ExpectedPassed,
++                    TodoComments = project.Migration.TodoComments,
++                    UnmappedTargets = project.Migration.UnmappedTargets,
++                    UnsupportedActions = project.Migration.UnsupportedActions,
++                    WarningFiles = project.Migration.Warnings,
++                    QualityPassed = project.Quality.Passed,
++                    OraclePassed = project.Oracle.Passed,
++                    DiagnosticCategories = LabComparisonNormalizer.NormalizeSet(project.ProjectVerify.DiagnosticCategories, roots),
++                    Diagnostics = LabComparisonNormalizer.NormalizeSet(
++                        project.ProjectVerify.Diagnostics
++                            .Concat(project.Migration.Issues)
++                            .Concat(project.Migration.FailedStages.Select(stage => $"migration-stage:{stage}")),
++                        roots),
++                    SemanticChecks = LabComparisonNormalizer.SemanticCheckSignatures(project.Oracle, roots),
++                    GeneratedSemanticHash = LabComparisonNormalizer.ComputeGeneratedSemanticHash(project.Migration.GeneratedFiles),
++                    DurationMs = project.DurationMs
++                })
++                .ToArray()
++        };
++    }
++}
+diff --git a/Migrator.Lab/Execution/LabComparisonNormalizer.cs b/Migrator.Lab/Execution/LabComparisonNormalizer.cs
+new file mode 100644
+index 0000000..38191c2
+--- /dev/null
++++ b/Migrator.Lab/Execution/LabComparisonNormalizer.cs
+@@ -0,0 +1,104 @@
++using System.Security.Cryptography;
++using System.Text;
++using System.Text.RegularExpressions;
++using Migrator.Lab.Contracts;
++
++namespace Migrator.Lab.Execution;
++
++public static partial class LabComparisonNormalizer
++{
++    public static string NormalizeText(string? value, params string?[] roots)
++    {
++        if (string.IsNullOrWhiteSpace(value))
++            return string.Empty;
++
++        var result = value.Replace('\\', '/').Trim();
++        foreach (var root in roots.Where(root => !string.IsNullOrWhiteSpace(root)))
++        {
++            var normalizedRoot = Path.GetFullPath(root!).Replace('\\', '/').TrimEnd('/');
++            result = result.Replace(normalizedRoot, "<ROOT>", StringComparison.OrdinalIgnoreCase);
++        }
++
++        var tempRoot = Path.GetTempPath().Replace('\\', '/').TrimEnd('/');
++        result = result.Replace(tempRoot, "<TEMP>", StringComparison.OrdinalIgnoreCase);
++        result = GuidRegex().Replace(result, "<GUID>");
++        result = IsoTimestampRegex().Replace(result, "<TIMESTAMP>");
++        result = MultiWhitespaceRegex().Replace(result, " ");
++        return result.Trim();
++    }
++
++    public static string[] NormalizeSet(IEnumerable<string> values, params string?[] roots) =>
++        values
++            .Select(value => NormalizeText(value, roots))
++            .Where(value => value.Length > 0)
++            .Distinct(StringComparer.Ordinal)
++            .OrderBy(value => value, StringComparer.Ordinal)
++            .ToArray();
++
++    public static string? ComputeGeneratedSemanticHash(IEnumerable<string> generatedFiles)
++    {
++        var files = generatedFiles
++            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
++            .OrderBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
++            .ThenBy(path => path, StringComparer.OrdinalIgnoreCase)
++            .ToArray();
++        if (files.Length == 0)
++            return null;
++
++        var builder = new StringBuilder();
++        foreach (var path in files)
++        {
++            builder.AppendLine(Path.GetFileName(path).ToLowerInvariant());
++            builder.AppendLine(NormalizeGeneratedSource(File.ReadAllText(path)));
++        }
++
++        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
++        return Convert.ToHexString(bytes).ToLowerInvariant();
++    }
++
++    public static string NormalizeGeneratedSource(string source)
++    {
++        var normalized = source.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
++        var lines = normalized.Split('\n');
++        var output = new List<string>(lines.Length);
++        foreach (var rawLine in lines)
++        {
++            var line = rawLine.Trim();
++            if (line.Length == 0)
++                continue;
++            if (line.StartsWith("//", StringComparison.Ordinal))
++                continue;
++
++            line = GeneratedLineCommentRegex().Replace(line, string.Empty).TrimEnd();
++            line = IsoTimestampRegex().Replace(line, "<TIMESTAMP>");
++            line = GuidRegex().Replace(line, "<GUID>");
++            if (line.Length > 0)
++                output.Add(line);
++        }
++
++        return string.Join('\n', output);
++    }
++
++    public static string[] SemanticCheckSignatures(LabSemanticOracleSummary oracle, params string?[] roots) =>
++        oracle.Checks
++            .Select(check => string.Join('|',
++                NormalizeText(check.Kind, roots),
++                check.Passed ? "PASS" : "FAIL",
++                NormalizeText(check.Expected, roots),
++                NormalizeText(check.Actual, roots)))
++            .Distinct(StringComparer.Ordinal)
++            .OrderBy(value => value, StringComparer.Ordinal)
++            .ToArray();
++
++    [GeneratedRegex(@"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")]
++    private static partial Regex GuidRegex();
++
++    [GeneratedRegex(@"\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\b")]
++    private static partial Regex IsoTimestampRegex();
++
++    [GeneratedRegex(@"\s+")]
++    private static partial Regex MultiWhitespaceRegex();
++
++    [GeneratedRegex(@"\s*//\s*line\s+\d+\s*$", RegexOptions.IgnoreCase)]
++    private static partial Regex GeneratedLineCommentRegex();
++}
+diff --git a/Migrator.Lab/Execution/LabDiffEngine.cs b/Migrator.Lab/Execution/LabDiffEngine.cs
+new file mode 100644
+index 0000000..dafeb87
+--- /dev/null
++++ b/Migrator.Lab/Execution/LabDiffEngine.cs
+@@ -0,0 +1,258 @@
++using Migrator.Lab.Contracts;
++
++namespace Migrator.Lab.Execution;
++
++public static class LabDiffEngine
++{
++    const long MinimumDurationDeltaMs = 1000;
++
++    public static LabSuiteDiffResult Compare(
++        LabBaselineSnapshot baseline,
++        LabSuiteRunResult currentRun,
++        string baselinePath,
++        string currentPath,
++        double durationRegressionPercent = 20)
++    {
++        ArgumentNullException.ThrowIfNull(baseline);
++        ArgumentNullException.ThrowIfNull(currentRun);
++        if (durationRegressionPercent < 0)
++            throw new ArgumentOutOfRangeException(nameof(durationRegressionPercent), "Duration regression percentage must be non-negative.");
++
++        var current = LabBaselineService.Create(currentRun, "current");
++        var baselineById = baseline.Projects.ToDictionary(project => project.Id, StringComparer.OrdinalIgnoreCase);
++        var currentById = current.Projects.ToDictionary(project => project.Id, StringComparer.OrdinalIgnoreCase);
++        var ids = baselineById.Keys
++            .Concat(currentById.Keys)
++            .Distinct(StringComparer.OrdinalIgnoreCase)
++            .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
++            .ToArray();
++
++        var projects = ids.Select(id => CompareScenario(
++            baselineById.GetValueOrDefault(id),
++            currentById.GetValueOrDefault(id),
++            durationRegressionPercent)).ToArray();
++
++        return new LabSuiteDiffResult
++        {
++            GeneratedAtUtc = DateTimeOffset.UtcNow,
++            BaselineLabel = baseline.Label,
++            BaselinePath = Path.GetFullPath(baselinePath),
++            CurrentPath = Path.GetFullPath(currentPath),
++            DurationRegressionPercent = durationRegressionPercent,
++            Summary = new LabDiffSummary
++            {
++                Projects = projects.Length,
++                Unchanged = projects.Count(project => project.Kind == LabDiffKind.Unchanged),
++                Changed = projects.Count(project => project.Kind == LabDiffKind.Changed),
++                Added = projects.Count(project => project.Kind == LabDiffKind.Added),
++                Removed = projects.Count(project => project.Kind == LabDiffKind.Removed),
++                Improvements = projects.Count(project => project.IsImprovement),
++                Regressions = projects.Count(project => project.IsRegression)
++            },
++            Projects = projects
++        };
++    }
++
++    static LabScenarioDiff CompareScenario(
++        LabBaselineScenario? baseline,
++        LabBaselineScenario? current,
++        double durationRegressionPercent)
++    {
++        if (baseline == null && current == null)
++            throw new InvalidOperationException("At least one scenario side must be present.");
++
++        if (baseline == null)
++        {
++            var accepted = ContractSatisfied(current!);
++            return CreateOneSided(current!, isAdded: true, isRegression: !accepted,
++                accepted ? "New scenario satisfies its contract." : "New scenario does not satisfy its contract.");
++        }
++
++        if (current == null)
++            return CreateOneSided(baseline, isAdded: false, isRegression: true, "Scenario was removed from the current run.");
++
++        var reasons = new List<string>();
++        var regressions = new List<string>();
++        var improvements = new List<string>();
++
++        if (baseline.ExpectedStatus != current.ExpectedStatus)
++            regressions.Add($"Expected contract changed: {baseline.ExpectedStatus} -> {current.ExpectedStatus}. Update the baseline explicitly if this change is intentional.");
++
++        var baselineSatisfied = ContractSatisfied(baseline);
++        var currentSatisfied = ContractSatisfied(current);
++        if (baselineSatisfied && !currentSatisfied)
++            regressions.Add($"Contract status regressed: {baseline.ActualStatus} -> {current.ActualStatus}.");
++        else if (!baselineSatisfied && currentSatisfied)
++            improvements.Add($"Contract status improved: {baseline.ActualStatus} -> {current.ActualStatus}.");
++        else if (!baselineSatisfied && !currentSatisfied)
++        {
++            var severityDelta = StatusSeverity(current.ActualStatus) - StatusSeverity(baseline.ActualStatus);
++            if (severityDelta > 0)
++                regressions.Add($"Failure severity increased: {baseline.ActualStatus} -> {current.ActualStatus}.");
++            else if (severityDelta < 0)
++                improvements.Add($"Failure severity decreased: {baseline.ActualStatus} -> {current.ActualStatus}.");
++            else if (baseline.ActualStatus != current.ActualStatus)
++                reasons.Add($"Actual status changed: {baseline.ActualStatus} -> {current.ActualStatus}.");
++        }
++
++        CompareMetric("TODO comments", baseline.TodoComments, current.TodoComments, regressions, improvements);
++        CompareMetric("unmapped targets", baseline.UnmappedTargets, current.UnmappedTargets, regressions, improvements);
++        CompareMetric("unsupported actions", baseline.UnsupportedActions, current.UnsupportedActions, regressions, improvements);
++        CompareMetric("warning-bearing files", baseline.WarningFiles, current.WarningFiles, regressions, improvements);
++
++        if (baseline.QualityPassed && !current.QualityPassed)
++            regressions.Add("Quality evaluation changed from PASS to FAIL.");
++        else if (!baseline.QualityPassed && current.QualityPassed)
++            improvements.Add("Quality evaluation changed from FAIL to PASS.");
++
++        if (baseline.OraclePassed && !current.OraclePassed)
++            regressions.Add("Semantic oracle changed from PASS to FAIL.");
++        else if (!baseline.OraclePassed && current.OraclePassed)
++            improvements.Add("Semantic oracle changed from FAIL to PASS.");
++
++        CompareTestCount("source passed-test count", baseline.SourcePassed, current.SourcePassed, regressions, improvements);
++        CompareTestCount("source expected-test count", baseline.SourceExpected, current.SourceExpected, regressions, improvements);
++        CompareTestCount("target passed-test count", baseline.TargetPassed, current.TargetPassed, regressions, improvements);
++        CompareTestCount("target expected-test count", baseline.TargetExpected, current.TargetExpected, regressions, improvements);
++
++        var addedDiagnostics = current.DiagnosticCategories.Concat(current.Diagnostics)
++            .Except(baseline.DiagnosticCategories.Concat(baseline.Diagnostics), StringComparer.Ordinal)
++            .OrderBy(value => value, StringComparer.Ordinal)
++            .ToArray();
++        var removedDiagnostics = baseline.DiagnosticCategories.Concat(baseline.Diagnostics)
++            .Except(current.DiagnosticCategories.Concat(current.Diagnostics), StringComparer.Ordinal)
++            .OrderBy(value => value, StringComparer.Ordinal)
++            .ToArray();
++        if (addedDiagnostics.Length > 0)
++            regressions.Add($"Added diagnostics: {string.Join(", ", addedDiagnostics)}.");
++        if (removedDiagnostics.Length > 0)
++            improvements.Add($"Removed diagnostics: {string.Join(", ", removedDiagnostics)}.");
++
++        var addedSemanticChecks = current.SemanticChecks.Except(baseline.SemanticChecks, StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal).ToArray();
++        var removedSemanticChecks = baseline.SemanticChecks.Except(current.SemanticChecks, StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal).ToArray();
++        if (addedSemanticChecks.Length > 0 || removedSemanticChecks.Length > 0)
++            reasons.Add("Semantic check evidence changed.");
++
++        var durationDelta = current.DurationMs - baseline.DurationMs;
++        double? durationDeltaPercent = baseline.DurationMs > 0
++            ? durationDelta * 100d / baseline.DurationMs
++            : null;
++        if (durationDeltaPercent.HasValue && Math.Abs(durationDelta) >= MinimumDurationDeltaMs)
++        {
++            if (durationDeltaPercent.Value > durationRegressionPercent)
++                regressions.Add($"Duration increased by {durationDeltaPercent.Value:F1}% ({durationDelta:+#;-#;0} ms).");
++            else if (durationDeltaPercent.Value < -durationRegressionPercent)
++                improvements.Add($"Duration decreased by {Math.Abs(durationDeltaPercent.Value):F1}% ({durationDelta:+#;-#;0} ms).");
++        }
++
++        var generatedChanged = !string.Equals(
++            baseline.GeneratedSemanticHash,
++            current.GeneratedSemanticHash,
++            StringComparison.OrdinalIgnoreCase);
++        if (generatedChanged)
++            reasons.Add("Normalized generated-code fingerprint changed.");
++
++        reasons.AddRange(regressions);
++        reasons.AddRange(improvements);
++        var isRegression = regressions.Count > 0;
++        var isImprovement = !isRegression && improvements.Count > 0;
++        var kind = isRegression
++            ? LabDiffKind.Regressed
++            : isImprovement
++                ? LabDiffKind.Improved
++                : reasons.Count > 0
++                    ? LabDiffKind.Changed
++                    : LabDiffKind.Unchanged;
++
++        return new LabScenarioDiff
++        {
++            Id = current.Id,
++            Kind = kind,
++            IsRegression = isRegression,
++            IsImprovement = isImprovement,
++            BaselineExpectedStatus = baseline.ExpectedStatus,
++            CurrentExpectedStatus = current.ExpectedStatus,
++            BaselineStatus = baseline.ActualStatus,
++            CurrentStatus = current.ActualStatus,
++            TodoComments = Delta(baseline.TodoComments, current.TodoComments),
++            UnmappedTargets = Delta(baseline.UnmappedTargets, current.UnmappedTargets),
++            UnsupportedActions = Delta(baseline.UnsupportedActions, current.UnsupportedActions),
++            WarningFiles = Delta(baseline.WarningFiles, current.WarningFiles),
++            BaselineQualityPassed = baseline.QualityPassed,
++            CurrentQualityPassed = current.QualityPassed,
++            BaselineOraclePassed = baseline.OraclePassed,
++            CurrentOraclePassed = current.OraclePassed,
++            AddedDiagnostics = addedDiagnostics,
++            RemovedDiagnostics = removedDiagnostics,
++            AddedSemanticChecks = addedSemanticChecks,
++            RemovedSemanticChecks = removedSemanticChecks,
++            BaselineGeneratedSemanticHash = baseline.GeneratedSemanticHash,
++            CurrentGeneratedSemanticHash = current.GeneratedSemanticHash,
++            GeneratedSemanticChanged = generatedChanged,
++            BaselineDurationMs = baseline.DurationMs,
++            CurrentDurationMs = current.DurationMs,
++            DurationDeltaMs = durationDelta,
++            DurationDeltaPercent = durationDeltaPercent,
++            Reasons = reasons.Distinct(StringComparer.Ordinal).ToArray()
++        };
++    }
++
++    static LabScenarioDiff CreateOneSided(LabBaselineScenario scenario, bool isAdded, bool isRegression, string reason) => new()
++    {
++        Id = scenario.Id,
++        Kind = isAdded ? LabDiffKind.Added : LabDiffKind.Removed,
++        IsRegression = isRegression,
++        IsImprovement = false,
++        BaselineExpectedStatus = isAdded ? null : scenario.ExpectedStatus,
++        CurrentExpectedStatus = isAdded ? scenario.ExpectedStatus : null,
++        BaselineStatus = isAdded ? null : scenario.ActualStatus,
++        CurrentStatus = isAdded ? scenario.ActualStatus : null,
++        TodoComments = isAdded ? Delta(0, scenario.TodoComments) : Delta(scenario.TodoComments, 0),
++        UnmappedTargets = isAdded ? Delta(0, scenario.UnmappedTargets) : Delta(scenario.UnmappedTargets, 0),
++        UnsupportedActions = isAdded ? Delta(0, scenario.UnsupportedActions) : Delta(scenario.UnsupportedActions, 0),
++        WarningFiles = isAdded ? Delta(0, scenario.WarningFiles) : Delta(scenario.WarningFiles, 0),
++        BaselineQualityPassed = isAdded ? null : scenario.QualityPassed,
++        CurrentQualityPassed = isAdded ? scenario.QualityPassed : null,
++        BaselineOraclePassed = isAdded ? null : scenario.OraclePassed,
++        CurrentOraclePassed = isAdded ? scenario.OraclePassed : null,
++        BaselineGeneratedSemanticHash = isAdded ? null : scenario.GeneratedSemanticHash,
++        CurrentGeneratedSemanticHash = isAdded ? scenario.GeneratedSemanticHash : null,
++        GeneratedSemanticChanged = true,
++        BaselineDurationMs = isAdded ? null : scenario.DurationMs,
++        CurrentDurationMs = isAdded ? scenario.DurationMs : null,
++        Reasons = new[] { reason }
++    };
++
++    static void CompareTestCount(string name, int baseline, int current, List<string> regressions, List<string> improvements)
++    {
++        if (current < baseline)
++            regressions.Add($"{name} decreased: {baseline} -> {current}.");
++        else if (current > baseline)
++            improvements.Add($"{name} increased: {baseline} -> {current}.");
++    }
++
++    static void CompareMetric(string name, int baseline, int current, List<string> regressions, List<string> improvements)
++    {
++        if (current > baseline)
++            regressions.Add($"{name} increased: {baseline} -> {current}.");
++        else if (current < baseline)
++            improvements.Add($"{name} decreased: {baseline} -> {current}.");
++    }
++
++    static LabMetricDelta Delta(int baseline, int current) => new() { Baseline = baseline, Current = current };
++
++    static bool ContractSatisfied(LabBaselineScenario scenario) => scenario.ActualStatus == scenario.ExpectedStatus;
++
++    static int StatusSeverity(ScenarioStatus status) => status switch
++    {
++        ScenarioStatus.Pass => 0,
++        ScenarioStatus.UnsupportedAsExpected => 0,
++        ScenarioStatus.PassWithWarnings => 1,
++        ScenarioStatus.NonDeterministic => 2,
++        ScenarioStatus.SourceInvalid => 3,
++        ScenarioStatus.InfrastructureFailure => 4,
++        ScenarioStatus.Regression => 5,
++        ScenarioStatus.MigratorFailure => 6,
++        _ => 5
++    };
++}
+diff --git a/Migrator.Lab/Execution/LabRunArtifactLoader.cs b/Migrator.Lab/Execution/LabRunArtifactLoader.cs
+new file mode 100644
+index 0000000..564d210
+--- /dev/null
++++ b/Migrator.Lab/Execution/LabRunArtifactLoader.cs
+@@ -0,0 +1,69 @@
++using System.Text.Json;
++using Migrator.Lab.Contracts;
++
++namespace Migrator.Lab.Execution;
++
++public static class LabRunArtifactLoader
++{
++    public static LabSuiteRunResult LoadRun(string path)
++    {
++        var summaryPath = ResolveFile(path, "lab-summary.json");
++        try
++        {
++            return JsonSerializer.Deserialize<LabSuiteRunResult>(File.ReadAllText(summaryPath), LabJson.Options)
++                ?? throw new InvalidDataException($"Lab run summary is empty: {summaryPath}");
++        }
++        catch (JsonException ex)
++        {
++            throw new InvalidDataException($"Lab run summary is invalid JSON: {summaryPath}. {ex.Message}", ex);
++        }
++    }
++
++    public static LabBaselineSnapshot LoadBaseline(string path)
++    {
++        var fullPath = Path.GetFullPath(path);
++        if (Directory.Exists(fullPath))
++        {
++            var baselinePath = Path.Combine(fullPath, "lab-baseline.json");
++            if (File.Exists(baselinePath))
++                return DeserializeBaseline(baselinePath);
++
++            var runPath = Path.Combine(fullPath, "lab-summary.json");
++            if (File.Exists(runPath))
++                return LabBaselineService.Create(LoadRun(runPath), Path.GetFileName(fullPath));
++
++            throw new FileNotFoundException($"Directory does not contain lab-baseline.json or lab-summary.json: {fullPath}");
++        }
++
++        if (!File.Exists(fullPath))
++            throw new FileNotFoundException($"Lab baseline or run summary was not found: {fullPath}");
++
++        if (string.Equals(Path.GetFileName(fullPath), "lab-summary.json", StringComparison.OrdinalIgnoreCase))
++            return LabBaselineService.Create(LoadRun(fullPath), Path.GetFileName(Path.GetDirectoryName(fullPath)) ?? "baseline");
++
++        return DeserializeBaseline(fullPath);
++    }
++
++    public static string ResolveFile(string path, string defaultFileName)
++    {
++        var fullPath = Path.GetFullPath(path);
++        if (Directory.Exists(fullPath))
++            fullPath = Path.Combine(fullPath, defaultFileName);
++        if (!File.Exists(fullPath))
++            throw new FileNotFoundException($"Required lab artifact was not found: {fullPath}");
++        return fullPath;
++    }
++
++    static LabBaselineSnapshot DeserializeBaseline(string path)
++    {
++        try
++        {
++            return JsonSerializer.Deserialize<LabBaselineSnapshot>(File.ReadAllText(path), LabJson.Options)
++                ?? throw new InvalidDataException($"Lab baseline is empty: {path}");
++        }
++        catch (JsonException ex)
++        {
++            throw new InvalidDataException($"Lab baseline is invalid JSON: {path}. {ex.Message}", ex);
++        }
++    }
++}
+diff --git a/Migrator.Lab/Execution/LabRunStatusPolicy.cs b/Migrator.Lab/Execution/LabRunStatusPolicy.cs
+index e03fbff..47a888f 100644
+--- a/Migrator.Lab/Execution/LabRunStatusPolicy.cs
++++ b/Migrator.Lab/Execution/LabRunStatusPolicy.cs
+@@ -201,16 +201,16 @@ public static class LabRunStatusPolicy
+     {
+         var statuses = projects.Select(project => project.ActualStatus).ToHashSet();
+         if (statuses.Contains(ScenarioStatus.MigratorFailure))
+-            return 11;
++            return LabExitCodes.MigratorFailure;
+         if (statuses.Contains(ScenarioStatus.Regression))
+-            return 10;
++            return LabExitCodes.Regression;
+         if (statuses.Contains(ScenarioStatus.SourceInvalid))
+-            return 12;
++            return LabExitCodes.SourceInvalid;
+         if (statuses.Contains(ScenarioStatus.InfrastructureFailure))
+-            return 13;
++            return LabExitCodes.InfrastructureFailure;
+         if (statuses.Contains(ScenarioStatus.NonDeterministic))
+-            return 14;
+-        return 0;
++            return LabExitCodes.NonDeterministic;
++        return LabExitCodes.Accepted;
+     }
+ 
+     static LabStageResult? Find(IEnumerable<LabStageResult> stages, LabRunStage stage) =>
+diff --git a/Migrator.Lab/Reports/LabBaselineReportWriter.cs b/Migrator.Lab/Reports/LabBaselineReportWriter.cs
+new file mode 100644
+index 0000000..a1d807a
+--- /dev/null
++++ b/Migrator.Lab/Reports/LabBaselineReportWriter.cs
+@@ -0,0 +1,37 @@
++using System.Text;
++using System.Text.Json;
++using Migrator.Lab.Contracts;
++
++namespace Migrator.Lab.Reports;
++
++public static class LabBaselineReportWriter
++{
++    public static void Write(LabBaselineSnapshot baseline, string outputDirectory)
++    {
++        var root = Path.GetFullPath(outputDirectory);
++        Directory.CreateDirectory(root);
++        File.WriteAllText(Path.Combine(root, "lab-baseline.json"), JsonSerializer.Serialize(baseline, LabJson.Options) + Environment.NewLine);
++        File.WriteAllText(Path.Combine(root, "lab-baseline.md"), ToMarkdown(baseline));
++    }
++
++    static string ToMarkdown(LabBaselineSnapshot baseline)
++    {
++        var builder = new StringBuilder();
++        builder.AppendLine("# Migrator Lab baseline");
++        builder.AppendLine();
++        builder.AppendLine($"- **Label:** `{baseline.Label}`");
++        builder.AppendLine($"- **Created:** {baseline.CreatedAtUtc:O}");
++        builder.AppendLine($"- **Suite:** `{baseline.Suite}`");
++        builder.AppendLine($"- **Projects:** {baseline.Projects.Length}");
++        builder.AppendLine();
++        builder.AppendLine("| Scenario | Expected | Actual | TODO | Unmapped | Unsupported | Warnings | Oracle | Duration | Generated hash |");
++        builder.AppendLine("|---|---|---|---:|---:|---:|---:|---|---:|---|");
++        foreach (var project in baseline.Projects)
++        {
++            builder.AppendLine($"| {project.Id} | {project.ExpectedStatus} | {project.ActualStatus} | {project.TodoComments} | {project.UnmappedTargets} | {project.UnsupportedActions} | {project.WarningFiles} | {(project.OraclePassed ? "PASS" : "FAIL")} | {project.DurationMs} ms | `{ShortHash(project.GeneratedSemanticHash)}` |");
++        }
++        return builder.ToString();
++    }
++
++    static string ShortHash(string? value) => string.IsNullOrWhiteSpace(value) ? "n/a" : value[..Math.Min(12, value.Length)];
++}
+diff --git a/Migrator.Lab/Reports/LabDiffReportWriter.cs b/Migrator.Lab/Reports/LabDiffReportWriter.cs
+new file mode 100644
+index 0000000..19cd591
+--- /dev/null
++++ b/Migrator.Lab/Reports/LabDiffReportWriter.cs
+@@ -0,0 +1,82 @@
++using System.Text;
++using System.Text.Json;
++using Migrator.Lab.Contracts;
++
++namespace Migrator.Lab.Reports;
++
++public static class LabDiffReportWriter
++{
++    public static void Write(LabSuiteDiffResult result, string outputDirectory)
++    {
++        var root = Path.GetFullPath(outputDirectory);
++        Directory.CreateDirectory(root);
++        File.WriteAllText(Path.Combine(root, "lab-diff.json"), JsonSerializer.Serialize(result, LabJson.Options) + Environment.NewLine);
++        File.WriteAllText(Path.Combine(root, "lab-diff.md"), ToMarkdown(result));
++        File.WriteAllText(Path.Combine(root, "lab-diff.html"), ToHtml(result));
++    }
++
++    static string ToMarkdown(LabSuiteDiffResult result)
++    {
++        var builder = new StringBuilder();
++        builder.AppendLine("# Migrator Lab baseline diff");
++        builder.AppendLine();
++        builder.AppendLine($"- **Baseline:** `{result.BaselineLabel}` — `{result.BaselinePath}`");
++        builder.AppendLine($"- **Current:** `{result.CurrentPath}`");
++        builder.AppendLine($"- **Duration threshold:** {result.DurationRegressionPercent:F1}%");
++        builder.AppendLine();
++        builder.AppendLine($"**Regressions:** {result.Summary.Regressions} · **Improvements:** {result.Summary.Improvements} · **Unchanged:** {result.Summary.Unchanged}");
++        builder.AppendLine();
++        builder.AppendLine("| Scenario | Kind | Status | TODO Δ | Unmapped Δ | Unsupported Δ | Warnings Δ | Duration Δ | Generated | Reason |");
++        builder.AppendLine("|---|---|---|---:|---:|---:|---:|---:|---|---|");
++        foreach (var project in result.Projects)
++        {
++            builder.AppendLine($"| {project.Id} | {ContractName(project.Kind)} | {Status(project.BaselineStatus)} → {Status(project.CurrentStatus)} | {Signed(project.TodoComments.Delta)} | {Signed(project.UnmappedTargets.Delta)} | {Signed(project.UnsupportedActions.Delta)} | {Signed(project.WarningFiles.Delta)} | {Duration(project)} | {(project.GeneratedSemanticChanged ? "changed" : "same")} | {Escape(string.Join(" ", project.Reasons))} |");
++        }
++        return builder.ToString();
++    }
++
++    static string ToHtml(LabSuiteDiffResult result)
++    {
++        var body = new StringBuilder();
++        body.AppendLine("<h1>Migrator Lab baseline diff</h1>");
++        body.AppendLine($"<div class=\"meta\">Baseline <code>{LabHtml.Encode(result.BaselineLabel)}</code> · threshold {result.DurationRegressionPercent:F1}%<br><code>{LabHtml.Encode(result.BaselinePath)}</code> → <code>{LabHtml.Encode(result.CurrentPath)}</code></div>");
++        body.AppendLine("<div class=\"cards\">");
++        Card("Projects", result.Summary.Projects, "");
++        Card("Regressions", result.Summary.Regressions, result.Summary.Regressions == 0 ? "ok" : "bad");
++        Card("Improvements", result.Summary.Improvements, "ok");
++        Card("Changed", result.Summary.Changed, "warn");
++        Card("Unchanged", result.Summary.Unchanged, "");
++        body.AppendLine("</div>");
++        body.AppendLine("<div class=\"table-wrap\"><table><thead><tr><th>Scenario</th><th>Kind</th><th>Status</th><th>TODO</th><th>Unmapped</th><th>Warnings</th><th>Duration</th><th>Generated</th></tr></thead><tbody>");
++        foreach (var project in result.Projects)
++        {
++            var css = project.IsRegression ? "bad" : project.IsImprovement ? "ok" : project.Kind == LabDiffKind.Changed ? "warn" : "";
++            body.AppendLine($"<tr><td><strong>{LabHtml.Encode(project.Id)}</strong></td><td class=\"status {css}\">{LabHtml.Encode(ContractName(project.Kind))}</td><td>{LabHtml.Encode(Status(project.BaselineStatus))} → {LabHtml.Encode(Status(project.CurrentStatus))}</td><td>{Signed(project.TodoComments.Delta)}</td><td>{Signed(project.UnmappedTargets.Delta)}</td><td>{Signed(project.WarningFiles.Delta)}</td><td>{LabHtml.Encode(Duration(project))}</td><td>{(project.GeneratedSemanticChanged ? "changed" : "same")}</td></tr>");
++            if (project.Reasons.Length > 0)
++            {
++                body.AppendLine($"<tr><td colspan=\"8\"><details><summary>Evidence</summary><ul>{string.Join(string.Empty, project.Reasons.Select(reason => $"<li>{LabHtml.Encode(reason)}</li>"))}</ul></details></td></tr>");
++            }
++        }
++        body.AppendLine("</tbody></table></div>");
++        return LabHtml.Page("Migrator Lab diff", body.ToString());
++
++        void Card(string label, int value, string css) => body.AppendLine($"<div class=\"card {css}\"><span>{LabHtml.Encode(label)}</span><strong>{value}</strong></div>");
++    }
++
++    static string Status(ScenarioStatus? value) => value?.ToString() ?? "—";
++    static string Signed(int value) => value > 0 ? $"+{value}" : value.ToString();
++    static string Signed(long value) => value > 0 ? $"+{value}" : value.ToString();
++
++    static string Duration(LabScenarioDiff project)
++    {
++        if (!project.DurationDeltaMs.HasValue)
++            return "—";
++
++        var percent = project.DurationDeltaPercent.HasValue
++            ? $"{project.DurationDeltaPercent.Value:F1}%"
++            : "n/a";
++        return $"{Signed(project.DurationDeltaMs.Value)} ms ({percent})";
++    }
++    static string Escape(string value) => value.Replace("|", "\\|", StringComparison.Ordinal).Replace("\r", " ", StringComparison.Ordinal).Replace("\n", " ", StringComparison.Ordinal);
++    static string ContractName<T>(T value) where T : struct, Enum => string.Concat(value.ToString().Select((character, index) => index > 0 && char.IsUpper(character) ? "_" + char.ToUpperInvariant(character) : char.ToUpperInvariant(character).ToString()));
++}
+diff --git a/Migrator.Lab/Reports/LabHtml.cs b/Migrator.Lab/Reports/LabHtml.cs
+new file mode 100644
+index 0000000..aeff572
+--- /dev/null
++++ b/Migrator.Lab/Reports/LabHtml.cs
+@@ -0,0 +1,29 @@
++using System.Net;
++using System.Text;
++
++namespace Migrator.Lab.Reports;
++
++internal static class LabHtml
++{
++    public static string Encode(string? value) => WebUtility.HtmlEncode(value ?? string.Empty);
++
++    public static string Page(string title, string body)
++    {
++        var builder = new StringBuilder();
++        builder.AppendLine("<!doctype html>");
++        builder.AppendLine("<html lang=\"en\"><head><meta charset=\"utf-8\">");
++        builder.AppendLine("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">");
++        builder.AppendLine($"<title>{Encode(title)}</title>");
++        builder.AppendLine("""
++<style>
++:root{font-family:Inter,Segoe UI,Arial,sans-serif;color-scheme:light dark;--bg:#f5f7fb;--card:#fff;--text:#172033;--muted:#657087;--line:#dbe1ea;--ok:#16794b;--bad:#b42318;--warn:#9a6700;--info:#175cd3}
++@media(prefers-color-scheme:dark){:root{--bg:#10131a;--card:#171c25;--text:#edf2f7;--muted:#a6b0c3;--line:#303847;--ok:#5fd39a;--bad:#ff8a80;--warn:#ffd166;--info:#84adff}}
++*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}main{max-width:1440px;margin:auto;padding:28px}h1,h2,h3{margin-top:0}a{color:var(--info)}.meta{color:var(--muted);margin-bottom:20px}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:18px 0}.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}.card strong{display:block;font-size:1.5rem}.table-wrap{overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:12px}table{width:100%;border-collapse:collapse;min-width:880px}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{position:sticky;top:0;background:var(--card)}tr:last-child td{border-bottom:0}.status{font-weight:700}.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}.muted{color:var(--muted)}details{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0}code{white-space:pre-wrap;word-break:break-word}.delta-pos{color:var(--bad)}.delta-neg{color:var(--ok)}
++</style>
++""");
++        builder.AppendLine("</head><body><main>");
++        builder.AppendLine(body);
++        builder.AppendLine("</main></body></html>");
++        return builder.ToString();
++    }
++}
+diff --git a/Migrator.Lab/Reports/LabRunHtmlReportWriter.cs b/Migrator.Lab/Reports/LabRunHtmlReportWriter.cs
+new file mode 100644
+index 0000000..4223d53
+--- /dev/null
++++ b/Migrator.Lab/Reports/LabRunHtmlReportWriter.cs
+@@ -0,0 +1,66 @@
++using System.Text;
++using Migrator.Lab.Contracts;
++
++namespace Migrator.Lab.Reports;
++
++public static class LabRunHtmlReportWriter
++{
++    public static string ToHtml(LabSuiteRunResult result)
++    {
++        var body = new StringBuilder();
++        body.AppendLine("<h1>Migrator Lab run</h1>");
++        body.AppendLine($"<div class=\"meta\">Suite <code>{LabHtml.Encode(result.Suite)}</code> · {result.StartedAtUtc:O} → {result.CompletedAtUtc:O}<br>Corpus <code>{LabHtml.Encode(result.CorpusRoot)}</code></div>");
++        body.AppendLine("<div class=\"cards\">");
++        Card("Projects", result.Summary.Projects);
++        Card("PASS", result.Summary.Passed + result.Summary.PassedWithWarnings + result.Summary.UnsupportedAsExpected, "ok");
++        Card("Regressions", result.Summary.Regressions, result.Summary.Regressions == 0 ? "ok" : "bad");
++        Card("Migrator failures", result.Summary.MigratorFailures, result.Summary.MigratorFailures == 0 ? "ok" : "bad");
++        Card("Infrastructure", result.Summary.InfrastructureFailures, result.Summary.InfrastructureFailures == 0 ? "ok" : "warn");
++        body.AppendLine("</div>");
++        body.AppendLine("<div class=\"table-wrap\"><table><thead><tr><th>Scenario</th><th>Expected</th><th>Actual</th><th>Source</th><th>verify-project</th><th>Target</th><th>Quality</th><th>Oracle</th><th>Duration</th><th>Artifacts</th></tr></thead><tbody>");
++        foreach (var project in result.Projects.OrderBy(project => project.Id, StringComparer.OrdinalIgnoreCase))
++        {
++            var accepted = project.ActualStatus == project.ExpectedStatus;
++            var id = LabHtml.Encode(project.Id);
++            body.Append("<tr>");
++            body.Append($"<td><strong>{id}</strong></td>");
++            body.Append($"<td>{LabHtml.Encode(ContractName(project.ExpectedStatus))}</td>");
++            body.Append($"<td class=\"status {(accepted ? "ok" : "bad")}\">{LabHtml.Encode(ContractName(project.ActualStatus))}</td>");
++            body.Append($"<td>{project.SourceTests.Passed}/{project.SourceTests.ExpectedPassed}</td>");
++            body.Append($"<td>{LabHtml.Encode(project.ProjectVerify.Status ?? "not-run")}</td>");
++            body.Append($"<td>{project.TargetTests.Passed}/{project.TargetTests.ExpectedPassed}</td>");
++            body.Append($"<td class=\"{(project.Quality.Passed ? "ok" : "bad")}\">{(project.Quality.Passed ? "PASS" : "FAIL")}</td>");
++            body.Append($"<td class=\"{(project.Oracle.Passed ? "ok" : "bad")}\">{(project.Oracle.Passed ? "PASS" : "FAIL")}</td>");
++            body.Append($"<td>{project.DurationMs} ms</td>");
++            body.Append($"<td><a href=\"projects/{Uri.EscapeDataString(project.Id)}/scenario-result.json\">result</a> · <a href=\"projects/{Uri.EscapeDataString(project.Id)}/target/semantic-diff.json\">oracle</a> · <a href=\"projects/{Uri.EscapeDataString(project.Id)}/target/quality-evaluation.json\">quality</a></td>");
++            body.AppendLine("</tr>");
++        }
++        body.AppendLine("</tbody></table></div>");
++
++        foreach (var project in result.Projects.Where(project => project.Issues.Length > 0))
++        {
++            body.AppendLine($"<details><summary>{LabHtml.Encode(project.Id)} — {project.Issues.Length} issue(s)</summary><ul>");
++            foreach (var issue in project.Issues.Distinct(StringComparer.Ordinal))
++                body.AppendLine($"<li>{LabHtml.Encode(issue)}</li>");
++            body.AppendLine("</ul></details>");
++        }
++
++        return LabHtml.Page("Migrator Lab run", body.ToString());
++
++        void Card(string label, int value, string css = "") =>
++            body.AppendLine($"<div class=\"card {css}\"><span>{LabHtml.Encode(label)}</span><strong>{value}</strong></div>");
++    }
++
++    static string ContractName<T>(T value) where T : struct, Enum
++    {
++        var text = value.ToString();
++        var builder = new StringBuilder();
++        for (var index = 0; index < text.Length; index++)
++        {
++            if (index > 0 && char.IsUpper(text[index]))
++                builder.Append('_');
++            builder.Append(char.ToUpperInvariant(text[index]));
++        }
++        return builder.ToString();
++    }
++}
+diff --git a/Migrator.Lab/Reports/LabRunReportWriter.cs b/Migrator.Lab/Reports/LabRunReportWriter.cs
+index 3aab91f..8249796 100644
+--- a/Migrator.Lab/Reports/LabRunReportWriter.cs
++++ b/Migrator.Lab/Reports/LabRunReportWriter.cs
+@@ -1,19 +1,11 @@
+ using System.Text;
+ using System.Text.Json;
+-using System.Text.Json.Serialization;
+ using Migrator.Lab.Contracts;
+ 
+ namespace Migrator.Lab.Reports;
+ 
+ public static class LabRunReportWriter
+ {
+-    static readonly JsonSerializerOptions JsonOptions = new()
+-    {
+-        WriteIndented = true,
+-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseUpper) }
+-    };
+-
+     static readonly LabRunStage[] SourceStages =
+     {
+         LabRunStage.SourceRestore,
+@@ -26,17 +18,20 @@ public static class LabRunReportWriter
+         Directory.CreateDirectory(result.ArtifactsRoot);
+         File.WriteAllText(
+             Path.Combine(result.ArtifactsRoot, "lab-summary.json"),
+-            JsonSerializer.Serialize(result, JsonOptions) + Environment.NewLine);
++            JsonSerializer.Serialize(result, LabJson.Options) + Environment.NewLine);
+         File.WriteAllText(
+             Path.Combine(result.ArtifactsRoot, "lab-summary.md"),
+             ToMarkdown(result));
++        File.WriteAllText(
++            Path.Combine(result.ArtifactsRoot, "lab-summary.html"),
++            LabRunHtmlReportWriter.ToHtml(result));
+ 
+         foreach (var project in result.Projects)
+         {
+             Directory.CreateDirectory(project.ArtifactsDirectory);
+             File.WriteAllText(
+                 Path.Combine(project.ArtifactsDirectory, "scenario-result.json"),
+-                JsonSerializer.Serialize(project, JsonOptions) + Environment.NewLine);
++                JsonSerializer.Serialize(project, LabJson.Options) + Environment.NewLine);
+ 
+             var sourceDirectory = Path.Combine(project.ArtifactsDirectory, "source");
+             Directory.CreateDirectory(sourceDirectory);
+@@ -52,7 +47,7 @@ public static class LabRunReportWriter
+             };
+             File.WriteAllText(
+                 Path.Combine(sourceDirectory, "source-validation.json"),
+-                JsonSerializer.Serialize(sourceValidation, JsonOptions) + Environment.NewLine);
++                JsonSerializer.Serialize(sourceValidation, LabJson.Options) + Environment.NewLine);
+ 
+             var targetDirectory = Path.Combine(project.ArtifactsDirectory, "target");
+             Directory.CreateDirectory(targetDirectory);
+@@ -66,13 +61,13 @@ public static class LabRunReportWriter
+                     runtimeArtifactsDirectory = project.RuntimeArtifactsDirectory,
+                     build = project.Stages.LastOrDefault(stage => stage.Stage == LabRunStage.TargetBuild),
+                     test = project.Stages.LastOrDefault(stage => stage.Stage == LabRunStage.TargetTest)
+-                }, JsonOptions) + Environment.NewLine);
++                }, LabJson.Options) + Environment.NewLine);
+             File.WriteAllText(
+                 Path.Combine(targetDirectory, "semantic-diff.json"),
+-                JsonSerializer.Serialize(project.Oracle, JsonOptions) + Environment.NewLine);
++                JsonSerializer.Serialize(project.Oracle, LabJson.Options) + Environment.NewLine);
+             File.WriteAllText(
+                 Path.Combine(targetDirectory, "quality-evaluation.json"),
+-                JsonSerializer.Serialize(project.Quality, JsonOptions) + Environment.NewLine);
++                JsonSerializer.Serialize(project.Quality, LabJson.Options) + Environment.NewLine);
+         }
+     }
+ 
+diff --git a/Migrator.Tests/LabBaselineDiffTests.cs b/Migrator.Tests/LabBaselineDiffTests.cs
+new file mode 100644
+index 0000000..a403177
+--- /dev/null
++++ b/Migrator.Tests/LabBaselineDiffTests.cs
+@@ -0,0 +1,218 @@
++using System.Text.Json;
++using Migrator.Lab.Contracts;
++using Migrator.Lab.Execution;
++using Migrator.Lab.Reports;
++
++namespace Migrator.Tests;
++
++[Trait("Layer", "Unit")]
++public sealed class LabBaselineDiffTests
++{
++    [Fact]
++    public void GeneratedFingerprint_IgnoresFormattingGeneratedCommentsAndLineTrivia()
++    {
++        var root = TempRoot();
++        try
++        {
++            var firstDirectory = Path.Combine(root, "first");
++            var secondDirectory = Path.Combine(root, "second");
++            Directory.CreateDirectory(firstDirectory);
++            Directory.CreateDirectory(secondDirectory);
++            var first = Path.Combine(firstDirectory, "Sample.cs");
++            var second = Path.Combine(secondDirectory, "Sample.cs");
++            File.WriteAllText(first, """
++            // Generated by Migrator at 2026-07-30T10:00:00Z
++            public class Sample
++            {
++                public void Run() { } // line 12
++            }
++            """);
++            File.WriteAllText(second, """
++            // a different generated comment
++            public class Sample
++            {
++            public void Run() { }
++            }
++            """);
++
++            Assert.Equal(
++                LabComparisonNormalizer.ComputeGeneratedSemanticHash(new[] { first }),
++                LabComparisonNormalizer.ComputeGeneratedSemanticHash(new[] { second }));
++        }
++        finally
++        {
++            Directory.Delete(root, recursive: true);
++        }
++    }
++
++    [Fact]
++    public void DiagnosticNormalization_RemovesRunRootsTempGuidsAndTimestamps()
++    {
++        var firstRoot = Path.Combine(Path.GetTempPath(), "run-one");
++        var secondRoot = Path.Combine(Path.GetTempPath(), "run-two");
++        var first = $"{firstRoot}/projects/{Guid.NewGuid()}/Sample.cs at 2026-07-30T10:00:00Z";
++        var second = $"{secondRoot}/projects/{Guid.NewGuid()}/Sample.cs at 2026-07-30T11:00:00Z";
++
++        Assert.Equal(
++            LabComparisonNormalizer.NormalizeText(first, firstRoot),
++            LabComparisonNormalizer.NormalizeText(second, secondRoot));
++    }
++
++    [Fact]
++    public void Diff_DetectsQualityDiagnosticAndPerformanceRegression()
++    {
++        var root = TempRoot();
++        try
++        {
++            var baselineRun = CreateRun(root, "baseline", todo: 0, durationMs: 10_000, actualStatus: ScenarioStatus.Pass, diagnostic: null);
++            var currentRun = CreateRun(root, "current", todo: 1, durationMs: 13_000, actualStatus: ScenarioStatus.Pass, diagnostic: "missing-type-or-namespace");
++            var baseline = LabBaselineService.Create(baselineRun, "main");
++
++            var diff = LabDiffEngine.Compare(baseline, currentRun, root, root, durationRegressionPercent: 20);
++
++            var project = Assert.Single(diff.Projects);
++            Assert.Equal(LabDiffKind.Regressed, project.Kind);
++            Assert.True(project.IsRegression);
++            Assert.Equal(1, project.TodoComments.Delta);
++            Assert.Contains("missing-type-or-namespace", project.AddedDiagnostics);
++            Assert.Contains(project.Reasons, reason => reason.Contains("Duration increased", StringComparison.Ordinal));
++            Assert.Equal(1, diff.Summary.Regressions);
++        }
++        finally
++        {
++            Directory.Delete(root, recursive: true);
++        }
++    }
++
++    [Fact]
++    public void Diff_ReportsImprovementAndDoesNotFailOnTriviaOnlyGeneratedChange()
++    {
++        var root = TempRoot();
++        try
++        {
++            var baselineRun = CreateRun(root, "baseline", todo: 2, durationMs: 12_000, actualStatus: ScenarioStatus.Regression, diagnostic: "unmapped");
++            var currentRun = CreateRun(root, "current", todo: 0, durationMs: 8_000, actualStatus: ScenarioStatus.Pass, diagnostic: null, alternateFormatting: true);
++            var baseline = LabBaselineService.Create(baselineRun, "main");
++
++            var diff = LabDiffEngine.Compare(baseline, currentRun, root, root, durationRegressionPercent: 20);
++
++            var project = Assert.Single(diff.Projects);
++            Assert.Equal(LabDiffKind.Improved, project.Kind);
++            Assert.False(project.IsRegression);
++            Assert.True(project.IsImprovement);
++            Assert.False(project.GeneratedSemanticChanged);
++            Assert.Equal(1, diff.Summary.Improvements);
++        }
++        finally
++        {
++            Directory.Delete(root, recursive: true);
++        }
++    }
++
++    [Fact]
++    public void BaselineAndDiffWriters_CreateMachineMarkdownAndHtmlArtifacts()
++    {
++        var root = TempRoot();
++        try
++        {
++            var run = CreateRun(root, "run", todo: 0, durationMs: 100, actualStatus: ScenarioStatus.Pass, diagnostic: null);
++            var runRoot = Path.Combine(root, "run-report");
++            run = run with { ArtifactsRoot = runRoot };
++            LabRunReportWriter.Write(run);
++            Assert.True(File.Exists(Path.Combine(runRoot, "lab-summary.html")));
++            Assert.Contains("p01", File.ReadAllText(Path.Combine(runRoot, "lab-summary.html")));
++
++            var baseline = LabBaselineService.Create(run, "main");
++            var baselineRoot = Path.Combine(root, "baseline-report");
++            LabBaselineReportWriter.Write(baseline, baselineRoot);
++            Assert.True(File.Exists(Path.Combine(baselineRoot, "lab-baseline.json")));
++            Assert.True(File.Exists(Path.Combine(baselineRoot, "lab-baseline.md")));
++
++            var loaded = LabRunArtifactLoader.LoadBaseline(baselineRoot);
++            Assert.Equal("main", loaded.Label);
++            Assert.Single(loaded.Projects);
++
++            var diff = LabDiffEngine.Compare(loaded, run, baselineRoot, runRoot, 20);
++            var diffRoot = Path.Combine(root, "diff-report");
++            LabDiffReportWriter.Write(diff, diffRoot);
++            Assert.True(File.Exists(Path.Combine(diffRoot, "lab-diff.json")));
++            Assert.True(File.Exists(Path.Combine(diffRoot, "lab-diff.md")));
++            Assert.True(File.Exists(Path.Combine(diffRoot, "lab-diff.html")));
++
++            using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(diffRoot, "lab-diff.json")));
++            Assert.Equal(0, document.RootElement.GetProperty("summary").GetProperty("regressions").GetInt32());
++        }
++        finally
++        {
++            Directory.Delete(root, recursive: true);
++        }
++    }
++
++    static LabSuiteRunResult CreateRun(
++        string root,
++        string name,
++        int todo,
++        long durationMs,
++        ScenarioStatus actualStatus,
++        string? diagnostic,
++        bool alternateFormatting = false)
++    {
++        var generatedRoot = Path.Combine(root, name, "generated");
++        Directory.CreateDirectory(generatedRoot);
++        var generated = Path.Combine(generatedRoot, "Sample.cs");
++        File.WriteAllText(generated, alternateFormatting
++            ? "// another comment\npublic class Sample\n{\npublic void Run() { }\n}\n"
++            : "// Generated by Migrator\npublic class Sample\n{\n    public void Run() { } // line 10\n}\n");
++
++        var projectArtifacts = Path.Combine(root, name, "projects", "p01");
++        return new LabSuiteRunResult
++        {
++            StartedAtUtc = DateTimeOffset.Parse("2026-07-30T10:00:00Z"),
++            CompletedAtUtc = DateTimeOffset.Parse("2026-07-30T10:01:00Z"),
++            Suite = "vertical",
++            CorpusRoot = Path.Combine(root, name, "corpus"),
++            ArtifactsRoot = Path.Combine(root, name),
++            Summary = new LabSuiteSummary { Projects = 1 },
++            Projects = new[]
++            {
++                new LabScenarioRunResult
++                {
++                    Id = "p01",
++                    ExpectedStatus = ScenarioStatus.Pass,
++                    ActualStatus = actualStatus,
++                    ArtifactsDirectory = projectArtifacts,
++                    DurationMs = durationMs,
++                    SourceTests = new LabSourceTestSummary { Passed = 1, ExpectedPassed = 1 },
++                    TargetTests = new LabSourceTestSummary { Passed = actualStatus == ScenarioStatus.Pass ? 1 : 0, ExpectedPassed = 1 },
++                    Migration = new LabMigrationSummary
++                    {
++                        TodoComments = todo,
++                        GeneratedFiles = new[] { generated }
++                    },
++                    ProjectVerify = new LabProjectVerifySummary
++                    {
++                        Status = diagnostic == null ? "passed" : "failed",
++                        DiagnosticCategories = diagnostic == null ? Array.Empty<string>() : new[] { diagnostic },
++                        Diagnostics = diagnostic == null ? Array.Empty<string>() : new[] { $"C:/temp/{Guid.NewGuid()}/Sample.cs: {diagnostic}" }
++                    },
++                    Quality = new LabQualityEvaluation { Passed = todo == 0 },
++                    Oracle = new LabSemanticOracleSummary
++                    {
++                        Passed = actualStatus == ScenarioStatus.Pass,
++                        Checks = new[]
++                        {
++                            new LabSemanticCheck { Kind = "dom-text", Expected = "ok", Actual = actualStatus == ScenarioStatus.Pass ? "ok" : "missing", Passed = actualStatus == ScenarioStatus.Pass }
++                        }
++                    }
++                }
++            }
++        };
++    }
++
++    static string TempRoot()
++    {
++        var root = Path.Combine(Path.GetTempPath(), "migrator-lab-diff-tests-" + Guid.NewGuid().ToString("N"));
++        Directory.CreateDirectory(root);
++        return root;
++    }
++}
+diff --git a/Migrator.Tests/LabCliContractTests.cs b/Migrator.Tests/LabCliContractTests.cs
+index 7d0a5e8..60a9aee 100644
+--- a/Migrator.Tests/LabCliContractTests.cs
++++ b/Migrator.Tests/LabCliContractTests.cs
+@@ -14,7 +14,11 @@ public sealed class LabCliContractTests
+ 
+         Assert.Contains("string.Equals(args[0], \"lab\"", program);
+         Assert.Contains("selenium-pw-migrator lab run", command);
++        Assert.Contains("selenium-pw-migrator lab replay", command);
++        Assert.Contains("selenium-pw-migrator lab baseline", command);
++        Assert.Contains("selenium-pw-migrator lab diff", command);
+         Assert.Contains("LabRunCoordinator", command);
++        Assert.Contains("LabDiffEngine", command);
+         Assert.Contains("--suite <name>", command);
+         Assert.Contains("selenium-pw-migrator lab validate", command);
+         Assert.Contains("selenium-pw-migrator lab list", command);
+diff --git a/Migrator.Tests/LabExitCodeContractTests.cs b/Migrator.Tests/LabExitCodeContractTests.cs
+new file mode 100644
+index 0000000..3a5a03f
+--- /dev/null
++++ b/Migrator.Tests/LabExitCodeContractTests.cs
+@@ -0,0 +1,23 @@
++using Migrator.Lab.Contracts;
++using Migrator.Lab.Execution;
++
++namespace Migrator.Tests;
++
++[Trait("Layer", "Contract")]
++public sealed class LabExitCodeContractTests
++{
++    [Fact]
++    public void ExitCodes_AreSharedByRunReplayAndDiffContracts()
++    {
++        Assert.Equal(0, LabExitCodes.Accepted);
++        Assert.Equal(10, LabExitCodes.Regression);
++        Assert.Equal(11, LabExitCodes.MigratorFailure);
++        Assert.Equal(12, LabExitCodes.SourceInvalid);
++        Assert.Equal(13, LabExitCodes.InfrastructureFailure);
++        Assert.Equal(14, LabExitCodes.NonDeterministic);
++        Assert.Equal(15, LabExitCodes.LabError);
++
++        var result = new LabScenarioRunResult { ActualStatus = ScenarioStatus.Regression };
++        Assert.Equal(LabExitCodes.Regression, LabRunStatusPolicy.GetSuiteExitCode(new[] { result }));
++    }
++}
+diff --git a/docs/lab/BLOCK_05_RESULT.ru.md b/docs/lab/BLOCK_05_RESULT.ru.md
+new file mode 100644
+index 0000000..423b2c1
+--- /dev/null
++++ b/docs/lab/BLOCK_05_RESULT.ru.md
+@@ -0,0 +1,96 @@
++# Блок 5 — suite report, replay и baseline diff
++
++## Результат
++
++Полигон получил воспроизводимый слой сравнения запусков поверх уже работающего runtime-
++pipeline Блока 4.
++
++Реализовано:
++
++- `lab-summary.html` рядом с существующими JSON/Markdown-отчётами;
++- `lab replay --project <id>` для полного воспроизведения одного сценария;
++- `lab baseline --input <run> --out <dir> --label <name>`;
++- нормализованный `lab-baseline.json` и человекочитаемый `lab-baseline.md`;
++- `lab diff --baseline <path> --current <run> --out <dir>`;
++- `lab-diff.json`, `lab-diff.md` и `lab-diff.html`;
++- единые exit codes через `LabExitCodes`;
++- сравнение expected/actual status, TODO, unmapped, unsupported, warning-bearing files,
++  project-verify diagnostics, semantic checks, target test counts и длительности;
++- нормализация абсолютных путей, temp-каталогов, GUID и timestamp;
++- semantic fingerprint generated C# без generated-комментариев, line trivia и отступов;
++- performance regression gate: по умолчанию рост более 20% и минимум на 1000 мс;
++- PowerShell/Bash smoke-скрипты Блока 5.
++
++## Правила diff
++
++Регрессией считаются, в частности:
++
++- сценарий выполнял expected contract, а текущий запуск перестал;
++- выросли TODO, unmapped, unsupported или warning-bearing files;
++- появились новые project-verify diagnostics;
++- quality/oracle сменились с PASS на FAIL;
++- уменьшилось число прошедших target-тестов;
++- сценарий исчез из текущего корпуса;
++- длительность превысила заданный относительный порог с абсолютной разницей не менее 1 с.
++
++Улучшения классифицируются отдельно и не дают отрицательный exit code. Изменение
++нормализованного generated-кода без ухудшения статуса, метрик или oracle помечается как
++`CHANGED`, а не как автоматическая регрессия.
++
++## Команды
++
++```powershell
++# Воспроизвести один сценарий
++
++dotnet run --project .\Migrator.Cli -c Release --no-build -- `
++  lab replay `
++  --project p15-webdriverwait-visible `
++  --corpus .\corpus\stable\vertical-slice `
++  --out .\artifacts\lab\replay\p15 `
++  --timeout-seconds 600 `
++  --configuration Release
++
++# Сохранить baseline зелёного запуска
++
++dotnet run --project .\Migrator.Cli -c Release --no-build -- `
++  lab baseline `
++  --input .\artifacts\lab\main `
++  --out .\artifacts\lab\baselines\main `
++  --label main
++
++# Сравнить PR-запуск с baseline
++
++dotnet run --project .\Migrator.Cli -c Release --no-build -- `
++  lab diff `
++  --baseline .\artifacts\lab\baselines\main `
++  --current .\artifacts\lab\pr `
++  --out .\artifacts\lab\diff `
++  --duration-regression-percent 20
++```
++
++Exit code `0` означает отсутствие регрессий, `10` — найден хотя бы один regression,
++`15` — ошибка входных файлов или самого lab command.
++
++## Автоматическая проверка
++
++Из корня репозитория:
++
++```powershell
++.\scripts\run-lab-block5.ps1
++```
++
++Скрипт не устанавливает Playwright: он использует уже установленный Chromium. Он:
++
++1. собирает решение и запускает полный набор тестов;
++2. выполняет зелёный vertical run;
++3. сохраняет baseline;
++4. выполняет replay `p15`;
++5. проверяет clean diff baseline против того же запуска;
++6. создаёт synthetic PR regression и проверяет exit code `10`;
++7. проверяет наличие JSON/Markdown/HTML-артефактов.
++
++Ожидаемая финальная строка:
++
++```text
++Block 5 passed: HTML report, single-scenario replay, normalized baseline, clean diff, and regression exit code 10 are verified.
++```
+diff --git a/docs/lab/IMPLEMENTATION_PLAN.ru.md b/docs/lab/IMPLEMENTATION_PLAN.ru.md
+index 45f7627..f005f5a 100644
+--- a/docs/lab/IMPLEMENTATION_PLAN.ru.md
++++ b/docs/lab/IMPLEMENTATION_PLAN.ru.md
+@@ -117,7 +117,7 @@ Block 3 passed: 7 source projects validated, existing migration run executed, su
+ 
+ После этого пишет: `Классификация стадий верна, продолжай блок 4`.
+ 
+-## Блок 4. Verify-project, Playwright runtime и поведенческий oracle — реализован, идёт ремедиация найденных дефектов
++## Блок 4. Verify-project, Playwright runtime и поведенческий oracle — проверен
+ 
+ Цель: доказать не только синтаксическую корректность generated-кода, но и сохранение
+ исполняемого поведения.
+@@ -155,33 +155,42 @@ expected status или ослаблять oracle.
+ папки `artifacts/lab/block-04`. После устранения найденных дефектов и полного совпадения
+ статусов пишет: `Oracle понятен, продолжай блок 5`.
+ 
+-Текущий прогресс ремедиации vertical slice:
++Текущий vertical slice полностью принят:
+ 
+ - `p01-basic-id-login` — PASS;
+ - `p04-findelements-count-text` — PASS;
+ - `p09-helper-extension-mapping` — PASS;
++- `p15-webdriverwait-visible` — PASS;
+ - `p23-cpm-isolation` — PASS;
+ - `p24a-transitive-warning-isolated` — PASS;
+-- `p15-webdriverwait-visible` — исправление подготовлено в remediation 04;
+-- `p26-jsexecutor-unsupported` — следующий оставшийся сценарий.
++- `p26-jsexecutor-unsupported` — UNSUPPORTED_AS_EXPECTED.
+ 
+-## Блок 5. Suite report, replay и baseline diff
++## Блок 5. Suite report, replay и baseline diff — реализован
+ 
+ Состав:
+ 
+ - `lab-summary.json`, `.md`, `.html`;
+-- единая модель exit codes;
+-- `lab replay --project <id>`;
+-- baseline текущей основной ветки;
+-- сравнение статуса, diagnostics, quality budgets, semantic outcome и времени;
+-- нормализация путей, временных файлов и generated trivia.
+-
+-Критерий: одна команда воспроизводит отдельный сценарий, а diff явно показывает
+-регрессии и улучшения.
++- единая модель exit codes `0`, `10–15`;
++- `lab replay --project <id>` через тот же полный runtime pipeline;
++- `lab baseline` с нормализованным machine-readable snapshot;
++- `lab diff` со сравнением статуса, diagnostics, quality budgets, semantic outcome,
++  target test counts, generated fingerprint и времени;
++- нормализация путей, temp-каталогов, GUID, timestamps и generated trivia;
++- JSON/Markdown/HTML diff report;
++- regression exit code `10`, improvement/changed без ложного CI failure.
++
++Критерий: одна команда воспроизводит отдельный сценарий, clean diff не даёт изменений,
++а synthetic regression детектируется и возвращает exit code `10`.
+ 
+ ### Что делает владелец после блока 5
+ 
+-Сохраняет baseline основной ветки и запускает тестовый PR-diff. После проверки пишет:
++Из корня репозитория запускает:
++
++```powershell
++.\scripts\run-lab-block5.ps1
++```
++
++Playwright повторно не скачивается. После успешной финальной строки пишет:
+ `Replay и diff работают, продолжай блок 6`.
+ 
+ ## Блок 6. Полный стабильный корпус из 30 проектов
+@@ -241,42 +250,52 @@ expected status или ослаблять oracle.
+ Утверждает policy: какие кластеры агент исправляет автоматически, а какие требуют
+ ручного решения. После этого полигон считается введённым в постоянную эксплуатацию.
+ 
+-## Текущая проверка после блока 4
++## Текущая проверка после блока 5
+ 
+ Из корня репозитория на Windows:
+ 
+ ```powershell
+-.\scripts\run-lab-block4.ps1
++.\scripts\run-lab-block5.ps1
+ ```
+ 
+-Скрипт собирает решение, запускает полный набор `Migrator.Tests`, устанавливает Chromium
+-для Playwright и выполняет вертикальный suite. Для уже установленного Chromium:
++Скрипт использует уже установленный Playwright Chromium и не скачивает браузеры повторно.
++Он проверяет полный vertical run, HTML report, baseline, replay, clean diff и synthetic
++regression с exit code `10`.
++
++Ручное сохранение baseline:
+ 
+ ```powershell
+-.\scripts\run-lab-block4.ps1 -SkipBrowserInstall
++dotnet run --project .\Migrator.Cli -c Release --no-build -- `
++  lab baseline `
++  --input .\artifacts\lab\main `
++  --out .\artifacts\lab\baselines\main `
++  --label main
+ ```
+ 
+-Ручной эквивалент основного запуска:
++Ручной PR-diff:
+ 
+ ```powershell
+-dotnet run --project Migrator.Cli -c Release --no-build -- lab run `
+-  --suite vertical `
+-  --corpus ./corpus/stable/vertical-slice `
+-  --out ./artifacts/lab/block-04 `
+-  --timeout-seconds 600
++dotnet run --project .\Migrator.Cli -c Release --no-build -- `
++  lab diff `
++  --baseline .\artifacts\lab\baselines\main `
++  --current .\artifacts\lab\pr `
++  --out .\artifacts\lab\diff
+ ```
+ 
+-Для воспроизведения одного сценария с сохранением workspace:
++Воспроизведение одного сценария:
+ 
+ ```powershell
+-dotnet run --project Migrator.Cli -c Release --no-build -- lab run `
++dotnet run --project .\Migrator.Cli -c Release --no-build -- `
++  lab replay `
+   --project p15-webdriverwait-visible `
+-  --out ./artifacts/lab/repro-p15 `
+-  --keep-workspaces
++  --corpus .\corpus\stable\vertical-slice `
++  --out .\artifacts\lab\replay-p15 `
++  --timeout-seconds 600 `
++  --configuration Release
+ ```
+ 
+ Bash:
+ 
+ ```bash
+-./scripts/run-lab-block4.sh
++./scripts/run-lab-block5.sh
+ ```
+diff --git a/scripts/run-lab-block5.ps1 b/scripts/run-lab-block5.ps1
+new file mode 100644
+index 0000000..08d580d
+--- /dev/null
++++ b/scripts/run-lab-block5.ps1
+@@ -0,0 +1,105 @@
++[CmdletBinding()]
++param(
++    [string]$Configuration = "Release",
++    [int]$TimeoutSeconds = 600,
++    [string]$Artifacts = "./artifacts/lab/block-05"
++)
++
++$ErrorActionPreference = "Stop"
++$repoRoot = Split-Path -Parent $PSScriptRoot
++Push-Location $repoRoot
++try {
++    Write-Host "Building Migrator..."
++    dotnet build Migrator.sln -c $Configuration
++    if ($LASTEXITCODE -ne 0) { throw "dotnet build failed with exit code $LASTEXITCODE" }
++
++    Write-Host "Running the full Migrator test suite..."
++    dotnet test Migrator.Tests/Migrator.Tests.csproj -c $Configuration --no-build
++    if ($LASTEXITCODE -ne 0) { throw "Migrator tests failed with exit code $LASTEXITCODE" }
++
++    if (Test-Path $Artifacts) { Remove-Item $Artifacts -Recurse -Force }
++    $current = Join-Path $Artifacts "current"
++    $baseline = Join-Path $Artifacts "baseline-main"
++    $replay = Join-Path $Artifacts "replay-p15"
++    $sameDiff = Join-Path $Artifacts "diff-same"
++    $synthetic = Join-Path $Artifacts "synthetic-regression"
++    $regressionDiff = Join-Path $Artifacts "diff-regression"
++
++    Write-Host "Running the accepted vertical suite used as the current candidate..."
++    dotnet run --project Migrator.Cli -c $Configuration --no-build -- `
++        lab run `
++        --suite vertical `
++        --corpus ./corpus/stable/vertical-slice `
++        --out $current `
++        --timeout-seconds $TimeoutSeconds `
++        --configuration $Configuration
++    if ($LASTEXITCODE -ne 0) { throw "vertical lab run failed with exit code $LASTEXITCODE" }
++
++    foreach ($report in @("lab-summary.json", "lab-summary.md", "lab-summary.html")) {
++        if (-not (Test-Path (Join-Path $current $report))) { throw "Missing suite report: $report" }
++    }
++
++    Write-Host "Saving the normalized main baseline..."
++    dotnet run --project Migrator.Cli -c $Configuration --no-build -- `
++        lab baseline `
++        --input $current `
++        --out $baseline `
++        --label main
++    if ($LASTEXITCODE -ne 0) { throw "lab baseline failed with exit code $LASTEXITCODE" }
++
++    Write-Host "Replaying one scenario through the full runtime pipeline..."
++    dotnet run --project Migrator.Cli -c $Configuration --no-build -- `
++        lab replay `
++        --project p15-webdriverwait-visible `
++        --corpus ./corpus/stable/vertical-slice `
++        --out $replay `
++        --timeout-seconds $TimeoutSeconds `
++        --configuration $Configuration
++    if ($LASTEXITCODE -ne 0) { throw "lab replay failed with exit code $LASTEXITCODE" }
++
++    Write-Host "Comparing the baseline with the identical run..."
++    dotnet run --project Migrator.Cli -c $Configuration --no-build -- `
++        lab diff `
++        --baseline $baseline `
++        --current $current `
++        --out $sameDiff `
++        --duration-regression-percent 20
++    if ($LASTEXITCODE -ne 0) { throw "same-run diff unexpectedly failed with exit code $LASTEXITCODE" }
++
++    $same = Get-Content (Join-Path $sameDiff "lab-diff.json") -Raw | ConvertFrom-Json
++    if ($same.summary.regressions -ne 0) { throw "Expected zero regressions for identical baseline/current run" }
++
++    Write-Host "Creating a synthetic PR regression to prove the diff gate..."
++    New-Item -ItemType Directory -Path $synthetic -Force | Out-Null
++    $candidate = Get-Content (Join-Path $current "lab-summary.json") -Raw | ConvertFrom-Json
++    $candidateProject = @($candidate.projects | Where-Object { $_.id -eq "p01-basic-id-login" })[0]
++    $candidateProject.migration.todoComments = [int]$candidateProject.migration.todoComments + 1
++    $candidate | ConvertTo-Json -Depth 100 | Set-Content (Join-Path $synthetic "lab-summary.json") -Encoding utf8
++
++    dotnet run --project Migrator.Cli -c $Configuration --no-build -- `
++        lab diff `
++        --baseline $baseline `
++        --current $synthetic `
++        --out $regressionDiff `
++        --duration-regression-percent 20
++    $regressionExit = $LASTEXITCODE
++    if ($regressionExit -ne 10) { throw "Synthetic regression diff must return exit code 10, got $regressionExit" }
++
++    $regression = Get-Content (Join-Path $regressionDiff "lab-diff.json") -Raw | ConvertFrom-Json
++    if ($regression.summary.regressions -lt 1) { throw "Synthetic diff did not report a regression" }
++
++    foreach ($required in @(
++        (Join-Path $baseline "lab-baseline.json"),
++        (Join-Path $baseline "lab-baseline.md"),
++        (Join-Path $replay "lab-summary.html"),
++        (Join-Path $sameDiff "lab-diff.html"),
++        (Join-Path $regressionDiff "lab-diff.html")
++    )) {
++        if (-not (Test-Path $required)) { throw "Missing Block 5 artifact: $required" }
++    }
++
++    Write-Host "Block 5 passed: HTML report, single-scenario replay, normalized baseline, clean diff, and regression exit code 10 are verified."
++}
++finally {
++    Pop-Location
++}
+diff --git a/scripts/run-lab-block5.sh b/scripts/run-lab-block5.sh
+new file mode 100755
+index 0000000..3f33f03
+--- /dev/null
++++ b/scripts/run-lab-block5.sh
+@@ -0,0 +1,27 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++configuration="${CONFIGURATION:-Release}"
++timeout_seconds="${TIMEOUT_SECONDS:-600}"
++artifacts="${ARTIFACTS:-./artifacts/lab/block-05}"
++repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++cd "$repo_root"
++
++dotnet build Migrator.sln -c "$configuration"
++dotnet test Migrator.Tests/Migrator.Tests.csproj -c "$configuration" --no-build
++rm -rf "$artifacts"
++current="$artifacts/current"
++baseline="$artifacts/baseline-main"
++replay="$artifacts/replay-p15"
++same_diff="$artifacts/diff-same"
++
++dotnet run --project Migrator.Cli -c "$configuration" --no-build -- lab run --suite vertical --corpus ./corpus/stable/vertical-slice --out "$current" --timeout-seconds "$timeout_seconds" --configuration "$configuration"
++dotnet run --project Migrator.Cli -c "$configuration" --no-build -- lab baseline --input "$current" --out "$baseline" --label main
++dotnet run --project Migrator.Cli -c "$configuration" --no-build -- lab replay --project p15-webdriverwait-visible --corpus ./corpus/stable/vertical-slice --out "$replay" --timeout-seconds "$timeout_seconds" --configuration "$configuration"
++dotnet run --project Migrator.Cli -c "$configuration" --no-build -- lab diff --baseline "$baseline" --current "$current" --out "$same_diff" --duration-regression-percent 20
++
++test -f "$current/lab-summary.html"
++test -f "$baseline/lab-baseline.json"
++test -f "$replay/lab-summary.html"
++test -f "$same_diff/lab-diff.html"
++echo "Block 5 passed: HTML report, single-scenario replay, normalized baseline, and clean diff are verified."

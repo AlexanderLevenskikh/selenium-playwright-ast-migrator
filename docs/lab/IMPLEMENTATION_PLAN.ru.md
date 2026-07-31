@@ -117,7 +117,7 @@ Block 3 passed: 7 source projects validated, existing migration run executed, su
 
 После этого пишет: `Классификация стадий верна, продолжай блок 4`.
 
-## Блок 4. Verify-project, Playwright runtime и поведенческий oracle — реализован, идёт ремедиация найденных дефектов
+## Блок 4. Verify-project, Playwright runtime и поведенческий oracle — проверен
 
 Цель: доказать не только синтаксическую корректность generated-кода, но и сохранение
 исполняемого поведения.
@@ -155,33 +155,42 @@ expected status или ослаблять oracle.
 папки `artifacts/lab/block-04`. После устранения найденных дефектов и полного совпадения
 статусов пишет: `Oracle понятен, продолжай блок 5`.
 
-Текущий прогресс ремедиации vertical slice:
+Текущий vertical slice полностью принят:
 
 - `p01-basic-id-login` — PASS;
 - `p04-findelements-count-text` — PASS;
 - `p09-helper-extension-mapping` — PASS;
+- `p15-webdriverwait-visible` — PASS;
 - `p23-cpm-isolation` — PASS;
 - `p24a-transitive-warning-isolated` — PASS;
-- `p15-webdriverwait-visible` — исправление подготовлено в remediation 04;
-- `p26-jsexecutor-unsupported` — следующий оставшийся сценарий.
+- `p26-jsexecutor-unsupported` — UNSUPPORTED_AS_EXPECTED.
 
-## Блок 5. Suite report, replay и baseline diff
+## Блок 5. Suite report, replay и baseline diff — реализован
 
 Состав:
 
 - `lab-summary.json`, `.md`, `.html`;
-- единая модель exit codes;
-- `lab replay --project <id>`;
-- baseline текущей основной ветки;
-- сравнение статуса, diagnostics, quality budgets, semantic outcome и времени;
-- нормализация путей, временных файлов и generated trivia.
+- единая модель exit codes `0`, `10–15`;
+- `lab replay --project <id>` через тот же полный runtime pipeline;
+- `lab baseline` с нормализованным machine-readable snapshot;
+- `lab diff` со сравнением статуса, diagnostics, quality budgets, semantic outcome,
+  target test counts, generated fingerprint и времени;
+- нормализация путей, temp-каталогов, GUID, timestamps и generated trivia;
+- JSON/Markdown/HTML diff report;
+- regression exit code `10`, improvement/changed без ложного CI failure.
 
-Критерий: одна команда воспроизводит отдельный сценарий, а diff явно показывает
-регрессии и улучшения.
+Критерий: одна команда воспроизводит отдельный сценарий, clean diff не даёт изменений,
+а synthetic regression детектируется и возвращает exit code `10`.
 
 ### Что делает владелец после блока 5
 
-Сохраняет baseline основной ветки и запускает тестовый PR-diff. После проверки пишет:
+Из корня репозитория запускает:
+
+```powershell
+.\scripts\run-lab-block5.ps1
+```
+
+Playwright повторно не скачивается. После успешной финальной строки пишет:
 `Replay и diff работают, продолжай блок 6`.
 
 ## Блок 6. Полный стабильный корпус из 30 проектов
@@ -241,42 +250,52 @@ expected status или ослаблять oracle.
 Утверждает policy: какие кластеры агент исправляет автоматически, а какие требуют
 ручного решения. После этого полигон считается введённым в постоянную эксплуатацию.
 
-## Текущая проверка после блока 4
+## Текущая проверка после блока 5
 
 Из корня репозитория на Windows:
 
 ```powershell
-.\scripts\run-lab-block4.ps1
+.\scripts\run-lab-block5.ps1
 ```
 
-Скрипт собирает решение, запускает полный набор `Migrator.Tests`, устанавливает Chromium
-для Playwright и выполняет вертикальный suite. Для уже установленного Chromium:
+Скрипт использует уже установленный Playwright Chromium и не скачивает браузеры повторно.
+Он проверяет полный vertical run, HTML report, baseline, replay, clean diff и synthetic
+regression с exit code `10`.
+
+Ручное сохранение baseline:
 
 ```powershell
-.\scripts\run-lab-block4.ps1 -SkipBrowserInstall
+dotnet run --project .\Migrator.Cli -c Release --no-build -- `
+  lab baseline `
+  --input .\artifacts\lab\main `
+  --out .\artifacts\lab\baselines\main `
+  --label main
 ```
 
-Ручной эквивалент основного запуска:
+Ручной PR-diff:
 
 ```powershell
-dotnet run --project Migrator.Cli -c Release --no-build -- lab run `
-  --suite vertical `
-  --corpus ./corpus/stable/vertical-slice `
-  --out ./artifacts/lab/block-04 `
-  --timeout-seconds 600
+dotnet run --project .\Migrator.Cli -c Release --no-build -- `
+  lab diff `
+  --baseline .\artifacts\lab\baselines\main `
+  --current .\artifacts\lab\pr `
+  --out .\artifacts\lab\diff
 ```
 
-Для воспроизведения одного сценария с сохранением workspace:
+Воспроизведение одного сценария:
 
 ```powershell
-dotnet run --project Migrator.Cli -c Release --no-build -- lab run `
+dotnet run --project .\Migrator.Cli -c Release --no-build -- `
+  lab replay `
   --project p15-webdriverwait-visible `
-  --out ./artifacts/lab/repro-p15 `
-  --keep-workspaces
+  --corpus .\corpus\stable\vertical-slice `
+  --out .\artifacts\lab\replay-p15 `
+  --timeout-seconds 600 `
+  --configuration Release
 ```
 
 Bash:
 
 ```bash
-./scripts/run-lab-block4.sh
+./scripts/run-lab-block5.sh
 ```

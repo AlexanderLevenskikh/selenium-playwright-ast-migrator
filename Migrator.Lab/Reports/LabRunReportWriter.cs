@@ -1,19 +1,11 @@
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Migrator.Lab.Contracts;
 
 namespace Migrator.Lab.Reports;
 
 public static class LabRunReportWriter
 {
-    static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseUpper) }
-    };
-
     static readonly LabRunStage[] SourceStages =
     {
         LabRunStage.SourceRestore,
@@ -26,17 +18,20 @@ public static class LabRunReportWriter
         Directory.CreateDirectory(result.ArtifactsRoot);
         File.WriteAllText(
             Path.Combine(result.ArtifactsRoot, "lab-summary.json"),
-            JsonSerializer.Serialize(result, JsonOptions) + Environment.NewLine);
+            JsonSerializer.Serialize(result, LabJson.Options) + Environment.NewLine);
         File.WriteAllText(
             Path.Combine(result.ArtifactsRoot, "lab-summary.md"),
             ToMarkdown(result));
+        File.WriteAllText(
+            Path.Combine(result.ArtifactsRoot, "lab-summary.html"),
+            LabRunHtmlReportWriter.ToHtml(result));
 
         foreach (var project in result.Projects)
         {
             Directory.CreateDirectory(project.ArtifactsDirectory);
             File.WriteAllText(
                 Path.Combine(project.ArtifactsDirectory, "scenario-result.json"),
-                JsonSerializer.Serialize(project, JsonOptions) + Environment.NewLine);
+                JsonSerializer.Serialize(project, LabJson.Options) + Environment.NewLine);
 
             var sourceDirectory = Path.Combine(project.ArtifactsDirectory, "source");
             Directory.CreateDirectory(sourceDirectory);
@@ -52,7 +47,7 @@ public static class LabRunReportWriter
             };
             File.WriteAllText(
                 Path.Combine(sourceDirectory, "source-validation.json"),
-                JsonSerializer.Serialize(sourceValidation, JsonOptions) + Environment.NewLine);
+                JsonSerializer.Serialize(sourceValidation, LabJson.Options) + Environment.NewLine);
 
             var targetDirectory = Path.Combine(project.ArtifactsDirectory, "target");
             Directory.CreateDirectory(targetDirectory);
@@ -66,13 +61,13 @@ public static class LabRunReportWriter
                     runtimeArtifactsDirectory = project.RuntimeArtifactsDirectory,
                     build = project.Stages.LastOrDefault(stage => stage.Stage == LabRunStage.TargetBuild),
                     test = project.Stages.LastOrDefault(stage => stage.Stage == LabRunStage.TargetTest)
-                }, JsonOptions) + Environment.NewLine);
+                }, LabJson.Options) + Environment.NewLine);
             File.WriteAllText(
                 Path.Combine(targetDirectory, "semantic-diff.json"),
-                JsonSerializer.Serialize(project.Oracle, JsonOptions) + Environment.NewLine);
+                JsonSerializer.Serialize(project.Oracle, LabJson.Options) + Environment.NewLine);
             File.WriteAllText(
                 Path.Combine(targetDirectory, "quality-evaluation.json"),
-                JsonSerializer.Serialize(project.Quality, JsonOptions) + Environment.NewLine);
+                JsonSerializer.Serialize(project.Quality, LabJson.Options) + Environment.NewLine);
         }
     }
 

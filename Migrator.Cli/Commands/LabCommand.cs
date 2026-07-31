@@ -13,7 +13,7 @@ internal static class LabCommand
         if (args.Length == 0 || IsHelp(args[0]))
         {
             WriteHelp();
-            return 0;
+            return LabExitCodes.Accepted;
         }
 
         var subcommand = args[0].Trim().ToLowerInvariant();
@@ -21,16 +21,22 @@ internal static class LabCommand
             return RunApp(args.Skip(1).ToArray());
         if (subcommand == "run")
             return RunSuite(args.Skip(1).ToArray());
+        if (subcommand == "replay")
+            return RunReplay(args.Skip(1).ToArray());
+        if (subcommand == "baseline")
+            return RunBaseline(args.Skip(1).ToArray());
+        if (subcommand == "diff")
+            return RunDiff(args.Skip(1).ToArray());
 
         if (args.Skip(1).Any(IsHelp))
         {
             WriteHelp();
-            return 0;
+            return LabExitCodes.Accepted;
         }
 
         var options = ParseCatalogOptions(args.Skip(1).ToArray());
         if (options == null)
-            return 15;
+            return LabExitCodes.LabError;
 
         return subcommand switch
         {
@@ -45,19 +51,54 @@ internal static class LabCommand
         if (args.Any(IsHelp))
         {
             WriteRunHelp();
-            return 0;
+            return LabExitCodes.Accepted;
         }
 
         var options = ParseRunOptions(args);
-        if (options == null)
-            return 15;
+        return options == null ? LabExitCodes.LabError : ExecuteRun(options, "run");
+    }
 
+    static int RunReplay(string[] args)
+    {
+        if (args.Any(IsHelp))
+        {
+            WriteReplayHelp();
+            return LabExitCodes.Accepted;
+        }
+
+        var options = ParseRunOptions(args, allowSuiteOption: false, defaultArtifactsRoot: Path.Combine("artifacts", "lab", "replay"));
+        if (options == null)
+            return LabExitCodes.LabError;
+        if (options.ProjectIds.Length != 1)
+        {
+            Console.Error.WriteLine("lab replay requires exactly one --project <id>.");
+            return LabExitCodes.LabError;
+        }
+        if (!string.IsNullOrWhiteSpace(options.Tag))
+        {
+            Console.Error.WriteLine("lab replay does not accept --tag; select exactly one --project.");
+            return LabExitCodes.LabError;
+        }
+
+        var explicitOut = args.Contains("--out", StringComparer.Ordinal);
+        options = options with
+        {
+            Suite = "replay",
+            ArtifactsRoot = explicitOut
+                ? options.ArtifactsRoot
+                : Path.Combine(options.ArtifactsRoot, options.ProjectIds[0])
+        };
+        return ExecuteRun(options, "replay");
+    }
+
+    static int ExecuteRun(LabRunOptions options, string operation)
+    {
         try
         {
             var coordinator = new LabRunCoordinator();
             var result = coordinator.RunAsync(options).GetAwaiter().GetResult();
 
-            Console.WriteLine($"Migrator Lab run: {result.Summary.Projects} project(s).");
+            Console.WriteLine($"Migrator Lab {operation}: {result.Summary.Projects} project(s).");
             foreach (var project in result.Projects)
             {
                 Console.WriteLine($"  {project.Id}: {ToContractName(project.ActualStatus)} " +
@@ -69,20 +110,158 @@ internal static class LabCommand
         catch (LabRunConfigurationException ex)
         {
             Console.Error.WriteLine(ex.Message);
-            return 15;
+            return LabExitCodes.LabError;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
-            Console.Error.WriteLine($"Lab run failed before a suite report could be completed: {ex.Message}");
-            return 15;
+            Console.Error.WriteLine($"Lab {operation} failed before a suite report could be completed: {ex.Message}");
+            return LabExitCodes.LabError;
         }
     }
 
-    static LabRunOptions? ParseRunOptions(string[] args)
+    static int RunBaseline(string[] args)
+    {
+        if (args.Any(IsHelp))
+        {
+            WriteBaselineHelp();
+            return LabExitCodes.Accepted;
+        }
+
+        string? input = null;
+        var output = Path.Combine("artifacts", "lab", "baselines", "main");
+        var label = "main";
+        for (var index = 0; index < args.Length; index++)
+        {
+            switch (args[index])
+            {
+                case "--input":
+                    if (!TryReadValue(args, ref index, out input))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--out":
+                    if (!TryReadValue(args, ref index, out output))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--label":
+                    if (!TryReadValue(args, ref index, out label))
+                        return LabExitCodes.LabError;
+                    break;
+                default:
+                    Console.Error.WriteLine($"Unknown lab baseline option: {args[index]}");
+                    return LabExitCodes.LabError;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            Console.Error.WriteLine("lab baseline requires --input <lab run directory|lab-summary.json>.");
+            return LabExitCodes.LabError;
+        }
+
+        try
+        {
+            var run = LabRunArtifactLoader.LoadRun(input);
+            var unexpected = run.Projects
+                .Where(project => project.ActualStatus != project.ExpectedStatus)
+                .Select(project => $"{project.Id}: expected {ToContractName(project.ExpectedStatus)}, actual {ToContractName(project.ActualStatus)}")
+                .ToArray();
+            if (unexpected.Length > 0)
+            {
+                Console.Error.WriteLine("Refusing to create a baseline from a run with unexpected scenario outcomes:");
+                foreach (var item in unexpected)
+                    Console.Error.WriteLine($"  {item}");
+                return LabExitCodes.Regression;
+            }
+
+            var baseline = LabBaselineService.Create(run, label);
+            LabBaselineReportWriter.Write(baseline, output);
+            Console.WriteLine($"Migrator Lab baseline: {baseline.Projects.Length} project(s), label '{baseline.Label}'.");
+            Console.WriteLine($"Baseline: {Path.GetFullPath(output)}");
+            return LabExitCodes.Accepted;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            Console.Error.WriteLine($"Lab baseline failed: {ex.Message}");
+            return LabExitCodes.LabError;
+        }
+    }
+
+    static int RunDiff(string[] args)
+    {
+        if (args.Any(IsHelp))
+        {
+            WriteDiffHelp();
+            return LabExitCodes.Accepted;
+        }
+
+        string? baselinePath = null;
+        string? currentPath = null;
+        var output = Path.Combine("artifacts", "lab", "diff");
+        var durationPercent = 20d;
+        for (var index = 0; index < args.Length; index++)
+        {
+            switch (args[index])
+            {
+                case "--baseline":
+                    if (!TryReadValue(args, ref index, out baselinePath))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--current":
+                    if (!TryReadValue(args, ref index, out currentPath))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--out":
+                    if (!TryReadValue(args, ref index, out output))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--duration-regression-percent":
+                    if (!TryReadValue(args, ref index, out var rawPercent)
+                        || !double.TryParse(rawPercent, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out durationPercent)
+                        || durationPercent < 0)
+                    {
+                        Console.Error.WriteLine("--duration-regression-percent requires a non-negative number using '.' as decimal separator.");
+                        return LabExitCodes.LabError;
+                    }
+                    break;
+                default:
+                    Console.Error.WriteLine($"Unknown lab diff option: {args[index]}");
+                    return LabExitCodes.LabError;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(baselinePath) || string.IsNullOrWhiteSpace(currentPath))
+        {
+            Console.Error.WriteLine("lab diff requires --baseline <path> and --current <path>.");
+            return LabExitCodes.LabError;
+        }
+
+        try
+        {
+            var baseline = LabRunArtifactLoader.LoadBaseline(baselinePath);
+            var current = LabRunArtifactLoader.LoadRun(currentPath);
+            var diff = LabDiffEngine.Compare(baseline, current, baselinePath, currentPath, durationPercent);
+            LabDiffReportWriter.Write(diff, output);
+            Console.WriteLine($"Migrator Lab diff: {diff.Summary.Regressions} regression(s), {diff.Summary.Improvements} improvement(s), {diff.Summary.Unchanged} unchanged.");
+            foreach (var project in diff.Projects.Where(project => project.Kind != LabDiffKind.Unchanged))
+                Console.WriteLine($"  {project.Id}: {ToContractName(project.Kind)} — {string.Join(" ", project.Reasons)}");
+            Console.WriteLine($"Reports: {Path.GetFullPath(output)}");
+            return diff.Summary.Regressions > 0 ? LabExitCodes.Regression : LabExitCodes.Accepted;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            Console.Error.WriteLine($"Lab diff failed: {ex.Message}");
+            return LabExitCodes.LabError;
+        }
+    }
+
+    static LabRunOptions? ParseRunOptions(
+        string[] args,
+        bool allowSuiteOption = true,
+        string? defaultArtifactsRoot = null)
     {
         var suite = "vertical";
         var corpus = Path.Combine("corpus", "stable", "vertical-slice");
-        var outDirectory = Path.Combine("artifacts", "lab", "run");
+        var outDirectory = defaultArtifactsRoot ?? Path.Combine("artifacts", "lab", "run");
         var projectIds = new List<string>();
         string? tag = null;
         var timeout = TimeSpan.FromMinutes(10);
@@ -95,6 +274,11 @@ internal static class LabCommand
             switch (args[index])
             {
                 case "--suite":
+                    if (!allowSuiteOption)
+                    {
+                        Console.Error.WriteLine("--suite is not valid for lab replay.");
+                        return null;
+                    }
                     if (!TryReadValue(args, ref index, out suite))
                         return null;
                     suite = suite.Trim().ToLowerInvariant();
@@ -208,7 +392,7 @@ internal static class LabCommand
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
             Console.Error.WriteLine($"Lab validation could not read the corpus or write reports: {ex.Message}");
-            return 15;
+            return LabExitCodes.LabError;
         }
 
         Console.WriteLine($"Migrator Lab contract validation: {result.ValidCount} valid, {result.InvalidCount} invalid, {result.ReadyCount} ready, {result.PlannedCount} planned.");
@@ -217,16 +401,16 @@ internal static class LabCommand
         if (result.HasErrors)
         {
             Console.Error.WriteLine("Lab contract validation failed. See lab-contract-validation.md/json.");
-            return 15;
+            return LabExitCodes.LabError;
         }
 
         if (options.FailOnPlanned && result.PlannedCount > 0)
         {
             Console.Error.WriteLine($"Lab contract validation found {result.PlannedCount} planned scenario(s); --fail-on-planned requires all scenarios to be READY.");
-            return 15;
+            return LabExitCodes.LabError;
         }
 
-        return 0;
+        return LabExitCodes.Accepted;
     }
 
     static int RunList(LabCatalogCommandOptions options)
@@ -239,7 +423,7 @@ internal static class LabCommand
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
             Console.Error.WriteLine($"Lab list could not read the corpus: {ex.Message}");
-            return 15;
+            return LabExitCodes.LabError;
         }
 
         var entries = result.Entries
@@ -263,7 +447,7 @@ internal static class LabCommand
         foreach (var issue in result.CatalogIssues)
             Console.Error.WriteLine($"{issue.Severity} {issue.Code}: {issue.Message}");
 
-        return result.HasErrors ? 15 : 0;
+        return result.HasErrors ? LabExitCodes.LabError : LabExitCodes.Accepted;
     }
 
     static int RunApp(string[] args)
@@ -271,7 +455,7 @@ internal static class LabCommand
         if (args.Length == 0 || IsHelp(args[0]))
         {
             WriteAppHelp();
-            return 0;
+            return LabExitCodes.Accepted;
         }
 
         var action = args[0].Trim().ToLowerInvariant();
@@ -279,7 +463,7 @@ internal static class LabCommand
         {
             Console.Error.WriteLine($"Unknown lab app action: {action}");
             WriteAppHelp();
-            return 15;
+            return LabExitCodes.LabError;
         }
 
         var port = 5057;
@@ -292,20 +476,20 @@ internal static class LabCommand
                     if (!TryReadValue(args, ref index, out var rawPort) || !int.TryParse(rawPort, out port) || port is < 0 or > 65535)
                     {
                         Console.Error.WriteLine("--port requires an integer in range 0-65535");
-                        return 15;
+                        return LabExitCodes.LabError;
                     }
                     break;
                 case "--ready-file":
                     if (!TryReadValue(args, ref index, out readyFile))
-                        return 15;
+                        return LabExitCodes.LabError;
                     break;
                 case "--help":
                 case "-h":
                     WriteAppHelp();
-                    return 0;
+                    return LabExitCodes.Accepted;
                 default:
                     Console.Error.WriteLine($"Unknown lab app option: {args[index]}");
-                    return 15;
+                    return LabExitCodes.LabError;
             }
         }
 
@@ -316,7 +500,7 @@ internal static class LabCommand
         catch (Exception ex) when (ex is IOException or SocketException or UnauthorizedAccessException or ArgumentException)
         {
             Console.Error.WriteLine($"LabApp could not start: {ex.Message}");
-            return 15;
+            return LabExitCodes.LabError;
         }
     }
 
@@ -395,7 +579,7 @@ internal static class LabCommand
     {
         Console.Error.WriteLine($"Unknown lab subcommand: {subcommand}");
         WriteHelp();
-        return 15;
+        return LabExitCodes.LabError;
     }
 
     static bool IsHelp(string value) => value is "help" or "--help" or "-h";
@@ -420,6 +604,9 @@ internal static class LabCommand
         Console.WriteLine();
         Console.WriteLine("Usage:");
         Console.WriteLine("  selenium-pw-migrator lab run [options]");
+        Console.WriteLine("  selenium-pw-migrator lab replay --project <id> [options]");
+        Console.WriteLine("  selenium-pw-migrator lab baseline --input <run> [options]");
+        Console.WriteLine("  selenium-pw-migrator lab diff --baseline <path> --current <run> [options]");
         Console.WriteLine("  selenium-pw-migrator lab validate [options]");
         Console.WriteLine("  selenium-pw-migrator lab list [options]");
         Console.WriteLine("  selenium-pw-migrator lab app serve [options]");
@@ -450,7 +637,35 @@ internal static class LabCommand
         Console.WriteLine("  --configuration <name>   Source and target build configuration (default: Release).");
         Console.WriteLine("  --dotnet <path>          dotnet host used for source, verify-project harness, and target runtime.");
         Console.WriteLine("  --keep-workspaces        Preserve copied source workspaces for diagnostics.");
-        Console.WriteLine("  Runtime output includes project-verify reports, target TRX, semantic diff, quality budgets, and failure-only trace/screenshot artifacts.");
+        Console.WriteLine("  Runtime output includes JSON/Markdown/HTML suite reports, project-verify reports, target TRX, semantic diff, quality budgets, and failure-only trace/screenshot artifacts.");
+    }
+
+    static void WriteReplayHelp()
+    {
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  selenium-pw-migrator lab replay --project <id> [options]");
+        Console.WriteLine();
+        Console.WriteLine("Runs exactly one READY scenario through the same source, migration, verify-project, Playwright runtime, quality, and oracle pipeline as lab run.");
+        Console.WriteLine("Options are the same as lab run except --suite and --tag. Default output: artifacts/lab/replay/<id>.");
+    }
+
+    static void WriteBaselineHelp()
+    {
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  selenium-pw-migrator lab baseline --input <run directory|lab-summary.json> [--out <directory>] [--label <name>]");
+        Console.WriteLine();
+        Console.WriteLine("Creates a normalized baseline containing statuses, diagnostics, quality metrics, semantic evidence, duration, and generated-code fingerprints.");
+    }
+
+    static void WriteDiffHelp()
+    {
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  selenium-pw-migrator lab diff --baseline <baseline directory|json> --current <run directory|lab-summary.json> [options]");
+        Console.WriteLine();
+        Console.WriteLine("Options:");
+        Console.WriteLine("  --out <directory>                         Diff report directory (default: artifacts/lab/diff).");
+        Console.WriteLine("  --duration-regression-percent <number>    Performance regression threshold (default: 20).");
+        Console.WriteLine("Produces lab-diff.json, lab-diff.md, and lab-diff.html. Exit code 10 means at least one regression.");
     }
 
     static void WriteAppHelp()

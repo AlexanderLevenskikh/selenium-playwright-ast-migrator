@@ -201,16 +201,16 @@ public static class LabRunStatusPolicy
     {
         var statuses = projects.Select(project => project.ActualStatus).ToHashSet();
         if (statuses.Contains(ScenarioStatus.MigratorFailure))
-            return 11;
+            return LabExitCodes.MigratorFailure;
         if (statuses.Contains(ScenarioStatus.Regression))
-            return 10;
+            return LabExitCodes.Regression;
         if (statuses.Contains(ScenarioStatus.SourceInvalid))
-            return 12;
+            return LabExitCodes.SourceInvalid;
         if (statuses.Contains(ScenarioStatus.InfrastructureFailure))
-            return 13;
+            return LabExitCodes.InfrastructureFailure;
         if (statuses.Contains(ScenarioStatus.NonDeterministic))
-            return 14;
-        return 0;
+            return LabExitCodes.NonDeterministic;
+        return LabExitCodes.Accepted;
     }
 
     static LabStageResult? Find(IEnumerable<LabStageResult> stages, LabRunStage stage) =>
