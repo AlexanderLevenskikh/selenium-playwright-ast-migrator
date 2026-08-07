@@ -7,6 +7,13 @@ This project uses preview SemVer-style versions while the public API is still st
 ## [Unreleased]
 
 ### Breaking changes
+### Added
+### Changed
+### Fixed
+
+## [0.3.0-preview.1]
+
+### Breaking changes
 
 - Removed the Waves/partition runtime, its CLI command family, wave state machine, claims, leases, acceptance receipts, quality-manager/sentinel roles, dashboard lifecycle, recovery commands, and related packaging requirements. Existing historical release notes remain as history, but new workspaces no longer install or execute that mode.
 - `/supervised-task` now has one ordinary full-project flow. `/supervised-task continue` may apply one bounded source-backed repair and then reruns the complete configured source scope; it never advances a hidden partition.
