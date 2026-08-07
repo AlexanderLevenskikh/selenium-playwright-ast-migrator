@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p13-async-lift-simple",
+  "seed": 113,
+  "tags": [
+    "smoke",
+    "pr",
+    "async",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "AsyncLift",
+      "HelperReturn",
+      "CallChain"
+    ],
+    "migrationFiles": [
+      "Tests/AsyncLiftTests.cs"
+    ],
+    "adapterConfig": "adapter-config.json"
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/AsyncLiftTests.cs",
+      "adapter-config.json"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/async",
+        "model": "async-lift"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "async:click"
+      ],
+      "dom": [
+        {
+          "selector": "#async-status",
+          "text": "done"
+        }
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "READY: reviewed source-backed helper-return mapping exercises sync-to-async call-chain lift without hiding TODO debt.",
+    "contentHash": "sha256:30a1c6b5110475d6eeb0bba6d20e3779a9fb0d13e94c06ef3e0dd647a08f0088"
+  }
+}

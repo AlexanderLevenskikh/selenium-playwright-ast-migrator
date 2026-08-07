@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p12-pageobject-inheritance-composition",
+  "seed": 112,
+  "tags": [
+    "page-object",
+    "inheritance",
+    "composition",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "PageObjectInheritance",
+      "BaseConstructor",
+      "Composition"
+    ],
+    "migrationFiles": [
+      "Tests/PomInheritanceTests.cs",
+      "Pages/BasePage.cs",
+      "Pages/ModalComponent.cs",
+      "Pages/UsersPage.cs"
+    ],
+    "adapterConfig": "adapter-config.json"
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/PomInheritanceTests.cs",
+      "Pages/BasePage.cs",
+      "Pages/ModalComponent.cs",
+      "Pages/UsersPage.cs",
+      "adapter-config.json"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/modal",
+        "model": "modal"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "modal:open",
+        "modal:save"
+      ],
+      "dom": [
+        {
+          "selector": "#modal-status",
+          "text": "saved"
+        }
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "Ready stable fixture p12-pageobject-inheritance-composition; reviewed Page Object mapping is backed by included source files.",
+    "contentHash": "sha256:88326eac8d4019fb8d00af44734d0157e248009652027b01759636af9c2ec2cf"
+  }
+}

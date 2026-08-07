@@ -6,7 +6,10 @@
     "smoke",
     "collections",
     "runtime-pass",
-    "vertical-slice"
+    "vertical-slice",
+    "stable",
+    "nightly",
+    "pr"
   ],
   "source": {
     "language": "csharp",

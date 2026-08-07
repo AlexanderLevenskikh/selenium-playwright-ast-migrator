@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p27-actions-api-unsupported",
+  "seed": 127,
+  "tags": [
+    "unsupported",
+    "actions-api",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "Actions",
+      "MoveToElement",
+      "Perform"
+    ],
+    "migrationFiles": [
+      "Tests/ActionsApiTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/ActionsApiTests.cs"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/actions",
+        "model": "actions-api"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "actions:neighbour-click"
+      ],
+      "dom": [
+        {
+          "selector": "#actions-status",
+          "text": "ok"
+        }
+      ]
+    },
+    "diagnostics": {
+      "mustContainAny": [
+        "RAW_STATEMENT",
+        "MANUAL_REVIEW",
+        "Actions"
+      ]
+    },
+    "mustNot": {
+      "corruptNeighbourCode": true
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 5,
+    "unmappedMax": 0,
+    "unsupportedMax": 2,
+    "warningsMax": 1
+  },
+  "expected": {
+    "status": "UNSUPPORTED_AS_EXPECTED"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "Ready stable fixture p27-actions-api-unsupported.",
+    "contentHash": "sha256:3492c7dc555bfef3e7a1f969957e2fb184ffe4bfcbbbff44284bfd5da47ccd87"
+  }
+}

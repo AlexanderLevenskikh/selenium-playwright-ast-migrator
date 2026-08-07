@@ -1,0 +1,110 @@
+{
+  "GeneratedAtUtc": "2026-07-31T09:01:16.1795694+00:00",
+  "Source": "pipeline",
+  "ArtifactRoot": "pipeline",
+  "RecursiveArtifactLookup": false,
+  "FilesProcessed": 1,
+  "TestsFound": 1,
+  "ActionsFound": 4,
+  "SemanticActions": 0,
+  "SyntaxFallbackActions": 4,
+  "MappedTargets": 1,
+  "UnmappedTargets": 1,
+  "UnsupportedActions": 0,
+  "TodoComments": 2,
+  "SyntaxErrors": 0,
+  "ProjectVerifyStatus": "passed",
+  "Insights": [
+    {
+      "Category": "ASSERTION_CONSTRAINT",
+      "Title": "Review TODO [ASSERTION_CONSTRAINT]: convert constraint to Playwright assertion",
+      "Reason": "The assertion was preserved because no direct Playwright assertion mapping was inferred.",
+      "EstimatedImpact": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776\\.migration-input\\Tests\\ModernSyntaxTests.cs",
+      "ExampleLine": 19,
+      "SuggestedAction": "Add reusable assertion mapping if this pattern appears often.",
+      "RequiresSourceTruth": false,
+      "RequiresDeveloper": false,
+      "Evidence": [
+        "// TODO: convert constraint to Playwright assertion [MIGRATOR:ASSERTION_CONSTRAINT]"
+      ]
+    },
+    {
+      "Category": "MISSING_MAPPING",
+      "Title": "Add mapping for button!",
+      "Reason": "Source expression was not mapped to a Playwright locator/action.",
+      "EstimatedImpact": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776\\.migration-input\\Tests\\ModernSyntaxTests.cs",
+      "ExampleLine": 10,
+      "SuggestedAction": "Find POM/source truth for this expression, then add a UiTarget/Method/ParameterizedMethod mapping in adapter-config.json.",
+      "RequiresSourceTruth": true,
+      "RequiresDeveloper": false,
+      "Evidence": [
+        "Suggested target draft: TODO_button!"
+      ]
+    },
+    {
+      "Category": "MISSING_MAPPING",
+      "Title": "Add source-backed mapping: map source expression to Playwright locator: button!",
+      "Reason": "Generated code contains a source UI target that has no Playwright mapping.",
+      "EstimatedImpact": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776\\.migration-input\\Tests\\ModernSyntaxTests.cs",
+      "ExampleLine": 22,
+      "SuggestedAction": "Find POM/source truth and add UiTarget/Method/ParameterizedMethod/Table/Pagination mapping.",
+      "RequiresSourceTruth": true,
+      "RequiresDeveloper": false,
+      "Evidence": [
+        "// TODO: map source expression to Playwright locator: button! [MIGRATOR:MISSING_MAPPING]"
+      ]
+    }
+  ],
+  "NormalizedRootCauses": [
+    {
+      "Category": "ASSERTION_CONSTRAINT",
+      "GroupKey": "Review TODO [ASSERTION_CONSTRAINT]: convert constraint to Playwright assertion",
+      "DisplayName": "Review TODO [ASSERTION_CONSTRAINT]: convert constraint to Playwright assertion",
+      "Count": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776\\.migration-input\\Tests\\ModernSyntaxTests.cs",
+      "ExampleLine": 19,
+      "SuggestedAction": "Add reusable assertion mapping if this pattern appears often.",
+      "RepresentativeFiles": [
+        "\u003CUSER_HOME\u003E\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776\\.migration-input\\Tests\\ModernSyntaxTests.cs"
+      ],
+      "Evidence": [
+        "// TODO: convert constraint to Playwright assertion [MIGRATOR:ASSERTION_CONSTRAINT]"
+      ]
+    },
+    {
+      "Category": "MISSING_MAPPING",
+      "GroupKey": "Add mapping for button!",
+      "DisplayName": "Add mapping for button!",
+      "Count": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776\\.migration-input\\Tests\\ModernSyntaxTests.cs",
+      "ExampleLine": 10,
+      "SuggestedAction": "Find POM/source truth for this expression, then add a UiTarget/Method/ParameterizedMethod mapping in adapter-config.json.",
+      "RepresentativeFiles": [
+        "\u003CUSER_HOME\u003E\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776\\.migration-input\\Tests\\ModernSyntaxTests.cs"
+      ],
+      "Evidence": [
+        "Suggested target draft: TODO_button!"
+      ]
+    },
+    {
+      "Category": "MISSING_MAPPING",
+      "GroupKey": "Add source-backed mapping: map source expression to Playwright locator: button!",
+      "DisplayName": "Add source-backed mapping: map source expression to Playwright locator: button!",
+      "Count": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776\\.migration-input\\Tests\\ModernSyntaxTests.cs",
+      "ExampleLine": 22,
+      "SuggestedAction": "Find POM/source truth and add UiTarget/Method/ParameterizedMethod/Table/Pagination mapping.",
+      "RepresentativeFiles": [
+        "\u003CUSER_HOME\u003E\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776\\.migration-input\\Tests\\ModernSyntaxTests.cs"
+      ],
+      "Evidence": [
+        "// TODO: map source expression to Playwright locator: button! [MIGRATOR:MISSING_MAPPING]"
+      ]
+    }
+  ],
+  "TableMappingCandidates": [],
+  "NextBestAction": "Add reusable assertion mapping if this pattern appears often."
+}

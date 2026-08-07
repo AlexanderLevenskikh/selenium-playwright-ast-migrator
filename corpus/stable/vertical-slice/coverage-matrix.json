@@ -1,0 +1,495 @@
+{
+  "schemaVersion": "migrator-lab-coverage/v1",
+  "scenarioCount": 30,
+  "suiteCounts": {
+    "smoke": 7,
+    "pr": 18,
+    "nightly": 30
+  },
+  "expectedStatusCounts": {
+    "PASS": 25,
+    "INFRASTRUCTURE_FAILURE": 1,
+    "UNSUPPORTED_AS_EXPECTED": 4
+  },
+  "categories": {
+    "basic-actions-and-assertions": [
+      "p01-basic-id-login",
+      "p02-css-clear-input",
+      "p03-xpath-text-assert",
+      "p04-findelements-count-text",
+      "p05-table-row-target",
+      "p06-checkbox-radio-selected"
+    ],
+    "locator-shapes": [
+      "p07-locator-in-variable",
+      "p08-conditional-locator"
+    ],
+    "helpers-and-page-objects": [
+      "p09-helper-extension-mapping",
+      "p10-unresolved-pageobject-chain",
+      "p11-pageobject-separate-project",
+      "p12-pageobject-inheritance-composition"
+    ],
+    "async-and-lifecycle": [
+      "p13-async-lift-simple",
+      "p14-async-lift-setup-base"
+    ],
+    "wait-semantics": [
+      "p15-webdriverwait-visible",
+      "p16-wait-disappear-negative",
+      "p17-custom-wait-state"
+    ],
+    "assertions-control-flow-and-data": [
+      "p18-assert-multiple-fluent",
+      "p19-control-flow-loops",
+      "p20-nunit-testcasesource-valuesource",
+      "p21-nunit-parallelizable-retry-order"
+    ],
+    "modern-csharp-and-msbuild": [
+      "p22-file-scoped-globalusings-nullable",
+      "p23-cpm-isolation",
+      "p24a-transitive-warning-isolated",
+      "p24b-transitive-warning-sabotage",
+      "p25-multitarget-conditional-itemgroup"
+    ],
+    "expected-unsupported": [
+      "p26-jsexecutor-unsupported",
+      "p27-actions-api-unsupported",
+      "p28-frames-popup-upload-download",
+      "p29-raw-statement-dynamic"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "p01-basic-id-login",
+      "expectedStatus": "PASS",
+      "suites": [
+        "smoke",
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "FindElement",
+        "By.Id",
+        "SendKeys",
+        "Click",
+        "Assert.That"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p02-css-clear-input",
+      "expectedStatus": "PASS",
+      "suites": [
+        "smoke",
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "By.CssSelector",
+        "Clear",
+        "SendKeys",
+        "GetAttribute",
+        "Click"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p03-xpath-text-assert",
+      "expectedStatus": "PASS",
+      "suites": [
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "By.XPath",
+        "Text",
+        "Assert.That"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p04-findelements-count-text",
+      "expectedStatus": "PASS",
+      "suites": [
+        "smoke",
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "FindElements",
+        "By.CssSelector",
+        "Count",
+        "Text",
+        "Assert.That"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p05-table-row-target",
+      "expectedStatus": "PASS",
+      "suites": [
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "FindElements",
+        "TableRow",
+        "Indexer",
+        "Count",
+        "TextContains"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p06-checkbox-radio-selected",
+      "expectedStatus": "PASS",
+      "suites": [
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "Selected",
+        "Enabled",
+        "Displayed",
+        "ControlStateAssertion"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p07-locator-in-variable",
+      "expectedStatus": "PASS",
+      "suites": [
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "ByVariable",
+        "FindElementVariable",
+        "Click"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p08-conditional-locator",
+      "expectedStatus": "PASS",
+      "suites": [
+        "nightly"
+      ],
+      "features": [
+        "ConditionalExpression",
+        "By.Id",
+        "FindElementVariable"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p09-helper-extension-mapping",
+      "expectedStatus": "PASS",
+      "suites": [
+        "smoke",
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "ExtensionMethod",
+        "FindElement",
+        "Click",
+        "WebDriverWait"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p10-unresolved-pageobject-chain",
+      "expectedStatus": "PASS",
+      "suites": [
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "PageObject",
+        "MethodReturnChain",
+        "DownstreamAssertion"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p11-pageobject-separate-project",
+      "expectedStatus": "PASS",
+      "suites": [
+        "nightly"
+      ],
+      "features": [
+        "PageObject",
+        "ProjectReference",
+        "SeparateAssembly"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p12-pageobject-inheritance-composition",
+      "expectedStatus": "PASS",
+      "suites": [
+        "nightly"
+      ],
+      "features": [
+        "PageObjectInheritance",
+        "BaseConstructor",
+        "Composition"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p13-async-lift-simple",
+      "expectedStatus": "PASS",
+      "suites": [
+        "smoke",
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "AsyncLift",
+        "HelperReturn",
+        "CallChain"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p14-async-lift-setup-base",
+      "expectedStatus": "PASS",
+      "suites": [
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "SetUp",
+        "AsyncLift",
+        "Lifecycle"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p15-webdriverwait-visible",
+      "expectedStatus": "PASS",
+      "suites": [
+        "smoke",
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "WebDriverWait",
+        "Until",
+        "Displayed",
+        "Click"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p16-wait-disappear-negative",
+      "expectedStatus": "PASS",
+      "suites": [
+        "nightly"
+      ],
+      "features": [
+        "WebDriverWait",
+        "UntilNotDisplayed",
+        "Enabled"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p17-custom-wait-state",
+      "expectedStatus": "PASS",
+      "suites": [
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "CustomWait",
+        "Enabled",
+        "ParameterizedMethodMapping"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p18-assert-multiple-fluent",
+      "expectedStatus": "PASS",
+      "suites": [
+        "nightly"
+      ],
+      "features": [
+        "Assert.Multiple",
+        "FluentAssertions",
+        "Selected",
+        "Text"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p19-control-flow-loops",
+      "expectedStatus": "PASS",
+      "suites": [
+        "nightly"
+      ],
+      "features": [
+        "Foreach",
+        "Continue",
+        "Break",
+        "ConditionalBlock"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p20-nunit-testcasesource-valuesource",
+      "expectedStatus": "PASS",
+      "suites": [
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "TestCaseSource",
+        "ValueSource",
+        "StringInterpolation"
+      ],
+      "mustPassTests": 4
+    },
+    {
+      "id": "p21-nunit-parallelizable-retry-order",
+      "expectedStatus": "PASS",
+      "suites": [
+        "nightly"
+      ],
+      "features": [
+        "Parallelizable",
+        "Retry",
+        "FixtureLifeCycle",
+        "TestCase"
+      ],
+      "mustPassTests": 2
+    },
+    {
+      "id": "p22-file-scoped-globalusings-nullable",
+      "expectedStatus": "PASS",
+      "suites": [
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "FileScopedNamespace",
+        "GlobalUsings",
+        "Nullable"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p23-cpm-isolation",
+      "expectedStatus": "PASS",
+      "suites": [
+        "smoke",
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "Directory.Packages.props",
+        "CentralPackageManagement",
+        "VerifyProject"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p24a-transitive-warning-isolated",
+      "expectedStatus": "PASS",
+      "suites": [
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "Directory.Build.props",
+        "ProjectReference",
+        "TreatWarningsAsErrors",
+        "VerifyProject"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p24b-transitive-warning-sabotage",
+      "expectedStatus": "INFRASTRUCTURE_FAILURE",
+      "suites": [
+        "nightly"
+      ],
+      "features": [
+        "ProjectReference",
+        "NuGetRestoreFailure",
+        "InfrastructureClassification"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p25-multitarget-conditional-itemgroup",
+      "expectedStatus": "PASS",
+      "suites": [
+        "nightly"
+      ],
+      "features": [
+        "TargetFrameworks",
+        "ConditionalItemGroup",
+        "ProjectReference"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p26-jsexecutor-unsupported",
+      "expectedStatus": "UNSUPPORTED_AS_EXPECTED",
+      "suites": [
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "IJavaScriptExecutor",
+        "ExecuteScript",
+        "RawStatement"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p27-actions-api-unsupported",
+      "expectedStatus": "UNSUPPORTED_AS_EXPECTED",
+      "suites": [
+        "nightly"
+      ],
+      "features": [
+        "Actions",
+        "MoveToElement",
+        "Perform"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p28-frames-popup-upload-download",
+      "expectedStatus": "UNSUPPORTED_AS_EXPECTED",
+      "suites": [
+        "nightly"
+      ],
+      "features": [
+        "SwitchTo.Frame",
+        "WindowHandles",
+        "Upload",
+        "Download"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p29-raw-statement-dynamic",
+      "expectedStatus": "UNSUPPORTED_AS_EXPECTED",
+      "suites": [
+        "nightly"
+      ],
+      "features": [
+        "dynamic",
+        "RawStatement",
+        "NeighbourPreservation"
+      ],
+      "mustPassTests": 1
+    }
+  ]
+}

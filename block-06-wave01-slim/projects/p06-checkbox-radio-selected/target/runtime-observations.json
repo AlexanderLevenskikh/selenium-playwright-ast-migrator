@@ -1,0 +1,38 @@
+[
+  {
+    "Sequence": 1,
+    "ObservedAtUtc": "2026-07-31T08:55:15.8048669+00:00",
+    "Event": "form:ready",
+    "Path": "/form",
+    "Dom": {
+      "terms": {
+        "Text": "",
+        "Value": "on",
+        "Visible": true,
+        "Enabled": true,
+        "Checked": true
+      },
+      "blocked": {
+        "Text": "",
+        "Value": "on",
+        "Visible": true,
+        "Enabled": false,
+        "Checked": false
+      },
+      "form-status": {
+        "Text": "ready",
+        "Value": "",
+        "Visible": true,
+        "Enabled": true,
+        "Checked": false
+      },
+      "lab-event-log": {
+        "Text": "[\u0022form:ready\u0022]",
+        "Value": "",
+        "Visible": true,
+        "Enabled": true,
+        "Checked": false
+      }
+    }
+  }
+]

@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "migrator-lab-source-validation/v1",
+  "scenarioId": "p22-file-scoped-globalusings-nullable",
+  "status": "PASS",
+  "sourceContentPreserved": true,
+  "tests": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0,
+    "expectedPassed": 1,
+    "trxPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\source\\test-results\\source-tests.trx"
+  },
+  "stages": [
+    {
+      "stage": "SOURCE_RESTORE",
+      "outcome": "PASSED",
+      "exitCode": 0,
+      "durationMs": 1264,
+      "command": "dotnet restore C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776\\Scenario.csproj --nologo",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\source\\restore.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\source\\restore.stderr.log",
+      "message": null
+    },
+    {
+      "stage": "SOURCE_BUILD",
+      "outcome": "PASSED",
+      "exitCode": 0,
+      "durationMs": 1233,
+      "command": "dotnet build C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776\\Scenario.csproj --configuration Release --no-restore --nologo",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\source\\build.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\source\\build.stderr.log",
+      "message": null
+    },
+    {
+      "stage": "SOURCE_TEST",
+      "outcome": "PASSED",
+      "exitCode": 0,
+      "durationMs": 3992,
+      "command": "dotnet test C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776\\Scenario.csproj --configuration Release --no-build --no-restore --nologo --logger trx;LogFileName=source-tests.trx --results-directory C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\source\\test-results",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\source\\test.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\source\\test.stderr.log",
+      "message": null
+    }
+  ],
+  "issues": [
+    "Quality budget exceeded: TODO comments = 2, maximum = 0.",
+    "Quality budget exceeded: unmapped targets = 1, maximum = 0.",
+    "Quality budget exceeded: warning-bearing files = 1, maximum = 0.",
+    "Semantic oracle failed (target-test-count): expected 1; actual 0/1.",
+    "Semantic oracle failed (event-sequence): expected smoke:click; actual .",
+    "Semantic oracle failed (dom-element): expected #smoke-status; actual missing from final observation."
+  ]
+}

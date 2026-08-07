@@ -1,0 +1,16 @@
+{
+  "SchemaVersion": "adapter-config/v1",
+  "SourceProjectName": "Migrator.Lab.P11",
+  "ParameterizedMethods": [
+    {
+      "SourceMethodPattern": "new LoginPage(WebDriver).Login()",
+      "TargetStatements": [
+        "await Page.Locator(\"#pom-user\").FillAsync(\"john\");",
+        "await Page.Locator(\"#pom-password\").FillAsync(\"secret\");",
+        "await Page.Locator(\"#pom-login\").ClickAsync();"
+      ],
+      "RequiresReview": false,
+      "Description": "Source-backed mapping from the referenced Pages project."
+    }
+  ]
+}

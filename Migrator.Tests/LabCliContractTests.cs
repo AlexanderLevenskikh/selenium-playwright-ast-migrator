@@ -20,6 +20,8 @@ public sealed class LabCliContractTests
         Assert.Contains("LabRunCoordinator", command);
         Assert.Contains("LabDiffEngine", command);
         Assert.Contains("--suite <name>", command);
+        Assert.Contains("vertical|smoke|pr|nightly", command);
+        Assert.Contains("--feature <name[,name]>", command);
         Assert.Contains("selenium-pw-migrator lab validate", command);
         Assert.Contains("selenium-pw-migrator lab list", command);
         Assert.Contains("selenium-pw-migrator lab app serve", command);

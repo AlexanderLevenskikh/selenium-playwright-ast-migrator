@@ -13,9 +13,13 @@ public partial class PlaywrightDotNetRenderer
             return;
         }
 
-        var method = action.Kind == ControlStateAssertionKind.Disabled
-            ? "ToBeDisabledAsync"
-            : "ToBeEnabledAsync";
+        var method = action.Kind switch
+        {
+            ControlStateAssertionKind.Disabled => "ToBeDisabledAsync",
+            ControlStateAssertionKind.Checked => "ToBeCheckedAsync",
+            ControlStateAssertionKind.Unchecked => "Not.ToBeCheckedAsync",
+            _ => "ToBeEnabledAsync"
+        };
         sb.AppendLine($"{_indent}{_indent}await {ExpectCall()}({RenderTargetExpression(action.Target)}).{method}(); // line {action.SourceLine}");
     }
 }

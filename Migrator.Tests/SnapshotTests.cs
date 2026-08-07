@@ -4463,6 +4463,152 @@ public class PipelineIntegrationTests
     }
 
     [Fact]
+    public void ReviewedSyncHelperReturnMapping_LiftsCallerAndPreservesScalarAssertion()
+    {
+        var config = new ProjectAdapterConfig(
+            "Migrator.Tests.AsyncLiftHelper",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "ClickAndReadStatus()",
+                    new[]
+                    {
+                        "await Page.Locator(\"#async-button\").ClickAsync();",
+                        "var {result} = await Page.Locator(\"#async-status\").InnerTextAsync();"
+                    },
+                    requiresReview: false)
+            });
+        var pipeline = new MigrationPipeline(
+            new RoslynTestFileParser(config),
+            new PlaywrightDotNetRenderer(),
+            new DefaultProjectAdapter(config));
+
+        var result = pipeline.ProcessFile(Path.Combine(_testFilesDir, "PipelineAsyncLiftHelperTests.cs"));
+        var output = result.GeneratedOutput;
+
+        Assert.Contains("public async Task SyncHelperIsLiftedIntoAsyncCallChain()", output);
+        Assert.Contains("await Page.Locator(\"#async-button\").ClickAsync();", output);
+        Assert.Contains("var status = await Page.Locator(\"#async-status\").InnerTextAsync();", output);
+        Assert.Contains("Assert.That(status, Is.EqualTo(\"done\"));", output);
+        Assert.DoesNotContain("HELPER_METHOD_REQUIRES_MAPPING", output);
+        Assert.DoesNotContain("ASSERTION_CONSTRAINT", output);
+        Assert.DoesNotContain("UNAVAILABLE_SYMBOLS", output);
+        Assert.DoesNotContain("TODO", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void NUnitDataSourcesAndMetadata_ArePreservedWithExpressionBodiedHelperMapping()
+    {
+        var config = new ProjectAdapterConfig(
+            "Migrator.Tests.NUnitMetadata",
+            Array.Empty<UiTargetMapping>(),
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "RunCase({value})",
+                    new[]
+                    {
+                        "await Page.Locator(\"#parameter-{value}\").ClickAsync();",
+                        "await Expect(Page.Locator(\"#parameter-status\")).ToHaveTextAsync({value});"
+                    },
+                    requiresReview: false)
+            });
+        var pipeline = new MigrationPipeline(
+            new RoslynTestFileParser(config),
+            new PlaywrightDotNetRenderer(),
+            new DefaultProjectAdapter(config));
+
+        var result = pipeline.ProcessFile(Path.Combine(_testFilesDir, "PipelineNUnitDataSourceMetadataTests.cs"));
+        var output = result.GeneratedOutput;
+
+        Assert.Contains("[FixtureLifeCycle(LifeCycle.InstancePerTestCase)]", output);
+        Assert.Contains("[Parallelizable(ParallelScope.All)]", output);
+        Assert.Contains("[TestCaseSource(nameof(Cases))]", output);
+        Assert.Contains("[Retry(2)]", output);
+        Assert.Contains("[ValueSource(nameof(Values))] string value", output);
+        Assert.Contains("await Page.Locator($\"#parameter-{value}\").ClickAsync();", output);
+        Assert.Contains("await Expect(Page.Locator(\"#parameter-status\")).ToHaveTextAsync(value);", output);
+        Assert.DoesNotContain("MISSING_MAPPING", output);
+        Assert.DoesNotContain("EMPTY_TEST_AFTER_SUPPRESSION", output);
+        Assert.DoesNotContain("TODO", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void InterpolatedIdLocator_WithNUnitMetadata_RendersActiveLocator()
+    {
+        var result = RunPipeline("PipelineInterpolatedIdLocatorTests.cs");
+        var output = result.GeneratedOutput;
+
+        Assert.Contains("[FixtureLifeCycle(LifeCycle.InstancePerTestCase)]", output);
+        Assert.Contains("[Parallelizable(ParallelScope.All)]", output);
+        Assert.Contains("[Retry(2)]", output);
+        Assert.Contains("[TestCase(\"one\")]", output);
+        Assert.Contains("[TestCase(\"two\")]", output);
+        Assert.Contains("await Page.Locator($\"#parameter-{value}\").ClickAsync();", output);
+        Assert.Contains("await Expect(Page.Locator(\"#parameter-status\")).ToHaveTextAsync(value);", output);
+        Assert.DoesNotContain("MISSING_MAPPING", output);
+        Assert.DoesNotContain("TODO", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void ConfiguredPageObjectResultInvocation_BindsReturnedLocatorAndDownstreamAssertion()
+    {
+        var config = new ProjectAdapterConfig(
+            "Migrator.Tests.PageObjectResult",
+            new[]
+            {
+                new UiTargetMapping("dashboard.Status", "dashboard", "RawExpression")
+            },
+            Array.Empty<PageObjectMapping>(),
+            Array.Empty<MethodMapping>(),
+            ParameterizedMethods: new[]
+            {
+                new ParameterizedMethodMapping(
+                    "new LoginPage(WebDriver).Login({user}, {password})",
+                    new[]
+                    {
+                        "await Page.Locator(\"#pom-user\").FillAsync({user});",
+                        "await Page.Locator(\"#pom-password\").FillAsync({password});",
+                        "await Page.Locator(\"#pom-login\").ClickAsync();",
+                        "var {result} = Page.Locator(\"#dashboard-status\");"
+                    },
+                    requiresReview: false)
+            });
+        var pipeline = new MigrationPipeline(
+            new RoslynTestFileParser(config),
+            new PlaywrightDotNetRenderer(),
+            new DefaultProjectAdapter(config));
+
+        var result = pipeline.ProcessFile(Path.Combine(_testFilesDir, "PipelineConfiguredPageObjectResultTests.cs"));
+        var output = result.GeneratedOutput;
+        var action = Assert.Single(result.TargetModel.Tests.Single().BodyActions.OfType<MappedMethodInvocationAction>());
+
+        Assert.Equal("dashboard", action.ResultVariable);
+        Assert.Contains("await Page.Locator(\"#pom-user\").FillAsync(\"john\");", output);
+        Assert.Contains("await Page.Locator(\"#pom-password\").FillAsync(\"secret\");", output);
+        Assert.Contains("await Page.Locator(\"#pom-login\").ClickAsync();", output);
+        Assert.Contains("var dashboard = Page.Locator(\"#dashboard-status\");", output);
+        Assert.Contains("await Expect(dashboard).ToHaveTextAsync(\"ready\");", output);
+        Assert.DoesNotContain("RAW_STATEMENT", output);
+        Assert.DoesNotContain("UNAVAILABLE_SYMBOLS", output);
+        Assert.DoesNotContain("UNRESOLVED_SYMBOL", output);
+        Assert.DoesNotContain("TODO", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
     public void WebDriverWaitUntilDisplayed_FullPipelineRendersVisibleWaitAndPreservesFollowingActions()
     {
         var result = RunPipeline("PipelineWebDriverWaitVisibleTests.cs");
@@ -4486,6 +4632,71 @@ public class PipelineIntegrationTests
         Assert.DoesNotContain("RAW_STATEMENT", output);
         Assert.DoesNotContain("UNRESOLVED_SYMBOL", output);
         Assert.DoesNotContain("UNAVAILABLE_SYMBOLS", output);
+        Assert.DoesNotContain("TODO", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void Block6PrimitivePatterns_FullPipelineRendersWithoutTodoDebt()
+    {
+        var result = RunPipeline("PipelineBlock6PrimitivePatternsTests.cs");
+        var output = result.GeneratedOutput;
+
+        Assert.Contains("""var input = Page.Locator(".name");""", output);
+        Assert.Contains("""await input.FillAsync("");""", output);
+        Assert.Contains("""await input.FillAsync("new");""", output);
+        Assert.Contains("""await Expect(input).ToHaveValueAsync("new");""", output);
+        Assert.Contains("await Expect(terms).ToBeCheckedAsync();", output);
+        Assert.Contains("await Expect(optional).Not.ToBeCheckedAsync();", output);
+        Assert.Contains("await Expect(terms).ToBeEnabledAsync();", output);
+        Assert.Contains("await Expect(blocked).ToBeDisabledAsync();", output);
+
+        Assert.Contains("""var target = Page.Locator("#locator-primary");""", output);
+        Assert.Contains("await target.ClickAsync();", output);
+        Assert.Contains("bool usePrimary = true;", output);
+        Assert.Contains(
+            """var conditionalTarget = usePrimary ? Page.Locator("#locator-primary") : Page.Locator("#locator-secondary");""",
+            output);
+        Assert.Contains("await conditionalTarget.ClickAsync();", output);
+
+        Assert.Contains("""await Expect(Page.Locator("#negative-spinner")).ToBeHiddenAsync();""", output);
+        Assert.Contains("source locator null-check elided", output);
+        Assert.Contains("await Expect(button).ToBeEnabledAsync();", output);
+        Assert.Contains("await button.ClickAsync();", output);
+
+        Assert.DoesNotContain("ASSERTION_CONSTRAINT", output);
+        Assert.DoesNotContain("MISSING_MAPPING", output);
+        Assert.DoesNotContain("RAW_STATEMENT", output);
+        Assert.DoesNotContain("UNRESOLVED_SYMBOL", output);
+        Assert.DoesNotContain("TODO", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
+    public void CollectionLoop_ContinueBreakAndLocatorTextGuards_ArePreserved()
+    {
+        var result = RunPipeline("PipelineControlFlowLoopTests.cs");
+        var output = result.GeneratedOutput;
+        var loop = Assert.Single(result.TargetModel.Tests.Single().BodyActions.OfType<CollectionForEachAction>());
+
+        var conditionals = loop.BodyActions.OfType<ConditionalBlockAction>().ToArray();
+        Assert.Equal(2, conditionals.Length);
+        Assert.Equal("await item.InnerTextAsync() == \"alpha\"", conditionals[0].ConditionExpression);
+        Assert.Equal("await item.InnerTextAsync() == \"gamma\"", conditionals[1].ConditionExpression);
+        Assert.Contains(conditionals[0].IfActions, action => action is RawStatementAction raw && raw.SourceText == "continue");
+        Assert.Contains(conditionals[1].IfActions, action => action is RawStatementAction raw && raw.SourceText == "break");
+
+        Assert.Contains("foreach (var item in await Page.Locator(\".control-item\").AllAsync())", output);
+        Assert.Contains("if (await item.InnerTextAsync() == \"alpha\")", output);
+        Assert.Contains("continue;", output);
+        Assert.Contains("if (await item.InnerTextAsync() == \"gamma\")", output);
+        Assert.Contains("break;", output);
+        Assert.Contains("await item.ClickAsync();", output);
+        Assert.Contains("await Expect(Page.Locator(\"#control-status\")).ToHaveTextAsync(\"beta\");", output);
+        Assert.DoesNotContain("CONDITIONAL_SUPPRESSED_BODY", output);
+        Assert.DoesNotContain("CONDITIONAL_UNRESOLVED_SYMBOL", output);
         Assert.DoesNotContain("TODO", output);
         Assert.True(CompileChecker.CompilesWithoutErrors(output),
             CompileChecker.FormatErrors(output));

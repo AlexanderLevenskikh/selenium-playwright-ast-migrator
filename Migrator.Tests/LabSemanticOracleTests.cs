@@ -109,6 +109,72 @@ public sealed class LabSemanticOracleTests
         }
     }
 
+
+    [Fact]
+    public void Oracle_ValidatesValueEnabledCheckedAndVisibleDomProperties()
+    {
+        var scenario = LoadScenario("p06-checkbox-radio-selected");
+        var generated = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(generated, """await Expect(Page.Locator("#terms")).ToBeCheckedAsync();""");
+            var observations = new[]
+            {
+                new LabAppObservation(
+                    1,
+                    DateTimeOffset.UtcNow,
+                    "form:ready",
+                    "/form",
+                    new Dictionary<string, LabAppDomElementState>(StringComparer.Ordinal)
+                    {
+                        ["terms"] = new("", "on", true, true, true),
+                        ["blocked"] = new("", "", true, false, false),
+                        ["form-status"] = new("ready", "", true, true, false)
+                    })
+            };
+
+            var result = LabSemanticOracle.Evaluate(
+                scenario,
+                new LabSourceTestSummary { ExpectedPassed = 1, Total = 1, Passed = 1 },
+                new LabMigrationSummary { GeneratedFiles = new[] { generated } },
+                new LabProjectVerifySummary { ReportPresent = true, Status = "passed" },
+                observations);
+
+            Assert.True(result.Passed);
+            Assert.Contains(result.Checks, check => check.Kind == "dom-checked" && check.Passed);
+            Assert.Contains(result.Checks, check => check.Kind == "dom-enabled" && check.Passed);
+            Assert.Contains(result.Checks, check => check.Kind == "dom-visible" && check.Passed);
+        }
+        finally
+        {
+            File.Delete(generated);
+        }
+    }
+
+    [Fact]
+    public void Oracle_RequiresGeneratedMetadataTokensOutsideComments()
+    {
+        var scenario = LoadScenario("p21-nunit-parallelizable-retry-order");
+        var generated = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(generated, """[Parallelizable] [Retry(2)] [TestCase("a")] public async Task Run() { }""");
+            var result = LabSemanticOracle.Evaluate(
+                scenario,
+                new LabSourceTestSummary { ExpectedPassed = 2, Total = 2, Passed = 2 },
+                new LabMigrationSummary { GeneratedFiles = new[] { generated } },
+                new LabProjectVerifySummary { ReportPresent = true, Status = "passed" },
+                Array.Empty<LabAppObservation>());
+
+            Assert.True(result.Passed);
+            Assert.Equal(3, result.Checks.Count(check => check.Kind == "generated-contains" && check.Passed));
+        }
+        finally
+        {
+            File.Delete(generated);
+        }
+    }
+
     static LabAppObservation Observation(long sequence, string eventName, string resultText) => new(
         sequence,
         DateTimeOffset.UtcNow,

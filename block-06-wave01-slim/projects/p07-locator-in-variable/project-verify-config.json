@@ -1,0 +1,18 @@
+{
+  "SchemaVersion": "adapter-config/v1",
+  "SourceProjectName": "Migrator.Lab.p07-locator-in-variable",
+  "Verification": {
+    "TargetFramework": "net10.0",
+    "BaseDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd",
+    "BuildWorkingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd",
+    "ProjectReferences": [
+      "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd\\Scenario.csproj"
+    ],
+    "AutoDiscoverNearestProject": false,
+    "AutoDiscoverProjectReferences": false,
+    "AutoDiscoverBuildFiles": true,
+    "AutoDiscoverPackageReferences": false,
+    "NoRestore": false,
+    "Configuration": "Release"
+  }
+}

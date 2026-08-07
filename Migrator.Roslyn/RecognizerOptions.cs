@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Migrator.Core;
 
 namespace Migrator.Roslyn;
@@ -11,6 +12,7 @@ public sealed class RecognizerOptions
     public IReadOnlySet<string> NavigationMethods { get; }
     public IReadOnlySet<string> FluentAssertionMethods { get; }
     public IReadOnlySet<string> GenericResultMethods { get; }
+    public IReadOnlySet<string> ConfiguredResultMethods { get; }
     public IReadOnlyDictionary<string, string> WaitPolicies { get; }
     public IReadOnlyList<WaitPolicyRule> WaitPolicyRules { get; }
 
@@ -22,6 +24,7 @@ public sealed class RecognizerOptions
         IReadOnlySet<string> navigationMethods,
         IReadOnlySet<string> fluentAssertionMethods,
         IReadOnlySet<string> genericResultMethods,
+        IReadOnlySet<string> configuredResultMethods,
         IReadOnlyDictionary<string, string> waitPolicies,
         IReadOnlyList<WaitPolicyRule> waitPolicyRules)
     {
@@ -30,6 +33,7 @@ public sealed class RecognizerOptions
         NavigationMethods = navigationMethods;
         FluentAssertionMethods = fluentAssertionMethods;
         GenericResultMethods = genericResultMethods;
+        ConfiguredResultMethods = configuredResultMethods;
         WaitPolicies = waitPolicies;
         WaitPolicyRules = waitPolicyRules;
     }
@@ -42,11 +46,14 @@ public sealed class RecognizerOptions
         var selectMethods = Merge(DefaultSelectMethods, aliases?.SelectMethods);
         var navigationMethods = Merge(DefaultNavigationMethods, aliases?.NavigationMethods);
         var fluentAssertionMethods = Merge(DefaultFluentAssertionMethods, aliases?.FluentAssertionMethods);
+        var configuredResultMethods = Merge(
+            InferConfiguredResultMethods(config?.Methods ?? Array.Empty<MethodMapping>())
+                .Concat(InferConfiguredResultMethods(config?.ParameterizedMethods ?? Array.Empty<ParameterizedMethodMapping>())),
+            null);
         var genericResultMethods = Merge(
             DefaultGenericResultMethods
                 .Concat(config?.GenericResultMethods ?? Array.Empty<string>())
-                .Concat(InferGenericResultMethods(config?.Methods ?? Array.Empty<MethodMapping>()))
-                .Concat(InferGenericResultMethods(config?.ParameterizedMethods ?? Array.Empty<ParameterizedMethodMapping>())),
+                .Concat(configuredResultMethods),
             null);
 
         var waitPolicies = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -80,6 +87,7 @@ public sealed class RecognizerOptions
             navigationMethods,
             fluentAssertionMethods,
             genericResultMethods,
+            configuredResultMethods,
             waitPolicies,
             waitPolicyRules);
     }
@@ -90,9 +98,23 @@ public sealed class RecognizerOptions
         if (string.IsNullOrWhiteSpace(value))
             return null;
 
-        var parenIndex = value.IndexOf('(', StringComparison.Ordinal);
-        if (parenIndex >= 0)
-            value = value[..parenIndex].Trim();
+        // Select the final invocation in a configured pattern instead of cutting at
+        // the first opening parenthesis. Constructor-qualified receivers such as
+        // `new LoginPage(WebDriver).Login(user, password)` contain an earlier call-like
+        // expression, but the mapped result method is `Login`.
+        var invocations = Regex.Matches(
+            value,
+            @"(?<![\w@])(?<method>@?[A-Za-z_][A-Za-z0-9_]*)\s*(?:<[^()]*>)?\s*\(");
+        foreach (Match invocation in invocations)
+        {
+            var openParenthesis = invocation.Index + invocation.Length - 1;
+            var closeParenthesis = FindMatchingClosingParenthesis(value, openParenthesis);
+            if (closeParenthesis >= 0
+                && string.IsNullOrWhiteSpace(value[(closeParenthesis + 1)..].TrimEnd(';')))
+            {
+                return invocation.Groups["method"].Value.TrimStart('@');
+            }
+        }
 
         var dotIndex = value.LastIndexOf('.');
         if (dotIndex >= 0 && dotIndex + 1 < value.Length)
@@ -102,7 +124,60 @@ public sealed class RecognizerOptions
         if (genericIndex >= 0)
             value = value[..genericIndex].Trim();
 
-        return string.IsNullOrWhiteSpace(value) ? null : value;
+        return string.IsNullOrWhiteSpace(value) ? null : value.TrimStart('@');
+    }
+
+    static int FindMatchingClosingParenthesis(string value, int openParenthesis)
+    {
+        var depth = 0;
+        var quote = '\0';
+        var escaped = false;
+
+        for (var index = openParenthesis; index < value.Length; index++)
+        {
+            var character = value[index];
+            if (quote != '\0')
+            {
+                if (escaped)
+                {
+                    escaped = false;
+                    continue;
+                }
+
+                if (character == '\\')
+                {
+                    escaped = true;
+                    continue;
+                }
+
+                if (character == quote)
+                    quote = '\0';
+                continue;
+            }
+
+            if (character is '"' or '\'')
+            {
+                quote = character;
+                continue;
+            }
+
+            if (character == '(')
+            {
+                depth++;
+                continue;
+            }
+
+            if (character != ')')
+                continue;
+
+            depth--;
+            if (depth == 0)
+                return index;
+            if (depth < 0)
+                return -1;
+        }
+
+        return -1;
     }
 
     static HashSet<string> Merge(IEnumerable<string> defaults, IEnumerable<string>? configured)
@@ -118,7 +193,7 @@ public sealed class RecognizerOptions
         return result;
     }
 
-    static IEnumerable<string> InferGenericResultMethods(IEnumerable<MethodMapping> mappings)
+    static IEnumerable<string> InferConfiguredResultMethods(IEnumerable<MethodMapping> mappings)
     {
         foreach (var mapping in mappings)
         {
@@ -128,17 +203,13 @@ public sealed class RecognizerOptions
             if (!statements.Any(statement => statement.Contains("{result}", StringComparison.Ordinal)))
                 continue;
 
-            var sourceMethod = mapping.SourceMethod ?? string.Empty;
-            if (sourceMethod.IndexOf('<', StringComparison.Ordinal) < 0)
-                continue;
-
-            var method = NormalizeMethodName(sourceMethod);
+            var method = NormalizeMethodName(mapping.SourceMethod);
             if (!string.IsNullOrWhiteSpace(method))
                 yield return method;
         }
     }
 
-    static IEnumerable<string> InferGenericResultMethods(IEnumerable<ParameterizedMethodMapping> mappings)
+    static IEnumerable<string> InferConfiguredResultMethods(IEnumerable<ParameterizedMethodMapping> mappings)
     {
         foreach (var mapping in mappings)
         {
@@ -148,9 +219,6 @@ public sealed class RecognizerOptions
             if (!statements.Any(statement => statement.Contains("{result}", StringComparison.Ordinal)))
                 continue;
 
-            // Generic invocations are normalized before pattern matching, so a config
-            // may intentionally use `CreatePage({uri})` for source `CreatePage<T>({uri})`.
-            // Infer the result-producing helper from either form.
             var method = NormalizeMethodName(mapping.SourceMethodPattern);
             if (!string.IsNullOrWhiteSpace(method))
                 yield return method;

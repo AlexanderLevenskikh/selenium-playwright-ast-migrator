@@ -312,6 +312,14 @@ public partial class PlaywrightDotNetRenderer
         var constraint = ConvertConstraint(action.ConstraintExpression);
         var sourceLine = action.SourceLine;
 
+        // A reviewed helper/POM mapping may intentionally materialize a scalar target local,
+        // for example `var status = await locator.InnerTextAsync()`. In that case the source
+        // NUnit equality assertion is already target-safe and preserving it is more faithful
+        // than forcing a locator assertion or emitting a TODO. Keep this deliberately narrow:
+        // only a target local produced by active generated code and a literal equality value.
+        if (TryRenderTargetLocalLiteralEquality(sb, actual, constraint, sourceLine))
+            return;
+
         var commentBody = $"Assert.That({actual}, {constraint}); // line {sourceLine}";
         AppendCommentBlock(sb, _indent + _indent, commentBody);
 
@@ -321,6 +329,51 @@ public partial class PlaywrightDotNetRenderer
             "ASSERTION_CONSTRAINT",
             "The NUnit/Fluent assertion constraint was preserved as a comment because no equivalent Playwright assertion was inferred.",
             "Add a parameterized assertion mapping if this pattern is common.");
+    }
+
+    bool TryRenderTargetLocalLiteralEquality(StringBuilder sb, string actual, string constraint, int sourceLine)
+    {
+        var actualName = actual.Trim();
+        if (!System.Text.RegularExpressions.Regex.IsMatch(actualName, @"^@?[A-Za-z_]\w*$"))
+            return false;
+
+        var normalizedName = actualName.TrimStart('@');
+        if (!_targetLocals.Contains(normalizedName))
+            return false;
+
+        var match = System.Text.RegularExpressions.Regex.Match(
+            constraint.Trim(),
+            "^Is\\.EqualTo\\((?<expected>.*)\\)$",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        if (!match.Success)
+            return false;
+
+        var expected = match.Groups["expected"].Value.Trim();
+        if (!IsSafeScalarLiteral(expected))
+            return false;
+
+        sb.AppendLine($"{_indent}{_indent}Assert.That({actualName}, Is.EqualTo({expected})); // line {sourceLine}");
+        return true;
+    }
+
+    static bool IsSafeScalarLiteral(string expression)
+    {
+        if (expression is "true" or "false" or "null")
+            return true;
+
+        if (System.Text.RegularExpressions.Regex.IsMatch(
+                expression,
+                @"^-?\d+(?:\.\d+)?(?:[mMdDfFlL])?$",
+                System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+            return true;
+
+        // The source was already parsed as valid C#, so for the narrow preservation
+        // rule it is enough to require a single-line quoted literal.
+        return expression.Length >= 2
+               && expression[0] == '"'
+               && expression[^1] == '"'
+               && !expression.Contains('\r')
+               && !expression.Contains('\n');
     }
 
     void RenderAssertAreEqual(StringBuilder sb, AssertAreEqualAction action)

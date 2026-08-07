@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <!-- dotnet build also receives these as global properties so automatic repo-wide imports cannot run before this project body is evaluated. -->
+    <ImportDirectoryBuildProps>false</ImportDirectoryBuildProps>
+    <ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="C:\Users\levenskikh\Desktop\MyProjects\Migrator\artifacts\lab\block-06\nightly\projects\p07-locator-in-variable\project-verify\generated\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
+    <PackageReference Include="Microsoft.Playwright.NUnit" Version="1.52.0" />
+    <PackageReference Include="NUnit" Version="4.2.2" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="C:\Users\levenskikh\Desktop\MyProjects\Migrator\artifacts\lab\block-06\nightly\.workspaces\p07-locator-in-variable-0b7a106006e74673900510399398fccd\Scenario.csproj" GlobalPropertiesToRemove="ImportDirectoryBuildProps;ImportDirectoryBuildTargets" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFrameworks>net10.0;netstandard2.1</TargetFrameworks><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
+  <ItemGroup><Compile Include="SharedContract.cs" /></ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'"><Compile Include="Net10Only.cs" /></ItemGroup>
+</Project>

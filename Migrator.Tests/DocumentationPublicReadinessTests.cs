@@ -264,6 +264,16 @@ public class DocumentationPublicReadinessTests
             .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")))
         {
             var text = File.ReadAllText(project);
+            var isStableCorpusFixture = project.Contains(
+                Path.Combine("corpus", "stable", "vertical-slice"),
+                StringComparison.OrdinalIgnoreCase);
+
+            if (isStableCorpusFixture && text.Contains("<TargetFrameworks>", StringComparison.OrdinalIgnoreCase))
+            {
+                Assert.Contains("net10.0", text, StringComparison.OrdinalIgnoreCase);
+                continue;
+            }
+
             Assert.Contains("<TargetFramework>net10.0</TargetFramework>", text);
         }
 

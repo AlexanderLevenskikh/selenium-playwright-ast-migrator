@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p28-frames-popup-upload-download",
+  "seed": 128,
+  "tags": [
+    "unsupported",
+    "frames",
+    "popup",
+    "upload",
+    "download",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "SwitchTo.Frame",
+      "WindowHandles",
+      "Upload",
+      "Download"
+    ],
+    "migrationFiles": [
+      "Tests/ComplexWindowTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/ComplexWindowTests.cs"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/complex",
+        "model": "complex-capabilities"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "complex:neighbour-click"
+      ],
+      "dom": [
+        {
+          "selector": "#complex-status",
+          "text": "ok"
+        }
+      ]
+    },
+    "diagnostics": {
+      "mustContainAny": [
+        "RAW_STATEMENT",
+        "MANUAL_REVIEW",
+        "UNSUPPORTED"
+      ]
+    },
+    "mustNot": {
+      "corruptNeighbourCode": true
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 15,
+    "unmappedMax": 2,
+    "unsupportedMax": 6,
+    "warningsMax": 2
+  },
+  "expected": {
+    "status": "UNSUPPORTED_AS_EXPECTED"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "Ready stable fixture p28-frames-popup-upload-download.",
+    "contentHash": "sha256:d0999d4e6e06c30d9099dcdb33ca1499baffaa7ad749395e1d7bb599e24381bb"
+  }
+}

@@ -16,20 +16,25 @@ public sealed class LabScenarioContractTests
         var result = ScenarioCatalog.Load(root);
 
         Assert.False(result.HasErrors, BuildFailureMessage(result));
-        Assert.Equal(7, result.Entries.Length);
-        Assert.Equal(7, result.ValidCount);
+        Assert.Equal(30, result.Entries.Length);
+        Assert.Equal(30, result.ValidCount);
         Assert.Equal(0, result.PlannedCount);
-        Assert.Equal(7, result.ReadyCount);
-        Assert.Equal(7, result.Entries.Select(entry => entry.Scenario!.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(30, result.ReadyCount);
+        Assert.Equal(30, result.Entries.Select(entry => entry.Scenario!.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
     }
 
     [Fact]
-    public void VerticalSlice_CoversPassAndExpectedUnsupportedContracts()
+    public void StableCorpus_CoversPositiveUnsupportedAndIntentionalInfrastructureContracts()
     {
         var scenarios = ScenarioCatalog.Load(VerticalSliceRoot()).Entries.Select(entry => entry.Scenario!).ToArray();
 
-        Assert.Contains(scenarios, scenario => scenario.Expected.Status == ScenarioStatus.Pass);
-        Assert.Contains(scenarios, scenario => scenario.Expected.Status == ScenarioStatus.UnsupportedAsExpected);
+        Assert.Equal(25, scenarios.Count(scenario => scenario.Expected.Status == ScenarioStatus.Pass));
+        Assert.Equal(4, scenarios.Count(scenario => scenario.Expected.Status == ScenarioStatus.UnsupportedAsExpected));
+        Assert.Single(scenarios, scenario => scenario.Expected.Status == ScenarioStatus.InfrastructureFailure);
+        Assert.All(scenarios, scenario => Assert.Contains("stable", scenario.Tags));
+        Assert.All(scenarios, scenario => Assert.Contains("nightly", scenario.Tags));
+        Assert.Equal(7, scenarios.Count(scenario => scenario.Tags.Contains("smoke")));
+        Assert.Equal(18, scenarios.Count(scenario => scenario.Tags.Contains("pr")));
         Assert.Contains(scenarios, scenario => scenario.Tags.Contains("real-failure"));
         Assert.Contains(scenarios, scenario => scenario.Tags.Contains("msbuild"));
         Assert.Contains(scenarios, scenario => scenario.Tags.Contains("runtime-pass"));
@@ -43,8 +48,11 @@ public sealed class LabScenarioContractTests
         foreach (var scenario in scenarios)
         {
             Assert.Equal(JsonValueKind.Object, scenario.Oracle.Source.ValueKind);
-            Assert.True(scenario.Oracle.Source.TryGetProperty("mustPassTests", out var count), $"{scenario.Id} must declare oracle.source.mustPassTests.");
-            Assert.Equal(1, count.GetInt32());
+            Assert.True(scenario.Oracle.Source.TryGetProperty("mustPassTests", out var sourceCount), $"{scenario.Id} must declare oracle.source.mustPassTests.");
+            Assert.True(sourceCount.GetInt32() > 0, $"{scenario.Id} must execute at least one source test.");
+            Assert.Equal(JsonValueKind.Object, scenario.Oracle.Target.ValueKind);
+            Assert.True(scenario.Oracle.Target.TryGetProperty("mustPassTests", out var targetCount), $"{scenario.Id} must declare oracle.target.mustPassTests.");
+            Assert.Equal(sourceCount.GetInt32(), targetCount.GetInt32());
         }
     }
 
@@ -113,6 +121,74 @@ public sealed class LabScenarioContractTests
     }
 
     [Fact]
+    public void AsyncLiftSimple_UsesReviewedSourceBackedHelperReturnMapping()
+    {
+        var entry = ScenarioCatalog.Load(VerticalSliceRoot()).Entries
+            .Single(item => item.Scenario!.Id == "p13-async-lift-simple");
+        var scenario = entry.Scenario!;
+
+        Assert.Equal("adapter-config.json", scenario.Source.AdapterConfig);
+        Assert.Contains(scenario.Source.AdapterConfig, scenario.Project.Files);
+
+        var source = File.ReadAllText(Path.Combine(entry.ScenarioDirectory, "Tests", "AsyncLiftTests.cs"));
+        Assert.Contains("string ClickAndReadStatus()", source, StringComparison.Ordinal);
+        Assert.Contains("FindElement(By.Id(\"async-button\")).Click()", source, StringComparison.Ordinal);
+        Assert.Contains("return WebDriver.FindElement(By.Id(\"async-status\")).Text", source, StringComparison.Ordinal);
+
+        using var config = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(entry.ScenarioDirectory, scenario.Source.AdapterConfig)));
+        var mapping = Assert.Single(config.RootElement.GetProperty("ParameterizedMethods").EnumerateArray());
+        Assert.Equal("ClickAndReadStatus()", mapping.GetProperty("SourceMethodPattern").GetString());
+        Assert.False(mapping.GetProperty("RequiresReview").GetBoolean());
+        var statements = mapping.GetProperty("TargetStatements").EnumerateArray().Select(item => item.GetString()!).ToArray();
+        Assert.Contains(statements, statement => statement.Contains("#async-button", StringComparison.Ordinal) && statement.Contains("ClickAsync", StringComparison.Ordinal));
+        Assert.Contains(statements, statement => statement.Contains("{result}", StringComparison.Ordinal) && statement.Contains("InnerTextAsync", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void PageObjectScenarios_UseReviewedMappingsBackedByIncludedSourceFiles()
+    {
+        var entries = ScenarioCatalog.Load(VerticalSliceRoot()).Entries
+            .Where(entry => entry.Scenario!.Id is
+                "p10-unresolved-pageobject-chain" or
+                "p11-pageobject-separate-project" or
+                "p12-pageobject-inheritance-composition")
+            .ToDictionary(entry => entry.Scenario!.Id, StringComparer.Ordinal);
+
+        Assert.Equal(3, entries.Count);
+        foreach (var entry in entries.Values)
+        {
+            var scenario = entry.Scenario!;
+            Assert.Equal("adapter-config.json", scenario.Source.AdapterConfig);
+            Assert.Contains(scenario.Source.AdapterConfig, scenario.Project.Files);
+
+            using var config = JsonDocument.Parse(File.ReadAllText(
+                Path.Combine(entry.ScenarioDirectory, scenario.Source.AdapterConfig)));
+            var mappings = config.RootElement.GetProperty("ParameterizedMethods").EnumerateArray().ToArray();
+            Assert.NotEmpty(mappings);
+            Assert.All(mappings, mapping => Assert.False(mapping.GetProperty("RequiresReview").GetBoolean()));
+            Assert.All(mappings, mapping => Assert.NotEmpty(mapping.GetProperty("TargetStatements").EnumerateArray()));
+        }
+
+        var p10 = entries["p10-unresolved-pageobject-chain"];
+        var loginPage = File.ReadAllText(Path.Combine(p10.ScenarioDirectory, "Pages", "LoginPage.cs"));
+        Assert.Contains("FindElement(By.Id(\"pom-user\")).SendKeys(user)", loginPage, StringComparison.Ordinal);
+        Assert.Contains("FindElement(By.Id(\"pom-password\")).SendKeys(password)", loginPage, StringComparison.Ordinal);
+        Assert.Contains("FindElement(By.Id(\"pom-login\")).Click()", loginPage, StringComparison.Ordinal);
+        Assert.Contains("FindElement(By.Id(\"dashboard-status\"))", loginPage, StringComparison.Ordinal);
+
+        var p11 = entries["p11-pageobject-separate-project"];
+        var separateLoginPage = File.ReadAllText(Path.Combine(p11.ScenarioDirectory, "Pages", "LoginPage.cs"));
+        Assert.Contains("FindElement(By.Id(\"pom-login\")).Click()", separateLoginPage, StringComparison.Ordinal);
+        Assert.Contains("Pages/LoginPage.cs", p11.Scenario!.Source.MigrationFiles);
+
+        var p12 = entries["p12-pageobject-inheritance-composition"];
+        var modal = File.ReadAllText(Path.Combine(p12.ScenarioDirectory, "Pages", "ModalComponent.cs"));
+        Assert.Contains("FindElement(By.Id(\"modal-open\")).Click()", modal, StringComparison.Ordinal);
+        Assert.Contains("FindElement(By.Id(\"modal-save\")).Click()", modal, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TransitiveWarningScenario_HasOneUnambiguousPositiveExpectation()
     {
         var scenario = ScenarioCatalog.Load(VerticalSliceRoot()).Entries
@@ -144,6 +220,41 @@ public sealed class LabScenarioContractTests
         Assert.Contains("SmokeContract", sourceOnlyInfrastructure, StringComparison.Ordinal);
         Assert.Contains("A/A.csproj", scenario.Project.References);
         Assert.Contains("B/B.csproj", scenario.Project.References);
+    }
+
+
+    [Fact]
+    public void StableCorpus_SplitsPositiveAndSabotagedTransitiveWarningContracts()
+    {
+        var scenarios = ScenarioCatalog.Load(VerticalSliceRoot()).Entries.Select(entry => entry.Scenario!).ToArray();
+        var positive = Assert.Single(scenarios, scenario => scenario.Id == "p24a-transitive-warning-isolated");
+        var sabotage = Assert.Single(scenarios, scenario => scenario.Id == "p24b-transitive-warning-sabotage");
+
+        Assert.Equal(ScenarioStatus.Pass, positive.Expected.Status);
+        Assert.Equal(ScenarioStatus.InfrastructureFailure, sabotage.Expected.Status);
+        Assert.Contains("sabotage", sabotage.Tags);
+        Assert.DoesNotContain("pr", sabotage.Tags);
+    }
+
+    [Fact]
+    public void ParameterizedScenarios_DeclareTheirExpandedTestCounts()
+    {
+        var scenarios = ScenarioCatalog.Load(VerticalSliceRoot()).Entries.ToDictionary(entry => entry.Scenario!.Id, entry => entry.Scenario!);
+
+        Assert.Equal(4, scenarios["p20-nunit-testcasesource-valuesource"].Oracle.Source.GetProperty("mustPassTests").GetInt32());
+        Assert.Equal(2, scenarios["p21-nunit-parallelizable-retry-order"].Oracle.Source.GetProperty("mustPassTests").GetInt32());
+    }
+
+    [Fact]
+    public void CustomWaitScenario_UsesReviewedSourceBackedAdapterConfig()
+    {
+        var entry = ScenarioCatalog.Load(VerticalSliceRoot()).Entries.Single(item => item.Scenario!.Id == "p17-custom-wait-state");
+        var scenario = entry.Scenario!;
+
+        Assert.Equal("adapter-config.json", scenario.Source.AdapterConfig);
+        Assert.Contains(scenario.Source.AdapterConfig, scenario.Project.Files);
+        using var config = JsonDocument.Parse(File.ReadAllText(Path.Combine(entry.ScenarioDirectory, scenario.Source.AdapterConfig)));
+        Assert.NotEmpty(config.RootElement.GetProperty("ParameterizedMethods").EnumerateArray());
     }
 
     [Fact]

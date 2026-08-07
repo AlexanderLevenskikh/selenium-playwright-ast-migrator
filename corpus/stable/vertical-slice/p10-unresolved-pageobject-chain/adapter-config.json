@@ -1,0 +1,26 @@
+{
+  "SchemaVersion": "adapter-config/v1",
+  "SourceProjectName": "Migrator.Lab.P10",
+  "UiTargets": [
+    {
+      "SourceExpression": "dashboard.Status",
+      "TargetExpression": "dashboard",
+      "TargetKind": "RawExpression",
+      "SourceTruth": "Pages/LoginPage.cs: DashboardPage.Status resolves By.Id(\"dashboard-status\").",
+      "Confidence": "high"
+    }
+  ],
+  "ParameterizedMethods": [
+    {
+      "SourceMethodPattern": "new LoginPage(WebDriver).Login({user}, {password})",
+      "TargetStatements": [
+        "await Page.Locator(\"#pom-user\").FillAsync({user});",
+        "await Page.Locator(\"#pom-password\").FillAsync({password});",
+        "await Page.Locator(\"#pom-login\").ClickAsync();",
+        "var {result} = Page.Locator(\"#dashboard-status\");"
+      ],
+      "RequiresReview": false,
+      "Description": "Source-backed LoginPage.Login mapping preserving the returned dashboard status locator."
+    }
+  ]
+}

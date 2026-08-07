@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p17-custom-wait-state",
+  "seed": 117,
+  "tags": [
+    "pr",
+    "waits",
+    "helpers",
+    "real-failure",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "CustomWait",
+      "Enabled",
+      "ParameterizedMethodMapping"
+    ],
+    "migrationFiles": [
+      "Tests/CustomWaitTests.cs"
+    ],
+    "adapterConfig": "adapter-config.json"
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Helpers/WaitHelpers.cs",
+      "Tests/CustomWaitTests.cs",
+      "adapter-config.json"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/custom-wait",
+        "model": "custom-wait"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "custom:enabled",
+        "custom:click"
+      ],
+      "timeoutMaxMs": 3000,
+      "dom": [
+        {
+          "selector": "#custom-status",
+          "text": "done"
+        }
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "Block 6 stable fixture.",
+    "contentHash": "sha256:80a3908e23b7e53bdf2b22969938c312f55bffeae351ba7520a86d4d168e425e"
+  }
+}

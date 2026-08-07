@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "migrator-lab-source-validation/v1",
+  "scenarioId": "p02-css-clear-input",
+  "status": "PASS",
+  "sourceContentPreserved": true,
+  "tests": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0,
+    "expectedPassed": 1,
+    "trxPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\source\\test-results\\source-tests.trx"
+  },
+  "stages": [
+    {
+      "stage": "SOURCE_RESTORE",
+      "outcome": "PASSED",
+      "exitCode": 0,
+      "durationMs": 2550,
+      "command": "dotnet restore C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p02-css-clear-input-90a770019c504c2683f4d316a718bc6f\\Scenario.csproj --nologo",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p02-css-clear-input-90a770019c504c2683f4d316a718bc6f",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\source\\restore.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\source\\restore.stderr.log",
+      "message": null
+    },
+    {
+      "stage": "SOURCE_BUILD",
+      "outcome": "PASSED",
+      "exitCode": 0,
+      "durationMs": 2887,
+      "command": "dotnet build C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p02-css-clear-input-90a770019c504c2683f4d316a718bc6f\\Scenario.csproj --configuration Release --no-restore --nologo",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p02-css-clear-input-90a770019c504c2683f4d316a718bc6f",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\source\\build.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\source\\build.stderr.log",
+      "message": null
+    },
+    {
+      "stage": "SOURCE_TEST",
+      "outcome": "PASSED",
+      "exitCode": 0,
+      "durationMs": 43702,
+      "command": "dotnet test C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p02-css-clear-input-90a770019c504c2683f4d316a718bc6f\\Scenario.csproj --configuration Release --no-build --no-restore --nologo --logger trx;LogFileName=source-tests.trx --results-directory C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\source\\test-results",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p02-css-clear-input-90a770019c504c2683f4d316a718bc6f",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\source\\test.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\source\\test.stderr.log",
+      "message": null
+    }
+  ],
+  "issues": [
+    "Quality budget exceeded: TODO comments = 2, maximum = 0.",
+    "Quality budget exceeded: warning-bearing files = 1, maximum = 0."
+  ]
+}

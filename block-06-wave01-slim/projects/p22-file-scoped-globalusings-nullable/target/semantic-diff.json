@@ -1,0 +1,32 @@
+{
+  "passed": false,
+  "expectedEvents": [
+    "smoke:click"
+  ],
+  "observedEvents": [],
+  "checks": [
+    {
+      "kind": "target-test-count",
+      "expected": "1",
+      "actual": "0/1",
+      "passed": false
+    },
+    {
+      "kind": "event-sequence",
+      "expected": "smoke:click",
+      "actual": "",
+      "passed": false
+    },
+    {
+      "kind": "dom-element",
+      "expected": "#smoke-status",
+      "actual": "missing from final observation",
+      "passed": false
+    }
+  ],
+  "issues": [
+    "Semantic oracle failed (target-test-count): expected 1; actual 0/1.",
+    "Semantic oracle failed (event-sequence): expected smoke:click; actual .",
+    "Semantic oracle failed (dom-element): expected #smoke-status; actual missing from final observation."
+  ]
+}

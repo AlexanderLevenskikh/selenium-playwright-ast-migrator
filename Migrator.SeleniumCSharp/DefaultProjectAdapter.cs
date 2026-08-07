@@ -103,7 +103,8 @@ public class DefaultProjectAdapter : IProjectAdapter
             SuppressedMethodPatterns = resolved._suppressedMethodPatterns,
             ScaffoldMethods = resolved._scaffoldMethods,
             ScaffoldMethodPatterns = resolved._scaffoldMethodPatterns,
-            ClassFields = sourceModel.ClassFields
+            ClassFields = sourceModel.ClassFields,
+            PreservedClassAttributes = sourceModel.PreservedClassAttributes
         };
     }
 
@@ -741,7 +742,8 @@ public class DefaultProjectAdapter : IProjectAdapter
             Category: test.Category,
             CaseData: test.CaseData,
             Parameters: test.Parameters,
-            BodyActions: adaptedActions
+            BodyActions: adaptedActions,
+            PreservedAttributes: test.PreservedAttributes
         );
     }
 
@@ -782,21 +784,54 @@ public class DefaultProjectAdapter : IProjectAdapter
         ResolvedFileConfig resolved,
         Dictionary<string, TargetExpression> localVariableMappings)
     {
+        var adaptedCondition = AdaptConditionalExpressionWithLocalVars(cond.ConditionExpression, localVariableMappings);
         var adaptedIfActions = cond.IfActions.SelectMany(a => AdaptActionWithLocalVars(a, resolved, localVariableMappings)).ToList();
         var adaptedElseIfActions = cond.ElseIfActions.Select(e =>
-            (e.Condition, (IReadOnlyList<TestAction>)e.Actions.SelectMany(a => AdaptActionWithLocalVars(a, resolved, localVariableMappings)).ToList())).ToList();
+            (AdaptConditionalExpressionWithLocalVars(e.Condition, localVariableMappings),
+                (IReadOnlyList<TestAction>)e.Actions.SelectMany(a => AdaptActionWithLocalVars(a, resolved, localVariableMappings)).ToList())).ToList();
         var adaptedElseActions = cond.ElseActions.SelectMany(a => AdaptActionWithLocalVars(a, resolved, localVariableMappings)).ToList();
 
         return new[]
         {
             new ConditionalBlockAction(
                 cond.SourceLine,
-                cond.ConditionExpression,
+                adaptedCondition,
                 adaptedIfActions,
                 adaptedElseIfActions,
                 adaptedElseActions,
                 cond.Confidence)
         };
+    }
+
+    static string AdaptConditionalExpressionWithLocalVars(
+        string conditionExpression,
+        IReadOnlyDictionary<string, TargetExpression> localVariableMappings)
+    {
+        var adapted = conditionExpression;
+
+        // Selenium IWebElement.Text is synchronous, while an item produced by
+        // Playwright ILocator.AllAsync() must read its text asynchronously. Keep the
+        // transformation deliberately narrow: only locals that the adapter already
+        // proved to be mapped target expressions are eligible. This is enough to
+        // preserve deterministic loop guards without guessing arbitrary business
+        // predicates.
+        foreach (var mapping in localVariableMappings
+                     .Where(entry => entry.Value.Kind != TargetKind.Unresolved)
+                     .OrderByDescending(entry => entry.Key.Length))
+        {
+            var sourceLocal = mapping.Key.TrimStart('@');
+            if (sourceLocal.Length == 0)
+                continue;
+
+            var targetLocal = mapping.Value.RenderLocator();
+            adapted = Regex.Replace(
+                adapted,
+                $@"(?<![\w@])@?{Regex.Escape(sourceLocal)}\s*\.\s*Text(?!\w)",
+                _ => $"await {targetLocal}.InnerTextAsync()",
+                RegexOptions.CultureInvariant);
+        }
+
+        return adapted;
     }
 
     IEnumerable<TestAction> AdaptAssertMultipleWithLocalVars(
@@ -864,6 +899,18 @@ public class DefaultProjectAdapter : IProjectAdapter
         @"^\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*Id\s*\(\s*""([^""]*)""\s*\)\s*\)\s*$",
         RegexOptions.Compiled);
 
+    static readonly Regex FindElementInterpolatedIdPattern = new(
+        @"^\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*Id\s*\(\s*\$""([^""]*)""\s*\)\s*\)\s*$",
+        RegexOptions.Compiled);
+
+    static readonly Regex FindElementInterpolatedCssPattern = new(
+        @"^\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*CssSelector\s*\(\s*\$""([^""]*)""\s*\)\s*\)\s*$",
+        RegexOptions.Compiled);
+
+    static readonly Regex FindElementInterpolatedXPathPattern = new(
+        @"^\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*XPath\s*\(\s*\$""([^""]*)""\s*\)\s*\)\s*$",
+        RegexOptions.Compiled);
+
     static readonly Regex FindElementXPathAssignmentPattern = new(
         @"^\s*(\w+)\s*=\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*XPath\s*\(\s*""([^""]*)""\s*\)\s*\)\s*$",
         RegexOptions.Compiled);
@@ -878,6 +925,10 @@ public class DefaultProjectAdapter : IProjectAdapter
 
     static readonly Regex AssignmentPattern = new(
         @"^\s*(\w+)\s*=",
+        RegexOptions.Compiled);
+
+    static readonly Regex FindElementLocalLocatorPattern = new(
+        @"^\s*(?:WebDriver|driver)\s*\.\s*FindElements?\s*\(\s*(@?[A-Za-z_][A-Za-z0-9_]*)\s*\)\s*$",
         RegexOptions.Compiled);
 
     /// <summary>
@@ -907,6 +958,30 @@ public class DefaultProjectAdapter : IProjectAdapter
         {
             var selector = idMatch.Groups[1].Value;
             var locatorExpr = $"Page.Locator(\"#{EscapeForLocator(selector)}\")";
+            return TargetExpression.Mapped(sourceExpression, locatorExpr, TargetKind.RawExpression);
+        }
+
+        var interpolatedId = FindElementInterpolatedIdPattern.Match(sourceExpression);
+        if (interpolatedId.Success)
+        {
+            var selector = interpolatedId.Groups[1].Value;
+            var locatorExpr = $"Page.Locator($\"#{EscapeForLocator(selector)}\")";
+            return TargetExpression.Mapped(sourceExpression, locatorExpr, TargetKind.RawExpression);
+        }
+
+        var interpolatedCss = FindElementInterpolatedCssPattern.Match(sourceExpression);
+        if (interpolatedCss.Success)
+        {
+            var selector = interpolatedCss.Groups[1].Value;
+            var locatorExpr = $"Page.Locator($\"{EscapeForLocator(selector)}\")";
+            return TargetExpression.Mapped(sourceExpression, locatorExpr, TargetKind.RawExpression);
+        }
+
+        var interpolatedXPath = FindElementInterpolatedXPathPattern.Match(sourceExpression);
+        if (interpolatedXPath.Success)
+        {
+            var selector = interpolatedXPath.Groups[1].Value;
+            var locatorExpr = $"Page.Locator($\"xpath={EscapeForLocator(selector)}\")";
             return TargetExpression.Mapped(sourceExpression, locatorExpr, TargetKind.RawExpression);
         }
 
@@ -962,20 +1037,38 @@ public class DefaultProjectAdapter : IProjectAdapter
         ResolvedFileConfig resolved,
         Dictionary<string, TargetExpression> localVariableMappings)
     {
+        var normalizedSource = StripTrailingNullForgivingOperator(sourceExpression);
+
         // First check local variable mappings.
-        // This covers local locators introduced from WebDriver.FindElement(s).
-        if (localVariableMappings.TryGetValue(sourceExpression, out var localMapping))
+        // This covers local locators introduced from WebDriver.FindElement(s) and
+        // Selenium By aliases converted to target ILocator locals.
+        if (localVariableMappings.TryGetValue(normalizedSource, out var localMapping))
             return localMapping;
 
-        var localElementAt = ResolveLocalElementAt(sourceExpression, localVariableMappings);
+        var wrappedLocal = FindElementLocalLocatorPattern.Match(normalizedSource);
+        if (wrappedLocal.Success
+            && localVariableMappings.TryGetValue(wrappedLocal.Groups[1].Value, out var wrappedMapping))
+        {
+            return wrappedMapping;
+        }
+
+        var localElementAt = ResolveLocalElementAt(normalizedSource, localVariableMappings);
         if (localElementAt is MappedTarget)
             return localElementAt;
 
-        var localIndexedAccess = ResolveLocalIndexedAccess(sourceExpression, localVariableMappings);
+        var localIndexedAccess = ResolveLocalIndexedAccess(normalizedSource, localVariableMappings);
         if (localIndexedAccess is MappedTarget)
             return localIndexedAccess;
 
-        return ResolveTarget(sourceExpression, resolved);
+        return ResolveTarget(normalizedSource, resolved);
+    }
+
+    static string StripTrailingNullForgivingOperator(string expression)
+    {
+        var trimmed = expression.Trim();
+        return Regex.IsMatch(trimmed, @"(?:[A-Za-z0-9_\]\)])!$")
+            ? trimmed[..^1].TrimEnd()
+            : trimmed;
     }
 
     TargetExpression ResolveLocalIndexedAccess(
@@ -1310,6 +1403,30 @@ public class DefaultProjectAdapter : IProjectAdapter
 
     IEnumerable<TestAction> TryResolveAssertThat(AssertThatAction action, ResolvedFileConfig resolved)
     {
+        if (TryConvertAssertThatControlStateConstraint(action, out var controlTarget, out var controlKind))
+        {
+            return new[]
+            {
+                new ControlStateAssertionAction(
+                    action.SourceLine,
+                    ResolveTarget(controlTarget, resolved),
+                    controlKind,
+                    $"Assert.That({action.ActualExpression}, {action.ConstraintExpression})",
+                    action.Confidence)
+            };
+        }
+
+        if (TryConvertAssertThatValueConstraint(action, out var valueTarget, out var expectedValue))
+        {
+            return new[]
+            {
+                CreateBuiltInValueAssertion(
+                    action,
+                    ResolveTarget(valueTarget, resolved),
+                    expectedValue)
+            };
+        }
+
         if (TryConvertAssertThatVisibilityConstraint(action, out var visibilityTarget, out var visibilityKind))
         {
             return new[]
@@ -1347,6 +1464,48 @@ public class DefaultProjectAdapter : IProjectAdapter
         ResolvedFileConfig resolved,
         Dictionary<string, TargetExpression> localVariableMappings)
     {
+        if (TryConvertAssertThatControlStateConstraint(action, out var controlTarget, out var controlKind))
+        {
+            return new[]
+            {
+                new ControlStateAssertionAction(
+                    action.SourceLine,
+                    ResolveTargetWithLocalVars(controlTarget, resolved, localVariableMappings),
+                    controlKind,
+                    $"Assert.That({action.ActualExpression}, {action.ConstraintExpression})",
+                    action.Confidence)
+            };
+        }
+
+        if (TryConvertAssertThatValueConstraint(action, out var valueTarget, out var expectedValue))
+        {
+            return new[]
+            {
+                CreateBuiltInValueAssertion(
+                    action,
+                    ResolveTargetWithLocalVars(valueTarget, resolved, localVariableMappings),
+                    expectedValue)
+            };
+        }
+
+        if (TryConvertAssertThatNonNullLocatorConstraint(action, out var nonNullTarget))
+        {
+            var resolvedTarget = ResolveTargetWithLocalVars(nonNullTarget, resolved, localVariableMappings);
+            if (resolvedTarget.Kind != TargetKind.Unresolved)
+            {
+                return new[]
+                {
+                    new MappedMethodInvocationAction(
+                        action.SourceLine,
+                        $"Assert.That({action.ActualExpression}, {action.ConstraintExpression})",
+                        new[] { "// source locator null-check elided: Playwright locator objects are non-null handles" },
+                        requiresReview: false,
+                        targetExpr: resolvedTarget,
+                        sourceMethod: "Assert.That.Is.Not.Null")
+                };
+            }
+        }
+
         if (TryConvertAssertThatVisibilityConstraint(action, out var visibilityTarget, out var visibilityKind))
         {
             return new[]
@@ -1380,6 +1539,99 @@ public class DefaultProjectAdapter : IProjectAdapter
             textAssertion,
             resolved,
             ResolveTargetWithLocalVars(textAssertion.Target.SourceExpression, resolved, localVariableMappings));
+    }
+
+    static bool TryConvertAssertThatControlStateConstraint(
+        AssertThatAction action,
+        out string target,
+        out ControlStateAssertionKind kind)
+    {
+        target = string.Empty;
+        kind = ControlStateAssertionKind.Enabled;
+
+        var actual = action.ActualExpression.Trim();
+        string? property = null;
+        foreach (var candidate in new[] { "Enabled", "Selected", "Checked" })
+        {
+            var suffix = "." + candidate;
+            if (!actual.EndsWith(suffix, StringComparison.Ordinal))
+                continue;
+
+            target = actual[..^suffix.Length].Trim();
+            property = candidate;
+            break;
+        }
+
+        if (target.Length == 0 || property == null)
+            return false;
+
+        var constraint = Regex.Replace(action.ConstraintExpression, @"\s+", string.Empty);
+        var expected = constraint switch
+        {
+            "Is.True" or "Is.EqualTo(true)" => true,
+            "Is.False" or "Is.EqualTo(false)" => false,
+            _ => (bool?)null
+        };
+        if (expected == null)
+        {
+            target = string.Empty;
+            return false;
+        }
+
+        kind = property == "Enabled"
+            ? (expected.Value ? ControlStateAssertionKind.Enabled : ControlStateAssertionKind.Disabled)
+            : (expected.Value ? ControlStateAssertionKind.Checked : ControlStateAssertionKind.Unchecked);
+        return true;
+    }
+
+    static bool TryConvertAssertThatValueConstraint(
+        AssertThatAction action,
+        out string target,
+        out string expectedValue)
+    {
+        target = string.Empty;
+        expectedValue = string.Empty;
+
+        var match = Regex.Match(
+            action.ActualExpression.Trim(),
+            @"^(?<target>.+?)\.GetAttribute\s*\(\s*[""']value[""']\s*\)\s*$",
+            RegexOptions.Singleline | RegexOptions.IgnoreCase);
+        if (!match.Success
+            || !TryExtractConstraintArgument(action.ConstraintExpression.Trim(), "Is.EqualTo", out expectedValue))
+        {
+            return false;
+        }
+
+        target = match.Groups["target"].Value.Trim();
+        return target.Length > 0;
+    }
+
+    static bool TryConvertAssertThatNonNullLocatorConstraint(
+        AssertThatAction action,
+        out string target)
+    {
+        target = action.ActualExpression.Trim();
+        var constraint = Regex.Replace(action.ConstraintExpression, @"\s+", string.Empty);
+        return target.Length > 0 && constraint == "Is.Not.Null";
+    }
+
+    static MappedMethodInvocationAction CreateBuiltInValueAssertion(
+        AssertThatAction action,
+        TargetExpression target,
+        string expectedValue)
+    {
+        var source = $"Assert.That({action.ActualExpression}, {action.ConstraintExpression})";
+        return new MappedMethodInvocationAction(
+            action.SourceLine,
+            source,
+            new[] { $"await Expect({{TARGET}}).ToHaveValueAsync({expectedValue});" },
+            requiresReview: false,
+            targetExpr: target,
+            sourceMethod: "GetAttribute(value)",
+            targetStatementsByTarget: new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["playwright-typescript"] = new[] { $"await expect({{TARGET}}).toHaveValue({expectedValue});" }
+            });
     }
 
     static bool TryConvertAssertThatCountConstraint(
@@ -1727,15 +1979,43 @@ public class DefaultProjectAdapter : IProjectAdapter
         if (paramResult != null)
             return new[] { paramResult };
 
-        // Built-in, semantically stable FluentAssertions state checks. These are
-        // common enough that forcing every project to repeat config mappings creates
-        // avoidable MANUAL_REVIEW debt. Only emit when the receiver resolves to a
-        // target locator (including a lambda-local locator inside CollectionForEachAction).
+        // Built-in, semantically stable locator operations and state checks.
+        // These are common enough that forcing every project to repeat config mappings
+        // creates avoidable MANUAL_REVIEW debt. Only emit when the receiver resolves
+        // to a concrete target locator.
+        if (TryResolveBuiltInLocatorOperation(mi, resolvedTarget) is { } locatorOperation)
+            return new[] { locatorOperation };
         if (TryResolveBuiltInLocatorStateAssertion(mi, resolvedTarget) is { } stateAssertion)
             return new[] { stateAssertion };
 
         // 6. No match — return original action (will render as TODO)
         return new[] { mi };
+    }
+
+    static MappedMethodInvocationAction? TryResolveBuiltInLocatorOperation(
+        MethodInvocationAction invocation,
+        TargetExpression? resolvedTarget)
+    {
+        if (resolvedTarget == null || resolvedTarget.Kind == TargetKind.Unresolved)
+            return null;
+
+        if (!string.Equals(invocation.MethodName, "Clear", StringComparison.Ordinal)
+            || invocation.ArgumentTexts.Count != 0)
+        {
+            return null;
+        }
+
+        return new MappedMethodInvocationAction(
+            invocation.SourceLine,
+            invocation.FullSourceText,
+            new[] { "await {TARGET}.FillAsync(\"\");" },
+            requiresReview: false,
+            targetExpr: resolvedTarget,
+            sourceMethod: "Clear",
+            targetStatementsByTarget: new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["playwright-typescript"] = new[] { "await {TARGET}.fill('');" }
+            });
     }
 
     static ControlStateAssertionAction? TryResolveBuiltInLocatorStateAssertion(

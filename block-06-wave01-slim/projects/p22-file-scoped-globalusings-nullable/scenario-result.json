@@ -1,0 +1,223 @@
+{
+  "id": "p22-file-scoped-globalusings-nullable",
+  "expectedStatus": "PASS",
+  "actualStatus": "REGRESSION",
+  "scenarioDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\corpus\\stable\\vertical-slice\\p22-file-scoped-globalusings-nullable",
+  "artifactsDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable",
+  "workspaceDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776",
+  "runtimeArtifactsDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\target\\runtime-artifacts",
+  "durationMs": 25279,
+  "sourceContentPreserved": true,
+  "sourceTests": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0,
+    "expectedPassed": 1,
+    "trxPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\source\\test-results\\source-tests.trx"
+  },
+  "targetTests": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "expectedPassed": 1,
+    "trxPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\target\\test-results\\target-tests.trx"
+  },
+  "migration": {
+    "orchestrationStatus": "passed",
+    "verifyStatus": "passed",
+    "unsupportedActions": 0,
+    "todoComments": 2,
+    "unmappedTargets": 1,
+    "warnings": 1,
+    "mandatoryArtifactsPresent": true,
+    "orchestrationReportPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\migration\\orchestration-report.json",
+    "verifyReportPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\migration\\verify\\verify-report.json",
+    "generatedFiles": [
+      "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\migration\\generated\\ModernSyntaxTestsPlaywright.cs"
+    ],
+    "failedStages": [],
+    "issues": []
+  },
+  "projectVerify": {
+    "reportPresent": true,
+    "status": "passed",
+    "exitCode": 0,
+    "reportPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\project-verify\\project-verify-report.json",
+    "harnessProject": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\project-verify\\project-verify\\Generated.Playwright.Verify.csproj",
+    "projectReferences": [
+      "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776\\Scenario.csproj"
+    ],
+    "diagnostics": [],
+    "diagnosticCategories": [],
+    "harness": {
+      "schemaVersion": "verify-project-harness/v1",
+      "centralPackageManagementDetected": false,
+      "centralPackageManagementMode": "not-detected",
+      "managePackageVersionsCentrallyDisabled": false,
+      "directoryPackagesPropsPathPinned": false,
+      "importedBuildFiles": [],
+      "skippedBuildFiles": [],
+      "snapshotPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\project-verify\\project-verify-harness.csproj"
+    },
+    "issues": []
+  },
+  "quality": {
+    "passed": false,
+    "todoActual": 2,
+    "todoMax": 0,
+    "unmappedActual": 1,
+    "unmappedMax": 0,
+    "unsupportedActual": 0,
+    "unsupportedMax": 0,
+    "warningsActual": 1,
+    "warningsMax": 0,
+    "issues": [
+      "Quality budget exceeded: TODO comments = 2, maximum = 0.",
+      "Quality budget exceeded: unmapped targets = 1, maximum = 0.",
+      "Quality budget exceeded: warning-bearing files = 1, maximum = 0."
+    ]
+  },
+  "oracle": {
+    "passed": false,
+    "expectedEvents": [
+      "smoke:click"
+    ],
+    "observedEvents": [],
+    "checks": [
+      {
+        "kind": "target-test-count",
+        "expected": "1",
+        "actual": "0/1",
+        "passed": false
+      },
+      {
+        "kind": "event-sequence",
+        "expected": "smoke:click",
+        "actual": "",
+        "passed": false
+      },
+      {
+        "kind": "dom-element",
+        "expected": "#smoke-status",
+        "actual": "missing from final observation",
+        "passed": false
+      }
+    ],
+    "issues": [
+      "Semantic oracle failed (target-test-count): expected 1; actual 0/1.",
+      "Semantic oracle failed (event-sequence): expected smoke:click; actual .",
+      "Semantic oracle failed (dom-element): expected #smoke-status; actual missing from final observation."
+    ]
+  },
+  "stages": [
+    {
+      "stage": "SOURCE_RESTORE",
+      "outcome": "PASSED",
+      "exitCode": 0,
+      "durationMs": 1264,
+      "command": "dotnet restore C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776\\Scenario.csproj --nologo",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\source\\restore.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\source\\restore.stderr.log",
+      "message": null
+    },
+    {
+      "stage": "SOURCE_BUILD",
+      "outcome": "PASSED",
+      "exitCode": 0,
+      "durationMs": 1233,
+      "command": "dotnet build C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776\\Scenario.csproj --configuration Release --no-restore --nologo",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\source\\build.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\source\\build.stderr.log",
+      "message": null
+    },
+    {
+      "stage": "SOURCE_TEST",
+      "outcome": "PASSED",
+      "exitCode": 0,
+      "durationMs": 3992,
+      "command": "dotnet test C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776\\Scenario.csproj --configuration Release --no-build --no-restore --nologo --logger trx;LogFileName=source-tests.trx --results-directory C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\source\\test-results",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\source\\test.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\source\\test.stderr.log",
+      "message": null
+    },
+    {
+      "stage": "MIGRATION",
+      "outcome": "PASSED",
+      "exitCode": 0,
+      "durationMs": 1909,
+      "command": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\Migrator.Cli\\bin\\Release\\net10.0\\Migrator.Cli.exe run --input C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776\\.migration-input --out C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\migration --format both --source selenium-csharp --target dotnet --target-test-framework nunit",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\migration-process.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\migration-process.stderr.log",
+      "message": null
+    },
+    {
+      "stage": "QUALITY_EVALUATION",
+      "outcome": "FAILED",
+      "exitCode": null,
+      "durationMs": 0,
+      "command": "",
+      "workingDirectory": "",
+      "standardOutputPath": "",
+      "standardErrorPath": "",
+      "message": "Quality budget exceeded: TODO comments = 2, maximum = 0. Quality budget exceeded: unmapped targets = 1, maximum = 0. Quality budget exceeded: warning-bearing files = 1, maximum = 0."
+    },
+    {
+      "stage": "PROJECT_VERIFY",
+      "outcome": "PASSED",
+      "exitCode": 0,
+      "durationMs": 4879,
+      "command": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\Migrator.Cli\\bin\\Release\\net10.0\\Migrator.Cli.exe verify-project --input C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776\\.migration-input --config C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\project-verify-config.json --out C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\project-verify --format both --source selenium-csharp --target dotnet --target-test-framework nunit",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\project-verify-process.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\project-verify-process.stderr.log",
+      "message": null
+    },
+    {
+      "stage": "TARGET_BUILD",
+      "outcome": "PASSED",
+      "exitCode": 0,
+      "durationMs": 2723,
+      "command": "dotnet build C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\target\\Migrator.Lab.TargetRuntime.csproj --configuration Release --nologo",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\target",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\target\\target-build.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\target\\target-build.stderr.log",
+      "message": null
+    },
+    {
+      "stage": "TARGET_TEST",
+      "outcome": "FAILED",
+      "exitCode": 1,
+      "durationMs": 9034,
+      "command": "dotnet test C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\target\\Migrator.Lab.TargetRuntime.csproj --configuration Release --no-build --no-restore --nologo --logger trx;LogFileName=target-tests.trx --results-directory C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\target\\test-results",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\target",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\target\\target-test.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p22-file-scoped-globalusings-nullable\\target\\target-test.stderr.log",
+      "message": null
+    },
+    {
+      "stage": "SEMANTIC_ORACLE",
+      "outcome": "FAILED",
+      "exitCode": null,
+      "durationMs": 0,
+      "command": "",
+      "workingDirectory": "",
+      "standardOutputPath": "",
+      "standardErrorPath": "",
+      "message": "Semantic oracle failed (target-test-count): expected 1; actual 0/1. Semantic oracle failed (event-sequence): expected smoke:click; actual . Semantic oracle failed (dom-element): expected #smoke-status; actual missing from final observation."
+    }
+  ],
+  "issues": [
+    "Quality budget exceeded: TODO comments = 2, maximum = 0.",
+    "Quality budget exceeded: unmapped targets = 1, maximum = 0.",
+    "Quality budget exceeded: warning-bearing files = 1, maximum = 0.",
+    "Semantic oracle failed (target-test-count): expected 1; actual 0/1.",
+    "Semantic oracle failed (event-sequence): expected smoke:click; actual .",
+    "Semantic oracle failed (dom-element): expected #smoke-status; actual missing from final observation."
+  ]
+}

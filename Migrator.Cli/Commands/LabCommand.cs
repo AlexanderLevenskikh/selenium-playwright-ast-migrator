@@ -263,6 +263,7 @@ internal static class LabCommand
         var corpus = Path.Combine("corpus", "stable", "vertical-slice");
         var outDirectory = defaultArtifactsRoot ?? Path.Combine("artifacts", "lab", "run");
         var projectIds = new List<string>();
+        var features = new List<string>();
         string? tag = null;
         var timeout = TimeSpan.FromMinutes(10);
         var keepWorkspaces = false;
@@ -282,9 +283,9 @@ internal static class LabCommand
                     if (!TryReadValue(args, ref index, out suite))
                         return null;
                     suite = suite.Trim().ToLowerInvariant();
-                    if (suite is not ("vertical" or "smoke" or "pr"))
+                    if (suite is not ("vertical" or "smoke" or "pr" or "nightly"))
                     {
-                        Console.Error.WriteLine("--suite requires: vertical|smoke|pr");
+                        Console.Error.WriteLine("--suite requires: vertical|smoke|pr|nightly");
                         return null;
                     }
                     break;
@@ -306,6 +307,12 @@ internal static class LabCommand
                     if (!TryReadValue(args, ref index, out tag))
                         return null;
                     tag = tag.Trim();
+                    break;
+                case "--feature":
+                case "--features":
+                    if (!TryReadValue(args, ref index, out var rawFeatures))
+                        return null;
+                    features.AddRange(rawFeatures.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
                     break;
                 case "--timeout-seconds":
                     if (!TryReadValue(args, ref index, out var rawTimeout)
@@ -336,11 +343,11 @@ internal static class LabCommand
 
         if (!string.IsNullOrWhiteSpace(tag) && suite != "vertical")
         {
-            Console.Error.WriteLine("Use either --suite smoke|pr or --tag, not both.");
+            Console.Error.WriteLine("Use either --suite smoke|pr|nightly or --tag, not both.");
             return null;
         }
 
-        if (string.IsNullOrWhiteSpace(tag) && suite is "smoke" or "pr")
+        if (string.IsNullOrWhiteSpace(tag) && suite is "smoke" or "pr" or "nightly")
             tag = suite;
 
         return new LabRunOptions
@@ -350,6 +357,7 @@ internal static class LabCommand
             ArtifactsRoot = outDirectory,
             ProjectIds = projectIds.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
             Tag = tag,
+            Features = features.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
             DotNetExecutable = dotnetExecutable,
             Configuration = configuration,
             CommandTimeout = timeout,
@@ -628,11 +636,12 @@ internal static class LabCommand
         Console.WriteLine("  selenium-pw-migrator lab run [options]");
         Console.WriteLine();
         Console.WriteLine("Options:");
-        Console.WriteLine("  --suite <name>           vertical|smoke|pr (default: vertical).");
+        Console.WriteLine("  --suite <name>           vertical|smoke|pr|nightly (default: vertical).");
         Console.WriteLine("  --corpus <path>          Corpus root (default: corpus/stable/vertical-slice).");
         Console.WriteLine("  --out <path>             Suite artifact directory (default: artifacts/lab/run).");
         Console.WriteLine("  --project <id[,id]>      Run only selected scenario ids; may be repeated.");
         Console.WriteLine("  --tag <tag>              Run READY scenarios carrying the tag.");
+        Console.WriteLine("  --feature <name[,name]>  Run scenarios whose source feature list contains any requested feature; may be repeated.");
         Console.WriteLine("  --timeout-seconds <n>    Timeout for each restore/build/test/migration/verify command.");
         Console.WriteLine("  --configuration <name>   Source and target build configuration (default: Release).");
         Console.WriteLine("  --dotnet <path>          dotnet host used for source, verify-project harness, and target runtime.");

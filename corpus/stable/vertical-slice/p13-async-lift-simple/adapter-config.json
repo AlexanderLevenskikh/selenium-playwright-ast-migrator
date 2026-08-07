@@ -1,0 +1,15 @@
+{
+  "SchemaVersion": "adapter-config/v1",
+  "SourceProjectName": "Migrator.Lab.P13",
+  "ParameterizedMethods": [
+    {
+      "SourceMethodPattern": "ClickAndReadStatus()",
+      "TargetStatements": [
+        "await Page.Locator(\"#async-button\").ClickAsync();",
+        "var {result} = await Page.Locator(\"#async-status\").InnerTextAsync();"
+      ],
+      "RequiresReview": false,
+      "Description": "Source-backed expansion of the synchronous helper: Playwright awaits the click and text read in the lifted async test call chain."
+    }
+  ]
+}

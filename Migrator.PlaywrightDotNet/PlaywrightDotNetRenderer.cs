@@ -92,6 +92,19 @@ public partial class PlaywrightDotNetRenderer : IRenderer
         if (DotNetTestFileScaffoldRenderer.HasTodoWarning(model))
             DotNetTestFileScaffoldRenderer.AppendTodoWarning(sb);
 
+        if (_targetTestFramework == DotNetTargetTestFramework.NUnit)
+        {
+            var configuredClassAttributes = new HashSet<string>(
+                testHost?.ClassAttributes ?? Array.Empty<string>(),
+                StringComparer.Ordinal);
+            foreach (var attr in model.PreservedClassAttributes ?? Array.Empty<string>())
+            {
+                var normalized = attr.Trim().TrimStart('[').TrimEnd(']');
+                if (!string.IsNullOrWhiteSpace(normalized) && configuredClassAttributes.Add(normalized))
+                    sb.AppendLine($"[{normalized}]");
+            }
+        }
+
         DotNetTestFileScaffoldRenderer.AppendClassDeclaration(sb, testHost, classLayout);
 
         // Render class-level fields. Some source class members are intentionally
@@ -393,6 +406,9 @@ public partial class PlaywrightDotNetRenderer : IRenderer
         if (!string.IsNullOrEmpty(test.Category))
             sb.AppendLine($"{_indent}[Category(\"{EscapeAttributeArgument(test.Category)}\")]");
 
+        foreach (var attr in test.PreservedAttributes ?? Array.Empty<string>())
+            sb.AppendLine($"{_indent}{NormalizeAttribute(attr)}");
+
         foreach (var caseData in test.CaseData)
         {
             if (!string.IsNullOrEmpty(caseData.RawSourceText))
@@ -468,12 +484,20 @@ public partial class PlaywrightDotNetRenderer : IRenderer
         if (parameters == null || !parameters.Any())
             return string.Empty;
 
-        return string.Join(", ", parameters.Select(p =>
+        return string.Join(", ", parameters.Select(parameter =>
         {
-            var param = $"{p.Type} {p.Name}";
-            if (p.DefaultValue != null)
-                param += $" = {p.DefaultValue}";
-            return param;
+            var prefix = string.Empty;
+            if (_targetTestFramework == DotNetTargetTestFramework.NUnit
+                && parameter.Attributes != null
+                && parameter.Attributes.Count > 0)
+            {
+                prefix = string.Join(" ", parameter.Attributes.Select(NormalizeAttribute)) + " ";
+            }
+
+            var defaultValue = string.IsNullOrWhiteSpace(parameter.DefaultValue)
+                ? string.Empty
+                : $" = {parameter.DefaultValue}";
+            return $"{prefix}{parameter.Type} {parameter.Name}{defaultValue}";
         }));
     }
 

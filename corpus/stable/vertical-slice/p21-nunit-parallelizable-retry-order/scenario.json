@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p21-nunit-parallelizable-retry-order",
+  "seed": 121,
+  "tags": [
+    "nunit-metadata",
+    "parallel",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "Parallelizable",
+      "Retry",
+      "FixtureLifeCycle",
+      "TestCase"
+    ],
+    "migrationFiles": [
+      "Tests/ParallelRetryTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/ParallelRetryTests.cs"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/parameterized",
+        "model": "parallel-metadata"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 2
+    },
+    "target": {
+      "mustPassTests": 2
+    },
+    "semantic": {
+      "generatedContains": [
+        "Parallelizable",
+        "Retry",
+        "TestCase"
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "Ready stable fixture p21-nunit-parallelizable-retry-order.",
+    "contentHash": "sha256:2db7b30254f19fb380903b34759aa3d97c4091ca1ce47c8cea96bfab9c26fb8d"
+  }
+}

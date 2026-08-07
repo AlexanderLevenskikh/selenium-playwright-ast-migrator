@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p05-table-row-target",
+  "seed": 105,
+  "tags": [
+    "pr",
+    "table",
+    "collections",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "FindElements",
+      "TableRow",
+      "Indexer",
+      "Count",
+      "TextContains"
+    ],
+    "migrationFiles": [
+      "Tests/TableTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/TableTests.cs"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/table",
+        "model": "table"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "table:ready"
+      ],
+      "count": 3,
+      "orderedTexts": [
+        "gamma"
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "Ready stable fixture p05-table-row-target.",
+    "contentHash": "sha256:0b3004ecff445ab4a3c2a2ce60744051e22cb706ed99c4c3d5f715b426d3ec3c"
+  }
+}

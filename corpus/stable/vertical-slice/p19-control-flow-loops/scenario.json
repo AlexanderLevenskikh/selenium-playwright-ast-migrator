@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p19-control-flow-loops",
+  "seed": 119,
+  "tags": [
+    "control-flow",
+    "collections",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "Foreach",
+      "Continue",
+      "Break",
+      "ConditionalBlock"
+    ],
+    "migrationFiles": [
+      "Tests/ControlFlowTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/ControlFlowTests.cs"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/control-flow",
+        "model": "control-flow"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "control:beta"
+      ],
+      "dom": [
+        {
+          "selector": "#control-status",
+          "text": "beta"
+        }
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "Ready stable fixture p19-control-flow-loops.",
+    "contentHash": "sha256:41c7474266260de6ca261d7b01b70fd6d8e7b862b0b4449e70236c366de82996"
+  }
+}

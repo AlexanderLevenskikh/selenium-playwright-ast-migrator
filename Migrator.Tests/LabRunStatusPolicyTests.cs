@@ -98,12 +98,21 @@ public sealed class LabRunStatusPolicyTests
     [Fact]
     public void SuiteExitCode_PreservesFailureNature()
     {
-        Assert.Equal(0, LabRunStatusPolicy.GetSuiteExitCode(new[] { Project(ScenarioStatus.Pass), Project(ScenarioStatus.UnsupportedAsExpected) }));
-        Assert.Equal(10, LabRunStatusPolicy.GetSuiteExitCode(new[] { Project(ScenarioStatus.Regression) }));
-        Assert.Equal(11, LabRunStatusPolicy.GetSuiteExitCode(new[] { Project(ScenarioStatus.SourceInvalid), Project(ScenarioStatus.MigratorFailure) }));
-        Assert.Equal(12, LabRunStatusPolicy.GetSuiteExitCode(new[] { Project(ScenarioStatus.SourceInvalid) }));
-        Assert.Equal(13, LabRunStatusPolicy.GetSuiteExitCode(new[] { Project(ScenarioStatus.InfrastructureFailure) }));
-        Assert.Equal(14, LabRunStatusPolicy.GetSuiteExitCode(new[] { Project(ScenarioStatus.NonDeterministic) }));
+        Assert.Equal(0, LabRunStatusPolicy.GetSuiteExitCode(new[]
+        {
+            Project(ScenarioStatus.Pass),
+            Project(ScenarioStatus.UnsupportedAsExpected),
+            Project(ScenarioStatus.InfrastructureFailure)
+        }));
+        Assert.Equal(10, LabRunStatusPolicy.GetSuiteExitCode(new[] { Project(ScenarioStatus.Regression, ScenarioStatus.Pass) }));
+        Assert.Equal(11, LabRunStatusPolicy.GetSuiteExitCode(new[]
+        {
+            Project(ScenarioStatus.SourceInvalid, ScenarioStatus.Pass),
+            Project(ScenarioStatus.MigratorFailure, ScenarioStatus.Pass)
+        }));
+        Assert.Equal(12, LabRunStatusPolicy.GetSuiteExitCode(new[] { Project(ScenarioStatus.SourceInvalid, ScenarioStatus.Pass) }));
+        Assert.Equal(13, LabRunStatusPolicy.GetSuiteExitCode(new[] { Project(ScenarioStatus.InfrastructureFailure, ScenarioStatus.Pass) }));
+        Assert.Equal(14, LabRunStatusPolicy.GetSuiteExitCode(new[] { Project(ScenarioStatus.NonDeterministic, ScenarioStatus.Pass) }));
     }
 
 
@@ -129,6 +138,45 @@ public sealed class LabRunStatusPolicyTests
             sourceContentPreserved: true);
 
         Assert.Equal(ScenarioStatus.Regression, actual);
+    }
+
+
+    [Fact]
+    public void ExpectedInfrastructureFailure_WithNuGetRestoreEvidence_IsPreserved()
+    {
+        var stages = AcceptedStages(migrationExitCode: 0)
+            .Concat(new[]
+            {
+                Stage(LabRunStage.ProjectVerify) with { Outcome = LabStageOutcome.Failed, ExitCode = 2 }
+            })
+            .ToArray();
+        var verify = new LabProjectVerifySummary
+        {
+            ReportPresent = true,
+            Status = "failed",
+            ExitCode = 2,
+            DiagnosticCategories = new[] { "nuget-restore" }
+        };
+
+        var expectedInfrastructure = LabRunStatusPolicy.ClassifyScenario(
+            ScenarioStatus.InfrastructureFailure,
+            stages,
+            new LabMigrationSummary { MandatoryArtifactsPresent = true, OrchestrationStatus = "Passed" },
+            verify,
+            new LabQualityEvaluation { Passed = true },
+            new LabSemanticOracleSummary { Passed = true },
+            sourceContentPreserved: true);
+        var ordinaryPassContract = LabRunStatusPolicy.ClassifyScenario(
+            ScenarioStatus.Pass,
+            stages,
+            new LabMigrationSummary { MandatoryArtifactsPresent = true, OrchestrationStatus = "Passed" },
+            verify,
+            new LabQualityEvaluation { Passed = true },
+            new LabSemanticOracleSummary { Passed = true },
+            sourceContentPreserved: true);
+
+        Assert.Equal(ScenarioStatus.InfrastructureFailure, expectedInfrastructure);
+        Assert.Equal(ScenarioStatus.Regression, ordinaryPassContract);
     }
 
     [Fact]
@@ -183,5 +231,9 @@ public sealed class LabRunStatusPolicyTests
         Outcome = LabStageOutcome.Passed
     };
 
-    static LabScenarioRunResult Project(ScenarioStatus status) => new() { ActualStatus = status };
+    static LabScenarioRunResult Project(ScenarioStatus actual, ScenarioStatus? expected = null) => new()
+    {
+        ActualStatus = actual,
+        ExpectedStatus = expected ?? actual
+    };
 }

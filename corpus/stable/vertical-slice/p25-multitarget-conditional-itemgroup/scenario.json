@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p25-multitarget-conditional-itemgroup",
+  "seed": 125,
+  "tags": [
+    "msbuild",
+    "multi-target",
+    "conditional-itemgroup",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "multi-project",
+    "features": [
+      "TargetFrameworks",
+      "ConditionalItemGroup",
+      "ProjectReference"
+    ],
+    "migrationFiles": [
+      "Tests/MultiTargetTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/MultiTargetTests.cs",
+      "Shared/Shared.csproj",
+      "Shared/SharedContract.cs",
+      "Shared/Net10Only.cs"
+    ],
+    "references": [
+      "Shared/Shared.csproj"
+    ],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/smoke",
+        "model": "multitarget"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "smoke:click"
+      ],
+      "dom": [
+        {
+          "selector": "#smoke-status",
+          "text": "ok"
+        }
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "Block 6 stable fixture.",
+    "contentHash": "sha256:b5105fe4ed1be7231110642e45cd188ef9cae2b8f28529a8a36f4b568a356a29"
+  }
+}

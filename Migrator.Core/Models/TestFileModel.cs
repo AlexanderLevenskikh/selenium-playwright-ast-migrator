@@ -15,6 +15,12 @@ public sealed record TestFileModel
     public IEnumerable<TestModel> Tests { get; init; } = Array.Empty<TestModel>();
 
     /// <summary>
+    /// Source test-fixture metadata that is safe to preserve for the same target test framework
+    /// (for example NUnit FixtureLifeCycle/Parallelizable).
+    /// </summary>
+    public IReadOnlyList<string> PreservedClassAttributes { get; init; } = Array.Empty<string>();
+
+    /// <summary>
     /// Class-level field declarations parsed from the source test file.
     /// Contains fields like `ServiceProvider`, `PageObject`, etc. that are used by test methods.
     /// These are parsed by Roslyn and may need to be rendered as class-level fields in the generated file.

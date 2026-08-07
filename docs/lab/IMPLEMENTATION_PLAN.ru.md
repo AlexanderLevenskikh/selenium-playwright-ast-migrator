@@ -165,7 +165,7 @@ expected status или ослаблять oracle.
 - `p24a-transitive-warning-isolated` — PASS;
 - `p26-jsexecutor-unsupported` — UNSUPPORTED_AS_EXPECTED.
 
-## Блок 5. Suite report, replay и baseline diff — реализован
+## Блок 5. Suite report, replay и baseline diff — принят
 
 Состав:
 
@@ -193,7 +193,7 @@ expected status или ослаблять oracle.
 Playwright повторно не скачивается. После успешной финальной строки пишет:
 `Replay и diff работают, продолжай блок 6`.
 
-## Блок 6. Полный стабильный корпус из 30 проектов
+## Блок 6. Полный стабильный корпус из 30 проектов — реализован, ожидает локальной приёмки
 
 Состав:
 
@@ -206,6 +206,16 @@ Playwright повторно не скачивается. После успешн
 
 Критерий: 30 сценариев детерминированы, каждый получает ожидаемый статус, PR-бюджет
 остаётся приемлемым.
+
+Реализовано:
+
+- 30 READY-сценариев: 25 `PASS`, 4 `UNSUPPORTED_AS_EXPECTED`, 1 ожидаемый `INFRASTRUCTURE_FAILURE`;
+- 7 smoke, 18 PR и 30 nightly-сценариев;
+- положительный `p24a` и намеренно саботажный `p24b` разделены;
+- `--feature` выбирает сценарии по `source.features`;
+- LabApp v1 покрывает формы, таблицы, Page Object, waits, popup/frame/upload/download и негативные сценарии;
+- машинная и человекочитаемая матрицы покрытия;
+- GitHub Actions: smoke на pull request, полный stable по расписанию.
 
 ### Что делает владелец после блока 6
 

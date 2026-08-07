@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "migrator-lab-runtime-validation/v1",
+  "scenarioId": "p07-locator-in-variable",
+  "tests": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "expectedPassed": 1,
+    "trxPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target\\test-results\\target-tests.trx"
+  },
+  "runtimeArtifactsDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target\\runtime-artifacts",
+  "build": {
+    "stage": "TARGET_BUILD",
+    "outcome": "PASSED",
+    "exitCode": 0,
+    "durationMs": 2372,
+    "command": "dotnet build C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target\\Migrator.Lab.TargetRuntime.csproj --configuration Release --nologo",
+    "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target",
+    "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target\\target-build.stdout.log",
+    "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target\\target-build.stderr.log",
+    "message": null
+  },
+  "test": {
+    "stage": "TARGET_TEST",
+    "outcome": "FAILED",
+    "exitCode": 1,
+    "durationMs": 9111,
+    "command": "dotnet test C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target\\Migrator.Lab.TargetRuntime.csproj --configuration Release --no-build --no-restore --nologo --logger trx;LogFileName=target-tests.trx --results-directory C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target\\test-results",
+    "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target",
+    "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target\\target-test.stdout.log",
+    "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target\\target-test.stderr.log",
+    "message": null
+  }
+}

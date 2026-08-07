@@ -3,11 +3,13 @@ namespace Migrator.Core.Models;
 public enum ControlStateAssertionKind
 {
     Enabled,
-    Disabled
+    Disabled,
+    Checked,
+    Unchecked
 }
 
 /// <summary>
-/// Target-neutral assertion that a UI control is enabled or disabled.
+/// Target-neutral assertion that a UI control is enabled, disabled, checked, or unchecked.
 /// Renderers translate it to the native Playwright assertion for their backend.
 /// </summary>
 public sealed class ControlStateAssertionAction : TestAction

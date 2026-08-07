@@ -1,0 +1,19 @@
+{
+  "SchemaVersion": "adapter-config/v1",
+  "SourceProjectName": "Migrator.Lab.P17",
+  "ParameterizedMethods": [
+    {
+      "SourceMethodPattern": "WebDriver.WaitUntilEnabled(By.Id({targetId}))",
+      "TargetStatements": [
+        "await Expect(Page.Locator(\"#{targetId}\")).ToBeEnabledAsync();"
+      ],
+      "RequiresReview": false
+    }
+  ],
+  "WaitPolicies": [
+    {
+      "MethodName": "WaitUntilEnabled",
+      "Kind": "AdapterMapping"
+    }
+  ]
+}

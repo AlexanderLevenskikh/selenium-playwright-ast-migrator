@@ -1,0 +1,15 @@
+{
+  "SchemaVersion": "adapter-config/v1",
+  "SourceProjectName": "Migrator.Lab.P20",
+  "ParameterizedMethods": [
+    {
+      "SourceMethodPattern": "RunCase({value})",
+      "TargetStatements": [
+        "await Page.Locator(\"#parameter-{value}\").ClickAsync();",
+        "await Expect(Page.Locator(\"#parameter-status\")).ToHaveTextAsync({value});"
+      ],
+      "RequiresReview": false,
+      "Description": "Source-backed expansion of the local RunCase helper so the fixture isolates NUnit TestCaseSource/ValueSource preservation."
+    }
+  ]
+}

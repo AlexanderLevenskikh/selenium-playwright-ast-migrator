@@ -1,0 +1,73 @@
+name: Migrator Lab
+
+on:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 2 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+          cache: true
+          cache-dependency-path: "**/*.csproj"
+      - name: Build
+        run: dotnet build Migrator.sln -c Release
+      - name: Contract tests
+        run: dotnet test Migrator.Tests/Migrator.Tests.csproj -c Release --no-build --filter "Layer=Contract|FullyQualifiedName~LabAppTests|FullyQualifiedName~LabRunStatusPolicyTests"
+      - name: Install Playwright Chromium
+        shell: pwsh
+        run: ./Migrator.Tests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+      - name: Run smoke corpus
+        run: >-
+          dotnet run --project Migrator.Cli -c Release --no-build --
+          lab run --suite smoke --corpus ./corpus/stable/vertical-slice
+          --out ./artifacts/lab/ci-smoke --timeout-seconds 600 --configuration Release
+      - name: Upload smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migrator-lab-smoke
+          path: artifacts/lab/ci-smoke
+          if-no-files-found: warn
+
+  nightly:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+          cache: true
+          cache-dependency-path: "**/*.csproj"
+      - name: Build
+        run: dotnet build Migrator.sln -c Release
+      - name: Full Migrator tests
+        run: dotnet test Migrator.Tests/Migrator.Tests.csproj -c Release --no-build
+      - name: Install Playwright Chromium
+        shell: pwsh
+        run: ./Migrator.Tests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+      - name: Run full stable corpus
+        run: >-
+          dotnet run --project Migrator.Cli -c Release --no-build --
+          lab run --suite nightly --corpus ./corpus/stable/vertical-slice
+          --out ./artifacts/lab/ci-nightly --timeout-seconds 600 --configuration Release
+      - name: Upload nightly report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migrator-lab-nightly
+          path: artifacts/lab/ci-nightly
+          if-no-files-found: warn

@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p10-unresolved-pageobject-chain",
+  "seed": 110,
+  "tags": [
+    "pr",
+    "page-object",
+    "real-failure",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "PageObject",
+      "MethodReturnChain",
+      "DownstreamAssertion"
+    ],
+    "migrationFiles": [
+      "Tests/PageObjectChainTests.cs",
+      "Pages/LoginPage.cs"
+    ],
+    "adapterConfig": "adapter-config.json"
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/PageObjectChainTests.cs",
+      "Pages/LoginPage.cs",
+      "adapter-config.json"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/pom",
+        "model": "page-object-chain"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "pom:login",
+        "pom:dashboard"
+      ],
+      "dom": [
+        {
+          "selector": "#dashboard-status",
+          "text": "ready",
+          "visible": true
+        }
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "Ready stable fixture p10-unresolved-pageobject-chain; reviewed Page Object mapping is backed by included source files.",
+    "contentHash": "sha256:6743029924ac0b9da3c597cb90a38b0c6d440ee9a779432124f15566d3ed271d"
+  }
+}

@@ -7,7 +7,9 @@
     "msbuild",
     "transitive-reference",
     "verify-project",
-    "vertical-slice"
+    "vertical-slice",
+    "stable",
+    "nightly"
   ],
   "source": {
     "language": "csharp",

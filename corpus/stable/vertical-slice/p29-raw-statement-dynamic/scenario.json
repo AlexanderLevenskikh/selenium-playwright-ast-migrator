@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p29-raw-statement-dynamic",
+  "seed": 129,
+  "tags": [
+    "unsupported",
+    "dynamic",
+    "raw-statement",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "dynamic",
+      "RawStatement",
+      "NeighbourPreservation"
+    ],
+    "migrationFiles": [
+      "Tests/DynamicTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/DynamicTests.cs"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/dynamic",
+        "model": "dynamic"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "dynamic:neighbour-click"
+      ],
+      "dom": [
+        {
+          "selector": "#dynamic-status",
+          "text": "ok"
+        }
+      ]
+    },
+    "diagnostics": {
+      "mustContainAny": [
+        "RAW_STATEMENT",
+        "MANUAL_REVIEW",
+        "dynamic"
+      ]
+    },
+    "mustNot": {
+      "corruptNeighbourCode": true
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 5,
+    "unmappedMax": 1,
+    "unsupportedMax": 2,
+    "warningsMax": 1
+  },
+  "expected": {
+    "status": "UNSUPPORTED_AS_EXPECTED"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "Ready stable fixture p29-raw-statement-dynamic.",
+    "contentHash": "sha256:2660127897059e5fe67cba1b5c05e662fcd3614d314981b0749e6d8ea575ecbd"
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p11-pageobject-separate-project",
+  "seed": 111,
+  "tags": [
+    "page-object",
+    "multi-project",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "multi-project",
+    "features": [
+      "PageObject",
+      "ProjectReference",
+      "SeparateAssembly"
+    ],
+    "migrationFiles": [
+      "Pages/LoginPage.cs",
+      "Tests/SeparateProjectTests.cs"
+    ],
+    "adapterConfig": "adapter-config.json"
+  },
+  "project": {
+    "files": [
+      "Pages/Pages.csproj",
+      "Pages/LoginPage.cs",
+      "Tests/Tests.csproj",
+      "Tests/Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/SeparateProjectTests.cs",
+      "adapter-config.json"
+    ],
+    "references": [
+      "Pages/Pages.csproj"
+    ],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Tests/Tests.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/pom",
+        "model": "separate-project"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "pom:login",
+        "pom:dashboard"
+      ],
+      "dom": [
+        {
+          "selector": "#dashboard-status",
+          "text": "ready"
+        }
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "Block 6 stable fixture; reviewed Page Object mapping is backed by included source files.",
+    "contentHash": "sha256:328428edcce56b1e03b9a9aa3beba7c90670d0cb566ba68a1a2fd096112d8dd3"
+  }
+}

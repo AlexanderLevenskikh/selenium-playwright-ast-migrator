@@ -80,6 +80,24 @@ public static class LabSemanticOracle
                 activeGenerated.Contains(text, StringComparison.Ordinal));
         }
 
+        foreach (var token in ReadStringArray(semantic, "generatedContains"))
+        {
+            AddCheck(
+                "generated-contains",
+                token,
+                activeGenerated.Contains(token, StringComparison.Ordinal) ? "active" : "missing-or-comment-only",
+                activeGenerated.Contains(token, StringComparison.Ordinal));
+        }
+
+        foreach (var token in ReadStringArray(semantic, "generatedNotContains"))
+        {
+            AddCheck(
+                "generated-not-contains",
+                token,
+                activeGenerated.Contains(token, StringComparison.Ordinal) ? "found" : "absent",
+                !activeGenerated.Contains(token, StringComparison.Ordinal));
+        }
+
         var diagnosticText = string.Join(
             Environment.NewLine,
             new[] { allGenerated }
@@ -222,6 +240,18 @@ public static class LabSemanticOracle
         var expectedVisible = ReadBool(item, "visible");
         if (expectedVisible.HasValue)
             addCheck("dom-visible", $"{selector}={expectedVisible.Value}", state.Visible.ToString(), state.Visible == expectedVisible.Value);
+
+        var expectedValue = ReadString(item, "value");
+        if (expectedValue != null)
+            addCheck("dom-value", $"{selector}={expectedValue}", state.Value, string.Equals(state.Value, expectedValue, StringComparison.Ordinal));
+
+        var expectedEnabled = ReadBool(item, "enabled");
+        if (expectedEnabled.HasValue)
+            addCheck("dom-enabled", $"{selector}={expectedEnabled.Value}", state.Enabled.ToString(), state.Enabled == expectedEnabled.Value);
+
+        var expectedChecked = ReadBool(item, "checked");
+        if (expectedChecked.HasValue)
+            addCheck("dom-checked", $"{selector}={expectedChecked.Value}", state.Checked.ToString(), state.Checked == expectedChecked.Value);
     }
 
     static string ReadGeneratedSource(IEnumerable<string> files, bool includeCommentLines)

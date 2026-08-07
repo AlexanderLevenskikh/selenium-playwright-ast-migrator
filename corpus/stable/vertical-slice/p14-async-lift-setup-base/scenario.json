@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p14-async-lift-setup-base",
+  "seed": 114,
+  "tags": [
+    "pr",
+    "async",
+    "nunit-lifecycle",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "SetUp",
+      "AsyncLift",
+      "Lifecycle"
+    ],
+    "migrationFiles": [
+      "Tests/SetupLiftTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/SetupLiftTests.cs"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/setup",
+        "model": "setup-lifecycle"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "setup:prepare",
+        "setup:test"
+      ],
+      "dom": [
+        {
+          "selector": "#setup-status",
+          "text": "done"
+        }
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "Ready stable fixture p14-async-lift-setup-base.",
+    "contentHash": "sha256:059b80d35955c5ab76386cfeddce0d0daf45caca5e2780e3761e3fa983461ea9"
+  }
+}

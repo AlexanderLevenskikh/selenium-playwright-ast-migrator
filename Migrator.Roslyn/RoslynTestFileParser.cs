@@ -15,6 +15,7 @@ public class RoslynTestFileParser : ITestFileParser
     readonly List<IInvocationRecognizer> _semanticRecognizers;
     readonly List<IInvocationRecognizer> _syntaxFallbackRecognizers;
     readonly IReadOnlySet<string> _genericResultMethods;
+    readonly IReadOnlySet<string> _configuredResultMethods;
 
     public RoslynTestFileParser()
         : this(RecognizerOptions.Default)
@@ -27,20 +28,24 @@ public class RoslynTestFileParser : ITestFileParser
     }
 
     public RoslynTestFileParser(RecognizerOptions options)
-        : this(CreateDefaultRecognizers(options), options.GenericResultMethods)
+        : this(CreateDefaultRecognizers(options), options.GenericResultMethods, options.ConfiguredResultMethods)
     {
     }
 
     public RoslynTestFileParser(List<IInvocationRecognizer> recognizers)
-        : this(recognizers, RecognizerOptions.Default.GenericResultMethods)
+        : this(recognizers, RecognizerOptions.Default.GenericResultMethods, RecognizerOptions.Default.ConfiguredResultMethods)
     {
     }
 
-    RoslynTestFileParser(List<IInvocationRecognizer> recognizers, IReadOnlySet<string> genericResultMethods)
+    RoslynTestFileParser(
+        List<IInvocationRecognizer> recognizers,
+        IReadOnlySet<string> genericResultMethods,
+        IReadOnlySet<string> configuredResultMethods)
     {
         _semanticRecognizers = recognizers;
         _syntaxFallbackRecognizers = recognizers;
         _genericResultMethods = genericResultMethods;
+        _configuredResultMethods = configuredResultMethods;
     }
 
     static List<IInvocationRecognizer> CreateDefaultRecognizers(RecognizerOptions options) => new()
@@ -126,8 +131,7 @@ public class RoslynTestFileParser : ITestFileParser
             : new List<TestAction>();
 
         var tests = testClass.DescendantNodes().OfType<MethodDeclarationSyntax>()
-            .Where(m => m.AttributeLists.SelectMany(al => al.Attributes)
-                .Any(a => a.Name.ToString() == "Test" || a.Name.ToString() == "TestCase"))
+            .Where(IsTestMethod)
             .Select(m => ParseTestMethod(m, semanticModel))
             .ToList();
 
@@ -144,7 +148,8 @@ public class RoslynTestFileParser : ITestFileParser
             Tests: tests
         )
         {
-            ClassFields = classFields
+            ClassFields = classFields,
+            PreservedClassAttributes = ParsePreservedClassAttributes(testClass)
         };
     }
 
@@ -235,6 +240,53 @@ public class RoslynTestFileParser : ITestFileParser
                                string.Equals(p, "CompileSmoke", StringComparison.OrdinalIgnoreCase));
     }
 
+    static bool IsTestMethod(MethodDeclarationSyntax method) =>
+        method.AttributeLists.SelectMany(al => al.Attributes)
+            .Any(a => IsAttributeNamed(a, "Test", "TestCase", "TestCaseSource"));
+
+    static IReadOnlyList<string> ParsePreservedClassAttributes(ClassDeclarationSyntax testClass) =>
+        testClass.AttributeLists.SelectMany(al => al.Attributes)
+            .Where(a => IsAttributeNamed(a,
+                "FixtureLifeCycle",
+                "Parallelizable",
+                "NonParallelizable"))
+            .Select(a => a.ToString())
+            .ToArray();
+
+    static IReadOnlyList<string> ParsePreservedMethodAttributes(MethodDeclarationSyntax method) =>
+        method.AttributeLists.SelectMany(al => al.Attributes)
+            .Where(a => IsAttributeNamed(a,
+                "Retry",
+                "Repeat",
+                "Order",
+                "Parallelizable",
+                "NonParallelizable",
+                "Timeout"))
+            .Select(a => a.ToString())
+            .ToArray();
+
+    static IReadOnlyList<string> ParsePreservedParameterAttributes(ParameterSyntax parameter) =>
+        parameter.AttributeLists.SelectMany(al => al.Attributes)
+            .Where(a => IsAttributeNamed(a, "ValueSource", "Values", "Range", "Random"))
+            .Select(a => a.ToString())
+            .ToArray();
+
+    static bool IsAttributeNamed(AttributeSyntax attribute, params string[] names)
+    {
+        var name = attribute.Name switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+            QualifiedNameSyntax qualified => qualified.Right.Identifier.ValueText,
+            AliasQualifiedNameSyntax aliasQualified => aliasQualified.Name.Identifier.ValueText,
+            _ => attribute.Name.ToString().Split('.').Last()
+        };
+
+        if (name.EndsWith("Attribute", StringComparison.Ordinal))
+            name = name[..^"Attribute".Length];
+
+        return names.Any(candidate => string.Equals(name, candidate, StringComparison.Ordinal));
+    }
+
     TestModel ParseTestMethod(MethodDeclarationSyntax method, SemanticModel semanticModel)
     {
         var name = method.Identifier.Text;
@@ -250,7 +302,8 @@ public class RoslynTestFileParser : ITestFileParser
             .Select(p => new MethodParameterModel(
                 Type: p.Type?.ToString() ?? string.Empty,
                 Name: p.Identifier.Text,
-                DefaultValue: p.Default?.Value.ToString()
+                DefaultValue: p.Default?.Value.ToString(),
+                Attributes: ParsePreservedParameterAttributes(p)
             ))
             .ToList() ?? new List<MethodParameterModel>();
 
@@ -261,7 +314,8 @@ public class RoslynTestFileParser : ITestFileParser
             Category: category,
             CaseData: caseData,
             Parameters: parameters,
-            BodyActions: bodyActions
+            BodyActions: bodyActions,
+            PreservedAttributes: ParsePreservedMethodAttributes(method)
         );
     }
 
@@ -270,7 +324,7 @@ public class RoslynTestFileParser : ITestFileParser
         var results = new List<TestCaseData>();
 
         foreach (var attr in method.AttributeLists.SelectMany(al => al.Attributes)
-            .Where(a => a.Name.ToString() == "TestCase"))
+            .Where(a => IsAttributeNamed(a, "TestCase", "TestCaseSource")))
         {
             var rawSource = attr.ToString();
             var args = attr.ArgumentList?.Arguments
@@ -294,7 +348,39 @@ public class RoslynTestFileParser : ITestFileParser
 
     IEnumerable<TestAction> ParseMethodBody(MethodDeclarationSyntax method, SemanticModel semanticModel)
     {
-        if (method.Body == null) yield break;
+        if (method.Body == null)
+        {
+            if (method.ExpressionBody?.Expression is { } expression)
+            {
+                var line = expression.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+                var invocation = expression switch
+                {
+                    InvocationExpressionSyntax ie => ie,
+                    AwaitExpressionSyntax { Expression: InvocationExpressionSyntax ie } => ie,
+                    _ => null
+                };
+
+                if (invocation != null)
+                {
+                    var action = TryExtractFromInvocation(
+                        invocation,
+                        semanticModel,
+                        line,
+                        expression is AwaitExpressionSyntax);
+                    if (action != null)
+                    {
+                        yield return action;
+                        yield break;
+                    }
+                }
+
+                var text = expression.ToString().Trim();
+                if (!string.IsNullOrEmpty(text))
+                    yield return new UnsupportedAction(line, text, "Expression-bodied test method is not yet supported by extractor");
+            }
+
+            yield break;
+        }
 
         foreach (var statement in method.Body.Statements)
         {
@@ -349,9 +435,22 @@ public class RoslynTestFileParser : ITestFileParser
             if (TryExtractNavigationDeclaration(lds, line) is { } navDecl)
                 return navDecl;
 
-            // Then try to extract locator declarations (WebDriver.FindElement)
+            // Then try to extract locator declarations. Besides direct
+            // WebDriver.FindElement(...) locals, a Selenium By value stored in a local
+            // is a stable locator alias and can be represented directly as ILocator.
+            if (TryExtractByLocatorDeclaration(lds, line) is { } byLocatorDecl)
+                return byLocatorDecl;
             if (TryExtractLocatorDeclaration(lds, line) is { } locatorDecl)
                 return locatorDecl;
+
+            // Result-producing invocations explicitly mapped by adapter config must stay
+            // structured even when they are ordinary receiver-qualified calls, e.g.
+            //   var dashboard = new LoginPage(WebDriver).Login(user, password);
+            // The mapping can then emit deterministic Playwright statements and bind
+            // {result} for downstream assertions. Defaults remain limited to generic
+            // invocation families so an unrelated `var x = button.Click()` is not stolen.
+            if (TryExtractConfiguredInvocationDeclaration(lds, line) is { } configuredInvocationDecl)
+                return configuredInvocationDecl;
 
             // Generic invocation assignments such as
             // var page = Browser.GoToPage<MyPage>(MyPage.Uri);
@@ -375,6 +474,17 @@ public class RoslynTestFileParser : ITestFileParser
             var text = lds.ToString().Trim().Trim(';');
             return new RawStatementAction(line, text);
         }
+
+        // Loop-control statements are semantically safe when they stay inside the
+        // original loop body. Preserve them as raw C# so conditional blocks such as
+        // `if (item.Text == "alpha") continue;` are not mistaken for an empty/suppressed
+        // branch. The renderer only emits these statements when their surrounding
+        // control-flow structure is active and all symbols are resolved.
+        if (statement is ContinueStatementSyntax)
+            return new RawStatementAction(line, "continue");
+
+        if (statement is BreakStatementSyntax)
+            return new RawStatementAction(line, "break");
 
         // if/else if/else blocks — extract as ConditionalBlockAction
         if (statement is IfStatementSyntax ifStmt)
@@ -671,6 +781,14 @@ public class RoslynTestFileParser : ITestFileParser
             return null;
 
         var body = UnwrapParenthesizedExpression(lambdaBody);
+        var negated = false;
+        if (body is PrefixUnaryExpressionSyntax prefix
+            && prefix.IsKind(SyntaxKind.LogicalNotExpression))
+        {
+            negated = true;
+            body = UnwrapParenthesizedExpression(prefix.Operand);
+        }
+
         if (body is not MemberAccessExpressionSyntax displayedAccess
             || !string.Equals(displayedAccess.Name.Identifier.ValueText, "Displayed", StringComparison.Ordinal))
         {
@@ -699,9 +817,13 @@ public class RoslynTestFileParser : ITestFileParser
             line,
             TargetExpression.Mapped(normalizedSourceTarget, locatorExpression, TargetKind.PlaywrightLocator),
             RecognitionConfidence.SyntaxFallback,
-            sourceMethod: "WebDriverWait.Until.Displayed",
+            sourceMethod: negated
+                ? "WebDriverWait.Until.NotDisplayed"
+                : "WebDriverWait.Until.Displayed",
             fullSourceText: invocation.ToString().Trim().TrimEnd(';'),
-            kind: WaitForKind.ProductStateVisible);
+            kind: negated
+                ? WaitForKind.ProductStateHidden
+                : WaitForKind.ProductStateVisible);
     }
 
     static bool TryGetSingleParameterLambda(
@@ -982,17 +1104,7 @@ public class RoslynTestFileParser : ITestFileParser
     static bool ContainsTestMethod(ClassDeclarationSyntax classDeclaration) =>
         classDeclaration.Members
             .OfType<MethodDeclarationSyntax>()
-            .Any(method => method.AttributeLists
-                .SelectMany(attributeList => attributeList.Attributes)
-                .Any(attribute => IsAttributeNamed(attribute, "Test") || IsAttributeNamed(attribute, "TestCase")));
-
-    static bool IsAttributeNamed(AttributeSyntax attribute, string expectedName)
-    {
-        var name = attribute.Name.ToString();
-        var simpleName = name.Split('.').Last();
-        return string.Equals(simpleName, expectedName, StringComparison.Ordinal)
-            || string.Equals(simpleName, expectedName + "Attribute", StringComparison.Ordinal);
-    }
+            .Any(IsTestMethod);
 
     static bool ShouldIgnoreStatement(StatementSyntax statement, SemanticModel semanticModel)
     {
@@ -1298,6 +1410,47 @@ public class RoslynTestFileParser : ITestFileParser
             isAwaited);
     }
 
+    TestAction? TryExtractConfiguredInvocationDeclaration(LocalDeclarationStatementSyntax lds, int line)
+    {
+        var declaration = lds.Declaration;
+        if (declaration.Variables.Count == 0)
+            return null;
+
+        var variable = declaration.Variables[0];
+        var initializer = variable.Initializer?.Value;
+        var invocation = initializer switch
+        {
+            InvocationExpressionSyntax direct => direct,
+            AwaitExpressionSyntax { Expression: InvocationExpressionSyntax awaited } => awaited,
+            _ => null
+        };
+        var isAwaited = initializer is AwaitExpressionSyntax;
+
+        if (invocation == null)
+            return null;
+
+        var methodName = GetMethodName(invocation);
+        if (!_configuredResultMethods.Contains(methodName))
+            return null;
+
+        var receiverText = GetReceiverText(invocation);
+        var argumentTexts = invocation.ArgumentList.Arguments
+            .Select(argument => argument.Expression.ToString())
+            .ToArray();
+        var genericArgumentTexts = GetGenericArgumentTexts(invocation);
+
+        return new MethodInvocationAction(
+            line,
+            receiverText,
+            methodName,
+            invocation.ToString().Trim().TrimEnd(';'),
+            argumentTexts,
+            genericArgumentTexts,
+            variable.Identifier.Text,
+            RecognitionConfidence.SyntaxFallback,
+            isAwaited);
+    }
+
     TestAction? TryExtractGenericInvocationDeclaration(LocalDeclarationStatementSyntax lds, int line)
     {
         var declaration = lds.Declaration;
@@ -1376,8 +1529,10 @@ public class RoslynTestFileParser : ITestFileParser
 
         var variable = declaration.Variables[0];
         var varName = variable.Identifier.Text;
+        var isSafeConstantLiteral = lds.Modifiers.Any(SyntaxKind.ConstKeyword)
+            && variable.Initializer?.Value is LiteralExpressionSyntax;
 
-        if (!IsMeaningfulVariableName(varName))
+        if (!isSafeConstantLiteral && !IsMeaningfulVariableName(varName))
             return null;
 
         var typeText = declaration.Type.ToString();
@@ -1508,6 +1663,41 @@ public class RoslynTestFileParser : ITestFileParser
     static readonly Regex WebDriverIdRegex = new(
         @"^\s*WebDriver\s*\.\s*FindElements?\s*\(\s*By\s*\.\s*Id\s*\(\s*""([^""]*)""\s*\)\s*\)\s*;?",
         RegexOptions.Compiled);
+
+    static LocatorDeclarationAction? TryExtractByLocatorDeclaration(LocalDeclarationStatementSyntax lds, int line)
+    {
+        var declaration = lds.Declaration;
+        if (declaration.Variables.Count != 1)
+            return null;
+
+        var variable = declaration.Variables[0];
+        var initializer = variable.Initializer?.Value;
+        if (initializer == null)
+            return null;
+
+        if (TryRenderStaticByLocator(initializer, out var directLocator))
+        {
+            return new LocatorDeclarationAction(
+                line,
+                variable.Identifier.Text,
+                directLocator,
+                initializer.ToString());
+        }
+
+        if (initializer is ConditionalExpressionSyntax conditional
+            && TryRenderStaticByLocator(conditional.WhenTrue, out var trueLocator)
+            && TryRenderStaticByLocator(conditional.WhenFalse, out var falseLocator))
+        {
+            var locatorExpression = $"{conditional.Condition} ? {trueLocator} : {falseLocator}";
+            return new LocatorDeclarationAction(
+                line,
+                variable.Identifier.Text,
+                locatorExpression,
+                initializer.ToString());
+        }
+
+        return null;
+    }
 
     static LocatorDeclarationAction? TryExtractLocatorDeclaration(LocalDeclarationStatementSyntax lds, int line)
     {

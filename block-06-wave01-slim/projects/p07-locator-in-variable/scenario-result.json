@@ -1,0 +1,223 @@
+{
+  "id": "p07-locator-in-variable",
+  "expectedStatus": "PASS",
+  "actualStatus": "REGRESSION",
+  "scenarioDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\corpus\\stable\\vertical-slice\\p07-locator-in-variable",
+  "artifactsDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable",
+  "workspaceDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd",
+  "runtimeArtifactsDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target\\runtime-artifacts",
+  "durationMs": 23239,
+  "sourceContentPreserved": true,
+  "sourceTests": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0,
+    "expectedPassed": 1,
+    "trxPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\source\\test-results\\source-tests.trx"
+  },
+  "targetTests": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "expectedPassed": 1,
+    "trxPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target\\test-results\\target-tests.trx"
+  },
+  "migration": {
+    "orchestrationStatus": "passed",
+    "verifyStatus": "passed",
+    "unsupportedActions": 0,
+    "todoComments": 3,
+    "unmappedTargets": 1,
+    "warnings": 1,
+    "mandatoryArtifactsPresent": true,
+    "orchestrationReportPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\migration\\orchestration-report.json",
+    "verifyReportPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\migration\\verify\\verify-report.json",
+    "generatedFiles": [
+      "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\migration\\generated\\VariableLocatorTestsPlaywright.cs"
+    ],
+    "failedStages": [],
+    "issues": []
+  },
+  "projectVerify": {
+    "reportPresent": true,
+    "status": "passed",
+    "exitCode": 0,
+    "reportPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\project-verify\\project-verify-report.json",
+    "harnessProject": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\project-verify\\project-verify\\Generated.Playwright.Verify.csproj",
+    "projectReferences": [
+      "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd\\Scenario.csproj"
+    ],
+    "diagnostics": [],
+    "diagnosticCategories": [],
+    "harness": {
+      "schemaVersion": "verify-project-harness/v1",
+      "centralPackageManagementDetected": false,
+      "centralPackageManagementMode": "not-detected",
+      "managePackageVersionsCentrallyDisabled": false,
+      "directoryPackagesPropsPathPinned": false,
+      "importedBuildFiles": [],
+      "skippedBuildFiles": [],
+      "snapshotPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\project-verify\\project-verify-harness.csproj"
+    },
+    "issues": []
+  },
+  "quality": {
+    "passed": false,
+    "todoActual": 3,
+    "todoMax": 0,
+    "unmappedActual": 1,
+    "unmappedMax": 0,
+    "unsupportedActual": 0,
+    "unsupportedMax": 0,
+    "warningsActual": 1,
+    "warningsMax": 0,
+    "issues": [
+      "Quality budget exceeded: TODO comments = 3, maximum = 0.",
+      "Quality budget exceeded: unmapped targets = 1, maximum = 0.",
+      "Quality budget exceeded: warning-bearing files = 1, maximum = 0."
+    ]
+  },
+  "oracle": {
+    "passed": false,
+    "expectedEvents": [
+      "locator:primary"
+    ],
+    "observedEvents": [],
+    "checks": [
+      {
+        "kind": "target-test-count",
+        "expected": "1",
+        "actual": "0/1",
+        "passed": false
+      },
+      {
+        "kind": "event-sequence",
+        "expected": "locator:primary",
+        "actual": "",
+        "passed": false
+      },
+      {
+        "kind": "dom-element",
+        "expected": "#locator-status",
+        "actual": "missing from final observation",
+        "passed": false
+      }
+    ],
+    "issues": [
+      "Semantic oracle failed (target-test-count): expected 1; actual 0/1.",
+      "Semantic oracle failed (event-sequence): expected locator:primary; actual .",
+      "Semantic oracle failed (dom-element): expected #locator-status; actual missing from final observation."
+    ]
+  },
+  "stages": [
+    {
+      "stage": "SOURCE_RESTORE",
+      "outcome": "PASSED",
+      "exitCode": 0,
+      "durationMs": 1277,
+      "command": "dotnet restore C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd\\Scenario.csproj --nologo",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\source\\restore.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\source\\restore.stderr.log",
+      "message": null
+    },
+    {
+      "stage": "SOURCE_BUILD",
+      "outcome": "PASSED",
+      "exitCode": 0,
+      "durationMs": 1183,
+      "command": "dotnet build C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd\\Scenario.csproj --configuration Release --no-restore --nologo",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\source\\build.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\source\\build.stderr.log",
+      "message": null
+    },
+    {
+      "stage": "SOURCE_TEST",
+      "outcome": "PASSED",
+      "exitCode": 0,
+      "durationMs": 3290,
+      "command": "dotnet test C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd\\Scenario.csproj --configuration Release --no-build --no-restore --nologo --logger trx;LogFileName=source-tests.trx --results-directory C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\source\\test-results",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\source\\test.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\source\\test.stderr.log",
+      "message": null
+    },
+    {
+      "stage": "MIGRATION",
+      "outcome": "PASSED",
+      "exitCode": 0,
+      "durationMs": 1657,
+      "command": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\Migrator.Cli\\bin\\Release\\net10.0\\Migrator.Cli.exe run --input C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd\\.migration-input --out C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\migration --format both --source selenium-csharp --target dotnet --target-test-framework nunit",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\migration-process.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\migration-process.stderr.log",
+      "message": null
+    },
+    {
+      "stage": "QUALITY_EVALUATION",
+      "outcome": "FAILED",
+      "exitCode": null,
+      "durationMs": 0,
+      "command": "",
+      "workingDirectory": "",
+      "standardOutputPath": "",
+      "standardErrorPath": "",
+      "message": "Quality budget exceeded: TODO comments = 3, maximum = 0. Quality budget exceeded: unmapped targets = 1, maximum = 0. Quality budget exceeded: warning-bearing files = 1, maximum = 0."
+    },
+    {
+      "stage": "PROJECT_VERIFY",
+      "outcome": "PASSED",
+      "exitCode": 0,
+      "durationMs": 4114,
+      "command": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\Migrator.Cli\\bin\\Release\\net10.0\\Migrator.Cli.exe verify-project --input C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd\\.migration-input --config C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\project-verify-config.json --out C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\project-verify --format both --source selenium-csharp --target dotnet --target-test-framework nunit",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\project-verify-process.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\project-verify-process.stderr.log",
+      "message": null
+    },
+    {
+      "stage": "TARGET_BUILD",
+      "outcome": "PASSED",
+      "exitCode": 0,
+      "durationMs": 2372,
+      "command": "dotnet build C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target\\Migrator.Lab.TargetRuntime.csproj --configuration Release --nologo",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target\\target-build.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target\\target-build.stderr.log",
+      "message": null
+    },
+    {
+      "stage": "TARGET_TEST",
+      "outcome": "FAILED",
+      "exitCode": 1,
+      "durationMs": 9111,
+      "command": "dotnet test C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target\\Migrator.Lab.TargetRuntime.csproj --configuration Release --no-build --no-restore --nologo --logger trx;LogFileName=target-tests.trx --results-directory C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target\\test-results",
+      "workingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target",
+      "standardOutputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target\\target-test.stdout.log",
+      "standardErrorPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p07-locator-in-variable\\target\\target-test.stderr.log",
+      "message": null
+    },
+    {
+      "stage": "SEMANTIC_ORACLE",
+      "outcome": "FAILED",
+      "exitCode": null,
+      "durationMs": 0,
+      "command": "",
+      "workingDirectory": "",
+      "standardOutputPath": "",
+      "standardErrorPath": "",
+      "message": "Semantic oracle failed (target-test-count): expected 1; actual 0/1. Semantic oracle failed (event-sequence): expected locator:primary; actual . Semantic oracle failed (dom-element): expected #locator-status; actual missing from final observation."
+    }
+  ],
+  "issues": [
+    "Quality budget exceeded: TODO comments = 3, maximum = 0.",
+    "Quality budget exceeded: unmapped targets = 1, maximum = 0.",
+    "Quality budget exceeded: warning-bearing files = 1, maximum = 0.",
+    "Semantic oracle failed (target-test-count): expected 1; actual 0/1.",
+    "Semantic oracle failed (event-sequence): expected locator:primary; actual .",
+    "Semantic oracle failed (dom-element): expected #locator-status; actual missing from final observation."
+  ]
+}

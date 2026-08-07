@@ -93,9 +93,13 @@ public sealed class PlaywrightTypeScriptRenderer : IRenderer
             case ControlStateAssertionAction controlState:
                 if (IsResolved(controlState.Target))
                 {
-                    var matcher = controlState.Kind == ControlStateAssertionKind.Disabled
-                        ? "toBeDisabled"
-                        : "toBeEnabled";
+                    var matcher = controlState.Kind switch
+                    {
+                        ControlStateAssertionKind.Disabled => "toBeDisabled",
+                        ControlStateAssertionKind.Checked => "toBeChecked",
+                        ControlStateAssertionKind.Unchecked => "not.toBeChecked",
+                        _ => "toBeEnabled"
+                    };
                     sb.AppendLine($"{pad}await expect({RenderTarget(controlState.Target)}).{matcher}();");
                 }
                 else

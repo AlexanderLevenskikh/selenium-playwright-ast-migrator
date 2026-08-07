@@ -1,0 +1,32 @@
+{
+  "SchemaVersion": "suggested-config-patch/v1",
+  "GeneratedAtUtc": "2026-07-31T09:01:16.2751387+00:00",
+  "ArtifactRoot": "pipeline",
+  "ReviewRequired": true,
+  "Warning": "Draft only. Copy small reviewed entries into adapter-config/profile layers after checking source truth.",
+  "FixThisProfileMappingFirst": "Review TODO [ASSERTION_CONSTRAINT]: convert constraint to Playwright assertion",
+  "UiTargets": [
+    {
+      "SourceExpression": "Add mapping for button!",
+      "SuggestedTarget": "TODO_add mapping for button!",
+      "RequiresReview": true,
+      "Confidence": "low-impact",
+      "Reason": "Find POM/source truth for this expression, then add a UiTarget/Method/ParameterizedMethod mapping in adapter-config.json.",
+      "Evidence": [
+        "Suggested target draft: TODO_button!"
+      ]
+    },
+    {
+      "SourceExpression": "Add source-backed mapping: map source expression to Playwright locator: button!",
+      "SuggestedTarget": "TODO_add source-backed mapping: map source expression to Playwright locator: button!",
+      "RequiresReview": true,
+      "Confidence": "low-impact",
+      "Reason": "Find POM/source truth and add UiTarget/Method/ParameterizedMethod/Table/Pagination mapping.",
+      "Evidence": [
+        "// TODO: map source expression to Playwright locator: button! [MIGRATOR:MISSING_MAPPING]"
+      ]
+    }
+  ],
+  "Methods": [],
+  "Tables": []
+}

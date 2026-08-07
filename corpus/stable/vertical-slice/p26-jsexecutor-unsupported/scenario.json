@@ -6,7 +6,9 @@
     "pr",
     "unsupported",
     "javascript-executor",
-    "vertical-slice"
+    "vertical-slice",
+    "stable",
+    "nightly"
   ],
   "source": {
     "language": "csharp",

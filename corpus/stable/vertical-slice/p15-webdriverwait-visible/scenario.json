@@ -6,7 +6,11 @@
     "waits",
     "runtime-pass",
     "real-failure",
-    "vertical-slice"
+    "vertical-slice",
+    "stable",
+    "nightly",
+    "smoke",
+    "pr"
   ],
   "source": {
     "language": "csharp",

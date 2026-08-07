@@ -1,0 +1,15 @@
+{
+  "passed": false,
+  "todoActual": 2,
+  "todoMax": 0,
+  "unmappedActual": 0,
+  "unmappedMax": 0,
+  "unsupportedActual": 0,
+  "unsupportedMax": 0,
+  "warningsActual": 1,
+  "warningsMax": 0,
+  "issues": [
+    "Quality budget exceeded: TODO comments = 2, maximum = 0.",
+    "Quality budget exceeded: warning-bearing files = 1, maximum = 0."
+  ]
+}

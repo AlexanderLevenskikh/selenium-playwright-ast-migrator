@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p03-xpath-text-assert",
+  "seed": 103,
+  "tags": [
+    "pr",
+    "selectors",
+    "xpath",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "By.XPath",
+      "Text",
+      "Assert.That"
+    ],
+    "migrationFiles": [
+      "Tests/XPathTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/XPathTests.cs"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/list",
+        "model": "list"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "list:ready"
+      ],
+      "generatedContains": [
+        "beta"
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "Ready stable fixture p03-xpath-text-assert.",
+    "contentHash": "sha256:de84b58f7b1489b56af7e1b8e1fc23dcdad6e5d26dad331d1baf7ea51b7e7766"
+  }
+}

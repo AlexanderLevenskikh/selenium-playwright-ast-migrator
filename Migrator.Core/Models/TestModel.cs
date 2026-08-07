@@ -5,5 +5,6 @@ public record TestModel(
     string? Category,
     IEnumerable<TestCaseData> CaseData,
     IEnumerable<MethodParameterModel> Parameters,
-    IEnumerable<TestAction> BodyActions
+    IEnumerable<TestAction> BodyActions,
+    IEnumerable<string>? PreservedAttributes = null
 );

@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p18-assert-multiple-fluent",
+  "seed": 118,
+  "tags": [
+    "assertions",
+    "fluent-assertions",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "Assert.Multiple",
+      "FluentAssertions",
+      "Selected",
+      "Text"
+    ],
+    "migrationFiles": [
+      "Tests/AssertionTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/AssertionTests.cs"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/form",
+        "model": "assertions"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "form:ready"
+      ],
+      "generatedContains": [
+        "ready"
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "Ready stable fixture p18-assert-multiple-fluent.",
+    "contentHash": "sha256:8cca5f9e5af5bd37494da7d6497d6daecc24bea15efa8460393e55f04f10291e"
+  }
+}

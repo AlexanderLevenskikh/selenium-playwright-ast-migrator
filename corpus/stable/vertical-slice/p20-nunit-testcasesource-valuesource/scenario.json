@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p20-nunit-testcasesource-valuesource",
+  "seed": 120,
+  "tags": [
+    "pr",
+    "nunit-data",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "TestCaseSource",
+      "ValueSource",
+      "StringInterpolation"
+    ],
+    "migrationFiles": [
+      "Tests/ParameterizedTests.cs"
+    ],
+    "adapterConfig": "adapter-config.json"
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/ParameterizedTests.cs",
+      "adapter-config.json"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/parameterized",
+        "model": "parameterized"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 4
+    },
+    "target": {
+      "mustPassTests": 4
+    },
+    "semantic": {
+      "generatedContains": [
+        "TestCaseSource",
+        "ValueSource"
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "Ready stable fixture p20-nunit-testcasesource-valuesource.",
+    "contentHash": "sha256:0964a8c763a2de60883f903991233f74e996944f69f9078cf2bfd0abe71b8675"
+  }
+}

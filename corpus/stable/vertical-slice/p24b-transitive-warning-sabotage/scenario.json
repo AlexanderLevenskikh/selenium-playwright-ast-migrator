@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p24b-transitive-warning-sabotage",
+  "seed": 1242,
+  "tags": [
+    "msbuild",
+    "sabotage",
+    "infrastructure",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "multi-project",
+    "features": [
+      "ProjectReference",
+      "NuGetRestoreFailure",
+      "InfrastructureClassification"
+    ],
+    "migrationFiles": [
+      "Tests/SabotageSmokeTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/SabotageSmokeTests.cs",
+      "Broken/Broken.csproj"
+    ],
+    "references": [
+      "Broken/Broken.csproj"
+    ],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/smoke",
+        "model": "sabotaged-reference"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {}
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "INFRASTRUCTURE_FAILURE"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "Intentional negative half of p24: source is valid, verify-project must classify unreachable restore as expected infrastructure failure.",
+    "contentHash": "sha256:0b81bd1801ce675790e4ee88bc8f7a2c92a76a2dd50be3bcbadfdf16b2e64ae3"
+  }
+}

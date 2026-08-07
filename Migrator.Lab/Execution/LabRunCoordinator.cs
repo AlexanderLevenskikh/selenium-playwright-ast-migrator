@@ -76,6 +76,14 @@ public sealed class LabRunCoordinator
                 .ToArray();
         }
 
+        if (options.Features.Length > 0)
+        {
+            var requestedFeatures = options.Features.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            entries = entries
+                .Where(entry => entry.Scenario!.Source.Features.Any(requestedFeatures.Contains))
+                .ToArray();
+        }
+
         if (options.ProjectIds.Length > 0)
         {
             var requested = options.ProjectIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -208,6 +216,11 @@ public sealed class LabRunCoordinator
             var migrationDirectory = Path.Combine(scenarioArtifacts, "migration");
             if (GetStage(stages, LabRunStage.SourceTest).Outcome == LabStageOutcome.Passed)
             {
+                // Source validation may leave nested bin/obj directories in referenced
+                // projects. Project verification then sees those generated .cs files as
+                // ordinary source through broad Compile globs, producing duplicate
+                // assembly attributes. Start migration/verification from source truth.
+                LabWorkspaceCleaner.DeleteBuildOutputs(workspace);
                 Directory.CreateDirectory(migrationInput);
                 CopyDeclaredProject(workspace, migrationInput, scenario.Source.MigrationFiles);
                 var adapterConfigPath = ResolveScenarioAdapterConfigPath(workspace, scenario);

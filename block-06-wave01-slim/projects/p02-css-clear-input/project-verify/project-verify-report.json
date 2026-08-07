@@ -1,0 +1,68 @@
+{
+  "GeneratedAtUtc": "2026-07-31T08:53:35.4645962+00:00",
+  "Status": "passed",
+  "ExitCode": 0,
+  "GeneratedFiles": [
+    "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\generated\\EditTestsPlaywright.cs"
+  ],
+  "HarnessProject": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\project-verify\\Generated.Playwright.Verify.csproj",
+  "BaseDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p02-css-clear-input-90a770019c504c2683f4d316a718bc6f",
+  "Solution": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\Migrator.sln",
+  "BuildWorkingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p02-css-clear-input-90a770019c504c2683f4d316a718bc6f",
+  "ProjectReferences": [
+    "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p02-css-clear-input-90a770019c504c2683f4d316a718bc6f\\Scenario.csproj"
+  ],
+  "ProjectReferenceDiscovery": [
+    {
+      "Path": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p02-css-clear-input-90a770019c504c2683f4d316a718bc6f\\Scenario.csproj",
+      "Source": "config",
+      "Status": "included",
+      "Reason": "explicit Verification.ProjectReferences entry"
+    }
+  ],
+  "AssemblyReferences": [],
+  "PackageReferences": [
+    {
+      "Include": "Microsoft.NET.Test.Sdk",
+      "Version": "18.7.0"
+    },
+    {
+      "Include": "Microsoft.Playwright.NUnit",
+      "Version": "1.52.0"
+    },
+    {
+      "Include": "NUnit",
+      "Version": "4.2.2"
+    },
+    {
+      "Include": "NUnit3TestAdapter",
+      "Version": "4.6.0"
+    }
+  ],
+  "BuildFilesImported": [],
+  "TargetFramework": "net10.0",
+  "Command": "dotnet build C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\project-verify\\Generated.Playwright.Verify.csproj -v:minimal -c:Release -p:ImportDirectoryBuildProps=false -p:ImportDirectoryBuildTargets=false",
+  "StdOut": "  Determining projects to restore...\r\n  Restored C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\project-verify\\Generated.Playwright.Verify.csproj (in 448 ms).\r\n  1 of 2 projects are up-to-date for restore.\r\n  Scenario -\u003E C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p02-css-clear-input-90a770019c504c2683f4d316a718bc6f\\bin\\Release\\net10.0\\Scenario.dll\r\n  Generated.Playwright.Verify -\u003E C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\project-verify\\bin\\Release\\net10.0\\Generated.Playwright.Verify.dll\r\n\r\nBuild succeeded.\r\n    0 Warning(s)\r\n    0 Error(s)\r\n\r\nTime Elapsed 00:00:03.76\r\n",
+  "StdErr": "",
+  "Diagnostics": [],
+  "ClassifiedDiagnostics": [],
+  "HarnessEvidence": {
+    "SchemaVersion": "verify-project-harness/v1",
+    "HarnessProjectSnapshot": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\project-verify-harness.csproj",
+    "HarnessProjectSnapshotSha256": "285a8ea9b4f084ab049e46b2da15b22aad5264e2355c8b3d05a05384d90707bc",
+    "CentralPackageManagementDetected": false,
+    "CentralPackageManagementMode": "not-detected",
+    "CentralPackageFiles": [],
+    "ManagePackageVersionsCentrallyDisabled": false,
+    "DirectoryPackagesPropsPathPinned": false,
+    "LocalDirectoryPackagesPropsShim": null,
+    "ImportedBuildFiles": [],
+    "SkippedBuildFiles": [],
+    "PackageVersionMode": "standard-inline-package-references",
+    "Nu1008Mitigation": "not-required",
+    "Notes": [
+      "Central Package Management was not detected for the verification anchors.",
+      "PackageReference entries with explicit versions: 4."
+    ]
+  }
+}

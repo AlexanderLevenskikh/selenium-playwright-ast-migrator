@@ -1,0 +1,18 @@
+{
+  "SchemaVersion": "adapter-config/v1",
+  "SourceProjectName": "Migrator.Lab.p22-file-scoped-globalusings-nullable",
+  "Verification": {
+    "TargetFramework": "net10.0",
+    "BaseDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776",
+    "BuildWorkingDirectory": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776",
+    "ProjectReferences": [
+      "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p22-file-scoped-globalusings-nullable-d9e8908ef063473f935b691f12dfd776\\Scenario.csproj"
+    ],
+    "AutoDiscoverNearestProject": false,
+    "AutoDiscoverProjectReferences": false,
+    "AutoDiscoverBuildFiles": true,
+    "AutoDiscoverPackageReferences": false,
+    "NoRestore": false,
+    "Configuration": "Release"
+  }
+}

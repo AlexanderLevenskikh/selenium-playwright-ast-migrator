@@ -1,0 +1,113 @@
+{
+  "GeneratedAtUtc": "2026-07-31T08:53:35.7635426+00:00",
+  "Source": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify",
+  "ArtifactRoot": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify",
+  "RecursiveArtifactLookup": false,
+  "ArtifactCandidates": [],
+  "Summary": {
+    "FilesProcessed": 0,
+    "TestsFound": 0,
+    "ActionsFound": 0,
+    "SemanticActions": 0,
+    "SyntaxFallbackActions": 0,
+    "UnsupportedActions": 0,
+    "MappedTargets": 0,
+    "UnmappedTargets": 0,
+    "TodoComments": 2,
+    "SyntaxErrors": 0,
+    "VerifyStatus": "passed"
+  },
+  "QualityGates": {
+    "ProjectVerifyStatus": "passed",
+    "CompileErrors": 0,
+    "EmptyTestsAfterSuppression": 0,
+    "SuppressedSideEffectDependencies": 0,
+    "SuppressedMethodPatterns": null,
+    "SuspiciousSuppressionPatterns": null,
+    "Warnings": []
+  },
+  "ProjectVerifyStatus": "passed",
+  "ProjectDiagnostics": 0,
+  "GeneratedFiles": 0,
+  "RuntimeReadyCandidates": 0,
+  "SmokeCandidates": 0,
+  "FileCards": [],
+  "TopInsights": [
+    {
+      "Category": "ASSERTION_CONSTRAINT",
+      "Title": "Review TODO [ASSERTION_CONSTRAINT]: convert constraint to Playwright assertion",
+      "Reason": "The assertion was preserved because no direct Playwright assertion mapping was inferred.",
+      "EstimatedImpact": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\generated\\EditTestsPlaywright.cs",
+      "ExampleLine": 25,
+      "SuggestedAction": "Add reusable assertion mapping if this pattern appears often.",
+      "RequiresSourceTruth": false,
+      "RequiresDeveloper": false,
+      "Evidence": [
+        "// TODO: convert constraint to Playwright assertion [MIGRATOR:ASSERTION_CONSTRAINT]"
+      ]
+    },
+    {
+      "Category": "MANUAL_REVIEW",
+      "Title": "Review TODO [MANUAL_REVIEW]: manual review needed",
+      "Reason": "Generated TODO contains a migrator classification code.",
+      "EstimatedImpact": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\generated\\EditTestsPlaywright.cs",
+      "ExampleLine": 19,
+      "SuggestedAction": "Inspect source truth and decide whether this is config work or developer escalation.",
+      "RequiresSourceTruth": false,
+      "RequiresDeveloper": false,
+      "Evidence": [
+        "// TODO: manual review needed [MIGRATOR:MANUAL_REVIEW]"
+      ]
+    }
+  ],
+  "TopNormalizedRootCauses": [
+    {
+      "Category": "ASSERTION_CONSTRAINT",
+      "GroupKey": "Review TODO [ASSERTION_CONSTRAINT]: convert constraint to Playwright assertion",
+      "DisplayName": "Review TODO [ASSERTION_CONSTRAINT]: convert constraint to Playwright assertion",
+      "Count": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\generated\\EditTestsPlaywright.cs",
+      "ExampleLine": 25,
+      "SuggestedAction": "Add reusable assertion mapping if this pattern appears often.",
+      "RepresentativeFiles": [
+        "\u003CUSER_HOME\u003E\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\generated\\EditTestsPlaywright.cs"
+      ],
+      "Evidence": [
+        "// TODO: convert constraint to Playwright assertion [MIGRATOR:ASSERTION_CONSTRAINT]"
+      ]
+    },
+    {
+      "Category": "MANUAL_REVIEW",
+      "GroupKey": "Review TODO [MANUAL_REVIEW]: manual review needed // TODO: manual review needed [MIGRATOR:MANUAL_REVIEW]",
+      "DisplayName": "MANUAL_REVIEW: unclassified helper/raw family",
+      "Count": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\generated\\EditTestsPlaywright.cs",
+      "ExampleLine": 19,
+      "SuggestedAction": "Inspect representative source snippets and classify this family before changing mappings or suppressions.",
+      "RepresentativeFiles": [
+        "\u003CUSER_HOME\u003E\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\generated\\EditTestsPlaywright.cs"
+      ],
+      "Evidence": [
+        "// TODO: manual review needed [MIGRATOR:MANUAL_REVIEW]"
+      ]
+    }
+  ],
+  "TableMappingCandidates": [],
+  "TopSmokeCandidates": [],
+  "RecommendedNextActions": [
+    "Top normalized root cause: Review TODO [ASSERTION_CONSTRAINT]: convert constraint to Playwright assertion (1). Add reusable assertion mapping if this pattern appears often.",
+    "\u0421\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u043B\u0443\u0447\u0448\u0438\u0439 config-\u0448\u0430\u0433: Add reusable assertion mapping if this pattern appears often."
+  ],
+  "Artifacts": [
+    "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\project-verify-report.json",
+    "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\explain-todo.md",
+    "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\explain-todo.json",
+    "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\agent-next-task.md",
+    "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\source-capabilities-report.md",
+    "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\source-capabilities-report.json",
+    "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\target-capabilities-report.md",
+    "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\projects\\p02-css-clear-input\\project-verify\\target-capabilities-report.json"
+  ]
+}

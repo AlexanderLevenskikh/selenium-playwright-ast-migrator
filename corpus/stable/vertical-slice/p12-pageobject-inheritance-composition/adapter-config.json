@@ -1,0 +1,15 @@
+{
+  "SchemaVersion": "adapter-config/v1",
+  "SourceProjectName": "Migrator.Lab.P12",
+  "ParameterizedMethods": [
+    {
+      "SourceMethodPattern": "new UsersPage(WebDriver).Modal.OpenAndSave()",
+      "TargetStatements": [
+        "await Page.Locator(\"#modal-open\").ClickAsync();",
+        "await Page.Locator(\"#modal-save\").ClickAsync();"
+      ],
+      "RequiresReview": false,
+      "Description": "Source-backed expansion of UsersPage composition through ModalComponent.OpenAndSave."
+    }
+  ]
+}

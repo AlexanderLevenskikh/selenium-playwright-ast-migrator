@@ -206,6 +206,7 @@ public sealed record LabRunOptions
     public string ArtifactsRoot { get; init; } = Path.Combine("artifacts", "lab", "run");
     public string[] ProjectIds { get; init; } = Array.Empty<string>();
     public string? Tag { get; init; }
+    public string[] Features { get; init; } = Array.Empty<string>();
     public string DotNetExecutable { get; init; } = "dotnet";
     public string Configuration { get; init; } = "Release";
     public TimeSpan CommandTimeout { get; init; } = TimeSpan.FromMinutes(10);

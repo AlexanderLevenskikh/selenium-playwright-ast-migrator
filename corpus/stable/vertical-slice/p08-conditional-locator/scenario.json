@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p08-conditional-locator",
+  "seed": 108,
+  "tags": [
+    "selectors",
+    "control-flow",
+    "refactoring-shape",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "ConditionalExpression",
+      "By.Id",
+      "FindElementVariable"
+    ],
+    "migrationFiles": [
+      "Tests/ConditionalLocatorTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/ConditionalLocatorTests.cs"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/locator",
+        "model": "conditional-locator"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "locator:primary"
+      ],
+      "dom": [
+        {
+          "selector": "#locator-status",
+          "text": "primary"
+        }
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "Ready stable fixture p08-conditional-locator.",
+    "contentHash": "sha256:f5b94ecea5511226ee17b5f0b09bbde04222226986ebf65abcaff7c320d8b540"
+  }
+}

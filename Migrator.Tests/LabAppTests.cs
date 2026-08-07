@@ -10,7 +10,12 @@ public sealed class LabAppTests
     [Fact]
     public void PageCatalog_ContainsAllVerticalSliceRoutesAndClientEventLog()
     {
-        var expected = new[] { "/login", "/list", "/helper", "/wait", "/smoke", "/unsupported" };
+        var expected = new[]
+        {
+            "/login", "/edit", "/list", "/table", "/form", "/locator", "/helper", "/pom", "/modal",
+            "/async", "/setup", "/wait", "/wait-negative", "/custom-wait", "/control-flow", "/parameterized",
+            "/smoke", "/unsupported", "/actions", "/complex", "/dynamic"
+        };
         Assert.Equal(expected, LabAppPageCatalog.PageRoutes);
 
         foreach (var route in expected)
@@ -31,11 +36,26 @@ public sealed class LabAppTests
         var requiredIds = new Dictionary<string, string[]>
         {
             ["/login"] = new[] { "username", "password", "login", "result" },
+            ["/edit"] = new[] { "edit-name", "edit-save", "edit-status" },
             ["/list"] = new[] { "items" },
+            ["/table"] = new[] { "data" },
+            ["/form"] = new[] { "terms", "blocked", "form-status" },
+            ["/locator"] = new[] { "locator-primary", "locator-secondary", "locator-status" },
             ["/helper"] = new[] { "helper-button", "helper-status" },
+            ["/pom"] = new[] { "pom-user", "pom-password", "pom-login", "dashboard-status" },
+            ["/modal"] = new[] { "modal-open", "modal-save", "modal-status" },
+            ["/async"] = new[] { "async-button", "async-status" },
+            ["/setup"] = new[] { "setup-prepare", "setup-test", "setup-status" },
             ["/wait"] = new[] { "wait-button", "wait-status" },
+            ["/wait-negative"] = new[] { "negative-spinner", "negative-save", "negative-status" },
+            ["/custom-wait"] = new[] { "custom-save", "custom-status" },
+            ["/control-flow"] = new[] { "control-status" },
+            ["/parameterized"] = new[] { "parameter-one", "parameter-two", "parameter-status" },
             ["/smoke"] = new[] { "smoke-button", "smoke-status" },
-            ["/unsupported"] = new[] { "unsupported-button", "unsupported-status", "script-target" }
+            ["/unsupported"] = new[] { "unsupported-button", "unsupported-status", "script-target" },
+            ["/actions"] = new[] { "actions-target", "actions-neighbour", "actions-status" },
+            ["/complex"] = new[] { "lab-frame", "popup-link", "upload-input", "download-link", "complex-neighbour", "complex-status" },
+            ["/dynamic"] = new[] { "dynamic-neighbour", "dynamic-status" }
         };
 
         foreach (var (route, ids) in requiredIds)
@@ -56,7 +76,7 @@ public sealed class LabAppTests
         var wait = await client.GetStringAsync("wait");
         var missing = await client.GetAsync("missing");
 
-        Assert.Contains("migrator-lab-app/v0", health);
+        Assert.Contains("migrator-lab-app/v1", health);
         Assert.Contains("setTimeout", wait);
         Assert.Contains("250", wait);
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
@@ -80,6 +100,17 @@ public sealed class LabAppTests
         Assert.True(observation.Dom["result"].Visible);
         host.ResetObservations();
         Assert.Empty(host.SnapshotObservations());
+    }
+
+    [Fact]
+    public void Catalog_ServesFramePopupAndDownloadInfrastructureForNightlyScenarios()
+    {
+        Assert.Equal(200, LabAppPageCatalog.Resolve("/frame-content").StatusCode);
+        Assert.Equal(200, LabAppPageCatalog.Resolve("/popup-content").StatusCode);
+        var download = LabAppPageCatalog.Resolve("/download/sample.txt");
+        Assert.Equal(200, download.StatusCode);
+        Assert.Equal("application/octet-stream", download.ContentType);
+        Assert.Contains("migrator-lab-download", System.Text.Encoding.UTF8.GetString(download.Body));
     }
 
 }

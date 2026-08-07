@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p16-wait-disappear-negative",
+  "seed": 116,
+  "tags": [
+    "waits",
+    "negative-state",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "WebDriverWait",
+      "UntilNotDisplayed",
+      "Enabled"
+    ],
+    "migrationFiles": [
+      "Tests/NegativeWaitTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/NegativeWaitTests.cs"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/wait-negative",
+        "model": "negative-wait"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "negative:start",
+        "negative:gone",
+        "negative:click"
+      ],
+      "timeoutMaxMs": 3000,
+      "dom": [
+        {
+          "selector": "#negative-spinner",
+          "visible": false
+        },
+        {
+          "selector": "#negative-save",
+          "enabled": true
+        },
+        {
+          "selector": "#negative-status",
+          "text": "saved"
+        }
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "Ready stable fixture p16-wait-disappear-negative.",
+    "contentHash": "sha256:44d0eabc56f4334ffd8c9c2aa82bb7c6aef78e27c74da9ec154bf143377479a9"
+  }
+}

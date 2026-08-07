@@ -1,0 +1,139 @@
+{
+  "GeneratedAtUtc": "2026-07-31T08:55:27.9155173+00:00",
+  "Source": "pipeline",
+  "ArtifactRoot": "pipeline",
+  "RecursiveArtifactLookup": false,
+  "FilesProcessed": 1,
+  "TestsFound": 1,
+  "ActionsFound": 3,
+  "SemanticActions": 0,
+  "SyntaxFallbackActions": 3,
+  "MappedTargets": 1,
+  "UnmappedTargets": 1,
+  "UnsupportedActions": 0,
+  "TodoComments": 3,
+  "SyntaxErrors": 0,
+  "ProjectVerifyStatus": "passed",
+  "Insights": [
+    {
+      "Category": "MISSING_MAPPING",
+      "Title": "Add mapping for WebDriver.FindElement(target)",
+      "Reason": "Source expression was not mapped to a Playwright locator/action.",
+      "EstimatedImpact": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd\\.migration-input\\Tests\\VariableLocatorTests.cs",
+      "ExampleLine": 12,
+      "SuggestedAction": "Find POM/source truth for this expression, then add a UiTarget/Method/ParameterizedMethod mapping in adapter-config.json.",
+      "RequiresSourceTruth": true,
+      "RequiresDeveloper": false,
+      "Evidence": [
+        "Suggested target draft: TODO_findElement(target)"
+      ]
+    },
+    {
+      "Category": "RAW_STATEMENT",
+      "Title": "Review TODO [RAW_STATEMENT]: raw statement \u2014 review: var target = By.Id(\u0022locator-primary\u0022)",
+      "Reason": "The statement was not recognized semantically and needs mapping or manual migration.",
+      "EstimatedImpact": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd\\.migration-input\\Tests\\VariableLocatorTests.cs",
+      "ExampleLine": 19,
+      "SuggestedAction": "If repeated, add Method/ParameterizedMethod mapping; otherwise keep manual TODO.",
+      "RequiresSourceTruth": true,
+      "RequiresDeveloper": false,
+      "Evidence": [
+        "// TODO: raw statement \u2014 review: var target = By.Id(\u0022locator-primary\u0022) [MIGRATOR:RAW_STATEMENT]"
+      ]
+    },
+    {
+      "Category": "UNAVAILABLE_SYMBOLS",
+      "Title": "Classify unavailable target symbols: references unavailable symbol(s) \u0027By\u0027 \u2014 verify in target",
+      "Reason": "The statement references identifiers not known in the target method/project context.",
+      "EstimatedImpact": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd\\.migration-input\\Tests\\VariableLocatorTests.cs",
+      "ExampleLine": 22,
+      "SuggestedAction": "Add TargetKnownTypes/TargetKnownIdentifiers only for real target symbols; otherwise map/comment the expression.",
+      "RequiresSourceTruth": false,
+      "RequiresDeveloper": true,
+      "Evidence": [
+        "// TODO: references unavailable symbol(s) \u0027By\u0027 \u2014 verify in target [MIGRATOR:UNAVAILABLE_SYMBOLS]"
+      ]
+    },
+    {
+      "Category": "UNRESOLVED_SYMBOL",
+      "Title": "Fix upstream unresolved symbol: depends on unresolved symbol \u0027target\u0027",
+      "Reason": "The statement depends on a symbol blocked earlier in the same method/setup chain.",
+      "EstimatedImpact": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd\\.migration-input\\Tests\\VariableLocatorTests.cs",
+      "ExampleLine": 25,
+      "SuggestedAction": "Find the first TODO that blocked the symbol; fix that root cause first.",
+      "RequiresSourceTruth": false,
+      "RequiresDeveloper": true,
+      "Evidence": [
+        "// TODO: depends on unresolved symbol \u0027target\u0027 [MIGRATOR:UNRESOLVED_SYMBOL]"
+      ]
+    }
+  ],
+  "NormalizedRootCauses": [
+    {
+      "Category": "MISSING_MAPPING",
+      "GroupKey": "Add mapping for WebDriver.FindElement(target)",
+      "DisplayName": "Add mapping for WebDriver.FindElement(target)",
+      "Count": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd\\.migration-input\\Tests\\VariableLocatorTests.cs",
+      "ExampleLine": 12,
+      "SuggestedAction": "Find POM/source truth for this expression, then add a UiTarget/Method/ParameterizedMethod mapping in adapter-config.json.",
+      "RepresentativeFiles": [
+        "\u003CUSER_HOME\u003E\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd\\.migration-input\\Tests\\VariableLocatorTests.cs"
+      ],
+      "Evidence": [
+        "Suggested target draft: TODO_findElement(target)"
+      ]
+    },
+    {
+      "Category": "RAW_STATEMENT",
+      "GroupKey": "method:Id",
+      "DisplayName": "RAW_STATEMENT: method family \u0060Id\u0060",
+      "Count": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd\\.migration-input\\Tests\\VariableLocatorTests.cs",
+      "ExampleLine": 19,
+      "SuggestedAction": "Group all occurrences of this helper/method family; inspect source/helper body or run --mode helper-inventory before adding MethodSemantics/ParameterizedMethods.",
+      "RepresentativeFiles": [
+        "\u003CUSER_HOME\u003E\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd\\.migration-input\\Tests\\VariableLocatorTests.cs"
+      ],
+      "Evidence": [
+        "// TODO: raw statement \u2014 review: var target = By.Id(\u0022locator-primary\u0022) [MIGRATOR:RAW_STATEMENT]"
+      ]
+    },
+    {
+      "Category": "UNAVAILABLE_SYMBOLS",
+      "GroupKey": "root:unknown-root",
+      "DisplayName": "UNAVAILABLE_SYMBOLS: source-only root \u0060unknown-root\u0060",
+      "Count": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd\\.migration-input\\Tests\\VariableLocatorTests.cs",
+      "ExampleLine": 22,
+      "SuggestedAction": "Map the full source expression or classify it explicitly; do not mark source-only roots as target-known unless they truly exist in target code.",
+      "RepresentativeFiles": [
+        "\u003CUSER_HOME\u003E\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd\\.migration-input\\Tests\\VariableLocatorTests.cs"
+      ],
+      "Evidence": [
+        "// TODO: references unavailable symbol(s) \u0027By\u0027 \u2014 verify in target [MIGRATOR:UNAVAILABLE_SYMBOLS]"
+      ]
+    },
+    {
+      "Category": "UNRESOLVED_SYMBOL",
+      "GroupKey": "root:unknown-root",
+      "DisplayName": "UNRESOLVED_SYMBOL: source-only root \u0060unknown-root\u0060",
+      "Count": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd\\.migration-input\\Tests\\VariableLocatorTests.cs",
+      "ExampleLine": 25,
+      "SuggestedAction": "Map the full source expression or classify it explicitly; do not mark source-only roots as target-known unless they truly exist in target code.",
+      "RepresentativeFiles": [
+        "\u003CUSER_HOME\u003E\\Desktop\\MyProjects\\Migrator\\artifacts\\lab\\block-06\\nightly\\.workspaces\\p07-locator-in-variable-0b7a106006e74673900510399398fccd\\.migration-input\\Tests\\VariableLocatorTests.cs"
+      ],
+      "Evidence": [
+        "// TODO: depends on unresolved symbol \u0027target\u0027 [MIGRATOR:UNRESOLVED_SYMBOL]"
+      ]
+    }
+  ],
+  "TableMappingCandidates": [],
+  "NextBestAction": "Find POM/source truth for this expression, then add a UiTarget/Method/ParameterizedMethod mapping in adapter-config.json."
+}
