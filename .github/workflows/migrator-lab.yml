@@ -71,3 +71,32 @@ jobs:
           name: migrator-lab-nightly
           path: artifacts/lab/ci-nightly
           if-no-files-found: warn
+      - name: Choose reproducible generated seed
+        id: generated_seed
+        shell: bash
+        run: echo "seed=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+      - name: Generate pairwise metamorphic corpus
+        run: >-
+          dotnet run --project Migrator.Cli -c Release --no-build --
+          lab generate --corpus ./corpus/stable/vertical-slice --base p01-basic-id-login
+          --seed ${{ steps.generated_seed.outputs.seed }} --count 6
+          --out ./artifacts/lab/ci-generated/corpus --force
+      - name: Run generated corpus
+        continue-on-error: true
+        run: >-
+          dotnet run --project Migrator.Cli -c Release --no-build --
+          lab run --corpus ./artifacts/lab/ci-generated/corpus
+          --out ./artifacts/lab/ci-generated/run --timeout-seconds 600 --configuration Release
+      - name: Check metamorphic invariants and save candidates
+        run: >-
+          dotnet run --project Migrator.Cli -c Release --no-build --
+          lab metamorphic --manifest ./artifacts/lab/ci-generated/corpus/generation-manifest.json
+          --run ./artifacts/lab/ci-generated/run --out ./artifacts/lab/ci-generated/metamorphic
+          --save-candidates ./artifacts/lab/ci-generated/seed-candidates
+      - name: Upload generated corpus evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migrator-lab-generated-${{ steps.generated_seed.outputs.seed }}
+          path: artifacts/lab/ci-generated
+          if-no-files-found: warn

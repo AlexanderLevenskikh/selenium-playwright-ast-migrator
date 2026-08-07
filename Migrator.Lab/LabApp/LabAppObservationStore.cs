@@ -31,7 +31,10 @@ public sealed class LabAppObservationStore
     }
 
     public LabAppObservation[] Snapshot() =>
-        observations.OrderBy(item => item.Sequence).ToArray();
+        observations
+            .OrderBy(item => item.Sequence)
+            .ThenBy(item => item.ObservedAtUtc)
+            .ToArray();
 
     public bool TryAppend(string json, out string? error)
     {
@@ -64,9 +67,13 @@ public sealed class LabAppObservationStore
                 }
             }
 
+            var serverSequence = Interlocked.Increment(ref sequence);
+            var browserSequence = ReadPositiveLong(root, "sequence");
+            var observedAtUtc = ReadDateTimeOffset(root, "observedAtUtc") ?? DateTimeOffset.UtcNow;
+
             observations.Enqueue(new LabAppObservation(
-                Interlocked.Increment(ref sequence),
-                DateTimeOffset.UtcNow,
+                browserSequence ?? serverSequence,
+                observedAtUtc,
                 eventName,
                 path,
                 dom));
@@ -89,4 +96,19 @@ public sealed class LabAppObservationStore
         element.TryGetProperty(name, out var value) && (value.ValueKind is JsonValueKind.True or JsonValueKind.False)
             ? value.GetBoolean()
             : defaultValue;
+
+    static long? ReadPositiveLong(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value)
+        && value.ValueKind == JsonValueKind.Number
+        && value.TryGetInt64(out var parsed)
+        && parsed > 0
+            ? parsed
+            : null;
+
+    static DateTimeOffset? ReadDateTimeOffset(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value)
+        && value.ValueKind == JsonValueKind.String
+        && DateTimeOffset.TryParse(value.GetString(), out var parsed)
+            ? parsed
+            : null;
 }

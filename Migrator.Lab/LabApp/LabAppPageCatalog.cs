@@ -504,7 +504,13 @@ public static class LabAppPageCatalog
             window.labEmit = function(name) {
               window.__migratorLab.events.push(name);
               document.getElementById('lab-event-log').textContent = JSON.stringify(window.__migratorLab.events);
-              const payload = JSON.stringify({ event: name, path: window.location.pathname, dom: window.labSnapshot() });
+              const payload = JSON.stringify({
+                sequence: window.__migratorLab.events.length,
+                observedAtUtc: new Date().toISOString(),
+                event: name,
+                path: window.location.pathname,
+                dom: window.labSnapshot()
+              });
               if (navigator.sendBeacon) {
                 navigator.sendBeacon('/__lab/events', payload);
               } else {

@@ -4400,6 +4400,29 @@ public class PipelineIntegrationTests
     }
 
     [Fact]
+    public void SeleniumByAlias_FullPipeline_NormalizesToCanonicalByAndRenders()
+    {
+        var result = RunPipeline("PipelineWebDriverAliasIdTests.cs");
+        var output = result.GeneratedOutput;
+        var model = result.TargetModel;
+
+        var test = model.Tests.Single();
+        Assert.Contains(test.BodyActions, action => action is LocatorDeclarationAction declaration && declaration.VariableName == "result");
+
+        Assert.Contains("Page.Locator(\"#username\").FillAsync(\"john\")", output);
+        Assert.Contains("Page.Locator(\"#password\").FillAsync(\"secret\")", output);
+        Assert.Contains("Page.Locator(\"#login\").ClickAsync()", output);
+        Assert.Contains("var result = Page.Locator(\"#result\");", output);
+        Assert.Contains("await Expect(result).ToBeVisibleAsync();", output);
+        Assert.Contains("await Expect(result).ToHaveTextAsync(\"ok\");", output);
+        Assert.DoesNotContain("SeleniumBy", output);
+        Assert.DoesNotContain("MISSING_MAPPING", output);
+        Assert.DoesNotContain("TODO", output);
+        Assert.True(CompileChecker.CompilesWithoutErrors(output),
+            CompileChecker.FormatErrors(output));
+    }
+
+    [Fact]
     public void WebDriverFindElements_IndexedCountAndText_FullPipelineRendersLocatorAssertions()
     {
         var result = RunPipeline("PipelineWebDriverFindElementsIndexedTests.cs");

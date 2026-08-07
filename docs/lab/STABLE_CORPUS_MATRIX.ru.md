@@ -29,6 +29,8 @@
 
 `p24b-transitive-warning-sabotage` — намеренно испорченная внешняя зависимость: ожидается `INFRASTRUCTURE_FAILURE`, и это считается принятым результатом, а не регрессией мигратора.
 
-## Следующий слой
+## Generated слой
 
-Метаморфные варианты (`p30`) и seedable generation намеренно остаются в Блоке 7: стабильный корпус не смешивается со случайной генерацией.
+Блок 7 добавляет семейство `p30-basic-login-metamorphic` через `lab generate`. Generated variants создаются в `artifacts/`, а не коммитятся в stable corpus: 30 постоянных сценариев остаются детерминированным PR/nightly gate, а seedable generation служит отдельным nightly/exploratory слоем.
+
+Для одного seed генерируются pairwise-варианты по rename, `var`/explicit type, namespace shape, file move и alias using. Полезный failing seed сохраняется как regression candidate и после triage может быть переведён в `corpus/seeds` или постоянный project fixture.

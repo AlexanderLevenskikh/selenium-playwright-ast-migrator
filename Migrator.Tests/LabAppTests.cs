@@ -27,6 +27,8 @@ public sealed class LabAppTests
             Assert.Contains("window.__migratorLab", html);
             Assert.Contains("/__lab/events", html);
             Assert.Contains("labSnapshot", html);
+            Assert.Contains("sequence: window.__migratorLab.events.length", html);
+            Assert.Contains("observedAtUtc: new Date().toISOString()", html);
         }
     }
 
@@ -100,6 +102,38 @@ public sealed class LabAppTests
         Assert.True(observation.Dom["result"].Visible);
         host.ResetObservations();
         Assert.Empty(host.SnapshotObservations());
+    }
+
+
+    [Fact]
+    public async Task Host_OrdersBusinessEventsByBrowserSequenceWhenBeaconRequestsArriveOutOfOrder()
+    {
+        await using var host = await LabAppHost.StartAsync();
+        using var client = new HttpClient { BaseAddress = host.BaseUri };
+
+        var successPayload = """
+        {"sequence":2,"observedAtUtc":"2026-08-07T17:20:00.002Z","event":"auth:success","path":"/login","dom":{"result":{"text":"ok","value":"","visible":true,"enabled":true,"checked":false},"lab-event-log":{"text":"[\"auth:attempt\",\"auth:success\"]","value":"","visible":true,"enabled":true,"checked":false}}}
+        """;
+        var attemptPayload = """
+        {"sequence":1,"observedAtUtc":"2026-08-07T17:20:00.001Z","event":"auth:attempt","path":"/login","dom":{"result":{"text":"","value":"","visible":false,"enabled":true,"checked":false},"lab-event-log":{"text":"[\"auth:attempt\"]","value":"","visible":true,"enabled":true,"checked":false}}}
+        """;
+
+        using var successResponse = await client.PostAsync(
+            "__lab/events",
+            new StringContent(successPayload, System.Text.Encoding.UTF8, "application/json"));
+        using var attemptResponse = await client.PostAsync(
+            "__lab/events",
+            new StringContent(attemptPayload, System.Text.Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.Accepted, successResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, attemptResponse.StatusCode);
+
+        var observations = host.SnapshotObservations();
+        Assert.Equal(new[] { "auth:attempt", "auth:success" }, observations.Select(item => item.Event).ToArray());
+        Assert.Equal(new long[] { 1, 2 }, observations.Select(item => item.Sequence).ToArray());
+        Assert.True(observations[0].ObservedAtUtc < observations[1].ObservedAtUtc);
+        Assert.False(observations[0].Dom["result"].Visible);
+        Assert.True(observations[1].Dom["result"].Visible);
     }
 
     [Fact]

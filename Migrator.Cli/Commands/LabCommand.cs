@@ -3,6 +3,7 @@ using System.Reflection;
 using Migrator.Lab;
 using Migrator.Lab.Contracts;
 using Migrator.Lab.Execution;
+using Migrator.Lab.Generator;
 using Migrator.Lab.LabApp;
 using Migrator.Lab.Reports;
 
@@ -27,6 +28,10 @@ internal static class LabCommand
             return RunBaseline(args.Skip(1).ToArray());
         if (subcommand == "diff")
             return RunDiff(args.Skip(1).ToArray());
+        if (subcommand == "generate")
+            return RunGenerate(args.Skip(1).ToArray());
+        if (subcommand == "metamorphic")
+            return RunMetamorphic(args.Skip(1).ToArray());
 
         if (args.Skip(1).Any(IsHelp))
         {
@@ -250,6 +255,150 @@ internal static class LabCommand
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
             Console.Error.WriteLine($"Lab diff failed: {ex.Message}");
+            return LabExitCodes.LabError;
+        }
+    }
+
+    static int RunGenerate(string[] args)
+    {
+        if (args.Any(IsHelp))
+        {
+            WriteGenerateHelp();
+            return LabExitCodes.Accepted;
+        }
+
+        var corpus = Path.Combine("corpus", "stable", "vertical-slice");
+        var baseScenario = "p01-basic-id-login";
+        var output = Path.Combine("artifacts", "lab", "generated");
+        var seed = 73001;
+        var count = 6;
+        var force = false;
+
+        for (var index = 0; index < args.Length; index++)
+        {
+            switch (args[index])
+            {
+                case "--corpus":
+                    if (!TryReadValue(args, ref index, out corpus))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--base":
+                    if (!TryReadValue(args, ref index, out baseScenario))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--out":
+                    if (!TryReadValue(args, ref index, out output))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--seed":
+                    if (!TryReadValue(args, ref index, out var rawSeed)
+                        || !int.TryParse(rawSeed, out seed)
+                        || seed < 0)
+                    {
+                        Console.Error.WriteLine("--seed requires a non-negative integer.");
+                        return LabExitCodes.LabError;
+                    }
+                    break;
+                case "--count":
+                    if (!TryReadValue(args, ref index, out var rawCount)
+                        || !int.TryParse(rawCount, out count)
+                        || count is < 6 or > 32)
+                    {
+                        Console.Error.WriteLine("--count requires an integer in range 6-32.");
+                        return LabExitCodes.LabError;
+                    }
+                    break;
+                case "--force":
+                    force = true;
+                    break;
+                default:
+                    Console.Error.WriteLine($"Unknown lab generate option: {args[index]}");
+                    return LabExitCodes.LabError;
+            }
+        }
+
+        try
+        {
+            var manifest = new SeededVariantGenerator().Generate(new SeededVariantGenerationOptions
+            {
+                CorpusRoot = corpus,
+                BaseScenarioId = baseScenario,
+                OutputRoot = output,
+                Seed = seed,
+                Count = count,
+                Force = force
+            });
+            Console.WriteLine($"Migrator Lab generate: {manifest.Variants.Length} pairwise variant(s), seed {manifest.Seed}.");
+            Console.WriteLine($"Corpus fingerprint: {manifest.CorpusFingerprint}");
+            Console.WriteLine($"Generated corpus: {Path.GetFullPath(output)}");
+            return LabExitCodes.Accepted;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
+            Console.Error.WriteLine($"Lab generate failed: {ex.Message}");
+            return LabExitCodes.LabError;
+        }
+    }
+
+    static int RunMetamorphic(string[] args)
+    {
+        if (args.Any(IsHelp))
+        {
+            WriteMetamorphicHelp();
+            return LabExitCodes.Accepted;
+        }
+
+        string? manifestPath = null;
+        string? runPath = null;
+        var output = Path.Combine("artifacts", "lab", "metamorphic");
+        string? candidateRoot = null;
+        for (var index = 0; index < args.Length; index++)
+        {
+            switch (args[index])
+            {
+                case "--manifest":
+                    if (!TryReadValue(args, ref index, out manifestPath))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--run":
+                    if (!TryReadValue(args, ref index, out runPath))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--out":
+                    if (!TryReadValue(args, ref index, out output))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--save-candidates":
+                    if (!TryReadValue(args, ref index, out candidateRoot))
+                        return LabExitCodes.LabError;
+                    break;
+                default:
+                    Console.Error.WriteLine($"Unknown lab metamorphic option: {args[index]}");
+                    return LabExitCodes.LabError;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(manifestPath) || string.IsNullOrWhiteSpace(runPath))
+        {
+            Console.Error.WriteLine("lab metamorphic requires --manifest <generation-manifest> and --run <lab run>.");
+            return LabExitCodes.LabError;
+        }
+
+        candidateRoot ??= Path.Combine(output, "candidates");
+        try
+        {
+            var run = LabRunArtifactLoader.LoadRun(runPath);
+            var report = new LabMetamorphicAnalyzer().Analyze(manifestPath, run, candidateRoot);
+            LabMetamorphicReportWriter.Write(report, output);
+            Console.WriteLine($"Migrator Lab metamorphic: {report.Summary.Passed}/{report.Summary.Variants} invariant variant(s) accepted; {report.Summary.SavedCandidates} seed candidate(s) saved.");
+            foreach (var variant in report.Variants.Where(item => !item.Passed))
+                Console.WriteLine($"  {variant.Id}: {string.Join(" ", variant.Reasons)}");
+            Console.WriteLine($"Reports: {Path.GetFullPath(output)}");
+            return report.Summary.Regressions == 0 ? LabExitCodes.Accepted : LabExitCodes.Regression;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or InvalidDataException)
+        {
+            Console.Error.WriteLine($"Lab metamorphic failed: {ex.Message}");
             return LabExitCodes.LabError;
         }
     }
@@ -615,6 +764,8 @@ internal static class LabCommand
         Console.WriteLine("  selenium-pw-migrator lab replay --project <id> [options]");
         Console.WriteLine("  selenium-pw-migrator lab baseline --input <run> [options]");
         Console.WriteLine("  selenium-pw-migrator lab diff --baseline <path> --current <run> [options]");
+        Console.WriteLine("  selenium-pw-migrator lab generate --seed <n> [options]");
+        Console.WriteLine("  selenium-pw-migrator lab metamorphic --manifest <path> --run <run> [options]");
         Console.WriteLine("  selenium-pw-migrator lab validate [options]");
         Console.WriteLine("  selenium-pw-migrator lab list [options]");
         Console.WriteLine("  selenium-pw-migrator lab app serve [options]");
@@ -675,6 +826,31 @@ internal static class LabCommand
         Console.WriteLine("  --out <directory>                         Diff report directory (default: artifacts/lab/diff).");
         Console.WriteLine("  --duration-regression-percent <number>    Performance regression threshold (default: 20).");
         Console.WriteLine("Produces lab-diff.json, lab-diff.md, and lab-diff.html. Exit code 10 means at least one regression.");
+    }
+
+    static void WriteGenerateHelp()
+    {
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  selenium-pw-migrator lab generate --seed <n> [options]");
+        Console.WriteLine();
+        Console.WriteLine("Options:");
+        Console.WriteLine("  --corpus <path>    Stable base corpus (default: corpus/stable/vertical-slice).");
+        Console.WriteLine("  --base <id>        READY PASS scenario used as the bounded template (default: p01-basic-id-login).");
+        Console.WriteLine("  --out <path>       Generated corpus directory (default: artifacts/lab/generated).");
+        Console.WriteLine("  --seed <n>         Non-negative reproducibility seed (default: 73001).");
+        Console.WriteLine("  --count <n>        Variant count, 6-32; six variants provide pairwise coverage of five binary dimensions.");
+        Console.WriteLine("  --force            Replace a non-empty output directory.");
+    }
+
+    static void WriteMetamorphicHelp()
+    {
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  selenium-pw-migrator lab metamorphic --manifest <generation-manifest> --run <lab run> [options]");
+        Console.WriteLine();
+        Console.WriteLine("Options:");
+        Console.WriteLine("  --out <path>                Metamorphic JSON/Markdown report directory.");
+        Console.WriteLine("  --save-candidates <path>    Copy useful failing seeds with evidence for later promotion.");
+        Console.WriteLine("Exit code 10 means a semantics-preserving variant changed status, diagnostics, quality, or oracle outcome.");
     }
 
     static void WriteAppHelp()

@@ -237,6 +237,17 @@ Playwright повторно не скачивается. После успешн
 Критерий: повтор seed создаёт тот же проект и outcome; invalid fixtures не доминируют
 над полезными находками.
 
+Реализовано:
+
+- `lab generate` с bounded template поверх `p01-basic-id-login`;
+- пять metamorphic dimensions: rename, `var`/explicit type, namespace shape, file move, alias using;
+- шесть seed-dependent pairwise вариантов с проверяемым покрытием;
+- `generation-manifest.json/md` с seed, content hashes, corpus fingerprint и environment;
+- повторная генерация одного seed и сравнение project hashes;
+- `lab metamorphic` для status/diagnostic/quality/oracle invariants;
+- автоматическое сохранение полезного failing seed как regression candidate;
+- `scripts/run-lab-block7.ps1` для полного deterministic replay двух одинаковых генераций.
+
 ### Что делает владелец после блока 7
 
 Просматривает первые найденные seed-кейсы и решает, какие перевести в постоянные

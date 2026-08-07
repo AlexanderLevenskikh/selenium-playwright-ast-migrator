@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Migrator.Lab.Contracts;
 
@@ -53,7 +54,10 @@ public sealed record ScenarioOracleSpec
     public JsonElement Source { get; init; }
     public JsonElement Target { get; init; }
     public JsonElement Semantic { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public JsonElement Diagnostics { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public JsonElement MustNot { get; init; }
 }
 

@@ -76,6 +76,32 @@ public class RoslynTestFileParser : ITestFileParser
         var tree = CSharpSyntaxTree.ParseText(source);
         var root = tree.GetRoot();
 
+        // C# using aliases are semantics-preserving for Selenium locator factories, e.g.
+        //   using SeleniumBy = OpenQA.Selenium.By;
+        //   WebDriver.FindElement(SeleniumBy.Id("login"))
+        // Most of the migration pipeline intentionally operates on canonical syntax text
+        // (By.Id / By.CssSelector / By.XPath). Normalize only alias usages that are proven
+        // by the using directive and only when they are used as a Selenium By factory.
+        // This keeps the recognizers deterministic without accepting arbitrary identifiers
+        // that merely happen to end in "By".
+        var seleniumByAliases = root.DescendantNodes()
+            .OfType<UsingDirectiveSyntax>()
+            .Where(IsSeleniumByAlias)
+            .Select(usingDirective => usingDirective.Alias!.Name.Identifier.ValueText)
+            .Where(alias => !string.IsNullOrWhiteSpace(alias))
+            .ToHashSet(StringComparer.Ordinal);
+
+        if (seleniumByAliases.Count > 0)
+        {
+            root = new SeleniumByAliasNormalizer(seleniumByAliases).Visit(root)!;
+            tree = CSharpSyntaxTree.Create((CSharpSyntaxNode)root, path: filePath);
+
+            // CSharpSyntaxTree.Create attaches an equivalent root to a new syntax tree.
+            // Always continue with the root owned by that tree; nodes from the rewritten
+            // pre-tree root cannot be queried through the SemanticModel for `tree`.
+            root = tree.GetRoot();
+        }
+
         var syntaxErrors = tree.GetDiagnostics()
             .Where(d => d.Severity == DiagnosticSeverity.Error)
             .ToArray();
@@ -151,6 +177,45 @@ public class RoslynTestFileParser : ITestFileParser
             ClassFields = classFields,
             PreservedClassAttributes = ParsePreservedClassAttributes(testClass)
         };
+    }
+
+    static bool IsSeleniumByAlias(UsingDirectiveSyntax usingDirective)
+    {
+        if (usingDirective.Alias == null || usingDirective.Name == null)
+            return false;
+
+        var target = usingDirective.Name.ToString().Replace("global::", string.Empty, StringComparison.Ordinal);
+        return string.Equals(target, "OpenQA.Selenium.By", StringComparison.Ordinal);
+    }
+
+    sealed class SeleniumByAliasNormalizer : CSharpSyntaxRewriter
+    {
+        static readonly HashSet<string> SupportedFactories = new(StringComparer.Ordinal)
+        {
+            "Id",
+            "CssSelector",
+            "XPath"
+        };
+
+        readonly IReadOnlySet<string> _aliases;
+
+        public SeleniumByAliasNormalizer(IReadOnlySet<string> aliases)
+        {
+            _aliases = aliases;
+        }
+
+        public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node)
+        {
+            if (_aliases.Contains(node.Identifier.ValueText)
+                && node.Parent is MemberAccessExpressionSyntax memberAccess
+                && ReferenceEquals(memberAccess.Expression, node)
+                && SupportedFactories.Contains(memberAccess.Name.Identifier.ValueText))
+            {
+                return SyntaxFactory.IdentifierName("By").WithTriviaFrom(node);
+            }
+
+            return base.VisitIdentifierName(node);
+        }
     }
 
     public IEnumerable<TestFileModel> ParseDirectory(string directoryPath)
