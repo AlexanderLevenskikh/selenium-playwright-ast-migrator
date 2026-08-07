@@ -33,12 +33,20 @@ jobs:
           dotnet run --project Migrator.Cli -c Release --no-build --
           lab run --suite smoke --corpus ./corpus/stable/vertical-slice
           --out ./artifacts/lab/ci-smoke --timeout-seconds 600 --configuration Release
+      - name: Triage smoke failures
+        if: failure()
+        run: >-
+          dotnet run --project Migrator.Cli -c Release --no-build --
+          lab triage --run ./artifacts/lab/ci-smoke --corpus ./corpus/stable/vertical-slice
+          --repo . --out ./artifacts/lab/ci-smoke-triage
       - name: Upload smoke report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: migrator-lab-smoke
-          path: artifacts/lab/ci-smoke
+          path: |
+            artifacts/lab/ci-smoke
+            artifacts/lab/ci-smoke-triage
           if-no-files-found: warn
 
   nightly:
@@ -64,12 +72,20 @@ jobs:
           dotnet run --project Migrator.Cli -c Release --no-build --
           lab run --suite nightly --corpus ./corpus/stable/vertical-slice
           --out ./artifacts/lab/ci-nightly --timeout-seconds 600 --configuration Release
+      - name: Triage stable nightly failures
+        if: failure()
+        run: >-
+          dotnet run --project Migrator.Cli -c Release --no-build --
+          lab triage --run ./artifacts/lab/ci-nightly --corpus ./corpus/stable/vertical-slice
+          --repo . --out ./artifacts/lab/ci-nightly-triage
       - name: Upload nightly report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: migrator-lab-nightly
-          path: artifacts/lab/ci-nightly
+          path: |
+            artifacts/lab/ci-nightly
+            artifacts/lab/ci-nightly-triage
           if-no-files-found: warn
       - name: Choose reproducible generated seed
         id: generated_seed
@@ -93,6 +109,12 @@ jobs:
           lab metamorphic --manifest ./artifacts/lab/ci-generated/corpus/generation-manifest.json
           --run ./artifacts/lab/ci-generated/run --out ./artifacts/lab/ci-generated/metamorphic
           --save-candidates ./artifacts/lab/ci-generated/seed-candidates
+      - name: Triage generated failures
+        if: failure()
+        run: >-
+          dotnet run --project Migrator.Cli -c Release --no-build --
+          lab triage --run ./artifacts/lab/ci-generated/run --corpus ./artifacts/lab/ci-generated/corpus
+          --repo . --out ./artifacts/lab/ci-generated/triage
       - name: Upload generated corpus evidence
         if: always()
         uses: actions/upload-artifact@v4

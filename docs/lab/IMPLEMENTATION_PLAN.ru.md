@@ -266,6 +266,17 @@ Playwright повторно не скачивается. После успешн
 Критерий: найденный сбой превращается в компактное воспроизводимое задание, а после
 исправления автоматически закрепляется на нужном уровне регрессии.
 
+Реализовано:
+
+- `lab reduce` — консервативный feature-aware reducer по scenario contract;
+- `lab triage` — stage/diagnostic/semantic/feature clustering;
+- bounded task packs с evidence, repro, максимум тремя файлами кода мигратора, тестами и definition of done;
+- decision policy `unit-test` / `project-fixture` / `saved-seed`;
+- `lab promote` для reviewed promotion artifacts;
+- `lab release-gate` для редкой проверки stable corpus + свежего PASS evidence настоящего проекта;
+- `docs/lab/AUTOMATION_POLICY.ru.md` с правилами auto-fix/manual-review;
+- `scripts/run-lab-block8.ps1` для end-to-end проверки финального блока.
+
 ### Что делает владелец после блока 8
 
 Утверждает policy: какие кластеры агент исправляет автоматически, а какие требуют

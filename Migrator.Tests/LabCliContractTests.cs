@@ -19,10 +19,18 @@ public sealed class LabCliContractTests
         Assert.Contains("selenium-pw-migrator lab diff", command);
         Assert.Contains("selenium-pw-migrator lab generate", command);
         Assert.Contains("selenium-pw-migrator lab metamorphic", command);
+        Assert.Contains("selenium-pw-migrator lab reduce", command);
+        Assert.Contains("selenium-pw-migrator lab triage", command);
+        Assert.Contains("selenium-pw-migrator lab promote", command);
+        Assert.Contains("selenium-pw-migrator lab release-gate", command);
         Assert.Contains("LabRunCoordinator", command);
         Assert.Contains("LabDiffEngine", command);
         Assert.Contains("SeededVariantGenerator", command);
         Assert.Contains("LabMetamorphicAnalyzer", command);
+        Assert.Contains("LabCandidateReducer", command);
+        Assert.Contains("LabFailureTriageService", command);
+        Assert.Contains("LabRegressionPromotionService", command);
+        Assert.Contains("LabReleaseGateService", command);
         Assert.Contains("--suite <name>", command);
         Assert.Contains("vertical|smoke|pr|nightly", command);
         Assert.Contains("--feature <name[,name]>", command);

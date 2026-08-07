@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "migrator-lab-real-project-evidence/v1",
+  "project": "MarketerWeb",
+  "sourceRevision": "git-sha-of-real-project",
+  "migratorRevision": "git-sha-of-migrator",
+  "executedAtUtc": "2026-08-07T18:00:00Z",
+  "status": "PASS",
+  "evidencePaths": [
+    "artifacts/real-project/project-verify-report.json",
+    "artifacts/real-project/migration-quality-dashboard.md"
+  ],
+  "notes": "Rare pre-release validation; not a PR gate."
+}

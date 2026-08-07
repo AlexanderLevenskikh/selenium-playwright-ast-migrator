@@ -6,6 +6,7 @@ using Migrator.Lab.Execution;
 using Migrator.Lab.Generator;
 using Migrator.Lab.LabApp;
 using Migrator.Lab.Reports;
+using Migrator.Lab.Triage;
 
 internal static class LabCommand
 {
@@ -32,6 +33,14 @@ internal static class LabCommand
             return RunGenerate(args.Skip(1).ToArray());
         if (subcommand == "metamorphic")
             return RunMetamorphic(args.Skip(1).ToArray());
+        if (subcommand == "reduce")
+            return RunReduce(args.Skip(1).ToArray());
+        if (subcommand == "triage")
+            return RunTriage(args.Skip(1).ToArray());
+        if (subcommand == "promote")
+            return RunPromote(args.Skip(1).ToArray());
+        if (subcommand == "release-gate")
+            return RunReleaseGate(args.Skip(1).ToArray());
 
         if (args.Skip(1).Any(IsHelp))
         {
@@ -403,6 +412,270 @@ internal static class LabCommand
         }
     }
 
+    static int RunReduce(string[] args)
+    {
+        if (args.Any(IsHelp))
+        {
+            WriteReduceHelp();
+            return LabExitCodes.Accepted;
+        }
+
+        string? candidate = null;
+        var output = Path.Combine("artifacts", "lab", "reduced");
+        for (var index = 0; index < args.Length; index++)
+        {
+            switch (args[index])
+            {
+                case "--candidate":
+                case "--scenario":
+                    if (!TryReadValue(args, ref index, out candidate))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--out":
+                    if (!TryReadValue(args, ref index, out output))
+                        return LabExitCodes.LabError;
+                    break;
+                default:
+                    Console.Error.WriteLine($"Unknown lab reduce option: {args[index]}");
+                    return LabExitCodes.LabError;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            Console.Error.WriteLine("lab reduce requires --candidate <candidate|scenario directory>.");
+            return LabExitCodes.LabError;
+        }
+
+        try
+        {
+            var report = new LabCandidateReducer().Reduce(candidate, output);
+            Console.WriteLine($"Migrator Lab reduce: {report.ScenarioId}, {report.BeforeFiles} -> {report.AfterFiles} file(s), {report.BeforeBytes} -> {report.AfterBytes} bytes.");
+            Console.WriteLine($"Reduced repro: {Path.GetFullPath(output)}");
+            return LabExitCodes.Accepted;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidDataException)
+        {
+            Console.Error.WriteLine($"Lab reduce failed: {ex.Message}");
+            return LabExitCodes.LabError;
+        }
+    }
+
+    static int RunTriage(string[] args)
+    {
+        if (args.Any(IsHelp))
+        {
+            WriteTriageHelp();
+            return LabExitCodes.Accepted;
+        }
+
+        string? runPath = null;
+        var corpus = Path.Combine("corpus", "stable", "vertical-slice");
+        var repository = Directory.GetCurrentDirectory();
+        var output = Path.Combine("artifacts", "lab", "triage");
+        var taskPacks = true;
+        for (var index = 0; index < args.Length; index++)
+        {
+            switch (args[index])
+            {
+                case "--run":
+                    if (!TryReadValue(args, ref index, out runPath))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--corpus":
+                    if (!TryReadValue(args, ref index, out corpus))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--repo":
+                    if (!TryReadValue(args, ref index, out repository))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--out":
+                    if (!TryReadValue(args, ref index, out output))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--no-task-packs":
+                    taskPacks = false;
+                    break;
+                default:
+                    Console.Error.WriteLine($"Unknown lab triage option: {args[index]}");
+                    return LabExitCodes.LabError;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(runPath))
+        {
+            Console.Error.WriteLine("lab triage requires --run <lab run directory|lab-summary.json>.");
+            return LabExitCodes.LabError;
+        }
+
+        try
+        {
+            var run = LabRunArtifactLoader.LoadRun(runPath);
+            var report = new LabFailureTriageService().Analyze(
+                run,
+                runPath,
+                corpus,
+                repository,
+                taskPacks ? Path.Combine(output, "task-packs") : null);
+            LabTriageReportWriter.Write(report, output);
+            Console.WriteLine($"Migrator Lab triage: {report.Summary.Findings} finding(s) -> {report.Summary.Clusters} cluster(s), {report.Summary.TaskPacks} task pack(s).");
+            Console.WriteLine($"Automation: {report.Summary.AutoFixEligible} auto-fix eligible, {report.Summary.ManualReview} manual review.");
+            Console.WriteLine($"Reports: {Path.GetFullPath(output)}");
+            return LabExitCodes.Accepted;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidDataException)
+        {
+            Console.Error.WriteLine($"Lab triage failed: {ex.Message}");
+            return LabExitCodes.LabError;
+        }
+    }
+
+    static int RunPromote(string[] args)
+    {
+        if (args.Any(IsHelp))
+        {
+            WritePromoteHelp();
+            return LabExitCodes.Accepted;
+        }
+
+        string? repro = null;
+        var output = Path.Combine("artifacts", "lab", "promoted-regressions");
+        LabRegressionLevel? level = null;
+        for (var index = 0; index < args.Length; index++)
+        {
+            switch (args[index])
+            {
+                case "--repro":
+                case "--candidate":
+                    if (!TryReadValue(args, ref index, out repro))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--out":
+                    if (!TryReadValue(args, ref index, out output))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--level":
+                    if (!TryReadValue(args, ref index, out var rawLevel) || !TryParseRegressionLevel(rawLevel, out var parsedLevel))
+                    {
+                        Console.Error.WriteLine("--level requires unit-test|project-fixture|saved-seed.");
+                        return LabExitCodes.LabError;
+                    }
+                    level = parsedLevel;
+                    break;
+                default:
+                    Console.Error.WriteLine($"Unknown lab promote option: {args[index]}");
+                    return LabExitCodes.LabError;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(repro) || level == null)
+        {
+            Console.Error.WriteLine("lab promote requires --repro <scenario|task-pack> and --level unit-test|project-fixture|saved-seed.");
+            return LabExitCodes.LabError;
+        }
+
+        try
+        {
+            var manifest = new LabRegressionPromotionService().Promote(repro, level.Value, output);
+            Console.WriteLine($"Migrator Lab promote: {manifest.ScenarioId} -> {ToContractName(manifest.Level)}.");
+            Console.WriteLine($"Promotion artifact: {manifest.DestinationDirectory}");
+            return LabExitCodes.Accepted;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidDataException)
+        {
+            Console.Error.WriteLine($"Lab promote failed: {ex.Message}");
+            return LabExitCodes.LabError;
+        }
+    }
+
+    static int RunReleaseGate(string[] args)
+    {
+        if (args.Any(IsHelp))
+        {
+            WriteReleaseGateHelp();
+            return LabExitCodes.Accepted;
+        }
+
+        string? stableRunPath = null;
+        string? realEvidencePath = null;
+        var output = Path.Combine("artifacts", "lab", "release-gate");
+        var maxAgeDays = 14;
+        for (var index = 0; index < args.Length; index++)
+        {
+            switch (args[index])
+            {
+                case "--stable-run":
+                    if (!TryReadValue(args, ref index, out stableRunPath))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--real-evidence":
+                    if (!TryReadValue(args, ref index, out realEvidencePath))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--out":
+                    if (!TryReadValue(args, ref index, out output))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--max-age-days":
+                    if (!TryReadValue(args, ref index, out var rawDays) || !int.TryParse(rawDays, out maxAgeDays) || maxAgeDays <= 0)
+                    {
+                        Console.Error.WriteLine("--max-age-days requires a positive integer.");
+                        return LabExitCodes.LabError;
+                    }
+                    break;
+                default:
+                    Console.Error.WriteLine($"Unknown lab release-gate option: {args[index]}");
+                    return LabExitCodes.LabError;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(stableRunPath) || string.IsNullOrWhiteSpace(realEvidencePath))
+        {
+            Console.Error.WriteLine("lab release-gate requires --stable-run <run> and --real-evidence <json>.");
+            return LabExitCodes.LabError;
+        }
+
+        try
+        {
+            var stable = LabRunArtifactLoader.LoadRun(stableRunPath);
+            var report = new LabReleaseGateService().Evaluate(stable, stableRunPath, realEvidencePath, maxAgeDays);
+            LabReleaseGateReportWriter.Write(report, output);
+            Console.WriteLine($"Migrator Lab release gate: {(report.Passed ? "PASS" : "FAIL")} — stable unexpected={report.StableUnexpectedOutcomes}, real={report.RealStatus}, evidence age={report.RealEvidenceAgeHours}h.");
+            foreach (var issue in report.Issues)
+                Console.WriteLine($"  {issue}");
+            Console.WriteLine($"Reports: {Path.GetFullPath(output)}");
+            return report.Passed ? LabExitCodes.Accepted : LabExitCodes.Regression;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidDataException)
+        {
+            Console.Error.WriteLine($"Lab release-gate failed: {ex.Message}");
+            return LabExitCodes.LabError;
+        }
+    }
+
+    static bool TryParseRegressionLevel(string value, out LabRegressionLevel level)
+    {
+        switch (value.Trim().ToLowerInvariant())
+        {
+            case "unit-test":
+            case "unittest":
+                level = LabRegressionLevel.UnitTest;
+                return true;
+            case "project-fixture":
+            case "projectfixture":
+                level = LabRegressionLevel.ProjectFixture;
+                return true;
+            case "saved-seed":
+            case "savedseed":
+                level = LabRegressionLevel.SavedSeed;
+                return true;
+            default:
+                level = default;
+                return false;
+        }
+    }
+
     static LabRunOptions? ParseRunOptions(
         string[] args,
         bool allowSuiteOption = true,
@@ -766,6 +1039,10 @@ internal static class LabCommand
         Console.WriteLine("  selenium-pw-migrator lab diff --baseline <path> --current <run> [options]");
         Console.WriteLine("  selenium-pw-migrator lab generate --seed <n> [options]");
         Console.WriteLine("  selenium-pw-migrator lab metamorphic --manifest <path> --run <run> [options]");
+        Console.WriteLine("  selenium-pw-migrator lab reduce --candidate <path> [options]");
+        Console.WriteLine("  selenium-pw-migrator lab triage --run <run> [options]");
+        Console.WriteLine("  selenium-pw-migrator lab promote --repro <path> --level <level> [options]");
+        Console.WriteLine("  selenium-pw-migrator lab release-gate --stable-run <run> --real-evidence <json> [options]");
         Console.WriteLine("  selenium-pw-migrator lab validate [options]");
         Console.WriteLine("  selenium-pw-migrator lab list [options]");
         Console.WriteLine("  selenium-pw-migrator lab app serve [options]");
@@ -851,6 +1128,46 @@ internal static class LabCommand
         Console.WriteLine("  --out <path>                Metamorphic JSON/Markdown report directory.");
         Console.WriteLine("  --save-candidates <path>    Copy useful failing seeds with evidence for later promotion.");
         Console.WriteLine("Exit code 10 means a semantics-preserving variant changed status, diagnostics, quality, or oracle outcome.");
+    }
+
+    static void WriteReduceHelp()
+    {
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  selenium-pw-migrator lab reduce --candidate <candidate|scenario directory> [--out <directory>]");
+        Console.WriteLine();
+        Console.WriteLine("Produces a deterministic feature-aware repro containing only scenario.json, declared project files, migration files, and adapter config.");
+    }
+
+    static void WriteTriageHelp()
+    {
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  selenium-pw-migrator lab triage --run <lab run> [options]");
+        Console.WriteLine();
+        Console.WriteLine("Options:");
+        Console.WriteLine("  --corpus <path>       Scenario corpus used to recover features and repro files.");
+        Console.WriteLine("  --repo <path>         Migrator repository root used to copy bounded relevant code.");
+        Console.WriteLine("  --out <path>          Triage report/task-pack directory.");
+        Console.WriteLine("  --no-task-packs       Produce clustering only.");
+        Console.WriteLine("Clusters by stage, diagnostics, semantic diff, and normalized feature tags.");
+    }
+
+    static void WritePromoteHelp()
+    {
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  selenium-pw-migrator lab promote --repro <scenario|task-pack> --level unit-test|project-fixture|saved-seed [--out <directory>]");
+        Console.WriteLine();
+        Console.WriteLine("Creates a reviewed promotion artifact and verification plan. Unit-test promotion deliberately keeps a minimal repro and requires the agent to encode the focused assertion rather than generating a fake test.");
+    }
+
+    static void WriteReleaseGateHelp()
+    {
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  selenium-pw-migrator lab release-gate --stable-run <run> --real-evidence <json> [options]");
+        Console.WriteLine();
+        Console.WriteLine("Options:");
+        Console.WriteLine("  --out <path>          Release-gate report directory.");
+        Console.WriteLine("  --max-age-days <n>    Maximum accepted age of real-project evidence (default: 14).");
+        Console.WriteLine("This command is intended for rare release validation, not every PR.");
     }
 
     static void WriteAppHelp()
