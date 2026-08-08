@@ -7,7 +7,7 @@ public class AssertInvocationRecognizer : IInvocationRecognizer
 {
     public TestAction? TryRecognize(InvocationContext ctx)
     {
-        if (ctx.MethodName == "That" && ctx.ReceiverText.Contains("Assert"))
+        if (ctx.MethodName == "That" && RoslynTestFileParser.IsAssertReceiver(ctx.ReceiverText))
         {
             var args = ctx.ArgumentTexts;
             var actual = args.Count > 0 ? args[0] : string.Empty;
@@ -15,7 +15,7 @@ public class AssertInvocationRecognizer : IInvocationRecognizer
             return new AssertThatAction(ctx.SourceLine, actual, constraint, RecognitionConfidence.SyntaxFallback);
         }
 
-        if (ctx.MethodName == "AreEqual" && ctx.ReceiverText.Contains("Assert"))
+        if (ctx.MethodName == "AreEqual" && RoslynTestFileParser.IsAssertReceiver(ctx.ReceiverText))
         {
             var args = ctx.ArgumentTexts;
             var expected = args.Count > 0 ? args[0] : string.Empty;

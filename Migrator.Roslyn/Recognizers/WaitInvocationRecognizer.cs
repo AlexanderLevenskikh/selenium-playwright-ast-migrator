@@ -161,8 +161,31 @@ public class WaitInvocationRecognizer : IInvocationRecognizer
             || methodName.Contains("Loaded", StringComparison.Ordinal);
     }
 
+    // Verbs that name the state a custom wait method waits for. These take priority over
+    // the widget-type bucket below: a widget type alone (e.g. "Modal"/"Dialog") does not
+    // imply a fixed direction — "WaitDialogClosed" and "WaitDialogShown" mean opposite
+    // things even though both mention "Dialog". Checked against the method name, where
+    // the verb conventionally lives (WaitXxxClosed / WaitXxxShown).
+    static readonly string[] ClosingStateVerbs =
+        { "Close", "Hidden", "Hide", "Gone", "Dismiss", "Away", "Disappear", "Collapse" };
+
+    static readonly string[] OpeningStateVerbs =
+        { "Show", "Open", "Visible", "Appear", "Expand", "Display" };
+
     static WaitForKind InferProductStateKind(string methodName, string receiverText)
     {
+        var closing = ContainsAny(methodName, ClosingStateVerbs);
+        var opening = ContainsAny(methodName, OpeningStateVerbs);
+
+        // Conflicting or otherwise unclear signals must not be guessed — surface as
+        // review-required so a human/project profile picks the correct direction.
+        if (closing && opening)
+            return WaitForKind.ReviewRequired;
+        if (closing)
+            return WaitForKind.ProductStateHidden;
+        if (opening)
+            return WaitForKind.ProductStateVisible;
+
         var text = receiverText + "." + methodName;
 
         if (ContainsAny(text, "Loader", "Loading", "Spinner", "Progress"))

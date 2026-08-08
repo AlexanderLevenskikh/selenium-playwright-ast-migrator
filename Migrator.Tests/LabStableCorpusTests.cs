@@ -29,12 +29,12 @@ public sealed class LabStableCorpusTests
             .OrderBy(id => id, StringComparer.Ordinal)
             .ToArray();
 
-        Assert.Equal(30, matrix.RootElement.GetProperty("scenarioCount").GetInt32());
+        Assert.Equal(31, matrix.RootElement.GetProperty("scenarioCount").GetInt32());
         Assert.Equal(scenarios.Select(scenario => scenario.Id), matrixIds);
         Assert.Equal(matrixIds, categorizedIds);
         Assert.Equal(7, matrix.RootElement.GetProperty("suiteCounts").GetProperty("smoke").GetInt32());
-        Assert.Equal(18, matrix.RootElement.GetProperty("suiteCounts").GetProperty("pr").GetInt32());
-        Assert.Equal(30, matrix.RootElement.GetProperty("suiteCounts").GetProperty("nightly").GetInt32());
+        Assert.Equal(19, matrix.RootElement.GetProperty("suiteCounts").GetProperty("pr").GetInt32());
+        Assert.Equal(31, matrix.RootElement.GetProperty("suiteCounts").GetProperty("nightly").GetInt32());
     }
 
     [Fact]

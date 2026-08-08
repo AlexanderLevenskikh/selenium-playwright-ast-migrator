@@ -1042,7 +1042,14 @@ public class RoslynTestFileParser : ITestFileParser
         }
     }
 
-    static bool IsAssertReceiver(string receiverText)
+    // Exact-identifier / qualified-suffix match (not a substring search) so a project
+    // helper whose name merely contains "Assert" (e.g. ReportAssertions.That(...)) is
+    // not mistaken for an NUnit Assert.That/AreEqual call. Internal so syntax-fallback
+    // recognizers (e.g. AssertInvocationRecognizer) can reuse the same rule instead of
+    // re-implementing their own — this is the check the semantic path can't fully
+    // replace, since Assert.That/AreEqual almost never resolve to a symbol here (the
+    // lightweight per-file compilation does not reference NUnit.Framework).
+    internal static bool IsAssertReceiver(string receiverText)
     {
         var receiver = receiverText.Trim();
         return receiver == "Assert" || receiver.EndsWith(".Assert", StringComparison.Ordinal);
@@ -1068,7 +1075,7 @@ public class RoslynTestFileParser : ITestFileParser
             return new SendKeysAction(line, receiverText, argText);
         }
 
-        if (methodName == "That" && receiverText.Contains("Assert"))
+        if (methodName == "That" && IsNUnitAssertType(methodSymbol))
         {
             var args = invocation.ArgumentList.Arguments.ToList();
             var actual = args.Count > 0 ? args[0].Expression.ToString() : string.Empty;
@@ -1076,7 +1083,7 @@ public class RoslynTestFileParser : ITestFileParser
             return new AssertThatAction(line, actual, constraint);
         }
 
-        if (methodName == "AreEqual" && receiverText.Contains("Assert"))
+        if (methodName == "AreEqual" && IsNUnitAssertType(methodSymbol))
         {
             var args = invocation.ArgumentList.Arguments.ToList();
             var expected = args.Count > 0 ? args[0].Expression.ToString() : string.Empty;
@@ -1085,6 +1092,21 @@ public class RoslynTestFileParser : ITestFileParser
         }
 
         return null;
+    }
+
+    // Semantic check (not text matching) — only NUnit.Framework(.*).Assert must be
+    // recognized as an assertion. A project-owned helper whose receiver text merely
+    // contains the substring "Assert" (e.g. ReportAssertions.That(...)) must not be
+    // misclassified as an NUnit assertion just because it shares that surface pattern.
+    static bool IsNUnitAssertType(IMethodSymbol methodSymbol)
+    {
+        var containingType = methodSymbol.ContainingType;
+        if (containingType == null || !string.Equals(containingType.Name, "Assert", StringComparison.Ordinal))
+            return false;
+
+        var containingNamespace = containingType.ContainingNamespace?.ToDisplayString() ?? string.Empty;
+        return string.Equals(containingNamespace, "NUnit.Framework", StringComparison.Ordinal)
+            || containingNamespace.StartsWith("NUnit.Framework.", StringComparison.Ordinal);
     }
 
     static bool IsBuiltinSystemMethod(IMethodSymbol methodSymbol)

@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p17b-custom-wait-closing-state",
+  "seed": 1172,
+  "tags": [
+    "pr",
+    "waits",
+    "helpers",
+    "real-failure",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "CustomWait",
+      "WaitDirectionInference",
+      "Hidden"
+    ],
+    "migrationFiles": [
+      "Tests/DialogCloseTests.cs"
+    ],
+    "adapterConfig": "adapter-config.json"
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Helpers/WaitHelpers.cs",
+      "Tests/DialogCloseTests.cs",
+      "adapter-config.json"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/dialog-close",
+        "model": "dialog-close"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "dialogclose:start",
+        "dialogclose:closed",
+        "dialogclose:save"
+      ],
+      "timeoutMaxMs": 3000,
+      "dom": [
+        {
+          "selector": "#dialog-status",
+          "text": "done"
+        }
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "audit-c2-fix",
+    "notes": "READY: regression fixture for the C2 audit finding — a custom wait helper named with a closing verb (WaitDialogClosed) on a Modal/Dialog-bucketed wait must migrate to ToBeHiddenAsync, not ToBeVisibleAsync. Complements the deterministic WaitPolicyTests unit regression test with a real end-to-end run against the LabApp.",
+    "contentHash": "sha256:3805fe0ee4590f26edb4604f89d18608df6bf2ca6e9c97730d73c5a8aa6e6f22"
+  }
+}

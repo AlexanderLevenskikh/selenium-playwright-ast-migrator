@@ -1,0 +1,13 @@
+{
+  "SchemaVersion": "adapter-config/v1",
+  "SourceProjectName": "Migrator.Lab.P17B",
+  "UiTargets": [
+    {
+      "SourceExpression": "WebDriver",
+      "TargetExpression": "Page.Locator(\"#confirm-dialog\")",
+      "TargetKind": "Locator",
+      "SourceTruth": "Helpers/WaitHelpers.cs: WaitDialogClosed waits for #confirm-dialog to stop being displayed.",
+      "Confidence": "high"
+    }
+  ]
+}

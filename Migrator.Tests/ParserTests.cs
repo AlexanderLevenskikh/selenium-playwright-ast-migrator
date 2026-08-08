@@ -2824,5 +2824,95 @@ namespace Sample.E2ETests
         Assert.Contains("Navigation", scope.TargetKnownIdentifiers);
     }
 
+    // Regression test for the C1 audit finding: a project helper whose receiver merely
+    // contains the substring "Assert" (but is not NUnit.Framework.Assert) must not be
+    // misrecognized as an NUnit assertion — neither through symbol-resolved semantic
+    // matching nor through the syntax-fallback recognizer.
+    [Fact]
+    public void Parse_HelperNamedThatOnAssertLikeReceiver_IsNotMisrecognizedAsNUnitAssert()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-c1-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file, """
+            using NUnit.Framework;
+            using OpenQA.Selenium;
 
+            namespace Sample;
+
+            public static class ReportAssertions
+            {
+                public static bool That(int actual, int expected) => actual == expected;
+                public static bool AreEqual(int expected, int actual) => actual == expected;
+            }
+
+            [TestFixture]
+            public class SubstringMatchTests
+            {
+                IWebDriver WebDriver = null!;
+
+                [Test]
+                public void FiltersRowsUsingHelper_NotAnAssertion()
+                {
+                    ReportAssertions.That(5, 5);
+                    ReportAssertions.AreEqual(5, 5);
+                    WebDriver.FindElement(By.Id("save")).Click();
+                }
+            }
+            """);
+
+        try
+        {
+            var model = _parser.Parse(file);
+            var actions = model.Tests.Single().BodyActions.ToList();
+
+            Assert.DoesNotContain(actions, a => a is AssertThatAction);
+            Assert.DoesNotContain(actions, a => a is AssertAreEqualAction);
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
+
+    // Sanity/non-regression companion to the fix above: genuine NUnit Assert.That /
+    // Assert.AreEqual calls must still be recognized correctly.
+    [Fact]
+    public void Parse_GenuineNUnitAssertCalls_AreStillRecognized()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"migrator-c1-sanity-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(file, """
+            using NUnit.Framework;
+            using OpenQA.Selenium;
+
+            namespace Sample;
+
+            [TestFixture]
+            public class GenuineAssertSanityTests
+            {
+                IWebDriver WebDriver = null!;
+
+                [Test]
+                public void UsesRealNUnitAssertions()
+                {
+                    WebDriver.FindElement(By.Id("save")).Click();
+                    Assert.That(WebDriver.FindElement(By.Id("status")).Text, Is.EqualTo("saved"));
+                    Assert.AreEqual("saved", WebDriver.FindElement(By.Id("status")).Text);
+                }
+            }
+            """);
+
+        try
+        {
+            var model = _parser.Parse(file);
+            var actions = model.Tests.Single().BodyActions.ToList();
+
+            Assert.Contains(actions, a => a is AssertThatAction);
+            Assert.Contains(actions, a => a is AssertAreEqualAction);
+        }
+        finally
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+    }
 }

@@ -28,6 +28,7 @@ public static class LabAppPageCatalog
         "/wait",
         "/wait-negative",
         "/custom-wait",
+        "/dialog-close",
         "/control-flow",
         "/parameterized",
         "/smoke",
@@ -57,6 +58,7 @@ public static class LabAppPageCatalog
             "/wait" => LabAppResponse.Html(BuildWait()),
             "/wait-negative" => LabAppResponse.Html(BuildWaitNegative()),
             "/custom-wait" => LabAppResponse.Html(BuildCustomWait()),
+            "/dialog-close" => LabAppResponse.Html(BuildDialogClose()),
             "/control-flow" => LabAppResponse.Html(BuildControlFlow()),
             "/parameterized" => LabAppResponse.Html(BuildParameterized()),
             "/smoke" => LabAppResponse.Html(BuildSmoke()),
@@ -328,6 +330,34 @@ public static class LabAppPageCatalog
         save.addEventListener('click', () => {
           document.getElementById('custom-status').textContent = 'done';
           labEmit('custom:click');
+        });
+        """);
+
+    static string BuildDialogClose() => BuildDocument(
+        "Dialog close",
+        """
+        <main>
+          <section id="confirm-dialog">
+            <button id="confirm-close" type="button">Close</button>
+          </section>
+          <button id="dialog-final-save" type="button" disabled>Save</button>
+          <div id="dialog-status">waiting</div>
+        </main>
+        """,
+        """
+        const dialog = document.getElementById('confirm-dialog');
+        const finalSave = document.getElementById('dialog-final-save');
+        document.getElementById('confirm-close').addEventListener('click', () => {
+          labEmit('dialogclose:start');
+          setTimeout(() => {
+            dialog.hidden = true;
+            finalSave.disabled = false;
+            labEmit('dialogclose:closed');
+          }, 250);
+        });
+        finalSave.addEventListener('click', () => {
+          document.getElementById('dialog-status').textContent = 'done';
+          labEmit('dialogclose:save');
         });
         """);
 

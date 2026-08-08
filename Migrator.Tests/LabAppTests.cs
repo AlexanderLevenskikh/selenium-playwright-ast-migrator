@@ -13,7 +13,7 @@ public sealed class LabAppTests
         var expected = new[]
         {
             "/login", "/edit", "/list", "/table", "/form", "/locator", "/helper", "/pom", "/modal",
-            "/async", "/setup", "/wait", "/wait-negative", "/custom-wait", "/control-flow", "/parameterized",
+            "/async", "/setup", "/wait", "/wait-negative", "/custom-wait", "/dialog-close", "/control-flow", "/parameterized",
             "/smoke", "/unsupported", "/actions", "/complex", "/dynamic"
         };
         Assert.Equal(expected, LabAppPageCatalog.PageRoutes);
@@ -51,6 +51,7 @@ public sealed class LabAppTests
             ["/wait"] = new[] { "wait-button", "wait-status" },
             ["/wait-negative"] = new[] { "negative-spinner", "negative-save", "negative-status" },
             ["/custom-wait"] = new[] { "custom-save", "custom-status" },
+            ["/dialog-close"] = new[] { "confirm-dialog", "confirm-close", "dialog-final-save", "dialog-status" },
             ["/control-flow"] = new[] { "control-status" },
             ["/parameterized"] = new[] { "parameter-one", "parameter-two", "parameter-status" },
             ["/smoke"] = new[] { "smoke-button", "smoke-status" },

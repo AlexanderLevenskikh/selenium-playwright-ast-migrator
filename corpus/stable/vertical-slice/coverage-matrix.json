@@ -1,13 +1,13 @@
 {
   "schemaVersion": "migrator-lab-coverage/v1",
-  "scenarioCount": 30,
+  "scenarioCount": 31,
   "suiteCounts": {
     "smoke": 7,
-    "pr": 18,
-    "nightly": 30
+    "pr": 19,
+    "nightly": 31
   },
   "expectedStatusCounts": {
-    "PASS": 25,
+    "PASS": 26,
     "INFRASTRUCTURE_FAILURE": 1,
     "UNSUPPORTED_AS_EXPECTED": 4
   },
@@ -37,7 +37,8 @@
     "wait-semantics": [
       "p15-webdriverwait-visible",
       "p16-wait-disappear-negative",
-      "p17-custom-wait-state"
+      "p17-custom-wait-state",
+      "p17b-custom-wait-closing-state"
     ],
     "assertions-control-flow-and-data": [
       "p18-assert-multiple-fluent",
@@ -308,6 +309,20 @@
         "CustomWait",
         "Enabled",
         "ParameterizedMethodMapping"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p17b-custom-wait-closing-state",
+      "expectedStatus": "PASS",
+      "suites": [
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "CustomWait",
+        "WaitDirectionInference",
+        "Hidden"
       ],
       "mustPassTests": 1
     },

@@ -162,7 +162,7 @@ public sealed class LabFailureTriageService
             .ToArray();
     }
 
-    static LabIssueCluster[] BuildClusters(IReadOnlyCollection<LabFailureEvidence> findings)
+    internal static LabIssueCluster[] BuildClusters(IReadOnlyCollection<LabFailureEvidence> findings)
     {
         var groups = findings
             .GroupBy(BuildClusterKey, StringComparer.Ordinal)
@@ -173,6 +173,17 @@ public sealed class LabFailureTriageService
         {
             var group = groups[index].OrderBy(item => item.ScenarioId, StringComparer.OrdinalIgnoreCase).ToArray();
             var first = group[0];
+
+            // Full, untruncated union across every finding in the cluster. This — not a
+            // pre-truncated slice — is what AUTO_FIX_ELIGIBLE eligibility must be judged
+            // against; how many of these files a task pack later copies is a separate,
+            // independently-bounded presentation concern (LabTaskPackWriter.CopyBoundedMigratorCode).
+            var allSuspectedComponents = group
+                .SelectMany(item => item.SuspectedComponents)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
             result.Add(new LabIssueCluster
             {
                 Id = $"cluster-{index + 1:000}-{ShortHash(groups[index].Key)}",
@@ -183,9 +194,10 @@ public sealed class LabFailureTriageService
                 SemanticDiffKinds = group.SelectMany(item => item.SemanticDiffKinds).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray(),
                 FeatureTags = group.SelectMany(item => item.FeatureTags).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray(),
                 ScenarioIds = group.Select(item => item.ScenarioId).ToArray(),
-                SuspectedComponents = group.SelectMany(item => item.SuspectedComponents).Distinct(StringComparer.OrdinalIgnoreCase).Take(3).ToArray(),
+                SuspectedComponents = allSuspectedComponents,
                 RecommendedRegressionLevel = MergeRegressionLevel(group),
                 AutomationDisposition = group.All(item => item.AutomationDisposition == LabAutomationDisposition.AutoFixEligible)
+                    && WithinAutoFixComponentBudget(allSuspectedComponents)
                     ? LabAutomationDisposition.AutoFixEligible
                     : LabAutomationDisposition.ManualReview
             });
@@ -222,7 +234,18 @@ public sealed class LabFailureTriageService
             .ToArray();
     }
 
-    static string[] SuspectedComponents(
+    // Maximum number of distinct suspected components a cluster may span and still be
+    // considered AUTO_FIX_ELIGIBLE. This budget must only ever be applied to the FULL,
+    // deduplicated set of suspected components (see WithinAutoFixComponentBudget) — never
+    // to a value that has already been truncated for a different purpose (e.g. the task
+    // pack's own, independent file-copy limit in LabTaskPackWriter.CopyBoundedMigratorCode).
+    internal const int MaxAutoFixSuspectedComponents = 3;
+
+    // Full, untruncated, deduplicated set of files the heuristic suspects. Truncation for
+    // presentation/context-budget purposes (e.g. how many files a task pack copies) is a
+    // separate concern and must happen at the point that needs a bounded count, not here —
+    // otherwise a downstream count check against this result becomes tautological.
+    internal static string[] SuspectedComponents(
         string stage,
         IReadOnlyCollection<string> diagnostics,
         IReadOnlyCollection<string> semanticDiffKinds,
@@ -254,8 +277,17 @@ public sealed class LabFailureTriageService
                 result.Add("Migrator.SeleniumCSharp/DefaultProjectAdapter.cs");
         }
 
-        return result.Distinct(StringComparer.OrdinalIgnoreCase).Take(3).ToArray();
+        return result
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
+
+    // The only place allowed to decide whether a suspected-component count is within the
+    // auto-fix budget. Always call this with the full, untruncated unique set — never with
+    // a value that was already bounded for a different (e.g. presentation) reason.
+    internal static bool WithinAutoFixComponentBudget(IReadOnlyCollection<string> uniqueSuspectedComponents) =>
+        uniqueSuspectedComponents.Count <= MaxAutoFixSuspectedComponents;
 
     static LabRegressionLevel RecommendRegressionLevel(
         LabScenarioRunResult project,
@@ -281,7 +313,11 @@ public sealed class LabFailureTriageService
         return LabRegressionLevel.UnitTest;
     }
 
-    static LabAutomationDisposition RecommendAutomationDisposition(
+    // components must be the FULL, untruncated unique suspected-component set (as returned
+    // by SuspectedComponents). Passing a value that was already bounded for a different
+    // reason (e.g. a task-pack file-copy limit) would make the budget check tautological —
+    // this is exactly the C3 audit defect this method must not reintroduce.
+    internal static LabAutomationDisposition RecommendAutomationDisposition(
         LabScenarioRunResult project,
         string stage,
         IReadOnlyCollection<string> diagnostics,
@@ -298,7 +334,7 @@ public sealed class LabFailureTriageService
             return LabAutomationDisposition.ManualReview;
         if (diagnostics.Any(code => code.Contains("nuget", StringComparison.OrdinalIgnoreCase)))
             return LabAutomationDisposition.ManualReview;
-        return components.Count <= 3
+        return WithinAutoFixComponentBudget(components)
             ? LabAutomationDisposition.AutoFixEligible
             : LabAutomationDisposition.ManualReview;
     }

@@ -4,6 +4,7 @@ using System.Reflection;
 using Migrator.Core.Models;
 using Migrator.PlaywrightDotNet;
 using Migrator.Roslyn;
+using Migrator.Roslyn.Recognizers;
 using Xunit;
 
 namespace Migrator.Tests;
@@ -66,6 +67,62 @@ public class WaitPolicyTests
         Assert.Contains("ToBeHiddenAsync", output);
         Assert.Contains("GetByTestId", output);
         Assert.DoesNotContain("SOURCE_ONLY_IDENTIFIER", output);
+    }
+
+    // Regression test for the C2 audit finding: a custom wait helper's closing verb
+    // (e.g. "Closed") must override the widget-type bucket default (Modal/Dialog
+    // defaulted to "visible"), not be silently inverted by it.
+    [Fact]
+    public void WaitInvocationRecognizer_ClosingVerbOnDialogBucket_InfersHiddenNotVisible()
+    {
+        var ctx = new InvocationContext(
+            MethodName: "WaitDialogClosed",
+            ReceiverText: "Modal",
+            FullText: "Modal.WaitDialogClosed()",
+            SourceLine: 21,
+            SymbolResolved: false,
+            ArgumentTexts: Array.Empty<string>());
+
+        var action = Assert.IsType<WaitForAction>(new WaitInvocationRecognizer().TryRecognize(ctx));
+
+        Assert.Equal(WaitForKind.ProductStateHidden, action.Kind);
+    }
+
+    // Symmetric case: an opening verb on the Loader/Spinner bucket (which previously
+    // defaulted to "hidden") must also flip to "visible" rather than keep the bucket's
+    // default direction.
+    [Fact]
+    public void WaitInvocationRecognizer_OpeningVerbOnLoaderBucket_InfersVisibleNotHidden()
+    {
+        var ctx = new InvocationContext(
+            MethodName: "WaitSpinnerShown",
+            ReceiverText: "Loader",
+            FullText: "Loader.WaitSpinnerShown()",
+            SourceLine: 22,
+            SymbolResolved: false,
+            ArgumentTexts: Array.Empty<string>());
+
+        var action = Assert.IsType<WaitForAction>(new WaitInvocationRecognizer().TryRecognize(ctx));
+
+        Assert.Equal(WaitForKind.ProductStateVisible, action.Kind);
+    }
+
+    // When a method name carries both an opening and a closing verb, direction must
+    // not be guessed — it must come back as ReviewRequired for a human/project profile.
+    [Fact]
+    public void WaitInvocationRecognizer_ConflictingVerbs_ReturnsReviewRequired()
+    {
+        var ctx = new InvocationContext(
+            MethodName: "WaitDialogOpenThenClosed",
+            ReceiverText: "Modal",
+            FullText: "Modal.WaitDialogOpenThenClosed()",
+            SourceLine: 23,
+            SymbolResolved: false,
+            ArgumentTexts: Array.Empty<string>());
+
+        var action = Assert.IsType<WaitForAction>(new WaitInvocationRecognizer().TryRecognize(ctx));
+
+        Assert.Equal(WaitForKind.ReviewRequired, action.Kind);
     }
 
     static TestFileModel CreateModel(TestAction action) => new(
