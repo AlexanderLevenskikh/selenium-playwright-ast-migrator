@@ -29,6 +29,8 @@ public sealed record LabFailureEvidence
     public string[] QualityIssues { get; init; } = Array.Empty<string>();
     public string[] OracleIssues { get; init; } = Array.Empty<string>();
     public string[] RunIssues { get; init; } = Array.Empty<string>();
+    public string[] RawEvidencePaths { get; init; } = Array.Empty<string>();
+    public string[] EvidenceBackedComponents { get; init; } = Array.Empty<string>();
     public string[] SuspectedComponents { get; init; } = Array.Empty<string>();
     public LabRegressionLevel RecommendedRegressionLevel { get; init; }
     public LabAutomationDisposition AutomationDisposition { get; init; }
@@ -96,6 +98,9 @@ public sealed record LabTaskPackManifest
     public string Classification { get; init; } = "";
     public string[] ScenarioIds { get; init; } = Array.Empty<string>();
     public string[] Evidence { get; init; } = Array.Empty<string>();
+    public string[] EvidenceArtifacts { get; init; } = Array.Empty<string>();
+    public string[] EvidenceBackedMigratorCode { get; init; } = Array.Empty<string>();
+    public string[] SuspectedMigratorComponents { get; init; } = Array.Empty<string>();
     public string[] RelevantMigratorCode { get; init; } = Array.Empty<string>();
     public string[] RelevantTests { get; init; } = Array.Empty<string>();
     public string[] Constraints { get; init; } = Array.Empty<string>();
@@ -132,13 +137,16 @@ public sealed record LabRealProjectEvidence
 
 public sealed record LabReleaseGateReport
 {
-    public string SchemaVersion { get; init; } = "migrator-lab-release-gate/v1";
+    public string SchemaVersion { get; init; } = "migrator-lab-release-gate/v2";
     public bool Passed { get; init; }
     public string StableRunPath { get; init; } = "";
+    public string ContractBaselinePath { get; init; } = "";
     public string RealEvidencePath { get; init; } = "";
     public int StableUnexpectedOutcomes { get; init; }
+    public int StableContractChanges { get; init; }
     public string RealProject { get; init; } = "";
     public string RealStatus { get; init; } = "";
+    public int VerifiedEvidenceArtifacts { get; init; }
     public long RealEvidenceAgeHours { get; init; }
     public int MaxAgeDays { get; init; }
     public string[] Issues { get; init; } = Array.Empty<string>();

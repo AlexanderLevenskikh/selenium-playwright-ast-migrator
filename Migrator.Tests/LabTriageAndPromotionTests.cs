@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Migrator.Lab;
 using Migrator.Lab.Contracts;
+using Migrator.Lab.Execution;
 using Migrator.Lab.Triage;
 
 namespace Migrator.Tests;
@@ -78,6 +79,112 @@ public sealed class LabTriageAndPromotionTests
             Assert.NotEmpty(manifest.RelevantTests);
             Assert.NotEmpty(manifest.DefinitionOfDone);
             Assert.Contains("todo=1", manifest.QualityBaseline, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TriageEvidencePaths_AreConfinedToRunArtifactsRoot()
+    {
+        var root = TempRoot();
+        try
+        {
+            var artifacts = Path.Combine(root, "artifacts");
+            Directory.CreateDirectory(artifacts);
+            var inside = Path.Combine(artifacts, "inside.log");
+            var outside = Path.Combine(root, "outside.log");
+            File.WriteAllText(inside, "inside");
+            File.WriteAllText(outside, "outside");
+
+            var project = CreateHealthyProject("p01-basic-id-login") with
+            {
+                Stages = new[]
+                {
+                    new LabStageResult
+                    {
+                        Stage = LabRunStage.TargetTest,
+                        Outcome = LabStageOutcome.Failed,
+                        StandardOutputPath = inside,
+                        StandardErrorPath = outside
+                    }
+                }
+            };
+
+            var evidence = LabFailureTriageService.DetermineRawEvidencePaths(project, artifacts);
+
+            Assert.Equal(new[] { Path.GetFullPath(inside) }, evidence);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Triage_RetainsRawEvidenceAndUsesEvidenceBackedCodeBeforeHeuristics()
+    {
+        var root = TempRoot();
+        try
+        {
+            var scenarioId = "p01-basic-id-login";
+            var projectArtifacts = Path.Combine(root, "projects", scenarioId);
+            Directory.CreateDirectory(projectArtifacts);
+            var stderrPath = Path.Combine(projectArtifacts, "target-test.stderr.log");
+            File.WriteAllText(
+                stderrPath,
+                "stack: at Migrator.SeleniumCSharp\\DefaultProjectAdapter.cs:line 42");
+
+            var original = CreateSemanticRegression(scenarioId);
+            var project = original.Projects[0] with
+            {
+                Stages = new[]
+                {
+                    new LabStageResult
+                    {
+                        Stage = LabRunStage.TargetTest,
+                        Outcome = LabStageOutcome.Passed,
+                        StandardErrorPath = stderrPath
+                    }
+                }
+            };
+            var run = original with
+            {
+                ArtifactsRoot = root,
+                Projects = new[] { project }
+            };
+            var taskRoot = Path.Combine(root, "task-packs");
+
+            var report = new LabFailureTriageService().Analyze(
+                run,
+                Path.Combine(root, "lab-summary.json"),
+                StableCorpusRoot(),
+                FindRepositoryRoot(),
+                taskRoot);
+
+            var finding = Assert.Single(report.Findings);
+            Assert.Contains(
+                "Migrator.SeleniumCSharp/DefaultProjectAdapter.cs",
+                finding.EvidenceBackedComponents);
+            Assert.Equal(LabAutomationDisposition.ManualReview, finding.AutomationDisposition);
+
+            var cluster = Assert.Single(report.Clusters);
+            Assert.Equal(LabAutomationDisposition.ManualReview, cluster.AutomationDisposition);
+            var manifestPath = Path.Combine(cluster.TaskPackDirectory!, "task-pack.json");
+            var manifest = JsonSerializer.Deserialize<LabTaskPackManifest>(File.ReadAllText(manifestPath), LabJson.Options)!;
+
+            var evidenceArtifact = Assert.Single(manifest.EvidenceArtifacts);
+            Assert.True(File.Exists(Path.Combine(cluster.TaskPackDirectory!, evidenceArtifact.Replace('/', Path.DirectorySeparatorChar))));
+            Assert.Contains("Migrator.SeleniumCSharp/DefaultProjectAdapter.cs", manifest.EvidenceBackedMigratorCode);
+            Assert.Contains("Migrator.SeleniumCSharp/DefaultProjectAdapter.cs", manifest.RelevantMigratorCode);
+            Assert.InRange(manifest.RelevantMigratorCode.Length, 1, 3);
+
+            var task = File.ReadAllText(Path.Combine(cluster.TaskPackDirectory!, "TASK.md"));
+            Assert.Contains("Retained evidence artifacts", task, StringComparison.Ordinal);
+            Assert.Contains("referenced by retained evidence", task, StringComparison.Ordinal);
+            Assert.Contains("triage hints, not proof", task, StringComparison.Ordinal);
         }
         finally
         {
@@ -204,12 +311,14 @@ public sealed class LabTriageAndPromotionTests
     }
 
     [Fact]
-    public void ReleaseGate_RequiresGreenStableRunAndFreshPassingRealProjectEvidence()
+    public void ReleaseGate_RequiresTrustedContractBaselineAndRetainedRealProjectEvidence()
     {
         var root = TempRoot();
         try
         {
             var now = new DateTimeOffset(2026, 8, 7, 18, 0, 0, TimeSpan.Zero);
+            var retainedArtifact = Path.Combine(root, "real-project-report.json");
+            File.WriteAllText(retainedArtifact, "{\"status\":\"PASS\"}");
             var evidencePath = Path.Combine(root, "real-project-evidence.json");
             File.WriteAllText(evidencePath, JsonSerializer.Serialize(new LabRealProjectEvidence
             {
@@ -218,25 +327,103 @@ public sealed class LabTriageAndPromotionTests
                 MigratorRevision = "migrator-def",
                 ExecutedAtUtc = now.AddDays(-2),
                 Status = "PASS",
-                EvidencePaths = new[] { "artifacts/real-project/report.json" }
+                EvidencePaths = new[] { retainedArtifact }
             }, LabJson.Options));
 
-            var stable = CreateRun(CreateHealthyProject("p01-basic-id-login"));
+            var tempCorpus = Path.Combine(root, "corpus");
+            var tempScenario = Path.Combine(tempCorpus, "p01-basic-id-login");
+            CopyDirectory(Path.Combine(StableCorpusRoot(), "p01-basic-id-login"), tempScenario);
+            var stable = CreateRun(CreateHealthyProject("p01-basic-id-login")) with { CorpusRoot = tempCorpus };
+            var trustedBaseline = LabBaselineService.Create(stable, "trusted-main");
             var service = new LabReleaseGateService();
-            var pass = service.Evaluate(stable, Path.Combine(root, "stable"), evidencePath, maxAgeDays: 14, now: now);
+            var pass = service.Evaluate(
+                stable,
+                Path.Combine(root, "stable"),
+                trustedBaseline,
+                Path.Combine(root, "trusted-baseline"),
+                evidencePath,
+                maxAgeDays: 14,
+                now: now);
             Assert.True(pass.Passed, string.Join(Environment.NewLine, pass.Issues));
+            Assert.Equal(0, pass.StableContractChanges);
+            Assert.Equal(1, pass.VerifiedEvidenceArtifacts);
 
-            var staleJson = JsonSerializer.Serialize(new LabRealProjectEvidence
+            var scenarioPath = Path.Combine(tempScenario, "scenario.json");
+            var originalScenario = File.ReadAllText(scenarioPath);
+            File.WriteAllText(scenarioPath, originalScenario.Replace("\"todoMax\": 0", "\"todoMax\": 1", StringComparison.Ordinal));
+            var changedAfterRun = service.Evaluate(
+                stable,
+                Path.Combine(root, "stable"),
+                trustedBaseline,
+                Path.Combine(root, "trusted-baseline"),
+                evidencePath,
+                maxAgeDays: 14,
+                now: now);
+            Assert.False(changedAfterRun.Passed);
+            Assert.Equal(1, changedAfterRun.StableContractChanges);
+            Assert.Contains(changedAfterRun.Issues, issue => issue.Contains("after the recorded run", StringComparison.OrdinalIgnoreCase));
+            File.WriteAllText(scenarioPath, originalScenario);
+
+            var changedContract = stable with
+            {
+                Projects = new[] { stable.Projects[0] with { ContractHash = "sha256:" + new string('b', 64) } }
+            };
+            var tampered = service.Evaluate(
+                changedContract,
+                Path.Combine(root, "stable"),
+                trustedBaseline,
+                Path.Combine(root, "trusted-baseline"),
+                evidencePath,
+                maxAgeDays: 14,
+                now: now);
+            Assert.False(tampered.Passed);
+            Assert.Equal(1, tampered.StableContractChanges);
+            Assert.Contains(tampered.Issues, issue => issue.Contains("contract changed", StringComparison.OrdinalIgnoreCase));
+
+            File.Delete(retainedArtifact);
+            var missingArtifact = service.Evaluate(
+                stable,
+                Path.Combine(root, "stable"),
+                trustedBaseline,
+                Path.Combine(root, "trusted-baseline"),
+                evidencePath,
+                maxAgeDays: 14,
+                now: now);
+            Assert.False(missingArtifact.Passed);
+            Assert.Equal(0, missingArtifact.VerifiedEvidenceArtifacts);
+            Assert.Contains(missingArtifact.Issues, issue => issue.Contains("does not exist", StringComparison.OrdinalIgnoreCase));
+
+            File.WriteAllText(retainedArtifact, "");
+            var emptyArtifact = service.Evaluate(
+                stable,
+                Path.Combine(root, "stable"),
+                trustedBaseline,
+                Path.Combine(root, "trusted-baseline"),
+                evidencePath,
+                maxAgeDays: 14,
+                now: now);
+            Assert.False(emptyArtifact.Passed);
+            Assert.Equal(0, emptyArtifact.VerifiedEvidenceArtifacts);
+            Assert.Contains(emptyArtifact.Issues, issue => issue.Contains("is empty", StringComparison.OrdinalIgnoreCase));
+
+            File.WriteAllText(retainedArtifact, "{\"status\":\"PASS\"}");
+            File.WriteAllText(evidencePath, JsonSerializer.Serialize(new LabRealProjectEvidence
             {
                 Project = "real-release-probe",
                 SourceRevision = "source-abc",
                 MigratorRevision = "migrator-def",
                 ExecutedAtUtc = now.AddDays(-30),
                 Status = "PASS",
-                EvidencePaths = new[] { "artifacts/real-project/report.json" }
-            }, LabJson.Options);
-            File.WriteAllText(evidencePath, staleJson);
-            var stale = service.Evaluate(stable, Path.Combine(root, "stable"), evidencePath, maxAgeDays: 14, now: now);
+                EvidencePaths = new[] { retainedArtifact }
+            }, LabJson.Options));
+            var stale = service.Evaluate(
+                stable,
+                Path.Combine(root, "stable"),
+                trustedBaseline,
+                Path.Combine(root, "trusted-baseline"),
+                evidencePath,
+                maxAgeDays: 14,
+                now: now);
             Assert.False(stale.Passed);
             Assert.Contains(stale.Issues, issue => issue.Contains("stale", StringComparison.OrdinalIgnoreCase));
 
@@ -247,13 +434,20 @@ public sealed class LabTriageAndPromotionTests
                 MigratorRevision = "migrator-def",
                 ExecutedAtUtc = now.AddDays(-1),
                 Status = "PASS",
-                EvidencePaths = new[] { "artifacts/real-project/report.json" }
+                EvidencePaths = new[] { retainedArtifact }
             }, LabJson.Options));
             var brokenStable = stable with
             {
                 Projects = new[] { stable.Projects[0] with { ActualStatus = ScenarioStatus.Regression } }
             };
-            var failedStable = service.Evaluate(brokenStable, Path.Combine(root, "stable"), evidencePath, maxAgeDays: 14, now: now);
+            var failedStable = service.Evaluate(
+                brokenStable,
+                Path.Combine(root, "stable"),
+                trustedBaseline,
+                Path.Combine(root, "trusted-baseline"),
+                evidencePath,
+                maxAgeDays: 14,
+                now: now);
             Assert.False(failedStable.Passed);
             Assert.Equal(1, failedStable.StableUnexpectedOutcomes);
         }
@@ -300,6 +494,7 @@ public sealed class LabTriageAndPromotionTests
         Id = id,
         ExpectedStatus = ScenarioStatus.Pass,
         ActualStatus = ScenarioStatus.Pass,
+        ContractHash = ContractHashFor(id),
         SourceTests = new LabSourceTestSummary { Passed = 1, ExpectedPassed = 1, Total = 1 },
         TargetTests = new LabSourceTestSummary { Passed = 1, ExpectedPassed = 1, Total = 1 },
         ProjectVerify = new LabProjectVerifySummary { ReportPresent = true, Status = "passed" },
@@ -317,6 +512,14 @@ public sealed class LabTriageAndPromotionTests
     };
 
     static string StableCorpusRoot() => Path.Combine(FindRepositoryRoot(), "corpus", "stable", "vertical-slice");
+
+    static string ContractHashFor(string id)
+    {
+        var scenarioFile = Path.Combine(StableCorpusRoot(), id, "scenario.json");
+        return File.Exists(scenarioFile)
+            ? ScenarioContractHasher.ComputeFile(scenarioFile)
+            : "sha256:" + new string('a', 64);
+    }
 
     static string TempRoot()
     {

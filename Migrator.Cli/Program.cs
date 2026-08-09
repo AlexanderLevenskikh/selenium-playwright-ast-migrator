@@ -17,6 +17,7 @@ using Migrator.Core.Profiles;
 using Migrator.Core.SourceFrontends;
 using Migrator.Core.Models;
 using Migrator.Core.Models.Ir;
+using Migrator.Lab.Execution;
 using Migrator.PlaywrightDotNet;
 using Migrator.PlaywrightTypeScript;
 using Migrator.Roslyn;
@@ -1660,8 +1661,11 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
 
     var generatedDir = Path.Combine(outPath, "generated");
     var harnessDir = Path.Combine(outPath, "project-verify");
-    Directory.CreateDirectory(generatedDir);
-    Directory.CreateDirectory(harnessDir);
+    // verify-project is intentionally rerunnable against the same --out directory.
+    // Recreate the generated/harness subtrees so renamed or removed source files and
+    // stale bin/obj outputs cannot leak into the next verification run.
+    RecreateDirectory(generatedDir);
+    RecreateDirectory(harnessDir);
 
     var writtenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     var generatedFiles = new List<string>();
@@ -1678,7 +1682,16 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
     var baseDir = ResolveVerificationBaseDirectory(verification, configPath, inputPath);
     var solutionPath = ResolveSolutionPath(verification, baseDir, inputPath);
     var projectDiscovery = ResolveProjectReferences(verification, baseDir, inputPath).ToList();
-    var projectReferences = projectDiscovery.Select(x => x.Path).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    var projectReferences = projectDiscovery
+        .Where(x => string.Equals(x.Status, "included", StringComparison.OrdinalIgnoreCase))
+        .Select(x => x.Path)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
+    var missingProjectReferences = projectDiscovery
+        .Where(x => string.Equals(x.Status, "missing", StringComparison.OrdinalIgnoreCase))
+        .ToArray();
+    foreach (var missing in missingProjectReferences)
+        Console.Error.WriteLine($"Warning: skipping missing project reference '{missing.Path}': {missing.Reason}");
     var assemblyReferences = ResolvePathList(verification.AssemblyReferences, baseDir).ToList();
     var discoveredBuildFiles = DiscoverBuildFiles(verification, baseDir, projectReferences).ToList();
     var centralPackageManagementDetected = discoveredBuildFiles.Any(x =>
@@ -1688,8 +1701,8 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
         .Except(importedBuildFiles, StringComparer.OrdinalIgnoreCase)
         .ToList();
     var localDirectoryPackagesPropsShimPath = WriteLocalDirectoryPackagesPropsShim(harnessDir, discoveredBuildFiles);
-    var targetFramework = ResolveVerificationTargetFramework(verification, projectReferences);
-    var packageReferences = BuildPackageReferences(verification, projectReferences, config).ToList();
+    var targetFramework = ResolveVerificationTargetFramework(verification, projectReferences, inputPath);
+    var packageReferences = BuildPackageReferences(verification, projectReferences, discoveredBuildFiles, config).ToList();
     var buildWorkingDirectory = ResolveBuildWorkingDirectory(verification, baseDir, solutionPath);
 
     var csprojPath = Path.Combine(harnessDir, "Generated.Playwright.Verify.csproj");
@@ -1716,11 +1729,20 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
         localDirectoryPackagesPropsShimPath);
 
     var buildResult = RunDotnetBuild(csprojPath, verification, buildWorkingDirectory);
+    var infrastructureFailure = InfrastructureFailureClassifier.IsInfrastructureFailure(
+        buildResult.ExitCode,
+        buildResult.StdOut,
+        buildResult.StdErr);
+    var verifyStatus = buildResult.ExitCode == 0
+        ? "passed"
+        : infrastructureFailure
+            ? "infrastructure-failure"
+            : "failed";
     var rawDiagnostics = ExtractBuildDiagnostics(buildResult.StdOut + "\n" + buildResult.StdErr);
     var classifiedDiagnostics = rawDiagnostics.Select(ClassifyBuildDiagnostic).ToArray();
     var report = new ProjectVerifyReport(
         GeneratedAtUtc: DateTimeOffset.UtcNow,
-        Status: buildResult.ExitCode == 0 ? "passed" : "failed",
+        Status: verifyStatus,
         ExitCode: buildResult.ExitCode,
         GeneratedFiles: generatedFiles.Select(Path.GetFullPath).ToArray(),
         HarnessProject: Path.GetFullPath(csprojPath),
@@ -1770,7 +1792,22 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
     }
     Console.WriteLine($"Project verify reports written to: {Path.GetFullPath(outPath)}");
 
-    return report.ExitCode == 0 ? 0 : 2;
+    // Preserve exit code 2 for genuine verification/compiler failures and expose
+    // infrastructure separately so shell automation can distinguish the failure
+    // without scraping human-readable build output.
+    return report.Status switch
+    {
+        "passed" => 0,
+        "infrastructure-failure" => 3,
+        _ => 2
+    };
+}
+
+static void RecreateDirectory(string path)
+{
+    if (Directory.Exists(path))
+        Directory.Delete(path, recursive: true);
+    Directory.CreateDirectory(path);
 }
 
 static string ResolveVerificationBaseDirectory(VerificationConfig verification, string? configPath, string inputPath)
@@ -1982,40 +2019,23 @@ static IEnumerable<string> ReadProjectReferences(string csprojPath)
     }
 }
 
-static string ResolveVerificationTargetFramework(VerificationConfig verification, IReadOnlyList<string> projectReferences)
+static string ResolveVerificationTargetFramework(VerificationConfig verification, IReadOnlyList<string> projectReferences, string inputPath)
 {
-    if (!string.IsNullOrWhiteSpace(verification.TargetFramework))
-        return verification.TargetFramework.Trim();
-
-    foreach (var project in projectReferences.Where(File.Exists))
+    // The project nearest to --input is the best available proxy for the source test
+    // project's execution context. Explicit/configured references can include shared
+    // libraries first, so discovery order must not decide the harness TFM.
+    string? preferredProject = null;
+    if (verification.AutoDiscoverNearestProject ?? true)
     {
-        var tfm = ReadTargetFramework(project);
-        if (!string.IsNullOrWhiteSpace(tfm))
-            return tfm!;
+        var nearest = FindNearestCsproj(inputPath);
+        if (nearest != null && projectReferences.Contains(nearest, StringComparer.OrdinalIgnoreCase))
+            preferredProject = nearest;
     }
 
-    return "net10.0";
-}
-
-static string? ReadTargetFramework(string csprojPath)
-{
-    try
-    {
-        var doc = XDocument.Load(csprojPath);
-        var targetFramework = doc.Descendants().FirstOrDefault(x => x.Name.LocalName == "TargetFramework")?.Value.Trim();
-        if (!string.IsNullOrWhiteSpace(targetFramework))
-            return targetFramework;
-
-        var targetFrameworks = doc.Descendants().FirstOrDefault(x => x.Name.LocalName == "TargetFrameworks")?.Value.Trim();
-        if (!string.IsNullOrWhiteSpace(targetFrameworks))
-            return targetFrameworks.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
-    }
-    catch
-    {
-        return null;
-    }
-
-    return null;
+    return VerificationProjectMetadataResolver.ResolveTargetFramework(
+        verification.TargetFramework,
+        preferredProject,
+        projectReferences);
 }
 
 static IEnumerable<string> DiscoverBuildFiles(VerificationConfig verification, string baseDir, IReadOnlyList<string> projectReferences)
@@ -2061,7 +2081,11 @@ static IEnumerable<string> SelectVerificationBuildFilesToImport(
     }
 }
 
-static IEnumerable<PackageReferenceConfig> BuildPackageReferences(VerificationConfig verification, IReadOnlyList<string> projectReferences, ProjectAdapterConfig config)
+static IEnumerable<PackageReferenceConfig> BuildPackageReferences(
+    VerificationConfig verification,
+    IReadOnlyList<string> projectReferences,
+    IReadOnlyList<string> discoveredBuildFiles,
+    ProjectAdapterConfig config)
 {
     var result = new List<PackageReferenceConfig>();
     if (verification.DisableDefaultPackageReferences != true)
@@ -2071,7 +2095,7 @@ static IEnumerable<PackageReferenceConfig> BuildPackageReferences(VerificationCo
     }
 
     if (verification.AutoDiscoverPackageReferences == true)
-        result.AddRange(ReadPackageReferences(projectReferences));
+        result.AddRange(VerificationProjectMetadataResolver.ReadPackageReferences(projectReferences, discoveredBuildFiles));
 
     var byInclude = new Dictionary<string, PackageReferenceConfig>(StringComparer.OrdinalIgnoreCase);
     foreach (var package in result.Concat(verification.PackageReferences))
@@ -2086,31 +2110,6 @@ static IEnumerable<PackageReferenceConfig> BuildPackageReferences(VerificationCo
     }
 
     return byInclude.Values.OrderBy(p => p.Include, StringComparer.OrdinalIgnoreCase);
-}
-
-static IEnumerable<PackageReferenceConfig> ReadPackageReferences(IEnumerable<string> projectReferences)
-{
-    foreach (var project in projectReferences.Where(File.Exists))
-    {
-        XDocument doc;
-        try
-        {
-            doc = XDocument.Load(project);
-        }
-        catch
-        {
-            continue;
-        }
-
-        foreach (var pr in doc.Descendants().Where(x => x.Name.LocalName == "PackageReference"))
-        {
-            var include = ((string?)pr.Attribute("Include"))?.Trim();
-            var version = ((string?)pr.Attribute("Version"))?.Trim()
-                ?? pr.Elements().FirstOrDefault(x => x.Name.LocalName == "Version")?.Value.Trim();
-            if (!string.IsNullOrWhiteSpace(include) && !string.IsNullOrWhiteSpace(version))
-                yield return new PackageReferenceConfig { Include = include!, Version = version! };
-        }
-    }
 }
 
 static string? WriteLocalDirectoryPackagesPropsShim(string harnessDir, IReadOnlyList<string> buildFiles)

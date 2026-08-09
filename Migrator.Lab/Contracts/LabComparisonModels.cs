@@ -26,6 +26,7 @@ public sealed record LabBaselineScenario
     public string Id { get; init; } = "";
     public ScenarioStatus ExpectedStatus { get; init; }
     public ScenarioStatus ActualStatus { get; init; }
+    public string ContractHash { get; init; } = "";
     public int SourcePassed { get; init; }
     public int SourceExpected { get; init; }
     public int TargetPassed { get; init; }

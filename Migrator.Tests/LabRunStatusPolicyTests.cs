@@ -21,6 +21,32 @@ public sealed class LabRunStatusPolicyTests
     }
 
     [Fact]
+    public void SourceTestAssertionContainingGenericNetworkText_IsSourceFailureNotInfrastructure()
+    {
+        var result = new LabProcessResult { ExitCode = 1 };
+
+        var outcome = LabRunStatusPolicy.ClassifySourceProcess(
+            LabRunStage.SourceTest,
+            result,
+            "Assert.Equal() Failure: expected error text 'connection timed out', actual 'request failed'");
+
+        Assert.Equal(LabStageOutcome.Failed, outcome);
+    }
+
+    [Fact]
+    public void SourceRestoreGenericNetworkText_RemainsInfrastructureFailure()
+    {
+        var result = new LabProcessResult { ExitCode = 1 };
+
+        var outcome = LabRunStatusPolicy.ClassifySourceProcess(
+            LabRunStage.SourceRestore,
+            result,
+            "restore failed: connection timed out");
+
+        Assert.Equal(LabStageOutcome.InfrastructureFailure, outcome);
+    }
+
+    [Fact]
     public void SourceBuildCompilerFailure_IsSourceFailure()
     {
         var result = new LabProcessResult { ExitCode = 1 };
@@ -31,6 +57,18 @@ public sealed class LabRunStatusPolicyTests
             "Tests.cs(10,2): error CS1002: ; expected");
 
         Assert.Equal(LabStageOutcome.Failed, outcome);
+    }
+
+    [Fact]
+    public void ProjectVerifyNuGetConnectivityFailure_IsInfrastructureFailure()
+    {
+        var result = new LabProcessResult { ExitCode = 1 };
+
+        var outcome = LabRunStatusPolicy.ClassifyProjectVerifyProcess(
+            result,
+            "error NU1301: Unable to load the service index for source https://api.nuget.org/v3/index.json");
+
+        Assert.Equal(LabStageOutcome.InfrastructureFailure, outcome);
     }
 
     [Fact]
@@ -187,6 +225,30 @@ public sealed class LabRunStatusPolicyTests
             LabRunStage.TargetTest,
             process,
             "Executable doesn't exist at C:/ms-playwright/chromium/headless_shell.exe. Please run playwright install.");
+
+        Assert.Equal(LabStageOutcome.InfrastructureFailure, outcome);
+    }
+
+    [Fact]
+    public void TargetTestAssertionContainingGenericNetworkText_IsRegressionSignalNotInfrastructure()
+    {
+        var process = new LabProcessResult { ExitCode = 1 };
+        var outcome = LabRunStatusPolicy.ClassifyTargetProcess(
+            LabRunStage.TargetTest,
+            process,
+            "NUnit assertion failed: expected message to contain 'connection timed out'");
+
+        Assert.Equal(LabStageOutcome.Failed, outcome);
+    }
+
+    [Fact]
+    public void TargetBuildGenericNetworkText_RemainsInfrastructureFailure()
+    {
+        var process = new LabProcessResult { ExitCode = 1 };
+        var outcome = LabRunStatusPolicy.ClassifyTargetProcess(
+            LabRunStage.TargetBuild,
+            process,
+            "restore/build failed: connection timed out");
 
         Assert.Equal(LabStageOutcome.InfrastructureFailure, outcome);
     }

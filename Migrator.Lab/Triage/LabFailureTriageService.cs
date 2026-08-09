@@ -20,6 +20,7 @@ public sealed class LabFailureTriageService
 
         var resolvedCorpus = Path.GetFullPath(corpusRoot);
         var resolvedRepository = Path.GetFullPath(repositoryRoot);
+        var resolvedRunArtifacts = ResolveRunArtifactsRoot(run, runPath);
         var catalog = ScenarioCatalog.Load(resolvedCorpus);
         if (catalog.HasErrors)
         {
@@ -54,7 +55,13 @@ public sealed class LabFailureTriageService
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            var components = SuspectedComponents(stage, diagnostics, semanticDiffKinds, features);
+            var rawEvidencePaths = DetermineRawEvidencePaths(project, resolvedRunArtifacts);
+            var evidenceBackedComponents = DiscoverEvidenceBackedComponents(rawEvidencePaths, resolvedRepository);
+            var components = evidenceBackedComponents
+                .Concat(SuspectedComponents(stage, diagnostics, semanticDiffKinds, features))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
             var regressionLevel = RecommendRegressionLevel(project, scenario, stage, features);
             var disposition = RecommendAutomationDisposition(project, stage, diagnostics, features, components);
             var scenarioDirectory = entry?.ScenarioDirectory ?? project.ScenarioDirectory;
@@ -75,6 +82,8 @@ public sealed class LabFailureTriageService
                 QualityIssues = project.Quality.Issues,
                 OracleIssues = project.Oracle.Issues,
                 RunIssues = project.Issues,
+                RawEvidencePaths = rawEvidencePaths,
+                EvidenceBackedComponents = evidenceBackedComponents,
                 SuspectedComponents = components,
                 RecommendedRegressionLevel = regressionLevel,
                 AutomationDisposition = disposition,
@@ -234,6 +243,108 @@ public sealed class LabFailureTriageService
             .ToArray();
     }
 
+    static string ResolveRunArtifactsRoot(LabSuiteRunResult run, string runPath)
+    {
+        if (!string.IsNullOrWhiteSpace(run.ArtifactsRoot))
+            return Path.GetFullPath(run.ArtifactsRoot);
+
+        var resolvedRunPath = Path.GetFullPath(runPath);
+        return Directory.Exists(resolvedRunPath)
+            ? resolvedRunPath
+            : Path.GetDirectoryName(resolvedRunPath) ?? Directory.GetCurrentDirectory();
+    }
+
+    internal static string[] DetermineRawEvidencePaths(LabScenarioRunResult project, string artifactsRoot)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentException.ThrowIfNullOrWhiteSpace(artifactsRoot);
+        var resolvedArtifactsRoot = Path.GetFullPath(artifactsRoot);
+
+        var stageArtifacts = project.Stages
+            .OrderBy(stage => stage.Outcome == LabStageOutcome.Passed ? 1 : 0)
+            .ThenByDescending(stage => stage.Stage)
+            .SelectMany(stage => new[] { stage.StandardErrorPath, stage.StandardOutputPath });
+
+        return stageArtifacts
+            .Concat(new[]
+            {
+                project.ProjectVerify.ReportPath,
+                project.Migration.VerifyReportPath,
+                project.Migration.OrchestrationReportPath
+            })
+            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            .Select(path => Path.GetFullPath(path!))
+            .Where(path => IsInsideRoot(resolvedArtifactsRoot, path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    static bool IsInsideRoot(string root, string candidate)
+    {
+        var normalizedRoot = Path.GetFullPath(root)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        var normalizedCandidate = Path.GetFullPath(candidate);
+        return normalizedCandidate.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Prefer source paths that are literally present in retained logs/reports over the
+    // static stage/feature heuristic. This remains conservative: only repository-relative
+    // production Migrator *.cs paths are accepted, and a file is evidence-backed only when
+    // that full relative path appears in the retained evidence. A basename coincidence is
+    // deliberately not enough.
+    internal static string[] DiscoverEvidenceBackedComponents(
+        IReadOnlyCollection<string> evidencePaths,
+        string repositoryRoot)
+    {
+        ArgumentNullException.ThrowIfNull(evidencePaths);
+        ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
+
+        var repository = Path.GetFullPath(repositoryRoot);
+        if (!Directory.Exists(repository) || evidencePaths.Count == 0)
+            return Array.Empty<string>();
+
+        const long maxEvidenceFileBytes = 2L * 1024 * 1024;
+        var texts = new List<string>();
+        foreach (var path in evidencePaths)
+        {
+            try
+            {
+                var full = Path.GetFullPath(path);
+                var info = new FileInfo(full);
+                if (!info.Exists || info.Length > maxEvidenceFileBytes)
+                    continue;
+                texts.Add(File.ReadAllText(full));
+            }
+            catch (IOException)
+            {
+                // Evidence discovery is additive. A transiently unreadable log must not
+                // prevent triage itself; the path remains available for task-pack copying.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Same rationale as above.
+            }
+        }
+
+        if (texts.Count == 0)
+            return Array.Empty<string>();
+
+        var combined = string.Join("\n", texts);
+        return Directory.EnumerateDirectories(repository, "Migrator.*", SearchOption.TopDirectoryOnly)
+            .Where(directory => !string.Equals(Path.GetFileName(directory), "Migrator.Tests", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(directory => Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories))
+            .Select(path => Path.GetRelativePath(repository, path).Replace('\\', '/'))
+            .Where(relative => !relative.Contains("/bin/", StringComparison.OrdinalIgnoreCase)
+                && !relative.Contains("/obj/", StringComparison.OrdinalIgnoreCase))
+            .Where(relative =>
+                combined.Contains(relative, StringComparison.OrdinalIgnoreCase)
+                || combined.Contains(relative.Replace('/', '\\'), StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     // Maximum number of distinct suspected components a cluster may span and still be
     // considered AUTO_FIX_ELIGIBLE. This budget must only ever be applied to the FULL,
     // deduplicated set of suspected components (see WithinAutoFixComponentBudget) — never
@@ -359,8 +470,8 @@ public sealed class LabFailureTriageService
         return "low";
     }
 
-    static string BuildReproCommand(string scenarioId, string corpusRoot) =>
-        $"dotnet run --project .\\Migrator.Cli -c Release --no-build -- lab replay --project {scenarioId} --corpus \"{corpusRoot}\" --out .\\artifacts\\lab\\repro-{scenarioId} --timeout-seconds 600 --configuration Release";
+    internal static string BuildReproCommand(string scenarioId, string corpusRoot) =>
+        $"dotnet run --project ./Migrator.Cli -c Release --no-build -- lab replay --project {scenarioId} --corpus \"{corpusRoot}\" --out ./artifacts/lab/repro-{scenarioId} --timeout-seconds 600 --configuration Release";
 
     static string ShortHash(string value)
     {

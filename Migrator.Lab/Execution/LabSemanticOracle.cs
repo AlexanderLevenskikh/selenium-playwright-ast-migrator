@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Migrator.Lab.Contracts;
 using Migrator.Lab.LabApp;
 
@@ -23,7 +24,7 @@ public static class LabSemanticOracle
             expectedTargetTests == 0 || (targetTests.Passed == expectedTargetTests && targetTests.Total == expectedTargetTests));
 
         var semantic = scenario.Oracle.Semantic;
-        var expectedEvents = ReadStringArray(semantic, "events");
+        var expectedEvents = ExpectedEvents(scenario);
         var observedEvents = observations.Select(item => item.Event).ToArray();
         if (expectedEvents.Length > 0)
         {
@@ -60,33 +61,39 @@ public static class LabSemanticOracle
                 EvaluateDomCheck(item, finalDom, AddCheck);
         }
 
-        var activeGenerated = ReadGeneratedSource(migration.GeneratedFiles, includeCommentLines: false);
+        var activeGeneratedLines = ReadGeneratedLines(migration.GeneratedFiles, includeCommentLines: false);
+        var activeGenerated = string.Join(Environment.NewLine, activeGeneratedLines);
         var allGenerated = ReadGeneratedSource(migration.GeneratedFiles, includeCommentLines: true);
         var expectedCount = ReadInt(semantic, "count");
         if (expectedCount.HasValue)
         {
-            var hasCountAssertion = activeGenerated.Contains(expectedCount.Value.ToString(), StringComparison.Ordinal)
-                && activeGenerated.Contains("Count", StringComparison.Ordinal);
-            AddCheck("generated-count-oracle", expectedCount.Value.ToString(), hasCountAssertion ? "active count check found" : "active count check missing", hasCountAssertion);
+            var hasCountAssertion = HasCountAssertion(activeGeneratedLines, expectedCount.Value);
+            AddCheck(
+                "generated-count-oracle",
+                $"ToHaveCountAsync({expectedCount.Value})",
+                hasCountAssertion ? "structured count assertion found" : "structured count assertion missing",
+                hasCountAssertion);
         }
 
         var orderedTexts = ReadStringArray(semantic, "orderedTexts");
-        foreach (var text in orderedTexts)
+        if (orderedTexts.Length > 0)
         {
+            var matchedTexts = MatchOrderedTextAssertions(activeGeneratedLines, orderedTexts);
             AddCheck(
                 "generated-ordered-text",
-                text,
-                activeGenerated.Contains(text, StringComparison.Ordinal) ? "active" : "missing-or-comment-only",
-                activeGenerated.Contains(text, StringComparison.Ordinal));
+                string.Join(" -> ", orderedTexts),
+                matchedTexts.Length == 0 ? "no structured text assertions found" : string.Join(" -> ", matchedTexts),
+                matchedTexts.Length == orderedTexts.Length);
         }
 
         foreach (var token in ReadStringArray(semantic, "generatedContains"))
         {
+            var found = HasGeneratedContainsEvidence(activeGeneratedLines, token);
             AddCheck(
                 "generated-contains",
                 token,
-                activeGenerated.Contains(token, StringComparison.Ordinal) ? "active" : "missing-or-comment-only",
-                activeGenerated.Contains(token, StringComparison.Ordinal));
+                found ? "structured active evidence found" : "structured active evidence missing",
+                found);
         }
 
         foreach (var token in ReadStringArray(semantic, "generatedNotContains"))
@@ -167,6 +174,72 @@ public static class LabSemanticOracle
                 issues.Add($"Semantic oracle failed ({kind}): expected {expected}; actual {actual}.");
         }
     }
+
+
+    internal static string[] ExpectedEvents(ScenarioSpec scenario) =>
+        ReadStringArray(scenario.Oracle.Semantic, "events");
+
+    static bool HasCountAssertion(IReadOnlyList<string> lines, int expectedCount)
+    {
+        var pattern = $@"\bToHaveCountAsync\s*\(\s*{expectedCount}\s*\)";
+        return lines.Any(line => Regex.IsMatch(line, pattern, RegexOptions.CultureInvariant));
+    }
+
+    static string[] MatchOrderedTextAssertions(IReadOnlyList<string> lines, IReadOnlyList<string> expectedTexts)
+    {
+        var matched = new List<string>();
+        var expectedIndex = 0;
+        foreach (var line in lines)
+        {
+            if (expectedIndex >= expectedTexts.Count || !IsTextAssertionLine(line))
+                continue;
+
+            var expected = expectedTexts[expectedIndex];
+            if (!ContainsCSharpStringLiteral(line, expected))
+                continue;
+
+            matched.Add(expected);
+            expectedIndex++;
+        }
+        return matched.ToArray();
+    }
+
+    static bool HasGeneratedContainsEvidence(IReadOnlyList<string> lines, string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return false;
+
+        // Lower-case/plain-text tokens in the current contract represent assertion payloads
+        // (for example "beta" or "ready"). Requiring an assertion-bearing line avoids
+        // a false PASS when the same literal merely survives in unrelated generated code.
+        if (char.IsLower(token[0]) || token.Any(ch => char.IsWhiteSpace(ch)))
+            return lines.Any(line => IsAssertionLine(line) && ContainsCSharpStringLiteral(line, token));
+
+        // Identifier-like metadata tokens (TestCaseSource, Retry, Parallelizable, ...) are
+        // matched on C# token boundaries instead of raw substring containment.
+        var pattern = $@"(?<![A-Za-z0-9_]){Regex.Escape(token)}(?![A-Za-z0-9_])";
+        return lines.Any(line => Regex.IsMatch(line, pattern, RegexOptions.CultureInvariant));
+    }
+
+    static bool IsTextAssertionLine(string line) =>
+        line.Contains("ToHaveTextAsync", StringComparison.Ordinal)
+        || line.Contains("ToContainTextAsync", StringComparison.Ordinal);
+
+    static bool IsAssertionLine(string line) =>
+        line.Contains("Expect(", StringComparison.Ordinal)
+        || line.Contains("Assert.That(", StringComparison.Ordinal)
+        || line.Contains(".Should()", StringComparison.Ordinal);
+
+    static bool ContainsCSharpStringLiteral(string line, string value) =>
+        line.Contains("\"" + EscapeCSharpString(value) + "\"", StringComparison.Ordinal);
+
+    static string EscapeCSharpString(string value) =>
+        value
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\"", "\\\"", StringComparison.Ordinal)
+            .Replace("\r", "\\r", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal)
+            .Replace("\t", "\\t", StringComparison.Ordinal);
 
     static void EvaluateHarnessEvidence(
         string expected,
@@ -254,7 +327,10 @@ public static class LabSemanticOracle
             addCheck("dom-checked", $"{selector}={expectedChecked.Value}", state.Checked.ToString(), state.Checked == expectedChecked.Value);
     }
 
-    static string ReadGeneratedSource(IEnumerable<string> files, bool includeCommentLines)
+    static string ReadGeneratedSource(IEnumerable<string> files, bool includeCommentLines) =>
+        string.Join(Environment.NewLine, ReadGeneratedLines(files, includeCommentLines));
+
+    static string[] ReadGeneratedLines(IEnumerable<string> files, bool includeCommentLines)
     {
         var lines = new List<string>();
         foreach (var file in files.Where(File.Exists))
@@ -266,7 +342,7 @@ public static class LabSemanticOracle
                 lines.Add(line);
             }
         }
-        return string.Join(Environment.NewLine, lines);
+        return lines.ToArray();
     }
 
     static bool IsOrderedSubsequence(IReadOnlyList<string> expected, IReadOnlyList<string> actual)

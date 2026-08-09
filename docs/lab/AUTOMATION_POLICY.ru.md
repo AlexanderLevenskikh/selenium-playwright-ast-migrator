@@ -61,4 +61,4 @@
 - `PASS`/`FAIL`;
 - ссылками/путями на retained evidence.
 
-`lab release-gate` принимает релиз только если stable corpus зелёный, real-project evidence имеет `PASS` и не старше заданного окна (по умолчанию 14 дней).
+`lab release-gate` принимает релиз только если stable corpus зелёный, его scenario-контракты совпадают с явно переданным trusted baseline, а real-project evidence имеет `PASS`, не старше заданного окна (по умолчанию 14 дней) и ссылается на существующие непустые retained artifacts. Trusted baseline должен быть получен из защищённой ветки/CI artifact, а не создан заново из проверяемого working tree.

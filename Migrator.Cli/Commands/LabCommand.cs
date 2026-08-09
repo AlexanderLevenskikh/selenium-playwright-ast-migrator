@@ -598,6 +598,7 @@ internal static class LabCommand
         }
 
         string? stableRunPath = null;
+        string? contractBaselinePath = null;
         string? realEvidencePath = null;
         var output = Path.Combine("artifacts", "lab", "release-gate");
         var maxAgeDays = 14;
@@ -607,6 +608,10 @@ internal static class LabCommand
             {
                 case "--stable-run":
                     if (!TryReadValue(args, ref index, out stableRunPath))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--contract-baseline":
+                    if (!TryReadValue(args, ref index, out contractBaselinePath))
                         return LabExitCodes.LabError;
                     break;
                 case "--real-evidence":
@@ -630,18 +635,27 @@ internal static class LabCommand
             }
         }
 
-        if (string.IsNullOrWhiteSpace(stableRunPath) || string.IsNullOrWhiteSpace(realEvidencePath))
+        if (string.IsNullOrWhiteSpace(stableRunPath)
+            || string.IsNullOrWhiteSpace(contractBaselinePath)
+            || string.IsNullOrWhiteSpace(realEvidencePath))
         {
-            Console.Error.WriteLine("lab release-gate requires --stable-run <run> and --real-evidence <json>.");
+            Console.Error.WriteLine("lab release-gate requires --stable-run <run>, --contract-baseline <baseline>, and --real-evidence <json>.");
             return LabExitCodes.LabError;
         }
 
         try
         {
             var stable = LabRunArtifactLoader.LoadRun(stableRunPath);
-            var report = new LabReleaseGateService().Evaluate(stable, stableRunPath, realEvidencePath, maxAgeDays);
+            var contractBaseline = LabRunArtifactLoader.LoadBaseline(contractBaselinePath);
+            var report = new LabReleaseGateService().Evaluate(
+                stable,
+                stableRunPath,
+                contractBaseline,
+                contractBaselinePath,
+                realEvidencePath,
+                maxAgeDays);
             LabReleaseGateReportWriter.Write(report, output);
-            Console.WriteLine($"Migrator Lab release gate: {(report.Passed ? "PASS" : "FAIL")} — stable unexpected={report.StableUnexpectedOutcomes}, real={report.RealStatus}, evidence age={report.RealEvidenceAgeHours}h.");
+            Console.WriteLine($"Migrator Lab release gate: {(report.Passed ? "PASS" : "FAIL")} — stable unexpected={report.StableUnexpectedOutcomes}, contract changes={report.StableContractChanges}, real={report.RealStatus}, evidence={report.VerifiedEvidenceArtifacts}, age={report.RealEvidenceAgeHours}h.");
             foreach (var issue in report.Issues)
                 Console.WriteLine($"  {issue}");
             Console.WriteLine($"Reports: {Path.GetFullPath(output)}");
@@ -1042,7 +1056,7 @@ internal static class LabCommand
         Console.WriteLine("  selenium-pw-migrator lab reduce --candidate <path> [options]");
         Console.WriteLine("  selenium-pw-migrator lab triage --run <run> [options]");
         Console.WriteLine("  selenium-pw-migrator lab promote --repro <path> --level <level> [options]");
-        Console.WriteLine("  selenium-pw-migrator lab release-gate --stable-run <run> --real-evidence <json> [options]");
+        Console.WriteLine("  selenium-pw-migrator lab release-gate --stable-run <run> --contract-baseline <baseline> --real-evidence <json> [options]");
         Console.WriteLine("  selenium-pw-migrator lab validate [options]");
         Console.WriteLine("  selenium-pw-migrator lab list [options]");
         Console.WriteLine("  selenium-pw-migrator lab app serve [options]");
@@ -1162,11 +1176,13 @@ internal static class LabCommand
     static void WriteReleaseGateHelp()
     {
         Console.WriteLine("Usage:");
-        Console.WriteLine("  selenium-pw-migrator lab release-gate --stable-run <run> --real-evidence <json> [options]");
+        Console.WriteLine("  selenium-pw-migrator lab release-gate --stable-run <run> --contract-baseline <baseline> --real-evidence <json> [options]");
         Console.WriteLine();
         Console.WriteLine("Options:");
-        Console.WriteLine("  --out <path>          Release-gate report directory.");
-        Console.WriteLine("  --max-age-days <n>    Maximum accepted age of real-project evidence (default: 14).");
+        Console.WriteLine("  --contract-baseline <path>  Baseline created from a trusted/protected corpus revision.");
+        Console.WriteLine("  --out <path>                Release-gate report directory.");
+        Console.WriteLine("  --max-age-days <n>          Maximum accepted age of real-project evidence (default: 14).");
+        Console.WriteLine("The contract baseline is the trust root: do not regenerate it from the same unreviewed working tree being gated.");
         Console.WriteLine("This command is intended for rare release validation, not every PR.");
     }
 

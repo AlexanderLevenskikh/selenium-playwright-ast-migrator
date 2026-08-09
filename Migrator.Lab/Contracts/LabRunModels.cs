@@ -156,6 +156,7 @@ public sealed record LabScenarioRunResult
     public string Id { get; init; } = "";
     public ScenarioStatus ExpectedStatus { get; init; }
     public ScenarioStatus ActualStatus { get; init; }
+    public string ContractHash { get; init; } = "";
     public string ScenarioDirectory { get; init; } = "";
     public string ArtifactsDirectory { get; init; } = "";
     public string? WorkspaceDirectory { get; init; }

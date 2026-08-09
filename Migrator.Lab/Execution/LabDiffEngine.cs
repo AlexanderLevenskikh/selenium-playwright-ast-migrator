@@ -78,6 +78,14 @@ public static class LabDiffEngine
         if (baseline.ExpectedStatus != current.ExpectedStatus)
             regressions.Add($"Expected contract changed: {baseline.ExpectedStatus} -> {current.ExpectedStatus}. Update the baseline explicitly if this change is intentional.");
 
+        if (!string.IsNullOrWhiteSpace(baseline.ContractHash))
+        {
+            if (string.IsNullOrWhiteSpace(current.ContractHash))
+                regressions.Add("Current scenario is missing its contract fingerprint.");
+            else if (!string.Equals(baseline.ContractHash, current.ContractHash, StringComparison.OrdinalIgnoreCase))
+                regressions.Add("Scenario contract fingerprint changed. Update the trusted baseline explicitly if this change is intentional.");
+        }
+
         var baselineSatisfied = ContractSatisfied(baseline);
         var currentSatisfied = ContractSatisfied(current);
         if (baselineSatisfied && !currentSatisfied)

@@ -59,12 +59,13 @@ task-packs/<cluster>/
 
 ### `lab release-gate`
 
-Редкий pre-release gate объединяет два доказательства:
+Редкий pre-release gate объединяет три доказательства:
 
 1. stable lab run без неожиданных outcomes;
-2. свежий `PASS` evidence от настоящего проекта.
+2. отсутствие изменений scenario-контрактов относительно явно переданного **trusted contract baseline**;
+3. свежий `PASS` evidence от настоящего проекта, чьи retained evidence-файлы существуют и не пусты.
 
-По умолчанию evidence старше 14 дней отклоняется. Gate не предназначен для каждого PR.
+Trusted baseline должен приходить из защищённой ветки/CI artifact. Его нельзя пересоздавать из того же непроверенного working tree, который сейчас проходит gate — иначе он перестаёт быть trust root. По умолчанию real-project evidence старше 14 дней отклоняется. Gate не предназначен для каждого PR.
 
 ## Политика автоматизации
 

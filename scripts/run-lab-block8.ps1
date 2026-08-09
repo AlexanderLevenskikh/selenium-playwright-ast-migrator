@@ -142,10 +142,22 @@ try {
     }
     $realEvidence | ConvertTo-Json -Depth 20 | Set-Content $realEvidencePath -Encoding UTF8
 
+    # Synthetic Block 8 contract probe: production release jobs must supply a baseline
+    # retained from a protected/trusted branch or CI artifact, not regenerate it from
+    # the same unreviewed working tree being gated.
+    $contractBaseline = Join-Path $Artifacts "contract-baseline"
+    dotnet run --project Migrator.Cli -c $Configuration --no-build -- `
+        lab baseline `
+        --input $cleanRun `
+        --out $contractBaseline `
+        --label block-08-trusted-probe
+    if ($LASTEXITCODE -ne 0) { throw "lab baseline failed with exit code $LASTEXITCODE" }
+
     $releaseGate = Join-Path $Artifacts "release-gate"
     dotnet run --project Migrator.Cli -c $Configuration --no-build -- `
         lab release-gate `
         --stable-run $cleanRun `
+        --contract-baseline $contractBaseline `
         --real-evidence $realEvidencePath `
         --out $releaseGate `
         --max-age-days 14

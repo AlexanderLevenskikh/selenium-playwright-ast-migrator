@@ -179,7 +179,7 @@ public class CliProductizationTests
         Assert.Contains("--static-only", program);
         Assert.Contains("ApplyTargetTestFrameworkOverride", program);
         Assert.Contains("TargetTestFramework = targetTestFramework ?? \"nunit\"", program);
-        Assert.Contains("BuildPackageReferences(verification, projectReferences, config)", program);
+        Assert.Contains("BuildPackageReferences(verification, projectReferences, discoveredBuildFiles, config)", program);
         Assert.Contains("Microsoft.Playwright.Xunit", program);
         Assert.Contains("string? TargetTestFramework", models);
         Assert.Contains("ReportServeDashboardReport", models);

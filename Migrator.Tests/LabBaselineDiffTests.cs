@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Migrator.Lab;
 using Migrator.Lab.Contracts;
 using Migrator.Lab.Execution;
 using Migrator.Lab.Reports;
@@ -45,6 +46,37 @@ public sealed class LabBaselineDiffTests
         }
     }
 
+
+    [Fact]
+    public void ScenarioContractFingerprint_IgnoresJsonFormattingAndDetectsBudgetChanges()
+    {
+        const string first = """
+        {
+          "expected": { "status": "PASS" },
+          "qualityBudget": { "todoMax": 0, "warningsMax": 0 }
+        }
+        """;
+        const string sameContractDifferentFormatting = """
+        {"qualityBudget":{"warningsMax":0,"todoMax":0},"expected":{"status":"PASS"}}
+        """;
+        const string changedBudget = """
+        {"qualityBudget":{"warningsMax":0,"todoMax":1},"expected":{"status":"PASS"}}
+        """;
+        const string changedExpectedStatus = """
+        {"qualityBudget":{"warningsMax":0,"todoMax":0},"expected":{"status":"UNSUPPORTED_AS_EXPECTED"}}
+        """;
+
+        Assert.Equal(
+            ScenarioContractHasher.ComputeJson(first),
+            ScenarioContractHasher.ComputeJson(sameContractDifferentFormatting));
+        Assert.NotEqual(
+            ScenarioContractHasher.ComputeJson(first),
+            ScenarioContractHasher.ComputeJson(changedBudget));
+        Assert.NotEqual(
+            ScenarioContractHasher.ComputeJson(first),
+            ScenarioContractHasher.ComputeJson(changedExpectedStatus));
+    }
+
     [Fact]
     public void DiagnosticNormalization_RemovesRunRootsTempGuidsAndTimestamps()
     {
@@ -56,6 +88,28 @@ public sealed class LabBaselineDiffTests
         Assert.Equal(
             LabComparisonNormalizer.NormalizeText(first, firstRoot),
             LabComparisonNormalizer.NormalizeText(second, secondRoot));
+    }
+
+    [Fact]
+    public void Diff_DetectsScenarioContractFingerprintChange()
+    {
+        var root = TempRoot();
+        try
+        {
+            var baselineRun = CreateRun(root, "baseline-contract", todo: 0, durationMs: 100, actualStatus: ScenarioStatus.Pass, diagnostic: null, contractHash: "sha256:" + new string('a', 64));
+            var currentRun = CreateRun(root, "current-contract", todo: 0, durationMs: 100, actualStatus: ScenarioStatus.Pass, diagnostic: null, contractHash: "sha256:" + new string('b', 64));
+            var baseline = LabBaselineService.Create(baselineRun, "trusted-main");
+
+            var diff = LabDiffEngine.Compare(baseline, currentRun, root, root, durationRegressionPercent: 20);
+
+            var project = Assert.Single(diff.Projects);
+            Assert.True(project.IsRegression);
+            Assert.Contains(project.Reasons, reason => reason.Contains("contract fingerprint changed", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]
@@ -155,7 +209,8 @@ public sealed class LabBaselineDiffTests
         long durationMs,
         ScenarioStatus actualStatus,
         string? diagnostic,
-        bool alternateFormatting = false)
+        bool alternateFormatting = false,
+        string? contractHash = null)
     {
         var generatedRoot = Path.Combine(root, name, "generated");
         Directory.CreateDirectory(generatedRoot);
@@ -180,6 +235,7 @@ public sealed class LabBaselineDiffTests
                     Id = "p01",
                     ExpectedStatus = ScenarioStatus.Pass,
                     ActualStatus = actualStatus,
+                    ContractHash = contractHash ?? "",
                     ArtifactsDirectory = projectArtifacts,
                     DurationMs = durationMs,
                     SourceTests = new LabSourceTestSummary { Passed = 1, ExpectedPassed = 1 },

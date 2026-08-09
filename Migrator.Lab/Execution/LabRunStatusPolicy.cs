@@ -4,22 +4,6 @@ namespace Migrator.Lab.Execution;
 
 public static class LabRunStatusPolicy
 {
-    static readonly string[] GeneralInfrastructureMarkers =
-    {
-        "no .net sdks were found",
-        "the command could not be loaded",
-        "a compatible installed .net sdk",
-        "unable to load the service index",
-        "nu1301",
-        "cannot connect to proxy",
-        "proxyerror",
-        "name or service not known",
-        "temporary failure in name resolution",
-        "connection timed out",
-        "network is unreachable",
-        "no such host is known"
-    };
-
     static readonly string[] BrowserInfrastructureMarkers =
     {
         "unable to obtain driver",
@@ -56,8 +40,16 @@ public static class LabRunStatusPolicy
         if (result.ExitCode == 0)
             return LabStageOutcome.Passed;
 
-        if (ContainsAny(combinedOutput, GeneralInfrastructureMarkers))
+        // Source tests run with --no-build --no-restore. Treating arbitrary test output
+        // as build/network infrastructure evidence can mask a real source failure when
+        // an assertion happens to contain text such as "connection timed out". General
+        // environment markers are therefore only authoritative for restore/build; the
+        // test stage keeps the narrower browser-launch classification below.
+        if ((stage is LabRunStage.SourceRestore or LabRunStage.SourceBuild)
+            && InfrastructureFailureClassifier.ContainsGeneralInfrastructureMarker(combinedOutput))
+        {
             return LabStageOutcome.InfrastructureFailure;
+        }
         if (stage == LabRunStage.SourceTest && ContainsAny(combinedOutput, BrowserInfrastructureMarkers))
             return LabStageOutcome.InfrastructureFailure;
 
@@ -74,7 +66,7 @@ public static class LabRunStatusPolicy
             return LabStageOutcome.InfrastructureFailure;
         if (result.ExitCode == 0)
             return LabStageOutcome.Passed;
-        if (ContainsAny(combinedOutput, GeneralInfrastructureMarkers))
+        if (InfrastructureFailureClassifier.ContainsGeneralInfrastructureMarker(combinedOutput))
             return LabStageOutcome.InfrastructureFailure;
         return LabStageOutcome.Failed;
     }
@@ -90,8 +82,15 @@ public static class LabRunStatusPolicy
             return LabStageOutcome.InfrastructureFailure;
         if (result.ExitCode == 0)
             return LabStageOutcome.Passed;
-        if (ContainsAny(combinedOutput, GeneralInfrastructureMarkers))
+        // Target tests also run with --no-build --no-restore. A user/test assertion may
+        // legitimately contain generic network words, so only target-build output may
+        // use the broad infrastructure marker set. Browser bootstrap failures remain a
+        // separate, explicit test-stage infrastructure signal.
+        if (stage == LabRunStage.TargetBuild
+            && InfrastructureFailureClassifier.ContainsGeneralInfrastructureMarker(combinedOutput))
+        {
             return LabStageOutcome.InfrastructureFailure;
+        }
         if (stage == LabRunStage.TargetTest && ContainsAny(combinedOutput, BrowserInfrastructureMarkers))
             return LabStageOutcome.InfrastructureFailure;
         return LabStageOutcome.Failed;

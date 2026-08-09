@@ -137,6 +137,40 @@ public sealed class LabAppTests
         Assert.True(observations[1].Dom["result"].Visible);
     }
 
+
+    [Fact]
+    public async Task Host_WaitsForExpectedEventsBeyondFormerFixedDelay()
+    {
+        await using var host = await LabAppHost.StartAsync();
+        using var client = new HttpClient { BaseAddress = host.BaseUri };
+
+        var waitTask = host.WaitForExpectedEventsAsync(
+            new[] { "auth:attempt", "auth:success" },
+            TimeSpan.FromSeconds(2));
+
+        await Task.Delay(300);
+
+        var attemptPayload = """
+        {"sequence":1,"observedAtUtc":"2026-08-09T05:00:00.001Z","event":"auth:attempt","path":"/login","dom":{}}
+        """;
+        var successPayload = """
+        {"sequence":2,"observedAtUtc":"2026-08-09T05:00:00.002Z","event":"auth:success","path":"/login","dom":{}}
+        """;
+
+        using var attemptResponse = await client.PostAsync(
+            "__lab/events",
+            new StringContent(attemptPayload, System.Text.Encoding.UTF8, "application/json"));
+        using var successResponse = await client.PostAsync(
+            "__lab/events",
+            new StringContent(successPayload, System.Text.Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.Accepted, attemptResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, successResponse.StatusCode);
+
+        var observations = await waitTask;
+        Assert.Equal(new[] { "auth:attempt", "auth:success" }, observations.Select(item => item.Event).ToArray());
+    }
+
     [Fact]
     public void Catalog_ServesFramePopupAndDownloadInfrastructureForNightlyScenarios()
     {

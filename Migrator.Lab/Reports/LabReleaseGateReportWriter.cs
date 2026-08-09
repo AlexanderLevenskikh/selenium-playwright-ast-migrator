@@ -18,8 +18,11 @@ public static class LabReleaseGateReportWriter
             "",
             $"- **Result:** {(report.Passed ? "PASS" : "FAIL")}",
             $"- **Stable unexpected outcomes:** {report.StableUnexpectedOutcomes}",
+            $"- **Stable contract changes:** {report.StableContractChanges}",
+            $"- **Trusted contract baseline:** `{report.ContractBaselinePath}`",
             $"- **Real project:** `{report.RealProject}`",
             $"- **Real status:** `{report.RealStatus}`",
+            $"- **Verified evidence artifacts:** {report.VerifiedEvidenceArtifacts}",
             $"- **Evidence age:** {report.RealEvidenceAgeHours} h (max {report.MaxAgeDays} days)",
             ""
         };

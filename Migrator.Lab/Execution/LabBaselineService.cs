@@ -25,6 +25,7 @@ public static class LabBaselineService
                     Id = project.Id,
                     ExpectedStatus = project.ExpectedStatus,
                     ActualStatus = project.ActualStatus,
+                    ContractHash = project.ContractHash,
                     SourcePassed = project.SourceTests.Passed,
                     SourceExpected = project.SourceTests.ExpectedPassed,
                     TargetPassed = project.TargetTests.Passed,
@@ -48,4 +49,5 @@ public static class LabBaselineService
                 .ToArray()
         };
     }
+
 }

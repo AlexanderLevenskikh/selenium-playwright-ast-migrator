@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -28,6 +29,51 @@ public sealed class LabAppHost : IAsyncDisposable
     public void ResetObservations() => observationStore.Reset();
 
     public LabAppObservation[] SnapshotObservations() => observationStore.Snapshot();
+
+    public async Task<LabAppObservation[]> WaitForExpectedEventsAsync(
+        IReadOnlyList<string> expectedEvents,
+        TimeSpan timeout,
+        CancellationToken cancellationToken = default)
+    {
+        if (expectedEvents.Count == 0)
+            return SnapshotObservations();
+        if (timeout < TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(timeout));
+
+        var stopwatch = Stopwatch.StartNew();
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var snapshot = SnapshotObservations();
+            if (ContainsOrderedEvents(expectedEvents, snapshot))
+                return snapshot;
+
+            var remaining = timeout - stopwatch.Elapsed;
+            if (remaining <= TimeSpan.Zero)
+                return snapshot;
+
+            var delay = remaining < TimeSpan.FromMilliseconds(25)
+                ? remaining
+                : TimeSpan.FromMilliseconds(25);
+            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    static bool ContainsOrderedEvents(
+        IReadOnlyList<string> expectedEvents,
+        IReadOnlyList<LabAppObservation> observations)
+    {
+        var expectedIndex = 0;
+        foreach (var observation in observations)
+        {
+            if (expectedIndex < expectedEvents.Count
+                && string.Equals(expectedEvents[expectedIndex], observation.Event, StringComparison.Ordinal))
+            {
+                expectedIndex++;
+            }
+        }
+        return expectedIndex == expectedEvents.Count;
+    }
 
     public static Task<LabAppHost> StartAsync(int port = 0, CancellationToken cancellationToken = default)
     {

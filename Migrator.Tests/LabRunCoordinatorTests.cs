@@ -30,6 +30,7 @@ public sealed class LabRunCoordinatorTests
             Assert.Equal(ScenarioStatus.Pass, project.ActualStatus);
             Assert.Equal(1, project.SourceTests.Passed);
             Assert.Equal(1, project.TargetTests.Passed);
+            Assert.Matches("^sha256:[0-9a-f]{64}$", project.ContractHash);
             Assert.True(project.SourceContentPreserved);
             Assert.True(project.ProjectVerify.ReportPresent);
             Assert.True(project.Quality.Passed);
@@ -42,6 +43,7 @@ public sealed class LabRunCoordinatorTests
             var summaryJson = File.ReadAllText(summaryJsonPath);
             Assert.Contains("\"schemaVersion\": \"migrator-lab-run/v2\"", summaryJson);
             Assert.Contains("\"actualStatus\": \"PASS\"", summaryJson);
+            Assert.Contains("\"contractHash\": \"sha256:", summaryJson);
             Assert.True(File.Exists(Path.Combine(project.ArtifactsDirectory, "scenario-result.json")));
             Assert.True(File.Exists(Path.Combine(project.ArtifactsDirectory, "source", "source-validation.json")));
             Assert.True(File.Exists(Path.Combine(project.ArtifactsDirectory, "target", "runtime-validation.json")));

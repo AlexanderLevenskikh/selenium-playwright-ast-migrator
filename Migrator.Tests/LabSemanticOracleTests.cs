@@ -175,6 +175,94 @@ public sealed class LabSemanticOracleTests
         }
     }
 
+
+    [Fact]
+    public void Oracle_RejectsUnrelatedCodeThatOnlyMimicsCountAndOrderedTextTokens()
+    {
+        var scenario = LoadScenario("p04-findelements-count-text");
+        var generated = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(generated, """
+            var unrelatedCount = 3;
+            var unrelatedDescription = "alpha beta gamma";
+            """);
+
+            var result = LabSemanticOracle.Evaluate(
+                scenario,
+                new LabSourceTestSummary { ExpectedPassed = 1, Total = 1, Passed = 1 },
+                new LabMigrationSummary { GeneratedFiles = new[] { generated } },
+                new LabProjectVerifySummary { ReportPresent = true, Status = "passed" },
+                Array.Empty<LabAppObservation>());
+
+            Assert.False(result.Passed);
+            Assert.Contains(result.Checks, check => check.Kind == "generated-count-oracle" && !check.Passed);
+            Assert.Contains(result.Checks, check => check.Kind == "generated-ordered-text" && !check.Passed);
+        }
+        finally
+        {
+            File.Delete(generated);
+        }
+    }
+
+    [Fact]
+    public void Oracle_AcceptsStructuredCountAndOrderedTextAssertions()
+    {
+        var scenario = LoadScenario("p04-findelements-count-text");
+        var generated = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(generated, """
+            await Expect(items).ToHaveCountAsync(3);
+            await Expect(items.Nth(0)).ToHaveTextAsync("alpha");
+            await Expect(items.Nth(1)).ToHaveTextAsync("beta");
+            await Expect(items.Nth(2)).ToHaveTextAsync("gamma");
+            """);
+
+            var result = LabSemanticOracle.Evaluate(
+                scenario,
+                new LabSourceTestSummary { ExpectedPassed = 1, Total = 1, Passed = 1 },
+                new LabMigrationSummary { GeneratedFiles = new[] { generated } },
+                new LabProjectVerifySummary { ReportPresent = true, Status = "passed" },
+                Array.Empty<LabAppObservation>());
+
+            Assert.True(result.Passed);
+            Assert.Contains(result.Checks, check => check.Kind == "generated-count-oracle" && check.Passed);
+            Assert.Contains(result.Checks, check => check.Kind == "generated-ordered-text" && check.Passed);
+        }
+        finally
+        {
+            File.Delete(generated);
+        }
+    }
+
+    [Fact]
+    public void Oracle_RejectsGeneratedContainsTextWhenLiteralIsNotAssertionEvidence()
+    {
+        var scenario = LoadScenario("p03-xpath-text-assert");
+        var generated = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(generated, """
+            var unrelatedDescription = "beta";
+            """);
+
+            var result = LabSemanticOracle.Evaluate(
+                scenario,
+                new LabSourceTestSummary { ExpectedPassed = 1, Total = 1, Passed = 1 },
+                new LabMigrationSummary { GeneratedFiles = new[] { generated } },
+                new LabProjectVerifySummary { ReportPresent = true, Status = "passed" },
+                new[] { Observation(1, "list:ready", "") });
+
+            Assert.False(result.Passed);
+            Assert.Contains(result.Checks, check => check.Kind == "generated-contains" && !check.Passed);
+        }
+        finally
+        {
+            File.Delete(generated);
+        }
+    }
+
     static LabAppObservation Observation(long sequence, string eventName, string resultText) => new(
         sequence,
         DateTimeOffset.UtcNow,

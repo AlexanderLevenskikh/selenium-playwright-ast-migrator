@@ -273,7 +273,7 @@ Playwright повторно не скачивается. После успешн
 - bounded task packs с evidence, repro, максимум тремя файлами кода мигратора, тестами и definition of done;
 - decision policy `unit-test` / `project-fixture` / `saved-seed`;
 - `lab promote` для reviewed promotion artifacts;
-- `lab release-gate` для редкой проверки stable corpus + свежего PASS evidence настоящего проекта;
+- `lab release-gate` для редкой проверки stable corpus + trusted contract baseline + свежего PASS evidence настоящего проекта;
 - `docs/lab/AUTOMATION_POLICY.ru.md` с правилами auto-fix/manual-review;
 - `scripts/run-lab-block8.ps1` для end-to-end проверки финального блока.
 

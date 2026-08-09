@@ -37,8 +37,21 @@ public sealed class LabTaskPackWriter
             Directory.Delete(reproRoot, recursive: true);
         Directory.Move(Path.Combine(reductionRoot, "scenario"), reproRoot);
 
+        var evidenceArtifacts = CopyBoundedEvidenceArtifacts(root, members, maxFiles: 16);
+        var evidenceBackedCode = members
+            .SelectMany(item => item.EvidenceBackedComponents)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var suspectedComponents = cluster.SuspectedComponents
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         var codeRoot = Path.Combine(root, "migrator-code");
-        var copiedCode = CopyBoundedMigratorCode(repository, codeRoot, cluster.SuspectedComponents, maxFiles: 3);
+        var requestedCode = evidenceBackedCode.Concat(suspectedComponents).Distinct(StringComparer.OrdinalIgnoreCase);
+        var copiedCode = CopyBoundedMigratorCode(repository, codeRoot, requestedCode, maxFiles: 3);
         var relevantTests = RecommendTests(cluster, copiedCode);
         var evidence = BuildEvidence(members);
         var qualityBaseline = string.Join("; ", members.Select(item =>
@@ -51,6 +64,9 @@ public sealed class LabTaskPackWriter
             Classification = $"stage={cluster.Stage}; severity={cluster.Severity}",
             ScenarioIds = cluster.ScenarioIds,
             Evidence = evidence,
+            EvidenceArtifacts = evidenceArtifacts,
+            EvidenceBackedMigratorCode = evidenceBackedCode,
+            SuspectedMigratorComponents = suspectedComponents,
             RelevantMigratorCode = copiedCode,
             RelevantTests = relevantTests,
             Constraints = new[]
@@ -58,6 +74,7 @@ public sealed class LabTaskPackWriter
                 "Do not change expected status, quality budgets or semantic oracle merely to make the scenario green.",
                 "Do not classify SOURCE_INVALID, INFRASTRUCTURE_FAILURE or NON_DETERMINISTIC as a migrator defect without separate evidence.",
                 "Keep the fix bounded to this cluster; unrelated cleanup belongs in a separate change.",
+                "Treat suspected migrator components as triage hints, not proof; prefer retained evidence and the minimal repro when they disagree.",
                 "Preserve source fixture validity and rerun the minimal repro before wider suites."
             },
             FilesNotToChange = new[]
@@ -88,6 +105,59 @@ public sealed class LabTaskPackWriter
         return root;
     }
 
+    static string[] CopyBoundedEvidenceArtifacts(
+        string taskPackRoot,
+        IReadOnlyCollection<LabFailureEvidence> findings,
+        int maxFiles)
+    {
+        var copied = new List<string>();
+        var seenSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var evidenceRoot = Path.Combine(taskPackRoot, "evidence", "raw");
+
+        foreach (var finding in findings.OrderBy(item => item.ScenarioId, StringComparer.OrdinalIgnoreCase))
+        {
+            foreach (var path in finding.RawEvidencePaths)
+            {
+                if (copied.Count >= maxFiles)
+                    return copied.ToArray();
+
+                try
+                {
+                    var source = Path.GetFullPath(path);
+                    if (!seenSources.Add(source) || !File.Exists(source))
+                        continue;
+
+                    var scenarioSegment = SanitizePathSegment(finding.ScenarioId);
+                    var destinationDirectory = Path.Combine(evidenceRoot, scenarioSegment);
+                    Directory.CreateDirectory(destinationDirectory);
+                    var destination = Path.Combine(
+                        destinationDirectory,
+                        $"{copied.Count + 1:00}-{SanitizePathSegment(Path.GetFileName(source))}");
+                    File.Copy(source, destination, overwrite: true);
+                    copied.Add(Path.GetRelativePath(taskPackRoot, destination).Replace('\\', '/'));
+                }
+                catch (IOException)
+                {
+                    // Evidence copying is best-effort. evidence.json still retains the
+                    // original path and repro can regenerate the artifact.
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Same rationale as above.
+                }
+            }
+        }
+
+        return copied.ToArray();
+    }
+
+    static string SanitizePathSegment(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars().ToHashSet();
+        var chars = value.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray();
+        return new string(chars);
+    }
+
     static string[] CopyBoundedMigratorCode(
         string repositoryRoot,
         string outputRoot,
@@ -97,9 +167,11 @@ public sealed class LabTaskPackWriter
         var copied = new List<string>();
         foreach (var relative in requestedPaths
                      .Where(path => !string.IsNullOrWhiteSpace(path))
-                     .Distinct(StringComparer.OrdinalIgnoreCase)
-                     .Take(maxFiles))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
         {
+            if (copied.Count >= maxFiles)
+                break;
+
             var normalized = relative.Replace('/', Path.DirectorySeparatorChar);
             var source = Path.GetFullPath(Path.Combine(repositoryRoot, normalized));
             if (!IsInside(repositoryRoot, source) || !File.Exists(source))
@@ -142,7 +214,8 @@ public sealed class LabTaskPackWriter
             {
                 $"{item.ScenarioId}: expected {item.ExpectedStatus}, actual {item.ActualStatus}, stage {item.Stage}",
                 item.DiagnosticCodes.Length == 0 ? "" : $"{item.ScenarioId}: diagnostics {string.Join(", ", item.DiagnosticCodes)}",
-                item.SemanticDiffKinds.Length == 0 ? "" : $"{item.ScenarioId}: semantic diff {string.Join(", ", item.SemanticDiffKinds)}"
+                item.SemanticDiffKinds.Length == 0 ? "" : $"{item.ScenarioId}: semantic diff {string.Join(", ", item.SemanticDiffKinds)}",
+                item.EvidenceBackedComponents.Length == 0 ? "" : $"{item.ScenarioId}: evidence-backed code {string.Join(", ", item.EvidenceBackedComponents)}"
             })
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Distinct(StringComparer.Ordinal)
@@ -194,7 +267,20 @@ public sealed class LabTaskPackWriter
             ""
         };
         lines.AddRange(manifest.Evidence.Select(item => $"- {item}"));
-        lines.AddRange(new[] { "", "## Reproduce", "", "```powershell", manifest.ReproCommand, "```", "", "## Relevant migrator code", "" });
+        if (manifest.EvidenceArtifacts.Length > 0)
+        {
+            lines.AddRange(new[] { "", "## Retained evidence artifacts", "" });
+            lines.AddRange(manifest.EvidenceArtifacts.Select(item => $"- `{item}`"));
+        }
+        lines.AddRange(new[] { "", "## Reproduce", "", "```powershell", manifest.ReproCommand, "```" });
+        if (manifest.EvidenceBackedMigratorCode.Length > 0)
+        {
+            lines.AddRange(new[] { "", "## Migrator code referenced by retained evidence", "" });
+            lines.AddRange(manifest.EvidenceBackedMigratorCode.Select(item => $"- `{item}`"));
+        }
+        lines.AddRange(new[] { "", "## Suspected migrator components (heuristic)", "", "These are triage hints, not proof of root cause." });
+        lines.AddRange(manifest.SuspectedMigratorComponents.Select(item => $"- `{item}`"));
+        lines.AddRange(new[] { "", "## Relevant migrator code copied into this task pack", "" });
         lines.AddRange(manifest.RelevantMigratorCode.Select(item => $"- `{item}`"));
         lines.AddRange(new[] { "", "## Relevant tests", "" });
         lines.AddRange(manifest.RelevantTests.Select(item => $"- `{item}`"));

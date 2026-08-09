@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Migrator.Lab;
 using Migrator.Lab.Contracts;
 using Migrator.Lab.LabApp;
 using Migrator.Lab.Reports;
@@ -10,6 +11,7 @@ namespace Migrator.Lab.Execution;
 
 public sealed class LabRunCoordinator
 {
+    static readonly TimeSpan RuntimeObservationTimeout = TimeSpan.FromSeconds(2);
     readonly ILabProcessRunner processRunner;
 
     public LabRunCoordinator(ILabProcessRunner? processRunner = null)
@@ -116,6 +118,7 @@ public sealed class LabRunCoordinator
         var scenarioArtifacts = Path.Combine(artifactsRoot, "projects", scenario.Id);
         RecreateDirectory(scenarioArtifacts);
         File.Copy(entry.ScenarioFile, Path.Combine(scenarioArtifacts, "scenario.json"), overwrite: true);
+        var contractHash = ScenarioContractHasher.ComputeFile(entry.ScenarioFile);
 
         var workspace = Path.Combine(
             artifactsRoot,
@@ -363,8 +366,11 @@ public sealed class LabRunCoordinator
                     targetTest = ApplyTestCountContract(targetTest, targetSummary, "Target");
                     stages.Add(targetTest);
 
-                    await Task.Delay(TimeSpan.FromMilliseconds(200), cancellationToken).ConfigureAwait(false);
-                    var observations = app.SnapshotObservations();
+                    var expectedRuntimeEvents = LabSemanticOracle.ExpectedEvents(scenario);
+                    var observations = await app.WaitForExpectedEventsAsync(
+                        expectedRuntimeEvents,
+                        RuntimeObservationTimeout,
+                        cancellationToken).ConfigureAwait(false);
                     File.WriteAllText(
                         Path.Combine(targetRoot, "runtime-observations.json"),
                         JsonSerializer.Serialize(observations, new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
@@ -423,6 +429,7 @@ public sealed class LabRunCoordinator
             Id = scenario.Id,
             ExpectedStatus = scenario.Expected.Status,
             ActualStatus = actualStatus,
+            ContractHash = contractHash,
             ScenarioDirectory = entry.ScenarioDirectory,
             ArtifactsDirectory = scenarioArtifacts,
             WorkspaceDirectory = workspace,

@@ -24,11 +24,11 @@ public static class LabBaselineReportWriter
         builder.AppendLine($"- **Suite:** `{baseline.Suite}`");
         builder.AppendLine($"- **Projects:** {baseline.Projects.Length}");
         builder.AppendLine();
-        builder.AppendLine("| Scenario | Expected | Actual | TODO | Unmapped | Unsupported | Warnings | Oracle | Duration | Generated hash |");
-        builder.AppendLine("|---|---|---|---:|---:|---:|---:|---|---:|---|");
+        builder.AppendLine("| Scenario | Expected | Actual | TODO | Unmapped | Unsupported | Warnings | Oracle | Duration | Contract hash | Generated hash |");
+        builder.AppendLine("|---|---|---|---:|---:|---:|---:|---|---:|---|---|");
         foreach (var project in baseline.Projects)
         {
-            builder.AppendLine($"| {project.Id} | {project.ExpectedStatus} | {project.ActualStatus} | {project.TodoComments} | {project.UnmappedTargets} | {project.UnsupportedActions} | {project.WarningFiles} | {(project.OraclePassed ? "PASS" : "FAIL")} | {project.DurationMs} ms | `{ShortHash(project.GeneratedSemanticHash)}` |");
+            builder.AppendLine($"| {project.Id} | {project.ExpectedStatus} | {project.ActualStatus} | {project.TodoComments} | {project.UnmappedTargets} | {project.UnsupportedActions} | {project.WarningFiles} | {(project.OraclePassed ? "PASS" : "FAIL")} | {project.DurationMs} ms | `{ShortHash(project.ContractHash)}` | `{ShortHash(project.GeneratedSemanticHash)}` |");
         }
         return builder.ToString();
     }

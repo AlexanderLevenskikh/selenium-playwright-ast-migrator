@@ -31,6 +31,7 @@ public sealed class LabCliContractTests
         Assert.Contains("LabFailureTriageService", command);
         Assert.Contains("LabRegressionPromotionService", command);
         Assert.Contains("LabReleaseGateService", command);
+        Assert.Contains("--contract-baseline <baseline>", command);
         Assert.Contains("--suite <name>", command);
         Assert.Contains("vertical|smoke|pr|nightly", command);
         Assert.Contains("--feature <name[,name]>", command);
