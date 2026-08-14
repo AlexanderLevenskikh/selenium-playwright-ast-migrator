@@ -33,13 +33,13 @@ An ordinary, `continue`, or `continuous` invocation receives up to five remediat
 Each cycle:
 
 1. chooses one non-exhausted, source-backed root cause;
-2. records a stable candidate fingerprint and baseline metrics;
+2. records the baseline run and a stable candidate label;
 3. makes one bounded adapter-config, generated-helper, generated-POM, or other permitted change;
-4. reviews the change;
-5. reruns the complete configured source and all available checks;
-6. classifies the result as `PROGRESS`, `NO_PROGRESS`, or `BLOCKED`.
+4. reviews the change and reruns the complete configured source into a new immutable run;
+5. runs `selenium-pw-migrator remediation evaluate --before-run <before> --after-run <after> --candidate "<label>" --autonomy-state migration/state/autonomy-state.json --out migration/state/remediation-evaluation.json`;
+6. records only the Core evaluation through `update-autonomy-state`.
 
-Progress resets the no-progress streak and starts the next safe cycle automatically. The first no-progress cycle exhausts that candidate and tries a different independent candidate. Stop after two consecutive distinct no-progress cycles, a real blocker, a human-only decision, or five completed cycles.
+Only Core may classify progress. `ACCEPT` advances the baseline. `REJECT_NO_PROGRESS` and `REJECT_REGRESSION` require rollback of the complete bounded change before another candidate. `REJECT_CYCLE` stops with `REMEDIATION_CYCLE_DETECTED`. State hashes survive fresh invocation budgets, so `continue` cannot hide a repeated logical state.
 
 `/supervised-task continue` starts a fresh five-cycle invocation budget while retaining run evidence and exhausted candidate fingerprints. `/supervised-task continuous` advances automatically between cycles and across five-cycle checkpoints without another user command.
 

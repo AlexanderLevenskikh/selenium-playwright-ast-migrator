@@ -1,0 +1,1220 @@
+diff --git a/.opencode/agents/orchestrator.md b/.opencode/agents/orchestrator.md
+index 82d8798..ff88d77 100644
+--- a/.opencode/agents/orchestrator.md
++++ b/.opencode/agents/orchestrator.md
+@@ -20,10 +20,10 @@ Use one configured Selenium source scope and one ordinary run lineage. Historica
+ 3. Execute the complete configured source and fresh project verification when available.
+ 4. Rank repeated root causes by payoff, source confidence, reversibility, and independence from known blockers.
+ 5. Run remediation in five-cycle batches. Ordinary, `continue`, and bounded modes receive one batch; `continuous` automatically opens another batch after each `AUTONOMOUS_CYCLE_BUDGET_REACHED` checkpoint. Each cycle contains exactly one bounded change, review, complete rerun, and evidence comparison.
+-6. After progress, reset the no-progress streak and automatically start the next safe cycle. In `continuous` mode, roll over to the next five-cycle batch when the current budget is reached; do not require another `continue` command.
+-7. After one no-progress cycle, exhaust that candidate and try a different independent candidate. Stop only after two consecutive no-progress cycles with distinct fingerprints and no intervening progress.
++6. After each rerun, call deterministic Core through `selenium-pw-migrator remediation evaluate`; the agent never authors PROGRESS/NO_PROGRESS/BLOCKED. `ACCEPT` resets the no-progress streak and advances the accepted baseline.
++7. `REJECT_NO_PROGRESS` or `REJECT_REGRESSION` requires rollback of the entire bounded change before trying another independent candidate. `REJECT_CYCLE` stops immediately with `REMEDIATION_CYCLE_DETECTED`. Stop after two consecutive rejected cycles with distinct Core-generated fingerprints and no intervening ACCEPT.
+ 8. Treat generated syntax, migration metrics, project build verification, and runtime verification as independent evidence dimensions. An isolated verification-harness defect does not block measurable config/POM/helper improvements.
+-9. Use `watchdog` for loops, crashes, contradictory evidence, repeated candidates, or disputed no-progress classification.
++9. Use `watchdog` for crashes, contradictory evidence, rollback failures, or disagreement with deterministic Core artifacts; cycle detection itself is state-hash based.
+ 10. Persist `state/autonomy-state.json` after every cycle and rewrite `state/handoff.md` atomically before handoff.
+ 
+ `continue` opens a fresh five-cycle invocation budget while preserving exhausted candidate fingerprints. `continuous` automatically advances between safe cycles and across `AUTONOMOUS_CYCLE_BUDGET_REACHED` checkpoints until success or a real terminal stop; it is not permission to ignore the no-progress, safety, or human-decision stops. If safe candidates remain at a checkpoint, this is budget rollover or bounded handoff, not a global plateau.
+diff --git a/.opencode/commands/supervised-task.md b/.opencode/commands/supervised-task.md
+index 4bb035c..503df11 100644
+--- a/.opencode/commands/supervised-task.md
++++ b/.opencode/commands/supervised-task.md
+@@ -93,18 +93,16 @@ Use `.ps1` equivalents on Windows. Preserve a failed gate honestly.
+ For each cycle:
+ 
+ 1. Select the highest-payoff root cause among **non-exhausted** candidates that is agent-executable and supported by current source evidence.
+-2. Record a stable candidate fingerprint and baseline metrics before editing.
++2. Record the baseline run path and one stable human-readable candidate label before editing. The label is not authoritative progress evidence.
+ 3. Delegate exactly one bounded change to `executor`; review it with `reviewer`.
+-4. Rerun the complete configured source and all available checks.
+-5. Compare at least TODO count, mapped/unmapped targets, unsupported actions, generated-file/test counts, syntax errors, project-verification status, and the relevant root-cause cluster count.
+-6. Classify the cycle:
+-   - `PROGRESS` when a meaningful migration metric improves, a blocker is resolved, or new source-backed evidence unlocks a concrete next action;
+-   - `NO_PROGRESS` when the accepted change and complete rerun produce no meaningful improvement and no new evidence;
+-   - `BLOCKED` only when that candidate cannot be measured or completed safely.
+-7. On `PROGRESS`, reset `noProgressStreak` to `0` and automatically start the next safe cycle while budget remains.
+-8. On the first `NO_PROGRESS`, set the streak to `1`, mark that candidate exhausted, and try a different independent candidate. Do not stop yet.
+-9. Stop with `STOPPED_TWO_CONSECUTIVE_NO_PROGRESS` only after two consecutive completed no-progress cycles on distinct candidate fingerprints with no intervening progress.
+-10. At five completed cycles, emit the `AUTONOMOUS_CYCLE_BUDGET_REACHED` checkpoint. In ordinary, `continue`, or bounded mode, stop and rank remaining safe candidates without claiming completion. In `continuous` mode, persist the checkpoint, open the next five-cycle batch automatically, and keep working without requiring `/supervised-task continue`.
++4. Rerun the complete configured source and all available checks into a new immutable run directory.
++5. Ask deterministic Core to compare the two exact runs:
++   `selenium-pw-migrator remediation evaluate --before-run <before> --after-run <after> --candidate "<label>" --autonomy-state migration/state/autonomy-state.json --out migration/state/remediation-evaluation.json`.
++6. Record only that Core decision with `migration/scripts/update-autonomy-state.ps1 -Action RecordCycle -Workspace migration -EvaluationPath migration/state/remediation-evaluation.json`. Never pass an agent-authored `PROGRESS`, `NO_PROGRESS`, `BLOCKED`, metric summary, or candidate fingerprint.
++7. `ACCEPT` is the only progress decision. Core requires at least one deterministic defect/build improvement and rejects measured regressions. Reset `noProgressStreak` and continue automatically while budget remains.
++8. `REJECT_NO_PROGRESS` or `REJECT_REGRESSION` sets `rollbackRequired=true`: restore the complete bounded change before selecting a different independent candidate. Do not carry a rejected patch into the next baseline.
++9. `REJECT_CYCLE` stops immediately with `REMEDIATION_CYCLE_DETECTED`. State hashes survive fresh invocation budgets, so `continue` cannot hide an A→B→A loop.
++10. Stop with `STOPPED_TWO_CONSECUTIVE_NO_PROGRESS` after two consecutive rejected cycles on distinct Core-generated candidate fingerprints. At five completed cycles, emit `AUTONOMOUS_CYCLE_BUDGET_REACHED`; `continuous` may roll to another batch, but state history remains.
+ 
+ ## Independent validation dimensions
+ 
+diff --git a/Migrator.Cli/Commands/RemediationCommand.cs b/Migrator.Cli/Commands/RemediationCommand.cs
+new file mode 100644
+index 0000000..07e243b
+--- /dev/null
++++ b/Migrator.Cli/Commands/RemediationCommand.cs
+@@ -0,0 +1,129 @@
++using System.Text.Json;
++using Migrator.Core;
++
++internal static class RemediationCommand
++{
++    public static int Run(string[] args)
++    {
++        if (args.Length == 0 || IsHelp(args[0]))
++        {
++            PrintHelp();
++            return 0;
++        }
++
++        if (!string.Equals(args[0], "evaluate", StringComparison.OrdinalIgnoreCase))
++        {
++            Console.Error.WriteLine($"Unknown remediation command: {args[0]}");
++            PrintHelp();
++            return 2;
++        }
++
++        string? beforeRun = null;
++        string? afterRun = null;
++        string? candidate = null;
++        string? autonomyState = null;
++        var outPath = "remediation-evaluation.json";
++
++        for (var i = 1; i < args.Length; i++)
++        {
++            switch (args[i])
++            {
++                case "--before-run":
++                    beforeRun = ReadValue(args, ref i, "--before-run");
++                    break;
++                case "--after-run":
++                    afterRun = ReadValue(args, ref i, "--after-run");
++                    break;
++                case "--candidate":
++                    candidate = ReadValue(args, ref i, "--candidate");
++                    break;
++                case "--autonomy-state":
++                    autonomyState = ReadValue(args, ref i, "--autonomy-state");
++                    break;
++                case "--out":
++                    outPath = ReadValue(args, ref i, "--out");
++                    break;
++                case "--help":
++                case "-h":
++                    PrintHelp();
++                    return 0;
++                default:
++                    Console.Error.WriteLine($"Unknown remediation evaluate option: {args[i]}");
++                    return 2;
++            }
++        }
++
++        if (string.IsNullOrWhiteSpace(beforeRun) || string.IsNullOrWhiteSpace(afterRun) || string.IsNullOrWhiteSpace(candidate))
++        {
++            Console.Error.WriteLine("remediation evaluate requires --before-run, --after-run, and --candidate.");
++            return 2;
++        }
++
++        try
++        {
++            var visited = LoadVisitedStateHashes(autonomyState);
++            var before = RemediationStateEvaluator.LoadRunState(beforeRun);
++            var after = RemediationStateEvaluator.LoadRunState(afterRun);
++            var evaluation = RemediationStateEvaluator.Evaluate(before, after, candidate, visited);
++
++            var fullOutPath = Path.GetFullPath(outPath);
++            Directory.CreateDirectory(Path.GetDirectoryName(fullOutPath) ?? Directory.GetCurrentDirectory());
++            File.WriteAllText(fullOutPath, JsonSerializer.Serialize(evaluation, new JsonSerializerOptions { WriteIndented = true }));
++
++            Console.WriteLine("=== Remediation Evaluation ===");
++            Console.WriteLine($"Decision: {evaluation.Decision}");
++            Console.WriteLine($"Reason: {evaluation.Reason}");
++            Console.WriteLine($"Before state: {evaluation.Before.StateHash}");
++            Console.WriteLine($"After state:  {evaluation.After.StateHash}");
++            Console.WriteLine($"Candidate: {evaluation.CandidateFingerprint}");
++            Console.WriteLine($"Rollback required: {evaluation.RollbackRequired}");
++            foreach (var item in evaluation.Improvements)
++                Console.WriteLine($"  + {item}");
++            foreach (var item in evaluation.Regressions)
++                Console.WriteLine($"  - {item}");
++            Console.WriteLine($"Evaluation: {fullOutPath}");
++
++            return 0;
++        }
++        catch (Exception ex)
++        {
++            Console.Error.WriteLine(ex.Message);
++            return 4;
++        }
++    }
++
++    static IReadOnlyCollection<string> LoadVisitedStateHashes(string? path)
++    {
++        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
++            return Array.Empty<string>();
++
++        using var document = JsonDocument.Parse(File.ReadAllText(path));
++        if (!document.RootElement.TryGetProperty("visitedStateHashes", out var values) || values.ValueKind != JsonValueKind.Array)
++            return Array.Empty<string>();
++
++        return values.EnumerateArray()
++            .Where(item => item.ValueKind == JsonValueKind.String)
++            .Select(item => item.GetString())
++            .Where(value => !string.IsNullOrWhiteSpace(value))
++            .Cast<string>()
++            .Distinct(StringComparer.Ordinal)
++            .ToArray();
++    }
++
++    static string ReadValue(string[] args, ref int index, string option)
++    {
++        if (index + 1 >= args.Length)
++            throw new ArgumentException($"{option} requires a value");
++        return args[++index];
++    }
++
++    static bool IsHelp(string value) => value is "--help" or "-h" or "help";
++
++    static void PrintHelp()
++    {
++        Console.WriteLine("Remediation commands:");
++        Console.WriteLine("  selenium-pw-migrator remediation evaluate --before-run <run> --after-run <run> --candidate <stable-description> [--autonomy-state <json>] --out <json>");
++        Console.WriteLine();
++        Console.WriteLine("Core computes ACCEPT / REJECT_NO_PROGRESS / REJECT_REGRESSION / REJECT_CYCLE from exact run artifacts. The agent does not classify progress.");
++    }
++}
+diff --git a/Migrator.Cli/Program.cs b/Migrator.Cli/Program.cs
+index 6004a97..b46d8c9 100644
+--- a/Migrator.Cli/Program.cs
++++ b/Migrator.Cli/Program.cs
+@@ -35,6 +35,9 @@ if (args.Length > 0 && string.Equals(args[0], "memory", StringComparison.Ordinal
+ if (args.Length > 0 && string.Equals(args[0], "lab", StringComparison.OrdinalIgnoreCase))
+     return LabCommand.Run(args.Skip(1).ToArray());
+ 
++if (args.Length > 0 && string.Equals(args[0], "remediation", StringComparison.OrdinalIgnoreCase))
++    return RemediationCommand.Run(args.Skip(1).ToArray());
++
+ if (args.Length > 1
+     && string.Equals(args[0], "config", StringComparison.OrdinalIgnoreCase)
+     && (string.Equals(args[1], "merge-deltas", StringComparison.OrdinalIgnoreCase)
+diff --git a/Migrator.Core/RemediationStateEvaluator.cs b/Migrator.Core/RemediationStateEvaluator.cs
+new file mode 100644
+index 0000000..c2a78f6
+--- /dev/null
++++ b/Migrator.Core/RemediationStateEvaluator.cs
+@@ -0,0 +1,308 @@
++using System.Text.Json;
++
++namespace Migrator.Core;
++
++public sealed record RemediationDefectVector(
++    int SyntaxErrors,
++    int UnsupportedActions,
++    int UnmappedTargets,
++    int RawExpressions,
++    int TodoComments,
++    int PageTodoCalls);
++
++public sealed record RemediationStructuralMetrics(
++    int TestsFound,
++    int GeneratedFiles);
++
++public sealed record RemediationRunState(
++    string RunPath,
++    string SourceSha256,
++    string ConfigSha256,
++    string TargetSha256,
++    string ToolSha256,
++    string EnvironmentSha256,
++    RemediationDefectVector Defects,
++    RemediationStructuralMetrics Structure,
++    string ProjectVerificationStatus,
++    int ProjectDiagnostics,
++    string StateHash);
++
++public sealed record RemediationEvaluation(
++    string SchemaVersion,
++    DateTimeOffset GeneratedAtUtc,
++    string Decision,
++    string Reason,
++    string CandidateFingerprint,
++    string CandidateLabel,
++    RemediationRunState Before,
++    RemediationRunState After,
++    IReadOnlyList<string> Improvements,
++    IReadOnlyList<string> Regressions,
++    bool RollbackRequired,
++    string EvaluationSha256);
++
++/// <summary>
++/// Deterministic remediation oracle. The agent may propose a bounded change, but it does
++/// not decide whether that change is progress. Core compares exact run artifacts and emits
++/// the only decision that autonomy state is allowed to persist.
++/// </summary>
++public static class RemediationStateEvaluator
++{
++    public const string EvaluationSchemaVersion = "migrator-remediation-evaluation/v1";
++
++    public static RemediationRunState LoadRunState(string runPath)
++    {
++        if (string.IsNullOrWhiteSpace(runPath))
++            throw new ArgumentException("Run path is required.", nameof(runPath));
++
++        var fullRunPath = Path.GetFullPath(runPath);
++        var manifestPath = Path.Combine(fullRunPath, "run-manifest.json");
++        if (!File.Exists(manifestPath))
++            throw new InvalidOperationException($"REMEDIATION_RUN_MANIFEST_MISSING: {manifestPath}");
++
++        var manifest = Deserialize<RunManifest>(manifestPath, "REMEDIATION_RUN_MANIFEST_INVALID");
++        if (!string.Equals(manifest.SchemaVersion, "migrator-run-manifest/v2", StringComparison.Ordinal))
++            throw new InvalidOperationException($"REMEDIATION_RUN_MANIFEST_SCHEMA_INVALID: {manifest.SchemaVersion}");
++        if (string.IsNullOrWhiteSpace(manifest.TargetSha256))
++            throw new InvalidOperationException("REMEDIATION_TARGET_IDENTITY_MISSING");
++        if (manifest.Verification == null)
++            throw new InvalidOperationException("REMEDIATION_GENERATED_VERIFICATION_MISSING");
++
++        ValidateEvidenceIdentity(manifest, manifest.Verification, "generated-verify");
++
++        var verifyPath = Path.Combine(fullRunPath, "verify", "verify-report.json");
++        if (!File.Exists(verifyPath))
++            throw new InvalidOperationException($"REMEDIATION_VERIFY_REPORT_MISSING: {verifyPath}");
++        var verify = Deserialize<VerifyReport>(verifyPath, "REMEDIATION_VERIFY_REPORT_INVALID");
++
++        var orchestrationPath = Path.Combine(fullRunPath, "orchestration-report.json");
++        if (!File.Exists(orchestrationPath))
++            throw new InvalidOperationException($"REMEDIATION_ORCHESTRATION_REPORT_MISSING: {orchestrationPath}");
++        var orchestration = Deserialize<OrchestrationReport>(orchestrationPath, "REMEDIATION_ORCHESTRATION_REPORT_INVALID");
++
++        var projectStatus = "not-run";
++        var projectDiagnostics = 0;
++        var projectEvidencePath = Path.Combine(fullRunPath, "verify-project", "verification-evidence.json");
++        if (File.Exists(projectEvidencePath))
++        {
++            var projectEvidence = Deserialize<VerificationEvidence>(projectEvidencePath, "REMEDIATION_PROJECT_EVIDENCE_INVALID");
++            ValidateEvidenceIdentity(manifest, projectEvidence, "dotnet-build-exact-target");
++            projectStatus = NormalizeProjectStatus(projectEvidence.Status);
++            projectDiagnostics = projectEvidence.Metrics.TryGetValue("diagnostics", out var diagnostics) ? diagnostics : 0;
++        }
++
++        var defects = new RemediationDefectVector(
++            SyntaxErrors: verify.SyntaxErrors,
++            UnsupportedActions: verify.UnsupportedActions,
++            UnmappedTargets: verify.UnmappedTargets,
++            RawExpressions: verify.RawExpressions,
++            TodoComments: verify.TodoComments,
++            PageTodoCalls: verify.PageTodoCalls);
++
++        var structure = new RemediationStructuralMetrics(
++            TestsFound: orchestration.Metrics.TestsFound,
++            GeneratedFiles: orchestration.Metrics.GeneratedFiles);
++
++        var identity = new
++        {
++            sourceSha256 = manifest.SourceSha256,
++            configSha256 = manifest.ConfigSha256,
++            targetSha256 = manifest.TargetSha256,
++            toolSha256 = manifest.Tool.IdentitySha256,
++            environmentSha256 = manifest.Environment.IdentitySha256,
++            defects,
++            structure,
++            projectVerificationStatus = projectStatus,
++            projectDiagnostics
++        };
++
++        return new RemediationRunState(
++            RunPath: fullRunPath,
++            SourceSha256: manifest.SourceSha256,
++            ConfigSha256: manifest.ConfigSha256,
++            TargetSha256: manifest.TargetSha256!,
++            ToolSha256: manifest.Tool.IdentitySha256,
++            EnvironmentSha256: manifest.Environment.IdentitySha256,
++            Defects: defects,
++            Structure: structure,
++            ProjectVerificationStatus: projectStatus,
++            ProjectDiagnostics: projectDiagnostics,
++            StateHash: CanonicalJsonHasher.ComputeSha256(identity));
++    }
++
++    public static RemediationEvaluation Evaluate(
++        RemediationRunState before,
++        RemediationRunState after,
++        string candidateLabel,
++        IReadOnlyCollection<string>? visitedStateHashes = null)
++    {
++        ArgumentNullException.ThrowIfNull(before);
++        ArgumentNullException.ThrowIfNull(after);
++        candidateLabel ??= string.Empty;
++        var normalizedCandidate = NormalizeCandidateLabel(candidateLabel);
++        if (normalizedCandidate.Length == 0)
++            throw new InvalidOperationException("REMEDIATION_CANDIDATE_REQUIRED");
++
++        if (!string.Equals(before.SourceSha256, after.SourceSha256, StringComparison.Ordinal))
++            return CreateEvaluation("REJECT_REGRESSION", "SOURCE_SNAPSHOT_CHANGED", before, after, normalizedCandidate, Array.Empty<string>(), new[] { "source snapshot changed" }, true);
++        if (!string.Equals(before.ToolSha256, after.ToolSha256, StringComparison.Ordinal))
++            return CreateEvaluation("REJECT_REGRESSION", "TOOL_IDENTITY_CHANGED", before, after, normalizedCandidate, Array.Empty<string>(), new[] { "tool identity changed" }, true);
++        if (!string.Equals(before.EnvironmentSha256, after.EnvironmentSha256, StringComparison.Ordinal))
++            return CreateEvaluation("REJECT_REGRESSION", "ENVIRONMENT_IDENTITY_CHANGED", before, after, normalizedCandidate, Array.Empty<string>(), new[] { "environment identity changed" }, true);
++
++        var visited = visitedStateHashes ?? Array.Empty<string>();
++        if (visited.Contains(after.StateHash, StringComparer.Ordinal))
++        {
++            return CreateEvaluation(
++                "REJECT_CYCLE",
++                "REMEDIATION_CYCLE_DETECTED",
++                before,
++                after,
++                normalizedCandidate,
++                Array.Empty<string>(),
++                new[] { $"state {after.StateHash} was already visited" },
++                true);
++        }
++
++        var improvements = new List<string>();
++        var regressions = new List<string>();
++
++        CompareDefect("syntaxErrors", before.Defects.SyntaxErrors, after.Defects.SyntaxErrors, improvements, regressions);
++        CompareDefect("unsupportedActions", before.Defects.UnsupportedActions, after.Defects.UnsupportedActions, improvements, regressions);
++        CompareDefect("unmappedTargets", before.Defects.UnmappedTargets, after.Defects.UnmappedTargets, improvements, regressions);
++        CompareDefect("rawExpressions", before.Defects.RawExpressions, after.Defects.RawExpressions, improvements, regressions);
++        CompareDefect("todoComments", before.Defects.TodoComments, after.Defects.TodoComments, improvements, regressions);
++        CompareDefect("pageTodoCalls", before.Defects.PageTodoCalls, after.Defects.PageTodoCalls, improvements, regressions);
++
++        if (after.Structure.TestsFound < before.Structure.TestsFound)
++            regressions.Add($"testsFound {before.Structure.TestsFound}->{after.Structure.TestsFound}");
++        if (after.Structure.GeneratedFiles < before.Structure.GeneratedFiles)
++            regressions.Add($"generatedFiles {before.Structure.GeneratedFiles}->{after.Structure.GeneratedFiles}");
++
++        CompareProjectVerification(before, after, improvements, regressions);
++
++        if (regressions.Count > 0)
++            return CreateEvaluation("REJECT_REGRESSION", "DETERMINISTIC_METRIC_REGRESSION", before, after, normalizedCandidate, improvements, regressions, true);
++
++        if (improvements.Count > 0)
++            return CreateEvaluation("ACCEPT", "DETERMINISTIC_IMPROVEMENT", before, after, normalizedCandidate, improvements, regressions, false);
++
++        return CreateEvaluation("REJECT_NO_PROGRESS", "NO_DETERMINISTIC_IMPROVEMENT", before, after, normalizedCandidate, improvements, regressions, true);
++    }
++
++    static void ValidateEvidenceIdentity(RunManifest manifest, VerificationEvidence evidence, string expectedKind)
++    {
++        if (!string.Equals(evidence.Kind, expectedKind, StringComparison.Ordinal)
++            || !string.Equals(evidence.SourceSha256, manifest.SourceSha256, StringComparison.Ordinal)
++            || !string.Equals(evidence.ConfigSha256, manifest.ConfigSha256, StringComparison.Ordinal)
++            || !string.Equals(evidence.TargetSha256, manifest.TargetSha256, StringComparison.Ordinal)
++            || !string.Equals(evidence.ToolSha256, manifest.Tool.IdentitySha256, StringComparison.Ordinal)
++            || !string.Equals(evidence.EnvironmentSha256, manifest.Environment.IdentitySha256, StringComparison.Ordinal))
++        {
++            throw new InvalidOperationException($"REMEDIATION_EVIDENCE_IDENTITY_MISMATCH: {expectedKind}");
++        }
++    }
++
++    static T Deserialize<T>(string path, string code)
++    {
++        try
++        {
++            return JsonSerializer.Deserialize<T>(File.ReadAllText(path), new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
++                ?? throw new InvalidOperationException($"{code}: empty document");
++        }
++        catch (Exception ex) when (ex is JsonException or NotSupportedException)
++        {
++            throw new InvalidOperationException($"{code}: {ex.Message}", ex);
++        }
++    }
++
++    static string NormalizeProjectStatus(string? status)
++    {
++        if (string.Equals(status, "passed", StringComparison.OrdinalIgnoreCase)) return "passed";
++        if (string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase)) return "failed";
++        if (string.Equals(status, "infrastructure-failure", StringComparison.OrdinalIgnoreCase)) return "infrastructure-failure";
++        return "not-run";
++    }
++
++    static void CompareProjectVerification(RemediationRunState before, RemediationRunState after, List<string> improvements, List<string> regressions)
++    {
++        if (before.ProjectVerificationStatus == "passed" && after.ProjectVerificationStatus != "passed")
++        {
++            regressions.Add($"projectVerification {before.ProjectVerificationStatus}->{after.ProjectVerificationStatus}");
++            return;
++        }
++
++        if (before.ProjectVerificationStatus != "passed" && after.ProjectVerificationStatus == "passed")
++        {
++            improvements.Add($"projectVerification {before.ProjectVerificationStatus}->{after.ProjectVerificationStatus}");
++            return;
++        }
++
++        if (before.ProjectVerificationStatus == "failed" && after.ProjectVerificationStatus == "failed")
++            CompareDefect("projectDiagnostics", before.ProjectDiagnostics, after.ProjectDiagnostics, improvements, regressions);
++        // infrastructure-failure and not-run are measurement states, not progress. They remain
++        // independent unless a previously passing project regresses into them.
++    }
++
++    static void CompareDefect(string name, int before, int after, List<string> improvements, List<string> regressions)
++    {
++        if (after < before)
++            improvements.Add($"{name} {before}->{after}");
++        else if (after > before)
++            regressions.Add($"{name} {before}->{after}");
++    }
++
++    static RemediationEvaluation CreateEvaluation(
++        string decision,
++        string reason,
++        RemediationRunState before,
++        RemediationRunState after,
++        string normalizedCandidate,
++        IReadOnlyList<string> improvements,
++        IReadOnlyList<string> regressions,
++        bool rollbackRequired)
++    {
++        var candidateFingerprint = CanonicalJsonHasher.ComputeSha256(new
++        {
++            beforeStateHash = before.StateHash,
++            candidate = normalizedCandidate
++        });
++
++        var identity = new
++        {
++            schemaVersion = EvaluationSchemaVersion,
++            decision,
++            reason,
++            candidateFingerprint,
++            candidateLabel = normalizedCandidate,
++            beforeStateHash = before.StateHash,
++            afterStateHash = after.StateHash,
++            improvements,
++            regressions,
++            rollbackRequired
++        };
++
++        return new RemediationEvaluation(
++            SchemaVersion: EvaluationSchemaVersion,
++            GeneratedAtUtc: DateTimeOffset.UtcNow,
++            Decision: decision,
++            Reason: reason,
++            CandidateFingerprint: candidateFingerprint,
++            CandidateLabel: normalizedCandidate,
++            Before: before,
++            After: after,
++            Improvements: improvements,
++            Regressions: regressions,
++            RollbackRequired: rollbackRequired,
++            EvaluationSha256: CanonicalJsonHasher.ComputeSha256(identity));
++    }
++
++    static string NormalizeCandidateLabel(string value)
++    {
++        var parts = value
++            .Trim()
++            .ToLowerInvariant()
++            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
++        return string.Join(" ", parts);
++    }
++}
+diff --git a/Migrator.Tests/DeterministicRemediationContractTests.cs b/Migrator.Tests/DeterministicRemediationContractTests.cs
+new file mode 100644
+index 0000000..0e77e6a
+--- /dev/null
++++ b/Migrator.Tests/DeterministicRemediationContractTests.cs
+@@ -0,0 +1,54 @@
++using Xunit;
++
++namespace Migrator.Tests;
++
++[Trait("Layer", "Contract")]
++public sealed class DeterministicRemediationContractTests
++{
++    [Fact]
++    public void AgentCannotAuthorProgressClassification()
++    {
++        var command = Read(".opencode/commands/supervised-task.md");
++        var updater = Read("templates/migration-kit/scripts/update-autonomy-state.ps1");
++        var state = Read("templates/migration-kit/state/autonomy-state.json");
++        var program = Read("Migrator.Cli/Program.cs");
++
++        Assert.Contains("selenium-pw-migrator remediation evaluate", command);
++        Assert.Contains("Never pass an agent-authored `PROGRESS`", command);
++        Assert.Contains("AUTONOMY_AGENT_PROGRESS_CLASSIFICATION_FORBIDDEN", updater);
++        Assert.Contains("-EvaluationPath", updater);
++        Assert.Contains("standard-migration-autonomy/v2", state);
++        Assert.Contains("visitedStateHashes", state);
++        Assert.Contains("rollbackRequired", state);
++        Assert.Contains("RemediationCommand.Run", program);
++    }
++
++    [Fact]
++    public void RejectedCycleRequiresRollbackAndVisitedStateStopsCycles()
++    {
++        var updater = Read("templates/migration-kit/scripts/update-autonomy-state.ps1");
++        var validator = Read("templates/migration-kit/scripts/validate-handoff.ps1");
++
++        Assert.Contains("REJECT_NO_PROGRESS", updater);
++        Assert.Contains("REJECT_REGRESSION", updater);
++        Assert.Contains("REJECT_CYCLE", updater);
++        Assert.Contains("REMEDIATION_CYCLE_DETECTED", updater);
++        Assert.Contains("rollbackRequired", updater);
++        Assert.Contains("AUTONOMY_EVALUATION_MISSED_CYCLE", updater);
++        Assert.Contains("AUTONOMY_STATE_REJECTION_REQUIRES_ROLLBACK", validator);
++    }
++
++    static string Read(string relativePath) => File.ReadAllText(Path.Combine(FindRepositoryRoot(), relativePath.Replace('/', Path.DirectorySeparatorChar)));
++
++    static string FindRepositoryRoot()
++    {
++        var dir = new DirectoryInfo(AppContext.BaseDirectory);
++        while (dir != null)
++        {
++            if (File.Exists(Path.Combine(dir.FullName, "Migrator.sln")))
++                return dir.FullName;
++            dir = dir.Parent;
++        }
++        throw new DirectoryNotFoundException("Could not locate repository root containing Migrator.sln.");
++    }
++}
+diff --git a/Migrator.Tests/RemediationStateEvaluatorTests.cs b/Migrator.Tests/RemediationStateEvaluatorTests.cs
+new file mode 100644
+index 0000000..be3f802
+--- /dev/null
++++ b/Migrator.Tests/RemediationStateEvaluatorTests.cs
+@@ -0,0 +1,94 @@
++using Migrator.Core;
++using Xunit;
++
++namespace Migrator.Tests;
++
++public sealed class RemediationStateEvaluatorTests
++{
++    [Fact]
++    public void Evaluate_AcceptsOnlyMeasuredImprovementWithoutRegression()
++    {
++        var before = State("a", unmapped: 4, todo: 4);
++        var after = State("b", unmapped: 2, todo: 3);
++
++        var evaluation = RemediationStateEvaluator.Evaluate(before, after, "map submit target");
++
++        Assert.Equal("ACCEPT", evaluation.Decision);
++        Assert.False(evaluation.RollbackRequired);
++        Assert.Contains(evaluation.Improvements, x => x.StartsWith("unmappedTargets 4->2", StringComparison.Ordinal));
++    }
++
++    [Fact]
++    public void Evaluate_RejectsNoProgressAndRequiresRollback()
++    {
++        var before = State("a", unmapped: 4, todo: 4);
++        var after = State("b", unmapped: 4, todo: 4);
++
++        var evaluation = RemediationStateEvaluator.Evaluate(before, after, "rewrite helper");
++
++        Assert.Equal("REJECT_NO_PROGRESS", evaluation.Decision);
++        Assert.True(evaluation.RollbackRequired);
++    }
++
++    [Fact]
++    public void Evaluate_RejectsRegressionEvenWhenAnotherMetricImproves()
++    {
++        var before = State("a", syntax: 0, unmapped: 4);
++        var after = State("b", syntax: 1, unmapped: 2);
++
++        var evaluation = RemediationStateEvaluator.Evaluate(before, after, "risky mapping");
++
++        Assert.Equal("REJECT_REGRESSION", evaluation.Decision);
++        Assert.True(evaluation.RollbackRequired);
++        Assert.Contains(evaluation.Regressions, x => x.StartsWith("syntaxErrors 0->1", StringComparison.Ordinal));
++    }
++
++    [Fact]
++    public void Evaluate_RejectsVisitedStateAsCycleRegardlessOfCandidateLabel()
++    {
++        var before = State("b", unmapped: 2);
++        var after = State("a", unmapped: 4);
++
++        var evaluation = RemediationStateEvaluator.Evaluate(before, after, "totally different wording", new[] { "a" });
++
++        Assert.Equal("REJECT_CYCLE", evaluation.Decision);
++        Assert.Equal("REMEDIATION_CYCLE_DETECTED", evaluation.Reason);
++        Assert.True(evaluation.RollbackRequired);
++    }
++
++    [Fact]
++    public void Evaluate_RejectsChangedSourceSnapshot()
++    {
++        var before = State("a", source: "source-a");
++        var after = State("b", source: "source-b");
++
++        var evaluation = RemediationStateEvaluator.Evaluate(before, after, "mapping");
++
++        Assert.Equal("REJECT_REGRESSION", evaluation.Decision);
++        Assert.Equal("SOURCE_SNAPSHOT_CHANGED", evaluation.Reason);
++    }
++
++    static RemediationRunState State(
++        string hash,
++        int syntax = 0,
++        int unsupported = 0,
++        int unmapped = 0,
++        int raw = 0,
++        int todo = 0,
++        int pageTodo = 0,
++        string source = "source",
++        string projectStatus = "passed",
++        int projectDiagnostics = 0)
++        => new(
++            RunPath: hash,
++            SourceSha256: source,
++            ConfigSha256: "config-" + hash,
++            TargetSha256: "target-" + hash,
++            ToolSha256: "tool",
++            EnvironmentSha256: "env",
++            Defects: new RemediationDefectVector(syntax, unsupported, unmapped, raw, todo, pageTodo),
++            Structure: new RemediationStructuralMetrics(TestsFound: 10, GeneratedFiles: 10),
++            ProjectVerificationStatus: projectStatus,
++            ProjectDiagnostics: projectDiagnostics,
++            StateHash: hash);
++}
+diff --git a/Migrator.Tests/StandardInstructionContractTests.cs b/Migrator.Tests/StandardInstructionContractTests.cs
+index 7a7cef5..9008c12 100644
+--- a/Migrator.Tests/StandardInstructionContractTests.cs
++++ b/Migrator.Tests/StandardInstructionContractTests.cs
+@@ -81,7 +81,9 @@ public sealed class StandardInstructionContractTests
+         Assert.Contains("one bounded change is allowed **per cycle**, not per invocation", command);
+         Assert.Contains("fresh budget of up to **5 remediation cycles**", command);
+         Assert.Contains("`continuous` means automatically begin the next safe cycle after progress", command);
+-        Assert.Contains("first `NO_PROGRESS`", command);
++        Assert.Contains("`REJECT_NO_PROGRESS`", command);
++        Assert.Contains("remediation evaluate", command);
++        Assert.Contains("Never pass an agent-authored `PROGRESS`", command);
+         Assert.Contains("distinct candidate fingerprints", command);
+         Assert.Contains("Independent validation dimensions", command);
+         Assert.Contains("validate-handoff.ps1", command);
+@@ -121,7 +123,8 @@ public sealed class StandardInstructionContractTests
+         }
+ 
+         Assert.Contains("one bounded change is allowed **per cycle**, not per invocation", command);
+-        Assert.Contains("On the first `NO_PROGRESS`", command);
++        Assert.Contains("`REJECT_NO_PROGRESS`", command);
++        Assert.Contains("rollbackRequired=true", command);
+         Assert.Contains("try a different independent candidate", command, StringComparison.OrdinalIgnoreCase);
+         Assert.Contains("A failed `verify-project` is not by itself a global stop", command);
+         Assert.Contains("AUTONOMOUS_CYCLE_BUDGET_REACHED", stopPolicy);
+@@ -144,11 +147,14 @@ public sealed class StandardInstructionContractTests
+         Assert.Equal(1, CountLine(handoff, "## Autonomous next actions"));
+         Assert.Equal(1, CountLine(handoff, "## What not to do"));
+         Assert.DoesNotContain("Status: COMPLETE", handoff);
+-        Assert.Contains("standard-migration-autonomy/v1", autonomy);
++        Assert.Contains("standard-migration-autonomy/v2", autonomy);
++        Assert.Contains("visitedStateHashes", autonomy);
++        Assert.Contains("rollbackRequired", autonomy);
+         Assert.Contains("HANDOFF_COMPLETE_CONTRADICTION", validator);
+         Assert.Contains("HANDOFF_VALIDATION_OVERCLAIM", validator);
+         Assert.Contains("AUTONOMY_STATE_NO_PROGRESS_CANDIDATES_NOT_DISTINCT", validator);
+-        Assert.Contains("AUTONOMY_CANDIDATE_ALREADY_EXHAUSTED", updater);
++        Assert.Contains("AUTONOMY_EVALUATION_REQUIRED", updater);
++        Assert.Contains("AUTONOMY_AGENT_PROGRESS_CLASSIFICATION_FORBIDDEN", updater);
+         Assert.Contains("AUTONOMY_NO_PROGRESS_CANDIDATES_NOT_DISTINCT", updater);
+         Assert.Contains("AUTONOMOUS_CYCLE_BUDGET_REACHED", updater);
+     }
+diff --git a/Migrator.Tests/StandardMigrationModeTests.cs b/Migrator.Tests/StandardMigrationModeTests.cs
+index 03bd9f2..6182062 100644
+--- a/Migrator.Tests/StandardMigrationModeTests.cs
++++ b/Migrator.Tests/StandardMigrationModeTests.cs
+@@ -170,8 +170,12 @@ public sealed class StandardMigrationModeTests
+         Assert.Contains("\"continuousAutoAdvanceAfterProgress\": true", policy);
+         Assert.Contains("\"requireDistinctNoProgressCandidates\": true", policy);
+         Assert.Contains("\"verificationDimensionsIndependent\": true", policy);
+-        Assert.Contains("standard-migration-autonomy/v1", state);
+-        Assert.Contains("AUTONOMY_CANDIDATE_ALREADY_EXHAUSTED", updater);
++        Assert.Contains("standard-migration-autonomy/v2", state);
++        Assert.Contains("visitedStateHashes", state);
++        Assert.Contains("rollbackRequired", state);
++        Assert.Contains("AUTONOMY_EVALUATION_REQUIRED", updater);
++        Assert.Contains("AUTONOMY_AGENT_PROGRESS_CLASSIFICATION_FORBIDDEN", updater);
++        Assert.Contains("REMEDIATION_CYCLE_DETECTED", updater);
+         Assert.Contains("STOPPED_TWO_CONSECUTIVE_NO_PROGRESS", updater);
+     }
+ 
+diff --git a/docs/agent-orchestration.md b/docs/agent-orchestration.md
+index a52219d..d6f713a 100644
+--- a/docs/agent-orchestration.md
++++ b/docs/agent-orchestration.md
+@@ -19,10 +19,12 @@ kit doctor
+   -> record independent validation dimensions
+   -> choose one non-exhausted candidate
+   -> one bounded change + review
+-  -> repeat complete run and compare
+-  -> PROGRESS: reset streak and continue automatically
+-  -> first NO_PROGRESS: exhaust candidate and try another
+-  -> stop after two distinct consecutive NO_PROGRESS cycles,
++  -> repeat complete run
++  -> Core remediation evaluate(before, after)
++  -> ACCEPT: advance accepted baseline and continue automatically
++  -> REJECT_NO_PROGRESS / REJECT_REGRESSION: rollback bounded change and try another
++  -> REJECT_CYCLE: stop with REMEDIATION_CYCLE_DETECTED
++  -> stop after two distinct rejected cycles,
+      a real blocker/human decision, or five completed cycles
+ ```
+ 
+diff --git a/docs/standard-migration-flow.md b/docs/standard-migration-flow.md
+index c9b9cc4..271eb86 100644
+--- a/docs/standard-migration-flow.md
++++ b/docs/standard-migration-flow.md
+@@ -33,13 +33,13 @@ An ordinary, `continue`, or `continuous` invocation receives up to five remediat
+ Each cycle:
+ 
+ 1. chooses one non-exhausted, source-backed root cause;
+-2. records a stable candidate fingerprint and baseline metrics;
++2. records the baseline run and a stable candidate label;
+ 3. makes one bounded adapter-config, generated-helper, generated-POM, or other permitted change;
+-4. reviews the change;
+-5. reruns the complete configured source and all available checks;
+-6. classifies the result as `PROGRESS`, `NO_PROGRESS`, or `BLOCKED`.
++4. reviews the change and reruns the complete configured source into a new immutable run;
++5. runs `selenium-pw-migrator remediation evaluate --before-run <before> --after-run <after> --candidate "<label>" --autonomy-state migration/state/autonomy-state.json --out migration/state/remediation-evaluation.json`;
++6. records only the Core evaluation through `update-autonomy-state`.
+ 
+-Progress resets the no-progress streak and starts the next safe cycle automatically. The first no-progress cycle exhausts that candidate and tries a different independent candidate. Stop after two consecutive distinct no-progress cycles, a real blocker, a human-only decision, or five completed cycles.
++Only Core may classify progress. `ACCEPT` advances the baseline. `REJECT_NO_PROGRESS` and `REJECT_REGRESSION` require rollback of the complete bounded change before another candidate. `REJECT_CYCLE` stops with `REMEDIATION_CYCLE_DETECTED`. State hashes survive fresh invocation budgets, so `continue` cannot hide a repeated logical state.
+ 
+ `/supervised-task continue` starts a fresh five-cycle invocation budget while retaining run evidence and exhausted candidate fingerprints. `/supervised-task continuous` advances automatically between cycles and across five-cycle checkpoints without another user command.
+ 
+diff --git a/docs/standard-migration-flow.ru.md b/docs/standard-migration-flow.ru.md
+index 39586d7..57aaef3 100644
+--- a/docs/standard-migration-flow.ru.md
++++ b/docs/standard-migration-flow.ru.md
+@@ -33,13 +33,13 @@ Pilot — необязательная калибровка, которая не
+ Каждый цикл:
+ 
+ 1. выбирает одну неисчерпанную первопричину, подтверждённую исходниками;
+-2. сохраняет стабильный fingerprint и исходные метрики;
++2. сохраняет baseline-run и стабильную человекочитаемую метку кандидата;
+ 3. делает одно ограниченное изменение в adapter config, generated helper/POM или другом разрешённом месте;
+-4. проверяет изменение;
+-5. полностью повторяет настроенный source scope и доступные проверки;
+-6. записывает результат `PROGRESS`, `NO_PROGRESS` или `BLOCKED`.
++4. проверяет изменение и полностью повторяет source scope в новый immutable run;
++5. запускает `selenium-pw-migrator remediation evaluate --before-run <before> --after-run <after> --candidate "<label>" --autonomy-state migration/state/autonomy-state.json --out migration/state/remediation-evaluation.json`;
++6. передаёт в `update-autonomy-state` только решение deterministic Core.
+ 
+-После прогресса счётчик no-progress сбрасывается, и агент автоматически начинает следующий безопасный цикл. После первого `NO_PROGRESS` текущий кандидат помечается исчерпанным и выбирается другой независимый кандидат. Остановка происходит после двух подряд разных безрезультатных циклов, реального блокера, решения человека или пяти завершённых циклов.
++Только Core определяет прогресс. `ACCEPT` принимает новое состояние. `REJECT_NO_PROGRESS` и `REJECT_REGRESSION` требуют полного отката bounded change до выбора следующего кандидата. `REJECT_CYCLE` немедленно останавливает цикл с `REMEDIATION_CYCLE_DETECTED`. Хэши состояний сохраняются между свежими invocation-budget, поэтому `continue` не скрывает возврат A→B→A.
+ 
+ `/supervised-task continue` открывает новый бюджет из пяти циклов, сохраняя реальные evidence и список исчерпанных кандидатов. `/supervised-task continuous` явно включает автоматический переход между циклами.
+ 
+diff --git a/templates/migration-kit/AGENT_CONTRACT.md b/templates/migration-kit/AGENT_CONTRACT.md
+index cc3ef37..4a970cc 100644
+--- a/templates/migration-kit/AGENT_CONTRACT.md
++++ b/templates/migration-kit/AGENT_CONTRACT.md
+@@ -13,7 +13,7 @@ Produce a reviewable Playwright migration draft for the complete configured Sele
+ 5. Run scope, policy, artifact, and final-gate checks for the exact run.
+ 6. Rank repeated root causes by payoff, source confidence, reversibility, and independence from known blockers.
+ 7. Execute remediation in batches of up to five cycles. Ordinary, `continue`, and bounded modes receive one batch; `continuous` automatically opens the next batch at every budget checkpoint. Each cycle contains one bounded source-backed improvement under `migration/**`, review, a complete rerun, and evidence comparison.
+-8. Continue automatically after progress. After one no-progress cycle, try a different independent candidate. Stop only after two consecutive no-progress cycles on distinct candidate fingerprints, a real blocker, a human-only decision, or the batch budget in non-continuous mode. A continuous budget boundary is a checkpoint, not a stop.
++8. After every rerun, call `selenium-pw-migrator remediation evaluate` for the exact before/after runs and persist only that Core decision. `ACCEPT` advances the baseline. Any `REJECT_*` requires rollback of the bounded change; `REJECT_CYCLE` stops with `REMEDIATION_CYCLE_DETECTED`. The agent never authors progress classification.
+ 9. `continue` starts a fresh five-cycle invocation budget while preserving real evidence and exhausted candidate fingerprints. `continuous` automatically advances between safe cycles and automatically opens the next five-cycle batch at each budget checkpoint, without requiring another user command.
+ 10. Rewrite `state/handoff.md` completely and validate it before handoff. Never append duplicate status fields or sections.
+ 11. Do not end routine work with an opt-in question. Ask only when every remaining useful candidate requires a human product decision, missing source truth, or new write authorization.
+diff --git a/templates/migration-kit/current-ticket.md b/templates/migration-kit/current-ticket.md
+index e4b511b..a38f02a 100644
+--- a/templates/migration-kit/current-ticket.md
++++ b/templates/migration-kit/current-ticket.md
+@@ -4,9 +4,9 @@
+ 
+ <fill in after current-run analysis>
+ 
+-## Candidate fingerprint
++## Candidate label
+ 
+-<stable root-cause identifier; do not reuse after NO_PROGRESS without new evidence>
++<stable human-readable root-cause label; Core derives the fingerprint from the baseline state + label>
+ 
+ ## Root cause
+ 
+@@ -35,10 +35,10 @@
+ - Runtime/smoke verification:
+ - Relevant metric delta:
+ 
+-## Cycle result
++## Core cycle decision
+ 
+-<NOT_STARTED | PROGRESS | NO_PROGRESS | BLOCKED>
++<NOT_EVALUATED | ACCEPT | REJECT_NO_PROGRESS | REJECT_REGRESSION | REJECT_CYCLE>
+ 
+ ## Stop condition
+ 
+-Complete exactly one bounded, source-backed repair for this cycle, rerun the complete configured source scope, compare all relevant evidence dimensions, record the result in `state/autonomy-state.json`, and return control to the orchestrator. This cycle belongs to a five-cycle invocation budget. Do not stop the whole invocation merely because this one cycle produced no progress; in `continuous` mode the orchestrator also rolls over to the next five-cycle batch automatically.
++Complete exactly one bounded, source-backed repair for this cycle, rerun the complete configured source scope, compare all relevant evidence dimensions, run `selenium-pw-migrator remediation evaluate`, record only its evaluation in `state/autonomy-state.json`, and roll back the bounded change on any `REJECT_*`, and return control to the orchestrator. This cycle belongs to a five-cycle invocation budget. Do not stop the whole invocation merely because this one cycle produced no progress; in `continuous` mode the orchestrator also rolls over to the next five-cycle batch automatically.
+diff --git a/templates/migration-kit/prompts/bounded-repair-prompt.txt b/templates/migration-kit/prompts/bounded-repair-prompt.txt
+index f50410d..6a4900c 100644
+--- a/templates/migration-kit/prompts/bounded-repair-prompt.txt
++++ b/templates/migration-kit/prompts/bounded-repair-prompt.txt
+@@ -1 +1 @@
+-Run one bounded improvement cycle: inspect current evidence, record a candidate fingerprint and baseline metrics, fix one repeated root cause, rerun the complete configured source, compare all evidence dimensions, and record PROGRESS, NO_PROGRESS, or BLOCKED. Return control to the orchestrator, which decides whether the invocation continues. Do not partition the source, bypass failed verification, or confuse syntax validity with a passing project build.
++Run one bounded improvement cycle: inspect current evidence, record the baseline run and a stable candidate label, make one bounded change, rerun the complete configured source into a new immutable run, then call `selenium-pw-migrator remediation evaluate` for the before/after runs. Record only the Core evaluation with `update-autonomy-state -EvaluationPath`. On any `REJECT_*`, restore the complete bounded change before another candidate; on `REJECT_CYCLE`, stop. Never author PROGRESS/NO_PROGRESS/BLOCKED yourself, partition the source, bypass failed verification, or confuse syntax validity with a passing project build.
+diff --git a/templates/migration-kit/prompts/next-ticket-prompt.txt b/templates/migration-kit/prompts/next-ticket-prompt.txt
+index f50410d..6a4900c 100644
+--- a/templates/migration-kit/prompts/next-ticket-prompt.txt
++++ b/templates/migration-kit/prompts/next-ticket-prompt.txt
+@@ -1 +1 @@
+-Run one bounded improvement cycle: inspect current evidence, record a candidate fingerprint and baseline metrics, fix one repeated root cause, rerun the complete configured source, compare all evidence dimensions, and record PROGRESS, NO_PROGRESS, or BLOCKED. Return control to the orchestrator, which decides whether the invocation continues. Do not partition the source, bypass failed verification, or confuse syntax validity with a passing project build.
++Run one bounded improvement cycle: inspect current evidence, record the baseline run and a stable candidate label, make one bounded change, rerun the complete configured source into a new immutable run, then call `selenium-pw-migrator remediation evaluate` for the before/after runs. Record only the Core evaluation with `update-autonomy-state -EvaluationPath`. On any `REJECT_*`, restore the complete bounded change before another candidate; on `REJECT_CYCLE`, stop. Never author PROGRESS/NO_PROGRESS/BLOCKED yourself, partition the source, bypass failed verification, or confuse syntax validity with a passing project build.
+diff --git a/templates/migration-kit/scripts/check-harness-policy.ps1 b/templates/migration-kit/scripts/check-harness-policy.ps1
+index a265018..75c8cf8 100644
+--- a/templates/migration-kit/scripts/check-harness-policy.ps1
++++ b/templates/migration-kit/scripts/check-harness-policy.ps1
+@@ -37,7 +37,7 @@ $autonomyPath = Join-Path $workspaceFull "state/autonomy-state.json"
+ if (-not (Test-Path -LiteralPath $autonomyPath)) { throw "AUTONOMY_STATE_MISSING: $autonomyPath" }
+ try { $autonomy = Get-Content -LiteralPath $autonomyPath -Raw | ConvertFrom-Json }
+ catch { throw "AUTONOMY_STATE_INVALID_JSON: $($_.Exception.Message)" }
+-if ($autonomy.schemaVersion -ne "standard-migration-autonomy/v1") { throw "AUTONOMY_STATE_SCHEMA_INVALID: $($autonomy.schemaVersion)" }
++if ($autonomy.schemaVersion -ne "standard-migration-autonomy/v2") { throw "AUTONOMY_STATE_SCHEMA_INVALID: $($autonomy.schemaVersion)" }
+ if ([int]$autonomy.cycleBudget -lt 1 -or [int]$autonomy.cycleBudget -gt [int]$policy.maxRemediationCyclesPerInvocation) {
+     throw "AUTONOMY_STATE_CYCLE_BUDGET_INVALID"
+ }
+diff --git a/templates/migration-kit/scripts/update-autonomy-state.ps1 b/templates/migration-kit/scripts/update-autonomy-state.ps1
+index f4332dc..80b4884 100644
+--- a/templates/migration-kit/scripts/update-autonomy-state.ps1
++++ b/templates/migration-kit/scripts/update-autonomy-state.ps1
+@@ -9,9 +9,11 @@ param(
+     [string]$InvocationId = "",
+     [ValidateRange(1, 5)]
+     [int]$CycleBudget = 5,
++    [string]$EvaluationPath = "",
++    # Legacy parameters are accepted by the parser only so old agents fail with a precise
++    # contract error instead of silently retaining authority over progress classification.
+     [string]$CandidateFingerprint = "",
+-    [ValidateSet("PROGRESS", "NO_PROGRESS", "BLOCKED")]
+-    [string]$Result = "PROGRESS",
++    [string]$Result = "",
+     [string]$MetricSummary = "",
+     [ValidateSet("RUNNING", "COMPLETE", "STOPPED", "BLOCKED")]
+     [string]$Status = "STOPPED",
+@@ -27,7 +29,7 @@ function Resolve-FullPath([string]$Path) {
+ 
+ function New-State {
+     return [ordered]@{
+-        schemaVersion = "standard-migration-autonomy/v1"
++        schemaVersion = "standard-migration-autonomy/v2"
+         invocationId = $null
+         mode = "standard"
+         status = "NOT_STARTED"
+@@ -39,8 +41,15 @@ function New-State {
+         noProgressStreak = 0
+         lastCandidateFingerprint = $null
+         lastCycleResult = $null
++        lastDecision = $null
++        lastEvaluationSha256 = $null
++        lastBeforeStateHash = $null
++        lastAfterStateHash = $null
++        currentStateHash = $null
++        rollbackRequired = $false
+         lastCheckpointReason = $null
+         exhaustedCandidateFingerprints = @()
++        visitedStateHashes = @()
+         completedCycles = @()
+         cycleHistory = @()
+         stopReason = $null
+@@ -50,10 +59,18 @@ function New-State {
+ function Convert-ToMutableState($InputState) {
+     $state = New-State
+     if ($null -eq $InputState) { return $state }
++
++    $sourceSchema = [string]$InputState.schemaVersion
++    if ($sourceSchema -ne "standard-migration-autonomy/v1" -and $sourceSchema -ne "standard-migration-autonomy/v2") {
++        throw "AUTONOMY_STATE_SCHEMA_INVALID: $sourceSchema"
++    }
++
+     foreach ($key in @($state.Keys)) {
+         if ($null -ne $InputState.PSObject.Properties[$key]) { $state[$key] = $InputState.$key }
+     }
++    $state.schemaVersion = "standard-migration-autonomy/v2"
+     $state.exhaustedCandidateFingerprints = @($state.exhaustedCandidateFingerprints)
++    $state.visitedStateHashes = @($state.visitedStateHashes)
+     $state.completedCycles = @($state.completedCycles)
+     $state.cycleHistory = @($state.cycleHistory)
+     return $state
+@@ -63,10 +80,32 @@ function Write-State([string]$Path, $State) {
+     $directory = Split-Path -Parent $Path
+     New-Item -ItemType Directory -Force -Path $directory | Out-Null
+     $temp = "$Path.tmp"
+-    $State | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $temp -Encoding UTF8
++    $State | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath $temp -Encoding UTF8
+     Move-Item -LiteralPath $temp -Destination $Path -Force
+ }
+ 
++function Read-Evaluation([string]$Path) {
++    if ([string]::IsNullOrWhiteSpace($Path)) { throw "AUTONOMY_EVALUATION_REQUIRED" }
++    $full = Resolve-FullPath $Path
++    if (-not (Test-Path -LiteralPath $full)) { throw "AUTONOMY_EVALUATION_NOT_FOUND: $full" }
++    try { $evaluation = Get-Content -LiteralPath $full -Raw | ConvertFrom-Json }
++    catch { throw "AUTONOMY_EVALUATION_INVALID_JSON: $($_.Exception.Message)" }
++
++    if ([string]$evaluation.SchemaVersion -ne "migrator-remediation-evaluation/v1") {
++        throw "AUTONOMY_EVALUATION_SCHEMA_INVALID: $($evaluation.SchemaVersion)"
++    }
++    if (@("ACCEPT", "REJECT_NO_PROGRESS", "REJECT_REGRESSION", "REJECT_CYCLE") -notcontains [string]$evaluation.Decision) {
++        throw "AUTONOMY_EVALUATION_DECISION_INVALID: $($evaluation.Decision)"
++    }
++    foreach ($required in @("EvaluationSha256", "CandidateFingerprint")) {
++        if ([string]::IsNullOrWhiteSpace([string]$evaluation.$required)) { throw "AUTONOMY_EVALUATION_FIELD_MISSING: $required" }
++    }
++    if ([string]::IsNullOrWhiteSpace([string]$evaluation.Before.StateHash) -or [string]::IsNullOrWhiteSpace([string]$evaluation.After.StateHash)) {
++        throw "AUTONOMY_EVALUATION_STATE_HASH_MISSING"
++    }
++    return $evaluation
++}
++
+ $workspaceFull = Resolve-FullPath $Workspace
+ $statePath = Join-Path $workspaceFull "state/autonomy-state.json"
+ $loaded = $null
+@@ -75,7 +114,6 @@ if (Test-Path -LiteralPath $statePath) {
+     catch { throw "AUTONOMY_STATE_INVALID_JSON: $($_.Exception.Message)" }
+ }
+ $state = Convert-ToMutableState $loaded
+-if ($state.schemaVersion -ne "standard-migration-autonomy/v1") { throw "AUTONOMY_STATE_SCHEMA_INVALID: $($state.schemaVersion)" }
+ 
+ switch ($Action) {
+     "StartInvocation" {
+@@ -91,51 +129,94 @@ switch ($Action) {
+         $state.noProgressStreak = 0
+         $state.lastCandidateFingerprint = $null
+         $state.lastCycleResult = $null
++        $state.lastDecision = $null
++        $state.lastEvaluationSha256 = $null
++        $state.lastBeforeStateHash = $null
++        $state.lastAfterStateHash = $null
++        $state.rollbackRequired = $false
+         $state.lastCheckpointReason = $null
+         $state.completedCycles = @()
+         $state.cycleHistory = @()
+         $state.stopReason = $null
++        # currentStateHash and visitedStateHashes intentionally survive a fresh invocation.
++        # A `continue` budget is fresh; logical state history is not.
+     }
+     "RecordCycle" {
+         if ($state.status -ne "RUNNING") { throw "AUTONOMY_STATE_NOT_RUNNING: start a new invocation first." }
+-        if ([string]::IsNullOrWhiteSpace($CandidateFingerprint)) { throw "AUTONOMY_CANDIDATE_FINGERPRINT_REQUIRED" }
+         if ([int]$state.cyclesCompleted -ge [int]$state.cycleBudget) { throw "AUTONOMY_CYCLE_BUDGET_ALREADY_REACHED" }
++        if (-not [string]::IsNullOrWhiteSpace($CandidateFingerprint) -or -not [string]::IsNullOrWhiteSpace($Result) -or -not [string]::IsNullOrWhiteSpace($MetricSummary)) {
++            throw "AUTONOMY_AGENT_PROGRESS_CLASSIFICATION_FORBIDDEN: use -EvaluationPath from `selenium-pw-migrator remediation evaluate`."
++        }
+ 
+-        $exhausted = @($state.exhaustedCandidateFingerprints)
+-        if ($Result -eq "NO_PROGRESS" -and $exhausted -contains $CandidateFingerprint) {
+-            throw "AUTONOMY_CANDIDATE_ALREADY_EXHAUSTED: $CandidateFingerprint"
++        $evaluation = Read-Evaluation $EvaluationPath
++        $beforeHash = [string]$evaluation.Before.StateHash
++        $afterHash = [string]$evaluation.After.StateHash
++        $decision = [string]$evaluation.Decision
++        $fingerprint = [string]$evaluation.CandidateFingerprint
++
++        if (-not [string]::IsNullOrWhiteSpace([string]$state.currentStateHash) -and [string]$state.currentStateHash -ne $beforeHash) {
++            throw "AUTONOMY_EVALUATION_BASELINE_MISMATCH: expected $($state.currentStateHash), got $beforeHash"
++        }
++
++        $visited = @($state.visitedStateHashes)
++        if ($visited -contains $afterHash -and $decision -ne "REJECT_CYCLE") {
++            throw "AUTONOMY_EVALUATION_MISSED_CYCLE: Core evaluation must classify revisited state as REJECT_CYCLE."
+         }
+ 
++        if ([string]::IsNullOrWhiteSpace([string]$state.currentStateHash)) {
++            $state.currentStateHash = $beforeHash
++        }
++        $state.visitedStateHashes = @($visited + @($beforeHash, $afterHash) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
++
++        $result = if ($decision -eq "ACCEPT") { "PROGRESS" } else { "NO_PROGRESS" }
++        $rollbackRequired = [bool]$evaluation.RollbackRequired
+         $record = [ordered]@{
+             batchNumber = [int]$state.batchNumber
+             cycleNumber = ([int]$state.cyclesCompleted + 1)
+             totalCycleNumber = ([int]$state.totalCyclesCompleted + 1)
+-            candidateFingerprint = $CandidateFingerprint
+-            result = $Result
+-            metricSummary = $MetricSummary
++            candidateFingerprint = $fingerprint
++            candidateLabel = [string]$evaluation.CandidateLabel
++            result = $result
++            decision = $decision
++            reason = [string]$evaluation.Reason
++            evaluationSha256 = [string]$evaluation.EvaluationSha256
++            beforeStateHash = $beforeHash
++            afterStateHash = $afterHash
++            beforeDefects = $evaluation.Before.Defects
++            afterDefects = $evaluation.After.Defects
++            improvements = @($evaluation.Improvements)
++            regressions = @($evaluation.Regressions)
++            rollbackRequired = $rollbackRequired
+             completedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+         }
+         $state.completedCycles = @(@($state.completedCycles) + @([pscustomobject]$record))
+         $state.cycleHistory = @(@($state.cycleHistory) + @([pscustomobject]$record))
+         $state.cyclesCompleted = [int]$state.cyclesCompleted + 1
+         $state.totalCyclesCompleted = [int]$state.totalCyclesCompleted + 1
+-        $state.lastCandidateFingerprint = $CandidateFingerprint
+-        $state.lastCycleResult = $Result
++        $state.lastCandidateFingerprint = $fingerprint
++        $state.lastCycleResult = $result
++        $state.lastDecision = $decision
++        $state.lastEvaluationSha256 = [string]$evaluation.EvaluationSha256
++        $state.lastBeforeStateHash = $beforeHash
++        $state.lastAfterStateHash = $afterHash
++        $state.rollbackRequired = $rollbackRequired
+         $state.lastCheckpointReason = $null
+ 
+-        if ($Result -eq "PROGRESS") {
++        if ($decision -eq "ACCEPT") {
+             $state.noProgressStreak = 0
+-        }
+-        elseif ($Result -eq "NO_PROGRESS") {
+-            $state.noProgressStreak = [int]$state.noProgressStreak + 1
+-            $state.exhaustedCandidateFingerprints = @($exhausted + @($CandidateFingerprint) | Select-Object -Unique)
++            $state.currentStateHash = $afterHash
+         }
+         else {
+-            $state.noProgressStreak = 0
+-            $state.exhaustedCandidateFingerprints = @($exhausted + @($CandidateFingerprint) | Select-Object -Unique)
++            $state.noProgressStreak = [int]$state.noProgressStreak + 1
++            $state.currentStateHash = $beforeHash
++            $state.exhaustedCandidateFingerprints = @(@($state.exhaustedCandidateFingerprints) + @($fingerprint) | Select-Object -Unique)
+         }
+ 
+-        if ([int]$state.noProgressStreak -ge 2) {
++        if ($decision -eq "REJECT_CYCLE") {
++            $state.status = "STOPPED"
++            $state.stopReason = "REMEDIATION_CYCLE_DETECTED"
++        }
++        elseif ([int]$state.noProgressStreak -ge 2) {
+             $history = @($state.cycleHistory)
+             $last = $history[$history.Count - 1]
+             $previous = $history[$history.Count - 2]
+@@ -189,6 +270,9 @@ Write-Host "Status: $($state.status)"
+ Write-Host "Batch: $($state.batchNumber)"
+ Write-Host "Cycles in batch: $($state.cyclesCompleted)/$($state.cycleBudget)"
+ Write-Host "Total cycles: $($state.totalCyclesCompleted)"
++Write-Host "Current state: $($state.currentStateHash)"
++Write-Host "Last decision: $($state.lastDecision)"
++Write-Host "Rollback required: $($state.rollbackRequired)"
+ Write-Host "No-progress streak: $($state.noProgressStreak)"
+ Write-Host "Checkpoint: $($state.lastCheckpointReason)"
+ Write-Host "Stop reason: $($state.stopReason)"
+diff --git a/templates/migration-kit/scripts/validate-handoff.ps1 b/templates/migration-kit/scripts/validate-handoff.ps1
+index 100210e..d2fdffc 100644
+--- a/templates/migration-kit/scripts/validate-handoff.ps1
++++ b/templates/migration-kit/scripts/validate-handoff.ps1
+@@ -113,7 +113,7 @@ catch {
+     throw "AUTONOMY_STATE_INVALID_JSON: $($_.Exception.Message)"
+ }
+ 
+-if ($state.schemaVersion -ne "standard-migration-autonomy/v1") { throw "AUTONOMY_STATE_SCHEMA_INVALID: $($state.schemaVersion)" }
++if ($state.schemaVersion -ne "standard-migration-autonomy/v2") { throw "AUTONOMY_STATE_SCHEMA_INVALID: $($state.schemaVersion)" }
+ if ([int]$state.cycleBudget -ne $cycleBudget) { throw "HANDOFF_STATE_MISMATCH: cycleBudget" }
+ if ([int]$state.cyclesCompleted -ne $cyclesCompleted) { throw "HANDOFF_STATE_MISMATCH: cyclesCompleted" }
+ if ([int]$state.totalCyclesCompleted -ne $totalCyclesCompleted) { throw "HANDOFF_STATE_MISMATCH: totalCyclesCompleted" }
+@@ -140,8 +140,14 @@ $fingerprints = @()
+ foreach ($cycle in $cycleHistory) {
+     $fingerprint = [string]$cycle.candidateFingerprint
+     $result = [string]$cycle.result
++    $decision = [string]$cycle.decision
+     if ([string]::IsNullOrWhiteSpace($fingerprint)) { throw "AUTONOMY_STATE_FINGERPRINT_MISSING" }
+-    if (@("PROGRESS", "NO_PROGRESS", "BLOCKED") -notcontains $result) { throw "AUTONOMY_STATE_CYCLE_RESULT_INVALID: $result" }
++    if (@("PROGRESS", "NO_PROGRESS") -notcontains $result) { throw "AUTONOMY_STATE_CYCLE_RESULT_INVALID: $result" }
++    if (@("ACCEPT", "REJECT_NO_PROGRESS", "REJECT_REGRESSION", "REJECT_CYCLE") -notcontains $decision) { throw "AUTONOMY_STATE_CYCLE_DECISION_INVALID: $decision" }
++    if ([string]::IsNullOrWhiteSpace([string]$cycle.evaluationSha256)) { throw "AUTONOMY_STATE_EVALUATION_HASH_MISSING" }
++    if ([string]::IsNullOrWhiteSpace([string]$cycle.beforeStateHash) -or [string]::IsNullOrWhiteSpace([string]$cycle.afterStateHash)) { throw "AUTONOMY_STATE_CYCLE_STATE_HASH_MISSING" }
++    if ($decision -eq "ACCEPT" -and [bool]$cycle.rollbackRequired) { throw "AUTONOMY_STATE_ACCEPT_CANNOT_REQUIRE_ROLLBACK" }
++    if ($decision -ne "ACCEPT" -and -not [bool]$cycle.rollbackRequired) { throw "AUTONOMY_STATE_REJECTION_REQUIRES_ROLLBACK" }
+     $fingerprints += $fingerprint
+ }
+ 
+diff --git a/templates/migration-kit/state/autonomy-state.json b/templates/migration-kit/state/autonomy-state.json
+index 616ca19..d98bab2 100644
+--- a/templates/migration-kit/state/autonomy-state.json
++++ b/templates/migration-kit/state/autonomy-state.json
+@@ -1,5 +1,5 @@
+ {
+-  "schemaVersion": "standard-migration-autonomy/v1",
++  "schemaVersion": "standard-migration-autonomy/v2",
+   "invocationId": null,
+   "mode": "standard",
+   "status": "NOT_STARTED",
+@@ -11,8 +11,15 @@
+   "noProgressStreak": 0,
+   "lastCandidateFingerprint": null,
+   "lastCycleResult": null,
++  "lastDecision": null,
++  "lastEvaluationSha256": null,
++  "lastBeforeStateHash": null,
++  "lastAfterStateHash": null,
++  "currentStateHash": null,
++  "rollbackRequired": false,
+   "lastCheckpointReason": null,
+   "exhaustedCandidateFingerprints": [],
++  "visitedStateHashes": [],
+   "completedCycles": [],
+   "cycleHistory": [],
+   "stopReason": null
+diff --git a/templates/migration-kit/state/harness-policy.json b/templates/migration-kit/state/harness-policy.json
+index 718ef57..eee2681 100644
+--- a/templates/migration-kit/state/harness-policy.json
++++ b/templates/migration-kit/state/harness-policy.json
+@@ -20,5 +20,11 @@
+   "oneWriteChangePerCycle": true,
+   "requireFullRerunAfterEachCycle": true,
+   "requireRemainingClusterClassificationBeforeManualHandoff": true,
+-  "cycleBudgetStopReason": "AUTONOMOUS_CYCLE_BUDGET_REACHED"
++  "cycleBudgetStopReason": "AUTONOMOUS_CYCLE_BUDGET_REACHED",
++  "progressAuthority": "deterministic-core",
++  "requireCoreRemediationEvaluation": true,
++  "rejectAgentAuthoredProgressClassification": true,
++  "requireRollbackOnRejectedCycle": true,
++  "persistVisitedStateHashesAcrossInvocations": true,
++  "cycleDetectedStopReason": "REMEDIATION_CYCLE_DETECTED"
+ }
+diff --git a/templates/opencode-team/global/.config/opencode/agents/orchestrator.md b/templates/opencode-team/global/.config/opencode/agents/orchestrator.md
+index 82d8798..ff88d77 100644
+--- a/templates/opencode-team/global/.config/opencode/agents/orchestrator.md
++++ b/templates/opencode-team/global/.config/opencode/agents/orchestrator.md
+@@ -20,10 +20,10 @@ Use one configured Selenium source scope and one ordinary run lineage. Historica
+ 3. Execute the complete configured source and fresh project verification when available.
+ 4. Rank repeated root causes by payoff, source confidence, reversibility, and independence from known blockers.
+ 5. Run remediation in five-cycle batches. Ordinary, `continue`, and bounded modes receive one batch; `continuous` automatically opens another batch after each `AUTONOMOUS_CYCLE_BUDGET_REACHED` checkpoint. Each cycle contains exactly one bounded change, review, complete rerun, and evidence comparison.
+-6. After progress, reset the no-progress streak and automatically start the next safe cycle. In `continuous` mode, roll over to the next five-cycle batch when the current budget is reached; do not require another `continue` command.
+-7. After one no-progress cycle, exhaust that candidate and try a different independent candidate. Stop only after two consecutive no-progress cycles with distinct fingerprints and no intervening progress.
++6. After each rerun, call deterministic Core through `selenium-pw-migrator remediation evaluate`; the agent never authors PROGRESS/NO_PROGRESS/BLOCKED. `ACCEPT` resets the no-progress streak and advances the accepted baseline.
++7. `REJECT_NO_PROGRESS` or `REJECT_REGRESSION` requires rollback of the entire bounded change before trying another independent candidate. `REJECT_CYCLE` stops immediately with `REMEDIATION_CYCLE_DETECTED`. Stop after two consecutive rejected cycles with distinct Core-generated fingerprints and no intervening ACCEPT.
+ 8. Treat generated syntax, migration metrics, project build verification, and runtime verification as independent evidence dimensions. An isolated verification-harness defect does not block measurable config/POM/helper improvements.
+-9. Use `watchdog` for loops, crashes, contradictory evidence, repeated candidates, or disputed no-progress classification.
++9. Use `watchdog` for crashes, contradictory evidence, rollback failures, or disagreement with deterministic Core artifacts; cycle detection itself is state-hash based.
+ 10. Persist `state/autonomy-state.json` after every cycle and rewrite `state/handoff.md` atomically before handoff.
+ 
+ `continue` opens a fresh five-cycle invocation budget while preserving exhausted candidate fingerprints. `continuous` automatically advances between safe cycles and across `AUTONOMOUS_CYCLE_BUDGET_REACHED` checkpoints until success or a real terminal stop; it is not permission to ignore the no-progress, safety, or human-decision stops. If safe candidates remain at a checkpoint, this is budget rollover or bounded handoff, not a global plateau.
+diff --git a/templates/opencode-team/global/.config/opencode/commands/supervised-task.md b/templates/opencode-team/global/.config/opencode/commands/supervised-task.md
+index 4bb035c..503df11 100644
+--- a/templates/opencode-team/global/.config/opencode/commands/supervised-task.md
++++ b/templates/opencode-team/global/.config/opencode/commands/supervised-task.md
+@@ -93,18 +93,16 @@ Use `.ps1` equivalents on Windows. Preserve a failed gate honestly.
+ For each cycle:
+ 
+ 1. Select the highest-payoff root cause among **non-exhausted** candidates that is agent-executable and supported by current source evidence.
+-2. Record a stable candidate fingerprint and baseline metrics before editing.
++2. Record the baseline run path and one stable human-readable candidate label before editing. The label is not authoritative progress evidence.
+ 3. Delegate exactly one bounded change to `executor`; review it with `reviewer`.
+-4. Rerun the complete configured source and all available checks.
+-5. Compare at least TODO count, mapped/unmapped targets, unsupported actions, generated-file/test counts, syntax errors, project-verification status, and the relevant root-cause cluster count.
+-6. Classify the cycle:
+-   - `PROGRESS` when a meaningful migration metric improves, a blocker is resolved, or new source-backed evidence unlocks a concrete next action;
+-   - `NO_PROGRESS` when the accepted change and complete rerun produce no meaningful improvement and no new evidence;
+-   - `BLOCKED` only when that candidate cannot be measured or completed safely.
+-7. On `PROGRESS`, reset `noProgressStreak` to `0` and automatically start the next safe cycle while budget remains.
+-8. On the first `NO_PROGRESS`, set the streak to `1`, mark that candidate exhausted, and try a different independent candidate. Do not stop yet.
+-9. Stop with `STOPPED_TWO_CONSECUTIVE_NO_PROGRESS` only after two consecutive completed no-progress cycles on distinct candidate fingerprints with no intervening progress.
+-10. At five completed cycles, emit the `AUTONOMOUS_CYCLE_BUDGET_REACHED` checkpoint. In ordinary, `continue`, or bounded mode, stop and rank remaining safe candidates without claiming completion. In `continuous` mode, persist the checkpoint, open the next five-cycle batch automatically, and keep working without requiring `/supervised-task continue`.
++4. Rerun the complete configured source and all available checks into a new immutable run directory.
++5. Ask deterministic Core to compare the two exact runs:
++   `selenium-pw-migrator remediation evaluate --before-run <before> --after-run <after> --candidate "<label>" --autonomy-state migration/state/autonomy-state.json --out migration/state/remediation-evaluation.json`.
++6. Record only that Core decision with `migration/scripts/update-autonomy-state.ps1 -Action RecordCycle -Workspace migration -EvaluationPath migration/state/remediation-evaluation.json`. Never pass an agent-authored `PROGRESS`, `NO_PROGRESS`, `BLOCKED`, metric summary, or candidate fingerprint.
++7. `ACCEPT` is the only progress decision. Core requires at least one deterministic defect/build improvement and rejects measured regressions. Reset `noProgressStreak` and continue automatically while budget remains.
++8. `REJECT_NO_PROGRESS` or `REJECT_REGRESSION` sets `rollbackRequired=true`: restore the complete bounded change before selecting a different independent candidate. Do not carry a rejected patch into the next baseline.
++9. `REJECT_CYCLE` stops immediately with `REMEDIATION_CYCLE_DETECTED`. State hashes survive fresh invocation budgets, so `continue` cannot hide an A→B→A loop.
++10. Stop with `STOPPED_TWO_CONSECUTIVE_NO_PROGRESS` after two consecutive rejected cycles on distinct Core-generated candidate fingerprints. At five completed cycles, emit `AUTONOMOUS_CYCLE_BUDGET_REACHED`; `continuous` may roll to another batch, but state history remains.
+ 
+ ## Independent validation dimensions
+ 

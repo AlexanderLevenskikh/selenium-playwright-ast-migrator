@@ -35,6 +35,9 @@ if (args.Length > 0 && string.Equals(args[0], "memory", StringComparison.Ordinal
 if (args.Length > 0 && string.Equals(args[0], "lab", StringComparison.OrdinalIgnoreCase))
     return LabCommand.Run(args.Skip(1).ToArray());
 
+if (args.Length > 0 && string.Equals(args[0], "remediation", StringComparison.OrdinalIgnoreCase))
+    return RemediationCommand.Run(args.Skip(1).ToArray());
+
 if (args.Length > 1
     && string.Equals(args[0], "config", StringComparison.OrdinalIgnoreCase)
     && (string.Equals(args[1], "merge-deltas", StringComparison.OrdinalIgnoreCase)

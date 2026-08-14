@@ -33,13 +33,13 @@ Pilot — необязательная калибровка, которая не
 Каждый цикл:
 
 1. выбирает одну неисчерпанную первопричину, подтверждённую исходниками;
-2. сохраняет стабильный fingerprint и исходные метрики;
+2. сохраняет baseline-run и стабильную человекочитаемую метку кандидата;
 3. делает одно ограниченное изменение в adapter config, generated helper/POM или другом разрешённом месте;
-4. проверяет изменение;
-5. полностью повторяет настроенный source scope и доступные проверки;
-6. записывает результат `PROGRESS`, `NO_PROGRESS` или `BLOCKED`.
+4. проверяет изменение и полностью повторяет source scope в новый immutable run;
+5. запускает `selenium-pw-migrator remediation evaluate --before-run <before> --after-run <after> --candidate "<label>" --autonomy-state migration/state/autonomy-state.json --out migration/state/remediation-evaluation.json`;
+6. передаёт в `update-autonomy-state` только решение deterministic Core.
 
-После прогресса счётчик no-progress сбрасывается, и агент автоматически начинает следующий безопасный цикл. После первого `NO_PROGRESS` текущий кандидат помечается исчерпанным и выбирается другой независимый кандидат. Остановка происходит после двух подряд разных безрезультатных циклов, реального блокера, решения человека или пяти завершённых циклов.
+Только Core определяет прогресс. `ACCEPT` принимает новое состояние. `REJECT_NO_PROGRESS` и `REJECT_REGRESSION` требуют полного отката bounded change до выбора следующего кандидата. `REJECT_CYCLE` немедленно останавливает цикл с `REMEDIATION_CYCLE_DETECTED`. Хэши состояний сохраняются между свежими invocation-budget, поэтому `continue` не скрывает возврат A→B→A.
 
 `/supervised-task continue` открывает новый бюджет из пяти циклов, сохраняя реальные evidence и список исчерпанных кандидатов. `/supervised-task continuous` явно включает автоматический переход между циклами.
 

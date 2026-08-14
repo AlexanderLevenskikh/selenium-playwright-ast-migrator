@@ -170,8 +170,12 @@ public sealed class StandardMigrationModeTests
         Assert.Contains("\"continuousAutoAdvanceAfterProgress\": true", policy);
         Assert.Contains("\"requireDistinctNoProgressCandidates\": true", policy);
         Assert.Contains("\"verificationDimensionsIndependent\": true", policy);
-        Assert.Contains("standard-migration-autonomy/v1", state);
-        Assert.Contains("AUTONOMY_CANDIDATE_ALREADY_EXHAUSTED", updater);
+        Assert.Contains("standard-migration-autonomy/v2", state);
+        Assert.Contains("visitedStateHashes", state);
+        Assert.Contains("rollbackRequired", state);
+        Assert.Contains("AUTONOMY_EVALUATION_REQUIRED", updater);
+        Assert.Contains("AUTONOMY_AGENT_PROGRESS_CLASSIFICATION_FORBIDDEN", updater);
+        Assert.Contains("REMEDIATION_CYCLE_DETECTED", updater);
         Assert.Contains("STOPPED_TWO_CONSECUTIVE_NO_PROGRESS", updater);
     }
 

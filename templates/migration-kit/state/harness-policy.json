@@ -20,5 +20,11 @@
   "oneWriteChangePerCycle": true,
   "requireFullRerunAfterEachCycle": true,
   "requireRemainingClusterClassificationBeforeManualHandoff": true,
-  "cycleBudgetStopReason": "AUTONOMOUS_CYCLE_BUDGET_REACHED"
+  "cycleBudgetStopReason": "AUTONOMOUS_CYCLE_BUDGET_REACHED",
+  "progressAuthority": "deterministic-core",
+  "requireCoreRemediationEvaluation": true,
+  "rejectAgentAuthoredProgressClassification": true,
+  "requireRollbackOnRejectedCycle": true,
+  "persistVisitedStateHashesAcrossInvocations": true,
+  "cycleDetectedStopReason": "REMEDIATION_CYCLE_DETECTED"
 }

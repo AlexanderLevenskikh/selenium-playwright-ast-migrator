@@ -81,7 +81,9 @@ public sealed class StandardInstructionContractTests
         Assert.Contains("one bounded change is allowed **per cycle**, not per invocation", command);
         Assert.Contains("fresh budget of up to **5 remediation cycles**", command);
         Assert.Contains("`continuous` means automatically begin the next safe cycle after progress", command);
-        Assert.Contains("first `NO_PROGRESS`", command);
+        Assert.Contains("`REJECT_NO_PROGRESS`", command);
+        Assert.Contains("remediation evaluate", command);
+        Assert.Contains("Never pass an agent-authored `PROGRESS`", command);
         Assert.Contains("distinct candidate fingerprints", command);
         Assert.Contains("Independent validation dimensions", command);
         Assert.Contains("validate-handoff.ps1", command);
@@ -121,7 +123,8 @@ public sealed class StandardInstructionContractTests
         }
 
         Assert.Contains("one bounded change is allowed **per cycle**, not per invocation", command);
-        Assert.Contains("On the first `NO_PROGRESS`", command);
+        Assert.Contains("`REJECT_NO_PROGRESS`", command);
+        Assert.Contains("rollbackRequired=true", command);
         Assert.Contains("try a different independent candidate", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("A failed `verify-project` is not by itself a global stop", command);
         Assert.Contains("AUTONOMOUS_CYCLE_BUDGET_REACHED", stopPolicy);
@@ -144,11 +147,14 @@ public sealed class StandardInstructionContractTests
         Assert.Equal(1, CountLine(handoff, "## Autonomous next actions"));
         Assert.Equal(1, CountLine(handoff, "## What not to do"));
         Assert.DoesNotContain("Status: COMPLETE", handoff);
-        Assert.Contains("standard-migration-autonomy/v1", autonomy);
+        Assert.Contains("standard-migration-autonomy/v2", autonomy);
+        Assert.Contains("visitedStateHashes", autonomy);
+        Assert.Contains("rollbackRequired", autonomy);
         Assert.Contains("HANDOFF_COMPLETE_CONTRADICTION", validator);
         Assert.Contains("HANDOFF_VALIDATION_OVERCLAIM", validator);
         Assert.Contains("AUTONOMY_STATE_NO_PROGRESS_CANDIDATES_NOT_DISTINCT", validator);
-        Assert.Contains("AUTONOMY_CANDIDATE_ALREADY_EXHAUSTED", updater);
+        Assert.Contains("AUTONOMY_EVALUATION_REQUIRED", updater);
+        Assert.Contains("AUTONOMY_AGENT_PROGRESS_CLASSIFICATION_FORBIDDEN", updater);
         Assert.Contains("AUTONOMY_NO_PROGRESS_CANDIDATES_NOT_DISTINCT", updater);
         Assert.Contains("AUTONOMOUS_CYCLE_BUDGET_REACHED", updater);
     }

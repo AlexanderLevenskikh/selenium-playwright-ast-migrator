@@ -19,10 +19,12 @@ kit doctor
   -> record independent validation dimensions
   -> choose one non-exhausted candidate
   -> one bounded change + review
-  -> repeat complete run and compare
-  -> PROGRESS: reset streak and continue automatically
-  -> first NO_PROGRESS: exhaust candidate and try another
-  -> stop after two distinct consecutive NO_PROGRESS cycles,
+  -> repeat complete run
+  -> Core remediation evaluate(before, after)
+  -> ACCEPT: advance accepted baseline and continue automatically
+  -> REJECT_NO_PROGRESS / REJECT_REGRESSION: rollback bounded change and try another
+  -> REJECT_CYCLE: stop with REMEDIATION_CYCLE_DETECTED
+  -> stop after two distinct rejected cycles,
      a real blocker/human decision, or five completed cycles
 ```
 

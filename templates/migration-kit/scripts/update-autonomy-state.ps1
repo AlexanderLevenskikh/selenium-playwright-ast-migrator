@@ -9,9 +9,11 @@ param(
     [string]$InvocationId = "",
     [ValidateRange(1, 5)]
     [int]$CycleBudget = 5,
+    [string]$EvaluationPath = "",
+    # Legacy parameters are accepted by the parser only so old agents fail with a precise
+    # contract error instead of silently retaining authority over progress classification.
     [string]$CandidateFingerprint = "",
-    [ValidateSet("PROGRESS", "NO_PROGRESS", "BLOCKED")]
-    [string]$Result = "PROGRESS",
+    [string]$Result = "",
     [string]$MetricSummary = "",
     [ValidateSet("RUNNING", "COMPLETE", "STOPPED", "BLOCKED")]
     [string]$Status = "STOPPED",
@@ -27,7 +29,7 @@ function Resolve-FullPath([string]$Path) {
 
 function New-State {
     return [ordered]@{
-        schemaVersion = "standard-migration-autonomy/v1"
+        schemaVersion = "standard-migration-autonomy/v2"
         invocationId = $null
         mode = "standard"
         status = "NOT_STARTED"
@@ -39,8 +41,15 @@ function New-State {
         noProgressStreak = 0
         lastCandidateFingerprint = $null
         lastCycleResult = $null
+        lastDecision = $null
+        lastEvaluationSha256 = $null
+        lastBeforeStateHash = $null
+        lastAfterStateHash = $null
+        currentStateHash = $null
+        rollbackRequired = $false
         lastCheckpointReason = $null
         exhaustedCandidateFingerprints = @()
+        visitedStateHashes = @()
         completedCycles = @()
         cycleHistory = @()
         stopReason = $null
@@ -50,10 +59,18 @@ function New-State {
 function Convert-ToMutableState($InputState) {
     $state = New-State
     if ($null -eq $InputState) { return $state }
+
+    $sourceSchema = [string]$InputState.schemaVersion
+    if ($sourceSchema -ne "standard-migration-autonomy/v1" -and $sourceSchema -ne "standard-migration-autonomy/v2") {
+        throw "AUTONOMY_STATE_SCHEMA_INVALID: $sourceSchema"
+    }
+
     foreach ($key in @($state.Keys)) {
         if ($null -ne $InputState.PSObject.Properties[$key]) { $state[$key] = $InputState.$key }
     }
+    $state.schemaVersion = "standard-migration-autonomy/v2"
     $state.exhaustedCandidateFingerprints = @($state.exhaustedCandidateFingerprints)
+    $state.visitedStateHashes = @($state.visitedStateHashes)
     $state.completedCycles = @($state.completedCycles)
     $state.cycleHistory = @($state.cycleHistory)
     return $state
@@ -63,8 +80,30 @@ function Write-State([string]$Path, $State) {
     $directory = Split-Path -Parent $Path
     New-Item -ItemType Directory -Force -Path $directory | Out-Null
     $temp = "$Path.tmp"
-    $State | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $temp -Encoding UTF8
+    $State | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath $temp -Encoding UTF8
     Move-Item -LiteralPath $temp -Destination $Path -Force
+}
+
+function Read-Evaluation([string]$Path) {
+    if ([string]::IsNullOrWhiteSpace($Path)) { throw "AUTONOMY_EVALUATION_REQUIRED" }
+    $full = Resolve-FullPath $Path
+    if (-not (Test-Path -LiteralPath $full)) { throw "AUTONOMY_EVALUATION_NOT_FOUND: $full" }
+    try { $evaluation = Get-Content -LiteralPath $full -Raw | ConvertFrom-Json }
+    catch { throw "AUTONOMY_EVALUATION_INVALID_JSON: $($_.Exception.Message)" }
+
+    if ([string]$evaluation.SchemaVersion -ne "migrator-remediation-evaluation/v1") {
+        throw "AUTONOMY_EVALUATION_SCHEMA_INVALID: $($evaluation.SchemaVersion)"
+    }
+    if (@("ACCEPT", "REJECT_NO_PROGRESS", "REJECT_REGRESSION", "REJECT_CYCLE") -notcontains [string]$evaluation.Decision) {
+        throw "AUTONOMY_EVALUATION_DECISION_INVALID: $($evaluation.Decision)"
+    }
+    foreach ($required in @("EvaluationSha256", "CandidateFingerprint")) {
+        if ([string]::IsNullOrWhiteSpace([string]$evaluation.$required)) { throw "AUTONOMY_EVALUATION_FIELD_MISSING: $required" }
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$evaluation.Before.StateHash) -or [string]::IsNullOrWhiteSpace([string]$evaluation.After.StateHash)) {
+        throw "AUTONOMY_EVALUATION_STATE_HASH_MISSING"
+    }
+    return $evaluation
 }
 
 $workspaceFull = Resolve-FullPath $Workspace
@@ -75,7 +114,6 @@ if (Test-Path -LiteralPath $statePath) {
     catch { throw "AUTONOMY_STATE_INVALID_JSON: $($_.Exception.Message)" }
 }
 $state = Convert-ToMutableState $loaded
-if ($state.schemaVersion -ne "standard-migration-autonomy/v1") { throw "AUTONOMY_STATE_SCHEMA_INVALID: $($state.schemaVersion)" }
 
 switch ($Action) {
     "StartInvocation" {
@@ -91,51 +129,94 @@ switch ($Action) {
         $state.noProgressStreak = 0
         $state.lastCandidateFingerprint = $null
         $state.lastCycleResult = $null
+        $state.lastDecision = $null
+        $state.lastEvaluationSha256 = $null
+        $state.lastBeforeStateHash = $null
+        $state.lastAfterStateHash = $null
+        $state.rollbackRequired = $false
         $state.lastCheckpointReason = $null
         $state.completedCycles = @()
         $state.cycleHistory = @()
         $state.stopReason = $null
+        # currentStateHash and visitedStateHashes intentionally survive a fresh invocation.
+        # A `continue` budget is fresh; logical state history is not.
     }
     "RecordCycle" {
         if ($state.status -ne "RUNNING") { throw "AUTONOMY_STATE_NOT_RUNNING: start a new invocation first." }
-        if ([string]::IsNullOrWhiteSpace($CandidateFingerprint)) { throw "AUTONOMY_CANDIDATE_FINGERPRINT_REQUIRED" }
         if ([int]$state.cyclesCompleted -ge [int]$state.cycleBudget) { throw "AUTONOMY_CYCLE_BUDGET_ALREADY_REACHED" }
-
-        $exhausted = @($state.exhaustedCandidateFingerprints)
-        if ($Result -eq "NO_PROGRESS" -and $exhausted -contains $CandidateFingerprint) {
-            throw "AUTONOMY_CANDIDATE_ALREADY_EXHAUSTED: $CandidateFingerprint"
+        if (-not [string]::IsNullOrWhiteSpace($CandidateFingerprint) -or -not [string]::IsNullOrWhiteSpace($Result) -or -not [string]::IsNullOrWhiteSpace($MetricSummary)) {
+            throw "AUTONOMY_AGENT_PROGRESS_CLASSIFICATION_FORBIDDEN: use -EvaluationPath from `selenium-pw-migrator remediation evaluate`."
         }
 
+        $evaluation = Read-Evaluation $EvaluationPath
+        $beforeHash = [string]$evaluation.Before.StateHash
+        $afterHash = [string]$evaluation.After.StateHash
+        $decision = [string]$evaluation.Decision
+        $fingerprint = [string]$evaluation.CandidateFingerprint
+
+        if (-not [string]::IsNullOrWhiteSpace([string]$state.currentStateHash) -and [string]$state.currentStateHash -ne $beforeHash) {
+            throw "AUTONOMY_EVALUATION_BASELINE_MISMATCH: expected $($state.currentStateHash), got $beforeHash"
+        }
+
+        $visited = @($state.visitedStateHashes)
+        if ($visited -contains $afterHash -and $decision -ne "REJECT_CYCLE") {
+            throw "AUTONOMY_EVALUATION_MISSED_CYCLE: Core evaluation must classify revisited state as REJECT_CYCLE."
+        }
+
+        if ([string]::IsNullOrWhiteSpace([string]$state.currentStateHash)) {
+            $state.currentStateHash = $beforeHash
+        }
+        $state.visitedStateHashes = @($visited + @($beforeHash, $afterHash) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+
+        $result = if ($decision -eq "ACCEPT") { "PROGRESS" } else { "NO_PROGRESS" }
+        $rollbackRequired = [bool]$evaluation.RollbackRequired
         $record = [ordered]@{
             batchNumber = [int]$state.batchNumber
             cycleNumber = ([int]$state.cyclesCompleted + 1)
             totalCycleNumber = ([int]$state.totalCyclesCompleted + 1)
-            candidateFingerprint = $CandidateFingerprint
-            result = $Result
-            metricSummary = $MetricSummary
+            candidateFingerprint = $fingerprint
+            candidateLabel = [string]$evaluation.CandidateLabel
+            result = $result
+            decision = $decision
+            reason = [string]$evaluation.Reason
+            evaluationSha256 = [string]$evaluation.EvaluationSha256
+            beforeStateHash = $beforeHash
+            afterStateHash = $afterHash
+            beforeDefects = $evaluation.Before.Defects
+            afterDefects = $evaluation.After.Defects
+            improvements = @($evaluation.Improvements)
+            regressions = @($evaluation.Regressions)
+            rollbackRequired = $rollbackRequired
             completedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
         }
         $state.completedCycles = @(@($state.completedCycles) + @([pscustomobject]$record))
         $state.cycleHistory = @(@($state.cycleHistory) + @([pscustomobject]$record))
         $state.cyclesCompleted = [int]$state.cyclesCompleted + 1
         $state.totalCyclesCompleted = [int]$state.totalCyclesCompleted + 1
-        $state.lastCandidateFingerprint = $CandidateFingerprint
-        $state.lastCycleResult = $Result
+        $state.lastCandidateFingerprint = $fingerprint
+        $state.lastCycleResult = $result
+        $state.lastDecision = $decision
+        $state.lastEvaluationSha256 = [string]$evaluation.EvaluationSha256
+        $state.lastBeforeStateHash = $beforeHash
+        $state.lastAfterStateHash = $afterHash
+        $state.rollbackRequired = $rollbackRequired
         $state.lastCheckpointReason = $null
 
-        if ($Result -eq "PROGRESS") {
+        if ($decision -eq "ACCEPT") {
             $state.noProgressStreak = 0
-        }
-        elseif ($Result -eq "NO_PROGRESS") {
-            $state.noProgressStreak = [int]$state.noProgressStreak + 1
-            $state.exhaustedCandidateFingerprints = @($exhausted + @($CandidateFingerprint) | Select-Object -Unique)
+            $state.currentStateHash = $afterHash
         }
         else {
-            $state.noProgressStreak = 0
-            $state.exhaustedCandidateFingerprints = @($exhausted + @($CandidateFingerprint) | Select-Object -Unique)
+            $state.noProgressStreak = [int]$state.noProgressStreak + 1
+            $state.currentStateHash = $beforeHash
+            $state.exhaustedCandidateFingerprints = @(@($state.exhaustedCandidateFingerprints) + @($fingerprint) | Select-Object -Unique)
         }
 
-        if ([int]$state.noProgressStreak -ge 2) {
+        if ($decision -eq "REJECT_CYCLE") {
+            $state.status = "STOPPED"
+            $state.stopReason = "REMEDIATION_CYCLE_DETECTED"
+        }
+        elseif ([int]$state.noProgressStreak -ge 2) {
             $history = @($state.cycleHistory)
             $last = $history[$history.Count - 1]
             $previous = $history[$history.Count - 2]
@@ -189,6 +270,9 @@ Write-Host "Status: $($state.status)"
 Write-Host "Batch: $($state.batchNumber)"
 Write-Host "Cycles in batch: $($state.cyclesCompleted)/$($state.cycleBudget)"
 Write-Host "Total cycles: $($state.totalCyclesCompleted)"
+Write-Host "Current state: $($state.currentStateHash)"
+Write-Host "Last decision: $($state.lastDecision)"
+Write-Host "Rollback required: $($state.rollbackRequired)"
 Write-Host "No-progress streak: $($state.noProgressStreak)"
 Write-Host "Checkpoint: $($state.lastCheckpointReason)"
 Write-Host "Stop reason: $($state.stopReason)"

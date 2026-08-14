@@ -37,7 +37,7 @@ $autonomyPath = Join-Path $workspaceFull "state/autonomy-state.json"
 if (-not (Test-Path -LiteralPath $autonomyPath)) { throw "AUTONOMY_STATE_MISSING: $autonomyPath" }
 try { $autonomy = Get-Content -LiteralPath $autonomyPath -Raw | ConvertFrom-Json }
 catch { throw "AUTONOMY_STATE_INVALID_JSON: $($_.Exception.Message)" }
-if ($autonomy.schemaVersion -ne "standard-migration-autonomy/v1") { throw "AUTONOMY_STATE_SCHEMA_INVALID: $($autonomy.schemaVersion)" }
+if ($autonomy.schemaVersion -ne "standard-migration-autonomy/v2") { throw "AUTONOMY_STATE_SCHEMA_INVALID: $($autonomy.schemaVersion)" }
 if ([int]$autonomy.cycleBudget -lt 1 -or [int]$autonomy.cycleBudget -gt [int]$policy.maxRemediationCyclesPerInvocation) {
     throw "AUTONOMY_STATE_CYCLE_BUDGET_INVALID"
 }

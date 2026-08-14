@@ -4,9 +4,9 @@
 
 <fill in after current-run analysis>
 
-## Candidate fingerprint
+## Candidate label
 
-<stable root-cause identifier; do not reuse after NO_PROGRESS without new evidence>
+<stable human-readable root-cause label; Core derives the fingerprint from the baseline state + label>
 
 ## Root cause
 
@@ -35,10 +35,10 @@
 - Runtime/smoke verification:
 - Relevant metric delta:
 
-## Cycle result
+## Core cycle decision
 
-<NOT_STARTED | PROGRESS | NO_PROGRESS | BLOCKED>
+<NOT_EVALUATED | ACCEPT | REJECT_NO_PROGRESS | REJECT_REGRESSION | REJECT_CYCLE>
 
 ## Stop condition
 
-Complete exactly one bounded, source-backed repair for this cycle, rerun the complete configured source scope, compare all relevant evidence dimensions, record the result in `state/autonomy-state.json`, and return control to the orchestrator. This cycle belongs to a five-cycle invocation budget. Do not stop the whole invocation merely because this one cycle produced no progress; in `continuous` mode the orchestrator also rolls over to the next five-cycle batch automatically.
+Complete exactly one bounded, source-backed repair for this cycle, rerun the complete configured source scope, compare all relevant evidence dimensions, run `selenium-pw-migrator remediation evaluate`, record only its evaluation in `state/autonomy-state.json`, and roll back the bounded change on any `REJECT_*`, and return control to the orchestrator. This cycle belongs to a five-cycle invocation budget. Do not stop the whole invocation merely because this one cycle produced no progress; in `continuous` mode the orchestrator also rolls over to the next five-cycle batch automatically.

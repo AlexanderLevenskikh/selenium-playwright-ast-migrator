@@ -20,10 +20,10 @@ Use one configured Selenium source scope and one ordinary run lineage. Historica
 3. Execute the complete configured source and fresh project verification when available.
 4. Rank repeated root causes by payoff, source confidence, reversibility, and independence from known blockers.
 5. Run remediation in five-cycle batches. Ordinary, `continue`, and bounded modes receive one batch; `continuous` automatically opens another batch after each `AUTONOMOUS_CYCLE_BUDGET_REACHED` checkpoint. Each cycle contains exactly one bounded change, review, complete rerun, and evidence comparison.
-6. After progress, reset the no-progress streak and automatically start the next safe cycle. In `continuous` mode, roll over to the next five-cycle batch when the current budget is reached; do not require another `continue` command.
-7. After one no-progress cycle, exhaust that candidate and try a different independent candidate. Stop only after two consecutive no-progress cycles with distinct fingerprints and no intervening progress.
+6. After each rerun, call deterministic Core through `selenium-pw-migrator remediation evaluate`; the agent never authors PROGRESS/NO_PROGRESS/BLOCKED. `ACCEPT` resets the no-progress streak and advances the accepted baseline.
+7. `REJECT_NO_PROGRESS` or `REJECT_REGRESSION` requires rollback of the entire bounded change before trying another independent candidate. `REJECT_CYCLE` stops immediately with `REMEDIATION_CYCLE_DETECTED`. Stop after two consecutive rejected cycles with distinct Core-generated fingerprints and no intervening ACCEPT.
 8. Treat generated syntax, migration metrics, project build verification, and runtime verification as independent evidence dimensions. An isolated verification-harness defect does not block measurable config/POM/helper improvements.
-9. Use `watchdog` for loops, crashes, contradictory evidence, repeated candidates, or disputed no-progress classification.
+9. Use `watchdog` for crashes, contradictory evidence, rollback failures, or disagreement with deterministic Core artifacts; cycle detection itself is state-hash based.
 10. Persist `state/autonomy-state.json` after every cycle and rewrite `state/handoff.md` atomically before handoff.
 
 `continue` opens a fresh five-cycle invocation budget while preserving exhausted candidate fingerprints. `continuous` automatically advances between safe cycles and across `AUTONOMOUS_CYCLE_BUDGET_REACHED` checkpoints until success or a real terminal stop; it is not permission to ignore the no-progress, safety, or human-decision stops. If safe candidates remain at a checkpoint, this is budget rollover or bounded handoff, not a global plateau.
