@@ -34,6 +34,9 @@ public sealed class StandardMigrationModeTests
         Assert.Contains("VerificationEvidence.Create", method);
         Assert.Contains("new RunManifest(", method);
         Assert.Contains("run-manifest.json", method);
+        Assert.Contains("TryWriteProjectSemanticIndex", method);
+        Assert.Contains("ProjectSemanticIndexBuilder", program);
+        Assert.Contains("semantic-index.sha256", program);
         Assert.DoesNotContain("Directory.GetFiles(generatedDir, \"*.cs\")", method);
     }
 

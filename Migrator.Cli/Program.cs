@@ -9573,6 +9573,31 @@ static int WriteEmergencyOrchestrationReport(string inputPath, string outPath, s
     return 1;
 }
 
+static void TryWriteProjectSemanticIndex(string inputPath, string analyzeDir, List<string> warnings)
+{
+    var projectPath = ProjectSemanticIndexBuilder.FindNearestProject(inputPath);
+    if (string.IsNullOrWhiteSpace(projectPath))
+        return;
+
+    try
+    {
+        var semanticIndex = ProjectSemanticIndexBuilder.Build(projectPath);
+        File.WriteAllText(
+            Path.Combine(analyzeDir, "semantic-index.json"),
+            JsonSerializer.Serialize(semanticIndex, new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(
+            Path.Combine(analyzeDir, "semantic-index.sha256"),
+            semanticIndex.SemanticSha256 + Environment.NewLine);
+    }
+    catch (Exception ex)
+    {
+        // Semantic indexing is additive in Block 9. The legacy migration result remains
+        // authoritative until canonical IR is switched to consume this graph. Do not make
+        // successful migration depend on package/MSBuild metadata that the index cannot yet load.
+        warnings.Add($"Project semantic index unavailable ({ex.GetType().Name}); legacy migration continued.");
+    }
+}
+
 static int RunOrchestrate(string inputPath, string outPath, string? configPath, string format, ITestFileParser parser, IRenderer renderer, IProjectAdapter? adapter, ProjectAdapterConfig? config, ITargetBackend targetBackend)
 {
     Console.WriteLine("=== Standard Migration Run ===");
@@ -9627,6 +9652,9 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
                 throw new InvalidOperationException("Migration source changed while the pipeline was running. Re-run against a stable source snapshot.");
             }
             sourceIdentity = sourceAfter;
+
+            if (parser is RoslynTestFileParser)
+                TryWriteProjectSemanticIndex(inputPath, analyzeDir, warnings);
 
             if (migrationResults.Count == 0)
             {
