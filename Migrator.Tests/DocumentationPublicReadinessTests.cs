@@ -259,9 +259,10 @@ public class DocumentationPublicReadinessTests
             Assert.DoesNotContain(".NET 8", text, StringComparison.OrdinalIgnoreCase);
         }
 
-        foreach (var project in Directory.EnumerateFiles(repoRoot, "*.csproj", SearchOption.AllDirectories)
-            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
-            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")))
+        // Reuse the public-readiness file set so runtime test artifacts and transient
+        // generated harness projects cannot race this repository-content assertion.
+        foreach (var project in relevantFiles
+            .Where(path => path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)))
         {
             var text = File.ReadAllText(project);
             var isStableCorpusFixture = project.Contains(

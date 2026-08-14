@@ -4356,6 +4356,59 @@ public class PipelineIntegrationTests
     }
 
     [Fact]
+    public void NoNamespace_WebDriverCss_FullPipeline_EmitsRequiredUsingsAndCompiles()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"migrator-no-namespace-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "LoginTests.cs");
+        try
+        {
+            File.WriteAllText(sourcePath, """
+using NUnit.Framework;
+using OpenQA.Selenium;
+
+public class LoginTests
+{
+    [Test]
+    public void ClicksSubmit()
+    {
+        var submit = WebDriver.FindElement(By.CssSelector("[data-test='submit-button']"));
+        submit.Click();
+    }
+}
+""");
+
+            var pipeline = new MigrationPipeline(
+                new RoslynTestFileParser(),
+                new PlaywrightDotNetRenderer(),
+                adapter: null);
+
+            var result = pipeline.ProcessFile(sourcePath);
+            var output = result.GeneratedOutput;
+
+            Assert.Contains("using Microsoft.Playwright;", output);
+            Assert.Contains("using Microsoft.Playwright.NUnit;", output);
+            Assert.Contains("using NUnit.Framework;", output);
+            Assert.Contains("using System.Threading.Tasks;", output);
+            Assert.DoesNotContain("namespace .Playwright;", output);
+            Assert.True(CompileChecker.CompilesWithoutErrors(output),
+                CompileChecker.FormatErrors(output));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // Best effort cleanup for Windows file handles.
+            }
+        }
+    }
+
+    [Fact]
     public void WebDriverCss_FullPipeline_ParsesAndRenders()
     {
         var result = RunPipeline("PipelineWebDriverCssTests.cs");

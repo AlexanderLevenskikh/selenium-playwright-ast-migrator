@@ -221,7 +221,9 @@ public class RoslynTestFileParser : ITestFileParser
     public IEnumerable<TestFileModel> ParseDirectory(string directoryPath)
     {
         var files = Directory.GetFiles(directoryPath, "*.cs", SearchOption.AllDirectories)
-            .Where(IsInputFixtureFile);
+            .Where(IsInputFixtureFile)
+            .OrderBy(NormalizeDiscoveryPath, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(NormalizeDiscoveryPath, StringComparer.Ordinal);
         var results = new List<TestFileModel>();
         foreach (var file in files)
         {
@@ -246,6 +248,12 @@ public class RoslynTestFileParser : ITestFileParser
             }
         }
         return results;
+    }
+
+
+    static string NormalizeDiscoveryPath(string path)
+    {
+        return Path.GetFullPath(path).Replace('\\', '/');
     }
 
     static IEnumerable<PageObjectFieldAction> ParseClassMember(SyntaxNode member)

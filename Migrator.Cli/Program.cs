@@ -1085,17 +1085,9 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
 {
     Directory.CreateDirectory(outPath);
 
-    int generated = 0;
-    var writtenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-    foreach (var result in results)
-    {
-        string baseName = targetBackend.GetDefaultFileName(result.SourceModel);
-        string outName = ResolveFileName(outPath, baseName, writtenNames);
-        var fullOut = Path.Combine(outPath, outName);
-        File.WriteAllText(fullOut, result.GeneratedOutput);
-        generated++;
-    }
+    var plannedOutputs = PlanGeneratedOutputs(results, result => targetBackend.GetDefaultFileName(result.SourceModel));
+    MaterializeGeneratedOutputs(outPath, plannedOutputs, recreateOutputDirectory: false);
+    var generated = plannedOutputs.Count;
 
     var summaryWithGenerated = summary with { GeneratedFiles = generated };
 
@@ -1600,26 +1592,90 @@ static ProfileScope ApplyTargetTestFrameworkToScope(ProfileScope scope, string t
     };
 }
 
-static string ResolveFileName(string dir, string baseName, ISet<string> usedNames)
+static IReadOnlyList<(PipelineResult Result, string FileName)> PlanGeneratedOutputs(
+    IEnumerable<PipelineResult> results,
+    Func<PipelineResult, string> baseNameSelector)
 {
-    if (!usedNames.Contains(baseName))
-    {
-        usedNames.Add(baseName);
-        return baseName;
-    }
+    return GeneratedNaming.AssignStableFileNames(
+        results,
+        result => result.SourceModel.FilePath,
+        baseNameSelector)
+        .Select(entry => (entry.Item, entry.FileName))
+        .ToArray();
+}
 
-    var ext = Path.GetExtension(baseName);
-    var stem = Path.GetFileNameWithoutExtension(baseName);
-    int n = 2;
-    while (true)
+static string MaterializeGeneratedOutputs(
+    string outputDirectory,
+    IReadOnlyList<(PipelineResult Result, string FileName)> plannedOutputs,
+    bool recreateOutputDirectory)
+{
+    var fullOutputDirectory = Path.GetFullPath(outputDirectory);
+    var parentDirectory = Path.GetDirectoryName(fullOutputDirectory)
+        ?? throw new InvalidOperationException($"Cannot resolve parent directory for '{outputDirectory}'.");
+    var outputName = Path.GetFileName(fullOutputDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+    Directory.CreateDirectory(parentDirectory);
+
+    var stagingDirectory = Path.Combine(parentDirectory, $".{outputName}.migrator-staging-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(stagingDirectory);
+
+    try
     {
-        string candidate = $"{stem}_{n}{ext}";
-        if (!usedNames.Contains(candidate))
+        foreach (var (result, fileName) in plannedOutputs)
+            File.WriteAllText(Path.Combine(stagingDirectory, fileName), result.GeneratedOutput);
+
+        var targetHash = TargetTreeHasher.Compute(plannedOutputs.Select(entry => (entry.FileName, entry.Result.GeneratedOutput)));
+        File.WriteAllText(Path.Combine(stagingDirectory, "target-tree.sha256"), targetHash + Environment.NewLine);
+
+        if (recreateOutputDirectory)
         {
-            usedNames.Add(candidate);
-            return candidate;
+            var backupDirectory = Path.Combine(parentDirectory, $".{outputName}.migrator-backup-{Guid.NewGuid():N}");
+            var hadPreviousOutput = Directory.Exists(fullOutputDirectory);
+            if (hadPreviousOutput)
+                Directory.Move(fullOutputDirectory, backupDirectory);
+
+            try
+            {
+                Directory.Move(stagingDirectory, fullOutputDirectory);
+                if (Directory.Exists(backupDirectory))
+                    Directory.Delete(backupDirectory, recursive: true);
+            }
+            catch
+            {
+                if (!Directory.Exists(fullOutputDirectory) && Directory.Exists(backupDirectory))
+                    Directory.Move(backupDirectory, fullOutputDirectory);
+                throw;
+            }
         }
-        n++;
+        else
+        {
+            Directory.CreateDirectory(fullOutputDirectory);
+
+            // Ordinary --mode migrate writes target files directly into --out. Remove only
+            // target-language files managed by previous runs; preserve unrelated user files.
+            foreach (var existing in Directory.GetFiles(fullOutputDirectory, "*", SearchOption.TopDirectoryOnly))
+            {
+                var extension = Path.GetExtension(existing);
+                if (extension.Equals(".cs", StringComparison.OrdinalIgnoreCase)
+                    || extension.Equals(".ts", StringComparison.OrdinalIgnoreCase)
+                    || Path.GetFileName(existing).Equals("target-tree.sha256", StringComparison.OrdinalIgnoreCase))
+                {
+                    File.Delete(existing);
+                }
+            }
+
+            foreach (var staged in Directory.GetFiles(stagingDirectory, "*", SearchOption.TopDirectoryOnly))
+            {
+                var destination = Path.Combine(fullOutputDirectory, Path.GetFileName(staged));
+                File.Move(staged, destination, overwrite: true);
+            }
+        }
+
+        return targetHash;
+    }
+    finally
+    {
+        if (Directory.Exists(stagingDirectory))
+            Directory.Delete(stagingDirectory, recursive: true);
     }
 }
 
@@ -1667,16 +1723,11 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
     RecreateDirectory(generatedDir);
     RecreateDirectory(harnessDir);
 
-    var writtenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-    var generatedFiles = new List<string>();
-    foreach (var result in results)
-    {
-        var baseName = $"{result.SourceModel.ClassName}Playwright.cs";
-        var outName = ResolveFileName(generatedDir, baseName, writtenNames);
-        var fullOut = Path.Combine(generatedDir, outName);
-        File.WriteAllText(fullOut, result.GeneratedOutput);
-        generatedFiles.Add(fullOut);
-    }
+    var plannedOutputs = PlanGeneratedOutputs(results, result => $"{result.SourceModel.ClassName}Playwright.cs");
+    MaterializeGeneratedOutputs(generatedDir, plannedOutputs, recreateOutputDirectory: true);
+    var generatedFiles = plannedOutputs
+        .Select(entry => Path.Combine(generatedDir, entry.FileName))
+        .ToList();
 
     var verification = config.Verification ?? new VerificationConfig();
     var baseDir = ResolveVerificationBaseDirectory(verification, configPath, inputPath);
@@ -9180,10 +9231,12 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
     var verifyDir = Path.Combine(outPath, "verify");
     var proposeDir = Path.Combine(outPath, "propose");
 
-    Directory.CreateDirectory(analyzeDir);
-    Directory.CreateDirectory(generatedDir);
-    Directory.CreateDirectory(verifyDir);
-    Directory.CreateDirectory(proposeDir);
+    // Every orchestration invocation starts from clean stage directories. A previous
+    // partial/failed run must never contribute generated files or stage evidence.
+    RecreateDirectory(analyzeDir);
+    RecreateDirectory(generatedDir);
+    RecreateDirectory(verifyDir);
+    RecreateDirectory(proposeDir);
 
     var stages = new List<OrchestrationStage>();
     var warnings = new List<string>();
@@ -9250,16 +9303,9 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
                 var summary = BuildSummary(resultsList, out var allUnmapped);
                 var allUnsupported = CollectAllUnsupported(resultsList);
 
-                int generated = 0;
-                var writtenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-                foreach (var result in resultsList)
-                {
-                    string baseName = targetBackend.GetDefaultFileName(result.SourceModel);
-                    string outName = ResolveFileName(generatedDir, baseName, writtenNames);
-                    File.WriteAllText(Path.Combine(generatedDir, outName), result.GeneratedOutput);
-                    generated++;
-                }
+                var plannedOutputs = PlanGeneratedOutputs(resultsList, result => targetBackend.GetDefaultFileName(result.SourceModel));
+                MaterializeGeneratedOutputs(generatedDir, plannedOutputs, recreateOutputDirectory: true);
+                var generated = plannedOutputs.Count;
 
                 var summaryWithGenerated = summary with { GeneratedFiles = generated };
 

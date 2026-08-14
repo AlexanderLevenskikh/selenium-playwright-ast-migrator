@@ -99,6 +99,8 @@ public sealed class JavaSeleniumTestFileParser : ITestFileParser
     public IEnumerable<TestFileModel> ParseDirectory(string directoryPath)
     {
         var files = Directory.GetFiles(directoryPath, "*.java", SearchOption.AllDirectories)
+            .OrderBy(file => Path.GetFullPath(file).Replace('\\', '/'), StringComparer.OrdinalIgnoreCase)
+            .ThenBy(file => Path.GetFullPath(file).Replace('\\', '/'), StringComparer.Ordinal)
             .Select(file => (FilePath: file, Source: File.ReadAllText(file)))
             .ToArray();
         var pomIndex = CollectJavaPageObjects(files);

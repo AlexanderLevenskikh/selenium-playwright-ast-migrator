@@ -75,7 +75,9 @@ public sealed class PythonSeleniumTestFileParser : ITestFileParser
 
     public IEnumerable<TestFileModel> ParseDirectory(string directoryPath)
     {
-        foreach (var file in Directory.GetFiles(directoryPath, "*.py", SearchOption.AllDirectories))
+        foreach (var file in Directory.GetFiles(directoryPath, "*.py", SearchOption.AllDirectories)
+                     .OrderBy(file => Path.GetFullPath(file).Replace('\\', '/'), StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(file => Path.GetFullPath(file).Replace('\\', '/'), StringComparer.Ordinal))
         {
             var model = Parse(file);
             if (model.Tests.Any() || model.SetUpActions.Any())
