@@ -86,7 +86,52 @@ public static class VerifyRunner
     /// <param name="config">Adapter config (may be null).</param>
     /// <param name="syntaxChecker">Optional Roslyn-based syntax checker. When null, syntax check is skipped.</param>
     /// <param name="scopeChecker">Optional scope checker. When null, scope matching is derived from config patterns.</param>
-    public static VerifyReport Run(List<PipelineResult> results, ProjectAdapterConfig? config, SyntaxCheckerDelegate? syntaxChecker = null, Func<string, string?>? scopeChecker = null)
+    public static VerifyReport Run(IReadOnlyList<PipelineResult> results, ProjectAdapterConfig? config, SyntaxCheckerDelegate? syntaxChecker = null, Func<string, string?>? scopeChecker = null)
+    {
+        ArgumentNullException.ThrowIfNull(results);
+        return RunCore(
+            results,
+            config,
+            syntaxChecker,
+            scopeChecker,
+            result => (result.GeneratedOutput, $"{result.SourceModel.ClassName}Playwright.cs"));
+    }
+
+    /// <summary>
+    /// Run verify checks against the exact immutable target artifact that was materialized.
+    /// Generated contents and names are read from the artifact rather than reconstructed
+    /// from pipeline conventions.
+    /// </summary>
+    public static VerifyReport Run(TargetArtifact artifact, ProjectAdapterConfig? config, SyntaxCheckerDelegate? syntaxChecker = null, Func<string, string?>? scopeChecker = null)
+    {
+        ArgumentNullException.ThrowIfNull(artifact);
+
+        var filesBySource = artifact.Files.ToDictionary(
+            file => GeneratedNaming.NormalizeSourceIdentity(file.SourceFilePath),
+            file => file,
+            StringComparer.Ordinal);
+
+        return RunCore(
+            artifact.Results,
+            config,
+            syntaxChecker,
+            scopeChecker,
+            result =>
+            {
+                var sourceIdentity = GeneratedNaming.NormalizeSourceIdentity(result.SourceModel.FilePath);
+                if (!filesBySource.TryGetValue(sourceIdentity, out var file))
+                    throw new InvalidOperationException($"TargetArtifact does not contain generated output for '{result.SourceModel.FilePath}'.");
+
+                return (file.Content, file.RelativePath);
+            });
+    }
+
+    static VerifyReport RunCore(
+        IReadOnlyList<PipelineResult> results,
+        ProjectAdapterConfig? config,
+        SyntaxCheckerDelegate? syntaxChecker,
+        Func<string, string?>? scopeChecker,
+        Func<PipelineResult, (string Content, string RelativePath)> generatedOutputResolver)
     {
         var issues = new List<VerifyIssue>();
         var fileResults = new List<VerifyFileResult>();
@@ -115,7 +160,8 @@ public static class VerifyRunner
         {
             var fileIssues = new List<VerifyIssue>();
             var sourcePath = result.Report.SourceFilePath;
-            var generatedOutput = result.GeneratedOutput;
+            var generatedFile = generatedOutputResolver(result);
+            var generatedOutput = generatedFile.Content;
 
             // Scope matching check
             var scopeResult = CheckScopeMatching(sourcePath, config, scopeChecker);
@@ -124,8 +170,9 @@ public static class VerifyRunner
             if (scopeResult.MatchingScopes.Count > 1)
             {
                 fileIssues.Add(new VerifyIssue(
-                    "Scope", IssueSeverity.Warning,
-                    $"Multiple scopes matched '{Path.GetFileName(sourcePath)}': {string.Join(", ", scopeResult.MatchingScopes)}",
+                    "Config", IssueSeverity.Error,
+                    $"Multiple scopes matched '{Path.GetFileName(sourcePath)}': {string.Join(", ", scopeResult.MatchingScopes)}. " +
+                    "SourcePathPatterns must resolve to exactly one scope.",
                     sourcePath, null));
                 totalScopeWarnings++;
             }
@@ -168,11 +215,10 @@ public static class VerifyRunner
             totalRawExpressions += rawExprCount;
 
             var fileStatus = fileIssues.Any(i => i.Severity == IssueSeverity.Error) ? "failed" : "passed";
-            var generatedName = $"{result.SourceModel.ClassName}Playwright.cs";
 
             fileResults.Add(new VerifyFileResult(
                 SourceFile: Path.GetFileName(sourcePath),
-                GeneratedFile: generatedName,
+                GeneratedFile: generatedFile.RelativePath,
                 ActiveScope: activeScope,
                 Status: fileStatus,
                 Issues: fileIssues));
@@ -406,49 +452,14 @@ public static class VerifyRunner
         if (config == null || config.Scopes.Length == 0)
             return new ScopeMatchResult(sourceFilePath, null, Array.Empty<string>());
 
-        var activeScope = scopeChecker?.Invoke(sourceFilePath);
-        var matchingNames = new List<string>();
+        var matching = ScopeResolver.FindMatchingScopes(config.Scopes, sourceFilePath);
+        var activeScope = scopeChecker?.Invoke(sourceFilePath)
+            ?? (matching.Count == 1 ? matching[0].Name : null);
 
-        var fileName = Path.GetFileName(sourceFilePath);
-        foreach (var scope in config.Scopes)
-        {
-            foreach (var pattern in scope.SourcePathPatterns)
-            {
-                if (MatchPathPattern(pattern, sourceFilePath, fileName))
-                {
-                    matchingNames.Add(scope.Name);
-                    break;
-                }
-            }
-        }
-
-        return new ScopeMatchResult(sourceFilePath, activeScope, matchingNames);
-    }
-
-    /// <summary>
-    /// Matches a glob-like path pattern against a source file path.
-    /// Supports **/* wildcards and exact file name matching.
-    /// </summary>
-    static bool MatchPathPattern(string pattern, string fullPath, string fileName)
-    {
-        if (pattern.Contains("**"))
-        {
-            var suffix = pattern.Substring(pattern.IndexOf("**") + 2);
-            if (suffix.StartsWith("/")) suffix = suffix.Substring(1);
-            if (suffix.StartsWith("\\")) suffix = suffix.Substring(1);
-
-            return fullPath.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) ||
-                   fileName.Equals(suffix, StringComparison.OrdinalIgnoreCase);
-        }
-
-        if (!pattern.Contains('/') && !pattern.Contains('\\'))
-        {
-            return fileName.Equals(pattern, StringComparison.OrdinalIgnoreCase);
-        }
-
-        var normalizedPattern = pattern.Replace('\\', '/');
-        var normalizedPath = fullPath.Replace('\\', '/');
-        return normalizedPath.Equals(normalizedPattern, StringComparison.OrdinalIgnoreCase);
+        return new ScopeMatchResult(
+            sourceFilePath,
+            activeScope,
+            matching.Select(scope => scope.Name).ToArray());
     }
 
     // --- Generated code checks ---
@@ -775,7 +786,6 @@ public static class VerifyRunner
         var maxRaw = gateDefaults.MaxRawExpressions ?? int.MaxValue;
         var failOnPageTodo = gateDefaults.FailOnPageTodo ?? true;
         var failOnSyntax = gateDefaults.FailOnInvalidGeneratedSyntax ?? true;
-        var failOnMultipleScopes = gateDefaults.FailOnMultipleMatchingScopes ?? true;
         var failOnPlaceholderLeftovers = gateDefaults.FailOnPlaceholderLeftovers ?? true;
         var failOnSuspiciousLiteralVariables = gateDefaults.FailOnSuspiciousLiteralVariables ?? true;
         var failOnLocalProfileLeaks = gateDefaults.FailOnLocalProfileLeaks ?? true;
@@ -831,10 +841,10 @@ public static class VerifyRunner
             exitCode = Math.Max(exitCode, 1);
         }
 
-        if (failOnMultipleScopes && report.ScopeWarnings > 0)
+        if (report.ScopeWarnings > 0)
         {
             Console.Error.WriteLine($"Quality gate: {report.ScopeWarnings} scope conflict(s) found.");
-            exitCode = Math.Max(exitCode, 1);
+            exitCode = Math.Max(exitCode, 2);
         }
 
         if (failOnPlaceholderLeftovers && report.PlaceholderLeftovers > 0)

@@ -18,19 +18,49 @@ public class ResearchAuditRegressionTests
             adapter.GetActiveScope(Path.Combine("src", "CatalogPrincipalsFilter.cs")));
 
         Assert.Contains("Multiple profile scopes matched", error.Message);
-        Assert.Contains("FailOnMultipleMatchingScopes=false", error.Message);
+        Assert.Contains("first-match compatibility has been removed", error.Message);
     }
 
     [Fact]
-    public void MultipleMatchingScopes_CanUseExplicitCompatibilityMode()
+    public void MultipleMatchingScopes_CompatibilityModeIsRejected()
     {
         var config = CreateScopedConfig(new QualityGatesConfig
         {
             FailOnMultipleMatchingScopes = false
         });
-        var adapter = new DefaultProjectAdapter(config);
 
-        Assert.Equal("ScopeA", adapter.GetActiveScope(Path.Combine("src", "CatalogPrincipalsFilter.cs")));
+        var error = Assert.Throws<ConfigValidationError>(() => new DefaultProjectAdapter(config));
+
+        Assert.Contains("FailOnMultipleMatchingScopes=false is no longer supported", error.Message);
+    }
+
+    [Theory]
+    [InlineData("**/*.cs", "C:/repo/Tests/LoginTests.cs")]
+    [InlineData("**/DiscountsTests/**", "C:/repo/Features/DiscountsTests/Cases/Smoke.cs")]
+    [InlineData("Tests/*.cs", "C:/repo/Tests/LoginTests.cs")]
+    [InlineData("Login*.cs", "C:/repo/Tests/LoginTests.cs")]
+    public void ScopeResolver_ImplementsDocumentedGlobSemantics(string pattern, string path)
+    {
+        Assert.True(ScopeResolver.IsMatch(pattern, path));
+    }
+
+    [Fact]
+    public void TargetPrefixResolution_UsesMostSpecificMappingRegardlessOfConfigOrder()
+    {
+        static DefaultProjectAdapter Create(params UiTargetMapping[] mappings) => new(new ProjectAdapterConfig
+        {
+            SourceProjectName = "sample",
+            UiTargets = mappings
+        });
+
+        var broad = new UiTargetMapping("page.Panel", "broad", "TestId");
+        var specific = new UiTargetMapping("page.Panel.Button", "specific", "TestId");
+
+        var first = Assert.IsType<MappedTarget>(Create(broad, specific).ResolveTarget("page.Panel.Button.Icon"));
+        var second = Assert.IsType<MappedTarget>(Create(specific, broad).ResolveTarget("page.Panel.Button.Icon"));
+
+        Assert.Equal("specific", first.TargetExpression);
+        Assert.Equal(first.TargetExpression, second.TargetExpression);
     }
 
     [Fact]

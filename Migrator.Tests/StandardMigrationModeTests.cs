@@ -19,6 +19,25 @@ public sealed class StandardMigrationModeTests
     }
 
     [Fact]
+    public void Orchestrate_ExecutesMigrationPipelineOnceAndVerifiesThatArtifact()
+    {
+        var program = Read("Migrator.Cli/Program.cs");
+        var start = program.IndexOf("static int RunOrchestrate(", StringComparison.Ordinal);
+        var end = program.IndexOf("static MigrationSummaryReport? TryLoadMigrationReport", start, StringComparison.Ordinal);
+
+        Assert.True(start >= 0 && end > start, "Could not isolate RunOrchestrate implementation.");
+        var method = program[start..end];
+
+        Assert.Equal(1, CountOccurrences(method, "new MigrationPipeline("));
+        Assert.Contains("VerifyRunner.Run(targetArtifact", method);
+        Assert.Contains("targetArtifact.Files", method);
+        Assert.Contains("VerificationEvidence.Create", method);
+        Assert.Contains("new RunManifest(", method);
+        Assert.Contains("run-manifest.json", method);
+        Assert.DoesNotContain("Directory.GetFiles(generatedDir, \"*.cs\")", method);
+    }
+
+    [Fact]
     public void DirectProjectVerification_MapsToRealVerificationMode()
     {
         var program = Read("Migrator.Cli/Program.cs");
@@ -49,6 +68,19 @@ public sealed class StandardMigrationModeTests
     }
 
     [Fact]
+    public void VerifyProject_RunManifestPathSkipsMigrationAndEmitsExactTargetEvidence()
+    {
+        var program = Read("Migrator.Cli/Program.cs");
+        var catalog = Read("Migrator.Cli/Commands/CliCommandCatalog.cs");
+
+        Assert.Contains("RunVerifyProjectFromManifest", program);
+        Assert.Contains("dotnet-build-exact-target", program);
+        Assert.Contains("EVIDENCE_IDENTITY_MISMATCH", program);
+        Assert.Contains("--run-manifest", catalog);
+        Assert.Contains("no regeneration", catalog, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void OpenCodeCommand_UsesFullRunAndForbidsSyntheticEvidence()
     {
         var command = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
@@ -61,6 +93,7 @@ public sealed class StandardMigrationModeTests
             Assert.Contains("Never write a synthetic PASS", text, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("full standard flow", text, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("check-final-gate", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("--run-manifest", text, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("run-wave", text, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("measure-wave", text, StringComparison.OrdinalIgnoreCase);
         }
@@ -72,12 +105,20 @@ public sealed class StandardMigrationModeTests
         var gate = Read("templates/migration-kit/scripts/check-final-gate.ps1");
         var validator = Read("templates/migration-kit/scripts/validate-run-artifacts.ps1");
 
-        Assert.Contains("standard-run-final-gate/v1", gate);
+        Assert.Contains("standard-run-final-gate/v2", gate);
+        Assert.Contains("run-manifest.json", gate);
         Assert.Contains("orchestration-report.json", gate);
         Assert.Contains("generated/report.json", gate);
         Assert.Contains("verify-project/project-verify-report.json", gate);
+        Assert.Contains("verify-project/verification-evidence.json", gate);
+        Assert.Contains("dotnet-build-exact-target", gate);
+        Assert.Contains("Get-FileHash", gate);
+        Assert.Contains("Convert-ToRelativePath", gate);
+        Assert.DoesNotContain("[IO.Path]::GetRelativePath", gate, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("[System.IO.Path]::GetRelativePath", gate, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("STANDARD_RUN_FINAL_GATE_PASS", gate);
-        Assert.Contains("elseif (-not $AllowMissingVerification)", gate);
+        Assert.DoesNotContain("AllowMissingVerification", gate);
+        Assert.DoesNotContain("LastWriteTimeUtc", gate);
         Assert.Contains("STANDARD_RUN_ARTIFACTS_PASS", validator);
     }
 
@@ -144,9 +185,25 @@ public sealed class StandardMigrationModeTests
         Assert.Contains("submit.Click()", smoke);
         Assert.DoesNotContain("driver.Navigate()", smoke);
         Assert.DoesNotContain("driver.FindElement(", smoke);
-        Assert.Contains("syntax errors: $syntaxErrors", smoke);
+        Assert.Contains("syntaxErrors=$syntaxErrors", smoke);
+        Assert.Contains("verify-project --help", smoke);
+        Assert.Contains("--run-manifest $runManifestPath", smoke);
+        Assert.Contains("check-final-gate.ps1", smoke);
+        Assert.Contains("standard-migration-smoke/v2", smoke);
         Assert.Contains("standardMigrationSmokeError", performance);
         Assert.Contains("catch", performance);
+    }
+
+    static int CountOccurrences(string text, string value)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+        return count;
     }
 
     static string Read(string relativePath) => File.ReadAllText(FindRepositoryPath(relativePath));

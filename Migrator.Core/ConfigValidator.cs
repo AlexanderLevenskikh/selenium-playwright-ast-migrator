@@ -545,6 +545,9 @@ public static class ConfigValidator
 
         if (gates.MaxRawExpressions.HasValue && gates.MaxRawExpressions.Value < 0)
             errors.Add("QualityGates.MaxRawExpressions cannot be negative.");
+
+        if (gates.FailOnMultipleMatchingScopes == false)
+            errors.Add("QualityGates.FailOnMultipleMatchingScopes=false is no longer supported. Scope overlap is a configuration error; make SourcePathPatterns mutually exclusive.");
     }
 
 

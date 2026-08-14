@@ -580,7 +580,7 @@ $quickStartLines = @(
     "",
     '```bash',
     "selenium-pw-migrator run --input `"$Source`" --config `"$Config`" --out `"$Output`" --format both",
-    "selenium-pw-migrator verify-project --input `"$Source`" --config `"$Config`" --out `"$(Join-Path $Output 'verify-project')`" --format both",
+    "selenium-pw-migrator verify-project --input `"$Source`" --config `"$Config`" --run-manifest `"$(Join-Path $Output 'run-manifest.json')`" --out `"$(Join-Path $Output 'verify-project')`" --format both",
     "./$(Join-Path $Workspace 'scripts/check-final-gate.sh') -Workspace `"$Workspace`" -Run `"$Output`" -RepoRoot .",
     '```',
     "",

@@ -123,9 +123,9 @@ internal static class CliCommandCatalog
             "selenium-pw-migrator --mode verify --input ./OldTests --config ./adapter-config.json --out verify"),
         StableCommand("verify-project", "verify-project", true, true,
             "Project-aware verification for generated Playwright .NET code.",
-            "Creates a temporary verification project, adds configured references, runs dotnet build, and classifies diagnostics. Use --target-test-framework nunit|xunit to choose default test packages when config does not override them.",
-            "Source Selenium test directory.",
-            "selenium-pw-migrator --mode verify-project --input ./OldTests --config ./adapter-config.json --target-test-framework xunit --out verify-project"),
+            "With --run-manifest, compiles the exact generated tree from that run and emits provenance-bound evidence. Without it, legacy diagnostic mode regenerates source before build.",
+            "Source Selenium test directory. Pass --run-manifest <run>/run-manifest.json for authoritative verification.",
+            "selenium-pw-migrator verify-project --input ./OldTests --config ./adapter-config.json --run-manifest migration/runs/run-001/run-manifest.json --out migration/runs/run-001/verify-project"),
         ExperimentalCommand("verify-ts-project", "verify-ts-project", true, true,
             "Project-aware verification for generated Playwright TypeScript specs.",
             "Copies generated specs into a workspace, creates tsconfig.migrator.json, and runs npx tsc --noEmit.",
@@ -422,6 +422,7 @@ internal static class CliCommandCatalog
         sb.AppendLine("                                   Agent handoff preference for start/onboarding.");
         sb.AppendLine("  --max-tests <number>             Pilot slice budget for `pilot` (default: 10).");
         sb.AppendLine("  --selected-tests <file>          Limit analyze/migrate/verify/verify-project to file::Class.Test entries.");
+        sb.AppendLine("  --run-manifest <file>            Verify-project: compile the exact target from this run manifest; no regeneration.");
         sb.AppendLine("  --wizard                         Run init in guided/onboarding mode.");
         sb.AppendLine("  --fix                           Add safe doctor repair plan artifacts.");
         sb.AppendLine("  --dry-run                       Preview doctor fixes without writing project/config files.");

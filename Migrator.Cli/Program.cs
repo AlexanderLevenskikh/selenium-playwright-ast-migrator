@@ -82,6 +82,7 @@ string target = opts.Target;
 string source = opts.Source;
 bool sourceExplicit = opts.SourceExplicit;
 string? selectedTestsFile = opts.SelectedTestsFile;
+string? runManifestPath = opts.RunManifestPath;
 string? tsProjectPath = opts.TsProject;
 bool recursiveArtifacts = opts.RecursiveArtifacts;
 string irVersion = opts.IrVersion;
@@ -201,6 +202,12 @@ if (configPaths.Length == 0 && (!string.IsNullOrWhiteSpace(targetTestFramework) 
     loadedConfig = GenerationPolicy.Apply(loadedConfig, opts.GenerationPolicy);
     generationPolicy = GenerationPolicy.NormalizeOrDefault(loadedConfig.GenerationPolicy);
     adapter = new DefaultProjectAdapter(loadedConfig);
+}
+
+if (mode == "verify-project" && !string.IsNullOrWhiteSpace(runManifestPath))
+{
+    var exactVerifyConfig = loadedConfig ?? new ProjectAdapterConfig();
+    return RunVerifyProjectFromManifest(runManifestPath, outPath, format, exactVerifyConfig, primaryConfigPath, inputPath);
 }
 
 var sourceRegistry = CreateBuiltInSourceFrontendRegistry(loadedConfig);
@@ -1085,9 +1092,9 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
 {
     Directory.CreateDirectory(outPath);
 
-    var plannedOutputs = PlanGeneratedOutputs(results, result => targetBackend.GetDefaultFileName(result.SourceModel));
-    MaterializeGeneratedOutputs(outPath, plannedOutputs, recreateOutputDirectory: false);
-    var generated = plannedOutputs.Count;
+    var artifact = BuildTargetArtifact(results, targetBackend);
+    MaterializeGeneratedOutputs(outPath, artifact, recreateOutputDirectory: false);
+    var generated = artifact.Files.Count;
 
     var summaryWithGenerated = summary with { GeneratedFiles = generated };
 
@@ -1592,21 +1599,18 @@ static ProfileScope ApplyTargetTestFrameworkToScope(ProfileScope scope, string t
     };
 }
 
-static IReadOnlyList<(PipelineResult Result, string FileName)> PlanGeneratedOutputs(
+static TargetArtifact BuildTargetArtifact(
     IEnumerable<PipelineResult> results,
-    Func<PipelineResult, string> baseNameSelector)
+    ITargetBackend targetBackend)
 {
-    return GeneratedNaming.AssignStableFileNames(
+    return TargetArtifact.Create(
         results,
-        result => result.SourceModel.FilePath,
-        baseNameSelector)
-        .Select(entry => (entry.Item, entry.FileName))
-        .ToArray();
+        result => targetBackend.GetDefaultFileName(result.SourceModel));
 }
 
 static string MaterializeGeneratedOutputs(
     string outputDirectory,
-    IReadOnlyList<(PipelineResult Result, string FileName)> plannedOutputs,
+    TargetArtifact artifact,
     bool recreateOutputDirectory)
 {
     var fullOutputDirectory = Path.GetFullPath(outputDirectory);
@@ -1620,10 +1624,14 @@ static string MaterializeGeneratedOutputs(
 
     try
     {
-        foreach (var (result, fileName) in plannedOutputs)
-            File.WriteAllText(Path.Combine(stagingDirectory, fileName), result.GeneratedOutput);
+        foreach (var file in artifact.Files)
+        {
+            var destination = Path.Combine(stagingDirectory, file.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.WriteAllText(destination, file.Content);
+        }
 
-        var targetHash = TargetTreeHasher.Compute(plannedOutputs.Select(entry => (entry.FileName, entry.Result.GeneratedOutput)));
+        var targetHash = artifact.TargetHash;
         File.WriteAllText(Path.Combine(stagingDirectory, "target-tree.sha256"), targetHash + Environment.NewLine);
 
         if (recreateOutputDirectory)
@@ -1663,9 +1671,11 @@ static string MaterializeGeneratedOutputs(
                 }
             }
 
-            foreach (var staged in Directory.GetFiles(stagingDirectory, "*", SearchOption.TopDirectoryOnly))
+            foreach (var staged in Directory.GetFiles(stagingDirectory, "*", SearchOption.AllDirectories))
             {
-                var destination = Path.Combine(fullOutputDirectory, Path.GetFileName(staged));
+                var relativePath = Path.GetRelativePath(stagingDirectory, staged);
+                var destination = Path.Combine(fullOutputDirectory, relativePath);
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
                 File.Move(staged, destination, overwrite: true);
             }
         }
@@ -1677,6 +1687,117 @@ static string MaterializeGeneratedOutputs(
         if (Directory.Exists(stagingDirectory))
             Directory.Delete(stagingDirectory, recursive: true);
     }
+}
+
+static (string Hash, int Files) CaptureSourceInputIdentity(string inputPath, string outPath)
+{
+    var inputFull = Path.GetFullPath(inputPath);
+    var outFull = Path.GetFullPath(outPath);
+    var entries = new List<(string RelativePath, byte[] Content)>();
+
+    if (File.Exists(inputFull))
+    {
+        entries.Add((Path.GetFileName(inputFull), File.ReadAllBytes(inputFull)));
+    }
+    else if (Directory.Exists(inputFull))
+    {
+        foreach (var file in Directory.GetFiles(inputFull, "*", SearchOption.AllDirectories)
+                     .Select(Path.GetFullPath)
+                     .Where(IsMigrationSourceFile)
+                     .Where(file => !IsPathInside(file, outFull))
+                     .OrderBy(file => file, StringComparer.Ordinal))
+        {
+            var relative = Path.GetRelativePath(inputFull, file).Replace('\\', '/');
+            entries.Add((relative, File.ReadAllBytes(file)));
+        }
+    }
+    else
+    {
+        throw new DirectoryNotFoundException($"Migration input does not exist: '{inputPath}'.");
+    }
+
+    return (ContentTreeHasher.ComputeBytes(entries), entries.Count);
+}
+
+static bool IsMigrationSourceFile(string path)
+{
+    var extension = Path.GetExtension(path);
+    return extension.Equals(".cs", StringComparison.OrdinalIgnoreCase)
+        || extension.Equals(".java", StringComparison.OrdinalIgnoreCase)
+        || extension.Equals(".py", StringComparison.OrdinalIgnoreCase);
+}
+
+static bool IsPathInside(string filePath, string directoryPath)
+{
+    var file = Path.GetFullPath(filePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+    var directory = Path.GetFullPath(directoryPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+        + Path.DirectorySeparatorChar;
+    return file.StartsWith(directory, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+}
+
+static RunToolIdentity CreateRunToolIdentity()
+{
+    var assembly = Assembly.GetExecutingAssembly();
+    var informationalVersion = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+    var version = !string.IsNullOrWhiteSpace(informationalVersion)
+        ? informationalVersion
+        : assembly.GetName().Version?.ToString() ?? "unknown";
+    var manifest = ReadStandaloneVersionManifest();
+    var commit = FirstNonEmpty(
+        Environment.GetEnvironmentVariable("MIGRATOR_COMMIT"),
+        GetAssemblyMetadata(assembly, "RepositoryCommit"),
+        ParseCommitFromInformationalVersion(informationalVersion));
+    var distribution = FirstNonEmpty(
+        Environment.GetEnvironmentVariable("MIGRATOR_DISTRIBUTION"),
+        GetAssemblyMetadata(assembly, "Distribution"),
+        manifest is null ? "dotnet-tool/source" : "standalone") ?? "dotnet-tool/source";
+
+    var identitySha256 = CanonicalJsonHasher.ComputeSha256(new
+    {
+        version,
+        commit,
+        distribution
+    });
+    return new RunToolIdentity(version, commit, distribution, identitySha256);
+}
+
+static RunEnvironmentIdentity CreateRunEnvironmentIdentity()
+{
+    var runtimeIdentifier = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier;
+    var framework = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription;
+    var operatingSystem = System.Runtime.InteropServices.RuntimeInformation.OSDescription;
+    var processArchitecture = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString();
+    var culture = System.Globalization.CultureInfo.CurrentCulture.Name;
+    var uiCulture = System.Globalization.CultureInfo.CurrentUICulture.Name;
+    var newLine = Environment.NewLine == "\r\n" ? "CRLF" : Environment.NewLine == "\n" ? "LF" : Convert.ToHexString(Encoding.UTF8.GetBytes(Environment.NewLine));
+    var identitySha256 = CanonicalJsonHasher.ComputeSha256(new
+    {
+        runtimeIdentifier,
+        framework,
+        operatingSystem,
+        processArchitecture,
+        culture,
+        uiCulture,
+        newLine
+    });
+
+    return new RunEnvironmentIdentity(
+        runtimeIdentifier,
+        framework,
+        operatingSystem,
+        processArchitecture,
+        culture,
+        uiCulture,
+        newLine,
+        identitySha256);
+}
+
+static void WriteVerificationEvidence(string directory, VerificationEvidence evidence)
+{
+    Directory.CreateDirectory(directory);
+    File.WriteAllText(
+        Path.Combine(directory, "verification-evidence.json"),
+        JsonSerializer.Serialize(evidence, new JsonSerializerOptions { WriteIndented = true }));
 }
 
 static int RunVerify(MigrationSummaryReport summary, string outPath, string format, List<PipelineResult> results, ProjectAdapterConfig? config, DefaultProjectAdapter? adapter)
@@ -1713,21 +1834,261 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
 
     Console.WriteLine("=== Verify Project Mode ===");
     Console.WriteLine("Creates a temporary verification project and runs dotnet build. Source project files are not modified.");
+    Console.WriteLine("Diagnostic compatibility mode: source is regenerated before build. Use --run-manifest for authoritative exact-target verification.");
     Console.WriteLine();
 
     var generatedDir = Path.Combine(outPath, "generated");
-    var harnessDir = Path.Combine(outPath, "project-verify");
-    // verify-project is intentionally rerunnable against the same --out directory.
-    // Recreate the generated/harness subtrees so renamed or removed source files and
-    // stale bin/obj outputs cannot leak into the next verification run.
     RecreateDirectory(generatedDir);
+
+    var sourceIdentity = CaptureSourceInputIdentity(inputPath, outPath);
+    var configSha256 = CanonicalJsonHasher.ComputeSha256(config);
+    var toolIdentity = CreateRunToolIdentity();
+    var environmentIdentity = CreateRunEnvironmentIdentity();
+
+    var artifact = TargetArtifact.Create(results, result => $"{result.SourceModel.ClassName}Playwright.cs");
+    MaterializeGeneratedOutputs(generatedDir, artifact, recreateOutputDirectory: true);
+
+    return RunVerifyProjectAgainstGeneratedTree(
+        summary,
+        outPath,
+        format,
+        generatedDir,
+        artifact.TargetHash,
+        config,
+        configPath,
+        inputPath,
+        allUnmapped,
+        allUnsupported,
+        sourceIdentity,
+        configSha256,
+        toolIdentity,
+        environmentIdentity,
+        authoritativeTarget: false,
+        writeAdvisoryArtifacts: true);
+}
+
+static int RunVerifyProjectFromManifest(string runManifestPath, string outPath, string format, ProjectAdapterConfig config, string? configPath, string inputPath)
+{
+    var manifestFullPath = Path.GetFullPath(runManifestPath);
+    if (!File.Exists(manifestFullPath))
+    {
+        Console.Error.WriteLine($"Run manifest not found: {manifestFullPath}");
+        return 4;
+    }
+
+    RunManifest? manifest;
+    try
+    {
+        manifest = JsonSerializer.Deserialize<RunManifest>(
+            File.ReadAllText(manifestFullPath),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Run manifest is invalid JSON: {ex.Message}");
+        return 4;
+    }
+
+    if (manifest == null || !string.Equals(manifest.SchemaVersion, "migrator-run-manifest/v2", StringComparison.Ordinal))
+    {
+        Console.Error.WriteLine("Run manifest is missing or uses an unsupported schema.");
+        return 4;
+    }
+
+    if (string.IsNullOrWhiteSpace(manifest.TargetSha256))
+    {
+        Console.Error.WriteLine("Run manifest has no authoritative targetSha256.");
+        return 4;
+    }
+
+    var runDir = Path.GetDirectoryName(manifestFullPath)
+        ?? throw new InvalidOperationException("Run manifest has no parent directory.");
+    var outFullPath = Path.GetFullPath(outPath);
+    if (IsPathInside(manifestFullPath, outFullPath))
+    {
+        Console.Error.WriteLine("verify-project --out must not contain run-manifest.json; use a child such as <run>/verify-project.");
+        return 4;
+    }
+    RecreateDirectory(outFullPath);
+
+    var generatedDir = Path.Combine(runDir, "generated");
+    if (!Directory.Exists(generatedDir))
+    {
+        Console.Error.WriteLine($"Authoritative generated directory is missing: {generatedDir}");
+        return 4;
+    }
+
+    var actualTarget = CaptureGeneratedTargetIdentity(generatedDir);
+    var sourceIdentity = CaptureSourceInputIdentity(inputPath, runDir);
+    var configSha256 = CanonicalJsonHasher.ComputeSha256(config);
+    var toolIdentity = CreateRunToolIdentity();
+    var environmentIdentity = CreateRunEnvironmentIdentity();
+
+    var identityFailures = new List<string>();
+    if (!string.Equals(sourceIdentity.Hash, manifest.SourceSha256, StringComparison.OrdinalIgnoreCase))
+        identityFailures.Add("sourceSha256 differs from run manifest");
+    if (!string.Equals(configSha256, manifest.ConfigSha256, StringComparison.OrdinalIgnoreCase))
+        identityFailures.Add("configSha256 differs from run manifest");
+    if (!string.Equals(actualTarget.Hash, manifest.TargetSha256, StringComparison.OrdinalIgnoreCase))
+        identityFailures.Add("generated target tree differs from run manifest");
+    if (!string.Equals(toolIdentity.IdentitySha256, manifest.Tool.IdentitySha256, StringComparison.OrdinalIgnoreCase))
+        identityFailures.Add("tool identity differs from run manifest");
+    if (!string.Equals(environmentIdentity.IdentitySha256, manifest.Environment.IdentitySha256, StringComparison.OrdinalIgnoreCase))
+        identityFailures.Add("environment identity differs from run manifest");
+
+    var targetFileFailures = ValidateManifestTargetFiles(generatedDir, manifest.TargetFiles);
+    identityFailures.AddRange(targetFileFailures);
+
+    if (identityFailures.Count > 0)
+    {
+        var failedEvidence = VerificationEvidence.Create(
+            kind: "exact-target-preflight",
+            sourceSha256: sourceIdentity.Hash,
+            configSha256: configSha256,
+            targetSha256: actualTarget.Hash,
+            toolSha256: toolIdentity.IdentitySha256,
+            environmentSha256: environmentIdentity.IdentitySha256,
+            status: "provenance-mismatch",
+            exitCode: 4,
+            metrics: new Dictionary<string, int>(StringComparer.Ordinal)
+            {
+                ["identityMismatches"] = identityFailures.Count,
+                ["generatedFiles"] = actualTarget.Files
+            });
+        WriteVerificationEvidence(outPath, failedEvidence);
+        File.WriteAllText(
+            Path.Combine(outPath, "provenance-errors.json"),
+            JsonSerializer.Serialize(identityFailures, new JsonSerializerOptions { WriteIndented = true }));
+
+        foreach (var failure in identityFailures)
+            Console.Error.WriteLine($"EVIDENCE_IDENTITY_MISMATCH: {failure}");
+        return 4;
+    }
+
+    MigrationSummaryReport? summary = null;
+    var summaryPath = Path.Combine(generatedDir, "report.json");
+    if (File.Exists(summaryPath))
+    {
+        try
+        {
+            summary = JsonSerializer.Deserialize<MigrationSummaryReport>(
+                File.ReadAllText(summaryPath),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch
+        {
+            // Project compilation remains authoritative. A malformed advisory report must
+            // not cause us to regenerate source or silently switch verification targets.
+        }
+    }
+
+    Console.WriteLine("=== Verify Project Mode ===");
+    Console.WriteLine("Authoritative exact-target verification from run-manifest.json.");
+    Console.WriteLine($"Target: {manifest.TargetSha256}");
+    Console.WriteLine();
+
+    return RunVerifyProjectAgainstGeneratedTree(
+        summary,
+        outPath,
+        format,
+        generatedDir,
+        manifest.TargetSha256,
+        config,
+        configPath,
+        inputPath,
+        new Dictionary<string, (int Count, string File, int Line)>(StringComparer.Ordinal),
+        new Dictionary<string, (int Count, string File, int Line)>(StringComparer.Ordinal),
+        sourceIdentity,
+        configSha256,
+        toolIdentity,
+        environmentIdentity,
+        authoritativeTarget: true,
+        writeAdvisoryArtifacts: false);
+}
+
+static (string Hash, int Files) CaptureGeneratedTargetIdentity(string generatedDir)
+{
+    var entries = Directory.GetFiles(generatedDir, "*.cs", SearchOption.AllDirectories)
+        .Select(Path.GetFullPath)
+        .OrderBy(path => path, StringComparer.Ordinal)
+        .Select(path => (
+            RelativePath: Path.GetRelativePath(generatedDir, path).Replace('\\', '/'),
+            Content: File.ReadAllBytes(path)))
+        .ToArray();
+    return (ContentTreeHasher.ComputeBytes(entries), entries.Length);
+}
+
+static IReadOnlyList<string> ValidateManifestTargetFiles(string generatedDir, IReadOnlyList<RunTargetFileIdentity>? targetFiles)
+{
+    var failures = new List<string>();
+    if (targetFiles == null || targetFiles.Count == 0)
+    {
+        failures.Add("run manifest has no target file identities");
+        return failures;
+    }
+
+    var expected = new HashSet<string>(StringComparer.Ordinal);
+    foreach (var file in targetFiles)
+    {
+        var relative = file.RelativePath.Replace('\\', '/').TrimStart('/');
+        if (!expected.Add(relative))
+        {
+            failures.Add($"duplicate target file identity: {relative}");
+            continue;
+        }
+
+        var fullPath = Path.GetFullPath(Path.Combine(generatedDir, relative.Replace('/', Path.DirectorySeparatorChar)));
+        if (!IsPathInside(fullPath, generatedDir) || !File.Exists(fullPath))
+        {
+            failures.Add($"target file missing: {relative}");
+            continue;
+        }
+
+        var actualHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(fullPath))).ToLowerInvariant();
+        if (!string.Equals(actualHash, file.ContentSha256, StringComparison.OrdinalIgnoreCase))
+            failures.Add($"target file hash mismatch: {relative}");
+    }
+
+    var actual = Directory.GetFiles(generatedDir, "*.cs", SearchOption.AllDirectories)
+        .Select(path => Path.GetRelativePath(generatedDir, path).Replace('\\', '/'))
+        .ToHashSet(StringComparer.Ordinal);
+    foreach (var extra in actual.Except(expected, StringComparer.Ordinal).OrderBy(path => path, StringComparer.Ordinal))
+        failures.Add($"unexpected generated target file: {extra}");
+
+    return failures;
+}
+
+static int RunVerifyProjectAgainstGeneratedTree(
+    MigrationSummaryReport? summary,
+    string outPath,
+    string format,
+    string generatedDir,
+    string targetSha256,
+    ProjectAdapterConfig config,
+    string? configPath,
+    string inputPath,
+    IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped,
+    IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnsupported,
+    (string Hash, int Files) sourceIdentity,
+    string configSha256,
+    RunToolIdentity toolIdentity,
+    RunEnvironmentIdentity environmentIdentity,
+    bool authoritativeTarget,
+    bool writeAdvisoryArtifacts)
+{
+    Directory.CreateDirectory(outPath);
+    var harnessDir = Path.Combine(outPath, "project-verify");
     RecreateDirectory(harnessDir);
 
-    var plannedOutputs = PlanGeneratedOutputs(results, result => $"{result.SourceModel.ClassName}Playwright.cs");
-    MaterializeGeneratedOutputs(generatedDir, plannedOutputs, recreateOutputDirectory: true);
-    var generatedFiles = plannedOutputs
-        .Select(entry => Path.Combine(generatedDir, entry.FileName))
+    var generatedFiles = Directory.GetFiles(generatedDir, "*.cs", SearchOption.AllDirectories)
+        .OrderBy(path => path, StringComparer.Ordinal)
+        .Select(Path.GetFullPath)
         .ToList();
+    if (generatedFiles.Count == 0)
+    {
+        Console.Error.WriteLine("No generated C# files exist in the authoritative target tree.");
+        return 4;
+    }
 
     var verification = config.Verification ?? new VerificationConfig();
     var baseDir = ResolveVerificationBaseDirectory(verification, configPath, inputPath);
@@ -1795,7 +2156,7 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
         GeneratedAtUtc: DateTimeOffset.UtcNow,
         Status: verifyStatus,
         ExitCode: buildResult.ExitCode,
-        GeneratedFiles: generatedFiles.Select(Path.GetFullPath).ToArray(),
+        GeneratedFiles: generatedFiles.ToArray(),
         HarnessProject: Path.GetFullPath(csprojPath),
         BaseDirectory: Path.GetFullPath(baseDir),
         Solution: solutionPath != null ? Path.GetFullPath(solutionPath) : null,
@@ -1815,15 +2176,38 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
 
     var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
     File.WriteAllText(Path.Combine(outPath, "project-verify-report.json"),
-        System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }), utf8NoBom);
+        JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }), utf8NoBom);
     File.WriteAllText(Path.Combine(outPath, "project-verify-report.md"), WriteProjectVerifyMarkdown(report), utf8NoBom);
-    WriteExplainTodoArtifacts(summary with { GeneratedFiles = generatedFiles.Count }, outPath, format, allUnmapped, allUnsupported, report);
-    WriteSmokePlanArtifacts(outPath, outPath, format);
-    WriteMigrationBoardArtifacts(outPath, outPath, format);
 
-    PrintSummary(summary with { GeneratedFiles = generatedFiles.Count });
+    var projectVerificationEvidence = VerificationEvidence.Create(
+        kind: authoritativeTarget ? "dotnet-build-exact-target" : "dotnet-build-regenerated",
+        sourceSha256: sourceIdentity.Hash,
+        configSha256: configSha256,
+        targetSha256: targetSha256,
+        toolSha256: toolIdentity.IdentitySha256,
+        environmentSha256: environmentIdentity.IdentitySha256,
+        status: verifyStatus,
+        exitCode: buildResult.ExitCode,
+        metrics: new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            ["diagnostics"] = rawDiagnostics.Length,
+            ["generatedFiles"] = generatedFiles.Count
+        });
+    WriteVerificationEvidence(outPath, projectVerificationEvidence);
+
+    if (writeAdvisoryArtifacts && summary != null)
+    {
+        WriteExplainTodoArtifacts(summary with { GeneratedFiles = generatedFiles.Count }, outPath, format, allUnmapped, allUnsupported, report);
+        WriteSmokePlanArtifacts(outPath, outPath, format);
+        WriteMigrationBoardArtifacts(outPath, outPath, format);
+    }
+
+    if (summary != null)
+        PrintSummary(summary with { GeneratedFiles = generatedFiles.Count });
     Console.WriteLine();
     Console.WriteLine("=== Project Verify Summary ===");
+    Console.WriteLine($"Mode: {(authoritativeTarget ? "EXACT TARGET" : "REGENERATED DIAGNOSTIC")}");
+    Console.WriteLine($"Target SHA-256: {targetSha256}");
     Console.WriteLine($"Status: {report.Status.ToUpperInvariant()}");
     Console.WriteLine($"Generated files: {report.GeneratedFiles.Length}");
     Console.WriteLine($"Harness project: {report.HarnessProject}");
@@ -1843,9 +2227,6 @@ static int RunVerifyProject(MigrationSummaryReport summary, string outPath, stri
     }
     Console.WriteLine($"Project verify reports written to: {Path.GetFullPath(outPath)}");
 
-    // Preserve exit code 2 for genuine verification/compiler failures and expose
-    // infrastructure separately so shell automation can distinguish the failure
-    // without scraping human-readable build output.
     return report.Status switch
     {
         "passed" => 0,
@@ -5841,7 +6222,7 @@ static IEnumerable<string> BuildIterationNextCommands(string workspaceRoot, Proj
         yield return "selenium-pw-migrator start --input <selenium-source> --workspace " + QuoteIfNeeded(workspaceRoot);
     else if (!string.Equals(standardRun.VerificationStatus, "PASS", StringComparison.OrdinalIgnoreCase)
         && !string.Equals(standardRun.VerificationStatus, "PASSED", StringComparison.OrdinalIgnoreCase))
-        yield return "selenium-pw-migrator --mode verify-project --input <selenium-source> --config <adapter-config> --out " + QuoteIfNeeded(Path.Combine(standardRun.LatestRunPath, "verify-project")) + " --format both";
+        yield return "selenium-pw-migrator --mode verify-project --input <selenium-source> --config <adapter-config> --run-manifest " + QuoteIfNeeded(Path.Combine(standardRun.LatestRunPath, "run-manifest.json")) + " --out " + QuoteIfNeeded(Path.Combine(standardRun.LatestRunPath, "verify-project")) + " --format both";
     if (memory.ConfigDeltas > 0 && !merge.CandidateExists)
         yield return $"selenium-pw-migrator config merge-deltas --base {QuoteIfNeeded(Path.Combine(workspaceRoot, "adapter-config.json"))} --deltas {QuoteIfNeeded(Path.Combine(workspaceRoot, "state", "memory", "config-deltas"))} --out {QuoteIfNeeded(Path.Combine(workspaceRoot, "config-merge"))}";
     if (merge.CandidateExists && !merge.ValidateReportExists)
@@ -9242,41 +9623,64 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
     var warnings = new List<string>();
     var issues = new List<string>();
     VerifyReport? verifyReport = null;
+    VerificationEvidence? verificationEvidence = null;
+    (string Hash, int Files)? sourceIdentity = null;
+    var configSha256 = CanonicalJsonHasher.ComputeSha256(config ?? new ProjectAdapterConfig());
+    var toolIdentity = CreateRunToolIdentity();
+    var environmentIdentity = CreateRunEnvironmentIdentity();
+
+    // One orchestration invocation owns exactly one migration execution. The stage views
+    // below must reuse these results and, after Migrate, the exact same TargetArtifact.
+    List<PipelineResult>? migrationResults = null;
+    MigrationSummaryReport? analyzedSummary = null;
+    MigrationSummaryReport? generatedSummaryInMemory = null;
+    IReadOnlyDictionary<string, (int Count, string File, int Line)>? allUnmapped = null;
+    IReadOnlyDictionary<string, (int Count, string File, int Line)>? allUnsupported = null;
+    TargetArtifact? targetArtifact = null;
 
     // ---- Stage 1: Analyze ----
     {
         var stage = new OrchestrationStage("analyze", OrchestrationStageStatus.NotStarted, 0, null, Path.GetRelativePath(outPath, analyzeDir));
         try
         {
+            var sourceBefore = CaptureSourceInputIdentity(inputPath, outPath);
             var pipeline = new MigrationPipeline(parser, renderer, adapter);
-            var resultsList = Directory.Exists(inputPath)
+            migrationResults = Directory.Exists(inputPath)
                 ? pipeline.ProcessDirectory(inputPath).ToList()
                 : new[] { pipeline.ProcessFile(inputPath) }.ToList();
-
-            if (resultsList.Count == 0)
+            var sourceAfter = CaptureSourceInputIdentity(inputPath, outPath);
+            if (!string.Equals(sourceBefore.Hash, sourceAfter.Hash, StringComparison.Ordinal)
+                || sourceBefore.Files != sourceAfter.Files)
             {
+                throw new InvalidOperationException("Migration source changed while the pipeline was running. Re-run against a stable source snapshot.");
+            }
+            sourceIdentity = sourceAfter;
+
+            if (migrationResults.Count == 0)
+            {
+                migrationResults = null;
                 stage = stage with { Status = OrchestrationStageStatus.Failed, Message = "No test files found" };
                 issues.Add("Analyze: no test files found in input");
             }
             else
             {
-                var summary = BuildSummary(resultsList, out var allUnmapped);
-                var allUnsupported = CollectAllUnsupported(resultsList);
-                WriteReports(summary, analyzeDir, format, allUnmapped, allUnsupported);
-                GenerateDraftConfig(allUnmapped, analyzeDir, config);
+                analyzedSummary = BuildSummary(migrationResults, out var discoveredUnmapped);
+                allUnmapped = discoveredUnmapped;
+                allUnsupported = CollectAllUnsupported(migrationResults);
 
-                // Copy summary to generated/ for later stages
-                WriteReports(summary, generatedDir, format, allUnmapped, allUnsupported);
+                WriteReports(analyzedSummary, analyzeDir, format, allUnmapped, allUnsupported);
+                GenerateDraftConfig(allUnmapped, analyzeDir, config);
 
                 stage = stage with
                 {
-                    Status = summary.UnsupportedActions > 0 ? OrchestrationStageStatus.PassedWithWarnings : OrchestrationStageStatus.Passed,
-                    Message = $"{summary.FilesProcessed} files, {summary.TestsFound} tests",
+                    Status = analyzedSummary.UnsupportedActions > 0 ? OrchestrationStageStatus.PassedWithWarnings : OrchestrationStageStatus.Passed,
+                    Message = $"{analyzedSummary.FilesProcessed} files, {analyzedSummary.TestsFound} tests",
                 };
             }
         }
         catch (Exception ex)
         {
+            migrationResults = null;
             stage = stage with { Status = OrchestrationStageStatus.Failed, Message = ex.Message };
             issues.Add($"Analyze stage failed: {ex.Message}");
         }
@@ -9295,33 +9699,29 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
             }
             else
             {
-                var pipeline = new MigrationPipeline(parser, renderer, adapter);
-                var resultsList = Directory.Exists(inputPath)
-                    ? pipeline.ProcessDirectory(inputPath).ToList()
-                    : new[] { pipeline.ProcessFile(inputPath) }.ToList();
+                if (migrationResults == null || analyzedSummary == null || allUnmapped == null || allUnsupported == null)
+                    throw new InvalidOperationException("Analyze completed without an authoritative migration result.");
 
-                var summary = BuildSummary(resultsList, out var allUnmapped);
-                var allUnsupported = CollectAllUnsupported(resultsList);
+                targetArtifact = BuildTargetArtifact(migrationResults, targetBackend);
+                MaterializeGeneratedOutputs(generatedDir, targetArtifact, recreateOutputDirectory: true);
 
-                var plannedOutputs = PlanGeneratedOutputs(resultsList, result => targetBackend.GetDefaultFileName(result.SourceModel));
-                MaterializeGeneratedOutputs(generatedDir, plannedOutputs, recreateOutputDirectory: true);
-                var generated = plannedOutputs.Count;
+                generatedSummaryInMemory = analyzedSummary with { GeneratedFiles = targetArtifact.Files.Count };
 
-                var summaryWithGenerated = summary with { GeneratedFiles = generated };
-
-                // Write reports to both generated/ and generated/reports/
-                WriteReports(summaryWithGenerated, generatedDir, format, allUnmapped, allUnsupported);
+                // Generated reports are projections of the same migration execution that
+                // produced TargetArtifact; Migrate never parses/adapts/renders source again.
+                WriteReports(generatedSummaryInMemory, generatedDir, format, allUnmapped, allUnsupported);
                 GenerateDraftConfig(allUnmapped, generatedDir, config);
 
                 stage = stage with
                 {
                     Status = OrchestrationStageStatus.Passed,
-                    Message = $"{generated} files generated",
+                    Message = $"{targetArtifact.Files.Count} files generated",
                 };
             }
         }
         catch (Exception ex)
         {
+            targetArtifact = null;
             stage = stage with { Status = OrchestrationStageStatus.Failed, Message = ex.Message };
             issues.Add($"Migrate stage failed: {ex.Message}");
         }
@@ -9341,11 +9741,8 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
             }
             else
             {
-                // Rebuild pipeline results for verify
-                var pipeline = new MigrationPipeline(parser, renderer, adapter);
-                var resultsList = Directory.Exists(inputPath)
-                    ? pipeline.ProcessDirectory(inputPath).ToList()
-                    : new[] { pipeline.ProcessFile(inputPath) }.ToList();
+                if (targetArtifact == null)
+                    throw new InvalidOperationException("Migrate completed without an authoritative TargetArtifact.");
 
                 var syntaxChecker = CreateGeneratedCodeChecker();
 
@@ -9353,10 +9750,14 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
                     ? (Func<string, string?>)(p => da.GetActiveScope(p))
                     : null;
 
-                verifyReport = VerifyRunner.Run(resultsList, config, syntaxChecker, scopeChecker);
+                // Verify the exact pipeline results captured by TargetArtifact. There is no
+                // second migration execution and therefore no T1/T2 identity assumption.
+                verifyReport = VerifyRunner.Run(targetArtifact, config, syntaxChecker, scopeChecker);
                 verifyExitCode = VerifyRunner.ApplyQualityGates(verifyReport, config?.QualityGates, verifyReport.Issues);
 
-                // Write verify reports
+                // Bind verification artifacts to the exact generated target identity. Block 4
+                // will promote this into the full RunManifest/evidence contract.
+                File.WriteAllText(Path.Combine(verifyDir, "target-tree.sha256"), targetArtifact.TargetHash + Environment.NewLine);
                 File.WriteAllText(Path.Combine(verifyDir, "verify-report.txt"), VerifyReportWriter.ToText(verifyReport));
                 File.WriteAllText(Path.Combine(verifyDir, "verify-report.json"), VerifyReportWriter.ToJson(verifyReport));
 
@@ -9369,6 +9770,28 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
                     status = OrchestrationStageStatus.Passed;
 
                 stage = stage with { Status = status, ExitCode = verifyExitCode, Message = verifyReport.Status };
+
+                if (sourceIdentity == null)
+                    throw new InvalidOperationException("Verify cannot bind evidence because source identity is missing.");
+
+                verificationEvidence = VerificationEvidence.Create(
+                    kind: "generated-verify",
+                    sourceSha256: sourceIdentity.Value.Hash,
+                    configSha256: configSha256,
+                    targetSha256: targetArtifact.TargetHash,
+                    toolSha256: toolIdentity.IdentitySha256,
+                    environmentSha256: environmentIdentity.IdentitySha256,
+                    status: status,
+                    exitCode: verifyExitCode,
+                    metrics: new Dictionary<string, int>(StringComparer.Ordinal)
+                    {
+                        ["syntaxErrors"] = verifyReport.SyntaxErrors,
+                        ["todoComments"] = verifyReport.TodoComments,
+                        ["unsupportedActions"] = verifyReport.UnsupportedActions,
+                        ["unmappedTargets"] = verifyReport.UnmappedTargets,
+                        ["rawExpressions"] = verifyReport.RawExpressions
+                    });
+                WriteVerificationEvidence(verifyDir, verificationEvidence);
 
                 if (verifyReport.SyntaxErrors > 0)
                     issues.Add($"Verify: {verifyReport.SyntaxErrors} syntax error(s)");
@@ -9394,62 +9817,49 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
             }
             else
             {
-                // Propose runs even if verify failed — it reads from generated/ reports
-                // Load report.json from generated/
-                var summary = System.Text.Json.JsonSerializer.Deserialize<MigrationSummaryReport>(
-                    File.ReadAllText(Path.Combine(generatedDir, "report.json")));
+                if (targetArtifact == null || generatedSummaryInMemory == null || allUnmapped == null || allUnsupported == null)
+                    throw new InvalidOperationException("Migrate completed without authoritative in-memory artifacts for proposal generation.");
 
-                // Load unmapped-targets.json
-                var unmappedTargets = new List<UnmappedTargetInfo>();
-                var unmappedPath = Path.Combine(generatedDir, "unmapped-targets.json");
-                if (File.Exists(unmappedPath))
-                {
-                    unmappedTargets = System.Text.Json.JsonSerializer.Deserialize<List<UnmappedTargetInfo>>(File.ReadAllText(unmappedPath)) ?? new List<UnmappedTargetInfo>();
-                }
-                else if (summary?.TopUnmappedTargets != null)
-                {
-                    unmappedTargets = new List<UnmappedTargetInfo>(summary.TopUnmappedTargets);
-                }
+                // Propose is another view over the same migration result. Do not rediscover
+                // generated files from mutable disk state or reload semantic reports.
+                var unmappedTargets = allUnmapped
+                    .OrderByDescending(kv => kv.Value.Count)
+                    .ThenBy(kv => kv.Key, StringComparer.Ordinal)
+                    .Select(kv => new UnmappedTargetInfo(
+                        SourceExpression: kv.Key,
+                        Usages: kv.Value.Count,
+                        ExampleFile: kv.Value.File,
+                        ExampleLine: kv.Value.Line,
+                        SuggestedTargetExpression: SuggestTargetExpression(kv.Key)))
+                    .ToList();
 
-                // Load unsupported-actions.json
-                var unsupportedActions = new List<UnsupportedMethodInfo>();
-                var unsupportedPath = Path.Combine(generatedDir, "unsupported-actions.json");
-                if (File.Exists(unsupportedPath))
-                {
-                    unsupportedActions = System.Text.Json.JsonSerializer.Deserialize<List<UnsupportedMethodInfo>>(File.ReadAllText(unsupportedPath)) ?? new List<UnsupportedMethodInfo>();
-                }
-                else if (summary?.TopUnsupportedActions != null)
-                {
-                    unsupportedActions = new List<UnsupportedMethodInfo>(summary.TopUnsupportedActions);
-                }
+                var unsupportedActions = allUnsupported
+                    .OrderByDescending(kv => kv.Value.Count)
+                    .ThenBy(kv => kv.Key, StringComparer.Ordinal)
+                    .Select(kv => new UnsupportedMethodInfo(
+                        MethodOrSourceText: kv.Key,
+                        Count: kv.Value.Count,
+                        ExampleFile: kv.Value.File,
+                        ExampleLine: kv.Value.Line))
+                    .ToList();
 
-                // Use in-memory VerifyReport from verify stage (JSON format is custom, not directly deserializable)
-                VerifyReport? verifyRpt = verifyReport;
-
-                // Load generated file contents for proposal analysis
-                var generatedFiles = new Dictionary<string, string>();
-                foreach (var csFile in Directory.GetFiles(generatedDir, "*.cs"))
-                {
-                    generatedFiles[Path.GetFileName(csFile)] = File.ReadAllText(csFile);
-                }
-
-                var existingConfig = config;
+                var generatedFiles = targetArtifact.Files
+                    .ToDictionary(file => file.RelativePath, file => file.Content, StringComparer.Ordinal);
 
                 var proposalInput = new ProposalGenerator.ProposalInput
                 {
-                    MigrationReport = summary,
-                    VerifyReport = verifyRpt,
+                    MigrationReport = generatedSummaryInMemory,
+                    VerifyReport = verifyReport,
                     UnmappedTargets = unmappedTargets,
                     UnsupportedActions = unsupportedActions,
-                    ExistingConfig = existingConfig,
-                    GeneratedFiles = generatedFiles.Keys.ToList(),
+                    ExistingConfig = config,
+                    GeneratedFiles = targetArtifact.Files.Select(file => file.RelativePath).ToList(),
                     GeneratedFileContents = generatedFiles
                 };
 
                 var generator = new ProposalGenerator();
                 var proposals = generator.Generate(proposalInput);
 
-                // Write proposals
                 if (format == "json" || format == "both")
                 {
                     File.WriteAllText(Path.Combine(proposeDir, "mapping-proposals.json"),
@@ -9546,6 +9956,25 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
 
     var reportMdPath = Path.Combine(outPath, "orchestration-report.md");
     File.WriteAllText(reportMdPath, ToOrchestrationReportMarkdown(report));
+
+    var runManifest = new RunManifest(
+        SchemaVersion: "migrator-run-manifest/v2",
+        GeneratedAtUtc: DateTimeOffset.UtcNow,
+        Status: overallStatus,
+        SourceSha256: sourceIdentity?.Hash ?? string.Empty,
+        SourceFiles: sourceIdentity?.Files ?? 0,
+        ConfigSha256: configSha256,
+        TargetSha256: targetArtifact?.TargetHash,
+        Tool: toolIdentity,
+        Environment: environmentIdentity,
+        Verification: verificationEvidence,
+        TargetFiles: targetArtifact?.Files
+            .Select(file => new RunTargetFileIdentity(file.RelativePath, file.ContentSha256))
+            .OrderBy(file => file.RelativePath, StringComparer.Ordinal)
+            .ToArray());
+    File.WriteAllText(
+        Path.Combine(outPath, "run-manifest.json"),
+        JsonSerializer.Serialize(runManifest, new JsonSerializerOptions { WriteIndented = true }));
 
     // Console summary
     Console.WriteLine();
@@ -11403,6 +11832,7 @@ static CliOptions? ParseArgs(string[] args)
     bool staticOnly = false;
     bool includeSourceFiles = false;
     string? selectedTestsFile = null;
+    string? runManifestPath = null;
     int maxTests = 10;
     string agent = "opencode";
     var initModeRequested = IsInitModeRequest(args);
@@ -11544,6 +11974,15 @@ static CliOptions? ParseArgs(string[] args)
                 else
                 {
                     Console.Error.WriteLine("--selected-tests requires a file path");
+                    return null;
+                }
+                break;
+            case "--run-manifest":
+                if (i + 1 < args.Length)
+                    runManifestPath = args[++i];
+                else
+                {
+                    Console.Error.WriteLine("--run-manifest requires a path to run-manifest.json");
                     return null;
                 }
                 break;
@@ -11878,13 +12317,26 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
+    if (!string.IsNullOrWhiteSpace(runManifestPath)
+        && !mode.Equals("verify-project", StringComparison.OrdinalIgnoreCase))
+    {
+        Console.Error.WriteLine("--run-manifest is only supported for verify-project.");
+        return null;
+    }
+
+    if (!string.IsNullOrWhiteSpace(runManifestPath) && !string.IsNullOrWhiteSpace(selectedTestsFile))
+    {
+        Console.Error.WriteLine("--selected-tests cannot be combined with --run-manifest because exact-target verification must not change target scope.");
+        return null;
+    }
+
     if (!new[] { "opencode", "codex", "generic", "manual", "none" }.Contains(agent, StringComparer.OrdinalIgnoreCase))
     {
         Console.Error.WriteLine("Invalid --agent. Use: opencode|codex|generic|manual");
         return null;
     }
 
-    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, source, sourceExplicit, tsProject, recursiveArtifacts, irVersion, renderIr, validationMode, targetTestFramework, generationPolicy, wizard, installAgentKit, targetProjectExists, targetProjectPath, defaultTestIdAttribute, targetNamespace, targetBaseClass, fix, apply, dryRun, port, staticOnly, includeSourceFiles, selectedTestsFile, maxTests, agent);
+    return new CliOptions(mode, input ?? "", outDir, config, configs.ToArray(), format, failOnUnsupported, failOnTodo, workspace, before, after, target, source, sourceExplicit, tsProject, recursiveArtifacts, irVersion, renderIr, validationMode, targetTestFramework, generationPolicy, wizard, installAgentKit, targetProjectExists, targetProjectPath, defaultTestIdAttribute, targetNamespace, targetBaseClass, fix, apply, dryRun, port, staticOnly, includeSourceFiles, selectedTestsFile, runManifestPath, maxTests, agent);
 }
 
 static string[] NormalizeDirectCommand(string[] args)

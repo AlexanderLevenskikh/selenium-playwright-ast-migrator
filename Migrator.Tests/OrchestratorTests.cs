@@ -233,6 +233,123 @@ public class OrchestratorTests
     }
 
     [Fact]
+    public void Orchestrator_VerifyBindsToExactGeneratedTargetArtifact()
+    {
+        var tmp = Path.Combine(Path.GetTempPath(), $"orch_target_identity_{Guid.NewGuid():N}");
+        try
+        {
+            RunOrchestratorCli(_testFilesDir, tmp);
+
+            var generatedDir = Path.Combine(tmp, "generated");
+            var generatedHashPath = Path.Combine(generatedDir, "target-tree.sha256");
+            var verifyHashPath = Path.Combine(tmp, "verify", "target-tree.sha256");
+
+            Assert.True(File.Exists(generatedHashPath), "generated target-tree.sha256 missing");
+            Assert.True(File.Exists(verifyHashPath), "verify target-tree.sha256 missing");
+
+            var generatedHash = File.ReadAllText(generatedHashPath).Trim();
+            var verifyHash = File.ReadAllText(verifyHashPath).Trim();
+            Assert.Equal(generatedHash, verifyHash);
+
+            var exactGeneratedTreeHash = TargetTreeHasher.Compute(
+                Directory.GetFiles(generatedDir, "*.cs", SearchOption.AllDirectories)
+                    .Select(path => (
+                        Path.GetRelativePath(generatedDir, path),
+                        File.ReadAllText(path))));
+
+            Assert.Equal(exactGeneratedTreeHash, generatedHash);
+        }
+        finally
+        {
+            TryDelete(tmp);
+        }
+    }
+
+    [Fact]
+    public void Orchestrator_RunManifestBindsSourceConfigTargetAndVerificationEvidence()
+    {
+        var tmp = Path.Combine(Path.GetTempPath(), $"orch_manifest_{Guid.NewGuid():N}");
+        try
+        {
+            RunOrchestratorCli(_testFilesDir, tmp);
+
+            var manifestPath = Path.Combine(tmp, "run-manifest.json");
+            var evidencePath = Path.Combine(tmp, "verify", "verification-evidence.json");
+            Assert.True(File.Exists(manifestPath), "run-manifest.json missing");
+            Assert.True(File.Exists(evidencePath), "verify/verification-evidence.json missing");
+
+            var manifest = JsonSerializer.Deserialize<RunManifest>(File.ReadAllText(manifestPath));
+            var evidence = JsonSerializer.Deserialize<VerificationEvidence>(File.ReadAllText(evidencePath));
+            Assert.NotNull(manifest);
+            Assert.NotNull(evidence);
+            Assert.Equal("migrator-run-manifest/v2", manifest!.SchemaVersion);
+            Assert.Equal("migrator-verification-evidence/v1", evidence!.SchemaVersion);
+            Assert.Equal(64, manifest.SourceSha256.Length);
+            Assert.True(manifest.SourceFiles > 0);
+            Assert.Equal(64, manifest.ConfigSha256.Length);
+            Assert.Equal(64, manifest.Tool.IdentitySha256.Length);
+            Assert.Equal(64, manifest.Environment.IdentitySha256.Length);
+
+            var generatedHash = File.ReadAllText(Path.Combine(tmp, "generated", "target-tree.sha256")).Trim();
+            Assert.Equal(generatedHash, manifest.TargetSha256);
+            Assert.NotNull(manifest.TargetFiles);
+            Assert.NotEmpty(manifest.TargetFiles!);
+            foreach (var file in manifest.TargetFiles!)
+            {
+                var fullPath = Path.Combine(tmp, "generated", file.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+                Assert.True(File.Exists(fullPath), $"Manifest target file missing: {file.RelativePath}");
+                var actualHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(fullPath))).ToLowerInvariant();
+                Assert.Equal(file.ContentSha256, actualHash);
+            }
+            Assert.Equal(generatedHash, evidence.TargetSha256);
+            Assert.Equal(manifest.SourceSha256, evidence.SourceSha256);
+            Assert.Equal(manifest.ConfigSha256, evidence.ConfigSha256);
+            Assert.Equal(manifest.Tool.IdentitySha256, evidence.ToolSha256);
+            Assert.Equal(manifest.Environment.IdentitySha256, evidence.EnvironmentSha256);
+            Assert.Equal(evidence.EvidenceSha256, manifest.Verification?.EvidenceSha256);
+        }
+        finally
+        {
+            TryDelete(tmp);
+        }
+    }
+
+    [Fact]
+    public void VerifyProject_RunManifestRejectsMutatedGeneratedTreeWithoutRegeneratingIt()
+    {
+        var tmp = Path.Combine(Path.GetTempPath(), $"orch_exact_verify_{Guid.NewGuid():N}");
+        try
+        {
+            RunOrchestratorCli(_testFilesDir, tmp);
+            var generated = Directory.GetFiles(Path.Combine(tmp, "generated"), "*.cs", SearchOption.AllDirectories)
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .First();
+            const string mutation = "// exact-target-mutation";
+            File.AppendAllText(generated, Environment.NewLine + mutation + Environment.NewLine);
+
+            var verifyOut = Path.Combine(tmp, "verify-project");
+            var result = CliTestRunner.Run(
+                $"verify-project --input \"{_testFilesDir}\" --run-manifest \"{Path.Combine(tmp, "run-manifest.json")}\" --out \"{verifyOut}\" --format both",
+                TimeSpan.FromSeconds(30));
+
+            Assert.False(result.TimedOut, result.StdOut + Environment.NewLine + result.StdErr);
+            Assert.Equal(4, result.ExitCode);
+            Assert.Contains("EVIDENCE_IDENTITY_MISMATCH", result.StdErr);
+            Assert.Contains(mutation, File.ReadAllText(generated));
+
+            var evidence = JsonSerializer.Deserialize<VerificationEvidence>(
+                File.ReadAllText(Path.Combine(verifyOut, "verification-evidence.json")));
+            Assert.NotNull(evidence);
+            Assert.Equal("exact-target-preflight", evidence!.Kind);
+            Assert.Equal("provenance-mismatch", evidence.Status);
+        }
+        finally
+        {
+            TryDelete(tmp);
+        }
+    }
+
+    [Fact]
     public void Orchestrator_ReusesCachedScenarioButMaterializesIndependentOutputs()
     {
         var before = OrchestratorScenarioCache.CachedScenarioCount;

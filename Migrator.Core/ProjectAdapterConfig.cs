@@ -423,8 +423,8 @@ public sealed class QualityGatesConfig
     public bool? FailOnInvalidGeneratedSyntax { get; init; }
 
     /// <summary>
-    /// Fail verify if multiple scopes match a single source file.
-    /// Default: true.
+    /// Legacy compatibility flag. Multiple matching scopes are now always a configuration error.
+    /// Setting this property to false is rejected by config validation.
     /// </summary>
     public bool? FailOnMultipleMatchingScopes { get; init; }
 

@@ -35,7 +35,7 @@ For migration smoke checks:
 ```powershell
 selenium-pw-migrator pilot --input ./OldTests --out migration/pilot
 selenium-pw-migrator run --input ./OldTests --config ./adapter-config.json --out migration/runs/run-001 --format both
-selenium-pw-migrator verify-project --input ./OldTests --config ./adapter-config.json --out migration/runs/run-001/verify-project --format both
+selenium-pw-migrator verify-project --input ./OldTests --config ./adapter-config.json --run-manifest migration/runs/run-001/run-manifest.json --out migration/runs/run-001/verify-project --format both
 ```
 
 ## CLI installation diagnostics

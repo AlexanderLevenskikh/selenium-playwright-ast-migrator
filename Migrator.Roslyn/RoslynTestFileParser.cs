@@ -244,7 +244,7 @@ public class RoslynTestFileParser : ITestFileParser
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"Warning: could not parse {file}: {ex.Message}");
+                throw new SourceFileParseException(file, ex);
             }
         }
         return results;

@@ -127,7 +127,7 @@ public class CliProductizationTests
         Assert.Contains("selenium-pw-migrator profile list", catalog);
         Assert.Contains("selenium-pw-migrator profile inspect basic-csharp-xunit", catalog);
         Assert.Contains("selenium-pw-migrator profile install basic-csharp-nunit", catalog);
-        Assert.Contains("selenium-pw-migrator --mode verify-project --input ./OldTests", catalog);
+        Assert.Contains("selenium-pw-migrator verify-project --input ./OldTests --config ./adapter-config.json --run-manifest migration/runs/run-001/run-manifest.json", catalog);
         Assert.Contains("selenium-pw-migrator --mode helper-inventory --input ./OldTests", catalog);
         Assert.Contains("--target-test-framework <nunit|xunit>", catalog);
         Assert.Contains("--fix", catalog);

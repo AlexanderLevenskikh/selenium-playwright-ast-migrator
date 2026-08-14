@@ -145,7 +145,7 @@ Run the configured source through one ordinary full-project migration command. D
 
 ```bash
 {{options.ToolCommand}} run --input "{{options.Source}}" --config "{{options.Config}}" --out "{{options.Output}}" --format both
-{{options.ToolCommand}} verify-project --input "{{options.Source}}" --config "{{options.Config}}" --format both --out "{{options.Output}}/verify-project"
+{{options.ToolCommand}} verify-project --input "{{options.Source}}" --config "{{options.Config}}" --run-manifest "{{options.Output}}/run-manifest.json" --format both --out "{{options.Output}}/verify-project"
 ```
 
 PowerShell and Bash safety checks are available after the real run:
@@ -1172,7 +1172,7 @@ Standard full-project run:
 
 ```bash
 {{options.ToolCommand}} run --input "{{options.Source}}" --config "{{options.Config}}" --out "{{options.Output}}" --format both
-{{options.ToolCommand}} verify-project --input "{{options.Source}}" --config "{{options.Config}}" --format both --out "{{options.Output}}/verify-project"
+{{options.ToolCommand}} verify-project --input "{{options.Source}}" --config "{{options.Config}}" --run-manifest "{{options.Output}}/run-manifest.json" --format both --out "{{options.Output}}/verify-project"
 ./{{Path.Combine(options.Workspace, "scripts", "check-final-gate.sh")}} -Workspace "{{options.Workspace}}" -Run "{{options.Output}}" -RepoRoot .
 ```
 

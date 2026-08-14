@@ -64,18 +64,28 @@ public class DefaultProjectAdapter : IProjectAdapter
     }
 
     public string? GetActiveScope(string sourceFilePath)
+        => ResolveScope(sourceFilePath)?.Name;
+
+    ProfileScope? ResolveScope(string sourceFilePath)
     {
         if (_globalConfig == null || _globalConfig.Scopes.Length == 0)
             return null;
 
-        var matching = FindMatchingScopes(_globalConfig.Scopes, sourceFilePath);
-        if (matching.Length == 0)
+        var matching = ScopeResolver.FindMatchingScopes(_globalConfig.Scopes, sourceFilePath);
+        if (matching.Count == 0)
             return null;
 
-        if (matching.Length > 1)
-            HandleMultipleMatchingScopes(sourceFilePath, matching);
+        if (matching.Count > 1)
+        {
+            var names = string.Join(", ", matching.Select(scope => scope.Name));
+            throw new ConfigValidationError(new[]
+            {
+                $"Multiple profile scopes matched source file '{Path.GetFileName(sourceFilePath)}': {names}. " +
+                "SourcePathPatterns must resolve to exactly one scope; first-match compatibility has been removed."
+            });
+        }
 
-        return matching[0].Name;
+        return matching[0];
     }
 
     public TestFileModel Adapt(TestFileModel sourceModel)
@@ -141,15 +151,9 @@ public class DefaultProjectAdapter : IProjectAdapter
         if (_globalConfig == null)
             return EmptyConfig;
 
-        var matchingScopes = FindMatchingScopes(_globalConfig.Scopes, sourceFilePath);
-
-        if (matchingScopes.Length == 0)
+        var scope = ResolveScope(sourceFilePath);
+        if (scope == null)
             return ResolveGlobalConfig();
-
-        if (matchingScopes.Length > 1)
-            HandleMultipleMatchingScopes(sourceFilePath, matchingScopes);
-
-        var scope = matchingScopes[0];
 
         // Merge: scope overrides global for same keys
         var mergedTargets = MergeUiTargets(_globalConfig.UiTargets, scope.UiTargets);
@@ -360,22 +364,6 @@ public class DefaultProjectAdapter : IProjectAdapter
             .Select(name => name!)
             .ToArray();
         return methodName.Length > 0;
-    }
-
-    void HandleMultipleMatchingScopes(string sourceFilePath, ProfileScope[] matchingScopes)
-    {
-        var message = $"Multiple profile scopes matched source file '{Path.GetFileName(sourceFilePath)}': " +
-            string.Join(", ", matchingScopes.Select(scope => scope.Name));
-        var fail = _globalConfig?.QualityGates?.FailOnMultipleMatchingScopes ?? true;
-        if (fail)
-        {
-            throw new ConfigValidationError(new[]
-            {
-                message + ". Make SourcePathPatterns mutually exclusive or set QualityGates.FailOnMultipleMatchingScopes=false for first-match compatibility."
-            });
-        }
-
-        Console.Error.WriteLine("Warning: " + message + ". Using the first matching scope because FailOnMultipleMatchingScopes=false.");
     }
 
     static int FindTopLevelParameterListStart(string text)
@@ -663,48 +651,6 @@ public class DefaultProjectAdapter : IProjectAdapter
                 result[kvp.Key.Trim()] = kvp.Value;
         }
         return result;
-    }
-
-    static ProfileScope[] FindMatchingScopes(ProfileScope[] scopes, string sourceFilePath)
-    {
-        var fileName = Path.GetFileName(sourceFilePath);
-        var matching = new List<ProfileScope>();
-
-        foreach (var scope in scopes)
-        {
-            foreach (var pattern in scope.SourcePathPatterns)
-            {
-                if (MatchPathPattern(pattern, sourceFilePath, fileName))
-                {
-                    matching.Add(scope);
-                    break;
-                }
-            }
-        }
-
-        return matching.ToArray();
-    }
-
-    static bool MatchPathPattern(string pattern, string fullPath, string fileName)
-    {
-        if (pattern.Contains("**"))
-        {
-            var suffix = pattern.Substring(pattern.IndexOf("**") + 2);
-            if (suffix.StartsWith("/")) suffix = suffix.Substring(1);
-            if (suffix.StartsWith("\\")) suffix = suffix.Substring(1);
-
-            return fullPath.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) ||
-                   fileName.Equals(suffix, StringComparison.OrdinalIgnoreCase);
-        }
-
-        if (!pattern.Contains('/') && !pattern.Contains('\\'))
-        {
-            return fileName.Equals(pattern, StringComparison.OrdinalIgnoreCase);
-        }
-
-        var normalizedPattern = pattern.Replace('\\', '/');
-        var normalizedPath = fullPath.Replace('\\', '/');
-        return normalizedPath.Equals(normalizedPattern, StringComparison.OrdinalIgnoreCase);
     }
 
     TestModel AdaptTest(TestModel test, ResolvedFileConfig resolved)
@@ -1212,28 +1158,24 @@ public class DefaultProjectAdapter : IProjectAdapter
         if (tableResult is MappedTarget)
             return tableResult;
 
-        foreach (var entry in resolved._targetMap)
+        foreach (var entry in TargetMappingResolver.GetPrefixCandidates(resolved._targetMap, sourceExpression))
         {
-            if (sourceExpression.StartsWith(entry.Key + ".", StringComparison.Ordinal) ||
-                sourceExpression == entry.Key)
+            // If the expression contains ElementAt with an unsafe index, don't
+            // let the prefix fallback silently resolve it to the base locator.
+            // This prevents ElementAt(GetIndex()) or ElementAt(i + 1) from becoming
+            // an active mapped target that would generate incorrect .Nth() code.
+            // Check both table-style (.Items.ElementAt) and general (collection.ElementAt) patterns.
+            var elemTableMatch = ElementAtRegex.Match(sourceExpression);
+            var elemGeneralMatch = Regex.Match(sourceExpression, @"\w+\s*\.\s*ElementAt\s*\(\s*([^)]+)\s*\)");
+            var generalIdx = elemGeneralMatch.Success ? elemGeneralMatch.Groups[1].Value.Trim() : null;
+            var tableIdx = elemTableMatch.Success ? elemTableMatch.Groups[1].Value.Trim() : null;
+            if ((elemTableMatch.Success && !int.TryParse(tableIdx!, out _) && !IsSafeIndexExpression(tableIdx!)) ||
+                (elemGeneralMatch.Success && !int.TryParse(generalIdx!, out _) && !IsSafeIndexExpression(generalIdx!)))
             {
-                // If the expression contains ElementAt with an unsafe index, don't
-                // let the prefix fallback silently resolve it to the base locator.
-                // This prevents ElementAt(GetIndex()) or ElementAt(i + 1) from becoming
-                // an active mapped target that would generate incorrect .Nth() code.
-                // Check both table-style (.Items.ElementAt) and general (collection.ElementAt) patterns.
-                var elemTableMatch = ElementAtRegex.Match(sourceExpression);
-                var elemGeneralMatch = Regex.Match(sourceExpression, @"\w+\s*\.\s*ElementAt\s*\(\s*([^)]+)\s*\)");
-                var generalIdx = elemGeneralMatch.Success ? elemGeneralMatch.Groups[1].Value.Trim() : null;
-                var tableIdx = elemTableMatch.Success ? elemTableMatch.Groups[1].Value.Trim() : null;
-                if ((elemTableMatch.Success && !int.TryParse(tableIdx!, out _) && !IsSafeIndexExpression(tableIdx!)) ||
-                    (elemGeneralMatch.Success && !int.TryParse(generalIdx!, out _) && !IsSafeIndexExpression(generalIdx!)))
-                {
-                    continue;
-                }
-
-                return entry.Value;
+                continue;
             }
+
+            return entry.Value;
         }
 
         return new UnresolvedTarget(sourceExpression);
@@ -3536,25 +3478,21 @@ public class DefaultProjectAdapter : IProjectAdapter
             if (_targetMap.TryGetValue(sourceExpression, out var target))
                 return target;
 
-            foreach (var entry in _targetMap)
+            foreach (var entry in TargetMappingResolver.GetPrefixCandidates(_targetMap, sourceExpression))
             {
-                if (sourceExpression.StartsWith(entry.Key + ".", StringComparison.Ordinal) ||
-                    sourceExpression == entry.Key)
+                // If the expression contains ElementAt with an unsafe index, don't
+                // let the prefix fallback silently resolve it to the base locator.
+                var elemTableMatch = ElementAtRegex.Match(sourceExpression);
+                var elemGeneralMatch = Regex.Match(sourceExpression, @"\w+\s*\.\s*ElementAt\s*\(\s*([^)]+)\s*\)");
+                var generalIdx = elemGeneralMatch.Success ? elemGeneralMatch.Groups[1].Value.Trim() : null;
+                var tableIdx = elemTableMatch.Success ? elemTableMatch.Groups[1].Value.Trim() : null;
+                if ((elemTableMatch.Success && !int.TryParse(tableIdx!, out _) && !IsSafeIndexExpression(tableIdx!)) ||
+                    (elemGeneralMatch.Success && !int.TryParse(generalIdx!, out _) && !IsSafeIndexExpression(generalIdx!)))
                 {
-                    // If the expression contains ElementAt with an unsafe index, don't
-                    // let the prefix fallback silently resolve it to the base locator.
-                    var elemTableMatch = ElementAtRegex.Match(sourceExpression);
-                    var elemGeneralMatch = Regex.Match(sourceExpression, @"\w+\s*\.\s*ElementAt\s*\(\s*([^)]+)\s*\)");
-                    var generalIdx = elemGeneralMatch.Success ? elemGeneralMatch.Groups[1].Value.Trim() : null;
-                    var tableIdx = elemTableMatch.Success ? elemTableMatch.Groups[1].Value.Trim() : null;
-                    if ((elemTableMatch.Success && !int.TryParse(tableIdx!, out _) && !IsSafeIndexExpression(tableIdx!)) ||
-                        (elemGeneralMatch.Success && !int.TryParse(generalIdx!, out _) && !IsSafeIndexExpression(generalIdx!)))
-                    {
-                        continue;
-                    }
-
-                    return entry.Value;
+                    continue;
                 }
+
+                return entry.Value;
             }
 
             return new UnresolvedTarget(sourceExpression);

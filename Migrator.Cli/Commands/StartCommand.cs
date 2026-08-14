@@ -123,7 +123,7 @@ internal static class StartCommand
             if (target == "ts")
                 commands.Add($"selenium-pw-migrator --mode verify-ts-project --input {Quote(runOutput)} --out {Quote(ToCommandPath(Path.Combine(workspace, "runs", "run-001", "verify-ts-project")))} --format both");
             else
-                commands.Add($"selenium-pw-migrator verify-project --input {Quote(source)} --config {Quote(configPath)} --out {Quote(ToCommandPath(Path.Combine(workspace, "runs", "run-001", "verify-project")))} --format both");
+                commands.Add($"selenium-pw-migrator verify-project --input {Quote(source)} --config {Quote(configPath)} --run-manifest {Quote(ToCommandPath(Path.Combine(workspace, "runs", "run-001", "run-manifest.json")))} --out {Quote(ToCommandPath(Path.Combine(workspace, "runs", "run-001", "verify-project")))} --format both");
         }
         else
         {

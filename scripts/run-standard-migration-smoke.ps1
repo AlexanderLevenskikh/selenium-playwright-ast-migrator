@@ -15,6 +15,10 @@ if (-not (Test-Path $CliDll)) {
     $CliDll = Get-ChildItem (Join-Path $rootPath 'Migrator.Cli/bin') -Filter Migrator.Cli.dll -Recurse -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1 -ExpandProperty FullName
 }
 if (-not $CliDll -or -not (Test-Path $CliDll)) { throw 'Migrator.Cli.dll was not found.' }
+$verifyProjectHelp = (& dotnet $CliDll verify-project --help 2>&1 | Out-String)
+if ($LASTEXITCODE -ne 0 -or $verifyProjectHelp -notmatch [regex]::Escape('--run-manifest')) {
+    throw "Migrator.Cli.dll does not expose verify-project --run-manifest. Rebuild Migrator.Cli from the current sources before running the standard smoke. CLI: $CliDll"
+}
 $sourceDir = Join-Path $outputPath 'source'
 $runDir = Join-Path $outputPath 'run-001'
 New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
@@ -51,23 +55,68 @@ if (Test-Path $verifyReportPath) {
     }
 }
 $partitionDirectories = @(Get-ChildItem -Path $runDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^(wave|partition)-' })
-$status = if ($exitCode -eq 0 -and (Test-Path $reportPath) -and (Test-Path $generatedReportPath) -and $partitionDirectories.Count -eq 0) { 'PASS' } else { 'FAIL' }
+$orchestrationPassed = $exitCode -eq 0 -and (Test-Path $reportPath) -and (Test-Path $generatedReportPath) -and $partitionDirectories.Count -eq 0
+$runManifestPath = Join-Path $runDir 'run-manifest.json'
+$verifyProjectDir = Join-Path $runDir 'verify-project'
+$projectVerifyReportPath = Join-Path $verifyProjectDir 'project-verify-report.json'
+$projectVerifyEvidencePath = Join-Path $verifyProjectDir 'verification-evidence.json'
+$projectVerifyExitCode = $null
+$finalGateExitCode = $null
+$finalGateOutput = @()
+
+if ($orchestrationPassed) {
+    & dotnet $CliDll verify-project `
+        --input $sourceDir `
+        --run-manifest $runManifestPath `
+        --out $verifyProjectDir `
+        --format both
+    $projectVerifyExitCode = $LASTEXITCODE
+}
+
+if ($orchestrationPassed -and $projectVerifyExitCode -eq 0) {
+    $finalGateScript = Join-Path $rootPath 'templates/migration-kit/scripts/check-final-gate.ps1'
+    $finalGateOutput = @(& powershell -NoProfile -ExecutionPolicy Bypass `
+        -File $finalGateScript `
+        -Workspace $outputPath `
+        -Run $runDir `
+        -RepoRoot $rootPath 2>&1)
+    $finalGateExitCode = $LASTEXITCODE
+    $finalGateOutput | ForEach-Object { Write-Host $_ }
+}
+
+$status = if (
+    $orchestrationPassed `
+    -and $projectVerifyExitCode -eq 0 `
+    -and $finalGateExitCode -eq 0 `
+    -and (Test-Path $runManifestPath) `
+    -and (Test-Path $projectVerifyReportPath) `
+    -and (Test-Path $projectVerifyEvidencePath)
+) { 'PASS' } else { 'FAIL' }
+
 $summary = [ordered]@{
-    schemaVersion = 'standard-migration-smoke/v1'
+    schemaVersion = 'standard-migration-smoke/v2'
     status = $status
-    exitCode = $exitCode
+    orchestrationExitCode = $exitCode
+    exactProjectVerifyExitCode = $projectVerifyExitCode
+    finalGateExitCode = $finalGateExitCode
     durationMs = [Math]::Round($watch.Elapsed.TotalMilliseconds, 3)
     source = $sourceDir
     run = $runDir
+    runManifest = $runManifestPath
     orchestrationReport = $reportPath
     generatedReport = $generatedReportPath
     verifyReport = $verifyReportPath
+    projectVerifyReport = $projectVerifyReportPath
+    projectVerifyEvidence = $projectVerifyEvidencePath
     syntaxErrors = $syntaxErrors
     todoComments = $todoComments
     hiddenPartitionDirectories = @($partitionDirectories | ForEach-Object { $_.FullName })
+    finalGateOutput = @($finalGateOutput | ForEach-Object { [string]$_ })
     generatedAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
 }
 $summary | ConvertTo-Json -Depth 10 | Set-Content -Encoding UTF8 (Join-Path $outputPath 'standard-migration-smoke.json')
-if ($status -ne 'PASS') { throw "Standard migration smoke failed with exit code $exitCode; orchestration report: $(Test-Path $reportPath); generated report: $(Test-Path $generatedReportPath); verify report: $(Test-Path $verifyReportPath); syntax errors: $syntaxErrors; TODOs: $todoComments; hidden partitions: $($partitionDirectories.Count)" }
+if ($status -ne 'PASS') {
+    throw "Standard migration smoke failed; orchestrationExit=$exitCode; exactProjectVerifyExit=$projectVerifyExitCode; finalGateExit=$finalGateExitCode; runManifest=$(Test-Path $runManifestPath); projectVerifyReport=$(Test-Path $projectVerifyReportPath); projectVerifyEvidence=$(Test-Path $projectVerifyEvidencePath); syntaxErrors=$syntaxErrors; TODOs=$todoComments; hiddenPartitions=$($partitionDirectories.Count)"
+}
 Write-Host 'STANDARD_MIGRATION_SMOKE_PASS'
 Write-Host "Report: $(Join-Path $outputPath 'standard-migration-smoke.json')"

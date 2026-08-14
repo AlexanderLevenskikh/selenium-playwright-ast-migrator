@@ -67,7 +67,7 @@ selenium-pw-migrator run --input <selenium-source> --config <adapter-config> --o
 8. Run fresh project verification for the same source/config when a real target project is available:
 
 ```shell
-selenium-pw-migrator verify-project --input <selenium-source> --config <adapter-config> --out migration/runs/run-001/verify-project --format both
+selenium-pw-migrator verify-project --input <selenium-source> --config <adapter-config> --run-manifest migration/runs/run-001/run-manifest.json --out migration/runs/run-001/verify-project --format both
 ```
 
 Never write a synthetic PASS. Never copy or manufacture a PASS/NOT_RUNNABLE result.

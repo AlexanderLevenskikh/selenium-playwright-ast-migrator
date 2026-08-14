@@ -1393,7 +1393,7 @@ public class SnapshotTests
     }
 
     [Fact]
-    public void ProfileScope_MultipleMatches_DeterministicSelection()
+    public void ProfileScope_MultipleMatches_AreRejectedInsteadOfFirstMatchSelection()
     {
         var config = new ProjectAdapterConfig(
             "Test",
@@ -1401,7 +1401,6 @@ public class SnapshotTests
             Array.Empty<PageObjectMapping>(),
             Array.Empty<MethodMapping>(),
             TestHost: new TestHostConfig { BaseClass = "DefaultBase" },
-            QualityGates: new QualityGatesConfig { FailOnMultipleMatchingScopes = false },
             Scopes: new[]
             {
                 new ProfileScope
@@ -1431,10 +1430,8 @@ public class SnapshotTests
                     Array.Empty<MethodParameterModel>(), Array.Empty<TestAction>()),
             });
 
-        var adapted = adapter.Adapt(sourceModel);
-
-        // First scope wins deterministically
-        Assert.Equal("ScopeABase", adapted.TestHost?.BaseClass);
+        var error = Assert.Throws<ConfigValidationError>(() => adapter.Adapt(sourceModel));
+        Assert.Contains("Multiple profile scopes matched", error.Message);
     }
 
     // --- Quote-aware placeholder substitution tests ---
@@ -3101,17 +3098,19 @@ public class ControlBase { }
     }
 
     [Fact]
-    public void Parser_DirectoryWithSyntaxErrorFile_DoesNotCrash()
+    public void Parser_DirectoryWithSyntaxErrorFile_SurfacesStableSourceFailure()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"migrator_test_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
-        File.WriteAllText(Path.Combine(tempDir, "Broken.cs"), @"
+        try
+        {
+            var brokenFile = Path.Combine(tempDir, "Broken.cs");
+            File.WriteAllText(brokenFile, @"
 namespace Tests;
 public class Broken { this is not valid C# }}}
 ");
-        var testFile = Path.Combine(tempDir, "GoodTests.cs");
-        File.WriteAllText(testFile, @"
+            File.WriteAllText(Path.Combine(tempDir, "GoodTests.cs"), @"
 using NUnit.Framework;
 
 namespace Tests;
@@ -3124,13 +3123,17 @@ public class GoodTests
 }
 ");
 
-        var parser = new RoslynTestFileParser();
-        var results = parser.ParseDirectory(tempDir).ToList();
+            var parser = new RoslynTestFileParser();
+            var error = Assert.Throws<SourceFileParseException>(() => parser.ParseDirectory(tempDir).ToList());
 
-        Assert.Single(results);
-        Assert.Equal("GoodTests", results[0].ClassName);
-
-        Directory.Delete(tempDir, true);
+            Assert.Equal(SourceFileParseException.StableCode, error.Code);
+            Assert.Equal(brokenFile, error.FilePath);
+            Assert.Contains("Syntax error", error.InnerException?.Message ?? string.Empty);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
     }
 
     #endregion
