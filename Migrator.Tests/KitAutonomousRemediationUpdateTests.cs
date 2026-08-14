@@ -49,6 +49,20 @@ public sealed class KitAutonomousRemediationUpdateTests
             var policyPath = Path.Combine(root, "migration", "state", "harness-policy.json");
             File.WriteAllText(policyPath, "{\n  \"maxRepairPassesPerRun\": 1\n}\n");
 
+            var autonomyPath = Path.Combine(root, "migration", "state", "autonomy-state.json");
+            var legacyAutonomy = File.ReadAllText(autonomyPath)
+                .Replace("standard-migration-autonomy/v3", "standard-migration-autonomy/v2", StringComparison.Ordinal);
+            foreach (var field in new[] { "cycleInProgress", "activeCycleBaselineStateHash", "lastGuardSha256", "lastGuardDecision", "lastWorkspaceIdentitySha256" })
+            {
+                var pattern = $"""^\s*"{System.Text.RegularExpressions.Regex.Escape(field)}"\s*:\s*[^\r\n]+,?\r?\n""";
+                legacyAutonomy = System.Text.RegularExpressions.Regex.Replace(
+                    legacyAutonomy,
+                    pattern,
+                    string.Empty,
+                    System.Text.RegularExpressions.RegexOptions.Multiline);
+            }
+            File.WriteAllText(autonomyPath, legacyAutonomy);
+
             var update = CliTestRunner.Run("kit update --workspace migration --source ./LegacyTests --backup", root, TimeSpan.FromMinutes(2));
             Assert.False(update.TimedOut, update.StdErr);
             Assert.Equal(0, update.ExitCode);
@@ -56,6 +70,8 @@ public sealed class KitAutonomousRemediationUpdateTests
             var ticket = File.ReadAllText(ticketPath);
             Assert.Contains("# Custom project note", ticket);
             Assert.Contains("five-cycle invocation budget", ticket, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("remediation guard", ticket, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("StartCycle", ticket, StringComparison.Ordinal);
             Assert.DoesNotContain("Complete at most one bounded", ticket, StringComparison.OrdinalIgnoreCase);
 
 
@@ -77,11 +93,18 @@ public sealed class KitAutonomousRemediationUpdateTests
             var contract = File.ReadAllText(Path.Combine(root, "migration", "AGENT_CONTRACT.md"));
             Assert.Contains("up to five cycles", contract, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("No further automated migration work remains", contract, StringComparison.Ordinal);
+            Assert.Contains("remediation guard", contract, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("ROLLBACK_CONFIRMED", contract, StringComparison.Ordinal);
 
             var policy = File.ReadAllText(policyPath);
             Assert.Contains("\"maxRepairPassesPerRun\": 5", policy);
             Assert.Contains("\"maxAutonomousRemediationCyclesPerInvocation\": 5", policy);
             Assert.Contains("AUTONOMOUS_CYCLE_BUDGET_REACHED", policy);
+
+            var autonomy = File.ReadAllText(autonomyPath);
+            Assert.Contains("standard-migration-autonomy/v3", autonomy);
+            Assert.Contains("\"cycleInProgress\": false", autonomy);
+            Assert.Contains("\"activeCycleBaselineStateHash\": null", autonomy);
             Assert.Contains("kit-overwrite:", update.StdOut, StringComparison.Ordinal);
             Assert.Contains("upgrade-standard-mode-state:", update.StdOut, StringComparison.Ordinal);
         }

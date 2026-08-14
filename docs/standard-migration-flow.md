@@ -33,13 +33,14 @@ An ordinary, `continue`, or `continuous` invocation receives up to five remediat
 Each cycle:
 
 1. chooses one non-exhausted, source-backed root cause;
-2. records the baseline run and a stable candidate label;
-3. makes one bounded adapter-config, generated-helper, generated-POM, or other permitted change;
-4. reviews the change and reruns the complete configured source into a new immutable run;
-5. runs `selenium-pw-migrator remediation evaluate --before-run <before> --after-run <after> --candidate "<label>" --autonomy-state migration/state/autonomy-state.json --out migration/state/remediation-evaluation.json`;
-6. records only the Core evaluation through `update-autonomy-state`.
+2. records the accepted baseline run and a stable candidate label;
+3. runs `selenium-pw-migrator remediation guard --accepted-run <before> --input <source> --config <adapter-config> --autonomy-state migration/state/autonomy-state.json --out migration/state/remediation-cycle-guard.json` and opens the transaction with `update-autonomy-state -Action StartCycle -GuardPath ...`;
+4. makes one bounded adapter-config, generated-helper, generated-POM, or other permitted change;
+5. reviews the change and reruns the complete configured source into a new immutable run;
+6. runs `selenium-pw-migrator remediation evaluate --before-run <before> --after-run <after> --candidate "<label>" --autonomy-state migration/state/autonomy-state.json --out migration/state/remediation-evaluation.json`;
+7. records only the Core evaluation through `update-autonomy-state -Action RecordCycle`.
 
-Only Core may classify progress. `ACCEPT` advances the baseline. `REJECT_NO_PROGRESS` and `REJECT_REGRESSION` require rollback of the complete bounded change before another candidate. `REJECT_CYCLE` stops with `REMEDIATION_CYCLE_DETECTED`. State hashes survive fresh invocation budgets, so `continue` cannot hide a repeated logical state.
+Only Core may classify progress. `ACCEPT` advances the baseline. `REJECT_NO_PROGRESS` and `REJECT_REGRESSION` leave `rollbackRequired=true`; the bounded change must be restored and Core must return `ROLLBACK_CONFIRMED` before another `StartCycle`. `REJECT_CYCLE` still requires rollback confirmation before handoff, then stops with `REMEDIATION_CYCLE_DETECTED`. State hashes and rollback state survive fresh invocation budgets, so `continue` cannot hide a repeated logical state or discard a rejected transaction.
 
 `/supervised-task continue` starts a fresh five-cycle invocation budget while retaining run evidence and exhausted candidate fingerprints. `/supervised-task continuous` advances automatically between cycles and across five-cycle checkpoints without another user command.
 

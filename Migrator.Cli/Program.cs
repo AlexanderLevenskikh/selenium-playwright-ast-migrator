@@ -1694,41 +1694,10 @@ static string MaterializeGeneratedOutputs(
 
 static (string Hash, int Files) CaptureSourceInputIdentity(string inputPath, string outPath)
 {
-    var inputFull = Path.GetFullPath(inputPath);
-    var outFull = Path.GetFullPath(outPath);
-    var entries = new List<(string RelativePath, byte[] Content)>();
-
-    if (File.Exists(inputFull))
-    {
-        entries.Add((Path.GetFileName(inputFull), File.ReadAllBytes(inputFull)));
-    }
-    else if (Directory.Exists(inputFull))
-    {
-        foreach (var file in Directory.GetFiles(inputFull, "*", SearchOption.AllDirectories)
-                     .Select(Path.GetFullPath)
-                     .Where(IsMigrationSourceFile)
-                     .Where(file => !IsPathInside(file, outFull))
-                     .OrderBy(file => file, StringComparer.Ordinal))
-        {
-            var relative = Path.GetRelativePath(inputFull, file).Replace('\\', '/');
-            entries.Add((relative, File.ReadAllBytes(file)));
-        }
-    }
-    else
-    {
-        throw new DirectoryNotFoundException($"Migration input does not exist: '{inputPath}'.");
-    }
-
-    return (ContentTreeHasher.ComputeBytes(entries), entries.Count);
+    var identity = SourceInputIdentityCapture.Capture(inputPath, outPath);
+    return (identity.Hash, identity.Files);
 }
 
-static bool IsMigrationSourceFile(string path)
-{
-    var extension = Path.GetExtension(path);
-    return extension.Equals(".cs", StringComparison.OrdinalIgnoreCase)
-        || extension.Equals(".java", StringComparison.OrdinalIgnoreCase)
-        || extension.Equals(".py", StringComparison.OrdinalIgnoreCase);
-}
 
 static bool IsPathInside(string filePath, string directoryPath)
 {

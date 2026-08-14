@@ -50,6 +50,7 @@ None.
 - Confirm the referenced run directory and reports exist.
 - Confirm each validation statement uses evidence from its own dimension.
 - Confirm `state/autonomy-state.json` matches the cycle table and stop reason.
+- Confirm `cycleInProgress=false` and `rollbackRequired=false`; handoff is invalid while a transaction or rollback is unresolved.
 - Confirm `state/stop-policy-checklist.md` is current.
 - Run `scripts/validate-handoff.ps1 -Workspace migration` or the shell equivalent.
 - Do not treat summaries or copied validation files as evidence.

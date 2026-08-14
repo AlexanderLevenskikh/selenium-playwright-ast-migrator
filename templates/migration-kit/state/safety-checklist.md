@@ -12,6 +12,8 @@
 - [ ] New engine behavior has regression tests when possible.
 - [ ] Config changes include representative evidence.
 - [ ] Exactly one bounded change was made per remediation cycle.
+- [ ] Every cycle was opened by a Core `remediation guard` + `StartCycle` against the accepted baseline.
+- [ ] No rejected patch was carried forward; every `rollbackRequired=true` received `ROLLBACK_CONFIRMED` before another cycle or handoff.
 - [ ] Every cycle has a stable fingerprint, baseline metrics, rerun evidence, and result.
 - [ ] Progress reset the no-progress streak.
 - [ ] A two-no-progress stop uses two distinct candidate fingerprints.

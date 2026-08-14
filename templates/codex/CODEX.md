@@ -16,6 +16,8 @@ Use this file when a migration task is delegated to Codex instead of the default
 ## Autonomous remediation cycles
 
 - One bounded write change is allowed per remediation cycle.
+- Before the bounded edit, run `selenium-pw-migrator remediation guard` against the accepted run/current source+config and open it with `update-autonomy-state -Action StartCycle`; close it only through Core `remediation evaluate` + `RecordCycle`.
+- `REJECT_*` requires complete rollback; another cycle may start only after Core returns `ROLLBACK_CONFIRMED`. A fresh `continue` budget never clears pending rollback or an active cycle.
 - An ordinary or `continue` invocation may execute up to five cycles, with a complete rerun and evidence comparison after every cycle.
 - After progress, continue automatically while safe candidates and budget remain. After the first no-progress cycle, try a different independent candidate.
 - In `continuous` mode, the five-cycle boundary is a checkpoint: persist evidence and automatically open the next batch without asking the user to invoke `continue`.

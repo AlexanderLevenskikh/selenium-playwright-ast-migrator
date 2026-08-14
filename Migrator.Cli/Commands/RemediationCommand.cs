@@ -11,20 +11,23 @@ internal static class RemediationCommand
             return 0;
         }
 
-        if (!string.Equals(args[0], "evaluate", StringComparison.OrdinalIgnoreCase))
+        return args[0].ToLowerInvariant() switch
         {
-            Console.Error.WriteLine($"Unknown remediation command: {args[0]}");
-            PrintHelp();
-            return 2;
-        }
+            "evaluate" => RunEvaluate(args.Skip(1).ToArray()),
+            "guard" => RunGuard(args.Skip(1).ToArray()),
+            _ => UnknownCommand(args[0])
+        };
+    }
 
+    static int RunEvaluate(string[] args)
+    {
         string? beforeRun = null;
         string? afterRun = null;
         string? candidate = null;
         string? autonomyState = null;
         var outPath = "remediation-evaluation.json";
 
-        for (var i = 1; i < args.Length; i++)
+        for (var i = 0; i < args.Length; i++)
         {
             switch (args[i])
             {
@@ -66,9 +69,7 @@ internal static class RemediationCommand
             var after = RemediationStateEvaluator.LoadRunState(afterRun);
             var evaluation = RemediationStateEvaluator.Evaluate(before, after, candidate, visited);
 
-            var fullOutPath = Path.GetFullPath(outPath);
-            Directory.CreateDirectory(Path.GetDirectoryName(fullOutPath) ?? Directory.GetCurrentDirectory());
-            File.WriteAllText(fullOutPath, JsonSerializer.Serialize(evaluation, new JsonSerializerOptions { WriteIndented = true }));
+            WriteJson(outPath, evaluation);
 
             Console.WriteLine("=== Remediation Evaluation ===");
             Console.WriteLine($"Decision: {evaluation.Decision}");
@@ -81,8 +82,92 @@ internal static class RemediationCommand
                 Console.WriteLine($"  + {item}");
             foreach (var item in evaluation.Regressions)
                 Console.WriteLine($"  - {item}");
-            Console.WriteLine($"Evaluation: {fullOutPath}");
+            Console.WriteLine($"Evaluation: {Path.GetFullPath(outPath)}");
 
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 4;
+        }
+    }
+
+    static int RunGuard(string[] args)
+    {
+        string? acceptedRun = null;
+        string? inputPath = null;
+        string? autonomyState = null;
+        var configPaths = new List<string>();
+        var outPath = "remediation-cycle-guard.json";
+
+        for (var i = 0; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--accepted-run":
+                    acceptedRun = ReadValue(args, ref i, "--accepted-run");
+                    break;
+                case "--input":
+                    inputPath = ReadValue(args, ref i, "--input");
+                    break;
+                case "--config":
+                    configPaths.Add(ReadValue(args, ref i, "--config"));
+                    break;
+                case "--autonomy-state":
+                    autonomyState = ReadValue(args, ref i, "--autonomy-state");
+                    break;
+                case "--out":
+                    outPath = ReadValue(args, ref i, "--out");
+                    break;
+                case "--help":
+                case "-h":
+                    PrintHelp();
+                    return 0;
+                default:
+                    Console.Error.WriteLine($"Unknown remediation guard option: {args[i]}");
+                    return 2;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(acceptedRun)
+            || string.IsNullOrWhiteSpace(inputPath)
+            || string.IsNullOrWhiteSpace(autonomyState))
+        {
+            Console.Error.WriteLine("remediation guard requires --accepted-run, --input, and --autonomy-state.");
+            return 2;
+        }
+
+        try
+        {
+            var autonomy = LoadAutonomyGuardState(autonomyState);
+            var accepted = RemediationStateEvaluator.LoadRunState(acceptedRun);
+            var workspaceRoot = ResolveWorkspaceRoot(autonomyState);
+            var source = SourceInputIdentityCapture.Capture(inputPath, workspaceRoot);
+            var config = configPaths.Count == 0
+                ? new ProjectAdapterConfig()
+                : ProjectAdapterConfigMerger.LoadAndMerge(configPaths);
+            var configSha256 = CanonicalJsonHasher.ComputeSha256(config);
+            var guard = RemediationCycleGuardEvaluator.Evaluate(
+                accepted,
+                source.Hash,
+                configSha256,
+                autonomy.CurrentStateHash,
+                autonomy.RollbackRequired,
+                autonomy.Status);
+
+            WriteJson(outPath, guard);
+
+            Console.WriteLine("=== Remediation Cycle Guard ===");
+            Console.WriteLine($"Decision: {guard.Decision}");
+            Console.WriteLine($"Reason: {guard.Reason}");
+            Console.WriteLine($"Accepted state: {guard.AcceptedStateHash}");
+            Console.WriteLine($"Workspace identity: {guard.WorkspaceIdentitySha256}");
+            Console.WriteLine($"Rollback confirmed: {guard.RollbackConfirmed}");
+            Console.WriteLine($"Ready to start cycle: {guard.ReadyToStartCycle}");
+            Console.WriteLine($"Guard: {Path.GetFullPath(outPath)}");
+
+            // A blocker is a valid deterministic guard result, not a CLI/infrastructure crash.
             return 0;
         }
         catch (Exception ex)
@@ -110,6 +195,54 @@ internal static class RemediationCommand
             .ToArray();
     }
 
+    static AutonomyGuardState LoadAutonomyGuardState(string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        if (!File.Exists(fullPath))
+            throw new InvalidOperationException($"REMEDIATION_AUTONOMY_STATE_MISSING: {fullPath}");
+
+        using var document = JsonDocument.Parse(File.ReadAllText(fullPath));
+        var root = document.RootElement;
+        var schema = ReadString(root, "schemaVersion");
+        if (!string.Equals(schema, "standard-migration-autonomy/v2", StringComparison.Ordinal)
+            && !string.Equals(schema, "standard-migration-autonomy/v3", StringComparison.Ordinal))
+            throw new InvalidOperationException($"REMEDIATION_AUTONOMY_STATE_SCHEMA_INVALID: {schema}");
+
+        var status = ReadString(root, "status");
+        var currentStateHash = ReadString(root, "currentStateHash");
+        var rollbackRequired = root.TryGetProperty("rollbackRequired", out var rollback) && rollback.ValueKind == JsonValueKind.True;
+        return new AutonomyGuardState(status, currentStateHash, rollbackRequired);
+    }
+
+    static string ResolveWorkspaceRoot(string autonomyStatePath)
+    {
+        var stateFile = new FileInfo(Path.GetFullPath(autonomyStatePath));
+        var stateDirectory = stateFile.Directory
+            ?? throw new InvalidOperationException("REMEDIATION_AUTONOMY_STATE_PARENT_MISSING");
+        return stateDirectory.Parent?.FullName ?? stateDirectory.FullName;
+    }
+
+    static string ReadString(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var value) || value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return string.Empty;
+        return value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : value.ToString();
+    }
+
+    static void WriteJson<T>(string path, T value)
+    {
+        var fullOutPath = Path.GetFullPath(path);
+        Directory.CreateDirectory(Path.GetDirectoryName(fullOutPath) ?? Directory.GetCurrentDirectory());
+        File.WriteAllText(fullOutPath, JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    static int UnknownCommand(string command)
+    {
+        Console.Error.WriteLine($"Unknown remediation command: {command}");
+        PrintHelp();
+        return 2;
+    }
+
     static string ReadValue(string[] args, ref int index, string option)
     {
         if (index + 1 >= args.Length)
@@ -122,8 +255,12 @@ internal static class RemediationCommand
     static void PrintHelp()
     {
         Console.WriteLine("Remediation commands:");
+        Console.WriteLine("  selenium-pw-migrator remediation guard --accepted-run <run> --input <source> [--config <json> ...] --autonomy-state <json> --out <json>");
         Console.WriteLine("  selenium-pw-migrator remediation evaluate --before-run <run> --after-run <run> --candidate <stable-description> [--autonomy-state <json>] --out <json>");
         Console.WriteLine();
-        Console.WriteLine("Core computes ACCEPT / REJECT_NO_PROGRESS / REJECT_REGRESSION / REJECT_CYCLE from exact run artifacts. The agent does not classify progress.");
+        Console.WriteLine("guard proves that current source/config bytes match the accepted baseline before a cycle starts; after REJECT_* it is also the rollback proof.");
+        Console.WriteLine("evaluate computes ACCEPT / REJECT_NO_PROGRESS / REJECT_REGRESSION / REJECT_CYCLE from exact run artifacts. The agent does not classify progress.");
     }
+
+    sealed record AutonomyGuardState(string Status, string CurrentStateHash, bool RollbackRequired);
 }

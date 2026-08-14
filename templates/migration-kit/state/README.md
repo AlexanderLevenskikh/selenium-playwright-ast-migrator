@@ -18,7 +18,7 @@ state/memory/**
 
 Each run lives under `runs/run-*`; older completed runs remain read-only history. The CLI creates run artifacts. Do not recreate missing reports or validation files by hand.
 
-An invocation may complete up to five cycles. Each cycle changes one root cause, reruns the complete source, compares evidence, and records a stable candidate fingerprint. Progress resets no-progress. A first no-progress result exhausts that candidate and tries another; two consecutive distinct no-progress results stop.
+An invocation may complete up to five cycles. Before every bounded edit, Core must emit a remediation cycle guard proving that current source/config bytes match the accepted baseline; `StartCycle` opens that exact transaction. Each cycle changes one root cause, reruns the complete source, compares evidence, and records a stable candidate fingerprint. `REJECT_*` leaves `rollbackRequired=true`; another cycle cannot start until the workspace is restored and Core returns `ROLLBACK_CONFIRMED`. A fresh `continue` budget never clears pending rollback or an active cycle. Progress resets no-progress. A first no-progress result exhausts that candidate and tries another; two consecutive distinct no-progress results stop.
 
 Project-scoped memory is guidance, not authority. Generated syntax, migration metrics, project build verification, and runtime verification remain separate evidence dimensions.
 

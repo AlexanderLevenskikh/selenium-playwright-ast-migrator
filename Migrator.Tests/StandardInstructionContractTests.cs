@@ -82,6 +82,9 @@ public sealed class StandardInstructionContractTests
         Assert.Contains("fresh budget of up to **5 remediation cycles**", command);
         Assert.Contains("`continuous` means automatically begin the next safe cycle after progress", command);
         Assert.Contains("`REJECT_NO_PROGRESS`", command);
+        Assert.Contains("remediation guard", command);
+        Assert.Contains("-Action StartCycle", command);
+        Assert.Contains("ROLLBACK_CONFIRMED", command);
         Assert.Contains("remediation evaluate", command);
         Assert.Contains("Never pass an agent-authored `PROGRESS`", command);
         Assert.Contains("distinct candidate fingerprints", command);
@@ -147,12 +150,15 @@ public sealed class StandardInstructionContractTests
         Assert.Equal(1, CountLine(handoff, "## Autonomous next actions"));
         Assert.Equal(1, CountLine(handoff, "## What not to do"));
         Assert.DoesNotContain("Status: COMPLETE", handoff);
-        Assert.Contains("standard-migration-autonomy/v2", autonomy);
+        Assert.Contains("standard-migration-autonomy/v3", autonomy);
         Assert.Contains("visitedStateHashes", autonomy);
         Assert.Contains("rollbackRequired", autonomy);
+        Assert.Contains("cycleInProgress", autonomy);
+        Assert.Contains("activeCycleBaselineStateHash", autonomy);
         Assert.Contains("HANDOFF_COMPLETE_CONTRADICTION", validator);
         Assert.Contains("HANDOFF_VALIDATION_OVERCLAIM", validator);
         Assert.Contains("AUTONOMY_STATE_NO_PROGRESS_CANDIDATES_NOT_DISTINCT", validator);
+        Assert.Contains("AUTONOMY_CYCLE_GUARD_REQUIRED", updater);
         Assert.Contains("AUTONOMY_EVALUATION_REQUIRED", updater);
         Assert.Contains("AUTONOMY_AGENT_PROGRESS_CLASSIFICATION_FORBIDDEN", updater);
         Assert.Contains("AUTONOMY_NO_PROGRESS_CANDIDATES_NOT_DISTINCT", updater);

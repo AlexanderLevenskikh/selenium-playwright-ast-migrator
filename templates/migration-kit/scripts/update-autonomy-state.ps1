@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("StartInvocation", "RecordCycle", "Stop")]
+    [ValidateSet("StartInvocation", "StartCycle", "ConfirmRollback", "RecordCycle", "Stop")]
     [string]$Action,
     [string]$Workspace = "migration",
     [ValidateSet("standard", "continue", "continuous", "bounded")]
@@ -9,6 +9,7 @@ param(
     [string]$InvocationId = "",
     [ValidateRange(1, 5)]
     [int]$CycleBudget = 5,
+    [string]$GuardPath = "",
     [string]$EvaluationPath = "",
     # Legacy parameters are accepted by the parser only so old agents fail with a precise
     # contract error instead of silently retaining authority over progress classification.
@@ -29,7 +30,7 @@ function Resolve-FullPath([string]$Path) {
 
 function New-State {
     return [ordered]@{
-        schemaVersion = "standard-migration-autonomy/v2"
+        schemaVersion = "standard-migration-autonomy/v3"
         invocationId = $null
         mode = "standard"
         status = "NOT_STARTED"
@@ -47,6 +48,11 @@ function New-State {
         lastAfterStateHash = $null
         currentStateHash = $null
         rollbackRequired = $false
+        cycleInProgress = $false
+        activeCycleBaselineStateHash = $null
+        lastGuardSha256 = $null
+        lastGuardDecision = $null
+        lastWorkspaceIdentitySha256 = $null
         lastCheckpointReason = $null
         exhaustedCandidateFingerprints = @()
         visitedStateHashes = @()
@@ -61,14 +67,14 @@ function Convert-ToMutableState($InputState) {
     if ($null -eq $InputState) { return $state }
 
     $sourceSchema = [string]$InputState.schemaVersion
-    if ($sourceSchema -ne "standard-migration-autonomy/v1" -and $sourceSchema -ne "standard-migration-autonomy/v2") {
+    if ($sourceSchema -ne "standard-migration-autonomy/v1" -and $sourceSchema -ne "standard-migration-autonomy/v2" -and $sourceSchema -ne "standard-migration-autonomy/v3") {
         throw "AUTONOMY_STATE_SCHEMA_INVALID: $sourceSchema"
     }
 
     foreach ($key in @($state.Keys)) {
         if ($null -ne $InputState.PSObject.Properties[$key]) { $state[$key] = $InputState.$key }
     }
-    $state.schemaVersion = "standard-migration-autonomy/v2"
+    $state.schemaVersion = "standard-migration-autonomy/v3"
     $state.exhaustedCandidateFingerprints = @($state.exhaustedCandidateFingerprints)
     $state.visitedStateHashes = @($state.visitedStateHashes)
     $state.completedCycles = @($state.completedCycles)
@@ -82,6 +88,28 @@ function Write-State([string]$Path, $State) {
     $temp = "$Path.tmp"
     $State | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath $temp -Encoding UTF8
     Move-Item -LiteralPath $temp -Destination $Path -Force
+}
+
+function Read-Guard([string]$Path) {
+    if ([string]::IsNullOrWhiteSpace($Path)) { throw "AUTONOMY_CYCLE_GUARD_REQUIRED" }
+    $full = Resolve-FullPath $Path
+    if (-not (Test-Path -LiteralPath $full)) { throw "AUTONOMY_CYCLE_GUARD_NOT_FOUND: $full" }
+    try { $guard = Get-Content -LiteralPath $full -Raw | ConvertFrom-Json }
+    catch { throw "AUTONOMY_CYCLE_GUARD_INVALID_JSON: $($_.Exception.Message)" }
+
+    if ([string]$guard.SchemaVersion -ne "migrator-remediation-cycle-guard/v1") {
+        throw "AUTONOMY_CYCLE_GUARD_SCHEMA_INVALID: $($guard.SchemaVersion)"
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$guard.GuardSha256) -or [string]::IsNullOrWhiteSpace([string]$guard.AcceptedStateHash)) {
+        throw "AUTONOMY_CYCLE_GUARD_IDENTITY_MISSING"
+    }
+    if (-not [bool]$guard.ReadyToStartCycle) {
+        throw "AUTONOMY_CYCLE_GUARD_BLOCKED: $($guard.Decision) $($guard.Reason)"
+    }
+    if (@("READY_INITIAL_BASELINE", "READY", "ROLLBACK_CONFIRMED") -notcontains [string]$guard.Decision) {
+        throw "AUTONOMY_CYCLE_GUARD_DECISION_INVALID: $($guard.Decision)"
+    }
+    return $guard
 }
 
 function Read-Evaluation([string]$Path) {
@@ -106,6 +134,12 @@ function Read-Evaluation([string]$Path) {
     return $evaluation
 }
 
+function Apply-GuardIdentity($state, $guard) {
+    $state.lastGuardSha256 = [string]$guard.GuardSha256
+    $state.lastGuardDecision = [string]$guard.Decision
+    $state.lastWorkspaceIdentitySha256 = [string]$guard.WorkspaceIdentitySha256
+}
+
 $workspaceFull = Resolve-FullPath $Workspace
 $statePath = Join-Path $workspaceFull "state/autonomy-state.json"
 $loaded = $null
@@ -117,6 +151,9 @@ $state = Convert-ToMutableState $loaded
 
 switch ($Action) {
     "StartInvocation" {
+        if ([bool]$state.cycleInProgress) {
+            throw "AUTONOMY_ACTIVE_CYCLE_MUST_BE_RESOLVED: record or roll back the active cycle before starting a new invocation."
+        }
         if ([string]::IsNullOrWhiteSpace($InvocationId)) { $InvocationId = [guid]::NewGuid().ToString("N") }
         $state.invocationId = $InvocationId
         $state.mode = $Mode
@@ -133,16 +170,67 @@ switch ($Action) {
         $state.lastEvaluationSha256 = $null
         $state.lastBeforeStateHash = $null
         $state.lastAfterStateHash = $null
-        $state.rollbackRequired = $false
         $state.lastCheckpointReason = $null
         $state.completedCycles = @()
         $state.cycleHistory = @()
         $state.stopReason = $null
-        # currentStateHash and visitedStateHashes intentionally survive a fresh invocation.
-        # A `continue` budget is fresh; logical state history is not.
+        # currentStateHash, visitedStateHashes, and rollbackRequired intentionally survive
+        # a fresh invocation. `continue` refreshes budget, never transaction correctness.
+    }
+    "StartCycle" {
+        if ($state.status -ne "RUNNING") { throw "AUTONOMY_STATE_NOT_RUNNING: start a new invocation first." }
+        if ([bool]$state.cycleInProgress) { throw "AUTONOMY_CYCLE_ALREADY_IN_PROGRESS" }
+        if ([int]$state.cyclesCompleted -ge [int]$state.cycleBudget) { throw "AUTONOMY_CYCLE_BUDGET_ALREADY_REACHED" }
+
+        $guard = Read-Guard $GuardPath
+        $acceptedHash = [string]$guard.AcceptedStateHash
+        if (-not [string]::IsNullOrWhiteSpace([string]$state.currentStateHash) -and [string]$state.currentStateHash -ne $acceptedHash) {
+            throw "AUTONOMY_CYCLE_GUARD_BASELINE_MISMATCH: expected $($state.currentStateHash), got $acceptedHash"
+        }
+
+        if ([bool]$state.rollbackRequired) {
+            if ([string]$guard.Decision -ne "ROLLBACK_CONFIRMED" -or -not [bool]$guard.RollbackConfirmed) {
+                throw "AUTONOMY_ROLLBACK_NOT_CONFIRMED: rejected workspace state must be restored before another cycle."
+            }
+        }
+        elseif ([string]$guard.Decision -eq "ROLLBACK_CONFIRMED") {
+            throw "AUTONOMY_UNEXPECTED_ROLLBACK_CONFIRMATION"
+        }
+
+        if ([string]::IsNullOrWhiteSpace([string]$state.currentStateHash)) {
+            if ([string]$guard.Decision -ne "READY_INITIAL_BASELINE") {
+                throw "AUTONOMY_INITIAL_BASELINE_GUARD_REQUIRED"
+            }
+            $state.currentStateHash = $acceptedHash
+            $state.visitedStateHashes = @(@($state.visitedStateHashes) + @($acceptedHash) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+        }
+
+        $state.rollbackRequired = $false
+        $state.cycleInProgress = $true
+        $state.activeCycleBaselineStateHash = [string]$state.currentStateHash
+        Apply-GuardIdentity $state $guard
+        Write-Host "AUTONOMY_CYCLE_STARTED"
+    }
+    "ConfirmRollback" {
+        if ([bool]$state.cycleInProgress) { throw "AUTONOMY_CANNOT_CONFIRM_ROLLBACK_DURING_ACTIVE_CYCLE" }
+        if (-not [bool]$state.rollbackRequired) { throw "AUTONOMY_ROLLBACK_NOT_REQUIRED" }
+
+        $guard = Read-Guard $GuardPath
+        if ([string]$guard.Decision -ne "ROLLBACK_CONFIRMED" -or -not [bool]$guard.RollbackConfirmed) {
+            throw "AUTONOMY_ROLLBACK_NOT_CONFIRMED: Core guard did not verify the accepted workspace state."
+        }
+        if ([string]$guard.AcceptedStateHash -ne [string]$state.currentStateHash) {
+            throw "AUTONOMY_ROLLBACK_BASELINE_MISMATCH: expected $($state.currentStateHash), got $($guard.AcceptedStateHash)"
+        }
+
+        $state.rollbackRequired = $false
+        Apply-GuardIdentity $state $guard
+        Write-Host "AUTONOMY_ROLLBACK_CONFIRMED"
     }
     "RecordCycle" {
         if ($state.status -ne "RUNNING") { throw "AUTONOMY_STATE_NOT_RUNNING: start a new invocation first." }
+        if (-not [bool]$state.cycleInProgress) { throw "AUTONOMY_CYCLE_NOT_STARTED: run StartCycle with a fresh Core guard before editing." }
+        if ([bool]$state.rollbackRequired) { throw "AUTONOMY_PENDING_ROLLBACK_BLOCKS_RECORD" }
         if ([int]$state.cyclesCompleted -ge [int]$state.cycleBudget) { throw "AUTONOMY_CYCLE_BUDGET_ALREADY_REACHED" }
         if (-not [string]::IsNullOrWhiteSpace($CandidateFingerprint) -or -not [string]::IsNullOrWhiteSpace($Result) -or -not [string]::IsNullOrWhiteSpace($MetricSummary)) {
             throw "AUTONOMY_AGENT_PROGRESS_CLASSIFICATION_FORBIDDEN: use -EvaluationPath from `selenium-pw-migrator remediation evaluate`."
@@ -154,17 +242,16 @@ switch ($Action) {
         $decision = [string]$evaluation.Decision
         $fingerprint = [string]$evaluation.CandidateFingerprint
 
-        if (-not [string]::IsNullOrWhiteSpace([string]$state.currentStateHash) -and [string]$state.currentStateHash -ne $beforeHash) {
+        if ([string]$state.activeCycleBaselineStateHash -ne $beforeHash) {
+            throw "AUTONOMY_ACTIVE_CYCLE_BASELINE_MISMATCH: expected $($state.activeCycleBaselineStateHash), got $beforeHash"
+        }
+        if ([string]$state.currentStateHash -ne $beforeHash) {
             throw "AUTONOMY_EVALUATION_BASELINE_MISMATCH: expected $($state.currentStateHash), got $beforeHash"
         }
 
         $visited = @($state.visitedStateHashes)
         if ($visited -contains $afterHash -and $decision -ne "REJECT_CYCLE") {
             throw "AUTONOMY_EVALUATION_MISSED_CYCLE: Core evaluation must classify revisited state as REJECT_CYCLE."
-        }
-
-        if ([string]::IsNullOrWhiteSpace([string]$state.currentStateHash)) {
-            $state.currentStateHash = $beforeHash
         }
         $state.visitedStateHashes = @($visited + @($beforeHash, $afterHash) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
 
@@ -180,6 +267,7 @@ switch ($Action) {
             decision = $decision
             reason = [string]$evaluation.Reason
             evaluationSha256 = [string]$evaluation.EvaluationSha256
+            startGuardSha256 = [string]$state.lastGuardSha256
             beforeStateHash = $beforeHash
             afterStateHash = $afterHash
             beforeDefects = $evaluation.Before.Defects
@@ -200,6 +288,8 @@ switch ($Action) {
         $state.lastBeforeStateHash = $beforeHash
         $state.lastAfterStateHash = $afterHash
         $state.rollbackRequired = $rollbackRequired
+        $state.cycleInProgress = $false
+        $state.activeCycleBaselineStateHash = $null
         $state.lastCheckpointReason = $null
 
         if ($decision -eq "ACCEPT") {
@@ -254,6 +344,9 @@ switch ($Action) {
     "Stop" {
         if ([string]::IsNullOrWhiteSpace($StopReason)) { throw "AUTONOMY_STOP_REASON_REQUIRED" }
         if ($Status -eq "COMPLETE" -and $StopReason -ne "SUCCESS") { throw "AUTONOMY_COMPLETE_REQUIRES_SUCCESS" }
+        if ($Status -eq "COMPLETE" -and ([bool]$state.rollbackRequired -or [bool]$state.cycleInProgress)) {
+            throw "AUTONOMY_COMPLETE_REQUIRES_CLEAN_TRANSACTION_STATE"
+        }
         if ($state.mode -eq "continuous" -and $StopReason -eq "AUTONOMOUS_CYCLE_BUDGET_REACHED") {
             throw "AUTONOMY_CONTINUOUS_BUDGET_IS_CHECKPOINT_NOT_STOP"
         }
@@ -271,6 +364,8 @@ Write-Host "Batch: $($state.batchNumber)"
 Write-Host "Cycles in batch: $($state.cyclesCompleted)/$($state.cycleBudget)"
 Write-Host "Total cycles: $($state.totalCyclesCompleted)"
 Write-Host "Current state: $($state.currentStateHash)"
+Write-Host "Cycle in progress: $($state.cycleInProgress)"
+Write-Host "Active baseline: $($state.activeCycleBaselineStateHash)"
 Write-Host "Last decision: $($state.lastDecision)"
 Write-Host "Rollback required: $($state.rollbackRequired)"
 Write-Host "No-progress streak: $($state.noProgressStreak)"

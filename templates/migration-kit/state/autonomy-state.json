@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "standard-migration-autonomy/v2",
+  "schemaVersion": "standard-migration-autonomy/v3",
   "invocationId": null,
   "mode": "standard",
   "status": "NOT_STARTED",
@@ -17,6 +17,11 @@
   "lastAfterStateHash": null,
   "currentStateHash": null,
   "rollbackRequired": false,
+  "cycleInProgress": false,
+  "activeCycleBaselineStateHash": null,
+  "lastGuardSha256": null,
+  "lastGuardDecision": null,
+  "lastWorkspaceIdentitySha256": null,
   "lastCheckpointReason": null,
   "exhaustedCandidateFingerprints": [],
   "visitedStateHashes": [],

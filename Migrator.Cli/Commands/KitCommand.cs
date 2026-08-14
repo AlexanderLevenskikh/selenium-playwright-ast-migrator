@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 internal static class KitCommand
 {
@@ -1594,10 +1595,27 @@ Fix only the current ticket.
     {
         var changed = false;
 
+        changed |= UpgradeAutonomyStateSchemaV3(Path.Combine(workspacePath, "state", "autonomy-state.json"));
+
+        changed |= ReplaceKnownText(
+            Path.Combine(workspacePath, "current-ticket.md"),
+            "Complete exactly one bounded, source-backed repair for this cycle, rerun the complete configured source scope, compare all relevant evidence dimensions, run `selenium-pw-migrator remediation evaluate`, record only its evaluation in `state/autonomy-state.json`, and roll back the bounded change on any `REJECT_*`, and return control to the orchestrator. This cycle belongs to a five-cycle invocation budget. Do not stop the whole invocation merely because this one cycle produced no progress; in `continuous` mode the orchestrator also rolls over to the next five-cycle batch automatically.",
+            "Before editing, run `selenium-pw-migrator remediation guard` for the accepted baseline and open the transaction with `update-autonomy-state -Action StartCycle`. Complete exactly one bounded, source-backed repair for this cycle, rerun the complete configured source scope, compare all relevant evidence dimensions, run `selenium-pw-migrator remediation evaluate`, record only its evaluation in `state/autonomy-state.json`, and roll back the bounded change on any `REJECT_*`. A rejected workspace must receive `ROLLBACK_CONFIRMED` before another cycle can start, then return control to the orchestrator. This cycle belongs to a five-cycle invocation budget. Do not stop the whole invocation merely because this one cycle produced no progress; in `continuous` mode the orchestrator also rolls over to the next five-cycle batch automatically.");
+
+        changed |= ReplaceKnownText(
+            Path.Combine(workspacePath, "state", "safety-checklist.md"),
+            "- [ ] Exactly one bounded change was made per remediation cycle.\n- [ ] Every cycle has a stable fingerprint, baseline metrics, rerun evidence, and result.",
+            "- [ ] Exactly one bounded change was made per remediation cycle.\n- [ ] Every cycle was opened by a Core `remediation guard` + `StartCycle` against the accepted baseline.\n- [ ] No rejected patch was carried forward; every `rollbackRequired=true` received `ROLLBACK_CONFIRMED` before another cycle or handoff.\n- [ ] Every cycle has a stable fingerprint, baseline metrics, rerun evidence, and result.");
+
+        changed |= ReplaceKnownText(
+            Path.Combine(workspacePath, "state", "handoff.md"),
+            "- Confirm `state/autonomy-state.json` matches the cycle table and stop reason.\n- Confirm `state/stop-policy-checklist.md` is current.",
+            "- Confirm `state/autonomy-state.json` matches the cycle table and stop reason.\n- Confirm `cycleInProgress=false` and `rollbackRequired=false`; handoff is invalid while a transaction or rollback is unresolved.\n- Confirm `state/stop-policy-checklist.md` is current.");
+
         changed |= ReplaceKnownText(
             Path.Combine(workspacePath, "current-ticket.md"),
             "Complete at most one bounded, source-backed repair for this ticket, rerun the complete configured source scope, and then stop with evidence. Stop earlier only when the repair is unsafe, required input/tooling is missing, or the repeated full run shows no progress.",
-            "Complete exactly one bounded, source-backed repair for this cycle, rerun the complete configured source scope, compare all relevant evidence dimensions, and return control to the orchestrator. This cycle belongs to a five-cycle invocation budget. Do not stop the whole invocation merely because this cycle made no progress; in `continuous` mode the orchestrator automatically opens the next five-cycle batch.");
+            "Before editing, run `selenium-pw-migrator remediation guard` and open the accepted baseline with `update-autonomy-state -Action StartCycle`. Complete exactly one bounded, source-backed repair for this cycle, rerun the complete configured source scope, compare all relevant evidence dimensions, and return control to the orchestrator. A rejected patch must receive `ROLLBACK_CONFIRMED` before another cycle. This cycle belongs to a five-cycle invocation budget. Do not stop the whole invocation merely because this cycle made no progress; in `continuous` mode the orchestrator automatically opens the next five-cycle batch.");
 
         changed |= ReplaceKnownText(
             Path.Combine(projectRoot, "AGENTS.md"),
@@ -1620,7 +1638,40 @@ Fix only the current ticket.
             "- [ ] The agent used the five-cycle budget correctly: one bounded write change per cycle, a complete rerun after every cycle, and automatic rollover in `continuous` mode.");
 
         if (changed)
-            Console.WriteLine($"upgrade-standard-mode-state: {workspacePath} (five-cycle invocation budget)");
+            Console.WriteLine($"upgrade-standard-mode-state: {workspacePath} (five-cycle budget + transactional cycle guard)");
+    }
+
+    static bool UpgradeAutonomyStateSchemaV3(string path)
+    {
+        if (!File.Exists(path))
+            return false;
+
+        JsonObject? state;
+        try
+        {
+            state = JsonNode.Parse(File.ReadAllText(path)) as JsonObject;
+        }
+        catch
+        {
+            return false;
+        }
+
+        if (state == null)
+            return false;
+
+        var schema = state["schemaVersion"]?.GetValue<string>() ?? string.Empty;
+        if (!string.Equals(schema, "standard-migration-autonomy/v1", StringComparison.Ordinal)
+            && !string.Equals(schema, "standard-migration-autonomy/v2", StringComparison.Ordinal))
+            return false;
+
+        state["schemaVersion"] = "standard-migration-autonomy/v3";
+        if (!state.ContainsKey("cycleInProgress")) state["cycleInProgress"] = false;
+        if (!state.ContainsKey("activeCycleBaselineStateHash")) state["activeCycleBaselineStateHash"] = null;
+        if (!state.ContainsKey("lastGuardSha256")) state["lastGuardSha256"] = null;
+        if (!state.ContainsKey("lastGuardDecision")) state["lastGuardDecision"] = null;
+        if (!state.ContainsKey("lastWorkspaceIdentitySha256")) state["lastWorkspaceIdentitySha256"] = null;
+        File.WriteAllText(path, state.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
+        return true;
     }
 
     static bool ReplaceKnownText(string path, string legacyText, string replacement)

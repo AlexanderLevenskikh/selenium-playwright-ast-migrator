@@ -113,7 +113,7 @@ catch {
     throw "AUTONOMY_STATE_INVALID_JSON: $($_.Exception.Message)"
 }
 
-if ($state.schemaVersion -ne "standard-migration-autonomy/v2") { throw "AUTONOMY_STATE_SCHEMA_INVALID: $($state.schemaVersion)" }
+if ($state.schemaVersion -ne "standard-migration-autonomy/v3") { throw "AUTONOMY_STATE_SCHEMA_INVALID: $($state.schemaVersion)" }
 if ([int]$state.cycleBudget -ne $cycleBudget) { throw "HANDOFF_STATE_MISMATCH: cycleBudget" }
 if ([int]$state.cyclesCompleted -ne $cyclesCompleted) { throw "HANDOFF_STATE_MISMATCH: cyclesCompleted" }
 if ([int]$state.totalCyclesCompleted -ne $totalCyclesCompleted) { throw "HANDOFF_STATE_MISMATCH: totalCyclesCompleted" }
@@ -125,6 +125,8 @@ if (([string]$state.stopReason) -ne $stopReason -and -not (($null -eq $state.sto
 }
 if (([string]$state.mode) -ne $mode) { throw "HANDOFF_STATE_MISMATCH: mode" }
 if ($invocationId -ne "NONE" -and ([string]$state.invocationId) -ne $invocationId) { throw "HANDOFF_STATE_MISMATCH: invocationId" }
+if ([bool]$state.cycleInProgress) { throw "AUTONOMY_STATE_ACTIVE_CYCLE_AT_HANDOFF" }
+if ([bool]$state.rollbackRequired) { throw "AUTONOMY_STATE_ROLLBACK_REQUIRED_AT_HANDOFF" }
 
 $completedCycles = @($state.completedCycles)
 $cycleHistory = @($state.cycleHistory)
@@ -145,6 +147,7 @@ foreach ($cycle in $cycleHistory) {
     if (@("PROGRESS", "NO_PROGRESS") -notcontains $result) { throw "AUTONOMY_STATE_CYCLE_RESULT_INVALID: $result" }
     if (@("ACCEPT", "REJECT_NO_PROGRESS", "REJECT_REGRESSION", "REJECT_CYCLE") -notcontains $decision) { throw "AUTONOMY_STATE_CYCLE_DECISION_INVALID: $decision" }
     if ([string]::IsNullOrWhiteSpace([string]$cycle.evaluationSha256)) { throw "AUTONOMY_STATE_EVALUATION_HASH_MISSING" }
+    if ([string]::IsNullOrWhiteSpace([string]$cycle.startGuardSha256)) { throw "AUTONOMY_STATE_START_GUARD_HASH_MISSING" }
     if ([string]::IsNullOrWhiteSpace([string]$cycle.beforeStateHash) -or [string]::IsNullOrWhiteSpace([string]$cycle.afterStateHash)) { throw "AUTONOMY_STATE_CYCLE_STATE_HASH_MISSING" }
     if ($decision -eq "ACCEPT" -and [bool]$cycle.rollbackRequired) { throw "AUTONOMY_STATE_ACCEPT_CANNOT_REQUIRE_ROLLBACK" }
     if ($decision -ne "ACCEPT" -and -not [bool]$cycle.rollbackRequired) { throw "AUTONOMY_STATE_REJECTION_REQUIRES_ROLLBACK" }

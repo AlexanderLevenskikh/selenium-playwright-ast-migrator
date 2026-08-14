@@ -37,10 +37,12 @@ $autonomyPath = Join-Path $workspaceFull "state/autonomy-state.json"
 if (-not (Test-Path -LiteralPath $autonomyPath)) { throw "AUTONOMY_STATE_MISSING: $autonomyPath" }
 try { $autonomy = Get-Content -LiteralPath $autonomyPath -Raw | ConvertFrom-Json }
 catch { throw "AUTONOMY_STATE_INVALID_JSON: $($_.Exception.Message)" }
-if ($autonomy.schemaVersion -ne "standard-migration-autonomy/v2") { throw "AUTONOMY_STATE_SCHEMA_INVALID: $($autonomy.schemaVersion)" }
+if ($autonomy.schemaVersion -ne "standard-migration-autonomy/v3") { throw "AUTONOMY_STATE_SCHEMA_INVALID: $($autonomy.schemaVersion)" }
 if ([int]$autonomy.cycleBudget -lt 1 -or [int]$autonomy.cycleBudget -gt [int]$policy.maxRemediationCyclesPerInvocation) {
     throw "AUTONOMY_STATE_CYCLE_BUDGET_INVALID"
 }
+if ([bool]$autonomy.cycleInProgress -and [bool]$autonomy.rollbackRequired) { throw "AUTONOMY_STATE_TRANSACTION_FLAGS_CONFLICT" }
+if ([bool]$autonomy.cycleInProgress -and [string]::IsNullOrWhiteSpace([string]$autonomy.activeCycleBaselineStateHash)) { throw "AUTONOMY_STATE_ACTIVE_BASELINE_MISSING" }
 
 Write-Host "STANDARD_RUN_POLICY_PASS"
 Write-Host "Remediation cycle budget: $($policy.maxRemediationCyclesPerInvocation)"
