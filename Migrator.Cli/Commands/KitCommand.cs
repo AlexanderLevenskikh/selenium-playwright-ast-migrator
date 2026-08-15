@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading.Tasks;
 
 internal static class KitCommand
 {
@@ -1920,14 +1921,25 @@ Fix only the current ticket.
                 CreateNoWindow = true
             };
             process.Start();
-            var stdout = process.StandardOutput.ReadToEnd();
-            var stderr = process.StandardError.ReadToEnd();
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
             if (!process.WaitForExit(timeoutMs))
             {
                 try { process.Kill(entireProcessTree: true); } catch { }
-                return new ProcessResult(124, stdout, $"Command timed out after {timeoutMs} ms: {fileName} {arguments}");
+                try { process.WaitForExit(5000); } catch { }
+                try { Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 5000); } catch { }
+                var timedOutStdOut = stdoutTask.IsCompletedSuccessfully ? stdoutTask.GetAwaiter().GetResult() : string.Empty;
+                var timedOutStdErr = stderrTask.IsCompletedSuccessfully ? stderrTask.GetAwaiter().GetResult() : string.Empty;
+                return new ProcessResult(124, timedOutStdOut, $"Command timed out after {timeoutMs} ms: {fileName} {arguments}{Environment.NewLine}{timedOutStdErr}".TrimEnd());
             }
-            return new ProcessResult(process.ExitCode, stdout, stderr);
+
+            if (!Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 5000))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                return new ProcessResult(124, string.Empty, $"Command exited but redirected output did not drain within 5000 ms: {fileName} {arguments}");
+            }
+
+            return new ProcessResult(process.ExitCode, stdoutTask.GetAwaiter().GetResult(), stderrTask.GetAwaiter().GetResult());
         }
         catch (Exception ex)
         {

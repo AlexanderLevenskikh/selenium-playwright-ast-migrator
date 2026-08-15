@@ -76,6 +76,25 @@ public sealed class ManagedWorktreeBootstrapTests
 
     [Fact]
     [Trait("Layer", "Unit")]
+    public void ManagedWorktreeProcessCapture_DrainsRedirectedStreamsConcurrentlyAndHasHardTimeouts()
+    {
+        var root = FindRepositoryRoot();
+        var worktreeManager = File.ReadAllText(Path.Combine(root, "Migrator.Cli", "Commands", "GitWorktreeManager.cs"));
+        var kitCommand = File.ReadAllText(Path.Combine(root, "Migrator.Cli", "Commands", "KitCommand.cs"));
+
+        Assert.Contains("StandardOutput.ReadToEndAsync()", worktreeManager, StringComparison.Ordinal);
+        Assert.Contains("StandardError.ReadToEndAsync()", worktreeManager, StringComparison.Ordinal);
+        Assert.Contains("WorktreeAddTimeoutMs", worktreeManager, StringComparison.Ordinal);
+        Assert.Contains("[worktree] Creating checkout:", worktreeManager, StringComparison.Ordinal);
+        Assert.DoesNotContain("StandardOutput.ReadToEnd();", worktreeManager, StringComparison.Ordinal);
+        Assert.DoesNotContain("StandardError.ReadToEnd();", worktreeManager, StringComparison.Ordinal);
+
+        Assert.Contains("StandardOutput.ReadToEndAsync()", kitCommand, StringComparison.Ordinal);
+        Assert.Contains("StandardError.ReadToEndAsync()", kitCommand, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait("Layer", "Unit")]
     public void KitHelp_OffersClaudeAndManagedWorktreeOptions()
     {
         var root = FindRepositoryRoot();

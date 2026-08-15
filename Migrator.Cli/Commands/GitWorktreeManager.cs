@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Tasks;
 
 internal sealed record ManagedWorktreeInfo(
     string OriginalRoot,
@@ -17,6 +18,9 @@ internal sealed record ManagedWorktreeInfo(
 internal static class GitWorktreeManager
 {
     public const string DefaultBranch = "migrator/selenium-playwright";
+    const int DefaultGitTimeoutMs = 120_000;
+    const int WorktreeAddTimeoutMs = 600_000;
+    const int StreamDrainTimeoutMs = 5_000;
 
     public static ManagedWorktreeInfo Prepare(
         string projectRoot,
@@ -30,15 +34,28 @@ internal static class GitWorktreeManager
 
         EnsureGitRepository(projectRoot);
 
+        Console.WriteLine("[worktree] Resolving base commit...");
         var baseCommit = RequireGit(projectRoot, "rev-parse", resolvedBase).StdOut.Trim();
-        var dirty = !string.IsNullOrWhiteSpace(RequireGit(projectRoot, "status", "--porcelain").StdOut);
-        RunGit(projectRoot, "worktree", "prune");
+
+        Console.WriteLine("[worktree] Checking tracked changes in the primary checkout...");
+        var dirtyCheck = RunGit(projectRoot, "diff-index", "--quiet", "HEAD", "--");
+        if (dirtyCheck.ExitCode is not (0 or 1))
+            throw new InvalidOperationException($"git diff-index failed with exit code {dirtyCheck.ExitCode}: {dirtyCheck.StdErr.Trim()}");
+        var dirty = dirtyCheck.ExitCode == 1;
+
+        Console.WriteLine("[worktree] Pruning stale worktree registrations...");
+        RequireGit(projectRoot, "worktree", "prune");
+
+        Console.WriteLine("[worktree] Reading registered worktrees...");
         var worktrees = ReadWorktrees(projectRoot);
 
         var branchRef = "refs/heads/" + branch;
         var existingForBranch = worktrees.FirstOrDefault(item => string.Equals(item.Branch, branchRef, StringComparison.Ordinal));
         if (existingForBranch is not null && Directory.Exists(existingForBranch.Path))
+        {
+            Console.WriteLine($"[worktree] Reusing registered branch worktree: {existingForBranch.Path}");
             return new ManagedWorktreeInfo(projectRoot, existingForBranch.Path, branch, baseCommit, Created: false, dirty);
+        }
 
         var path = string.IsNullOrWhiteSpace(requestedPath)
             ? GetDefaultWorktreePath(projectRoot)
@@ -50,6 +67,7 @@ internal static class GitWorktreeManager
             var existingBranch = existingForPath.Branch?.StartsWith("refs/heads/", StringComparison.Ordinal) == true
                 ? existingForPath.Branch["refs/heads/".Length..]
                 : branch;
+            Console.WriteLine($"[worktree] Reusing registered path: {existingForPath.Path}");
             return new ManagedWorktreeInfo(projectRoot, existingForPath.Path, existingBranch, baseCommit, Created: false, dirty);
         }
 
@@ -59,10 +77,15 @@ internal static class GitWorktreeManager
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
         var branchExists = RunGit(projectRoot, "show-ref", "--verify", "--quiet", branchRef).ExitCode == 0;
+        Console.WriteLine($"[worktree] Creating checkout: {path}");
+        Console.WriteLine($"[worktree] Branch: {branch} ({(branchExists ? "existing" : "new")})");
+        var stopwatch = Stopwatch.StartNew();
         if (branchExists)
-            RequireGit(projectRoot, "worktree", "add", path, branch);
+            RequireGit(projectRoot, WorktreeAddTimeoutMs, "worktree", "add", path, branch);
         else
-            RequireGit(projectRoot, "worktree", "add", "-b", branch, path, baseCommit);
+            RequireGit(projectRoot, WorktreeAddTimeoutMs, "worktree", "add", "-b", branch, path, baseCommit);
+        stopwatch.Stop();
+        Console.WriteLine($"[worktree] Checkout ready in {stopwatch.Elapsed.TotalSeconds:F1}s.");
 
         return new ManagedWorktreeInfo(projectRoot, path, branch, baseCommit, Created: true, dirty);
     }
@@ -202,14 +225,20 @@ internal static class GitWorktreeManager
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     static ProcessResult RequireGit(string workingDirectory, params string[] arguments)
+        => RequireGit(workingDirectory, DefaultGitTimeoutMs, arguments);
+
+    static ProcessResult RequireGit(string workingDirectory, int timeoutMs, params string[] arguments)
     {
-        var result = RunGit(workingDirectory, arguments);
+        var result = RunGit(workingDirectory, timeoutMs, arguments);
         if (result.ExitCode != 0)
             throw new InvalidOperationException($"git {string.Join(' ', arguments)} failed with exit code {result.ExitCode}: {result.StdErr.Trim()}");
         return result;
     }
 
     static ProcessResult RunGit(string workingDirectory, params string[] arguments)
+        => RunGit(workingDirectory, DefaultGitTimeoutMs, arguments);
+
+    static ProcessResult RunGit(string workingDirectory, int timeoutMs, params string[] arguments)
     {
         using var process = new Process();
         process.StartInfo = new ProcessStartInfo
@@ -229,15 +258,51 @@ internal static class GitWorktreeManager
         try
         {
             process.Start();
-            var stdout = process.StandardOutput.ReadToEnd();
-            var stderr = process.StandardError.ReadToEnd();
-            process.WaitForExit();
-            return new ProcessResult(process.ExitCode, stdout, stderr);
+
+            // stdout and stderr MUST be drained concurrently. Reading one stream
+            // synchronously to EOF before starting the other can deadlock when git
+            // (or a checkout filter) fills the other redirected pipe.
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+
+            if (!process.WaitForExit(timeoutMs))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                try { process.WaitForExit(StreamDrainTimeoutMs); } catch { }
+                DrainTasksBounded(stdoutTask, stderrTask);
+                return new ProcessResult(
+                    124,
+                    CompletedText(stdoutTask),
+                    $"git timed out after {timeoutMs} ms: git -C {workingDirectory} {string.Join(' ', arguments)}{Environment.NewLine}{CompletedText(stderrTask)}".TrimEnd());
+            }
+
+            if (!Task.WaitAll(new Task[] { stdoutTask, stderrTask }, StreamDrainTimeoutMs))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                return new ProcessResult(
+                    124,
+                    CompletedText(stdoutTask),
+                    $"git exited but redirected output did not drain within {StreamDrainTimeoutMs} ms. A descendant process may still hold a pipe open.{Environment.NewLine}{CompletedText(stderrTask)}".TrimEnd());
+            }
+
+            return new ProcessResult(process.ExitCode, stdoutTask.GetAwaiter().GetResult(), stderrTask.GetAwaiter().GetResult());
         }
         catch (Exception ex)
         {
             return new ProcessResult(127, string.Empty, ex.Message);
         }
+    }
+
+    static void DrainTasksBounded(Task<string> stdoutTask, Task<string> stderrTask)
+    {
+        try { Task.WaitAll(new Task[] { stdoutTask, stderrTask }, StreamDrainTimeoutMs); } catch { }
+    }
+
+    static string CompletedText(Task<string> task)
+    {
+        if (!task.IsCompletedSuccessfully)
+            return string.Empty;
+        return task.GetAwaiter().GetResult();
     }
 
     sealed record WorktreeEntry(string Path, string? Branch);
