@@ -418,7 +418,7 @@ internal static class CliCommandCatalog
         sb.AppendLine("                                   Test framework for Playwright .NET output/scaffold/verify defaults.");
         sb.AppendLine("  --generation-policy <conservative|balanced|aggressive>");
         sb.AppendLine("                                   Controls mapped helper risk: more TODOs, current behavior, or more active code.");
-        sb.AppendLine("  --agent <opencode|codex|generic|manual>");
+        sb.AppendLine("  --agent <opencode|codex|claude|generic|manual>");
         sb.AppendLine("                                   Agent handoff preference for start/onboarding.");
         sb.AppendLine("  --max-tests <number>             Pilot slice budget for `pilot` (default: 10).");
         sb.AppendLine("  --selected-tests <file>          Limit analyze/migrate/verify/verify-project to file::Class.Test entries.");

@@ -61,6 +61,9 @@ internal static class KitCommand
     static int RunBootstrapAgent(KitOptions options)
     {
         var agent = NormalizeAgent(options.Agent);
+        if (options.Worktree)
+            return RunBootstrapInManagedWorktree(options with { Agent = agent }, agent, mapped => RunBootstrapAgent(mapped));
+
         if (agent == "opencode")
             return RunBootstrapOpenCode(options with { OpenCodeInstall = string.IsNullOrWhiteSpace(options.OpenCodeInstall) || options.OpenCodeInstall == "manual" ? "auto" : options.OpenCodeInstall });
 
@@ -72,7 +75,7 @@ internal static class KitCommand
             Update = updateMode,
             Backup = options.Backup || updateMode,
             WithTeam = false,
-            NoCodexFiles = agent == "generic"
+            NoCodexFiles = agent is "generic" or "claude"
         };
 
         Console.WriteLine($"Bootstrapping guarded {agent} migration workspace");
@@ -105,21 +108,146 @@ internal static class KitCommand
         return 0;
     }
 
+    static int RunBootstrapInManagedWorktree(KitOptions options, string agent, Func<KitOptions, int> runner)
+    {
+        var originalRoot = ResolveProjectRoot();
+
+        ManagedWorktreeInfo info;
+        try
+        {
+            ValidateManagedWorktreeSource(originalRoot, options.Source);
+            if (Path.IsPathRooted(options.Workspace))
+                throw new InvalidOperationException("Managed worktree isolation requires a repository-relative --workspace path so migration state stays inside the isolated checkout.");
+
+            info = GitWorktreeManager.Prepare(
+                originalRoot,
+                string.IsNullOrWhiteSpace(options.WorktreePath) ? null : options.WorktreePath,
+                string.IsNullOrWhiteSpace(options.WorktreeBranch) ? null : options.WorktreeBranch,
+                string.IsNullOrWhiteSpace(options.WorktreeBase) ? null : options.WorktreeBase);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"WORKTREE_PREPARE_FAILED: {ex.Message}");
+            return 2;
+        }
+
+        Console.WriteLine("=== Managed Agent Worktree ===");
+        Console.WriteLine($"Original checkout: {info.OriginalRoot}");
+        Console.WriteLine($"Worktree:         {info.WorktreeRoot}");
+        Console.WriteLine($"Branch:           {info.Branch}");
+        Console.WriteLine($"Base commit:      {info.BaseCommit}");
+        Console.WriteLine($"Status:           {(info.Created ? "created" : "reused")}");
+        if (info.OriginalCheckoutDirty)
+        {
+            Console.WriteLine("WARNING: the original checkout has uncommitted changes.");
+            Console.WriteLine("The managed worktree is based on committed Git state; uncommitted development changes are intentionally not copied.");
+        }
+        Console.WriteLine();
+
+        var mapped = MapOptionsIntoWorktree(options, originalRoot, info.WorktreeRoot) with { Worktree = false };
+        var previousDirectory = Directory.GetCurrentDirectory();
+        int exitCode;
+        try
+        {
+            Directory.SetCurrentDirectory(info.WorktreeRoot);
+            exitCode = runner(mapped);
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(previousDirectory);
+        }
+
+        if (exitCode != 0)
+            return exitCode;
+
+        if (info.Created)
+        {
+            GitWorktreeManager.CopyLongLivedMigrationKnowledge(originalRoot, info.WorktreeRoot, options.Workspace);
+
+            previousDirectory = Directory.GetCurrentDirectory();
+            try
+            {
+                Directory.SetCurrentDirectory(info.WorktreeRoot);
+                var doctorExitCode = RunDoctor(mapped);
+                if (doctorExitCode != 0)
+                {
+                    Console.Error.WriteLine("Managed worktree bootstrap copied project migration knowledge, but the follow-up kit doctor reported a blocker.");
+                    return doctorExitCode;
+                }
+            }
+            finally
+            {
+                Directory.SetCurrentDirectory(previousDirectory);
+            }
+        }
+
+        var nextAction = agent == "opencode" ? "/supervised-task" : "Open AGENT_HANDOFF.md and start the guarded migration task.";
+        var descriptor = GitWorktreeManager.WriteLaunchDescriptor(info, mapped.Workspace, agent, nextAction);
+
+        Console.WriteLine();
+        Console.WriteLine("AGENT_WORKTREE_READY");
+        Console.WriteLine($"Agent:          {agent}");
+        Console.WriteLine($"Worktree path:  {info.WorktreeRoot}");
+        Console.WriteLine($"Workspace path: {Path.Combine(info.WorktreeRoot, mapped.Workspace)}");
+        Console.WriteLine($"Launch metadata:{descriptor}");
+        Console.WriteLine("Desktop: open the worktree path as the project working directory.");
+        if (agent is "codex" or "claude")
+            Console.WriteLine("Do not select a second Worktree mode inside the agent desktop app for this prepared project; use the existing worktree as Local/current project.");
+        if (agent == "opencode")
+            Console.WriteLine("Then run /supervised-task.");
+        return 0;
+    }
+
+    static KitOptions MapOptionsIntoWorktree(KitOptions options, string originalRoot, string worktreeRoot)
+    {
+        string Map(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || !Path.IsPathRooted(value))
+                return value;
+            return ProjectRootResolver.MapIntoWorktree(originalRoot, worktreeRoot, value);
+        }
+
+        return options with
+        {
+            Source = Map(options.Source),
+            Target = Map(options.Target),
+            Config = Map(options.Config),
+            Output = Map(options.Output),
+            Input = options.Input is null ? null : Map(options.Input)
+        };
+    }
+
+    static void ValidateManagedWorktreeSource(string projectRoot, string source)
+    {
+        if (string.IsNullOrWhiteSpace(source) || source.StartsWith("<", StringComparison.Ordinal))
+            return;
+
+        var absolute = Path.IsPathRooted(source)
+            ? Path.GetFullPath(source)
+            : Path.GetFullPath(Path.Combine(projectRoot, source));
+
+        if (!ProjectRootResolver.IsWithin(projectRoot, absolute))
+            throw new InvalidOperationException($"Managed worktree isolation requires --source to be inside the Git repository. Source: {absolute}");
+    }
+
     static string NormalizeAgent(string value)
     {
         var normalized = string.IsNullOrWhiteSpace(value) ? "generic" : value.Trim().ToLowerInvariant();
         return normalized switch
         {
-            "opencode" or "codex" or "generic" => normalized,
-            _ => throw new ArgumentException($"--agent must be one of: opencode, codex, generic. Got: {value}")
+            "opencode" or "codex" or "claude" or "generic" => normalized,
+            _ => throw new ArgumentException($"--agent must be one of: opencode, codex, claude, generic. Got: {value}")
         };
     }
 
     static void WriteAgentHandoff(string workspacePath, KitOptions options, string agent)
     {
-        var extra = agent == "codex"
-            ? $"- Codex-specific pack: `{Path.Combine(options.Workspace, "codex", "CODEX.md")}` and `{Path.Combine(options.Workspace, "codex", "prompts", "ticket-fix-prompt.txt")}`."
-            : "- Generic agents should use the contract, kickoff prompt, standard-run guide, and current-ticket.md unless a project-specific prompt says otherwise.";
+        var extra = agent switch
+        {
+            "codex" => $"- Codex-specific pack: `{Path.Combine(options.Workspace, "codex", "CODEX.md")}` and `{Path.Combine(options.Workspace, "codex", "prompts", "ticket-fix-prompt.txt")}`.",
+            "claude" => "- Claude Code/Desktop: open the prepared worktree as the project and start from AGENT_HANDOFF.md. When Migrator created the worktree, use that checkout directly instead of asking Claude to create a second nested worktree.",
+            _ => "- Generic agents should use the contract, kickoff prompt, standard-run guide, and current-ticket.md unless a project-specific prompt says otherwise."
+        };
 
         var handoff = $$"""
 # Agent Handoff Pack
@@ -176,6 +304,9 @@ Before final handoff, update autonomy state with `scripts/update-autonomy-state.
 
     static int RunBootstrapOpenCode(KitOptions options)
     {
+        if (options.Worktree)
+            return RunBootstrapInManagedWorktree(options with { Agent = "opencode" }, "opencode", mapped => RunBootstrapOpenCode(mapped));
+
         var projectRoot = ResolveProjectRoot();
         var workspacePath = ToAbsolutePath(options.Workspace, projectRoot);
         var updateMode = Directory.Exists(workspacePath);
@@ -1762,17 +1893,7 @@ Fix only the current ticket.
     }
 
     static string ResolveProjectRoot()
-    {
-        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
-        while (dir != null)
-        {
-            if (Directory.Exists(Path.Combine(dir.FullName, ".git")))
-                return dir.FullName;
-            dir = dir.Parent;
-        }
-
-        return Directory.GetCurrentDirectory();
-    }
+        => ProjectRootResolver.Resolve();
 
     static string ToAbsolutePath(string path, string basePath)
         => Path.IsPathRooted(path) || LooksLikeWindowsRootedPath(path) ? path : Path.Combine(basePath, path);
@@ -1846,7 +1967,7 @@ Usage:
   selenium-pw-migrator kit doctor [options]
   selenium-pw-migrator kit next-ticket [options]
   selenium-pw-migrator kit bootstrap-opencode [options]
-  selenium-pw-migrator kit bootstrap-agent --agent <codex|generic|opencode> [options]
+  selenium-pw-migrator kit bootstrap-agent --agent <codex|claude|generic|opencode> [options]
 
 Commands:
   init          Create a migration workspace from bundled templates.
@@ -1856,7 +1977,7 @@ Commands:
   bootstrap-opencode
                 Install/update the kit, copy repository-root OpenCode commands, run doctor, and optionally install Desktop/CLI config.
   bootstrap-agent
-                Install/update the kit and write an explicit handoff pack for Codex, generic agents, or OpenCode.
+                Install/update the kit and write an explicit handoff pack for Codex, Claude, generic agents, or OpenCode.
 
 Common options:
   --workspace <path>        Migration workspace root. Default: migration
@@ -1872,7 +1993,11 @@ Common options:
   --opencode-install <mode> For kit bootstrap-opencode: auto, none, manual, ci, project-local, project-desktop, global.
   --permission-profile <p>  OpenCode permission profile: LowNoise or TrustedProject. Default: LowNoise.
   --skip-project-config     Do not copy opencode.jsonc/.opencode/AGENTS.md into the repository root.
-  --agent <name>            For kit bootstrap-agent: codex, generic, opencode. Default: generic.
+  --agent <name>            For kit bootstrap-agent: codex, claude, generic, opencode. Default: generic.
+  --worktree                Create/reuse a long-lived Migrator-managed git worktree and bootstrap the agent there.
+  --worktree-path <path>    Override the managed worktree directory.
+  --worktree-branch <name>  Managed worktree branch. Default: migrator/selenium-playwright
+  --worktree-base <ref>     Base ref used only when the branch is created. Default: HEAD
   --no-codex-files          Do not install migration/codex files.
   --input <path>            Artifact directory for kit next-ticket.
 
@@ -1883,7 +2008,9 @@ Examples:
   selenium-pw-migrator kit next-ticket --workspace migration --input migration/runs/run-053
   selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./OldTests --opencode-install auto
   selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./OldTests --project-desktop
-  selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --source ./OldTests
+  selenium-pw-migrator kit bootstrap-opencode --workspace migration --source ./OldTests --project-desktop --worktree
+  selenium-pw-migrator kit bootstrap-agent --agent codex --workspace migration --source ./OldTests --worktree
+  selenium-pw-migrator kit bootstrap-agent --agent claude --workspace migration --source ./OldTests --worktree
   selenium-pw-migrator kit bootstrap-agent --agent generic --workspace migration --source ./OldTests
 
 Generated standard-run files:
@@ -1909,7 +2036,11 @@ Generated standard-run files:
         string OpenCodeInstall,
         string PermissionProfile,
         string Agent,
-        string? Input)
+        string? Input,
+        bool Worktree,
+        string WorktreePath,
+        string WorktreeBranch,
+        string WorktreeBase)
     {
         public static KitOptions? Parse(string[] args, out string error)
         {
@@ -1930,7 +2061,11 @@ Generated standard-run files:
                 OpenCodeInstall: "manual",
                 PermissionProfile: "LowNoise",
                 Agent: "generic",
-                Input: null);
+                Input: null,
+                Worktree: false,
+                WorktreePath: string.Empty,
+                WorktreeBranch: GitWorktreeManager.DefaultBranch,
+                WorktreeBase: "HEAD");
 
             error = string.Empty;
             for (int i = 0; i < args.Length; i++)
@@ -1965,6 +2100,10 @@ Generated standard-run files:
                         "--permission-profile" => options with { PermissionProfile = NormalizePermissionProfile(ReadValue()) },
                         "--skip-project-config" => options with { SkipProjectConfig = true },
                         "--agent" => options with { Agent = NormalizeAgent(ReadValue()) },
+                        "--worktree" => options with { Worktree = true },
+                        "--worktree-path" => options with { Worktree = true, WorktreePath = ReadValue() },
+                        "--worktree-branch" => options with { Worktree = true, WorktreeBranch = ReadValue() },
+                        "--worktree-base" => options with { Worktree = true, WorktreeBase = ReadValue() },
                         "--help" or "-h" => options,
                         _ when arg.StartsWith("-", StringComparison.Ordinal) => throw new ArgumentException($"Unknown option: {arg}"),
                         _ => throw new ArgumentException($"Unexpected argument: {arg}")

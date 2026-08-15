@@ -322,17 +322,7 @@ internal static class StartCommand
     }
 
     static string ResolveProjectRoot()
-    {
-        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
-        while (dir != null)
-        {
-            if (Directory.Exists(Path.Combine(dir.FullName, ".git")))
-                return dir.FullName;
-            dir = dir.Parent;
-        }
-
-        return Directory.GetCurrentDirectory();
-    }
+        => ProjectRootResolver.Resolve();
 
     static bool IsInteractiveConsole() => !Console.IsInputRedirected && !Console.IsOutputRedirected;
 
@@ -377,7 +367,7 @@ internal static class StartCommand
     {
         Console.WriteLine("""
 Usage:
-  selenium-pw-migrator start --input <selenium-tests> [--agent opencode|codex|generic|manual] [--workspace migration]
+  selenium-pw-migrator start --input <selenium-tests> [--agent opencode|codex|claude|generic|manual] [--workspace migration]
 
 Examples:
   selenium-pw-migrator start --input ./OldTests --agent opencode

@@ -12000,7 +12000,7 @@ static CliOptions? ParseArgs(string[] args)
                     agent = args[++i].Trim().ToLowerInvariant();
                 else
                 {
-                    Console.Error.WriteLine("--agent requires a value: opencode|codex|generic|manual");
+                    Console.Error.WriteLine("--agent requires a value: opencode|codex|claude|generic|manual");
                     return null;
                 }
                 break;
@@ -12330,9 +12330,9 @@ static CliOptions? ParseArgs(string[] args)
         return null;
     }
 
-    if (!new[] { "opencode", "codex", "generic", "manual", "none" }.Contains(agent, StringComparer.OrdinalIgnoreCase))
+    if (!new[] { "opencode", "codex", "claude", "generic", "manual", "none" }.Contains(agent, StringComparer.OrdinalIgnoreCase))
     {
-        Console.Error.WriteLine("Invalid --agent. Use: opencode|codex|generic|manual");
+        Console.Error.WriteLine("Invalid --agent. Use: opencode|codex|claude|generic|manual");
         return null;
     }
 
