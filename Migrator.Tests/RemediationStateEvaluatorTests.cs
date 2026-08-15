@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Migrator.Core;
 using Xunit;
 
@@ -66,6 +67,103 @@ public sealed class RemediationStateEvaluatorTests
 
         Assert.Equal("REJECT_REGRESSION", evaluation.Decision);
         Assert.Equal("SOURCE_SNAPSHOT_CHANGED", evaluation.Reason);
+    }
+
+
+    [Fact]
+    public void LoadRunState_ReadsVerifyWriterArtifactWithStringSeverityWithoutLosingMetrics()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "migrator-remediation-wire-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "verify"));
+
+            const string sourceSha = "source";
+            const string configSha = "config";
+            const string targetSha = "target";
+            const string toolSha = "tool";
+            const string environmentSha = "environment";
+
+            var verification = VerificationEvidence.Create(
+                kind: "generated-verify",
+                sourceSha256: sourceSha,
+                configSha256: configSha,
+                targetSha256: targetSha,
+                toolSha256: toolSha,
+                environmentSha256: environmentSha,
+                status: "failed",
+                exitCode: 3);
+
+            var manifest = new RunManifest(
+                SchemaVersion: "migrator-run-manifest/v2",
+                GeneratedAtUtc: DateTimeOffset.UtcNow,
+                Status: "failed",
+                SourceSha256: sourceSha,
+                SourceFiles: 1,
+                ConfigSha256: configSha,
+                TargetSha256: targetSha,
+                Tool: new RunToolIdentity("test", null, "test", toolSha),
+                Environment: new RunEnvironmentIdentity("test", "net10.0", "test", "x64", "en-US", "en-US", "LF", environmentSha),
+                Verification: verification);
+
+            File.WriteAllText(
+                Path.Combine(root, "run-manifest.json"),
+                JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
+
+            var issue = new VerifyIssue("syntax", IssueSeverity.Error, "boom", "Generated.cs", 7);
+            var verifyReport = new VerifyReport(
+                Status: "failed",
+                FilesChecked: 1,
+                GeneratedFilesChecked: 1,
+                TodoComments: 12,
+                PageTodoCalls: 3,
+                UnsupportedActions: 4,
+                UnmappedTargets: 5,
+                RawExpressions: 6,
+                SyntaxErrors: 7,
+                ScopeWarnings: 0,
+                ConfigWarnings: 0,
+                PlaceholderLeftovers: 0,
+                SuspiciousLiteralVariables: 0,
+                DuplicateLocalVariables: 0,
+                Files: new[] { new VerifyFileResult("Source.cs", "Generated.cs", null, "failed", new[] { issue }) },
+                Issues: new[] { issue });
+
+            File.WriteAllText(
+                Path.Combine(root, "verify", "verify-report.json"),
+                VerifyReportWriter.ToJson(verifyReport));
+
+            var orchestration = new OrchestrationReport(
+                Status: "failed",
+                InputPath: "input",
+                ConfigPath: "config",
+                OutputPath: root,
+                Stages: Array.Empty<OrchestrationStage>(),
+                Metrics: new OrchestrationMetrics(1, 9, 1, 7, 12, 3, 0),
+                Issues: Array.Empty<string>(),
+                TopProposals: Array.Empty<string>(),
+                RecommendedNextActions: Array.Empty<string>(),
+                Warnings: Array.Empty<string>());
+
+            File.WriteAllText(
+                Path.Combine(root, "orchestration-report.json"),
+                JsonSerializer.Serialize(orchestration, new JsonSerializerOptions { WriteIndented = true }));
+
+            var state = RemediationStateEvaluator.LoadRunState(root);
+
+            Assert.Equal(7, state.Defects.SyntaxErrors);
+            Assert.Equal(4, state.Defects.UnsupportedActions);
+            Assert.Equal(5, state.Defects.UnmappedTargets);
+            Assert.Equal(6, state.Defects.RawExpressions);
+            Assert.Equal(12, state.Defects.TodoComments);
+            Assert.Equal(3, state.Defects.PageTodoCalls);
+            Assert.Equal(9, state.Structure.TestsFound);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
     }
 
     static RemediationRunState State(

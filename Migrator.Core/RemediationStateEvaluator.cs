@@ -73,7 +73,7 @@ public static class RemediationStateEvaluator
         var verifyPath = Path.Combine(fullRunPath, "verify", "verify-report.json");
         if (!File.Exists(verifyPath))
             throw new InvalidOperationException($"REMEDIATION_VERIFY_REPORT_MISSING: {verifyPath}");
-        var verify = Deserialize<VerifyReport>(verifyPath, "REMEDIATION_VERIFY_REPORT_INVALID");
+        var defects = ReadVerifyDefects(verifyPath);
 
         var orchestrationPath = Path.Combine(fullRunPath, "orchestration-report.json");
         if (!File.Exists(orchestrationPath))
@@ -90,14 +90,6 @@ public static class RemediationStateEvaluator
             projectStatus = NormalizeProjectStatus(projectEvidence.Status);
             projectDiagnostics = projectEvidence.Metrics.TryGetValue("diagnostics", out var diagnostics) ? diagnostics : 0;
         }
-
-        var defects = new RemediationDefectVector(
-            SyntaxErrors: verify.SyntaxErrors,
-            UnsupportedActions: verify.UnsupportedActions,
-            UnmappedTargets: verify.UnmappedTargets,
-            RawExpressions: verify.RawExpressions,
-            TodoComments: verify.TodoComments,
-            PageTodoCalls: verify.PageTodoCalls);
 
         var structure = new RemediationStructuralMetrics(
             TestsFound: orchestration.Metrics.TestsFound,
@@ -188,6 +180,63 @@ public static class RemediationStateEvaluator
             return CreateEvaluation("ACCEPT", "DETERMINISTIC_IMPROVEMENT", before, after, normalizedCandidate, improvements, regressions, false);
 
         return CreateEvaluation("REJECT_NO_PROGRESS", "NO_DETERMINISTIC_IMPROVEMENT", before, after, normalizedCandidate, improvements, regressions, true);
+    }
+
+    static RemediationDefectVector ReadVerifyDefects(string path)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            var root = document.RootElement;
+            if (!TryGetPropertyIgnoreCase(root, "summary", out var summary) || summary.ValueKind != JsonValueKind.Object)
+                throw new InvalidOperationException("REMEDIATION_VERIFY_REPORT_SCHEMA_INVALID: missing summary object");
+
+            return new RemediationDefectVector(
+                SyntaxErrors: ReadRequiredInt(summary, "syntaxErrors"),
+                UnsupportedActions: ReadRequiredInt(summary, "unsupportedActions"),
+                UnmappedTargets: ReadRequiredInt(summary, "unmappedTargets"),
+                RawExpressions: ReadRequiredInt(summary, "rawExpressions"),
+                TodoComments: ReadRequiredInt(summary, "todoComments"),
+                PageTodoCalls: ReadRequiredInt(summary, "pageTodoCalls"));
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
+        {
+            throw new InvalidOperationException($"REMEDIATION_VERIFY_REPORT_INVALID: {ex.Message}", ex);
+        }
+    }
+
+    static int ReadRequiredInt(JsonElement element, string propertyName)
+    {
+        if (!TryGetPropertyIgnoreCase(element, propertyName, out var property)
+            || property.ValueKind != JsonValueKind.Number
+            || !property.TryGetInt32(out var value))
+        {
+            throw new InvalidOperationException($"REMEDIATION_VERIFY_REPORT_SCHEMA_INVALID: missing or invalid {propertyName}");
+        }
+
+        return value;
+    }
+
+    static bool TryGetPropertyIgnoreCase(JsonElement element, string propertyName, out JsonElement value)
+    {
+        if (element.TryGetProperty(propertyName, out value))
+            return true;
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
     }
 
     static void ValidateEvidenceIdentity(RunManifest manifest, VerificationEvidence evidence, string expectedKind)

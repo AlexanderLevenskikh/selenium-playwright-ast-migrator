@@ -2734,10 +2734,11 @@ static ProjectVerifyHarnessEvidence BuildProjectVerifyHarnessEvidence(
 
 static DotnetBuildResult RunDotnetBuild(string csprojPath, VerificationConfig verification, string workingDirectory)
 {
+    var fullCsprojPath = Path.GetFullPath(csprojPath);
     var args = new List<string>
     {
         "build",
-        csprojPath,
+        fullCsprojPath,
         "-v:minimal",
         $"-c:{(string.IsNullOrWhiteSpace(verification.Configuration) ? "Debug" : verification.Configuration!.Trim())}",
         "-p:ImportDirectoryBuildProps=false",
@@ -2773,9 +2774,11 @@ static DotnetBuildResult RunDotnetBuild(string csprojPath, VerificationConfig ve
         if (process == null)
             return new DotnetBuildResult(127, "dotnet " + string.Join(" ", args.Select(QuoteArg)), "", "Failed to start dotnet process.");
 
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
         process.WaitForExit();
+        var stdout = stdoutTask.GetAwaiter().GetResult();
+        var stderr = stderrTask.GetAwaiter().GetResult();
         return new DotnetBuildResult(process.ExitCode, "dotnet " + string.Join(" ", args.Select(QuoteArg)), stdout, stderr);
     }
     catch (Exception ex)

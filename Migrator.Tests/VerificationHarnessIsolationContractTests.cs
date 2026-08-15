@@ -80,6 +80,18 @@ public sealed class VerificationHarnessIsolationContractTests
         Assert.Contains("_ => 2", program);
     }
 
+
+    [Fact]
+    public void VerifyProject_BuildsAbsoluteHarnessPathAndDrainsBothProcessPipes()
+    {
+        var program = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "Migrator.Cli", "Program.cs"));
+
+        Assert.Contains("var fullCsprojPath = Path.GetFullPath(csprojPath);", program);
+        Assert.Contains("\"build\",\n        fullCsprojPath,", program.Replace("\r\n", "\n"));
+        Assert.Contains("process.StandardOutput.ReadToEndAsync()", program);
+        Assert.Contains("process.StandardError.ReadToEndAsync()", program);
+    }
+
     static string FindRepositoryRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
