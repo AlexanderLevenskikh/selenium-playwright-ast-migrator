@@ -118,18 +118,7 @@ public class RoslynTestFileParser : ITestFileParser
             throw new InvalidOperationException($"Syntax error in {filePath} at {location}: {first.Id} {first.GetMessage()}");
         }
 
-        var compilation = CSharpCompilation.Create(
-            "MigratorTemp",
-            new[] { tree },
-            new MetadataReference[]
-            {
-                MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
-                MetadataReference.CreateFromFile(typeof(Console).Assembly.Location),
-                MetadataReference.CreateFromFile(typeof(System.Linq.Enumerable).Assembly.Location),
-            },
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
-        );
-
+        var compilation = SemanticCompilationSupport.CreateCompilation(tree);
         var semanticModel = compilation.GetSemanticModel(tree);
 
         var namespaceDecl = root.DescendantNodes().OfType<BaseNamespaceDeclarationSyntax>().FirstOrDefault();
@@ -671,20 +660,34 @@ public class RoslynTestFileParser : ITestFileParser
         {
             if (TryRecognizeSemantic(methodSymbol!, methodName, receiverText, invocation, line) is { } semanticResult)
                 return semanticResult;
+
+            // Resolved runtime calls are authoritative negatives: do not reinterpret them
+            // through broad syntax recognizers just because the method name looks familiar.
+            if (IsBuiltinSystemMethod(methodSymbol!))
+                return null;
+
+            // Resolved project-owned calls are also authoritative negatives for builtin
+            // Selenium/NUnit recognizers. Preserve them structurally for adapter mapping.
+            if (IsResolvedProjectMethod(methodSymbol!, semanticModel.Compilation))
+            {
+                return new MethodInvocationAction(
+                    line,
+                    receiverText,
+                    methodName,
+                    fullText,
+                    argumentTexts,
+                    genericArgumentTexts,
+                    resultVariable: null,
+                    confidence: RecognitionConfidence.Semantic,
+                    isAwaited: isAwaited);
+            }
         }
 
         // --- Syntax fallback: run configured recognizer pipeline ---
-        foreach (var recognizer in _syntaxFallbackRecognizers)
-        {
-            if (recognizer is UnknownInvocationRecognizer) continue;
-
-            if (recognizer.TryRecognize(ctx) is { } fallbackResult)
-                return fallbackResult;
-        }
+        if (RecognizerArbitrator.Recognize(_syntaxFallbackRecognizers, ctx) is { } fallbackResult)
+            return fallbackResult;
 
         // --- Builtin/System calls — skip ---
-        if (symbolResolved && IsBuiltinSystemMethod(methodSymbol!))
-            return null;
 
         // Receiverless project helpers such as CreateDopCalc(lightbox) frequently
         // fail semantic resolution in migration mode because we compile the source
@@ -1150,21 +1153,63 @@ public class RoslynTestFileParser : ITestFileParser
             || containingNamespace.StartsWith("Microsoft.", StringComparison.Ordinal);
     }
 
+    static bool IsResolvedProjectMethod(IMethodSymbol methodSymbol, Compilation compilation)
+    {
+        if (!SymbolEqualityComparer.Default.Equals(
+                methodSymbol.ContainingAssembly,
+                compilation.Assembly))
+        {
+            return false;
+        }
+
+        // Selenium/NUnit semantic anchors are source trees inside the lightweight compilation,
+        // so assembly ownership alone is not enough to classify them as project code.
+        var containingNamespace = methodSymbol.ContainingNamespace?.ToDisplayString() ?? string.Empty;
+        return !IsKnownFrameworkNamespace(containingNamespace);
+    }
+
+    static bool IsKnownFrameworkNamespace(string containingNamespace) =>
+        string.Equals(containingNamespace, "OpenQA.Selenium", StringComparison.Ordinal)
+        || containingNamespace.StartsWith("OpenQA.Selenium.", StringComparison.Ordinal)
+        || string.Equals(containingNamespace, "NUnit.Framework", StringComparison.Ordinal)
+        || containingNamespace.StartsWith("NUnit.Framework.", StringComparison.Ordinal);
+
     static bool IsSeleniumControlType(IMethodSymbol methodSymbol, string containingType)
     {
-        if (containingType.Contains("OpenQA.Selenium")) return true;
+        if (containingType.Contains("OpenQA.Selenium", StringComparison.Ordinal))
+            return true;
 
-        var baseType = methodSymbol.ContainingType;
-        while (baseType.BaseType != null)
+        var containing = methodSymbol.ContainingType;
+        if (containing == null)
+            return false;
+
+        foreach (var @interface in containing.AllInterfaces)
         {
-            var baseName = baseType.BaseType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            if (baseName.Contains("ControlBase") || baseName.Contains("OpenQA.Selenium") || baseName.Contains("IWebElement"))
+            var interfaceNamespace = @interface.ContainingNamespace?.ToDisplayString() ?? string.Empty;
+            if (IsOpenQaSeleniumNamespace(interfaceNamespace)
+                && string.Equals(@interface.Name, "IWebElement", StringComparison.Ordinal))
+            {
                 return true;
-            baseType = baseType.BaseType;
+            }
+        }
+
+        for (var baseType = containing.BaseType; baseType != null; baseType = baseType.BaseType)
+        {
+            var baseNamespace = baseType.ContainingNamespace?.ToDisplayString() ?? string.Empty;
+            if (IsOpenQaSeleniumNamespace(baseNamespace)
+                || string.Equals(baseType.Name, "IWebElement", StringComparison.Ordinal)
+                   && IsOpenQaSeleniumNamespace(baseNamespace))
+            {
+                return true;
+            }
         }
 
         return false;
     }
+
+    static bool IsOpenQaSeleniumNamespace(string containingNamespace) =>
+        string.Equals(containingNamespace, "OpenQA.Selenium", StringComparison.Ordinal)
+        || containingNamespace.StartsWith("OpenQA.Selenium.", StringComparison.Ordinal);
 
     static string GetMethodName(InvocationExpressionSyntax invocation)
     {
