@@ -10,10 +10,11 @@ namespace Migrator.Roslyn;
 
 /// <summary>
 /// Deterministic project-level semantic view used as the foundation for whole-project
-/// migration analysis. It intentionally does not mutate the legacy parser/renderer path.
-/// The builder loads SDK-style C# sources and ProjectReference edges without invoking
-/// MSBuild, so package assets that are not available through framework/HintPath references
-/// may remain unresolved and are reported as diagnostics rather than guessed.
+/// migration analysis. The same compilation graph is reused internally by the production
+/// Roslyn source frontend so project-owned symbol identity does not have to be guessed from
+/// invocation text. The builder loads SDK-style C# sources and ProjectReference edges without
+/// invoking MSBuild, so package assets unavailable through framework/HintPath references may
+/// remain unresolved and are reported as diagnostics rather than guessed.
 /// </summary>
 public sealed record ProjectSemanticIndex(
     string SchemaVersion,
@@ -84,6 +85,92 @@ public sealed record SemanticDiagnosticRecord(
     int SourceLine,
     int SourceColumn);
 
+
+internal sealed record ProjectSemanticBoundSource(
+    CSharpCompilation Compilation,
+    SyntaxTree SyntaxTree);
+
+internal sealed record ProjectSemanticSourceCompilation(
+    CSharpCompilation Compilation,
+    SyntaxTree SyntaxTree);
+
+internal sealed class ProjectSemanticCompilationContext
+{
+    readonly IReadOnlyDictionary<string, ProjectSemanticSourceCompilation> _sources;
+
+    public ProjectSemanticCompilationContext(
+        string rootProjectPath,
+        IReadOnlyDictionary<string, ProjectSemanticSourceCompilation> sources)
+    {
+        RootProjectPath = Path.GetFullPath(rootProjectPath);
+        _sources = sources;
+    }
+
+    public string RootProjectPath { get; }
+
+    public CSharpParseOptions? GetParseOptions(string sourceFile)
+    {
+        var key = NormalizePath(sourceFile);
+        return _sources.TryGetValue(key, out var source)
+            ? source.SyntaxTree.Options as CSharpParseOptions
+            : null;
+    }
+
+    public IReadOnlyDictionary<string, ProjectSemanticBoundSource> BindSourceOverrides(
+        IReadOnlyDictionary<string, SyntaxTree> sourceOverrides)
+    {
+        ArgumentNullException.ThrowIfNull(sourceOverrides);
+
+        var normalizedOverrides = sourceOverrides
+            .ToDictionary(
+                pair => NormalizePath(pair.Key),
+                pair => pair.Value,
+                StringComparer.OrdinalIgnoreCase);
+
+        var transformed = new Dictionary<CSharpCompilation, CSharpCompilation>(
+            ReferenceEqualityComparer.Instance);
+
+        foreach (var source in _sources.Values)
+        {
+            if (transformed.ContainsKey(source.Compilation))
+                continue;
+
+            var compilation = source.Compilation;
+            foreach (var entry in _sources
+                         .Where(entry => ReferenceEquals(entry.Value.Compilation, source.Compilation))
+                         .OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
+                         .ThenBy(entry => entry.Key, StringComparer.Ordinal))
+            {
+                if (normalizedOverrides.TryGetValue(entry.Key, out var replacement))
+                    compilation = compilation.ReplaceSyntaxTree(entry.Value.SyntaxTree, replacement);
+            }
+
+            transformed[source.Compilation] =
+                SemanticCompilationSupport.AddMissingFrameworkAnchors(compilation);
+        }
+
+        var result = new Dictionary<string, ProjectSemanticBoundSource>(
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in _sources
+                     .OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(entry => entry.Key, StringComparer.Ordinal))
+        {
+            var tree = normalizedOverrides.TryGetValue(entry.Key, out var replacement)
+                ? replacement
+                : entry.Value.SyntaxTree;
+
+            result[entry.Key] = new ProjectSemanticBoundSource(
+                transformed[entry.Value.Compilation],
+                tree);
+        }
+
+        return result;
+    }
+
+    static string NormalizePath(string path)
+        => Path.GetFullPath(path);
+}
 public static class ProjectSemanticIndexBuilder
 {
     const string SchemaVersion = "project-semantic-index/v1";
@@ -135,6 +222,44 @@ public static class ProjectSemanticIndexBuilder
         return Build(projectPath);
     }
 
+
+    internal static ProjectSemanticCompilationContext? BuildCompilationContextForInput(string inputPath)
+    {
+        var projectPath = FindNearestProject(inputPath);
+        if (projectPath == null)
+            return null;
+
+        var graph = new CompilationGraphBuilder().Build(projectPath);
+        var sources = new Dictionary<string, ProjectSemanticSourceCompilation>(
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var node in graph.Nodes.Values
+                     .OrderBy(node => node.ProjectPath, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(node => node.ProjectPath, StringComparer.Ordinal))
+        {
+            foreach (var tree in node.Compilation.SyntaxTrees
+                         .OrderBy(tree => tree.FilePath, StringComparer.OrdinalIgnoreCase)
+                         .ThenBy(tree => tree.FilePath, StringComparer.Ordinal))
+            {
+                if (string.IsNullOrWhiteSpace(tree.FilePath))
+                    continue;
+
+                var fullPath = Path.GetFullPath(tree.FilePath);
+                if (sources.TryGetValue(fullPath, out var existing)
+                    && !ReferenceEquals(existing.Compilation, node.Compilation))
+                {
+                    throw new InvalidOperationException(
+                        $"PROJECT_SEMANTIC_SOURCE_OWNERSHIP_AMBIGUOUS: '{fullPath}' belongs to more than one project compilation.");
+                }
+
+                sources[fullPath] = new ProjectSemanticSourceCompilation(
+                    node.Compilation,
+                    tree);
+            }
+        }
+
+        return new ProjectSemanticCompilationContext(projectPath, sources);
+    }
     public static ProjectSemanticIndex Build(string projectPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectPath);

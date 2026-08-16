@@ -15,14 +15,21 @@ Syntax fallback работает без SemanticModel и может давать
 
 ### Граница проектной семантики
 
-Roslyn-парсер строит semantic model для анализируемого C#-файла и базовых runtime-сборок.
-Он не загружает автоматически всю исходную solution и все пользовательские assembly references
-на этапе parse. Поэтому вызовы проектных helper/POM-методов могут не получить полный `IMethodSymbol`
-и переходят в честный syntax fallback. Для них используются `Methods`, `ParameterizedMethods`,
-`PageObjects`, helper inventory и POM index. Финальная корректность проверяется отдельно через
-`verify-project`, который умеет подключать реальные project/package/assembly references.
+Для directory/project input Roslyn frontend теперь строит **project-scope semantic compilation**.
+Если рядом однозначно определяется SDK-style `.csproj`, parser переиспользует compilation graph
+`ProjectSemanticIndex`: source files, `ProjectReference`, framework references и доступные
+`HintPath` references. Если project определить нельзя, все объявленные входные `.cs` всё равно
+связываются в одну детерминированную lightweight compilation.
 
-Это текущее ограничение точности распознавания, а не отсутствие проектной верификации.
+Это позволяет symbol-based resolution для cross-file helpers, extension methods, inheritance,
+generic/partial helper declarations и source-owned `ProjectReference` calls. Resolved project calls
+не переинтерпретируются broad syntax recognizers только из-за похожего имени (`Click`, `That`, etc.).
+
+Граница всё ещё существует: parser не выполняет MSBuild restore и не реконструирует произвольные
+NuGet assets, custom targets/source generators или runtime DI. Такие знания должны приходить из
+явного config/evidence или оставаться unresolved. Кроме того, project-wide symbol resolution ещё
+не означает автоматическое переписывание helper/PageObject bodies и transitive async lifting:
+эта задача требует отдельного call-graph rewrite plan, а не локального recognizer fallback.
 
 ## Compile-smoke: что проверяет и чего не проверяет
 

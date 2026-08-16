@@ -72,21 +72,41 @@ public class RoslynTestFileParser : ITestFileParser
 
     public TestFileModel Parse(string filePath)
     {
+        var projectContext = ProjectSemanticIndexBuilder.BuildCompilationContextForInput(filePath);
+        var tree = ParseSourceTree(filePath, projectContext?.GetParseOptions(filePath));
+
+        if (projectContext != null)
+        {
+            var overrides = new Dictionary<string, SyntaxTree>(StringComparer.OrdinalIgnoreCase)
+            {
+                [Path.GetFullPath(filePath)] = tree
+            };
+            var bound = projectContext.BindSourceOverrides(overrides);
+            if (bound.TryGetValue(Path.GetFullPath(filePath), out var source))
+                return ParseTree(filePath, source.SyntaxTree, source.Compilation);
+        }
+
+        return ParseTree(
+            filePath,
+            tree,
+            SemanticCompilationSupport.CreateCompilation(tree));
+    }
+
+    SyntaxTree ParseSourceTree(string filePath, CSharpParseOptions? parseOptions)
+    {
         var source = File.ReadAllText(filePath);
-        var tree = CSharpSyntaxTree.ParseText(source);
+        var tree = CSharpSyntaxTree.ParseText(
+            source,
+            parseOptions,
+            path: Path.GetFullPath(filePath));
         var root = tree.GetRoot();
 
         if (LooksLikeMigratedPlaywrightFixture(filePath, root))
             throw new SourceInputBlockedException(filePath);
 
-        // C# using aliases are semantics-preserving for Selenium locator factories, e.g.
-        //   using SeleniumBy = OpenQA.Selenium.By;
-        //   WebDriver.FindElement(SeleniumBy.Id("login"))
-        // Most of the migration pipeline intentionally operates on canonical syntax text
-        // (By.Id / By.CssSelector / By.XPath). Normalize only alias usages that are proven
-        // by the using directive and only when they are used as a Selenium By factory.
-        // This keeps the recognizers deterministic without accepting arbitrary identifiers
-        // that merely happen to end in "By".
+        // Normalize only proven aliases used as Selenium By factories. The rewritten
+        // syntax tree keeps the real project's parse options and absolute path so it
+        // can replace the original tree inside the project-wide compilation graph.
         var seleniumByAliases = root.DescendantNodes()
             .OfType<UsingDirectiveSyntax>()
             .Where(IsSeleniumByAlias)
@@ -97,13 +117,21 @@ public class RoslynTestFileParser : ITestFileParser
         if (seleniumByAliases.Count > 0)
         {
             root = new SeleniumByAliasNormalizer(seleniumByAliases).Visit(root)!;
-            tree = CSharpSyntaxTree.Create((CSharpSyntaxNode)root, path: filePath);
-
-            // CSharpSyntaxTree.Create attaches an equivalent root to a new syntax tree.
-            // Always continue with the root owned by that tree; nodes from the rewritten
-            // pre-tree root cannot be queried through the SemanticModel for `tree`.
-            root = tree.GetRoot();
+            tree = CSharpSyntaxTree.Create(
+                (CSharpSyntaxNode)root,
+                tree.Options as CSharpParseOptions,
+                path: Path.GetFullPath(filePath));
         }
+
+        return tree;
+    }
+
+    TestFileModel ParseTree(
+        string filePath,
+        SyntaxTree tree,
+        CSharpCompilation compilation)
+    {
+        var root = tree.GetRoot();
 
         var syntaxErrors = tree.GetDiagnostics()
             .Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -118,17 +146,17 @@ public class RoslynTestFileParser : ITestFileParser
             throw new InvalidOperationException($"Syntax error in {filePath} at {location}: {first.Id} {first.GetMessage()}");
         }
 
-        var compilation = SemanticCompilationSupport.CreateCompilation(tree);
-        var semanticModel = compilation.GetSemanticModel(tree);
+        if (!compilation.SyntaxTrees.Contains(tree))
+            throw new InvalidOperationException(
+                $"PROJECT_SEMANTIC_TREE_MISSING: compilation does not contain '{filePath}'.");
+
+        var semanticModel = compilation.GetSemanticModel(tree, ignoreAccessibility: true);
 
         var namespaceDecl = root.DescendantNodes().OfType<BaseNamespaceDeclarationSyntax>().FirstOrDefault();
         var ns = namespaceDecl?.Name.ToString() ?? string.Empty;
 
         var classDecls = root.DescendantNodes().OfType<ClassDeclarationSyntax>().ToList();
 
-        // Prefer an explicit fixture, then a class that actually owns test methods.
-        // The previous single-class fallback rejected perfectly valid files that keep
-        // small DTO/helper types next to the fixture (a common pattern in migrated tests).
         var testClass = classDecls.FirstOrDefault(HasTestFixtureAttribute)
             ?? classDecls.FirstOrDefault(ContainsTestMethod)
             ?? (classDecls.Count == 1 ? classDecls[0] : null);
@@ -169,9 +197,7 @@ public class RoslynTestFileParser : ITestFileParser
             ClassFields = classFields,
             PreservedClassAttributes = ParsePreservedClassAttributes(testClass)
         };
-    }
-
-    static bool IsSeleniumByAlias(UsingDirectiveSyntax usingDirective)
+    }    static bool IsSeleniumByAlias(UsingDirectiveSyntax usingDirective)
     {
         if (usingDirective.Alias == null || usingDirective.Name == null)
             return false;
@@ -215,20 +241,58 @@ public class RoslynTestFileParser : ITestFileParser
         var files = Directory.GetFiles(directoryPath, "*.cs", SearchOption.AllDirectories)
             .Where(IsInputFixtureFile)
             .OrderBy(NormalizeDiscoveryPath, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(NormalizeDiscoveryPath, StringComparer.Ordinal);
+            .ThenBy(NormalizeDiscoveryPath, StringComparer.Ordinal)
+            .ToArray();
+
+        if (files.Length == 0)
+            return Array.Empty<TestFileModel>();
+
+        var projectContext =
+            ProjectSemanticIndexBuilder.BuildCompilationContextForInput(directoryPath);
+
+        var trees = new Dictionary<string, SyntaxTree>(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in files)
+        {
+            var fullPath = Path.GetFullPath(file);
+            trees[fullPath] = ParseSourceTree(
+                fullPath,
+                projectContext?.GetParseOptions(fullPath));
+        }
+
+        // The fallback is still project-scope within the declared input directory:
+        // helpers/base classes/partial parts participate in one semantic compilation
+        // even when no unambiguous .csproj can be associated with the source root.
+        var fallbackCompilation =
+            SemanticCompilationSupport.CreateCompilation(trees.Values);
+
+        var projectBound = projectContext?.BindSourceOverrides(trees);
         var results = new List<TestFileModel>();
+
         foreach (var file in files)
         {
             try
             {
-                var model = Parse(file);
-                var testCount = model.Tests.ToList().Count;
-                if (model != null && testCount > 0)
-                    results.Add(model);
-                else if (model != null && testCount == 0)
+                var fullPath = Path.GetFullPath(file);
+                var tree = trees[fullPath];
+
+                CSharpCompilation compilation;
+                if (projectBound != null
+                    && projectBound.TryGetValue(fullPath, out var boundSource))
                 {
-                    Console.Error.WriteLine($"Warning: no tests found in {file} — skipping.");
+                    tree = boundSource.SyntaxTree;
+                    compilation = boundSource.Compilation;
                 }
+                else
+                {
+                    compilation = fallbackCompilation;
+                }
+
+                var model = ParseTree(fullPath, tree, compilation);
+                var testCount = model.Tests.Count();
+                if (testCount > 0)
+                    results.Add(model);
+                else
+                    Console.Error.WriteLine($"Warning: no tests found in {file} — skipping.");
             }
             catch (InvalidOperationException ex) when (ex.Message.Contains("No test class found"))
             {
@@ -236,8 +300,6 @@ public class RoslynTestFileParser : ITestFileParser
             }
             catch (SourceFileParseException)
             {
-                // Preserve stable source failure identity (for example BLOCKED_SOURCE)
-                // instead of hiding it under a generic SRC_PARSE_FAILED wrapper.
                 throw;
             }
             catch (Exception ex)
@@ -245,11 +307,9 @@ public class RoslynTestFileParser : ITestFileParser
                 throw new SourceFileParseException(file, ex);
             }
         }
+
         return results;
-    }
-
-
-    static string NormalizeDiscoveryPath(string path)
+    }    static string NormalizeDiscoveryPath(string path)
     {
         return Path.GetFullPath(path).Replace('\\', '/');
     }
@@ -1155,20 +1215,34 @@ public class RoslynTestFileParser : ITestFileParser
 
     static bool IsResolvedProjectMethod(IMethodSymbol methodSymbol, Compilation compilation)
     {
-        if (!SymbolEqualityComparer.Default.Equals(
+        var containingNamespace = methodSymbol.ContainingNamespace?.ToDisplayString() ?? string.Empty;
+        if (IsKnownFrameworkNamespace(containingNamespace))
+            return false;
+
+        if (SymbolEqualityComparer.Default.Equals(
                 methodSymbol.ContainingAssembly,
                 compilation.Assembly))
         {
-            return false;
+            return true;
         }
 
-        // Selenium/NUnit semantic anchors are source trees inside the lightweight compilation,
-        // so assembly ownership alone is not enough to classify them as project code.
-        var containingNamespace = methodSymbol.ContainingNamespace?.ToDisplayString() ?? string.Empty;
-        return !IsKnownFrameworkNamespace(containingNamespace);
-    }
+        // ProjectSemanticIndexBuilder represents ProjectReference edges as Roslyn
+        // CompilationReference instances. Preserve methods from those source projects
+        // as project-owned semantic calls; ordinary package/DLL metadata references do
+        // not satisfy this branch and therefore cannot spoof source ownership.
+        foreach (var reference in compilation.References.OfType<CompilationReference>())
+        {
+            if (compilation.GetAssemblyOrModuleSymbol(reference) is IAssemblySymbol referencedAssembly
+                && SymbolEqualityComparer.Default.Equals(
+                    methodSymbol.ContainingAssembly,
+                    referencedAssembly))
+            {
+                return true;
+            }
+        }
 
-    static bool IsKnownFrameworkNamespace(string containingNamespace) =>
+        return false;
+    }    static bool IsKnownFrameworkNamespace(string containingNamespace) =>
         string.Equals(containingNamespace, "OpenQA.Selenium", StringComparison.Ordinal)
         || containingNamespace.StartsWith("OpenQA.Selenium.", StringComparison.Ordinal)
         || string.Equals(containingNamespace, "NUnit.Framework", StringComparison.Ordinal)
