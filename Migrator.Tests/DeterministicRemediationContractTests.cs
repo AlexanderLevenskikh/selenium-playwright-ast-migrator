@@ -55,7 +55,11 @@ public sealed class DeterministicRemediationContractTests
         Assert.Contains("AUTONOMY_TERMINAL_STOP_REQUIRES_RESOLVED_CYCLE", updater);
         Assert.Contains("$state.cycleInProgress = $false", updater);
         Assert.Contains("$state.activeCycleBaselineStateHash = $null", updater);
-        Assert.Contains("continue` refreshes budget, never transaction correctness", updater);
+        Assert.Contains("AUTONOMY_STATE_RECOVERED_FROM_LEDGER", updater);
+        Assert.Contains("AUTONOMY_STATE_LEDGER_MISMATCH", updater);
+        Assert.Contains("Write-AutonomyLedgerSnapshot", updater);
+        Assert.DoesNotContain("$state.totalCyclesCompleted = 0", updater);
+        Assert.DoesNotContain("$state.cycleHistory = @()", updater);
         Assert.Contains("AUTONOMY_STATE_REJECTION_REQUIRES_ROLLBACK", validator);
         Assert.Contains("AUTONOMY_STATE_ROLLBACK_REQUIRED_AT_HANDOFF", validator);
         Assert.Contains("AUTONOMY_STATE_ACTIVE_CYCLE_AT_HANDOFF", validator);

@@ -62,6 +62,7 @@ function New-State {
         completedCycles = @()
         cycleHistory = @()
         rebaselineHistory = @()
+        proofLedgerRequired = $false
         stopReason = $null
     }
 }
@@ -99,6 +100,215 @@ function Write-State([string]$Path, $State) {
     $temp = "$Path.tmp"
     $State | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath $temp -Encoding UTF8
     Move-Item -LiteralPath $temp -Destination $Path -Force
+}
+
+function Convert-StateToCanonicalJson($State) {
+    return ($State | ConvertTo-Json -Depth 32 -Compress)
+}
+
+function Get-TextSha256([string]$Text) {
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($Text)
+    $hash = [System.Security.Cryptography.SHA256]::HashData($bytes)
+    return [Convert]::ToHexString($hash).ToLowerInvariant()
+}
+
+function Write-Utf8TextAtomic([string]$Path, [string]$Text) {
+    $directory = Split-Path -Parent $Path
+    New-Item -ItemType Directory -Force -Path $directory | Out-Null
+    $temp = "$Path.tmp"
+    [System.IO.File]::WriteAllText($temp, $Text, [System.Text.UTF8Encoding]::new($false))
+    Move-Item -LiteralPath $temp -Destination $Path -Force
+}
+
+function Get-LedgerEntrySha256(
+    [long]$Sequence,
+    [string]$PreviousEntrySha256,
+    [string]$StateSha256,
+    [string]$StateJsonBase64
+) {
+    $material = @(
+        "standard-migration-autonomy-ledger-entry/v1",
+        $Sequence.ToString([System.Globalization.CultureInfo]::InvariantCulture),
+        $PreviousEntrySha256,
+        $StateSha256,
+        $StateJsonBase64
+    ) -join "`n"
+    return Get-TextSha256 $material
+}
+
+function Get-LedgerEntryPath([string]$EntriesPath, [long]$Sequence, [string]$EntrySha256) {
+    return Join-Path $EntriesPath ("{0:D12}-{1}.json" -f $Sequence, $EntrySha256)
+}
+
+function Read-AutonomyLedger([string]$EntriesPath, [string]$AnchorPath) {
+    $entryFiles = if (Test-Path -LiteralPath $EntriesPath -PathType Container) {
+        @(Get-ChildItem -LiteralPath $EntriesPath -Filter "*.json" -File)
+    } else { @() }
+
+    if (-not (Test-Path -LiteralPath $AnchorPath -PathType Leaf)) {
+        if ($entryFiles.Count -gt 0) {
+            throw "AUTONOMY_LEDGER_ANCHOR_MISSING: immutable ledger entries exist but anchor.json is missing."
+        }
+        return $null
+    }
+
+    try { $anchor = Get-Content -LiteralPath $AnchorPath -Raw | ConvertFrom-Json }
+    catch { throw "AUTONOMY_LEDGER_ANCHOR_INVALID_JSON: $($_.Exception.Message)" }
+
+    if ([string]$anchor.schemaVersion -ne "standard-migration-autonomy-ledger-anchor/v1") {
+        throw "AUTONOMY_LEDGER_ANCHOR_SCHEMA_INVALID: $($anchor.schemaVersion)"
+    }
+
+    $headSequence = [long]$anchor.sequence
+    $headEntrySha256 = [string]$anchor.entrySha256
+    $anchorStateSha256 = [string]$anchor.stateSha256
+    if ($headSequence -lt 1 -or
+        [string]::IsNullOrWhiteSpace($headEntrySha256) -or
+        [string]::IsNullOrWhiteSpace($anchorStateSha256)) {
+        throw "AUTONOMY_LEDGER_ANCHOR_IDENTITY_MISSING"
+    }
+
+    $expectedSequence = $headSequence
+    $expectedEntrySha256 = $headEntrySha256
+    $headStateJson = $null
+    $headStateSha256 = $null
+    $stateHashes = New-Object System.Collections.Generic.List[string]
+
+    while ($expectedSequence -ge 1) {
+        $entryPath = Get-LedgerEntryPath $EntriesPath $expectedSequence $expectedEntrySha256
+        if (-not (Test-Path -LiteralPath $entryPath -PathType Leaf)) {
+            throw "AUTONOMY_LEDGER_ENTRY_NOT_FOUND: $entryPath"
+        }
+
+        try { $entry = Get-Content -LiteralPath $entryPath -Raw | ConvertFrom-Json }
+        catch { throw "AUTONOMY_LEDGER_ENTRY_INVALID_JSON: $entryPath $($_.Exception.Message)" }
+
+        if ([string]$entry.schemaVersion -ne "standard-migration-autonomy-ledger-entry/v1") {
+            throw "AUTONOMY_LEDGER_ENTRY_SCHEMA_INVALID: $entryPath $($entry.schemaVersion)"
+        }
+        if ([long]$entry.sequence -ne $expectedSequence) {
+            throw "AUTONOMY_LEDGER_SEQUENCE_INVALID: expected $expectedSequence, got $($entry.sequence)"
+        }
+
+        $entrySha256 = [string]$entry.entrySha256
+        $stateSha256 = [string]$entry.stateSha256
+        $stateJsonBase64 = [string]$entry.stateJsonBase64
+        $previousEntrySha256 = [string]$entry.previousEntrySha256
+        if ([string]::IsNullOrWhiteSpace($entrySha256) -or
+            [string]::IsNullOrWhiteSpace($stateSha256) -or
+            [string]::IsNullOrWhiteSpace($stateJsonBase64)) {
+            throw "AUTONOMY_LEDGER_ENTRY_IDENTITY_MISSING: $entryPath"
+        }
+
+        $computedEntrySha256 = Get-LedgerEntrySha256 `
+            $expectedSequence `
+            $previousEntrySha256 `
+            $stateSha256 `
+            $stateJsonBase64
+        if ($computedEntrySha256 -ne $entrySha256 -or $entrySha256 -ne $expectedEntrySha256) {
+            throw "AUTONOMY_LEDGER_ENTRY_HASH_MISMATCH: $entryPath"
+        }
+
+        try {
+            $stateJson = [System.Text.Encoding]::UTF8.GetString(
+                [Convert]::FromBase64String($stateJsonBase64))
+        }
+        catch {
+            throw "AUTONOMY_LEDGER_STATE_BASE64_INVALID: $entryPath"
+        }
+
+        $computedStateSha256 = Get-TextSha256 $stateJson
+        if ($computedStateSha256 -ne $stateSha256) {
+            throw "AUTONOMY_LEDGER_STATE_HASH_MISMATCH: $entryPath"
+        }
+
+        try { $null = $stateJson | ConvertFrom-Json }
+        catch { throw "AUTONOMY_LEDGER_STATE_INVALID_JSON: $entryPath $($_.Exception.Message)" }
+
+        $stateHashes.Add($stateSha256)
+        if ($expectedSequence -eq $headSequence) {
+            $headStateJson = $stateJson
+            $headStateSha256 = $stateSha256
+        }
+
+        if ($expectedSequence -eq 1) {
+            if (-not [string]::IsNullOrWhiteSpace($previousEntrySha256)) {
+                throw "AUTONOMY_LEDGER_GENESIS_HAS_PREDECESSOR"
+            }
+        }
+        elseif ([string]::IsNullOrWhiteSpace($previousEntrySha256)) {
+            throw "AUTONOMY_LEDGER_CHAIN_BROKEN: sequence $expectedSequence has no predecessor."
+        }
+
+        $expectedEntrySha256 = $previousEntrySha256
+        $expectedSequence--
+    }
+
+    if ($headStateSha256 -ne $anchorStateSha256) {
+        throw "AUTONOMY_LEDGER_ANCHOR_STATE_MISMATCH"
+    }
+
+    return [pscustomobject]@{
+        Sequence = $headSequence
+        EntrySha256 = $headEntrySha256
+        StateSha256 = $headStateSha256
+        StateJson = $headStateJson
+        StateHashes = @($stateHashes)
+    }
+}
+
+function Write-AutonomyLedgerSnapshot([string]$EntriesPath, [string]$AnchorPath, $State) {
+    New-Item -ItemType Directory -Force -Path $EntriesPath | Out-Null
+
+    $previousSequence = 0L
+    $previousEntrySha256 = ""
+    if (Test-Path -LiteralPath $AnchorPath -PathType Leaf) {
+        try { $previousAnchor = Get-Content -LiteralPath $AnchorPath -Raw | ConvertFrom-Json }
+        catch { throw "AUTONOMY_LEDGER_ANCHOR_INVALID_JSON: $($_.Exception.Message)" }
+
+        if ([string]$previousAnchor.schemaVersion -ne "standard-migration-autonomy-ledger-anchor/v1") {
+            throw "AUTONOMY_LEDGER_ANCHOR_SCHEMA_INVALID: $($previousAnchor.schemaVersion)"
+        }
+        $previousSequence = [long]$previousAnchor.sequence
+        $previousEntrySha256 = [string]$previousAnchor.entrySha256
+    }
+
+    $sequence = $previousSequence + 1
+    $stateJson = Convert-StateToCanonicalJson $State
+    $stateSha256 = Get-TextSha256 $stateJson
+    $stateJsonBase64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($stateJson))
+    $entrySha256 = Get-LedgerEntrySha256 $sequence $previousEntrySha256 $stateSha256 $stateJsonBase64
+
+    $entry = [ordered]@{
+        schemaVersion = "standard-migration-autonomy-ledger-entry/v1"
+        sequence = $sequence
+        previousEntrySha256 = if ([string]::IsNullOrWhiteSpace($previousEntrySha256)) { $null } else { $previousEntrySha256 }
+        stateSha256 = $stateSha256
+        stateJsonBase64 = $stateJsonBase64
+        entrySha256 = $entrySha256
+        recordedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+    }
+
+    $entryPath = Get-LedgerEntryPath $EntriesPath $sequence $entrySha256
+    if (Test-Path -LiteralPath $entryPath) {
+        throw "AUTONOMY_LEDGER_ENTRY_ALREADY_EXISTS: $entryPath"
+    }
+    Write-Utf8TextAtomic $entryPath ($entry | ConvertTo-Json -Depth 8)
+
+    $anchor = [ordered]@{
+        schemaVersion = "standard-migration-autonomy-ledger-anchor/v1"
+        sequence = $sequence
+        entrySha256 = $entrySha256
+        stateSha256 = $stateSha256
+        updatedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+    }
+    Write-Utf8TextAtomic $AnchorPath ($anchor | ConvertTo-Json -Depth 8)
+
+    return [pscustomobject]@{
+        Sequence = $sequence
+        EntrySha256 = $entrySha256
+        StateSha256 = $stateSha256
+    }
 }
 
 function Read-Guard([string]$Path) {
@@ -195,12 +405,67 @@ function Apply-GuardIdentity($state, $guard) {
 
 $workspaceFull = Resolve-FullPath $Workspace
 $statePath = Join-Path $workspaceFull "state/autonomy-state.json"
+$ledgerRoot = Join-Path $workspaceFull "evidence/autonomy-ledger"
+$ledgerEntriesPath = Join-Path $ledgerRoot "entries"
+$ledgerAnchorPath = Join-Path $ledgerRoot "anchor.json"
+
 $loaded = $null
-if (Test-Path -LiteralPath $statePath) {
+$stateReadError = $null
+$stateFilePresent = Test-Path -LiteralPath $statePath -PathType Leaf
+if ($stateFilePresent) {
     try { $loaded = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json }
-    catch { throw "AUTONOMY_STATE_INVALID_JSON: $($_.Exception.Message)" }
+    catch { $stateReadError = $_.Exception.Message }
 }
-$state = Convert-ToMutableState $loaded
+
+$ledger = Read-AutonomyLedger $ledgerEntriesPath $ledgerAnchorPath
+if ($null -eq $ledger) {
+    if ($null -ne $stateReadError) {
+        throw "AUTONOMY_STATE_INVALID_JSON: $stateReadError"
+    }
+
+    $state = Convert-ToMutableState $loaded
+    if ($stateFilePresent) {
+        if ([bool]$state.proofLedgerRequired) {
+            throw "AUTONOMY_LEDGER_REQUIRED_BUT_MISSING: protected workspace lost its autonomy proof ledger."
+        }
+        $state.proofLedgerRequired = $true
+        $bootstrap = Write-AutonomyLedgerSnapshot $ledgerEntriesPath $ledgerAnchorPath $state
+        Write-Host "AUTONOMY_LEDGER_BOOTSTRAPPED: sequence=$($bootstrap.Sequence) entry=$($bootstrap.EntrySha256)"
+    }
+}
+else {
+    try {
+        $ledgerStateObject = $ledger.StateJson | ConvertFrom-Json
+        $ledgerState = Convert-ToMutableState $ledgerStateObject
+    }
+    catch {
+        throw "AUTONOMY_LEDGER_HEAD_STATE_INVALID: $($_.Exception.Message)"
+    }
+
+    $recoverMutableState = $false
+    if (-not $stateFilePresent -or $null -ne $stateReadError) {
+        $recoverMutableState = $true
+    }
+    else {
+        $mutableLoaded = Convert-ToMutableState $loaded
+        $mutableStateSha256 = Get-TextSha256 (Convert-StateToCanonicalJson $mutableLoaded)
+        if ($mutableStateSha256 -eq [string]$ledger.StateSha256) {
+            $state = $mutableLoaded
+        }
+        elseif (@($ledger.StateHashes) -contains $mutableStateSha256) {
+            $recoverMutableState = $true
+        }
+        else {
+            throw "AUTONOMY_STATE_LEDGER_MISMATCH: mutable autonomy-state.json is not an anchored ledger state."
+        }
+    }
+
+    if ($recoverMutableState) {
+        $state = $ledgerState
+        Write-State $statePath $state
+        Write-Host "AUTONOMY_STATE_RECOVERED_FROM_LEDGER: sequence=$($ledger.Sequence) entry=$($ledger.EntrySha256)"
+    }
+}
 
 switch ($Action) {
     "StartInvocation" {
@@ -214,7 +479,6 @@ switch ($Action) {
         $state.cycleBudget = $CycleBudget
         $state.batchNumber = 1
         $state.cyclesCompleted = 0
-        $state.totalCyclesCompleted = 0
         $state.completedBatches = 0
         $state.noProgressStreak = 0
         $state.lastCandidateFingerprint = $null
@@ -225,10 +489,10 @@ switch ($Action) {
         $state.lastAfterStateHash = $null
         $state.lastCheckpointReason = $null
         $state.completedCycles = @()
-        $state.cycleHistory = @()
         $state.stopReason = $null
-        # currentStateHash, visitedStateHashes, and rollbackRequired intentionally survive
-        # a fresh invocation. `continue` refreshes budget, never transaction correctness.
+        # currentStateHash, visitedStateHashes, rollbackRequired, totalCyclesCompleted,
+        # cycleHistory, and rebaselineHistory intentionally survive invocation boundaries.
+        # A new invocation refreshes execution budget; it never erases accumulated proof.
     }
     "StartCycle" {
         if ($state.status -ne "RUNNING") { throw "AUTONOMY_STATE_NOT_RUNNING: start a new invocation first." }
@@ -493,8 +757,12 @@ switch ($Action) {
     }
 }
 
+$state.proofLedgerRequired = $true
+$ledgerCommit = Write-AutonomyLedgerSnapshot $ledgerEntriesPath $ledgerAnchorPath $state
 Write-State $statePath $state
 Write-Host "AUTONOMY_STATE_UPDATED"
+Write-Host "Ledger sequence: $($ledgerCommit.Sequence)"
+Write-Host "Ledger entry: $($ledgerCommit.EntrySha256)"
 Write-Host "Invocation: $($state.invocationId)"
 Write-Host "Mode: $($state.mode)"
 Write-Host "Status: $($state.status)"
