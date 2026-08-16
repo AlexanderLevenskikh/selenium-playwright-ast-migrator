@@ -108,7 +108,7 @@ public sealed class StandardMigrationModeTests
         var gate = Read("templates/migration-kit/scripts/check-final-gate.ps1");
         var validator = Read("templates/migration-kit/scripts/validate-run-artifacts.ps1");
 
-        Assert.Contains("standard-run-final-gate/v2", gate);
+        Assert.Contains("standard-run-final-gate/v3", gate);
         Assert.Contains("run-manifest.json", gate);
         Assert.Contains("orchestration-report.json", gate);
         Assert.Contains("generated/report.json", gate);
@@ -117,6 +117,13 @@ public sealed class StandardMigrationModeTests
         Assert.Contains("dotnet-build-exact-target", gate);
         Assert.Contains("Get-FileHash", gate);
         Assert.Contains("Convert-ToRelativePath", gate);
+        Assert.Contains("autonomyStateFileSha256", gate);
+        Assert.Contains("autonomyLedgerEntrySha256", gate);
+        Assert.Contains("workspacePathSha256", gate);
+        Assert.Contains("generatedCsTreeSha256", gate);
+        Assert.Contains("verificationEvidenceSha256", gate);
+        Assert.Contains("finalGateSha256", gate);
+        Assert.Contains("Get-FinalGateProofSha256", gate);
         Assert.DoesNotContain("[IO.Path]::GetRelativePath", gate, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("[System.IO.Path]::GetRelativePath", gate, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("STANDARD_RUN_FINAL_GATE_PASS", gate);

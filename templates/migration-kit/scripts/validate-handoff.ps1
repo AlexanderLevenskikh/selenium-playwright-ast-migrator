@@ -128,6 +128,42 @@ if ($invocationId -ne "NONE" -and ([string]$state.invocationId) -ne $invocationI
 if ([bool]$state.cycleInProgress) { throw "AUTONOMY_STATE_ACTIVE_CYCLE_AT_HANDOFF" }
 if ([bool]$state.rollbackRequired) { throw "AUTONOMY_STATE_ROLLBACK_REQUIRED_AT_HANDOFF" }
 
+if ($status -eq "COMPLETE") {
+    foreach ($field in @(
+        "lastFinalGateSha256",
+        "lastFinalGateRunPath",
+        "lastFinalGateTargetSha256",
+        "lastFinalGateVerificationEvidenceSha256"
+    )) {
+        if ([string]::IsNullOrWhiteSpace([string]$state.$field)) {
+            throw "AUTONOMY_STATE_COMPLETION_PROOF_MISSING: $field"
+        }
+    }
+
+    $finalGatePath = Join-Path $workspaceFull "state/final-gate-result.json"
+    if (-not (Test-Path -LiteralPath $finalGatePath -PathType Leaf)) {
+        throw "AUTONOMY_STATE_COMPLETION_GATE_FILE_MISSING: $finalGatePath"
+    }
+    try { $finalGate = Get-Content -LiteralPath $finalGatePath -Raw | ConvertFrom-Json }
+    catch { throw "AUTONOMY_STATE_COMPLETION_GATE_INVALID_JSON: $($_.Exception.Message)" }
+
+    if ([string]$finalGate.schemaVersion -ne "standard-run-final-gate/v3" -or [string]$finalGate.status -ne "PASS") {
+        throw "AUTONOMY_STATE_COMPLETION_GATE_INVALID"
+    }
+    if ([string]$finalGate.finalGateSha256 -ne [string]$state.lastFinalGateSha256) {
+        throw "AUTONOMY_STATE_COMPLETION_GATE_HASH_MISMATCH"
+    }
+    if ([string]$finalGate.runPath -ne [string]$state.lastFinalGateRunPath) {
+        throw "AUTONOMY_STATE_COMPLETION_RUN_MISMATCH"
+    }
+    if ([string]$finalGate.targetSha256 -ne [string]$state.lastFinalGateTargetSha256) {
+        throw "AUTONOMY_STATE_COMPLETION_TARGET_MISMATCH"
+    }
+    if ([string]$finalGate.verificationEvidenceSha256 -ne [string]$state.lastFinalGateVerificationEvidenceSha256) {
+        throw "AUTONOMY_STATE_COMPLETION_VERIFICATION_MISMATCH"
+    }
+}
+
 $completedCycles = @($state.completedCycles)
 $cycleHistory = @($state.cycleHistory)
 if ($completedCycles.Count -ne $cyclesCompleted) {

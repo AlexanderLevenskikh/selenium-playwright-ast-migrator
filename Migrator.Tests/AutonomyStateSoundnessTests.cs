@@ -9,7 +9,7 @@ namespace Migrator.Tests;
 public sealed class AutonomyStateSoundnessTests
 {
     [Fact]
-    public void Mig05_CompleteSuccess_RequiresPassingFinalGate()
+    public void Mig05_CompleteSuccess_RejectsMissingAndLegacyFinalGates()
     {
         var root = Path.Combine(Path.GetTempPath(), $"migrator-mig05-{Guid.NewGuid():N}");
         var workspace = Path.Combine(root, "migration");
@@ -46,44 +46,46 @@ public sealed class AutonomyStateSoundnessTests
                 missingGate.CombinedOutput,
                 StringComparison.Ordinal);
 
-            var failedGatePath = Path.Combine(root, "final-gate-fail.json");
+            var canonicalGatePath = Path.Combine(workspace, "state", "final-gate-result.json");
             File.WriteAllText(
-                failedGatePath,
+                canonicalGatePath,
                 """{"schemaVersion":"standard-run-final-gate/v2","status":"FAIL"}""");
 
-            var failedGate = RunPowerShell(
+            var failedLegacyGate = RunPowerShell(
                 script,
                 "-Action", "Stop",
                 "-Workspace", workspace,
                 "-Status", "COMPLETE",
                 "-StopReason", "SUCCESS",
-                "-FinalGatePath", failedGatePath);
+                "-FinalGatePath", canonicalGatePath);
 
-            Assert.NotEqual(0, failedGate.ExitCode);
+            Assert.NotEqual(0, failedLegacyGate.ExitCode);
             Assert.Contains(
-                "AUTONOMY_COMPLETE_FINAL_GATE_NOT_PASS",
-                failedGate.CombinedOutput,
+                "AUTONOMY_COMPLETE_FINAL_GATE_SCHEMA_INVALID",
+                failedLegacyGate.CombinedOutput,
                 StringComparison.Ordinal);
 
-            var passingGatePath = Path.Combine(root, "final-gate-pass.json");
             File.WriteAllText(
-                passingGatePath,
+                canonicalGatePath,
                 """{"schemaVersion":"standard-run-final-gate/v2","status":"PASS"}""");
 
-            var passingGate = RunPowerShell(
+            var forgedLegacyPass = RunPowerShell(
                 script,
                 "-Action", "Stop",
                 "-Workspace", workspace,
                 "-Status", "COMPLETE",
                 "-StopReason", "SUCCESS",
-                "-FinalGatePath", passingGatePath);
+                "-FinalGatePath", canonicalGatePath);
 
-            Assert.Equal(0, passingGate.ExitCode);
+            Assert.NotEqual(0, forgedLegacyPass.ExitCode);
+            Assert.Contains(
+                "AUTONOMY_COMPLETE_FINAL_GATE_SCHEMA_INVALID",
+                forgedLegacyPass.CombinedOutput,
+                StringComparison.Ordinal);
 
             using var state = JsonDocument.Parse(
                 File.ReadAllText(Path.Combine(workspace, "state", "autonomy-state.json")));
-            Assert.Equal("COMPLETE", state.RootElement.GetProperty("status").GetString());
-            Assert.Equal("SUCCESS", state.RootElement.GetProperty("stopReason").GetString());
+            Assert.Equal("RUNNING", state.RootElement.GetProperty("status").GetString());
         }
         finally
         {

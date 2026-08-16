@@ -14,6 +14,10 @@
   "lastDecision": null,
   "lastEvaluationSha256": null,
   "lastRebaselineSha256": null,
+  "lastFinalGateSha256": null,
+  "lastFinalGateRunPath": null,
+  "lastFinalGateTargetSha256": null,
+  "lastFinalGateVerificationEvidenceSha256": null,
   "lastBeforeStateHash": null,
   "lastAfterStateHash": null,
   "currentStateHash": null,
@@ -29,5 +33,6 @@
   "completedCycles": [],
   "cycleHistory": [],
   "rebaselineHistory": [],
+  "proofLedgerRequired": false,
   "stopReason": null
 }

@@ -47,6 +47,10 @@ function New-State {
         lastDecision = $null
         lastEvaluationSha256 = $null
         lastRebaselineSha256 = $null
+        lastFinalGateSha256 = $null
+        lastFinalGateRunPath = $null
+        lastFinalGateTargetSha256 = $null
+        lastFinalGateVerificationEvidenceSha256 = $null
         lastBeforeStateHash = $null
         lastAfterStateHash = $null
         currentStateHash = $null
@@ -110,6 +114,279 @@ function Get-TextSha256([string]$Text) {
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($Text)
     $hash = [System.Security.Cryptography.SHA256]::HashData($bytes)
     return [Convert]::ToHexString($hash).ToLowerInvariant()
+}
+
+
+function Get-FileSha256([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return "" }
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Normalize-PathIdentity([string]$Path) {
+    $normalized = [IO.Path]::GetFullPath($Path).Replace('\', '/').TrimEnd('/')
+    if ([IO.Path]::DirectorySeparatorChar -eq '\') {
+        $normalized = $normalized.ToLowerInvariant()
+    }
+    return $normalized
+}
+
+function Get-PathIdentitySha256([string]$Path) {
+    return Get-TextSha256 (Normalize-PathIdentity $Path)
+}
+
+function Convert-ToRelativePath([string]$BasePath, [string]$Path) {
+    $fullBase = [IO.Path]::GetFullPath($BasePath)
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    $separatorChars = [char[]]@(
+        [IO.Path]::DirectorySeparatorChar,
+        [IO.Path]::AltDirectorySeparatorChar
+    )
+    $fullBase = $fullBase.TrimEnd($separatorChars)
+    $separator = [string][IO.Path]::DirectorySeparatorChar
+    $baseWithSeparator = $fullBase
+    if (-not $baseWithSeparator.EndsWith($separator, [StringComparison]::Ordinal)) {
+        $baseWithSeparator += $separator
+    }
+    $baseUri = New-Object System.Uri -ArgumentList $baseWithSeparator
+    $pathUri = New-Object System.Uri -ArgumentList $fullPath
+    $relativeUri = $baseUri.MakeRelativeUri($pathUri).ToString()
+    return ([Uri]::UnescapeDataString($relativeUri) -replace '\\', '/')
+}
+
+function Get-GeneratedCsTreeSha256([string]$GeneratedRoot) {
+    if (-not (Test-Path -LiteralPath $GeneratedRoot -PathType Container)) { return "" }
+
+    $entries = [System.Collections.Generic.List[string]]::new()
+    foreach ($file in @(Get-ChildItem -LiteralPath $GeneratedRoot -Recurse -File -Filter "*.cs")) {
+        $relative = Convert-ToRelativePath $GeneratedRoot $file.FullName
+        $hash = Get-FileSha256 $file.FullName
+        $entries.Add("$relative`t$hash")
+    }
+    $entries.Sort([StringComparer]::Ordinal)
+    return Get-TextSha256 ($entries -join "`n")
+}
+
+function Get-FinalGateProofSha256($Gate) {
+    $material = @(
+        "standard-run-final-gate/v3",
+        [string]$Gate.status,
+        [string]$Gate.workspacePathSha256,
+        [string]$Gate.runPathSha256,
+        [string]$Gate.autonomyStateFileSha256,
+        [string]$Gate.autonomyLedgerSequence,
+        [string]$Gate.autonomyLedgerEntrySha256,
+        [string]$Gate.autonomyLedgerStateSha256,
+        [string]$Gate.autonomyInvocationId,
+        [string]$Gate.autonomyCurrentStateHash,
+        [string]$Gate.sourceSha256,
+        [string]$Gate.configSha256,
+        [string]$Gate.targetSha256,
+        [string]$Gate.toolSha256,
+        [string]$Gate.environmentSha256,
+        [string]$Gate.orchestrationReportFileSha256,
+        [string]$Gate.generatedReportFileSha256,
+        [string]$Gate.runManifestFileSha256,
+        [string]$Gate.projectVerifyReportFileSha256,
+        [string]$Gate.verificationEvidenceFileSha256,
+        [string]$Gate.verificationEvidenceSha256,
+        [string]$Gate.generatedCsTreeSha256
+    ) -join "`n"
+    return Get-TextSha256 $material
+}
+
+function Assert-FinalGateIdentity([string]$Code, $Actual, $Expected) {
+    $actualText = [string]$Actual
+    $expectedText = [string]$Expected
+    if ([string]::IsNullOrWhiteSpace($actualText) -or
+        [string]::IsNullOrWhiteSpace($expectedText) -or
+        -not [string]::Equals($actualText, $expectedText, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "$Code`: expected '$expectedText', got '$actualText'"
+    }
+}
+
+function Test-PathUnderRoot([string]$Root, [string]$Candidate) {
+    $separatorChars = [char[]]@(
+        [IO.Path]::DirectorySeparatorChar,
+        [IO.Path]::AltDirectorySeparatorChar
+    )
+    $rootFull = [IO.Path]::GetFullPath($Root).TrimEnd($separatorChars) + [IO.Path]::DirectorySeparatorChar
+    $candidateFull = [IO.Path]::GetFullPath($Candidate)
+    return $candidateFull.StartsWith($rootFull, [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Assert-FinalGateForCurrentState(
+    [string]$FinalGatePath,
+    [string]$WorkspaceFull,
+    [string]$StatePath,
+    $State,
+    $Ledger
+) {
+    if ([string]::IsNullOrWhiteSpace($FinalGatePath)) {
+        throw "AUTONOMY_COMPLETE_REQUIRES_FINAL_GATE"
+    }
+
+    $canonicalGatePath = [IO.Path]::GetFullPath((Join-Path $WorkspaceFull "state/final-gate-result.json"))
+    $resolvedFinalGatePath = Resolve-FullPath $FinalGatePath
+    if (-not [string]::Equals($resolvedFinalGatePath, $canonicalGatePath, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "AUTONOMY_COMPLETE_FINAL_GATE_PATH_INVALID: expected $canonicalGatePath, got $resolvedFinalGatePath"
+    }
+    if (-not (Test-Path -LiteralPath $resolvedFinalGatePath -PathType Leaf)) {
+        throw "AUTONOMY_COMPLETE_FINAL_GATE_NOT_FOUND: $resolvedFinalGatePath"
+    }
+
+    try { $gate = Get-Content -LiteralPath $resolvedFinalGatePath -Raw | ConvertFrom-Json }
+    catch { throw "AUTONOMY_COMPLETE_FINAL_GATE_INVALID_JSON: $($_.Exception.Message)" }
+
+    if ([string]$gate.schemaVersion -ne "standard-run-final-gate/v3") {
+        throw "AUTONOMY_COMPLETE_FINAL_GATE_SCHEMA_INVALID: $($gate.schemaVersion)"
+    }
+    if ([string]$gate.status -ne "PASS") {
+        throw "AUTONOMY_COMPLETE_FINAL_GATE_NOT_PASS: $($gate.status)"
+    }
+    if (@($gate.failures).Count -ne 0) {
+        throw "AUTONOMY_COMPLETE_FINAL_GATE_HAS_FAILURES"
+    }
+
+    $computedGateSha256 = Get-FinalGateProofSha256 $gate
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_FINAL_GATE_HASH_MISMATCH" $gate.finalGateSha256 $computedGateSha256
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_WORKSPACE_IDENTITY_MISMATCH" $gate.workspacePathSha256 (Get-PathIdentitySha256 $WorkspaceFull)
+
+    if (-not (Test-Path -LiteralPath $StatePath -PathType Leaf)) {
+        throw "AUTONOMY_COMPLETE_STATE_FILE_MISSING"
+    }
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_STATE_STALE" $gate.autonomyStateFileSha256 (Get-FileSha256 $StatePath)
+
+    if ($null -eq $Ledger) {
+        throw "AUTONOMY_COMPLETE_LEDGER_MISSING"
+    }
+    if ([long]$gate.autonomyLedgerSequence -ne [long]$Ledger.Sequence) {
+        throw "AUTONOMY_COMPLETE_LEDGER_SEQUENCE_STALE: expected $($Ledger.Sequence), got $($gate.autonomyLedgerSequence)"
+    }
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_LEDGER_ENTRY_STALE" $gate.autonomyLedgerEntrySha256 $Ledger.EntrySha256
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_LEDGER_STATE_STALE" $gate.autonomyLedgerStateSha256 $Ledger.StateSha256
+
+    if ([string]$gate.autonomyInvocationId -ne [string]$State.invocationId) {
+        throw "AUTONOMY_COMPLETE_INVOCATION_MISMATCH: expected $($State.invocationId), got $($gate.autonomyInvocationId)"
+    }
+    if ([string]$gate.autonomyCurrentStateHash -ne [string]$State.currentStateHash) {
+        throw "AUTONOMY_COMPLETE_CURRENT_STATE_MISMATCH: expected $($State.currentStateHash), got $($gate.autonomyCurrentStateHash)"
+    }
+
+    $runPath = [string]$gate.runPath
+    if ([string]::IsNullOrWhiteSpace($runPath) -or -not (Test-Path -LiteralPath $runPath -PathType Container)) {
+        throw "AUTONOMY_COMPLETE_RUN_NOT_FOUND: $runPath"
+    }
+    if (-not (Test-PathUnderRoot (Join-Path $WorkspaceFull "runs") $runPath)) {
+        throw "AUTONOMY_COMPLETE_RUN_OUTSIDE_WORKSPACE: $runPath"
+    }
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_RUN_PATH_MISMATCH" $gate.runPathSha256 (Get-PathIdentitySha256 $runPath)
+
+    $reportPath = Join-Path $runPath "orchestration-report.json"
+    $generatedReportPath = Join-Path $runPath "generated/report.json"
+    $manifestPath = Join-Path $runPath "run-manifest.json"
+    $generatedRoot = Join-Path $runPath "generated"
+    $generatedHashPath = Join-Path $generatedRoot "target-tree.sha256"
+    $verificationReportPath = Join-Path $runPath "verify-project/project-verify-report.json"
+    $verificationEvidencePath = Join-Path $runPath "verify-project/verification-evidence.json"
+
+    foreach ($pair in @(
+        @("AUTONOMY_COMPLETE_ORCHESTRATION_REPORT_STALE", $gate.orchestrationReportFileSha256, $reportPath),
+        @("AUTONOMY_COMPLETE_GENERATED_REPORT_STALE", $gate.generatedReportFileSha256, $generatedReportPath),
+        @("AUTONOMY_COMPLETE_RUN_MANIFEST_STALE", $gate.runManifestFileSha256, $manifestPath),
+        @("AUTONOMY_COMPLETE_PROJECT_VERIFY_REPORT_STALE", $gate.projectVerifyReportFileSha256, $verificationReportPath),
+        @("AUTONOMY_COMPLETE_VERIFICATION_EVIDENCE_STALE", $gate.verificationEvidenceFileSha256, $verificationEvidencePath)
+    )) {
+        $code = [string]$pair[0]
+        $expected = [string]$pair[1]
+        $path = [string]$pair[2]
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            throw "$code`: evidence file is missing: $path"
+        }
+        Assert-FinalGateIdentity $code $expected (Get-FileSha256 $path)
+    }
+
+    try { $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json }
+    catch { throw "AUTONOMY_COMPLETE_ORCHESTRATION_REPORT_INVALID_JSON: $($_.Exception.Message)" }
+    if ([string]$report.Status -notmatch '^(passed|PASS)$') {
+        throw "AUTONOMY_COMPLETE_ORCHESTRATION_NOT_PASS: $($report.Status)"
+    }
+
+    try { $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json }
+    catch { throw "AUTONOMY_COMPLETE_RUN_MANIFEST_INVALID_JSON: $($_.Exception.Message)" }
+    if ([string]$manifest.SchemaVersion -ne "migrator-run-manifest/v2") {
+        throw "AUTONOMY_COMPLETE_RUN_MANIFEST_SCHEMA_INVALID: $($manifest.SchemaVersion)"
+    }
+    if ([string]$manifest.Status -notmatch '^(passed|PASS)$') {
+        throw "AUTONOMY_COMPLETE_RUN_MANIFEST_NOT_PASS: $($manifest.Status)"
+    }
+
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_SOURCE_IDENTITY_MISMATCH" $gate.sourceSha256 $manifest.SourceSha256
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_CONFIG_IDENTITY_MISMATCH" $gate.configSha256 $manifest.ConfigSha256
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_TARGET_IDENTITY_MISMATCH" $gate.targetSha256 $manifest.TargetSha256
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_TOOL_IDENTITY_MISMATCH" $gate.toolSha256 $manifest.Tool.IdentitySha256
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_ENVIRONMENT_IDENTITY_MISMATCH" $gate.environmentSha256 $manifest.Environment.IdentitySha256
+
+    if ($null -eq $manifest.Verification) {
+        throw "AUTONOMY_COMPLETE_INTERNAL_VERIFICATION_MISSING"
+    }
+    if ([string]$manifest.Verification.Kind -ne "generated-verify" -or
+        [string]$manifest.Verification.Status -notmatch '^(passed|PASS)$' -or
+        [int]$manifest.Verification.ExitCode -ne 0) {
+        throw "AUTONOMY_COMPLETE_INTERNAL_VERIFICATION_NOT_PASS"
+    }
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_INTERNAL_SOURCE_MISMATCH" $manifest.Verification.SourceSha256 $manifest.SourceSha256
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_INTERNAL_CONFIG_MISMATCH" $manifest.Verification.ConfigSha256 $manifest.ConfigSha256
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_INTERNAL_TARGET_MISMATCH" $manifest.Verification.TargetSha256 $manifest.TargetSha256
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_INTERNAL_TOOL_MISMATCH" $manifest.Verification.ToolSha256 $manifest.Tool.IdentitySha256
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_INTERNAL_ENVIRONMENT_MISMATCH" $manifest.Verification.EnvironmentSha256 $manifest.Environment.IdentitySha256
+
+    try { $projectVerify = Get-Content -LiteralPath $verificationReportPath -Raw | ConvertFrom-Json }
+    catch { throw "AUTONOMY_COMPLETE_PROJECT_VERIFY_REPORT_INVALID_JSON: $($_.Exception.Message)" }
+    if ([string]$projectVerify.Status -notmatch '^(passed|PASS)$' -or [int]$projectVerify.ExitCode -ne 0) {
+        throw "AUTONOMY_COMPLETE_PROJECT_VERIFY_NOT_PASS: $($projectVerify.Status) exit=$($projectVerify.ExitCode)"
+    }
+
+    try { $projectEvidence = Get-Content -LiteralPath $verificationEvidencePath -Raw | ConvertFrom-Json }
+    catch { throw "AUTONOMY_COMPLETE_VERIFICATION_EVIDENCE_INVALID_JSON: $($_.Exception.Message)" }
+    if ([string]$projectEvidence.SchemaVersion -ne "migrator-verification-evidence/v1") {
+        throw "AUTONOMY_COMPLETE_VERIFICATION_EVIDENCE_SCHEMA_INVALID: $($projectEvidence.SchemaVersion)"
+    }
+    if ([string]$projectEvidence.Kind -ne "dotnet-build-exact-target" -or
+        [string]$projectEvidence.Status -notmatch '^(passed|PASS)$' -or
+        [int]$projectEvidence.ExitCode -ne 0) {
+        throw "AUTONOMY_COMPLETE_VERIFICATION_EVIDENCE_NOT_PASS"
+    }
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_PROJECT_SOURCE_MISMATCH" $projectEvidence.SourceSha256 $manifest.SourceSha256
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_PROJECT_CONFIG_MISMATCH" $projectEvidence.ConfigSha256 $manifest.ConfigSha256
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_PROJECT_TARGET_MISMATCH" $projectEvidence.TargetSha256 $manifest.TargetSha256
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_PROJECT_TOOL_MISMATCH" $projectEvidence.ToolSha256 $manifest.Tool.IdentitySha256
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_PROJECT_ENVIRONMENT_MISMATCH" $projectEvidence.EnvironmentSha256 $manifest.Environment.IdentitySha256
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_VERIFICATION_EVIDENCE_IDENTITY_MISMATCH" $gate.verificationEvidenceSha256 $projectEvidence.EvidenceSha256
+
+    if (-not (Test-Path -LiteralPath $generatedHashPath -PathType Leaf)) {
+        throw "AUTONOMY_COMPLETE_TARGET_TREE_MARKER_MISSING"
+    }
+    $targetMarker = (Get-Content -LiteralPath $generatedHashPath -Raw).Trim()
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_TARGET_TREE_MARKER_MISMATCH" $targetMarker $manifest.TargetSha256
+
+    $generatedRootFull = [IO.Path]::GetFullPath($generatedRoot).TrimEnd([char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)) + [IO.Path]::DirectorySeparatorChar
+    foreach ($targetFile in @($manifest.TargetFiles)) {
+        $relative = ([string]$targetFile.RelativePath).Replace('\', '/').TrimStart('/')
+        if ([string]::IsNullOrWhiteSpace($relative)) {
+            throw "AUTONOMY_COMPLETE_TARGET_FILE_IDENTITY_INVALID"
+        }
+        $candidate = [IO.Path]::GetFullPath((Join-Path $generatedRoot ($relative.Replace('/', [IO.Path]::DirectorySeparatorChar))))
+        if (-not $candidate.StartsWith($generatedRootFull, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "AUTONOMY_COMPLETE_TARGET_FILE_ESCAPES_ROOT: $relative"
+        }
+        if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            throw "AUTONOMY_COMPLETE_TARGET_FILE_MISSING: $relative"
+        }
+        Assert-FinalGateIdentity "AUTONOMY_COMPLETE_TARGET_FILE_HASH_MISMATCH" (Get-FileSha256 $candidate) $targetFile.ContentSha256
+    }
+
+    Assert-FinalGateIdentity "AUTONOMY_COMPLETE_GENERATED_TREE_STALE" $gate.generatedCsTreeSha256 (Get-GeneratedCsTreeSha256 $generatedRoot)
+    return $gate
 }
 
 function Write-Utf8TextAtomic([string]$Path, [string]$Text) {
@@ -469,6 +746,9 @@ else {
 
 switch ($Action) {
     "StartInvocation" {
+        if ([string]$state.status -eq "COMPLETE") {
+            throw "AUTONOMY_COMPLETE_IS_TERMINAL: completed migration cannot start a new invocation."
+        }
         if ([bool]$state.cycleInProgress) {
             throw "AUTONOMY_ACTIVE_CYCLE_MUST_BE_RESOLVED: record or roll back the active cycle before starting a new invocation."
         }
@@ -732,22 +1012,18 @@ switch ($Action) {
             throw "AUTONOMY_COMPLETE_REQUIRES_CLEAN_TRANSACTION_STATE"
         }
         if ($Status -eq "COMPLETE") {
-            if ([string]::IsNullOrWhiteSpace($FinalGatePath)) {
-                throw "AUTONOMY_COMPLETE_REQUIRES_FINAL_GATE"
-            }
+            $finalGate = Assert-FinalGateForCurrentState `
+                -FinalGatePath $FinalGatePath `
+                -WorkspaceFull $workspaceFull `
+                -StatePath $statePath `
+                -State $state `
+                -Ledger $ledger
 
-            $resolvedFinalGatePath = Resolve-FullPath $FinalGatePath
-            if (-not (Test-Path -LiteralPath $resolvedFinalGatePath -PathType Leaf)) {
-                throw "AUTONOMY_COMPLETE_FINAL_GATE_NOT_FOUND: $resolvedFinalGatePath"
-            }
-
-            $finalGate = Get-Content -LiteralPath $resolvedFinalGatePath -Raw | ConvertFrom-Json
-            if ([string]$finalGate.schemaVersion -ne "standard-run-final-gate/v2") {
-                throw "AUTONOMY_COMPLETE_FINAL_GATE_SCHEMA_INVALID: $($finalGate.schemaVersion)"
-            }
-            if ([string]$finalGate.status -ne "PASS") {
-                throw "AUTONOMY_COMPLETE_FINAL_GATE_NOT_PASS: $($finalGate.status)"
-            }
+            # Carry the exact completion proof into the next protected ledger snapshot.
+            $state.lastFinalGateSha256 = [string]$finalGate.finalGateSha256
+            $state.lastFinalGateRunPath = [string]$finalGate.runPath
+            $state.lastFinalGateTargetSha256 = [string]$finalGate.targetSha256
+            $state.lastFinalGateVerificationEvidenceSha256 = [string]$finalGate.verificationEvidenceSha256
         }
         if ($state.mode -eq "continuous" -and $StopReason -eq "AUTONOMOUS_CYCLE_BUDGET_REACHED") {
             throw "AUTONOMY_CONTINUOUS_BUDGET_IS_CHECKPOINT_NOT_STOP"

@@ -90,6 +90,10 @@ public sealed class StandardInstructionContractTests
         Assert.Contains("distinct candidate fingerprints", command);
         Assert.Contains("Independent validation dimensions", command);
         Assert.Contains("validate-handoff.ps1", command);
+        Assert.Contains("Success proof protocol", command);
+        Assert.Contains("proof-carrying and single-use", command);
+        Assert.Contains("-FinalGatePath migration/state/final-gate-result.json", command);
+        Assert.Contains("completed autonomy state is terminal", command, StringComparison.OrdinalIgnoreCase);
 
         var orchestrator = Read(".opencode/agents/orchestrator.md");
         var contract = Read("templates/migration-kit/AGENT_CONTRACT.md");
