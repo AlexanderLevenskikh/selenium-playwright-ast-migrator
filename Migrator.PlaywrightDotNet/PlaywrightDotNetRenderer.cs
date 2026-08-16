@@ -32,6 +32,7 @@ public partial class PlaywrightDotNetRenderer : IRenderer
     int _suppressedSideEffectLine;
     string? _suppressedSideEffectSource;
     bool _usedMigrationScaffold;
+    int? _currentSourceLine;
     string _pageVariable;
 
     public PlaywrightDotNetRenderer(string indent = "\t")
@@ -52,6 +53,7 @@ public partial class PlaywrightDotNetRenderer : IRenderer
     {
         _tempVarCounter = 0;
         _usedMigrationScaffold = false;
+        _currentSourceLine = null;
         var sb = new StringBuilder();
 
         var testHost = model.TestHost;
@@ -509,6 +511,20 @@ public partial class PlaywrightDotNetRenderer : IRenderer
 
     void RenderActionWithSafety(StringBuilder sb, TestAction action)
     {
+        var previousSourceLine = _currentSourceLine;
+        _currentSourceLine = action.SourceLine > 0 ? action.SourceLine : null;
+        try
+        {
+            RenderActionWithSafetyCore(sb, action);
+        }
+        finally
+        {
+            _currentSourceLine = previousSourceLine;
+        }
+    }
+
+    void RenderActionWithSafetyCore(StringBuilder sb, TestAction action)
+    {
         var sourceText = GetActionSourceText(action);
         var declaredVariables = ExtractVariableNames(sourceText).ToArray();
 
@@ -810,7 +826,10 @@ public partial class PlaywrightDotNetRenderer : IRenderer
 
     void AppendSmartTodo(StringBuilder sb, string message, string code, string? reason = null, string? nextAction = null, string? source = null)
     {
-        sb.AppendLine($"{_indent}{_indent}// TODO: {message} [MIGRATOR:{code}]");
+        var sourceLineMarker = _currentSourceLine is > 0
+            ? $" [MIGRATOR-SOURCE-LINE:{_currentSourceLine.Value}]"
+            : string.Empty;
+        sb.AppendLine($"{_indent}{_indent}// TODO: {message} [MIGRATOR:{code}]{sourceLineMarker}");
 
         if (!string.IsNullOrWhiteSpace(reason))
             sb.AppendLine($"{_indent}{_indent}//   Reason: {EscapeComment(reason)}");

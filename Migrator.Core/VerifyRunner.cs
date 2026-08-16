@@ -22,12 +22,19 @@ public delegate List<(int Line, string Message)> SyntaxCheckerDelegate(string co
 /// <summary>
 /// A single verify issue found during quality gate check.
 /// </summary>
+public sealed record VerifyLocation(
+    string File,
+    int? Line
+);
+
 public record VerifyIssue(
     string Category,
     IssueSeverity Severity,
     string Message,
     string? File,
-    int? Line
+    int? Line,
+    VerifyLocation? SourceLocation = null,
+    VerifyLocation? GeneratedLocation = null
 );
 
 /// <summary>
@@ -180,21 +187,46 @@ public static class VerifyRunner
             // Generated code checks
             if (syntaxChecker != null)
             {
-                CheckSyntaxWithChecker(generatedOutput, sourcePath, fileIssues, syntaxChecker);
+                CheckSyntaxWithChecker(
+                    generatedOutput,
+                    sourcePath,
+                    generatedFile.RelativePath,
+                    fileIssues,
+                    syntaxChecker);
             }
             totalSyntaxErrors += fileIssues.Count(i => i.Category == "Syntax" && i.Severity == IssueSeverity.Error);
 
-            CheckTodoComments(generatedOutput, sourcePath, fileIssues, out int fileTodoComments, out int filePageTodoCalls);
+            CheckTodoComments(
+                generatedOutput,
+                sourcePath,
+                generatedFile.RelativePath,
+                fileIssues,
+                out int fileTodoComments,
+                out int filePageTodoCalls);
             totalTodoComments += fileTodoComments;
             totalPageTodoCalls += filePageTodoCalls;
 
-            CheckPlaceholderLeftovers(generatedOutput, sourcePath, config, fileIssues);
+            CheckPlaceholderLeftovers(
+                generatedOutput,
+                sourcePath,
+                generatedFile.RelativePath,
+                config,
+                fileIssues);
             totalPlaceholderLeftovers += fileIssues.Count(i => i.Category == "PlaceholderLeftover");
 
-            CheckSuspiciousLiteralVariables(generatedOutput, sourcePath, config, fileIssues);
+            CheckSuspiciousLiteralVariables(
+                generatedOutput,
+                sourcePath,
+                generatedFile.RelativePath,
+                config,
+                fileIssues);
             totalSuspiciousLiteralVariables += fileIssues.Count(i => i.Category == "SuspiciousLiteralVariable");
 
-            CheckDuplicateLocalVariables(generatedOutput, sourcePath, fileIssues);
+            CheckDuplicateLocalVariables(
+                generatedOutput,
+                sourcePath,
+                generatedFile.RelativePath,
+                fileIssues);
             totalDuplicateLocalVariables += fileIssues.Count(i => i.Category == "DuplicateLocalVariable");
 
             // IR-level counts
@@ -683,60 +715,99 @@ public static class VerifyRunner
 
     // --- Generated code checks ---
 
-    static void CheckSyntaxWithChecker(string generatedCode, string sourceFile, List<VerifyIssue> issues, SyntaxCheckerDelegate checker)
+    static void CheckSyntaxWithChecker(
+        string generatedCode,
+        string sourceFile,
+        string generatedFile,
+        List<VerifyIssue> issues,
+        SyntaxCheckerDelegate checker)
     {
         var errors = checker(generatedCode);
+        var lines = SplitGeneratedLines(generatedCode);
         foreach (var (line, message) in errors)
         {
-            issues.Add(new VerifyIssue(
-                "Syntax", IssueSeverity.Error,
+            AddGeneratedIssue(
+                issues,
+                "Syntax",
+                IssueSeverity.Error,
                 $"Generated syntax error at line {line}: {message}",
-                sourceFile, line));
+                sourceFile,
+                generatedFile,
+                line,
+                ResolveSourceLine(lines, line));
         }
     }
 
-    static void CheckTodoComments(string generatedCode, string sourceFile, List<VerifyIssue> issues, out int todoCount, out int pageTodoCount)
+    static void CheckTodoComments(
+        string generatedCode,
+        string sourceFile,
+        string generatedFile,
+        List<VerifyIssue> issues,
+        out int todoCount,
+        out int pageTodoCount)
     {
         todoCount = 0;
         pageTodoCount = 0;
 
-        var lines = generatedCode.Split('\n');
+        var lines = SplitGeneratedLines(generatedCode);
         for (int i = 0; i < lines.Length; i++)
         {
             var line = lines[i];
             var trimmed = line.Trim();
+            var generatedLine = i + 1;
+            var sourceLine = ResolveSourceLine(lines, generatedLine);
 
-            // Count TODO comments
-            if (trimmed.StartsWith("// TODO:"))
+            if (trimmed.StartsWith("// TODO:", StringComparison.Ordinal))
             {
                 todoCount++;
                 var todoMessage = trimmed.Substring(8).Trim();
-                issues.Add(new VerifyIssue(
-                    "Todo", IssueSeverity.Warning,
+                AddGeneratedIssue(
+                    issues,
+                    "Todo",
+                    IssueSeverity.Warning,
                     $"TODO comment found: {todoMessage}",
-                    sourceFile, i + 1));
+                    sourceFile,
+                    generatedFile,
+                    generatedLine,
+                    sourceLine);
 
-                AddTodoDiagnosticIssues(todoMessage, sourceFile, i + 1, issues);
+                AddTodoDiagnosticIssues(
+                    todoMessage,
+                    sourceFile,
+                    generatedFile,
+                    generatedLine,
+                    sourceLine,
+                    issues);
             }
 
-            // Detect Page.TODO_ calls (actual code, not comments)
-            if (trimmed.Contains("Page.TODO_") && !trimmed.StartsWith("//"))
+            if (trimmed.Contains("Page.TODO_", StringComparison.Ordinal)
+                && !trimmed.StartsWith("//", StringComparison.Ordinal))
             {
                 pageTodoCount++;
-                issues.Add(new VerifyIssue(
-                    "PageTodo", IssueSeverity.Error,
+                AddGeneratedIssue(
+                    issues,
+                    "PageTodo",
+                    IssueSeverity.Error,
                     $"Page.TODO_* call found: {trimmed}",
-                    sourceFile, i + 1));
+                    sourceFile,
+                    generatedFile,
+                    generatedLine,
+                    sourceLine);
             }
 
-            // Detect active Page.Locator/GetBy... calls with TODO targets (not commented out).
-            if (!trimmed.StartsWith("//") && IsActiveTodoLocatorCall(trimmed))
+            if (!trimmed.StartsWith("//", StringComparison.Ordinal)
+                && IsActiveTodoLocatorCall(trimmed))
             {
                 pageTodoCount++;
-                issues.Add(new VerifyIssue(
-                    "ActiveTodoLocator", IssueSeverity.Error,
+                AddGeneratedIssue(
+                    issues,
+                    "ActiveTodoLocator",
+                    IssueSeverity.Error,
                     $"Active Page.Locator/GetBy... with TODO target found: {trimmed}",
-                    sourceFile, i + 1));
+                    sourceFile,
+                    generatedFile,
+                    generatedLine,
+                    sourceLine);
             }
         }
     }
@@ -749,81 +820,107 @@ public static class VerifyRunner
             RegexOptions.IgnoreCase);
     }
 
-    static void AddTodoDiagnosticIssues(string todoMessage, string sourceFile, int line, List<VerifyIssue> issues)
+    static void AddTodoDiagnosticIssues(
+        string todoMessage,
+        string sourceFile,
+        string generatedFile,
+        int generatedLine,
+        int? sourceLine,
+        List<VerifyIssue> issues)
     {
         if (todoMessage.Contains("depends on unresolved symbol", StringComparison.OrdinalIgnoreCase))
         {
-            issues.Add(new VerifyIssue(
-                "BlockedSymbolUsage", IssueSeverity.Warning,
+            AddGeneratedIssue(
+                issues,
+                "BlockedSymbolUsage",
+                IssueSeverity.Warning,
                 todoMessage,
-                sourceFile, line));
-            issues.Add(new VerifyIssue(
-                "DownstreamStatementBlocked", IssueSeverity.Warning,
+                sourceFile,
+                generatedFile,
+                generatedLine,
+                sourceLine);
+            AddGeneratedIssue(
+                issues,
+                "DownstreamStatementBlocked",
+                IssueSeverity.Warning,
                 todoMessage,
-                sourceFile, line));
+                sourceFile,
+                generatedFile,
+                generatedLine,
+                sourceLine);
         }
 
         if (todoMessage.Contains("uses source-only identifier", StringComparison.OrdinalIgnoreCase))
         {
-            issues.Add(new VerifyIssue(
-                "SourceOnlyIdentifierUsage", IssueSeverity.Warning,
+            AddGeneratedIssue(
+                issues,
+                "SourceOnlyIdentifierUsage",
+                IssueSeverity.Warning,
                 todoMessage,
-                sourceFile, line));
+                sourceFile,
+                generatedFile,
+                generatedLine,
+                sourceLine);
         }
 
         if (todoMessage.Contains("raw statement", StringComparison.OrdinalIgnoreCase))
         {
-            issues.Add(new VerifyIssue(
-                "RawDeclarationVariablesBlocked", IssueSeverity.Info,
+            AddGeneratedIssue(
+                issues,
+                "RawDeclarationVariablesBlocked",
+                IssueSeverity.Info,
                 todoMessage,
-                sourceFile, line));
+                sourceFile,
+                generatedFile,
+                generatedLine,
+                sourceLine);
         }
     }
 
-    static void CheckPlaceholderLeftovers(string generatedCode, string sourceFile, ProjectAdapterConfig? config, List<VerifyIssue> issues)
+    static void CheckPlaceholderLeftovers(
+        string generatedCode,
+        string sourceFile,
+        string generatedFile,
+        ProjectAdapterConfig? config,
+        List<VerifyIssue> issues)
     {
         var knownPlaceholders = CollectParameterizedPlaceholderNames(config);
 
         if (knownPlaceholders.Count == 0) return;
 
-        var lines = generatedCode.Split('\n');
+        var lines = SplitGeneratedLines(generatedCode);
         for (int i = 0; i < lines.Length; i++)
         {
             var line = lines[i];
             var trimmed = line.Trim();
 
-            // Skip comments
-            if (trimmed.StartsWith("//")) continue;
+            if (trimmed.StartsWith("//", StringComparison.Ordinal)) continue;
 
             foreach (var ph in knownPlaceholders)
             {
                 var placeholderToken = "{" + ph + "}";
                 var inInterpolated = false;
 
-                // Check if this is inside a valid interpolated string $"<...>"
-                // Scan the line for $" and track whether the placeholder falls within the string bounds.
                 var pi = 0;
-                while (pi < line.Length && line.IndexOf(placeholderToken, pi, System.StringComparison.Ordinal) >= 0)
+                while (pi < line.Length && line.IndexOf(placeholderToken, pi, StringComparison.Ordinal) >= 0)
                 {
-                    var phIdx = line.IndexOf(placeholderToken, pi, System.StringComparison.Ordinal);
+                    var phIdx = line.IndexOf(placeholderToken, pi, StringComparison.Ordinal);
 
-                    // Find the nearest $" before this placeholder position
                     var dollarQuoteIdx = -1;
                     for (var si = phIdx - 1; si >= 0; si--)
                     {
                         if (si + 1 < phIdx && line[si] == '$' && line[si + 1] == '"')
                         {
-                            dollarQuoteIdx = si + 1; // points to the opening "
+                            dollarQuoteIdx = si + 1;
                             break;
                         }
-                        // If we hit another " that isn't preceded by $, this $" can't cover the placeholder
+
                         if (line[si] == '"' && (si == 0 || line[si - 1] != '$'))
                             break;
                     }
 
                     if (dollarQuoteIdx >= 0)
                     {
-                        // Check if placeholder is before the closing " of this interpolated string
                         var closingQuote = FindClosingQuote(line, dollarQuoteIdx);
                         if (closingQuote > phIdx)
                         {
@@ -835,12 +932,18 @@ public static class VerifyRunner
                     pi = phIdx + placeholderToken.Length;
                 }
 
-                if (!inInterpolated && trimmed.Contains(placeholderToken))
+                if (!inInterpolated && trimmed.Contains(placeholderToken, StringComparison.Ordinal))
                 {
-                    issues.Add(new VerifyIssue(
-                        "PlaceholderLeftover", IssueSeverity.Error,
+                    var generatedLine = i + 1;
+                    AddGeneratedIssue(
+                        issues,
+                        "PlaceholderLeftover",
+                        IssueSeverity.Error,
                         $"Unresolved placeholder '{placeholderToken}' found in generated code",
-                        sourceFile, i + 1));
+                        sourceFile,
+                        generatedFile,
+                        generatedLine,
+                        ResolveSourceLine(lines, generatedLine));
                 }
             }
         }
@@ -856,10 +959,10 @@ public static class VerifyRunner
                 i += 2;
                 continue;
             }
+
             if (line[i] == '"')
-            {
                 return i;
-            }
+
             if (line[i] == '{')
             {
                 var depth = 1;
@@ -872,32 +975,35 @@ public static class VerifyRunner
                 }
                 continue;
             }
+
             i++;
         }
+
         return line.Length;
     }
 
-    static void CheckSuspiciousLiteralVariables(string generatedCode, string sourceFile, ProjectAdapterConfig? config, List<VerifyIssue> issues)
+    static void CheckSuspiciousLiteralVariables(
+        string generatedCode,
+        string sourceFile,
+        string generatedFile,
+        ProjectAdapterConfig? config,
+        List<VerifyIssue> issues)
     {
         var knownPlaceholders = CollectParameterizedPlaceholderNames(config);
 
         if (knownPlaceholders.Count == 0) return;
 
-        var lines = generatedCode.Split('\n');
+        var lines = SplitGeneratedLines(generatedCode);
         for (int i = 0; i < lines.Length; i++)
         {
             var line = lines[i];
             var trimmed = line.Trim();
 
-            // Skip comments
-            if (trimmed.StartsWith("//")) continue;
-
-            // Skip interpolated strings (valid usage)
+            if (trimmed.StartsWith("//", StringComparison.Ordinal)) continue;
             if (line.Contains('$')) continue;
 
             foreach (var ph in knownPlaceholders)
             {
-                // Check for quoted literal of the variable name: "sortOrder" or 'sortOrder'
                 var suspiciousPatterns = new[]
                 {
                     $"\"{ph}\"",
@@ -906,22 +1012,31 @@ public static class VerifyRunner
 
                 foreach (var pattern in suspiciousPatterns)
                 {
-                    if (trimmed.Contains(pattern))
+                    if (trimmed.Contains(pattern, StringComparison.Ordinal))
                     {
-                        issues.Add(new VerifyIssue(
-                            "SuspiciousLiteralVariable", IssueSeverity.Error,
+                        var generatedLine = i + 1;
+                        AddGeneratedIssue(
+                            issues,
+                            "SuspiciousLiteralVariable",
+                            IssueSeverity.Error,
                             $"Suspicious literal variable name '{pattern}' found — likely a placeholder substitution issue",
-                            sourceFile, i + 1));
+                            sourceFile,
+                            generatedFile,
+                            generatedLine,
+                            ResolveSourceLine(lines, generatedLine));
                     }
                 }
             }
         }
     }
 
-    static void CheckDuplicateLocalVariables(string generatedCode, string sourceFile, List<VerifyIssue> issues)
+    static void CheckDuplicateLocalVariables(
+        string generatedCode,
+        string sourceFile,
+        string generatedFile,
+        List<VerifyIssue> issues)
     {
-        // Simple heuristic: track var declarations per method scope
-        var lines = generatedCode.Split('\n');
+        var lines = SplitGeneratedLines(generatedCode);
         var currentScope = new HashSet<string>();
         int scopeDepth = 0;
 
@@ -929,31 +1044,36 @@ public static class VerifyRunner
         {
             var trimmed = lines[i].Trim();
 
-            // Track scope boundaries (simplified: { increases depth, } decreases)
             foreach (var ch in trimmed)
             {
                 if (ch == '{') scopeDepth++;
                 if (ch == '}') scopeDepth--;
             }
 
-            // Detect new method scope (public/private method declaration)
-            if (trimmed.StartsWith("public ") || trimmed.StartsWith("private ") || trimmed.StartsWith("protected "))
+            if (trimmed.StartsWith("public ", StringComparison.Ordinal)
+                || trimmed.StartsWith("private ", StringComparison.Ordinal)
+                || trimmed.StartsWith("protected ", StringComparison.Ordinal))
             {
                 currentScope.Clear();
             }
 
-            // Detect var declarations
-            if (trimmed.StartsWith("var ") && trimmed.Contains('='))
+            if (trimmed.StartsWith("var ", StringComparison.Ordinal) && trimmed.Contains('='))
             {
                 var eqIdx = trimmed.IndexOf('=');
                 var varName = trimmed.Substring(4, eqIdx - 4).Trim();
 
                 if (currentScope.Contains(varName))
                 {
-                    issues.Add(new VerifyIssue(
-                        "DuplicateLocalVariable", IssueSeverity.Warning,
+                    var generatedLine = i + 1;
+                    AddGeneratedIssue(
+                        issues,
+                        "DuplicateLocalVariable",
+                        IssueSeverity.Warning,
                         $"Duplicate local variable 'var {varName}' in method scope",
-                        sourceFile, i + 1));
+                        sourceFile,
+                        generatedFile,
+                        generatedLine,
+                        ResolveSourceLine(lines, generatedLine));
                 }
                 else
                 {
@@ -963,6 +1083,54 @@ public static class VerifyRunner
         }
     }
 
+    static string[] SplitGeneratedLines(string generatedCode) =>
+        generatedCode.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
+
+    static int? ResolveSourceLine(IReadOnlyList<string> generatedLines, int generatedLine)
+    {
+        if (generatedLine <= 0 || generatedLine > generatedLines.Count)
+            return null;
+
+        var line = generatedLines[generatedLine - 1];
+
+        var marker = Regex.Match(
+            line,
+            @"\[MIGRATOR-SOURCE-LINE:(?<line>\d+)\]",
+            RegexOptions.CultureInvariant);
+        if (marker.Success && int.TryParse(marker.Groups["line"].Value, out var markerLine))
+            return markerLine;
+
+        var legacyLine = Regex.Match(
+            line,
+            @"//\s*line\s+(?<line>\d+)\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (legacyLine.Success && int.TryParse(legacyLine.Groups["line"].Value, out var sourceLine))
+            return sourceLine;
+
+        return null;
+    }
+
+    static void AddGeneratedIssue(
+        List<VerifyIssue> issues,
+        string category,
+        IssueSeverity severity,
+        string message,
+        string sourceFile,
+        string generatedFile,
+        int generatedLine,
+        int? sourceLine)
+    {
+        issues.Add(new VerifyIssue(
+            category,
+            severity,
+            message,
+            generatedFile,
+            generatedLine,
+            SourceLocation: new VerifyLocation(sourceFile, sourceLine),
+            GeneratedLocation: new VerifyLocation(generatedFile, generatedLine)));
+    }
     static HashSet<string> ExtractPlaceholders(string text)
     {
         var placeholders = new HashSet<string>();
@@ -1172,7 +1340,7 @@ public static class VerifyReportWriter
             if (f.ActiveScope != null)
                 sb.AppendLine($"  Scope: {f.ActiveScope}");
             foreach (var issue in f.Issues)
-                sb.AppendLine($"  [{issue.Severity}] {issue.Message}");
+                sb.AppendLine($"  [{issue.Severity}] {FormatIssue(issue)}");
         }
 
         return sb.ToString();
@@ -1211,7 +1379,17 @@ public static class VerifyReportWriter
                     severity = i.Severity.ToString(),
                     message = i.Message,
                     file = i.File,
-                    line = i.Line
+                    line = i.Line,
+                    sourceLocation = i.SourceLocation is null ? null : new
+                    {
+                        file = i.SourceLocation.File,
+                        line = i.SourceLocation.Line
+                    },
+                    generatedLocation = i.GeneratedLocation is null ? null : new
+                    {
+                        file = i.GeneratedLocation.File,
+                        line = i.GeneratedLocation.Line
+                    }
                 }).ToArray()
             }).ToArray(),
             issues = report.Issues.Select(i => new
@@ -1220,7 +1398,17 @@ public static class VerifyReportWriter
                 severity = i.Severity.ToString(),
                 message = i.Message,
                 file = i.File,
-                line = i.Line
+                line = i.Line,
+                sourceLocation = i.SourceLocation is null ? null : new
+                {
+                    file = i.SourceLocation.File,
+                    line = i.SourceLocation.Line
+                },
+                generatedLocation = i.GeneratedLocation is null ? null : new
+                {
+                    file = i.GeneratedLocation.File,
+                    line = i.GeneratedLocation.Line
+                }
             }).ToArray()
         };
 
@@ -1229,11 +1417,25 @@ public static class VerifyReportWriter
 
     static string FormatIssue(VerifyIssue issue)
     {
-        var loc = "";
-        if (issue.File != null)
-            loc = $"{Path.GetFileName(issue.File)}";
-        if (issue.Line.HasValue)
-            loc += $":line {issue.Line.Value}";
-        return $"{(loc != null ? loc + ": " : "")}{issue.Message}";
+        var primary = FormatLocation(issue.File, issue.Line);
+        var provenance = "";
+
+        if (issue.SourceLocation is not null && issue.GeneratedLocation is not null)
+        {
+            provenance =
+                $" [source: {FormatLocation(issue.SourceLocation.File, issue.SourceLocation.Line)}; " +
+                $"generated: {FormatLocation(issue.GeneratedLocation.File, issue.GeneratedLocation.Line)}]";
+        }
+
+        return $"{(primary.Length > 0 ? primary + ": " : "")}{issue.Message}{provenance}";
+    }
+
+    static string FormatLocation(string? file, int? line)
+    {
+        if (string.IsNullOrWhiteSpace(file))
+            return line.HasValue ? $"line {line.Value}" : "";
+
+        var location = Path.GetFileName(file);
+        return line.HasValue ? $"{location}:line {line.Value}" : location;
     }
 }
