@@ -36,7 +36,8 @@ public sealed record RunEnvironmentIdentity(
     string Culture,
     string UICulture,
     string NewLine,
-    string IdentitySha256);
+    string IdentitySha256,
+    string? AssemblySetSha256 = null);
 
 /// <summary>
 /// Machine-readable verification evidence. Evidence identity deliberately excludes the

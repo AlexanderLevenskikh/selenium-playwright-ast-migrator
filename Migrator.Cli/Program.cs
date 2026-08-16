@@ -38,6 +38,13 @@ if (args.Length > 0 && string.Equals(args[0], "lab", StringComparison.OrdinalIgn
 if (args.Length > 0 && string.Equals(args[0], "remediation", StringComparison.OrdinalIgnoreCase))
     return RemediationCommand.Run(args.Skip(1).ToArray());
 
+if (args.Length > 0
+    && string.Equals(args[0], "run", StringComparison.OrdinalIgnoreCase)
+    && RunDeterminismCommand.IsRunTwiceRequest(args.Skip(1).ToArray()))
+{
+    return RunDeterminismCommand.RunTwice(args.Skip(1).ToArray());
+}
+
 if (args.Length > 1
     && string.Equals(args[0], "config", StringComparison.OrdinalIgnoreCase)
     && (string.Equals(args[1], "merge-deltas", StringComparison.OrdinalIgnoreCase)
@@ -1752,6 +1759,36 @@ static RunEnvironmentIdentity CreateRunEnvironmentIdentity()
     var culture = System.Globalization.CultureInfo.CurrentCulture.Name;
     var uiCulture = System.Globalization.CultureInfo.CurrentUICulture.Name;
     var newLine = Environment.NewLine == "\r\n" ? "CRLF" : Environment.NewLine == "\n" ? "LF" : Convert.ToHexString(Encoding.UTF8.GetBytes(Environment.NewLine));
+
+    var assemblySet = AppDomain.CurrentDomain.GetAssemblies()
+        .Where(assembly => !assembly.IsDynamic)
+        .Select(assembly =>
+        {
+            var name = assembly.GetName();
+            string mvid;
+            try
+            {
+                mvid = assembly.ManifestModule.ModuleVersionId.ToString("D");
+            }
+            catch
+            {
+                mvid = string.Empty;
+            }
+
+            return new
+            {
+                name = name.Name ?? string.Empty,
+                version = name.Version?.ToString() ?? string.Empty,
+                culture = name.CultureName ?? string.Empty,
+                mvid
+            };
+        })
+        .OrderBy(assembly => assembly.name, StringComparer.Ordinal)
+        .ThenBy(assembly => assembly.version, StringComparer.Ordinal)
+        .ThenBy(assembly => assembly.mvid, StringComparer.Ordinal)
+        .ToArray();
+
+    var assemblySetSha256 = CanonicalJsonHasher.ComputeSha256(assemblySet);
     var identitySha256 = CanonicalJsonHasher.ComputeSha256(new
     {
         runtimeIdentifier,
@@ -1760,7 +1797,8 @@ static RunEnvironmentIdentity CreateRunEnvironmentIdentity()
         processArchitecture,
         culture,
         uiCulture,
-        newLine
+        newLine,
+        assemblySetSha256
     });
 
     return new RunEnvironmentIdentity(
@@ -1771,9 +1809,9 @@ static RunEnvironmentIdentity CreateRunEnvironmentIdentity()
         culture,
         uiCulture,
         newLine,
-        identitySha256);
+        identitySha256,
+        assemblySetSha256);
 }
-
 static void WriteVerificationEvidence(string directory, VerificationEvidence evidence)
 {
     Directory.CreateDirectory(directory);
@@ -9988,6 +10026,10 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
     File.WriteAllText(
         Path.Combine(outPath, "run-manifest.json"),
         JsonSerializer.Serialize(runManifest, new JsonSerializerOptions { WriteIndented = true }));
+    var runDigest = RunDigest.ComputeDirectory(outPath);
+    File.WriteAllText(
+        Path.Combine(outPath, "run-digest.json"),
+        JsonSerializer.Serialize(runDigest, new JsonSerializerOptions { WriteIndented = true }));
 
     // Console summary
     Console.WriteLine();
