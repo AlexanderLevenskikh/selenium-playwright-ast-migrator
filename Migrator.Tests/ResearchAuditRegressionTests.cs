@@ -159,6 +159,112 @@ public class ComplexSignatureTests
         Assert.Equal(0, report.SuccessfullyConvertedTests);
     }
 
+    [Fact]
+    public void Mig01_AlreadyMigratedPlaywrightFixture_IsBlockedSource()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"migrator-mig01-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var source = Path.Combine(root, "LoginTestsPlaywright.cs");
+        File.WriteAllText(
+            source,
+            """
+            using Microsoft.Playwright.NUnit;
+
+            namespace Sample.Tests;
+
+            public class LoginTestsPlaywright : PageTest
+            {
+                public async Task Login()
+                {
+                    await Page.GotoAsync("https://example.test");
+                }
+            }
+            """);
+
+        try
+        {
+            var parser = new RoslynTestFileParser(new ProjectAdapterConfig
+            {
+                SourceProjectName = "sample"
+            });
+
+            var error = Assert.Throws<SourceInputBlockedException>(() => parser.ParseDirectory(root));
+
+            Assert.Equal(SourceInputBlockedException.StableCode, error.Code);
+            Assert.Contains(SourceInputBlockedException.AlreadyMigratedReason, error.Message, StringComparison.Ordinal);
+            Assert.Equal(source, error.FilePath);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Mig02_SourceActionsCannotDisappearIntoVacuumTarget()
+    {
+        var source = new TestFileModel(
+            FilePath: "Vacuum.cs",
+            Namespace: "Sample.Tests",
+            ClassName: "VacuumTests",
+            BaseClassName: null,
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel(
+                    "KeepsBehavior",
+                    null,
+                    Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(),
+                    new TestAction[]
+                    {
+                        new RawStatementAction(10, "page.Submit.Click();")
+                    })
+            });
+
+        var target = new TestFileModel(
+            FilePath: "Vacuum.cs",
+            Namespace: "Sample.Tests",
+            ClassName: "VacuumTestsPlaywright",
+            BaseClassName: "PageTest",
+            SetUpActions: Array.Empty<TestAction>(),
+            Tests: new[]
+            {
+                new TestModel(
+                    "KeepsBehavior",
+                    null,
+                    Array.Empty<TestCaseData>(),
+                    Array.Empty<MethodParameterModel>(),
+                    Array.Empty<TestAction>())
+            });
+
+        const string generated = """
+            using Microsoft.Playwright.NUnit;
+            namespace Sample.Tests;
+            public class VacuumTestsPlaywright : PageTest
+            {
+                public async Task KeepsBehavior()
+                {
+                }
+            }
+            """;
+
+        var pipelineResult = new PipelineResult(
+            source,
+            target,
+            generated,
+            ReportBuilder.Build(target, generated));
+
+        var report = VerifyRunner.Run(
+            new[] { pipelineResult },
+            config: null);
+
+        Assert.Equal("failed", report.Status);
+        var issue = Assert.Single(report.Issues.Where(item => item.Category == "VacuumTest"));
+        Assert.Equal(IssueSeverity.Error, issue.Severity);
+        Assert.Contains("no active migrated actions", issue.Message, StringComparison.Ordinal);
+    }
+
     static ProjectAdapterConfig CreateScopedConfig(QualityGatesConfig? qualityGates)
     {
         return new ProjectAdapterConfig

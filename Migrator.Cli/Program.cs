@@ -542,6 +542,16 @@ try
         results = new[] { pipeline.ProcessFile(inputPath) };
     }
 }
+catch (SourceInputBlockedException ex)
+{
+    Console.Error.WriteLine(ex.Message);
+    return 2;
+}
+catch (SourceFileParseException ex)
+{
+    Console.Error.WriteLine($"Input parse error: {ex.Message}");
+    return 2;
+}
 catch (InvalidOperationException ex) when (ex.Message.StartsWith("Syntax error in", StringComparison.Ordinal))
 {
     Console.Error.WriteLine($"Input parse error: {ex.Message}");

@@ -263,6 +263,58 @@ public sealed class LabSemanticOracleTests
         }
     }
 
+    [Fact]
+    public void Mig21_Oracle_MissingMustPassTests_IsAContractFailure()
+    {
+        var template = LoadScenario("p01-basic-id-login");
+        using var targetJson = JsonDocument.Parse("{}");
+        var scenario = template with
+        {
+            Oracle = template.Oracle with
+            {
+                Target = targetJson.RootElement.Clone()
+            }
+        };
+
+        var result = LabSemanticOracle.Evaluate(
+            scenario,
+            new LabSourceTestSummary { ExpectedPassed = 0, Total = 0, Passed = 0 },
+            new LabMigrationSummary { GeneratedFiles = Array.Empty<string>() },
+            new LabProjectVerifySummary { ReportPresent = true, Status = "passed" },
+            Array.Empty<LabAppObservation>());
+
+        var check = Assert.Single(result.Checks.Where(item => item.Kind == "target-test-count"));
+        Assert.False(check.Passed);
+        Assert.Equal("<required>", check.Expected);
+        Assert.Contains(result.Issues, issue => issue.Contains("target-test-count", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Mig21_Oracle_ExplicitZeroMustPassTests_IsDistinctFromMissing()
+    {
+        var template = LoadScenario("p01-basic-id-login");
+        using var targetJson = JsonDocument.Parse("""{"mustPassTests":0}""");
+        var scenario = template with
+        {
+            Oracle = template.Oracle with
+            {
+                Target = targetJson.RootElement.Clone()
+            }
+        };
+
+        var result = LabSemanticOracle.Evaluate(
+            scenario,
+            new LabSourceTestSummary { ExpectedPassed = 0, Total = 0, Passed = 0 },
+            new LabMigrationSummary { GeneratedFiles = Array.Empty<string>() },
+            new LabProjectVerifySummary { ReportPresent = true, Status = "passed" },
+            Array.Empty<LabAppObservation>());
+
+        var check = Assert.Single(result.Checks.Where(item => item.Kind == "target-test-count"));
+        Assert.True(check.Passed);
+        Assert.Equal("0", check.Expected);
+        Assert.Equal("0/0", check.Actual);
+    }
+
     static LabAppObservation Observation(long sequence, string eventName, string resultText) => new(
         sequence,
         DateTimeOffset.UtcNow,

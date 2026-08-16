@@ -77,10 +77,7 @@ public class RoslynTestFileParser : ITestFileParser
         var root = tree.GetRoot();
 
         if (LooksLikeMigratedPlaywrightFixture(filePath, root))
-        {
-            throw new InvalidOperationException(
-                $"INPUT_ALREADY_MIGRATED: '{filePath}' looks like Migrator-generated Playwright code and cannot be used as Selenium source.");
-        }
+            throw new SourceInputBlockedException(filePath);
 
         // C# using aliases are semantics-preserving for Selenium locator factories, e.g.
         //   using SeleniumBy = OpenQA.Selenium.By;
@@ -247,6 +244,12 @@ public class RoslynTestFileParser : ITestFileParser
             catch (InvalidOperationException ex) when (ex.Message.Contains("No test class found"))
             {
                 Console.Error.WriteLine($"Warning: skipped non-test file {file}");
+            }
+            catch (SourceFileParseException)
+            {
+                // Preserve stable source failure identity (for example BLOCKED_SOURCE)
+                // instead of hiding it under a generic SRC_PARSE_FAILED wrapper.
+                throw;
             }
             catch (Exception ex)
             {
