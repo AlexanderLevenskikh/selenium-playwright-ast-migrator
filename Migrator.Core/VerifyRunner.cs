@@ -214,6 +214,8 @@ public static class VerifyRunner
                 a is MappedMethodInvocationAction mmi && EnumerateMappedTargetStatements(mmi).Any(s => s.Contains("RawExpression")));
             totalRawExpressions += rawExprCount;
 
+            CheckForVacuumTests(result, sourcePath, fileIssues);
+
             var fileStatus = fileIssues.Any(i => i.Severity == IssueSeverity.Error) ? "failed" : "passed";
 
             fileResults.Add(new VerifyFileResult(
@@ -246,6 +248,46 @@ public static class VerifyRunner
             Files: fileResults,
             Issues: issues);
     }
+
+    static void CheckForVacuumTests(PipelineResult result, string sourcePath, List<VerifyIssue> issues)
+    {
+        var sourceTests = result.SourceModel.Tests.ToList();
+        var targetTests = result.TargetModel.Tests.ToList();
+        var count = Math.Min(sourceTests.Count, targetTests.Count);
+
+        for (var i = 0; i < count; i++)
+        {
+            var sourceActions = sourceTests[i].BodyActions.ToList();
+            var targetActions = targetTests[i].BodyActions.ToList();
+
+            // An empty source test is not a migration regression. The invariant fires only
+            // when source work existed but every target action became a TODO/comment/no-op.
+            if (sourceActions.Count == 0 || targetActions.Any(IsActiveTargetAction))
+                continue;
+
+            issues.Add(new VerifyIssue(
+                "VacuumTest",
+                IssueSeverity.Error,
+                $"Generated test '{targetTests[i].Name}' has no active migrated actions although source test '{sourceTests[i].Name}' contains {sourceActions.Count} action(s).",
+                sourcePath,
+                null));
+        }
+    }
+
+    static bool IsActiveTargetAction(TestAction action) =>
+        action switch
+        {
+            UnsupportedAction _ => false,
+            ClickAction click => click.Target.Kind != TargetKind.Unresolved,
+            SendKeysAction sendKeys => sendKeys.Target.Kind != TargetKind.Unresolved,
+            PressAction press => press.Target.Kind != TargetKind.Unresolved,
+            TextAssertionAction assertion => assertion.Target.Kind != TargetKind.Unresolved,
+            VisibilityAssertionAction assertion => assertion.Target.Kind != TargetKind.Unresolved,
+            WaitForAction wait => wait.Kind != WaitForKind.ActionabilityElided && wait.Target.Kind != TargetKind.Unresolved,
+            MappedMethodInvocationAction mapped => !EnumerateMappedTargetStatements(mapped)
+                .Any(s => s.Contains("RawExpression", StringComparison.Ordinal)),
+            _ => true
+        };
 
     // --- Config checks ---
 
@@ -774,16 +816,16 @@ public static class VerifyRunner
     /// <summary>
     /// Apply quality gates to a verify report. Returns exit code.
     /// 0 = passed, 1 = gate failure, 2 = config error, 3 = syntax error.
-    /// When gates is null, uses soft defaults: count thresholds = int.MaxValue,
-    /// boolean flags = true (but only fire when the corresponding count > 0).
+    /// Residual-work thresholds are strict by default. A caller must explicitly opt into
+    /// non-zero residual work instead of receiving a false-green migration implicitly.
     /// </summary>
     public static int ApplyQualityGates(VerifyReport report, QualityGatesConfig? gates, IReadOnlyList<VerifyIssue>? allIssues = null)
     {
         var gateDefaults = gates ?? new QualityGatesConfig();
-        var maxTodo = gateDefaults.MaxTodoComments ?? int.MaxValue;
-        var maxUnsupported = gateDefaults.MaxUnsupportedActions ?? int.MaxValue;
-        var maxUnmapped = gateDefaults.MaxUnmappedTargets ?? int.MaxValue;
-        var maxRaw = gateDefaults.MaxRawExpressions ?? int.MaxValue;
+        var maxTodo = gateDefaults.MaxTodoComments ?? 0;
+        var maxUnsupported = gateDefaults.MaxUnsupportedActions ?? 0;
+        var maxUnmapped = gateDefaults.MaxUnmappedTargets ?? 0;
+        var maxRaw = gateDefaults.MaxRawExpressions ?? 0;
         var failOnPageTodo = gateDefaults.FailOnPageTodo ?? true;
         var failOnSyntax = gateDefaults.FailOnInvalidGeneratedSyntax ?? true;
         var failOnPlaceholderLeftovers = gateDefaults.FailOnPlaceholderLeftovers ?? true;

@@ -76,6 +76,12 @@ public class RoslynTestFileParser : ITestFileParser
         var tree = CSharpSyntaxTree.ParseText(source);
         var root = tree.GetRoot();
 
+        if (LooksLikeMigratedPlaywrightFixture(filePath, root))
+        {
+            throw new InvalidOperationException(
+                $"INPUT_ALREADY_MIGRATED: '{filePath}' looks like Migrator-generated Playwright code and cannot be used as Selenium source.");
+        }
+
         // C# using aliases are semantics-preserving for Selenium locator factories, e.g.
         //   using SeleniumBy = OpenQA.Selenium.By;
         //   WebDriver.FindElement(SeleniumBy.Id("login"))
@@ -311,6 +317,21 @@ public class RoslynTestFileParser : ITestFileParser
         var parts = filePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         return !parts.Any(p => string.Equals(p, "Expected", StringComparison.OrdinalIgnoreCase) ||
                                string.Equals(p, "CompileSmoke", StringComparison.OrdinalIgnoreCase));
+    }
+
+    static bool LooksLikeMigratedPlaywrightFixture(string filePath, SyntaxNode root)
+    {
+        // Close the destructive rerun path without rejecting arbitrary projects that merely
+        // reference Microsoft.Playwright. We only reject the shape emitted by this Migrator:
+        // a *Playwright.cs fixture inheriting PageTest.
+        if (!Path.GetFileName(filePath).EndsWith("Playwright.cs", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return root.DescendantNodes()
+            .OfType<ClassDeclarationSyntax>()
+            .Any(c => c.BaseList?.Types.Any(t =>
+                string.Equals(t.Type.ToString(), "PageTest", StringComparison.Ordinal) ||
+                t.Type.ToString().EndsWith(".PageTest", StringComparison.Ordinal)) == true);
     }
 
     static bool IsTestMethod(MethodDeclarationSyntax method) =>

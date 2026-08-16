@@ -96,7 +96,7 @@ public class VerifyTests
     }
 
     [Fact]
-    public void Verify_RealPipeline_SoftDefaults_Passes()
+    public void Verify_RealPipeline_StrictDefaults_FailOnResidualWork()
     {
         var result = GetWidgetResult();
         var adapterConfigPath = Path.Combine(_testFilesDir, "adapter-config.json");
@@ -109,9 +109,16 @@ public class VerifyTests
             CleanSyntaxChecker,
             scopeChecker: null);
 
-        // Soft defaults: MaxTodoComments = int.MaxValue, so 8 TODOs don't fail
+        // P0 soundness contract: residual work is rejected unless the caller
+        // explicitly opts into a non-zero threshold.
+        Assert.True(
+            report.TodoComments > 0 ||
+            report.UnsupportedActions > 0 ||
+            report.UnmappedTargets > 0 ||
+            report.RawExpressions > 0);
+
         var exitCode = VerifyRunner.ApplyQualityGates(report, null, report.Issues);
-        Assert.Equal(0, exitCode);
+        Assert.Equal(1, exitCode);
     }
 
     #endregion
@@ -555,20 +562,28 @@ public class VerifyTests
 
     #endregion
 
-    #region Soft defaults sanity
+    #region Strict residual defaults
 
-    [Fact]
-    public void Verify_SoftDefaults_DoesNotFailOnHighTodoCount()
+    [Theory]
+    [InlineData(1, 0, 0, 0)]
+    [InlineData(0, 1, 0, 0)]
+    [InlineData(0, 0, 1, 0)]
+    [InlineData(0, 0, 0, 1)]
+    public void Verify_StrictDefaults_FailOnResidualWork(
+        int todoComments,
+        int unsupportedActions,
+        int unmappedTargets,
+        int rawExpressions)
     {
         var report = new VerifyReport(
             Status: "passed",
             FilesChecked: 1,
             GeneratedFilesChecked: 1,
-            TodoComments: 9999,
+            TodoComments: todoComments,
             PageTodoCalls: 0,
-            UnsupportedActions: 0,
-            UnmappedTargets: 0,
-            RawExpressions: 0,
+            UnsupportedActions: unsupportedActions,
+            UnmappedTargets: unmappedTargets,
+            RawExpressions: rawExpressions,
             SyntaxErrors: 0,
             ScopeWarnings: 0,
             ConfigWarnings: 0,
@@ -580,21 +595,22 @@ public class VerifyTests
         );
 
         var exitCode = VerifyRunner.ApplyQualityGates(report, null);
-        Assert.Equal(0, exitCode);
+
+        Assert.Equal(1, exitCode);
     }
 
     [Fact]
-    public void Verify_SoftDefaults_DoesNotFailOnUnmapped()
+    public void Verify_ExplicitResidualTolerance_CanOptIn()
     {
         var report = new VerifyReport(
             Status: "passed",
             FilesChecked: 1,
             GeneratedFilesChecked: 1,
-            TodoComments: 0,
+            TodoComments: 10,
             PageTodoCalls: 0,
-            UnsupportedActions: 0,
-            UnmappedTargets: 500,
-            RawExpressions: 0,
+            UnsupportedActions: 2,
+            UnmappedTargets: 3,
+            RawExpressions: 4,
             SyntaxErrors: 0,
             ScopeWarnings: 0,
             ConfigWarnings: 0,
@@ -605,33 +621,16 @@ public class VerifyTests
             Issues: Array.Empty<VerifyIssue>()
         );
 
-        var exitCode = VerifyRunner.ApplyQualityGates(report, null);
-        Assert.Equal(0, exitCode);
-    }
+        var gates = new QualityGatesConfig
+        {
+            MaxTodoComments = 10,
+            MaxUnsupportedActions = 2,
+            MaxUnmappedTargets = 3,
+            MaxRawExpressions = 4
+        };
 
-    [Fact]
-    public void Verify_SoftDefaults_DoesNotFailOnUnsupported()
-    {
-        var report = new VerifyReport(
-            Status: "passed",
-            FilesChecked: 1,
-            GeneratedFilesChecked: 1,
-            TodoComments: 0,
-            PageTodoCalls: 0,
-            UnsupportedActions: 50,
-            UnmappedTargets: 0,
-            RawExpressions: 0,
-            SyntaxErrors: 0,
-            ScopeWarnings: 0,
-            ConfigWarnings: 0,
-            PlaceholderLeftovers: 0,
-            SuspiciousLiteralVariables: 0,
-            DuplicateLocalVariables: 0,
-            Files: Array.Empty<VerifyFileResult>(),
-            Issues: Array.Empty<VerifyIssue>()
-        );
+        var exitCode = VerifyRunner.ApplyQualityGates(report, gates);
 
-        var exitCode = VerifyRunner.ApplyQualityGates(report, null);
         Assert.Equal(0, exitCode);
     }
 

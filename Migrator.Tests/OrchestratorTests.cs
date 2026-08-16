@@ -215,7 +215,9 @@ public class OrchestratorTests
             var verifyJson = File.ReadAllText(Path.Combine(tmp, "verify", "verify-report.json"));
             using var verifyDoc = JsonDocument.Parse(verifyJson);
             var summaryEl = verifyDoc.RootElement.GetProperty("summary");
-            Assert.Equal("passed", summaryEl.GetProperty("status").GetString());
+            // The fixture intentionally contains residual TODO work. Under the P0
+            // strict-by-default contract the verify stage must surface that as failed.
+            Assert.Equal("failed", summaryEl.GetProperty("status").GetString());
             Assert.True(summaryEl.GetProperty("filesChecked").GetInt32() >= 5);
             Assert.Equal(0, summaryEl.GetProperty("syntaxErrors").GetInt32());
             Assert.True(summaryEl.GetProperty("todoComments").GetInt32() > 0);

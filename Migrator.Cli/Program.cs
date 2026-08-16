@@ -9768,7 +9768,7 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
                 if (verifyReport.SyntaxErrors > 0)
                     status = OrchestrationStageStatus.Failed;
                 else if (verifyExitCode != 0)
-                    status = OrchestrationStageStatus.PassedWithWarnings;
+                    status = OrchestrationStageStatus.Failed;
                 else
                     status = OrchestrationStageStatus.Passed;
 

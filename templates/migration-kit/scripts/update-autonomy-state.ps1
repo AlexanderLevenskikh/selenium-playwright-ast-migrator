@@ -12,6 +12,7 @@ param(
     [string]$GuardPath = "",
     [string]$EvaluationPath = "",
     [string]$RebaselinePath = "",
+    [string]$FinalGatePath = "",
     # Legacy parameters are accepted by the parser only so old agents fail with a precise
     # contract error instead of silently retaining authority over progress classification.
     [string]$CandidateFingerprint = "",
@@ -465,6 +466,24 @@ switch ($Action) {
         }
         if ($Status -eq "COMPLETE" -and [bool]$state.rollbackRequired) {
             throw "AUTONOMY_COMPLETE_REQUIRES_CLEAN_TRANSACTION_STATE"
+        }
+        if ($Status -eq "COMPLETE") {
+            if ([string]::IsNullOrWhiteSpace($FinalGatePath)) {
+                throw "AUTONOMY_COMPLETE_REQUIRES_FINAL_GATE"
+            }
+
+            $resolvedFinalGatePath = Resolve-FullPath $FinalGatePath
+            if (-not (Test-Path -LiteralPath $resolvedFinalGatePath -PathType Leaf)) {
+                throw "AUTONOMY_COMPLETE_FINAL_GATE_NOT_FOUND: $resolvedFinalGatePath"
+            }
+
+            $finalGate = Get-Content -LiteralPath $resolvedFinalGatePath -Raw | ConvertFrom-Json
+            if ([string]$finalGate.schemaVersion -ne "standard-run-final-gate/v2") {
+                throw "AUTONOMY_COMPLETE_FINAL_GATE_SCHEMA_INVALID: $($finalGate.schemaVersion)"
+            }
+            if ([string]$finalGate.status -ne "PASS") {
+                throw "AUTONOMY_COMPLETE_FINAL_GATE_NOT_PASS: $($finalGate.status)"
+            }
         }
         if ($state.mode -eq "continuous" -and $StopReason -eq "AUTONOMOUS_CYCLE_BUDGET_REACHED") {
             throw "AUTONOMY_CONTINUOUS_BUDGET_IS_CHECKPOINT_NOT_STOP"

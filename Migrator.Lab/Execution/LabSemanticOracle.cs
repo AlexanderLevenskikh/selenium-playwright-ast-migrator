@@ -16,12 +16,14 @@ public static class LabSemanticOracle
     {
         var checks = new List<LabSemanticCheck>();
         var issues = new List<string>();
-        var expectedTargetTests = ReadInt(scenario.Oracle.Target, "mustPassTests") ?? 0;
+        var expectedTargetTests = ReadInt(scenario.Oracle.Target, "mustPassTests");
         AddCheck(
             "target-test-count",
-            expectedTargetTests.ToString(),
+            expectedTargetTests?.ToString() ?? "<required>",
             $"{targetTests.Passed}/{targetTests.Total}",
-            expectedTargetTests == 0 || (targetTests.Passed == expectedTargetTests && targetTests.Total == expectedTargetTests));
+            expectedTargetTests.HasValue &&
+            targetTests.Passed == expectedTargetTests.Value &&
+            targetTests.Total == expectedTargetTests.Value);
 
         var semantic = scenario.Oracle.Semantic;
         var expectedEvents = ExpectedEvents(scenario);
