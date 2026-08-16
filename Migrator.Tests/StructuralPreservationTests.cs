@@ -175,7 +175,7 @@ public class StructuralPreservationTests
         var issue = Assert.Single(Verify(source, target).Issues.Where(item => item.Category == "AssertionLoss"));
 
         Assert.Equal(IssueSeverity.Error, issue.Severity);
-        Assert.Contains("preserves 1 of 2 source assertion", issue.Message, StringComparison.Ordinal);
+        Assert.Contains("preserves 1 executable assertion(s) of 2 source assertion", issue.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -199,7 +199,7 @@ public class StructuralPreservationTests
             File(tests: new[] { Test("Checks", targetMultiple) }))
             .Issues.Where(item => item.Category == "AssertionLoss"));
 
-        Assert.Contains("1 of 2", issue.Message, StringComparison.Ordinal);
+        Assert.Contains("1 executable assertion(s) of 2", issue.Message, StringComparison.Ordinal);
     }
 
     [Fact]

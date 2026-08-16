@@ -8,7 +8,9 @@ public sealed record RemediationDefectVector(
     int UnmappedTargets,
     int RawExpressions,
     int TodoComments,
-    int PageTodoCalls);
+    int PageTodoCalls,
+    int StructuralErrors = 0,
+    int SemanticLosses = 0);
 
 public sealed record RemediationStructuralMetrics(
     int TestsFound,
@@ -49,6 +51,24 @@ public sealed record RemediationEvaluation(
 public static class RemediationStateEvaluator
 {
     public const string EvaluationSchemaVersion = "migrator-remediation-evaluation/v1";
+
+    static readonly HashSet<string> StructuralIssueCategories = new(StringComparer.Ordinal)
+    {
+        "DuplicateSourceTestIdentity",
+        "DuplicateTargetTestIdentity",
+        "MissingTargetTest",
+        "UnexpectedTargetTest",
+        "VacuumTest",
+        "VacuumSetUp",
+        "AssertionLoss",
+        "TestCaseLoss"
+    };
+
+    static readonly HashSet<string> SemanticLossIssueCategories = new(StringComparer.Ordinal)
+    {
+        "SemanticNoOp",
+        "PartialMappingLoss"
+    };
 
     public static RemediationRunState LoadRunState(string runPath)
     {
@@ -165,6 +185,8 @@ public static class RemediationStateEvaluator
         CompareDefect("rawExpressions", before.Defects.RawExpressions, after.Defects.RawExpressions, improvements, regressions);
         CompareDefect("todoComments", before.Defects.TodoComments, after.Defects.TodoComments, improvements, regressions);
         CompareDefect("pageTodoCalls", before.Defects.PageTodoCalls, after.Defects.PageTodoCalls, improvements, regressions);
+        CompareDefect("structuralErrors", before.Defects.StructuralErrors, after.Defects.StructuralErrors, improvements, regressions);
+        CompareDefect("semanticLosses", before.Defects.SemanticLosses, after.Defects.SemanticLosses, improvements, regressions);
 
         if (after.Structure.TestsFound < before.Structure.TestsFound)
             regressions.Add($"testsFound {before.Structure.TestsFound}->{after.Structure.TestsFound}");
@@ -197,7 +219,9 @@ public static class RemediationStateEvaluator
                 UnmappedTargets: ReadRequiredInt(summary, "unmappedTargets"),
                 RawExpressions: ReadRequiredInt(summary, "rawExpressions"),
                 TodoComments: ReadRequiredInt(summary, "todoComments"),
-                PageTodoCalls: ReadRequiredInt(summary, "pageTodoCalls"));
+                PageTodoCalls: ReadRequiredInt(summary, "pageTodoCalls"),
+                StructuralErrors: CountIssueCategories(root, StructuralIssueCategories),
+                SemanticLosses: CountIssueCategories(root, SemanticLossIssueCategories));
         }
         catch (InvalidOperationException)
         {
@@ -207,6 +231,34 @@ public static class RemediationStateEvaluator
         {
             throw new InvalidOperationException($"REMEDIATION_VERIFY_REPORT_INVALID: {ex.Message}", ex);
         }
+    }
+
+    static int CountIssueCategories(
+        JsonElement root,
+        IReadOnlySet<string> categories)
+    {
+        if (!TryGetPropertyIgnoreCase(root, "issues", out var issues)
+            || issues.ValueKind != JsonValueKind.Array)
+        {
+            return 0;
+        }
+
+        var count = 0;
+        foreach (var issue in issues.EnumerateArray())
+        {
+            if (issue.ValueKind != JsonValueKind.Object
+                || !TryGetPropertyIgnoreCase(issue, "category", out var category)
+                || category.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
+            var categoryName = category.GetString();
+            if (categoryName is not null && categories.Contains(categoryName))
+                count++;
+        }
+
+        return count;
     }
 
     static int ReadRequiredInt(JsonElement element, string propertyName)

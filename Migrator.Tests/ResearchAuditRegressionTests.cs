@@ -262,7 +262,7 @@ public class ComplexSignatureTests
         Assert.Equal("failed", report.Status);
         var issue = Assert.Single(report.Issues.Where(item => item.Category == "VacuumTest"));
         Assert.Equal(IssueSeverity.Error, issue.Severity);
-        Assert.Contains("no active migrated actions", issue.Message, StringComparison.Ordinal);
+        Assert.Contains("no executable migrated actions", issue.Message, StringComparison.Ordinal);
     }
 
     static ProjectAdapterConfig CreateScopedConfig(QualityGatesConfig? qualityGates)

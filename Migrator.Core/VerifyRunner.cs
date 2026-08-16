@@ -212,9 +212,12 @@ public static class VerifyRunner
                 a is TextAssertionAction ta && ta.Target.Kind == TargetKind.Unresolved ||
                 a is VisibilityAssertionAction va && va.Target.Kind == TargetKind.Unresolved ||
                 a is WaitForAction wa && wa.Kind != WaitForKind.ActionabilityElided && wa.Target.Kind == TargetKind.Unresolved ||
-                a is MappedMethodInvocationAction mmi && EnumerateMappedTargetStatements(mmi).Any(s => s.Contains("RawExpression")));
+                a is MappedMethodInvocationAction mmi &&
+                    ExecutableTargetSemantics.GetPlaywrightDotNetStatements(mmi)
+                        .Any(s => s.Contains("RawExpression", StringComparison.Ordinal)));
             totalRawExpressions += rawExprCount;
 
+            CheckExecutableSemantics(result.TargetModel, sourcePath, fileIssues);
             CheckStructuralPreservation(result, sourcePath, fileIssues);
 
             var fileStatus = fileIssues.Any(i => i.Severity == IssueSeverity.Error) ? "failed" : "passed";
@@ -248,6 +251,44 @@ public static class VerifyRunner
             DuplicateLocalVariables: totalDuplicateLocalVariables,
             Files: fileResults,
             Issues: issues);
+    }
+
+    static void CheckExecutableSemantics(
+        TestFileModel targetModel,
+        string sourcePath,
+        List<VerifyIssue> issues)
+    {
+        AddExecutableSemanticIssues(
+            "fixture setup",
+            ExecutableTargetSemantics.Analyze(targetModel.SetUpActions),
+            sourcePath,
+            issues);
+
+        foreach (var test in targetModel.Tests.OrderBy(GetTestIdentity, StringComparer.Ordinal))
+        {
+            AddExecutableSemanticIssues(
+                $"test '{GetTestIdentity(test)}'",
+                ExecutableTargetSemantics.Analyze(test.BodyActions),
+                sourcePath,
+                issues);
+        }
+    }
+
+    static void AddExecutableSemanticIssues(
+        string owner,
+        ExecutableSemanticSummary summary,
+        string sourcePath,
+        List<VerifyIssue> issues)
+    {
+        foreach (var semanticIssue in summary.Issues)
+        {
+            issues.Add(new VerifyIssue(
+                semanticIssue.Category,
+                IssueSeverity.Error,
+                $"Generated {owner}: {semanticIssue.Message}",
+                sourcePath,
+                semanticIssue.SourceLine));
+        }
     }
 
     static void CheckStructuralPreservation(PipelineResult result, string sourcePath, List<VerifyIssue> issues)
@@ -317,14 +358,14 @@ public static class VerifyRunner
         }
 
         var sourceSetup = TestActionTraversal.Flatten(result.SourceModel.SetUpActions).ToList();
-        var targetSetup = TestActionTraversal.Flatten(result.TargetModel.SetUpActions).ToList();
+        var targetSetupSemantics = ExecutableTargetSemantics.Analyze(result.TargetModel.SetUpActions);
         var sourceSetupBehavior = sourceSetup.Count(IsSourceBehavior);
-        if (sourceSetupBehavior > 0 && !targetSetup.Any(IsActiveTargetLeaf))
+        if (sourceSetupBehavior > 0 && targetSetupSemantics.BehaviorCount == 0)
         {
             issues.Add(new VerifyIssue(
                 "VacuumSetUp",
                 IssueSeverity.Error,
-                $"Source fixture setup contains {sourceSetupBehavior} behavioral action(s), but generated setup has no active migrated actions.",
+                $"Source fixture setup contains {sourceSetupBehavior} behavioral action(s), but generated setup has no executable migrated actions.",
                 sourcePath,
                 null));
         }
@@ -332,7 +373,7 @@ public static class VerifyRunner
         CheckAssertionLoss(
             "fixture setup",
             sourceSetup,
-            targetSetup,
+            targetSetupSemantics.AssertionCount,
             sourcePath,
             issues);
     }
@@ -345,15 +386,15 @@ public static class VerifyRunner
         List<VerifyIssue> issues)
     {
         var sourceActions = TestActionTraversal.Flatten(sourceTest.BodyActions).ToList();
-        var targetActions = TestActionTraversal.Flatten(targetTest.BodyActions).ToList();
+        var targetSemantics = ExecutableTargetSemantics.Analyze(targetTest.BodyActions);
         var sourceBehavior = sourceActions.Count(IsSourceBehavior);
 
-        if (sourceBehavior > 0 && !targetActions.Any(IsActiveTargetLeaf))
+        if (sourceBehavior > 0 && targetSemantics.BehaviorCount == 0)
         {
             issues.Add(new VerifyIssue(
                 "VacuumTest",
                 IssueSeverity.Error,
-                $"Generated test '{identity}' has no active migrated actions although the source contains {sourceBehavior} behavioral action(s).",
+                $"Generated test '{identity}' has no executable migrated actions although the source contains {sourceBehavior} behavioral action(s).",
                 sourcePath,
                 null));
         }
@@ -361,7 +402,7 @@ public static class VerifyRunner
         CheckAssertionLoss(
             $"test '{identity}'",
             sourceActions,
-            targetActions,
+            targetSemantics.AssertionCount,
             sourcePath,
             issues);
 
@@ -381,7 +422,7 @@ public static class VerifyRunner
     static void CheckAssertionLoss(
         string owner,
         IReadOnlyCollection<TestAction> sourceActions,
-        IReadOnlyCollection<TestAction> targetActions,
+        int executableTargetAssertions,
         string sourcePath,
         List<VerifyIssue> issues)
     {
@@ -389,14 +430,13 @@ public static class VerifyRunner
         if (sourceAssertions == 0)
             return;
 
-        var targetAssertions = targetActions.Count(IsAssertionLeaf);
-        if (targetAssertions >= sourceAssertions)
+        if (executableTargetAssertions >= sourceAssertions)
             return;
 
         issues.Add(new VerifyIssue(
             "AssertionLoss",
             IssueSeverity.Error,
-            $"Generated {owner} preserves {targetAssertions} of {sourceAssertions} source assertion(s).",
+            $"Generated {owner} preserves {executableTargetAssertions} executable assertion(s) of {sourceAssertions} source assertion(s).",
             sourcePath,
             null));
     }
@@ -409,7 +449,9 @@ public static class VerifyRunner
     }
 
     static bool IsSourceBehavior(TestAction action) =>
-        action is not UnsupportedAction && !TestActionTraversal.IsStructuralContainer(action);
+        action is not UnsupportedAction
+        && !TestActionTraversal.IsStructuralContainer(action)
+        && action is not WaitForAction { Kind: WaitForKind.ActionabilityElided };
 
     static bool IsAssertionLeaf(TestAction action) =>
         action is AssertAreEqualAction
@@ -421,25 +463,8 @@ public static class VerifyRunner
             or UrlAssertionAction
             or VisibilityAssertionAction;
 
-    static bool IsActiveTargetLeaf(TestAction action)
-    {
-        if (TestActionTraversal.IsStructuralContainer(action))
-            return false;
-
-        return action switch
-        {
-            UnsupportedAction _ => false,
-            ClickAction click => click.Target.Kind != TargetKind.Unresolved,
-            SendKeysAction sendKeys => sendKeys.Target.Kind != TargetKind.Unresolved,
-            PressAction press => press.Target.Kind != TargetKind.Unresolved,
-            TextAssertionAction assertion => assertion.Target.Kind != TargetKind.Unresolved,
-            VisibilityAssertionAction assertion => assertion.Target.Kind != TargetKind.Unresolved,
-            WaitForAction wait => wait.Kind != WaitForKind.ActionabilityElided && wait.Target.Kind != TargetKind.Unresolved,
-            MappedMethodInvocationAction mapped => !EnumerateMappedTargetStatements(mapped)
-                .Any(s => s.Contains("RawExpression", StringComparison.Ordinal)),
-            _ => true
-        };
-    }
+    static bool IsActiveTargetLeaf(TestAction action) =>
+        ExecutableTargetSemantics.Analyze(new[] { action }).BehaviorCount > 0;
 
     // --- Config checks ---
 
@@ -1063,6 +1088,30 @@ public static class VerifyRunner
                     Console.Error.WriteLine($"Quality gate: {li.Message}");
                 exitCode = Math.Max(exitCode, 2);
             }
+        }
+
+        // Structural/semantic preservation errors are non-configurable soundness failures.
+        // They prove that source behaviour disappeared or that the current renderer can only
+        // emit TODO/comment evidence for an action that the IR otherwise makes look migrated.
+        var preservationErrors = issues.Where(i =>
+            i.Severity == IssueSeverity.Error &&
+            i.Category is
+                "DuplicateSourceTestIdentity" or
+                "DuplicateTargetTestIdentity" or
+                "MissingTargetTest" or
+                "UnexpectedTargetTest" or
+                "VacuumTest" or
+                "VacuumSetUp" or
+                "AssertionLoss" or
+                "TestCaseLoss" or
+                "SemanticNoOp" or
+                "PartialMappingLoss").ToList();
+
+        if (preservationErrors.Count > 0)
+        {
+            foreach (var issue in preservationErrors)
+                Console.Error.WriteLine($"Quality gate: [{issue.Category}] {issue.Message}");
+            exitCode = Math.Max(exitCode, 1);
         }
 
         return exitCode;
