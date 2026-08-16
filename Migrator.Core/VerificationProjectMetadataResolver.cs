@@ -6,10 +6,17 @@ namespace Migrator.Core;
 /// <summary>
 /// Best-effort metadata reader used by verify-project when it builds an isolated
 /// temporary harness. It deliberately does not try to become a full MSBuild evaluator.
+/// When metadata is ambiguous, it fails explicitly instead of turning enumeration order
+/// into verification semantics.
 /// </summary>
 public static class VerificationProjectMetadataResolver
 {
     static readonly Regex PropertyReference = new(@"\$\(([^)]+)\)", RegexOptions.Compiled);
+
+    static StringComparer FilePathComparer =>
+        OperatingSystem.IsWindows()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
 
     public static string ResolveTargetFramework(
         string? configuredTargetFramework,
@@ -17,6 +24,8 @@ public static class VerificationProjectMetadataResolver
         IEnumerable<string> projectReferences,
         string fallback = "net10.0")
     {
+        ArgumentNullException.ThrowIfNull(projectReferences);
+
         if (!string.IsNullOrWhiteSpace(configuredTargetFramework))
             return configuredTargetFramework.Trim();
 
@@ -27,11 +36,47 @@ public static class VerificationProjectMetadataResolver
                 return preferred!;
         }
 
-        foreach (var project in projectReferences.Where(File.Exists))
+        var candidates = CanonicalExistingPaths(projectReferences)
+            .Select(project => (
+                Project: project,
+                Framework: ReadTargetFramework(project)))
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate.Framework))
+            .Select(candidate => (
+                candidate.Project,
+                Framework: candidate.Framework!))
+            .ToArray();
+
+        var frameworks = candidates
+            .Select(candidate => candidate.Framework)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(framework => framework, StringComparer.Ordinal)
+            .ToArray();
+
+        if (frameworks.Length == 1)
+            return frameworks[0];
+
+        if (frameworks.Length > 1)
         {
-            var targetFramework = ReadTargetFramework(project);
-            if (!string.IsNullOrWhiteSpace(targetFramework))
-                return targetFramework!;
+            var evidence = string.Join(
+                "; ",
+                frameworks.Select(framework =>
+                {
+                    var projects = candidates
+                        .Where(candidate => string.Equals(
+                            candidate.Framework,
+                            framework,
+                            StringComparison.Ordinal))
+                        .Select(candidate => Path.GetFileName(candidate.Project))
+                        .OrderBy(name => name, StringComparer.Ordinal)
+                        .ToArray();
+
+                    return $"{framework}=[{string.Join(",", projects)}]";
+                }));
+
+            throw new InvalidOperationException(
+                "VERIFY_PROJECT_TARGET_FRAMEWORK_AMBIGUOUS: " +
+                $"multiple target frameworks were discovered without an authoritative preferred project: {evidence}. " +
+                "Configure Verification.TargetFramework or an explicit entry/preferred project.");
         }
 
         return fallback;
@@ -62,9 +107,12 @@ public static class VerificationProjectMetadataResolver
         IEnumerable<string> projectReferences,
         IEnumerable<string> buildFiles)
     {
+        ArgumentNullException.ThrowIfNull(projectReferences);
+        ArgumentNullException.ThrowIfNull(buildFiles);
+
         var centralVersions = ReadCentralPackageVersions(buildFiles);
 
-        foreach (var project in projectReferences.Where(File.Exists))
+        foreach (var project in CanonicalExistingPaths(projectReferences))
         {
             XDocument doc;
             try
@@ -100,13 +148,21 @@ public static class VerificationProjectMetadataResolver
 
     public static IReadOnlyDictionary<string, string> ReadCentralPackageVersions(IEnumerable<string> buildFiles)
     {
+        ArgumentNullException.ThrowIfNull(buildFiles);
+
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var file in buildFiles.Where(x => Path.GetFileName(x).Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase) && File.Exists(x)))
+        foreach (var file in CanonicalExistingPaths(buildFiles)
+                     .Where(path => Path.GetFileName(path).Equals(
+                         "Directory.Packages.props",
+                         StringComparison.OrdinalIgnoreCase)))
         {
+            IReadOnlyList<(string Include, string Version)> fileVersions;
             try
             {
                 var doc = XDocument.Load(file);
                 var properties = ReadProperties(doc);
+                var collected = new List<(string Include, string Version)>();
+
                 foreach (var packageVersion in doc.Descendants().Where(x => x.Name.LocalName == "PackageVersion"))
                 {
                     // Conditional PackageVersion items require real MSBuild evaluation. Do not guess.
@@ -123,16 +179,61 @@ public static class VerificationProjectMetadataResolver
 
                     var resolvedVersion = ResolveProperties(rawVersion!, properties);
                     if (!string.IsNullOrWhiteSpace(resolvedVersion) && !PropertyReference.IsMatch(resolvedVersion))
-                        result[include!] = resolvedVersion;
+                        collected.Add((include!, resolvedVersion));
                 }
+
+                fileVersions = collected;
             }
             catch
             {
                 // Best effort only. Explicit PackageReference versions still work.
+                continue;
+            }
+
+            foreach (var packageVersion in fileVersions)
+            {
+                if (result.TryGetValue(packageVersion.Include, out var existing)
+                    && !string.Equals(existing, packageVersion.Version, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        "VERIFY_PROJECT_CENTRAL_PACKAGE_VERSION_CONFLICT: " +
+                        $"package '{packageVersion.Include}' resolves to both '{existing}' and '{packageVersion.Version}' " +
+                        "across unconditional Directory.Packages.props entries. " +
+                        "Use an explicit verification PackageReference/VersionOverride or real MSBuild evaluation.");
+                }
+
+                result[packageVersion.Include] = packageVersion.Version;
             }
         }
 
         return result;
+    }
+
+    static IReadOnlyList<string> CanonicalExistingPaths(IEnumerable<string> paths)
+    {
+        var normalized = new List<string>();
+
+        foreach (var path in paths)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                continue;
+
+            try
+            {
+                var fullPath = Path.GetFullPath(path);
+                if (File.Exists(fullPath))
+                    normalized.Add(fullPath);
+            }
+            catch
+            {
+                // Invalid paths are ignored by this best-effort metadata reader.
+            }
+        }
+
+        return normalized
+            .Distinct(FilePathComparer)
+            .OrderBy(path => path, FilePathComparer)
+            .ToArray();
     }
 
     static Dictionary<string, string> ReadProperties(XDocument doc)
