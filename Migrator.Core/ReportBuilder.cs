@@ -6,8 +6,8 @@ public static class ReportBuilder
 {
     public static MigrationReport Build(TestFileModel model, string generatedOutput)
     {
-        var allActions = model.Tests.SelectMany(t => FlattenActions(t.BodyActions)).ToList();
-        var allSetupActions = FlattenActions(model.SetUpActions).ToList();
+        var allActions = model.Tests.SelectMany(t => TestActionTraversal.Flatten(t.BodyActions)).ToList();
+        var allSetupActions = TestActionTraversal.Flatten(model.SetUpActions).ToList();
         var allFileActions = allActions.Concat(allSetupActions).ToList();
 
         var unsupportedActions = allFileActions.OfType<UnsupportedAction>().ToList();
@@ -22,7 +22,7 @@ public static class ReportBuilder
 
         var setupHasUnsupported = allSetupActions.Any(a => a is UnsupportedAction);
         var convertedWithoutUnsupported = model.Tests.Count(t =>
-            !FlattenActions(t.BodyActions).Any(a => a is UnsupportedAction));
+            !TestActionTraversal.Flatten(t.BodyActions).Any(a => a is UnsupportedAction));
         var emptyAfterSuppression = generatedOutput.Split(
             "[MIGRATOR:EMPTY_TEST_AFTER_SUPPRESSION]",
             StringSplitOptions.None).Length - 1;
@@ -58,16 +58,4 @@ public static class ReportBuilder
         return null;
     }
 
-    static IEnumerable<TestAction> FlattenActions(IEnumerable<TestAction> actions)
-    {
-        foreach (var action in actions)
-        {
-            yield return action;
-            if (action is CollectionForEachAction collection)
-            {
-                foreach (var nested in FlattenActions(collection.BodyActions))
-                    yield return nested;
-            }
-        }
-    }
 }

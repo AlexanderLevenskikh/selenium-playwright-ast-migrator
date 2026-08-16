@@ -198,8 +198,9 @@ public static class VerifyRunner
             totalDuplicateLocalVariables += fileIssues.Count(i => i.Category == "DuplicateLocalVariable");
 
             // IR-level counts
-            var allActions = result.TargetModel.Tests.SelectMany(t => t.BodyActions)
-                .Concat(result.TargetModel.SetUpActions).ToList();
+            var allActions = TestActionTraversal.Flatten(
+                result.TargetModel.Tests.SelectMany(t => t.BodyActions)
+                    .Concat(result.TargetModel.SetUpActions)).ToList();
 
             totalUnsupported += result.Report.UnsupportedCount;
             totalUnmapped += result.Report.UnmappedTargets;
@@ -214,7 +215,7 @@ public static class VerifyRunner
                 a is MappedMethodInvocationAction mmi && EnumerateMappedTargetStatements(mmi).Any(s => s.Contains("RawExpression")));
             totalRawExpressions += rawExprCount;
 
-            CheckForVacuumTests(result, sourcePath, fileIssues);
+            CheckStructuralPreservation(result, sourcePath, fileIssues);
 
             var fileStatus = fileIssues.Any(i => i.Severity == IssueSeverity.Error) ? "failed" : "passed";
 
@@ -249,33 +250,183 @@ public static class VerifyRunner
             Issues: issues);
     }
 
-    static void CheckForVacuumTests(PipelineResult result, string sourcePath, List<VerifyIssue> issues)
+    static void CheckStructuralPreservation(PipelineResult result, string sourcePath, List<VerifyIssue> issues)
     {
-        var sourceTests = result.SourceModel.Tests.ToList();
-        var targetTests = result.TargetModel.Tests.ToList();
-        var count = Math.Min(sourceTests.Count, targetTests.Count);
+        var sourceGroups = result.SourceModel.Tests
+            .GroupBy(GetTestIdentity, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
+        var targetGroups = result.TargetModel.Tests
+            .GroupBy(GetTestIdentity, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
 
-        for (var i = 0; i < count; i++)
+        foreach (var group in sourceGroups.Values.Where(group => group.Count > 1).OrderBy(group => GetTestIdentity(group[0]), StringComparer.Ordinal))
         {
-            var sourceActions = sourceTests[i].BodyActions.ToList();
-            var targetActions = targetTests[i].BodyActions.ToList();
+            var identity = GetTestIdentity(group[0]);
+            issues.Add(new VerifyIssue(
+                "DuplicateSourceTestIdentity",
+                IssueSeverity.Error,
+                $"Source contains {group.Count} tests with structural identity '{identity}'. Deterministic source/target pairing is ambiguous.",
+                sourcePath,
+                null));
+        }
 
-            // An empty source test is not a migration regression. The invariant fires only
-            // when source work existed but every target action became a TODO/comment/no-op.
-            if (sourceActions.Count == 0 || targetActions.Any(IsActiveTargetAction))
+        foreach (var group in targetGroups.Values.Where(group => group.Count > 1).OrderBy(group => GetTestIdentity(group[0]), StringComparer.Ordinal))
+        {
+            var identity = GetTestIdentity(group[0]);
+            issues.Add(new VerifyIssue(
+                "DuplicateTargetTestIdentity",
+                IssueSeverity.Error,
+                $"Target contains {group.Count} tests with structural identity '{identity}'. Deterministic source/target pairing is ambiguous.",
+                sourcePath,
+                null));
+        }
+
+        foreach (var sourceEntry in sourceGroups.OrderBy(entry => entry.Key, StringComparer.Ordinal))
+        {
+            if (sourceEntry.Value.Count != 1)
+                continue;
+
+            if (!targetGroups.TryGetValue(sourceEntry.Key, out var targetMatches))
+            {
+                issues.Add(new VerifyIssue(
+                    "MissingTargetTest",
+                    IssueSeverity.Error,
+                    $"Source test '{sourceEntry.Key}' has no target test with the same structural identity.",
+                    sourcePath,
+                    null));
+                continue;
+            }
+
+            if (targetMatches.Count != 1)
+                continue;
+
+            CheckMatchedTest(sourceEntry.Value[0], targetMatches[0], sourceEntry.Key, sourcePath, issues);
+        }
+
+        foreach (var targetEntry in targetGroups.OrderBy(entry => entry.Key, StringComparer.Ordinal))
+        {
+            if (targetEntry.Value.Count != 1 || sourceGroups.ContainsKey(targetEntry.Key))
                 continue;
 
             issues.Add(new VerifyIssue(
+                "UnexpectedTargetTest",
+                IssueSeverity.Error,
+                $"Target test '{targetEntry.Key}' has no source test with the same structural identity.",
+                sourcePath,
+                null));
+        }
+
+        var sourceSetup = TestActionTraversal.Flatten(result.SourceModel.SetUpActions).ToList();
+        var targetSetup = TestActionTraversal.Flatten(result.TargetModel.SetUpActions).ToList();
+        var sourceSetupBehavior = sourceSetup.Count(IsSourceBehavior);
+        if (sourceSetupBehavior > 0 && !targetSetup.Any(IsActiveTargetLeaf))
+        {
+            issues.Add(new VerifyIssue(
+                "VacuumSetUp",
+                IssueSeverity.Error,
+                $"Source fixture setup contains {sourceSetupBehavior} behavioral action(s), but generated setup has no active migrated actions.",
+                sourcePath,
+                null));
+        }
+
+        CheckAssertionLoss(
+            "fixture setup",
+            sourceSetup,
+            targetSetup,
+            sourcePath,
+            issues);
+    }
+
+    static void CheckMatchedTest(
+        TestModel sourceTest,
+        TestModel targetTest,
+        string identity,
+        string sourcePath,
+        List<VerifyIssue> issues)
+    {
+        var sourceActions = TestActionTraversal.Flatten(sourceTest.BodyActions).ToList();
+        var targetActions = TestActionTraversal.Flatten(targetTest.BodyActions).ToList();
+        var sourceBehavior = sourceActions.Count(IsSourceBehavior);
+
+        if (sourceBehavior > 0 && !targetActions.Any(IsActiveTargetLeaf))
+        {
+            issues.Add(new VerifyIssue(
                 "VacuumTest",
                 IssueSeverity.Error,
-                $"Generated test '{targetTests[i].Name}' has no active migrated actions although source test '{sourceTests[i].Name}' contains {sourceActions.Count} action(s).",
+                $"Generated test '{identity}' has no active migrated actions although the source contains {sourceBehavior} behavioral action(s).",
+                sourcePath,
+                null));
+        }
+
+        CheckAssertionLoss(
+            $"test '{identity}'",
+            sourceActions,
+            targetActions,
+            sourcePath,
+            issues);
+
+        var sourceCases = sourceTest.CaseData?.Count() ?? 0;
+        var targetCases = targetTest.CaseData?.Count() ?? 0;
+        if (targetCases < sourceCases)
+        {
+            issues.Add(new VerifyIssue(
+                "TestCaseLoss",
+                IssueSeverity.Error,
+                $"Generated test '{identity}' preserves {targetCases} of {sourceCases} source test case(s).",
                 sourcePath,
                 null));
         }
     }
 
-    static bool IsActiveTargetAction(TestAction action) =>
-        action switch
+    static void CheckAssertionLoss(
+        string owner,
+        IReadOnlyCollection<TestAction> sourceActions,
+        IReadOnlyCollection<TestAction> targetActions,
+        string sourcePath,
+        List<VerifyIssue> issues)
+    {
+        var sourceAssertions = sourceActions.Count(IsAssertionLeaf);
+        if (sourceAssertions == 0)
+            return;
+
+        var targetAssertions = targetActions.Count(IsAssertionLeaf);
+        if (targetAssertions >= sourceAssertions)
+            return;
+
+        issues.Add(new VerifyIssue(
+            "AssertionLoss",
+            IssueSeverity.Error,
+            $"Generated {owner} preserves {targetAssertions} of {sourceAssertions} source assertion(s).",
+            sourcePath,
+            null));
+    }
+
+    static string GetTestIdentity(TestModel test)
+    {
+        var parameterTypes = (test.Parameters ?? Array.Empty<MethodParameterModel>())
+            .Select(parameter => Regex.Replace(parameter.Type ?? string.Empty, @"\s+", string.Empty));
+        return $"{test.Name}({string.Join(",", parameterTypes)})";
+    }
+
+    static bool IsSourceBehavior(TestAction action) =>
+        action is not UnsupportedAction && !TestActionTraversal.IsStructuralContainer(action);
+
+    static bool IsAssertionLeaf(TestAction action) =>
+        action is AssertAreEqualAction
+            or AssertThatAction
+            or ControlStateAssertionAction
+            or MappedExpressionAssertionAction
+            or TableCountAssertionAction
+            or TextAssertionAction
+            or UrlAssertionAction
+            or VisibilityAssertionAction;
+
+    static bool IsActiveTargetLeaf(TestAction action)
+    {
+        if (TestActionTraversal.IsStructuralContainer(action))
+            return false;
+
+        return action switch
         {
             UnsupportedAction _ => false,
             ClickAction click => click.Target.Kind != TargetKind.Unresolved,
@@ -288,6 +439,7 @@ public static class VerifyRunner
                 .Any(s => s.Contains("RawExpression", StringComparison.Ordinal)),
             _ => true
         };
+    }
 
     // --- Config checks ---
 
