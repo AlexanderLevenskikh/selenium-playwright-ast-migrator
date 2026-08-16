@@ -29,6 +29,10 @@ public sealed class DeterministicRemediationContractTests
         Assert.Contains("\"guard\" => RunGuard", remediation);
         Assert.Contains("SourceInputIdentityCapture.Capture", remediation);
         Assert.Contains("RemediationCycleGuardEvaluator.Evaluate", remediation);
+        Assert.Contains("\"rebaseline\" => RunRebaseline", remediation);
+        Assert.Contains("RemediationRebaselineEvaluator.Evaluate", remediation);
+        Assert.Contains("Rebaseline", updater);
+        Assert.Contains("AUTONOMY_REBASELINE_CONFIRMED", updater);
     }
 
     [Fact]
@@ -46,6 +50,11 @@ public sealed class DeterministicRemediationContractTests
         Assert.Contains("AUTONOMY_CYCLE_NOT_STARTED", updater);
         Assert.Contains("AUTONOMY_ROLLBACK_NOT_CONFIRMED", updater);
         Assert.Contains("AUTONOMY_ACTIVE_CYCLE_MUST_BE_RESOLVED", updater);
+        Assert.Contains("AbortCycle", updater);
+        Assert.Contains("ABORT_CONFIRMED", updater);
+        Assert.Contains("AUTONOMY_TERMINAL_STOP_REQUIRES_RESOLVED_CYCLE", updater);
+        Assert.Contains("$state.cycleInProgress = $false", updater);
+        Assert.Contains("$state.activeCycleBaselineStateHash = $null", updater);
         Assert.Contains("continue` refreshes budget, never transaction correctness", updater);
         Assert.Contains("AUTONOMY_STATE_REJECTION_REQUIRES_ROLLBACK", validator);
         Assert.Contains("AUTONOMY_STATE_ROLLBACK_REQUIRED_AT_HANDOFF", validator);

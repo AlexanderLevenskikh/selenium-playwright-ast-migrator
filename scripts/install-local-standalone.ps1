@@ -117,8 +117,8 @@ $remediationHelp = (& $exe remediation --help 2>&1 | Out-String)
 if ($LASTEXITCODE -ne 0) {
     throw "Installed executable failed 'remediation --help' with exit code $LASTEXITCODE"
 }
-if ($remediationHelp -notmatch "guard" -or $remediationHelp -notmatch "evaluate") {
-    throw "Installed executable does not expose the expected remediation guard/evaluate commands."
+if ($remediationHelp -notmatch "guard" -or $remediationHelp -notmatch "evaluate" -or $remediationHelp -notmatch "rebaseline") {
+    throw "Installed executable does not expose the expected remediation guard/evaluate/rebaseline commands."
 }
 
 Write-Host ""

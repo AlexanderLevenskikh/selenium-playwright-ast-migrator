@@ -15,6 +15,7 @@ internal static class RemediationCommand
         {
             "evaluate" => RunEvaluate(args.Skip(1).ToArray()),
             "guard" => RunGuard(args.Skip(1).ToArray()),
+            "rebaseline" => RunRebaseline(args.Skip(1).ToArray()),
             _ => UnknownCommand(args[0])
         };
     }
@@ -93,6 +94,72 @@ internal static class RemediationCommand
         }
     }
 
+    static int RunRebaseline(string[] args)
+    {
+        string? beforeRun = null;
+        string? afterRun = null;
+        var outPath = "remediation-rebaseline.json";
+
+        for (var i = 0; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--before-run":
+                    beforeRun = ReadValue(args, ref i, "--before-run");
+                    break;
+                case "--after-run":
+                    afterRun = ReadValue(args, ref i, "--after-run");
+                    break;
+                case "--out":
+                    outPath = ReadValue(args, ref i, "--out");
+                    break;
+                case "--help":
+                case "-h":
+                    PrintHelp();
+                    return 0;
+                default:
+                    Console.Error.WriteLine($"Unknown remediation rebaseline option: {args[i]}");
+                    return 2;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(beforeRun) || string.IsNullOrWhiteSpace(afterRun))
+        {
+            Console.Error.WriteLine("remediation rebaseline requires --before-run and --after-run.");
+            return 2;
+        }
+
+        try
+        {
+            var before = RemediationStateEvaluator.LoadRunState(beforeRun);
+            var after = RemediationStateEvaluator.LoadRunState(afterRun);
+            var evidence = RemediationRebaselineEvaluator.Evaluate(before, after);
+
+            WriteJson(outPath, evidence);
+
+            Console.WriteLine("=== Remediation Rebaseline ===");
+            Console.WriteLine($"Decision: {evidence.Decision}");
+            Console.WriteLine($"Reason: {evidence.Reason}");
+            Console.WriteLine($"Before state: {evidence.Before.StateHash}");
+            Console.WriteLine($"After state:  {evidence.After.StateHash}");
+            Console.WriteLine($"Before tool:  {evidence.Before.ToolSha256}");
+            Console.WriteLine($"After tool:   {evidence.After.ToolSha256}");
+            foreach (var item in evidence.Improvements)
+                Console.WriteLine($"  + {item}");
+            foreach (var item in evidence.Regressions)
+                Console.WriteLine($"  - {item}");
+            Console.WriteLine($"Rebaseline evidence: {Path.GetFullPath(outPath)}");
+
+            // A rejected rebaseline is deterministic evidence, not a CLI failure.
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 4;
+        }
+    }
+
     static int RunGuard(string[] args)
     {
         string? acceptedRun = null;
@@ -154,6 +221,7 @@ internal static class RemediationCommand
                 configSha256,
                 autonomy.CurrentStateHash,
                 autonomy.RollbackRequired,
+                autonomy.CycleInProgress,
                 autonomy.Status);
 
             WriteJson(outPath, guard);
@@ -211,7 +279,8 @@ internal static class RemediationCommand
         var status = ReadString(root, "status");
         var currentStateHash = ReadString(root, "currentStateHash");
         var rollbackRequired = root.TryGetProperty("rollbackRequired", out var rollback) && rollback.ValueKind == JsonValueKind.True;
-        return new AutonomyGuardState(status, currentStateHash, rollbackRequired);
+        var cycleInProgress = root.TryGetProperty("cycleInProgress", out var activeCycle) && activeCycle.ValueKind == JsonValueKind.True;
+        return new AutonomyGuardState(status, currentStateHash, rollbackRequired, cycleInProgress);
     }
 
     static string ResolveWorkspaceRoot(string autonomyStatePath)
@@ -257,10 +326,12 @@ internal static class RemediationCommand
         Console.WriteLine("Remediation commands:");
         Console.WriteLine("  selenium-pw-migrator remediation guard --accepted-run <run> --input <source> [--config <json> ...] --autonomy-state <json> --out <json>");
         Console.WriteLine("  selenium-pw-migrator remediation evaluate --before-run <run> --after-run <run> --candidate <stable-description> [--autonomy-state <json>] --out <json>");
+        Console.WriteLine("  selenium-pw-migrator remediation rebaseline --before-run <old-tool-run> --after-run <new-tool-run> --out <json>");
         Console.WriteLine();
-        Console.WriteLine("guard proves that current source/config bytes match the accepted baseline before a cycle starts; after REJECT_* it is also the rollback proof.");
+        Console.WriteLine("guard proves that current source/config identity matches the accepted baseline before a cycle starts; after REJECT_* it is also the rollback proof, and an abandoned active cycle can receive ABORT_CONFIRMED after exact baseline restoration.");
         Console.WriteLine("evaluate computes ACCEPT / REJECT_NO_PROGRESS / REJECT_REGRESSION / REJECT_CYCLE from exact run artifacts. The agent does not classify progress.");
+        Console.WriteLine("rebaseline is the explicit tool-upgrade boundary: source/config/environment must match and the new tool run must introduce no deterministic regression.");
     }
 
-    sealed record AutonomyGuardState(string Status, string CurrentStateHash, bool RollbackRequired);
+    sealed record AutonomyGuardState(string Status, string CurrentStateHash, bool RollbackRequired, bool CycleInProgress);
 }

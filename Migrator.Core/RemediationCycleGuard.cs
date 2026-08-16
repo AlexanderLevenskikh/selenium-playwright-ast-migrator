@@ -18,7 +18,7 @@ public sealed record RemediationCycleGuard(
 
 /// <summary>
 /// Transaction boundary before a remediation cycle. It binds the autonomy baseline to a
-/// specific accepted run and checks the current source/config bytes before edits begin.
+/// specific accepted run and checks the current source/config identities before edits begin.
 /// A rejected patch therefore cannot become the next baseline merely by starting a fresh
 /// invocation or by pointing at an older run artifact.
 /// </summary>
@@ -26,12 +26,30 @@ public static class RemediationCycleGuardEvaluator
 {
     public const string GuardSchemaVersion = "migrator-remediation-cycle-guard/v1";
 
+    // Backward-compatible overload for callers that predate explicit active-cycle recovery.
     public static RemediationCycleGuard Evaluate(
         RemediationRunState acceptedRun,
         string observedSourceSha256,
         string observedConfigSha256,
         string? currentStateHash,
         bool rollbackRequired,
+        string autonomyStatus)
+        => Evaluate(
+            acceptedRun,
+            observedSourceSha256,
+            observedConfigSha256,
+            currentStateHash,
+            rollbackRequired,
+            cycleInProgress: false,
+            autonomyStatus);
+
+    public static RemediationCycleGuard Evaluate(
+        RemediationRunState acceptedRun,
+        string observedSourceSha256,
+        string observedConfigSha256,
+        string? currentStateHash,
+        bool rollbackRequired,
+        bool cycleInProgress,
         string autonomyStatus)
     {
         ArgumentNullException.ThrowIfNull(acceptedRun);
@@ -85,6 +103,27 @@ public static class RemediationCycleGuardEvaluator
                 rollbackRequired: true,
                 rollbackConfirmed: true,
                 ready: true);
+        }
+
+        // An opened cycle is a transaction. If its bounded edit is abandoned before a
+        // deterministic after-run/evaluation exists (for example reviewer rejection or an
+        // external blocker), the only legal escape is to restore the accepted
+        // source/config identity and explicitly abort the transaction. This decision is
+        // intentionally not ready-to-start: AbortCycle must clear the active transaction
+        // before any new invocation/cycle may begin. It also works for a legacy STOPPED
+        // state produced by older updaters, so existing workspaces can recover without
+        // hand-editing autonomy-state.json.
+        if (cycleInProgress)
+        {
+            return Create(
+                "ABORT_CONFIRMED",
+                "REMEDIATION_ACTIVE_CYCLE_BASELINE_RESTORED",
+                acceptedRun,
+                observedSourceSha256,
+                observedConfigSha256,
+                rollbackRequired: false,
+                rollbackConfirmed: false,
+                ready: false);
         }
 
         if (!string.Equals(autonomyStatus, "RUNNING", StringComparison.OrdinalIgnoreCase))

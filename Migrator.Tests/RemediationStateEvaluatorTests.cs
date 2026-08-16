@@ -71,6 +71,45 @@ public sealed class RemediationStateEvaluatorTests
 
 
     [Fact]
+    public void Rebaseline_ConfirmsToolUpgradeWithStableInputsAndNoRegression()
+    {
+        var before = State("old", unmapped: 4, todo: 5, config: "config", tool: "tool-old");
+        var after = State("new", unmapped: 3, todo: 5, config: "config", tool: "tool-new");
+
+        var evidence = RemediationRebaselineEvaluator.Evaluate(before, after);
+
+        Assert.Equal("REBASELINE_CONFIRMED", evidence.Decision);
+        Assert.Equal("NEW_TOOL_BASELINE_VERIFIED", evidence.Reason);
+        Assert.Contains(evidence.Improvements, x => x == "unmappedTargets 4->3");
+        Assert.NotEmpty(evidence.RebaselineSha256);
+    }
+
+    [Fact]
+    public void Rebaseline_RejectsConfigDriftEvenAcrossToolUpgrade()
+    {
+        var before = State("old", config: "config-a", tool: "tool-old");
+        var after = State("new", config: "config-b", tool: "tool-new");
+
+        var evidence = RemediationRebaselineEvaluator.Evaluate(before, after);
+
+        Assert.Equal("REBASELINE_REJECTED", evidence.Decision);
+        Assert.Equal("CONFIG_IDENTITY_CHANGED", evidence.Reason);
+    }
+
+    [Fact]
+    public void Rebaseline_RejectsNewToolMetricRegression()
+    {
+        var before = State("old", syntax: 0, unmapped: 4, config: "config", tool: "tool-old");
+        var after = State("new", syntax: 1, unmapped: 3, config: "config", tool: "tool-new");
+
+        var evidence = RemediationRebaselineEvaluator.Evaluate(before, after);
+
+        Assert.Equal("REBASELINE_REJECTED", evidence.Decision);
+        Assert.Equal("NEW_TOOL_REGRESSION", evidence.Reason);
+        Assert.Contains(evidence.Regressions, x => x == "syntaxErrors 0->1");
+    }
+
+    [Fact]
     public void LoadRunState_ReadsVerifyWriterArtifactWithStringSeverityWithoutLosingMetrics()
     {
         var root = Path.Combine(Path.GetTempPath(), "migrator-remediation-wire-" + Guid.NewGuid().ToString("N"));
@@ -176,14 +215,17 @@ public sealed class RemediationStateEvaluatorTests
         int pageTodo = 0,
         string source = "source",
         string projectStatus = "passed",
-        int projectDiagnostics = 0)
+        int projectDiagnostics = 0,
+        string? config = null,
+        string tool = "tool",
+        string environment = "env")
         => new(
             RunPath: hash,
             SourceSha256: source,
-            ConfigSha256: "config-" + hash,
+            ConfigSha256: config ?? "config-" + hash,
             TargetSha256: "target-" + hash,
-            ToolSha256: "tool",
-            EnvironmentSha256: "env",
+            ToolSha256: tool,
+            EnvironmentSha256: environment,
             Defects: new RemediationDefectVector(syntax, unsupported, unmapped, raw, todo, pageTodo),
             Structure: new RemediationStructuralMetrics(TestsFound: 10, GeneratedFiles: 10),
             ProjectVerificationStatus: projectStatus,

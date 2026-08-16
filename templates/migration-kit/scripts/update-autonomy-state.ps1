@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("StartInvocation", "StartCycle", "ConfirmRollback", "RecordCycle", "Stop")]
+    [ValidateSet("StartInvocation", "StartCycle", "AbortCycle", "Rebaseline", "ConfirmRollback", "RecordCycle", "Stop")]
     [string]$Action,
     [string]$Workspace = "migration",
     [ValidateSet("standard", "continue", "continuous", "bounded")]
@@ -11,6 +11,7 @@ param(
     [int]$CycleBudget = 5,
     [string]$GuardPath = "",
     [string]$EvaluationPath = "",
+    [string]$RebaselinePath = "",
     # Legacy parameters are accepted by the parser only so old agents fail with a precise
     # contract error instead of silently retaining authority over progress classification.
     [string]$CandidateFingerprint = "",
@@ -44,6 +45,7 @@ function New-State {
         lastCycleResult = $null
         lastDecision = $null
         lastEvaluationSha256 = $null
+        lastRebaselineSha256 = $null
         lastBeforeStateHash = $null
         lastAfterStateHash = $null
         currentStateHash = $null
@@ -58,6 +60,7 @@ function New-State {
         visitedStateHashes = @()
         completedCycles = @()
         cycleHistory = @()
+        rebaselineHistory = @()
         stopReason = $null
     }
 }
@@ -76,9 +79,16 @@ function Convert-ToMutableState($InputState) {
     }
     $state.schemaVersion = "standard-migration-autonomy/v3"
     $state.exhaustedCandidateFingerprints = @($state.exhaustedCandidateFingerprints)
+    if ($null -eq $state.PSObject.Properties["lastRebaselineSha256"]) {
+        $state | Add-Member -NotePropertyName lastRebaselineSha256 -NotePropertyValue $null
+    }
+    if ($null -eq $state.PSObject.Properties["rebaselineHistory"]) {
+        $state | Add-Member -NotePropertyName rebaselineHistory -NotePropertyValue @()
+    }
     $state.visitedStateHashes = @($state.visitedStateHashes)
     $state.completedCycles = @($state.completedCycles)
     $state.cycleHistory = @($state.cycleHistory)
+    $state.rebaselineHistory = @($state.rebaselineHistory)
     return $state
 }
 
@@ -103,13 +113,27 @@ function Read-Guard([string]$Path) {
     if ([string]::IsNullOrWhiteSpace([string]$guard.GuardSha256) -or [string]::IsNullOrWhiteSpace([string]$guard.AcceptedStateHash)) {
         throw "AUTONOMY_CYCLE_GUARD_IDENTITY_MISSING"
     }
+    if (@(
+        "READY_INITIAL_BASELINE",
+        "READY",
+        "ROLLBACK_CONFIRMED",
+        "ABORT_CONFIRMED",
+        "BLOCKED_BASELINE_MISMATCH",
+        "BLOCKED_WORKSPACE_MISMATCH",
+        "BLOCKED_AUTONOMY_NOT_RUNNING"
+    ) -notcontains [string]$guard.Decision) {
+        throw "AUTONOMY_CYCLE_GUARD_DECISION_INVALID: $($guard.Decision)"
+    }
+    return $guard
+}
+
+function Assert-GuardReadyToStartCycle($guard) {
     if (-not [bool]$guard.ReadyToStartCycle) {
         throw "AUTONOMY_CYCLE_GUARD_BLOCKED: $($guard.Decision) $($guard.Reason)"
     }
     if (@("READY_INITIAL_BASELINE", "READY", "ROLLBACK_CONFIRMED") -notcontains [string]$guard.Decision) {
-        throw "AUTONOMY_CYCLE_GUARD_DECISION_INVALID: $($guard.Decision)"
+        throw "AUTONOMY_CYCLE_GUARD_START_DECISION_INVALID: $($guard.Decision)"
     }
-    return $guard
 }
 
 function Read-Evaluation([string]$Path) {
@@ -132,6 +156,34 @@ function Read-Evaluation([string]$Path) {
         throw "AUTONOMY_EVALUATION_STATE_HASH_MISSING"
     }
     return $evaluation
+}
+
+function Read-Rebaseline([string]$Path) {
+    if ([string]::IsNullOrWhiteSpace($Path)) { throw "AUTONOMY_REBASELINE_EVIDENCE_REQUIRED" }
+    $full = Resolve-FullPath $Path
+    if (-not (Test-Path -LiteralPath $full)) { throw "AUTONOMY_REBASELINE_EVIDENCE_NOT_FOUND: $full" }
+    try { $evidence = Get-Content -LiteralPath $full -Raw | ConvertFrom-Json }
+    catch { throw "AUTONOMY_REBASELINE_EVIDENCE_INVALID_JSON: $($_.Exception.Message)" }
+
+    if ([string]$evidence.SchemaVersion -ne "migrator-remediation-rebaseline/v1") {
+        throw "AUTONOMY_REBASELINE_EVIDENCE_SCHEMA_INVALID: $($evidence.SchemaVersion)"
+    }
+    if ([string]$evidence.Decision -ne "REBASELINE_CONFIRMED") {
+        throw "AUTONOMY_REBASELINE_NOT_CONFIRMED: $($evidence.Decision) $($evidence.Reason)"
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$evidence.RebaselineSha256)) {
+        throw "AUTONOMY_REBASELINE_EVIDENCE_IDENTITY_MISSING"
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$evidence.Before.StateHash) -or [string]::IsNullOrWhiteSpace([string]$evidence.After.StateHash)) {
+        throw "AUTONOMY_REBASELINE_STATE_HASH_MISSING"
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$evidence.Before.ToolSha256) -or [string]::IsNullOrWhiteSpace([string]$evidence.After.ToolSha256)) {
+        throw "AUTONOMY_REBASELINE_TOOL_IDENTITY_MISSING"
+    }
+    if ([string]$evidence.Before.ToolSha256 -eq [string]$evidence.After.ToolSha256) {
+        throw "AUTONOMY_REBASELINE_TOOL_IDENTITY_UNCHANGED"
+    }
+    return $evidence
 }
 
 function Apply-GuardIdentity($state, $guard) {
@@ -183,6 +235,7 @@ switch ($Action) {
         if ([int]$state.cyclesCompleted -ge [int]$state.cycleBudget) { throw "AUTONOMY_CYCLE_BUDGET_ALREADY_REACHED" }
 
         $guard = Read-Guard $GuardPath
+        Assert-GuardReadyToStartCycle $guard
         $acceptedHash = [string]$guard.AcceptedStateHash
         if (-not [string]::IsNullOrWhiteSpace([string]$state.currentStateHash) -and [string]$state.currentStateHash -ne $acceptedHash) {
             throw "AUTONOMY_CYCLE_GUARD_BASELINE_MISMATCH: expected $($state.currentStateHash), got $acceptedHash"
@@ -210,6 +263,69 @@ switch ($Action) {
         $state.activeCycleBaselineStateHash = [string]$state.currentStateHash
         Apply-GuardIdentity $state $guard
         Write-Host "AUTONOMY_CYCLE_STARTED"
+    }
+    "AbortCycle" {
+        if (-not [bool]$state.cycleInProgress) { throw "AUTONOMY_CYCLE_NOT_IN_PROGRESS" }
+        if ([bool]$state.rollbackRequired) { throw "AUTONOMY_ABORT_CYCLE_INVALID_WITH_PENDING_ROLLBACK" }
+
+        $guard = Read-Guard $GuardPath
+        if ([string]$guard.Decision -ne "ABORT_CONFIRMED") {
+            throw "AUTONOMY_ABORT_NOT_CONFIRMED: Core guard must prove the active cycle workspace was restored to its accepted baseline; got $($guard.Decision) $($guard.Reason)"
+        }
+        if ([bool]$guard.ReadyToStartCycle) {
+            throw "AUTONOMY_ABORT_GUARD_MUST_NOT_START_NEW_CYCLE"
+        }
+
+        $acceptedHash = [string]$guard.AcceptedStateHash
+        if ([string]$state.activeCycleBaselineStateHash -ne $acceptedHash) {
+            throw "AUTONOMY_ABORT_BASELINE_MISMATCH: expected $($state.activeCycleBaselineStateHash), got $acceptedHash"
+        }
+        if ([string]$state.currentStateHash -ne $acceptedHash) {
+            throw "AUTONOMY_ABORT_CURRENT_STATE_MISMATCH: expected $($state.currentStateHash), got $acceptedHash"
+        }
+
+        $state.cycleInProgress = $false
+        $state.activeCycleBaselineStateHash = $null
+        Apply-GuardIdentity $state $guard
+        Write-Host "AUTONOMY_CYCLE_ABORTED"
+    }
+    "Rebaseline" {
+        if ([bool]$state.cycleInProgress) { throw "AUTONOMY_REBASELINE_REQUIRES_NO_ACTIVE_CYCLE" }
+        if ([bool]$state.rollbackRequired) { throw "AUTONOMY_REBASELINE_REQUIRES_CLEAN_TRANSACTION_STATE" }
+        if ($state.status -eq "RUNNING") { throw "AUTONOMY_REBASELINE_REQUIRES_INVOCATION_BOUNDARY" }
+        if ($state.status -eq "COMPLETE") { throw "AUTONOMY_REBASELINE_FORBIDDEN_AFTER_COMPLETE" }
+
+        $evidence = Read-Rebaseline $RebaselinePath
+        $beforeHash = [string]$evidence.Before.StateHash
+        $afterHash = [string]$evidence.After.StateHash
+        if ([string]::IsNullOrWhiteSpace([string]$state.currentStateHash)) {
+            throw "AUTONOMY_REBASELINE_CURRENT_STATE_MISSING"
+        }
+        if ([string]$state.currentStateHash -ne $beforeHash) {
+            throw "AUTONOMY_REBASELINE_BASELINE_MISMATCH: expected $($state.currentStateHash), got $beforeHash"
+        }
+        if ($beforeHash -eq $afterHash) {
+            throw "AUTONOMY_REBASELINE_STATE_UNCHANGED"
+        }
+
+        $record = [ordered]@{
+            beforeStateHash = $beforeHash
+            afterStateHash = $afterHash
+            beforeToolSha256 = [string]$evidence.Before.ToolSha256
+            afterToolSha256 = [string]$evidence.After.ToolSha256
+            reason = [string]$evidence.Reason
+            rebaselineSha256 = [string]$evidence.RebaselineSha256
+            improvements = @($evidence.Improvements)
+            completedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+        }
+        $state.rebaselineHistory = @(@($state.rebaselineHistory) + @([pscustomobject]$record))
+        $state.visitedStateHashes = @(@($state.visitedStateHashes) + @($beforeHash, $afterHash) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+        $state.currentStateHash = $afterHash
+        $state.lastDecision = "REBASELINE_CONFIRMED"
+        $state.lastBeforeStateHash = $beforeHash
+        $state.lastAfterStateHash = $afterHash
+        $state.lastRebaselineSha256 = [string]$evidence.RebaselineSha256
+        Write-Host "AUTONOMY_REBASELINE_CONFIRMED"
     }
     "ConfirmRollback" {
         if ([bool]$state.cycleInProgress) { throw "AUTONOMY_CANNOT_CONFIRM_ROLLBACK_DURING_ACTIVE_CYCLE" }
@@ -344,7 +460,10 @@ switch ($Action) {
     "Stop" {
         if ([string]::IsNullOrWhiteSpace($StopReason)) { throw "AUTONOMY_STOP_REASON_REQUIRED" }
         if ($Status -eq "COMPLETE" -and $StopReason -ne "SUCCESS") { throw "AUTONOMY_COMPLETE_REQUIRES_SUCCESS" }
-        if ($Status -eq "COMPLETE" -and ([bool]$state.rollbackRequired -or [bool]$state.cycleInProgress)) {
+        if ([bool]$state.cycleInProgress -and $Status -ne "RUNNING") {
+            throw "AUTONOMY_TERMINAL_STOP_REQUIRES_RESOLVED_CYCLE: record the cycle, or restore the accepted baseline and use AbortCycle before STOPPED/BLOCKED/COMPLETE."
+        }
+        if ($Status -eq "COMPLETE" -and [bool]$state.rollbackRequired) {
             throw "AUTONOMY_COMPLETE_REQUIRES_CLEAN_TRANSACTION_STATE"
         }
         if ($state.mode -eq "continuous" -and $StopReason -eq "AUTONOMOUS_CYCLE_BUDGET_REACHED") {

@@ -180,6 +180,11 @@ public sealed class StandardMigrationModeTests
         Assert.Contains("AUTONOMY_CYCLE_GUARD_REQUIRED", updater);
         Assert.Contains("AUTONOMY_EVALUATION_REQUIRED", updater);
         Assert.Contains("AUTONOMY_AGENT_PROGRESS_CLASSIFICATION_FORBIDDEN", updater);
+        Assert.Contains("AbortCycle", updater);
+        Assert.Contains("ABORT_CONFIRMED", updater);
+        Assert.Contains("Rebaseline", updater);
+        Assert.Contains("AUTONOMY_REBASELINE_CONFIRMED", updater);
+        Assert.Contains("AUTONOMY_TERMINAL_STOP_REQUIRES_RESOLVED_CYCLE", updater);
         Assert.Contains("REMEDIATION_CYCLE_DETECTED", updater);
         Assert.Contains("STOPPED_TWO_CONSECUTIVE_NO_PROGRESS", updater);
     }
