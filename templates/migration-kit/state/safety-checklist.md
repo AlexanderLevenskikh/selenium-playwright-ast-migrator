@@ -15,8 +15,9 @@
 - [ ] Every cycle was opened by a Core `remediation guard` + `StartCycle` against the accepted baseline.
 - [ ] No rejected patch was carried forward; every `rollbackRequired=true` received `ROLLBACK_CONFIRMED` before another cycle or handoff.
 - [ ] Every cycle has a stable fingerprint, baseline metrics, rerun evidence, and result.
-- [ ] Progress reset the no-progress streak.
-- [ ] A two-no-progress stop uses two distinct candidate fingerprints.
+- [ ] Progress reset the no-progress telemetry streak.
+- [ ] `REJECT_NO_PROGRESS` exhausted only Core residual IDs passed with `--residual-id`; a regression did not burn the candidate.
+- [ ] A plateau stop is backed by `REMEDIATION_RESIDUAL_CANDIDATES_EXHAUSTED`, not a global streak threshold.
 - [ ] `continuous` advanced after progress and rolled over each five-cycle checkpoint until a real mandatory stop.
 - [ ] `state/autonomy-state.json` and `state/handoff.md` agree.
 - [ ] `scripts/validate-handoff.ps1` passed before handoff.

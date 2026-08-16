@@ -14,6 +14,7 @@ internal static class RemediationCommand
         return args[0].ToLowerInvariant() switch
         {
             "evaluate" => RunEvaluate(args.Skip(1).ToArray()),
+            "residuals" => RunResiduals(args.Skip(1).ToArray()),
             "guard" => RunGuard(args.Skip(1).ToArray()),
             "rebaseline" => RunRebaseline(args.Skip(1).ToArray()),
             _ => UnknownCommand(args[0])
@@ -26,6 +27,7 @@ internal static class RemediationCommand
         string? afterRun = null;
         string? candidate = null;
         string? autonomyState = null;
+        var candidateResidualIds = new List<string>();
         var outPath = "remediation-evaluation.json";
 
         for (var i = 0; i < args.Length; i++)
@@ -40,6 +42,9 @@ internal static class RemediationCommand
                     break;
                 case "--candidate":
                     candidate = ReadValue(args, ref i, "--candidate");
+                    break;
+                case "--residual-id":
+                    candidateResidualIds.Add(ReadValue(args, ref i, "--residual-id"));
                     break;
                 case "--autonomy-state":
                     autonomyState = ReadValue(args, ref i, "--autonomy-state");
@@ -68,7 +73,12 @@ internal static class RemediationCommand
             var visited = LoadVisitedStateHashes(autonomyState);
             var before = RemediationStateEvaluator.LoadRunState(beforeRun);
             var after = RemediationStateEvaluator.LoadRunState(afterRun);
-            var evaluation = RemediationStateEvaluator.Evaluate(before, after, candidate, visited);
+            var evaluation = RemediationStateEvaluator.Evaluate(
+                before,
+                after,
+                candidate,
+                visited,
+                candidateResidualIds);
 
             WriteJson(outPath, evaluation);
 
@@ -78,6 +88,9 @@ internal static class RemediationCommand
             Console.WriteLine($"Before state: {evaluation.Before.StateHash}");
             Console.WriteLine($"After state:  {evaluation.After.StateHash}");
             Console.WriteLine($"Candidate: {evaluation.CandidateFingerprint}");
+            Console.WriteLine($"Candidate residuals: {evaluation.CandidateResidualIds?.Count ?? 0}");
+            Console.WriteLine($"Closed residuals: {evaluation.ClosedResidualIds?.Count ?? 0}");
+            Console.WriteLine($"Opened residuals: {evaluation.OpenedResidualIds?.Count ?? 0}");
             Console.WriteLine($"Rollback required: {evaluation.RollbackRequired}");
             foreach (var item in evaluation.Improvements)
                 Console.WriteLine($"  + {item}");
@@ -94,6 +107,72 @@ internal static class RemediationCommand
         }
     }
 
+    static int RunResiduals(string[] args)
+    {
+        string? run = null;
+        var outPath = "remediation-residuals.json";
+
+        for (var i = 0; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--run":
+                    run = ReadValue(args, ref i, "--run");
+                    break;
+                case "--out":
+                    outPath = ReadValue(args, ref i, "--out");
+                    break;
+                case "--help":
+                case "-h":
+                    PrintHelp();
+                    return 0;
+                default:
+                    Console.Error.WriteLine($"Unknown remediation residuals option: {args[i]}");
+                    return 2;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(run))
+        {
+            Console.Error.WriteLine("remediation residuals requires --run.");
+            return 2;
+        }
+
+        try
+        {
+            var state = RemediationStateEvaluator.LoadRunState(run);
+            var residuals = (state.Residuals ?? Array.Empty<RemediationResidual>())
+                .OrderBy(x => x.ResidualId, StringComparer.Ordinal)
+                .ToArray();
+            var inventory = new
+            {
+                SchemaVersion = RemediationStateEvaluator.ResidualInventorySchemaVersion,
+                RunPath = state.RunPath,
+                StateHash = state.StateHash,
+                Residuals = residuals
+            };
+            WriteJson(outPath, inventory);
+
+            Console.WriteLine("=== Remediation Residual Inventory ===");
+            Console.WriteLine($"State: {state.StateHash}");
+            Console.WriteLine($"Residuals: {residuals.Length}");
+            foreach (var residual in residuals.Where(x => x.Actionable).Take(50))
+            {
+                var source = residual.SourceLine.HasValue
+                    ? $"{residual.SourceFile}:{residual.SourceLine}"
+                    : residual.SourceFile ?? "<source-line-unknown>";
+                Console.WriteLine(
+                    $"  {residual.ResidualId}  {residual.Category}  progress={residual.ProgressBearing}  {source}");
+            }
+            Console.WriteLine($"Inventory: {Path.GetFullPath(outPath)}");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 4;
+        }
+    }
     static int RunRebaseline(string[] args)
     {
         string? beforeRun = null;
@@ -166,6 +245,7 @@ internal static class RemediationCommand
         string? inputPath = null;
         string? autonomyState = null;
         var configPaths = new List<string>();
+        var candidateResidualIds = new List<string>();
         var outPath = "remediation-cycle-guard.json";
 
         for (var i = 0; i < args.Length; i++)
@@ -180,6 +260,9 @@ internal static class RemediationCommand
                     break;
                 case "--config":
                     configPaths.Add(ReadValue(args, ref i, "--config"));
+                    break;
+                case "--residual-id":
+                    candidateResidualIds.Add(ReadValue(args, ref i, "--residual-id"));
                     break;
                 case "--autonomy-state":
                     autonomyState = ReadValue(args, ref i, "--autonomy-state");
@@ -222,7 +305,9 @@ internal static class RemediationCommand
                 autonomy.CurrentStateHash,
                 autonomy.RollbackRequired,
                 autonomy.CycleInProgress,
-                autonomy.Status);
+                autonomy.Status,
+                candidateResidualIds,
+                autonomy.ExhaustedResidualIds);
 
             WriteJson(outPath, guard);
 
@@ -232,6 +317,7 @@ internal static class RemediationCommand
             Console.WriteLine($"Accepted state: {guard.AcceptedStateHash}");
             Console.WriteLine($"Workspace identity: {guard.WorkspaceIdentitySha256}");
             Console.WriteLine($"Rollback confirmed: {guard.RollbackConfirmed}");
+            Console.WriteLine($"Candidate residuals: {guard.CandidateResidualIds?.Count ?? 0}");
             Console.WriteLine($"Ready to start cycle: {guard.ReadyToStartCycle}");
             Console.WriteLine($"Guard: {Path.GetFullPath(outPath)}");
 
@@ -280,7 +366,22 @@ internal static class RemediationCommand
         var currentStateHash = ReadString(root, "currentStateHash");
         var rollbackRequired = root.TryGetProperty("rollbackRequired", out var rollback) && rollback.ValueKind == JsonValueKind.True;
         var cycleInProgress = root.TryGetProperty("cycleInProgress", out var activeCycle) && activeCycle.ValueKind == JsonValueKind.True;
-        return new AutonomyGuardState(status, currentStateHash, rollbackRequired, cycleInProgress);
+        var exhaustedResidualIds = root.TryGetProperty("exhaustedResidualIds", out var exhausted)
+            && exhausted.ValueKind == JsonValueKind.Array
+            ? exhausted.EnumerateArray()
+                .Where(item => item.ValueKind == JsonValueKind.String)
+                .Select(item => item.GetString())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Cast<string>()
+                .Distinct(StringComparer.Ordinal)
+                .ToArray()
+            : Array.Empty<string>();
+        return new AutonomyGuardState(
+            status,
+            currentStateHash,
+            rollbackRequired,
+            cycleInProgress,
+            exhaustedResidualIds);
     }
 
     static string ResolveWorkspaceRoot(string autonomyStatePath)
@@ -324,14 +425,20 @@ internal static class RemediationCommand
     static void PrintHelp()
     {
         Console.WriteLine("Remediation commands:");
-        Console.WriteLine("  selenium-pw-migrator remediation guard --accepted-run <run> --input <source> [--config <json> ...] --autonomy-state <json> --out <json>");
-        Console.WriteLine("  selenium-pw-migrator remediation evaluate --before-run <run> --after-run <run> --candidate <stable-description> [--autonomy-state <json>] --out <json>");
+        Console.WriteLine("  selenium-pw-migrator remediation residuals --run <accepted-run> --out <json>");
+        Console.WriteLine("  selenium-pw-migrator remediation guard --accepted-run <run> --input <source> [--config <json> ...] [--residual-id <sha256> ...] --autonomy-state <json> --out <json>");
+        Console.WriteLine("  selenium-pw-migrator remediation evaluate --before-run <run> --after-run <run> --candidate <description> [--residual-id <sha256> ...] [--autonomy-state <json>] --out <json>");
         Console.WriteLine("  selenium-pw-migrator remediation rebaseline --before-run <old-tool-run> --after-run <new-tool-run> --out <json>");
         Console.WriteLine();
-        Console.WriteLine("guard proves that current source/config identity matches the accepted baseline before a cycle starts; after REJECT_* it is also the rollback proof, and an abandoned active cycle can receive ABORT_CONFIRMED after exact baseline restoration.");
+        Console.WriteLine("residuals emits stable source-bound residual identities. Bind an autonomous candidate with --residual-id so exhaustion cannot be evaded by rewording a label.");
+        Console.WriteLine("guard proves source/config identity and binds a ready cycle to non-exhausted residual IDs before any write; after REJECT_* it is also the rollback proof, and an abandoned active cycle can receive ABORT_CONFIRMED after exact baseline restoration.");
         Console.WriteLine("evaluate computes ACCEPT / REJECT_NO_PROGRESS / REJECT_REGRESSION / REJECT_CYCLE from exact run artifacts. The agent does not classify progress.");
         Console.WriteLine("rebaseline is the explicit tool-upgrade boundary: source/config/environment must match and the new tool run must introduce no deterministic regression.");
     }
-
-    sealed record AutonomyGuardState(string Status, string CurrentStateHash, bool RollbackRequired, bool CycleInProgress);
+    sealed record AutonomyGuardState(
+        string Status,
+        string CurrentStateHash,
+        bool RollbackRequired,
+        bool CycleInProgress,
+        IReadOnlyCollection<string> ExhaustedResidualIds);
 }

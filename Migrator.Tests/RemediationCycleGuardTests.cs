@@ -140,7 +140,98 @@ public sealed class RemediationCycleGuardTests
         Assert.False(guard.ReadyToStartCycle);
     }
 
-    static RemediationRunState State(string hash, string source, string config) => new(
+
+    [Fact]
+    public void Evaluate_ResidualBearingBaselineRequiresPreWriteCandidateBinding()
+    {
+        var residual = new RemediationResidual(
+            "r-login", "PageTodo", "Error", "login",
+            "Source.cs", 10, "Generated.cs", 20,
+            Actionable: true, ProgressBearing: true);
+        var accepted = State(
+            "accepted",
+            source: "source",
+            config: "config",
+            residuals: new[] { residual });
+
+        var guard = RemediationCycleGuardEvaluator.Evaluate(
+            accepted,
+            observedSourceSha256: "source",
+            observedConfigSha256: "config",
+            currentStateHash: "accepted",
+            rollbackRequired: false,
+            cycleInProgress: false,
+            autonomyStatus: "RUNNING",
+            candidateResidualIds: Array.Empty<string>(),
+            exhaustedResidualIds: Array.Empty<string>());
+
+        Assert.Equal("BLOCKED_CANDIDATE_REQUIRED", guard.Decision);
+        Assert.Equal("REMEDIATION_RESIDUAL_CANDIDATE_REQUIRED", guard.Reason);
+        Assert.False(guard.ReadyToStartCycle);
+    }
+
+    [Fact]
+    public void Evaluate_RejectsAlreadyExhaustedResidualBeforeWrite()
+    {
+        var residual = new RemediationResidual(
+            "r-login", "PageTodo", "Error", "login",
+            "Source.cs", 10, "Generated.cs", 20,
+            Actionable: true, ProgressBearing: true);
+        var accepted = State(
+            "accepted",
+            source: "source",
+            config: "config",
+            residuals: new[] { residual });
+
+        var guard = RemediationCycleGuardEvaluator.Evaluate(
+            accepted,
+            observedSourceSha256: "source",
+            observedConfigSha256: "config",
+            currentStateHash: "accepted",
+            rollbackRequired: false,
+            cycleInProgress: false,
+            autonomyStatus: "RUNNING",
+            candidateResidualIds: new[] { residual.ResidualId },
+            exhaustedResidualIds: new[] { residual.ResidualId });
+
+        Assert.Equal("BLOCKED_CANDIDATE_EXHAUSTED", guard.Decision);
+        Assert.Equal("REMEDIATION_RESIDUAL_CANDIDATE_ALREADY_EXHAUSTED", guard.Reason);
+        Assert.False(guard.ReadyToStartCycle);
+    }
+
+    [Fact]
+    public void Evaluate_ReadyGuardCarriesExactResidualBinding()
+    {
+        var residual = new RemediationResidual(
+            "r-login", "PageTodo", "Error", "login",
+            "Source.cs", 10, "Generated.cs", 20,
+            Actionable: true, ProgressBearing: true);
+        var accepted = State(
+            "accepted",
+            source: "source",
+            config: "config",
+            residuals: new[] { residual });
+
+        var guard = RemediationCycleGuardEvaluator.Evaluate(
+            accepted,
+            observedSourceSha256: "source",
+            observedConfigSha256: "config",
+            currentStateHash: "accepted",
+            rollbackRequired: false,
+            cycleInProgress: false,
+            autonomyStatus: "RUNNING",
+            candidateResidualIds: new[] { residual.ResidualId },
+            exhaustedResidualIds: Array.Empty<string>());
+
+        Assert.Equal("READY", guard.Decision);
+        Assert.True(guard.ReadyToStartCycle);
+        Assert.Equal(new[] { residual.ResidualId }, guard.CandidateResidualIds);
+    }
+    static RemediationRunState State(
+        string hash,
+        string source,
+        string config,
+        IReadOnlyList<RemediationResidual>? residuals = null) => new(
         RunPath: hash,
         SourceSha256: source,
         ConfigSha256: config,
@@ -151,5 +242,6 @@ public sealed class RemediationCycleGuardTests
         Structure: new RemediationStructuralMetrics(TestsFound: 1, GeneratedFiles: 1),
         ProjectVerificationStatus: "passed",
         ProjectDiagnostics: 0,
-        StateHash: hash);
+        StateHash: hash,
+        Residuals: residuals);
 }

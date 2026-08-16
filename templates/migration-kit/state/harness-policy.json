@@ -13,8 +13,10 @@
   "continueStartsFreshBudget": true,
   "continuousAutoAdvanceAfterProgress": true,
   "continuousRollsOverCycleBudget": true,
-  "noProgressStopThreshold": 2,
-  "requireDistinctNoProgressCandidates": true,
+  "globalNoProgressStopEnabled": false,
+  "candidateIdentity": "residual-id",
+  "stopWhenResidualCandidatesExhausted": true,
+  "regressionExhaustsCandidate": false,
   "verificationDimensionsIndependent": true,
   "maxAutonomousRemediationCyclesPerInvocation": 5,
   "oneWriteChangePerCycle": true,
@@ -26,5 +28,6 @@
   "rejectAgentAuthoredProgressClassification": true,
   "requireRollbackOnRejectedCycle": true,
   "persistVisitedStateHashesAcrossInvocations": true,
-  "cycleDetectedStopReason": "REMEDIATION_CYCLE_DETECTED"
+  "cycleDetectedStopReason": "REMEDIATION_CYCLE_DETECTED",
+  "residualExhaustionStopReason": "REMEDIATION_RESIDUAL_CANDIDATES_EXHAUSTED"
 }

@@ -178,7 +178,10 @@ public sealed class StandardMigrationModeTests
         Assert.Contains("\"maxChangesPerCycle\": 1", policy);
         Assert.Contains("\"continueStartsFreshBudget\": true", policy);
         Assert.Contains("\"continuousAutoAdvanceAfterProgress\": true", policy);
-        Assert.Contains("\"requireDistinctNoProgressCandidates\": true", policy);
+        Assert.Contains("\"globalNoProgressStopEnabled\": false", policy);
+        Assert.Contains("\"candidateIdentity\": \"residual-id\"", policy);
+        Assert.Contains("\"stopWhenResidualCandidatesExhausted\": true", policy);
+        Assert.Contains("\"regressionExhaustsCandidate\": false", policy);
         Assert.Contains("\"verificationDimensionsIndependent\": true", policy);
         Assert.Contains("standard-migration-autonomy/v3", state);
         Assert.Contains("visitedStateHashes", state);
@@ -193,7 +196,8 @@ public sealed class StandardMigrationModeTests
         Assert.Contains("AUTONOMY_REBASELINE_CONFIRMED", updater);
         Assert.Contains("AUTONOMY_TERMINAL_STOP_REQUIRES_RESOLVED_CYCLE", updater);
         Assert.Contains("REMEDIATION_CYCLE_DETECTED", updater);
-        Assert.Contains("STOPPED_TWO_CONSECUTIVE_NO_PROGRESS", updater);
+        Assert.Contains("REMEDIATION_RESIDUAL_CANDIDATES_EXHAUSTED", updater);
+        Assert.DoesNotContain("STOPPED_TWO_CONSECUTIVE_NO_PROGRESS", updater);
     }
 
     [Fact]

@@ -81,7 +81,7 @@ if (-not [int]::TryParse($totalCyclesCompletedText, [ref]$totalCyclesCompleted) 
 if (-not [int]::TryParse($continuousBatchesText, [ref]$continuousBatches) -or $continuousBatches -lt 0) {
     throw "HANDOFF_CONTINUOUS_BATCHES_INVALID: $continuousBatchesText"
 }
-if (-not [int]::TryParse($noProgressText, [ref]$noProgressStreak) -or $noProgressStreak -lt 0 -or $noProgressStreak -gt 2) {
+if (-not [int]::TryParse($noProgressText, [ref]$noProgressStreak) -or $noProgressStreak -lt 0 -or $noProgressStreak -gt $totalCyclesCompleted) {
     throw "HANDOFF_NO_PROGRESS_STREAK_INVALID: $noProgressText"
 }
 
@@ -94,8 +94,8 @@ if ($mode -eq "continuous" -and $stopReason -eq "AUTONOMOUS_CYCLE_BUDGET_REACHED
 if ($stopReason -eq "AUTONOMOUS_CYCLE_BUDGET_REACHED" -and $status -eq "COMPLETE") {
     throw "HANDOFF_BUDGET_CONTRADICTION: budget exhaustion is not completion."
 }
-if ($stopReason -eq "STOPPED_TWO_CONSECUTIVE_NO_PROGRESS" -and $noProgressStreak -ne 2) {
-    throw "HANDOFF_NO_PROGRESS_CONTRADICTION: two-no-progress stop requires No-progress streak: 2."
+if ($stopReason -eq "REMEDIATION_RESIDUAL_CANDIDATES_EXHAUSTED" -and $noProgressStreak -lt 1) {
+    throw "HANDOFF_RESIDUAL_EXHAUSTION_CONTRADICTION: residual exhaustion requires at least one measured no-progress candidate."
 }
 if ($stopReason -eq "AUTONOMOUS_CYCLE_BUDGET_REACHED" -and $cyclesCompleted -ne $cycleBudget) {
     throw "HANDOFF_BUDGET_COUNT_CONTRADICTION: budget stop requires completed cycles to equal cycle budget."
@@ -127,6 +127,18 @@ if (([string]$state.mode) -ne $mode) { throw "HANDOFF_STATE_MISMATCH: mode" }
 if ($invocationId -ne "NONE" -and ([string]$state.invocationId) -ne $invocationId) { throw "HANDOFF_STATE_MISMATCH: invocationId" }
 if ([bool]$state.cycleInProgress) { throw "AUTONOMY_STATE_ACTIVE_CYCLE_AT_HANDOFF" }
 if ([bool]$state.rollbackRequired) { throw "AUTONOMY_STATE_ROLLBACK_REQUIRED_AT_HANDOFF" }
+
+if ($stopReason -eq "REMEDIATION_RESIDUAL_CANDIDATES_EXHAUSTED") {
+    $currentResidualIds = @($state.currentResidualIds | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique)
+    $exhaustedResidualIds = @($state.exhaustedResidualIds | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique)
+    if ($currentResidualIds.Count -eq 0) {
+        throw "AUTONOMY_STATE_RESIDUAL_EXHAUSTION_WITHOUT_CANDIDATES"
+    }
+    $remainingResidualIds = @($currentResidualIds | Where-Object { $exhaustedResidualIds -notcontains [string]$_ })
+    if ($remainingResidualIds.Count -ne 0) {
+        throw "AUTONOMY_STATE_RESIDUAL_EXHAUSTION_OVERCLAIM: $($remainingResidualIds.Count) candidate(s) remain."
+    }
+}
 
 if ($status -eq "COMPLETE") {
     foreach ($field in @(
@@ -190,16 +202,8 @@ foreach ($cycle in $cycleHistory) {
     $fingerprints += $fingerprint
 }
 
-if ($stopReason -eq "STOPPED_TWO_CONSECUTIVE_NO_PROGRESS") {
-    if ($cycleHistory.Count -lt 2) { throw "AUTONOMY_STATE_NO_PROGRESS_HISTORY_MISSING" }
-    $last = $cycleHistory[$cycleHistory.Count - 1]
-    $previous = $cycleHistory[$cycleHistory.Count - 2]
-    if ([string]$last.result -ne "NO_PROGRESS" -or [string]$previous.result -ne "NO_PROGRESS") {
-        throw "AUTONOMY_STATE_NO_PROGRESS_HISTORY_INVALID: last two cycles must be NO_PROGRESS."
-    }
-    if ([string]$last.candidateFingerprint -eq [string]$previous.candidateFingerprint) {
-        throw "AUTONOMY_STATE_NO_PROGRESS_CANDIDATES_NOT_DISTINCT"
-    }
+if ($stopReason -eq "REMEDIATION_RESIDUAL_CANDIDATES_EXHAUSTED" -and $cycleHistory.Count -lt 1) {
+    throw "AUTONOMY_STATE_RESIDUAL_EXHAUSTION_HISTORY_MISSING"
 }
 
 Write-Host "HANDOFF_CONTRACT_PASS"

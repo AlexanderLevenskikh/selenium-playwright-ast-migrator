@@ -14,19 +14,18 @@ public sealed record RemediationCycleGuard(
     bool RollbackWasRequired,
     bool RollbackConfirmed,
     bool ReadyToStartCycle,
-    string GuardSha256);
+    string GuardSha256,
+    IReadOnlyList<string>? CandidateResidualIds = null);
 
 /// <summary>
-/// Transaction boundary before a remediation cycle. It binds the autonomy baseline to a
-/// specific accepted run and checks the current source/config identities before edits begin.
-/// A rejected patch therefore cannot become the next baseline merely by starting a fresh
-/// invocation or by pointing at an older run artifact.
+/// Transaction boundary before a remediation cycle. In addition to source/config identity,
+/// a ready guard may bind the cycle to exact progress-bearing residual identities. This
+/// prevents an exhausted candidate from being retried merely by changing its prose label.
 /// </summary>
 public static class RemediationCycleGuardEvaluator
 {
     public const string GuardSchemaVersion = "migrator-remediation-cycle-guard/v1";
 
-    // Backward-compatible overload for callers that predate explicit active-cycle recovery.
     public static RemediationCycleGuard Evaluate(
         RemediationRunState acceptedRun,
         string observedSourceSha256,
@@ -41,7 +40,9 @@ public static class RemediationCycleGuardEvaluator
             currentStateHash,
             rollbackRequired,
             cycleInProgress: false,
-            autonomyStatus);
+            autonomyStatus,
+            candidateResidualIds: null,
+            exhaustedResidualIds: null);
 
     public static RemediationCycleGuard Evaluate(
         RemediationRunState acceptedRun,
@@ -50,13 +51,20 @@ public static class RemediationCycleGuardEvaluator
         string? currentStateHash,
         bool rollbackRequired,
         bool cycleInProgress,
-        string autonomyStatus)
+        string autonomyStatus,
+        IReadOnlyCollection<string>? candidateResidualIds = null,
+        IReadOnlyCollection<string>? exhaustedResidualIds = null)
     {
         ArgumentNullException.ThrowIfNull(acceptedRun);
         observedSourceSha256 ??= string.Empty;
         observedConfigSha256 ??= string.Empty;
         currentStateHash ??= string.Empty;
         autonomyStatus ??= string.Empty;
+
+        var selectedResidualIds = CanonicalIds(candidateResidualIds);
+        var exhausted = new HashSet<string>(
+            CanonicalIds(exhaustedResidualIds),
+            StringComparer.Ordinal);
 
         if (currentStateHash.Length > 0
             && !string.Equals(currentStateHash, acceptedRun.StateHash, StringComparison.Ordinal))
@@ -69,11 +77,18 @@ public static class RemediationCycleGuardEvaluator
                 observedConfigSha256,
                 rollbackRequired,
                 rollbackConfirmed: false,
-                ready: false);
+                ready: false,
+                selectedResidualIds);
         }
 
-        var sourceMatches = string.Equals(observedSourceSha256, acceptedRun.SourceSha256, StringComparison.OrdinalIgnoreCase);
-        var configMatches = string.Equals(observedConfigSha256, acceptedRun.ConfigSha256, StringComparison.OrdinalIgnoreCase);
+        var sourceMatches = string.Equals(
+            observedSourceSha256,
+            acceptedRun.SourceSha256,
+            StringComparison.OrdinalIgnoreCase);
+        var configMatches = string.Equals(
+            observedConfigSha256,
+            acceptedRun.ConfigSha256,
+            StringComparison.OrdinalIgnoreCase);
         if (!sourceMatches || !configMatches)
         {
             var reason = !sourceMatches && !configMatches
@@ -89,7 +104,51 @@ public static class RemediationCycleGuardEvaluator
                 observedConfigSha256,
                 rollbackRequired,
                 rollbackConfirmed: false,
-                ready: false);
+                ready: false,
+                selectedResidualIds);
+        }
+
+        var availableById = (acceptedRun.Residuals ?? Array.Empty<RemediationResidual>())
+            .Where(x => x.Actionable && x.ProgressBearing)
+            .GroupBy(x => x.ResidualId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+
+        // Candidate selection is optional for a rollback/abort proof because handoff may need
+        // to confirm a clean workspace without opening another cycle. If a candidate is
+        // supplied, however, validate it even during rollback so a single guard can both
+        // confirm rollback and bind the next legal transaction.
+        if (selectedResidualIds.Count > 0)
+        {
+            foreach (var residualId in selectedResidualIds)
+            {
+                if (!availableById.ContainsKey(residualId))
+                {
+                    return Create(
+                        "BLOCKED_CANDIDATE_INVALID",
+                        "REMEDIATION_RESIDUAL_CANDIDATE_NOT_IN_BASELINE",
+                        acceptedRun,
+                        observedSourceSha256,
+                        observedConfigSha256,
+                        rollbackRequired,
+                        rollbackConfirmed: false,
+                        ready: false,
+                        selectedResidualIds);
+                }
+
+                if (exhausted.Contains(residualId))
+                {
+                    return Create(
+                        "BLOCKED_CANDIDATE_EXHAUSTED",
+                        "REMEDIATION_RESIDUAL_CANDIDATE_ALREADY_EXHAUSTED",
+                        acceptedRun,
+                        observedSourceSha256,
+                        observedConfigSha256,
+                        rollbackRequired,
+                        rollbackConfirmed: false,
+                        ready: false,
+                        selectedResidualIds);
+                }
+            }
         }
 
         if (rollbackRequired)
@@ -102,17 +161,10 @@ public static class RemediationCycleGuardEvaluator
                 observedConfigSha256,
                 rollbackRequired: true,
                 rollbackConfirmed: true,
-                ready: true);
+                ready: true,
+                selectedResidualIds);
         }
 
-        // An opened cycle is a transaction. If its bounded edit is abandoned before a
-        // deterministic after-run/evaluation exists (for example reviewer rejection or an
-        // external blocker), the only legal escape is to restore the accepted
-        // source/config identity and explicitly abort the transaction. This decision is
-        // intentionally not ready-to-start: AbortCycle must clear the active transaction
-        // before any new invocation/cycle may begin. It also works for a legacy STOPPED
-        // state produced by older updaters, so existing workspaces can recover without
-        // hand-editing autonomy-state.json.
         if (cycleInProgress)
         {
             return Create(
@@ -123,7 +175,8 @@ public static class RemediationCycleGuardEvaluator
                 observedConfigSha256,
                 rollbackRequired: false,
                 rollbackConfirmed: false,
-                ready: false);
+                ready: false,
+                selectedResidualIds);
         }
 
         if (!string.Equals(autonomyStatus, "RUNNING", StringComparison.OrdinalIgnoreCase))
@@ -136,18 +189,51 @@ public static class RemediationCycleGuardEvaluator
                 observedConfigSha256,
                 rollbackRequired: false,
                 rollbackConfirmed: false,
-                ready: false);
+                ready: false,
+                selectedResidualIds);
+        }
+
+        var nonExhaustedAvailable = availableById.Keys
+            .Where(id => !exhausted.Contains(id))
+            .OrderBy(id => id, StringComparer.Ordinal)
+            .ToArray();
+
+        if (nonExhaustedAvailable.Length > 0 && selectedResidualIds.Count == 0)
+        {
+            return Create(
+                "BLOCKED_CANDIDATE_REQUIRED",
+                "REMEDIATION_RESIDUAL_CANDIDATE_REQUIRED",
+                acceptedRun,
+                observedSourceSha256,
+                observedConfigSha256,
+                rollbackRequired: false,
+                rollbackConfirmed: false,
+                ready: false,
+                selectedResidualIds);
         }
 
         return Create(
             currentStateHash.Length == 0 ? "READY_INITIAL_BASELINE" : "READY",
-            currentStateHash.Length == 0 ? "REMEDIATION_BASELINE_INITIALIZED" : "REMEDIATION_BASELINE_READY",
+            currentStateHash.Length == 0
+                ? "REMEDIATION_BASELINE_INITIALIZED"
+                : "REMEDIATION_BASELINE_READY",
             acceptedRun,
             observedSourceSha256,
             observedConfigSha256,
             rollbackRequired: false,
             rollbackConfirmed: false,
-            ready: true);
+            ready: true,
+            selectedResidualIds);
+    }
+
+    static IReadOnlyList<string> CanonicalIds(IReadOnlyCollection<string>? values)
+    {
+        return (values ?? Array.Empty<string>())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToArray();
     }
 
     static RemediationCycleGuard Create(
@@ -158,7 +244,8 @@ public static class RemediationCycleGuardEvaluator
         string observedConfigSha256,
         bool rollbackRequired,
         bool rollbackConfirmed,
-        bool ready)
+        bool ready,
+        IReadOnlyList<string> candidateResidualIds)
     {
         var workspaceIdentitySha256 = CanonicalJsonHasher.ComputeSha256(new
         {
@@ -179,7 +266,8 @@ public static class RemediationCycleGuardEvaluator
             workspaceIdentitySha256,
             rollbackWasRequired = rollbackRequired,
             rollbackConfirmed,
-            readyToStartCycle = ready
+            readyToStartCycle = ready,
+            candidateResidualIds
         };
 
         return new RemediationCycleGuard(
@@ -196,6 +284,7 @@ public static class RemediationCycleGuardEvaluator
             RollbackWasRequired: rollbackRequired,
             RollbackConfirmed: rollbackConfirmed,
             ReadyToStartCycle: ready,
-            GuardSha256: CanonicalJsonHasher.ComputeSha256(identity));
+            GuardSha256: CanonicalJsonHasher.ComputeSha256(identity),
+            CandidateResidualIds: candidateResidualIds);
     }
 }

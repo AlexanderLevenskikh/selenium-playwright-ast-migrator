@@ -1769,6 +1769,20 @@ Fix only the current ticket.
             "- [ ] The agent stopped after the full run or after one bounded repair plus a complete rerun.",
             "- [ ] The agent used the five-cycle budget correctly: one bounded write change per cycle, a complete rerun after every cycle, and automatic rollover in `continuous` mode.");
 
+        changed |= ReplaceKnownText(
+            Path.Combine(workspacePath, "state", "stop-policy-checklist.md"),
+            "- [ ] `STOPPED_TWO_CONSECUTIVE_NO_PROGRESS`: two consecutive completed cycles on distinct candidate fingerprints produced no progress, with no intervening progress.",
+            "- [ ] `REMEDIATION_RESIDUAL_CANDIDATES_EXHAUSTED`: every current progress-bearing residual identity exposed by Core has been tried without deterministic progress.");
+
+        changed |= ReplaceKnownText(
+            Path.Combine(workspacePath, "state", "stop-policy-checklist.md"),
+            "- A successful cycle resets `noProgressStreak` to zero and autonomy continues while budget remains.`n- The first no-progress cycle exhausts that candidate and triggers a different independent candidate; it is not a stop by itself.",
+            "- `noProgressStreak` is telemetry only and never proves a global plateau.`n- `REJECT_NO_PROGRESS` exhausts only exact residual IDs bound with `--residual-id`; `REJECT_REGRESSION` requires rollback but does not exhaust the residual candidate.");
+
+        changed |= ReplaceKnownText(
+            Path.Combine(workspacePath, "state", "safety-checklist.md"),
+            "- [ ] Progress reset the no-progress streak.`n- [ ] A two-no-progress stop uses two distinct candidate fingerprints.",
+            "- [ ] Progress reset the no-progress telemetry streak.`n- [ ] `REJECT_NO_PROGRESS` exhausted only Core residual IDs passed with `--residual-id`; a regression did not burn the candidate.`n- [ ] A plateau stop is backed by `REMEDIATION_RESIDUAL_CANDIDATES_EXHAUSTED`, not a global streak threshold.");
         if (changed)
             Console.WriteLine($"upgrade-standard-mode-state: {workspacePath} (five-cycle budget + transactional cycle guard)");
     }
@@ -1792,20 +1806,41 @@ Fix only the current ticket.
             return false;
 
         var schema = state["schemaVersion"]?.GetValue<string>() ?? string.Empty;
-        if (!string.Equals(schema, "standard-migration-autonomy/v1", StringComparison.Ordinal)
-            && !string.Equals(schema, "standard-migration-autonomy/v2", StringComparison.Ordinal))
+        var changed = false;
+
+        if (string.Equals(schema, "standard-migration-autonomy/v1", StringComparison.Ordinal)
+            || string.Equals(schema, "standard-migration-autonomy/v2", StringComparison.Ordinal))
+        {
+            state["schemaVersion"] = "standard-migration-autonomy/v3";
+            changed = true;
+        }
+        else if (!string.Equals(schema, "standard-migration-autonomy/v3", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (!state.ContainsKey("cycleInProgress")) { state["cycleInProgress"] = false; changed = true; }
+        if (!state.ContainsKey("activeCycleBaselineStateHash")) { state["activeCycleBaselineStateHash"] = null; changed = true; }
+        if (!state.ContainsKey("activeCycleResidualIds")) { state["activeCycleResidualIds"] = new JsonArray(); changed = true; }
+        if (!state.ContainsKey("lastGuardSha256")) { state["lastGuardSha256"] = null; changed = true; }
+        if (!state.ContainsKey("lastGuardDecision")) { state["lastGuardDecision"] = null; changed = true; }
+        if (!state.ContainsKey("lastWorkspaceIdentitySha256")) { state["lastWorkspaceIdentitySha256"] = null; changed = true; }
+
+        // Block 10 residual-identity liveness state. These fields are additive and
+        // therefore safe to materialize in an already protected v3 workspace.
+        if (!state.ContainsKey("lastClosedResidualIds")) { state["lastClosedResidualIds"] = new JsonArray(); changed = true; }
+        if (!state.ContainsKey("lastOpenedResidualIds")) { state["lastOpenedResidualIds"] = new JsonArray(); changed = true; }
+        if (!state.ContainsKey("currentResidualIds")) { state["currentResidualIds"] = new JsonArray(); changed = true; }
+        if (!state.ContainsKey("exhaustedResidualIds")) { state["exhaustedResidualIds"] = new JsonArray(); changed = true; }
+
+        if (!changed)
             return false;
 
-        state["schemaVersion"] = "standard-migration-autonomy/v3";
-        if (!state.ContainsKey("cycleInProgress")) state["cycleInProgress"] = false;
-        if (!state.ContainsKey("activeCycleBaselineStateHash")) state["activeCycleBaselineStateHash"] = null;
-        if (!state.ContainsKey("lastGuardSha256")) state["lastGuardSha256"] = null;
-        if (!state.ContainsKey("lastGuardDecision")) state["lastGuardDecision"] = null;
-        if (!state.ContainsKey("lastWorkspaceIdentitySha256")) state["lastWorkspaceIdentitySha256"] = null;
-        File.WriteAllText(path, state.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
+        File.WriteAllText(
+            path,
+            state.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
         return true;
     }
-
     static bool ReplaceKnownText(string path, string legacyText, string replacement)
     {
         if (!File.Exists(path))

@@ -53,10 +53,15 @@ function New-State {
         lastFinalGateVerificationEvidenceSha256 = $null
         lastBeforeStateHash = $null
         lastAfterStateHash = $null
+        lastClosedResidualIds = @()
+        lastOpenedResidualIds = @()
         currentStateHash = $null
+        currentResidualIds = @()
+        exhaustedResidualIds = @()
         rollbackRequired = $false
         cycleInProgress = $false
         activeCycleBaselineStateHash = $null
+        activeCycleResidualIds = @()
         lastGuardSha256 = $null
         lastGuardDecision = $null
         lastWorkspaceIdentitySha256 = $null
@@ -91,6 +96,11 @@ function Convert-ToMutableState($InputState) {
     if ($null -eq $state.PSObject.Properties["rebaselineHistory"]) {
         $state | Add-Member -NotePropertyName rebaselineHistory -NotePropertyValue @()
     }
+    $state.activeCycleResidualIds = @($state.activeCycleResidualIds)
+    $state.lastClosedResidualIds = @($state.lastClosedResidualIds)
+    $state.lastOpenedResidualIds = @($state.lastOpenedResidualIds)
+    $state.currentResidualIds = @($state.currentResidualIds)
+    $state.exhaustedResidualIds = @($state.exhaustedResidualIds)
     $state.visitedStateHashes = @($state.visitedStateHashes)
     $state.completedCycles = @($state.completedCycles)
     $state.cycleHistory = @($state.cycleHistory)
@@ -608,7 +618,10 @@ function Read-Guard([string]$Path) {
         "ABORT_CONFIRMED",
         "BLOCKED_BASELINE_MISMATCH",
         "BLOCKED_WORKSPACE_MISMATCH",
-        "BLOCKED_AUTONOMY_NOT_RUNNING"
+        "BLOCKED_AUTONOMY_NOT_RUNNING",
+        "BLOCKED_CANDIDATE_REQUIRED",
+        "BLOCKED_CANDIDATE_INVALID",
+        "BLOCKED_CANDIDATE_EXHAUSTED"
     ) -notcontains [string]$guard.Decision) {
         throw "AUTONOMY_CYCLE_GUARD_DECISION_INVALID: $($guard.Decision)"
     }
@@ -803,9 +816,25 @@ switch ($Action) {
             $state.visitedStateHashes = @(@($state.visitedStateHashes) + @($acceptedHash) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
         }
 
+        $guardResidualIds = @(
+            $guard.CandidateResidualIds |
+                Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+                ForEach-Object { [string]$_ } |
+                Select-Object -Unique
+        )
+        if (@($state.currentResidualIds).Count -gt 0 -and $guardResidualIds.Count -eq 0) {
+            throw "AUTONOMY_CYCLE_RESIDUAL_BINDING_REQUIRED"
+        }
+        foreach ($residualId in $guardResidualIds) {
+            if (@($state.exhaustedResidualIds) -contains $residualId) {
+                throw "AUTONOMY_CYCLE_RESIDUAL_ALREADY_EXHAUSTED: $residualId"
+            }
+        }
+
         $state.rollbackRequired = $false
         $state.cycleInProgress = $true
         $state.activeCycleBaselineStateHash = [string]$state.currentStateHash
+        $state.activeCycleResidualIds = $guardResidualIds
         Apply-GuardIdentity $state $guard
         Write-Host "AUTONOMY_CYCLE_STARTED"
     }
@@ -831,6 +860,7 @@ switch ($Action) {
 
         $state.cycleInProgress = $false
         $state.activeCycleBaselineStateHash = $null
+        $state.activeCycleResidualIds = @()
         Apply-GuardIdentity $state $guard
         Write-Host "AUTONOMY_CYCLE_ABORTED"
     }
@@ -846,8 +876,16 @@ switch ($Action) {
         if ([string]::IsNullOrWhiteSpace([string]$state.currentStateHash)) {
             throw "AUTONOMY_REBASELINE_CURRENT_STATE_MISSING"
         }
-        if ([string]$state.currentStateHash -ne $beforeHash) {
-            throw "AUTONOMY_REBASELINE_BASELINE_MISMATCH: expected $($state.currentStateHash), got $beforeHash"
+
+        # Block 10 changes StateHash by adding residual inventory. A workspace created by
+        # the immediately previous tool version still stores the legacy formula. That old
+        # identity is accepted only here, at the explicit verified tool-upgrade boundary.
+        $legacyBeforeHash = [string]$evidence.Before.LegacyStateHash
+        $matchesAuthoritativeBefore = [string]$state.currentStateHash -eq $beforeHash
+        $matchesLegacyBefore = -not [string]::IsNullOrWhiteSpace($legacyBeforeHash) -and
+            [string]$state.currentStateHash -eq $legacyBeforeHash
+        if (-not $matchesAuthoritativeBefore -and -not $matchesLegacyBefore) {
+            throw "AUTONOMY_REBASELINE_BASELINE_MISMATCH: expected $($state.currentStateHash), got authoritative=$beforeHash legacy=$legacyBeforeHash"
         }
         if ($beforeHash -eq $afterHash) {
             throw "AUTONOMY_REBASELINE_STATE_UNCHANGED"
@@ -860,19 +898,35 @@ switch ($Action) {
             afterToolSha256 = [string]$evidence.After.ToolSha256
             reason = [string]$evidence.Reason
             rebaselineSha256 = [string]$evidence.RebaselineSha256
+            legacyBeforeStateHash = $legacyBeforeHash
+            usedLegacyStateBridge = [bool]$matchesLegacyBefore
             improvements = @($evidence.Improvements)
             completedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
         }
         $state.rebaselineHistory = @(@($state.rebaselineHistory) + @([pscustomobject]$record))
-        $state.visitedStateHashes = @(@($state.visitedStateHashes) + @($beforeHash, $afterHash) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+        $state.visitedStateHashes = @(
+            @($state.visitedStateHashes) + @($beforeHash, $afterHash) |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+                Select-Object -Unique
+        )
         $state.currentStateHash = $afterHash
+        $state.currentResidualIds = @(
+            $evidence.After.Residuals |
+                Where-Object { [bool]$_.Actionable -and [bool]$_.ProgressBearing } |
+                ForEach-Object { [string]$_.ResidualId } |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+                Select-Object -Unique
+        )
+        # Residual IDs are tool-derived. A successful tool rebaseline invalidates exhaustion
+        # recorded under the previous tool identity.
+        $state.exhaustedResidualIds = @()
+        $state.activeCycleResidualIds = @()
         $state.lastDecision = "REBASELINE_CONFIRMED"
         $state.lastBeforeStateHash = $beforeHash
         $state.lastAfterStateHash = $afterHash
         $state.lastRebaselineSha256 = [string]$evidence.RebaselineSha256
         Write-Host "AUTONOMY_REBASELINE_CONFIRMED"
-    }
-    "ConfirmRollback" {
+    }    "ConfirmRollback" {
         if ([bool]$state.cycleInProgress) { throw "AUTONOMY_CANNOT_CONFIRM_ROLLBACK_DURING_ACTIVE_CYCLE" }
         if (-not [bool]$state.rollbackRequired) { throw "AUTONOMY_ROLLBACK_NOT_REQUIRED" }
 
@@ -902,6 +956,23 @@ switch ($Action) {
         $afterHash = [string]$evaluation.After.StateHash
         $decision = [string]$evaluation.Decision
         $fingerprint = [string]$evaluation.CandidateFingerprint
+        $candidateResidualIds = @($evaluation.CandidateResidualIds | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique)
+        $closedResidualIds = @($evaluation.ClosedResidualIds | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique)
+        $openedResidualIds = @($evaluation.OpenedResidualIds | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique)
+        $activeCycleResidualIds = @(
+            $state.activeCycleResidualIds |
+                Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+                ForEach-Object { [string]$_ } |
+                Sort-Object -Unique
+        )
+        $evaluationResidualIds = @(
+            $candidateResidualIds |
+                ForEach-Object { [string]$_ } |
+                Sort-Object -Unique
+        )
+        if (($activeCycleResidualIds -join "`n") -ne ($evaluationResidualIds -join "`n")) {
+            throw "AUTONOMY_EVALUATION_CANDIDATE_BINDING_MISMATCH"
+        }
 
         if ([string]$state.activeCycleBaselineStateHash -ne $beforeHash) {
             throw "AUTONOMY_ACTIVE_CYCLE_BASELINE_MISMATCH: expected $($state.activeCycleBaselineStateHash), got $beforeHash"
@@ -924,6 +995,7 @@ switch ($Action) {
             totalCycleNumber = ([int]$state.totalCyclesCompleted + 1)
             candidateFingerprint = $fingerprint
             candidateLabel = [string]$evaluation.CandidateLabel
+            candidateResidualIds = $candidateResidualIds
             result = $result
             decision = $decision
             reason = [string]$evaluation.Reason
@@ -933,6 +1005,8 @@ switch ($Action) {
             afterStateHash = $afterHash
             beforeDefects = $evaluation.Before.Defects
             afterDefects = $evaluation.After.Defects
+            closedResidualIds = $closedResidualIds
+            openedResidualIds = $openedResidualIds
             improvements = @($evaluation.Improvements)
             regressions = @($evaluation.Regressions)
             rollbackRequired = $rollbackRequired
@@ -948,37 +1022,85 @@ switch ($Action) {
         $state.lastEvaluationSha256 = [string]$evaluation.EvaluationSha256
         $state.lastBeforeStateHash = $beforeHash
         $state.lastAfterStateHash = $afterHash
+        $state.lastClosedResidualIds = $closedResidualIds
+        $state.lastOpenedResidualIds = $openedResidualIds
         $state.rollbackRequired = $rollbackRequired
         $state.cycleInProgress = $false
         $state.activeCycleBaselineStateHash = $null
+        $state.activeCycleResidualIds = @()
         $state.lastCheckpointReason = $null
+
+        $beforeResidualIds = @(
+            $evaluation.Before.Residuals |
+                Where-Object { [bool]$_.Actionable -and [bool]$_.ProgressBearing } |
+                ForEach-Object { [string]$_.ResidualId } |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+                Select-Object -Unique
+        )
+        $afterResidualIds = @(
+            $evaluation.After.Residuals |
+                Where-Object { [bool]$_.Actionable -and [bool]$_.ProgressBearing } |
+                ForEach-Object { [string]$_.ResidualId } |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+                Select-Object -Unique
+        )
 
         if ($decision -eq "ACCEPT") {
             $state.noProgressStreak = 0
             $state.currentStateHash = $afterHash
+            $state.currentResidualIds = $afterResidualIds
+            $state.exhaustedResidualIds = @(
+                $state.exhaustedResidualIds |
+                    Where-Object { $afterResidualIds -contains [string]$_ } |
+                    Select-Object -Unique
+            )
         }
         else {
-            $state.noProgressStreak = [int]$state.noProgressStreak + 1
             $state.currentStateHash = $beforeHash
-            $state.exhaustedCandidateFingerprints = @(@($state.exhaustedCandidateFingerprints) + @($fingerprint) | Select-Object -Unique)
+            $state.currentResidualIds = $beforeResidualIds
+
+            if ($decision -eq "REJECT_NO_PROGRESS") {
+                $state.noProgressStreak = [int]$state.noProgressStreak + 1
+
+                # Only a canonical Core residual binding can be exhausted. A human-readable
+                # label/fingerprint is kept for history but cannot prove candidate-space exhaustion.
+                if ($candidateResidualIds.Count -gt 0) {
+                    $state.exhaustedResidualIds = @(
+                        @($state.exhaustedResidualIds) + $candidateResidualIds |
+                            Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+                            Select-Object -Unique
+                    )
+                    $state.exhaustedCandidateFingerprints = @(
+                        @($state.exhaustedCandidateFingerprints) + @($fingerprint) |
+                            Select-Object -Unique
+                    )
+                }
+            }
+            else {
+                # A regression proves that this implementation attempt is bad, not that the
+                # underlying residual candidate is impossible. Roll back and permit a different
+                # bounded implementation of the same residual.
+                $state.noProgressStreak = 0
+            }
         }
 
         if ($decision -eq "REJECT_CYCLE") {
             $state.status = "STOPPED"
             $state.stopReason = "REMEDIATION_CYCLE_DETECTED"
         }
-        elseif ([int]$state.noProgressStreak -ge 2) {
-            $history = @($state.cycleHistory)
-            $last = $history[$history.Count - 1]
-            $previous = $history[$history.Count - 2]
-            if ($last.result -ne "NO_PROGRESS" -or $previous.result -ne "NO_PROGRESS") {
-                throw "AUTONOMY_NO_PROGRESS_STREAK_CORRUPT"
+        elseif ($decision -eq "REJECT_NO_PROGRESS" -and $candidateResidualIds.Count -gt 0 -and $state.currentResidualIds.Count -gt 0) {
+            $remainingResidualIds = @(
+                $state.currentResidualIds |
+                    Where-Object { @($state.exhaustedResidualIds) -notcontains [string]$_ }
+            )
+            if ($remainingResidualIds.Count -eq 0) {
+                $state.status = "STOPPED"
+                $state.stopReason = "REMEDIATION_RESIDUAL_CANDIDATES_EXHAUSTED"
             }
-            if ($last.candidateFingerprint -eq $previous.candidateFingerprint) {
-                throw "AUTONOMY_NO_PROGRESS_CANDIDATES_NOT_DISTINCT"
+            else {
+                $state.status = "RUNNING"
+                $state.stopReason = $null
             }
-            $state.status = "STOPPED"
-            $state.stopReason = "STOPPED_TWO_CONSECUTIVE_NO_PROGRESS"
         }
         elseif ([int]$state.cyclesCompleted -ge [int]$state.cycleBudget) {
             $state.lastCheckpointReason = "AUTONOMOUS_CYCLE_BUDGET_REACHED"
@@ -1001,8 +1123,7 @@ switch ($Action) {
             $state.status = "RUNNING"
             $state.stopReason = $null
         }
-    }
-    "Stop" {
+    }    "Stop" {
         if ([string]::IsNullOrWhiteSpace($StopReason)) { throw "AUTONOMY_STOP_REASON_REQUIRED" }
         if ($Status -eq "COMPLETE" -and $StopReason -ne "SUCCESS") { throw "AUTONOMY_COMPLETE_REQUIRES_SUCCESS" }
         if ([bool]$state.cycleInProgress -and $Status -ne "RUNNING") {
@@ -1051,5 +1172,7 @@ Write-Host "Active baseline: $($state.activeCycleBaselineStateHash)"
 Write-Host "Last decision: $($state.lastDecision)"
 Write-Host "Rollback required: $($state.rollbackRequired)"
 Write-Host "No-progress streak: $($state.noProgressStreak)"
+Write-Host "Current residual candidates: $(@($state.currentResidualIds).Count)"
+Write-Host "Exhausted residual candidates: $(@($state.exhaustedResidualIds).Count)"
 Write-Host "Checkpoint: $($state.lastCheckpointReason)"
 Write-Host "Stop reason: $($state.stopReason)"

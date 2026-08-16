@@ -87,7 +87,8 @@ public sealed class StandardInstructionContractTests
         Assert.Contains("ROLLBACK_CONFIRMED", command);
         Assert.Contains("remediation evaluate", command);
         Assert.Contains("Never pass an agent-authored `PROGRESS`", command);
-        Assert.Contains("distinct candidate fingerprints", command);
+        Assert.Contains("--residual-id", command);
+        Assert.Contains("global no-progress streak is telemetry", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Independent validation dimensions", command);
         Assert.Contains("validate-handoff.ps1", command);
         Assert.Contains("Success proof protocol", command);
@@ -135,7 +136,8 @@ public sealed class StandardInstructionContractTests
         Assert.Contains("try a different independent candidate", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("A failed `verify-project` is not by itself a global stop", command);
         Assert.Contains("AUTONOMOUS_CYCLE_BUDGET_REACHED", stopPolicy);
-        Assert.Contains("two consecutive completed cycles on distinct candidate fingerprints", stopPolicy);
+        Assert.Contains("REMEDIATION_RESIDUAL_CANDIDATES_EXHAUSTED", stopPolicy);
+        Assert.Contains("telemetry only", stopPolicy, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -161,11 +163,11 @@ public sealed class StandardInstructionContractTests
         Assert.Contains("activeCycleBaselineStateHash", autonomy);
         Assert.Contains("HANDOFF_COMPLETE_CONTRADICTION", validator);
         Assert.Contains("HANDOFF_VALIDATION_OVERCLAIM", validator);
-        Assert.Contains("AUTONOMY_STATE_NO_PROGRESS_CANDIDATES_NOT_DISTINCT", validator);
+        Assert.Contains("AUTONOMY_STATE_RESIDUAL_EXHAUSTION_OVERCLAIM", validator);
         Assert.Contains("AUTONOMY_CYCLE_GUARD_REQUIRED", updater);
         Assert.Contains("AUTONOMY_EVALUATION_REQUIRED", updater);
         Assert.Contains("AUTONOMY_AGENT_PROGRESS_CLASSIFICATION_FORBIDDEN", updater);
-        Assert.Contains("AUTONOMY_NO_PROGRESS_CANDIDATES_NOT_DISTINCT", updater);
+        Assert.Contains("REMEDIATION_RESIDUAL_CANDIDATES_EXHAUSTED", updater);
         Assert.Contains("AUTONOMOUS_CYCLE_BUDGET_REACHED", updater);
     }
 

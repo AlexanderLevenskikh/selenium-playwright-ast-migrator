@@ -26,11 +26,13 @@ if ($policy.schemaVersion -ne "standard-migration-policy/v2") { throw "HARNESS_P
 if ([int]$policy.maxRemediationCyclesPerInvocation -ne 5) { throw "HARNESS_POLICY_CYCLE_BUDGET_INVALID" }
 if ([int]$policy.maxRepairPassesPerRun -ne 5) { throw "HARNESS_POLICY_LEGACY_CYCLE_BUDGET_ALIAS_INVALID" }
 if ([int]$policy.maxChangesPerCycle -ne 1) { throw "HARNESS_POLICY_CHANGE_LIMIT_INVALID" }
-if ([int]$policy.noProgressStopThreshold -ne 2) { throw "HARNESS_POLICY_NO_PROGRESS_THRESHOLD_INVALID" }
+if ([bool]$policy.globalNoProgressStopEnabled) { throw "HARNESS_POLICY_GLOBAL_NO_PROGRESS_STOP_MUST_BE_DISABLED" }
+if ([string]$policy.candidateIdentity -ne "residual-id") { throw "HARNESS_POLICY_CANDIDATE_IDENTITY_INVALID" }
+if (-not [bool]$policy.stopWhenResidualCandidatesExhausted) { throw "HARNESS_POLICY_RESIDUAL_EXHAUSTION_REQUIRED" }
+if ([bool]$policy.regressionExhaustsCandidate) { throw "HARNESS_POLICY_REGRESSION_MUST_NOT_EXHAUST_CANDIDATE" }
 if (-not [bool]$policy.continueStartsFreshBudget) { throw "HARNESS_POLICY_CONTINUE_BUDGET_INVALID" }
 if (-not [bool]$policy.continuousAutoAdvanceAfterProgress) { throw "HARNESS_POLICY_CONTINUOUS_INVALID" }
 if (-not [bool]$policy.continuousRollsOverCycleBudget) { throw "HARNESS_POLICY_CONTINUOUS_ROLLOVER_INVALID" }
-if (-not [bool]$policy.requireDistinctNoProgressCandidates) { throw "HARNESS_POLICY_NO_PROGRESS_DISTINCT_INVALID" }
 if (-not [bool]$policy.verificationDimensionsIndependent) { throw "HARNESS_POLICY_VALIDATION_DIMENSIONS_INVALID" }
 
 $autonomyPath = Join-Path $workspaceFull "state/autonomy-state.json"
@@ -43,8 +45,13 @@ if ([int]$autonomy.cycleBudget -lt 1 -or [int]$autonomy.cycleBudget -gt [int]$po
 }
 if ([bool]$autonomy.cycleInProgress -and [bool]$autonomy.rollbackRequired) { throw "AUTONOMY_STATE_TRANSACTION_FLAGS_CONFLICT" }
 if ([bool]$autonomy.cycleInProgress -and [string]::IsNullOrWhiteSpace([string]$autonomy.activeCycleBaselineStateHash)) { throw "AUTONOMY_STATE_ACTIVE_BASELINE_MISSING" }
+foreach ($field in @("activeCycleResidualIds", "currentResidualIds", "exhaustedResidualIds", "lastClosedResidualIds", "lastOpenedResidualIds")) {
+    if ($null -eq $autonomy.PSObject.Properties[$field]) { throw "AUTONOMY_STATE_RESIDUAL_FIELD_MISSING: $field" }
+}
 
 Write-Host "STANDARD_RUN_POLICY_PASS"
 Write-Host "Remediation cycle budget: $($policy.maxRemediationCyclesPerInvocation)"
 Write-Host "One bounded change per cycle: $($policy.maxChangesPerCycle)"
-Write-Host "No-progress threshold: $($policy.noProgressStopThreshold) distinct candidates"
+Write-Host "Global no-progress stop: $($policy.globalNoProgressStopEnabled)"
+Write-Host "Candidate identity: $($policy.candidateIdentity)"
+Write-Host "Stop on residual exhaustion: $($policy.stopWhenResidualCandidatesExhausted)"
