@@ -1,0 +1,20 @@
+{
+  "SchemaVersion": "migrator-verification-evidence/v1",
+  "GeneratedAtUtc": "2026-09-28T22:29:01.5114789+00:00",
+  "Kind": "generated-verify",
+  "SourceSha256": "dc37ff56ce181df223241f0c82fd8256c0799d9c42ff3c1f255fd1a62084e388",
+  "ConfigSha256": "75a1d0e1278bca3f105be455e42558915155f7f09847e571b61b79410f39044e",
+  "TargetSha256": "b1b832b166ee43680da393ac9f30e5a882e76d2a74a1041bafb13938caa78920",
+  "ToolSha256": "1a3e5cc6dfad05a2d48da625043be662ad1f7ec5d976a0fcffbe9ad442b40786",
+  "EnvironmentSha256": "96c6c824f074a29808b836158b83415b23c76f64e156498622d17b437d0f0e95",
+  "Status": "failed",
+  "ExitCode": 1,
+  "Metrics": {
+    "rawExpressions": 0,
+    "syntaxErrors": 0,
+    "todoComments": 4,
+    "unmappedTargets": 0,
+    "unsupportedActions": 0
+  },
+  "EvidenceSha256": "c801c6cd009dcb2e87809d3ca174dad4427db074d1e89fa1e49594cc93cd437e"
+}

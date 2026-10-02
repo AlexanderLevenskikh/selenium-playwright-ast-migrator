@@ -1,0 +1,66 @@
+{
+  "Summary": {
+    "FilesProcessed": 1,
+    "TestsFound": 1,
+    "ActionsFound": 5,
+    "MappedTargets": 0,
+    "UnmappedTargets": 0,
+    "UnsupportedActions": 0,
+    "TodoComments": 4,
+    "TargetMappingCoveragePercent": 100,
+    "TodoCommentsPerTest": 4,
+    "UnsupportedActionsPerTest": 0,
+    "GeneratedFilesWithWarnings": 1,
+    "QualityLevel": "needs_profile_iteration"
+  },
+  "TopTodoCategories": [
+    {
+      "Code": "UNCATEGORIZED_TODO",
+      "Count": 4,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\corpus\\stable\\vertical-slice\\p04-findelements-count-text\\Tests\\ListTests.cs",
+      "ExampleLine": 19,
+      "ExampleMessage": "convert constraint to Playwright assertion [MIGRATOR:ASSERTION_CONSTRAINT] [MIGRATOR-SOURCE-LINE:13]",
+      "RootCause": "The generated TODO does not have a dedicated migrator code yet; it needs categorization or a renderer diagnostic code.",
+      "NextAction": "Add a MIGRATOR diagnostic code if this is common; otherwise create a focused regression ticket from the example line.",
+      "RegressionTestIdea": "Add a minimal source fixture reproducing this TODO category and assert the intended renderer/config behavior.",
+      "SafetyRisk": "Low/Medium: manual TODO remains visible and should be tracked by the quality dashboard."
+    }
+  ],
+  "TopUnsupportedActions": [],
+  "TopUnmappedTargets": [],
+  "RecommendedTickets": [
+    {
+      "Id": "MQ-001",
+      "Priority": "P2",
+      "Title": "Reduce TODO category \u0060UNCATEGORIZED_TODO\u0060",
+      "Category": "todo-category",
+      "Occurrences": 4,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\corpus\\stable\\vertical-slice\\p04-findelements-count-text\\Tests\\ListTests.cs",
+      "ExampleLine": 19,
+      "RootCause": "The generated TODO does not have a dedicated migrator code yet; it needs categorization or a renderer diagnostic code.",
+      "NextAction": "Add a MIGRATOR diagnostic code if this is common; otherwise create a focused regression ticket from the example line.",
+      "AcceptanceCriteria": "The category count decreases in migration-quality-dashboard.json and generated code remains compile-safe.",
+      "RegressionTestIdea": "Add a minimal source fixture reproducing this TODO category and assert the intended renderer/config behavior."
+    }
+  ],
+  "Guardrails": [
+    {
+      "Id": "unsafe-suppression",
+      "Status": "pass",
+      "Description": "Suppression must never turn a test into an apparently green empty test.",
+      "NextAction": "No empty-test-after-suppression TODOs were found in this run."
+    },
+    {
+      "Id": "pom-helper-recovery",
+      "Status": "pass",
+      "Description": "POM/helper recovery should use source POMs and helper bodies before raw locators or suppression.",
+      "NextAction": "No obvious POM/helper backlog was found in the top categories."
+    },
+    {
+      "Id": "selector-evidence",
+      "Status": "pass",
+      "Description": "Selector mappings require evidence from Selenium POMs, helper bodies, target HTML, or existing Playwright components.",
+      "NextAction": "All target expressions are mapped in this run."
+    }
+  ]
+}

@@ -1,0 +1,128 @@
+{
+  "generatedAt": "2026-09-28T22:28:40Z",
+  "totalProposals": 3,
+  "summary": {
+    "high": 0,
+    "medium": 0,
+    "low": 3,
+    "requiresSourceTruth": 3
+  },
+  "topProposals": [
+    {
+      "id": "UIT-1",
+      "kind": 0,
+      "title": "Add UiTarget mapping for \u0060WebDriver.FindElement(By.Id(\u0022login\u0022))\u0060",
+      "priority": 2,
+      "confidence": 1,
+      "evidence": "Source expression \u0060WebDriver.FindElement(By.Id(\u0022login\u0022))\u0060 appears 1 time(s) across 1 file(s). Not mapped in current adapter config.",
+      "affectedFiles": [
+        "LoginTests.cs"
+      ],
+      "affectedTests": [],
+      "occurrences": 1,
+      "suggestedConfigSnippet": "{\n  \u0022SourceExpression\u0022: \u0022WebDriver.FindElement(By.Id(\u0022login\u0022))\u0022,\n  \u0022TargetExpression\u0022: \u0022\u003CSOURCE_TRUTH_REQUIRED\u003E\u0022,\n  \u0022TargetKind\u0022: \u0022TestId\u0022,\n  \u0022TestIdAttribute\u0022: \u0022\u003CSOURCE_TRUTH_REQUIRED\u003E\u0022\n}",
+      "requiresSourceTruth": true,
+      "reason": "WebDriver.FindElement(By.Id(\u0022login\u0022)) is used as a locator target but is not mapped. Each occurrence produces a TODO comment in generated code.",
+      "risks": "Applying without source truth will generate invalid selectors. Verify selector via PageObject inspection.",
+      "nextAction": "Inspect PageObject classes for \u0060WebDriver.FindElement(By.Id(\u0022login\u0022))\u0060. Search for corresponding WithDataTestId/WithDataTest/WithDataTid. Add UiTarget mapping to the narrowest scope.",
+      "score": 7
+    },
+    {
+      "id": "UIT-2",
+      "kind": 0,
+      "title": "Add UiTarget mapping for \u0060WebDriver.FindElement(By.Id(\u0022password\u0022))\u0060",
+      "priority": 2,
+      "confidence": 1,
+      "evidence": "Source expression \u0060WebDriver.FindElement(By.Id(\u0022password\u0022))\u0060 appears 1 time(s) across 1 file(s). Not mapped in current adapter config.",
+      "affectedFiles": [
+        "LoginTests.cs"
+      ],
+      "affectedTests": [],
+      "occurrences": 1,
+      "suggestedConfigSnippet": "{\n  \u0022SourceExpression\u0022: \u0022WebDriver.FindElement(By.Id(\u0022password\u0022))\u0022,\n  \u0022TargetExpression\u0022: \u0022\u003CSOURCE_TRUTH_REQUIRED\u003E\u0022,\n  \u0022TargetKind\u0022: \u0022TestId\u0022,\n  \u0022TestIdAttribute\u0022: \u0022\u003CSOURCE_TRUTH_REQUIRED\u003E\u0022\n}",
+      "requiresSourceTruth": true,
+      "reason": "WebDriver.FindElement(By.Id(\u0022password\u0022)) is used as a locator target but is not mapped. Each occurrence produces a TODO comment in generated code.",
+      "risks": "Applying without source truth will generate invalid selectors. Verify selector via PageObject inspection.",
+      "nextAction": "Inspect PageObject classes for \u0060WebDriver.FindElement(By.Id(\u0022password\u0022))\u0060. Search for corresponding WithDataTestId/WithDataTest/WithDataTid. Add UiTarget mapping to the narrowest scope.",
+      "score": 7
+    },
+    {
+      "id": "UIT-3",
+      "kind": 0,
+      "title": "Add UiTarget mapping for \u0060WebDriver.FindElement(By.Id(\u0022username\u0022))\u0060",
+      "priority": 2,
+      "confidence": 1,
+      "evidence": "Source expression \u0060WebDriver.FindElement(By.Id(\u0022username\u0022))\u0060 appears 1 time(s) across 1 file(s). Not mapped in current adapter config.",
+      "affectedFiles": [
+        "LoginTests.cs"
+      ],
+      "affectedTests": [],
+      "occurrences": 1,
+      "suggestedConfigSnippet": "{\n  \u0022SourceExpression\u0022: \u0022WebDriver.FindElement(By.Id(\u0022username\u0022))\u0022,\n  \u0022TargetExpression\u0022: \u0022\u003CSOURCE_TRUTH_REQUIRED\u003E\u0022,\n  \u0022TargetKind\u0022: \u0022TestId\u0022,\n  \u0022TestIdAttribute\u0022: \u0022\u003CSOURCE_TRUTH_REQUIRED\u003E\u0022\n}",
+      "requiresSourceTruth": true,
+      "reason": "WebDriver.FindElement(By.Id(\u0022username\u0022)) is used as a locator target but is not mapped. Each occurrence produces a TODO comment in generated code.",
+      "risks": "Applying without source truth will generate invalid selectors. Verify selector via PageObject inspection.",
+      "nextAction": "Inspect PageObject classes for \u0060WebDriver.FindElement(By.Id(\u0022username\u0022))\u0060. Search for corresponding WithDataTestId/WithDataTest/WithDataTid. Add UiTarget mapping to the narrowest scope.",
+      "score": 7
+    }
+  ],
+  "proposals": [
+    {
+      "id": "UIT-1",
+      "kind": 0,
+      "title": "Add UiTarget mapping for \u0060WebDriver.FindElement(By.Id(\u0022login\u0022))\u0060",
+      "priority": 2,
+      "confidence": 1,
+      "evidence": "Source expression \u0060WebDriver.FindElement(By.Id(\u0022login\u0022))\u0060 appears 1 time(s) across 1 file(s). Not mapped in current adapter config.",
+      "affectedFiles": [
+        "LoginTests.cs"
+      ],
+      "affectedTests": [],
+      "occurrences": 1,
+      "suggestedConfigSnippet": "{\n  \u0022SourceExpression\u0022: \u0022WebDriver.FindElement(By.Id(\u0022login\u0022))\u0022,\n  \u0022TargetExpression\u0022: \u0022\u003CSOURCE_TRUTH_REQUIRED\u003E\u0022,\n  \u0022TargetKind\u0022: \u0022TestId\u0022,\n  \u0022TestIdAttribute\u0022: \u0022\u003CSOURCE_TRUTH_REQUIRED\u003E\u0022\n}",
+      "requiresSourceTruth": true,
+      "reason": "WebDriver.FindElement(By.Id(\u0022login\u0022)) is used as a locator target but is not mapped. Each occurrence produces a TODO comment in generated code.",
+      "risks": "Applying without source truth will generate invalid selectors. Verify selector via PageObject inspection.",
+      "nextAction": "Inspect PageObject classes for \u0060WebDriver.FindElement(By.Id(\u0022login\u0022))\u0060. Search for corresponding WithDataTestId/WithDataTest/WithDataTid. Add UiTarget mapping to the narrowest scope.",
+      "score": 7
+    },
+    {
+      "id": "UIT-2",
+      "kind": 0,
+      "title": "Add UiTarget mapping for \u0060WebDriver.FindElement(By.Id(\u0022password\u0022))\u0060",
+      "priority": 2,
+      "confidence": 1,
+      "evidence": "Source expression \u0060WebDriver.FindElement(By.Id(\u0022password\u0022))\u0060 appears 1 time(s) across 1 file(s). Not mapped in current adapter config.",
+      "affectedFiles": [
+        "LoginTests.cs"
+      ],
+      "affectedTests": [],
+      "occurrences": 1,
+      "suggestedConfigSnippet": "{\n  \u0022SourceExpression\u0022: \u0022WebDriver.FindElement(By.Id(\u0022password\u0022))\u0022,\n  \u0022TargetExpression\u0022: \u0022\u003CSOURCE_TRUTH_REQUIRED\u003E\u0022,\n  \u0022TargetKind\u0022: \u0022TestId\u0022,\n  \u0022TestIdAttribute\u0022: \u0022\u003CSOURCE_TRUTH_REQUIRED\u003E\u0022\n}",
+      "requiresSourceTruth": true,
+      "reason": "WebDriver.FindElement(By.Id(\u0022password\u0022)) is used as a locator target but is not mapped. Each occurrence produces a TODO comment in generated code.",
+      "risks": "Applying without source truth will generate invalid selectors. Verify selector via PageObject inspection.",
+      "nextAction": "Inspect PageObject classes for \u0060WebDriver.FindElement(By.Id(\u0022password\u0022))\u0060. Search for corresponding WithDataTestId/WithDataTest/WithDataTid. Add UiTarget mapping to the narrowest scope.",
+      "score": 7
+    },
+    {
+      "id": "UIT-3",
+      "kind": 0,
+      "title": "Add UiTarget mapping for \u0060WebDriver.FindElement(By.Id(\u0022username\u0022))\u0060",
+      "priority": 2,
+      "confidence": 1,
+      "evidence": "Source expression \u0060WebDriver.FindElement(By.Id(\u0022username\u0022))\u0060 appears 1 time(s) across 1 file(s). Not mapped in current adapter config.",
+      "affectedFiles": [
+        "LoginTests.cs"
+      ],
+      "affectedTests": [],
+      "occurrences": 1,
+      "suggestedConfigSnippet": "{\n  \u0022SourceExpression\u0022: \u0022WebDriver.FindElement(By.Id(\u0022username\u0022))\u0022,\n  \u0022TargetExpression\u0022: \u0022\u003CSOURCE_TRUTH_REQUIRED\u003E\u0022,\n  \u0022TargetKind\u0022: \u0022TestId\u0022,\n  \u0022TestIdAttribute\u0022: \u0022\u003CSOURCE_TRUTH_REQUIRED\u003E\u0022\n}",
+      "requiresSourceTruth": true,
+      "reason": "WebDriver.FindElement(By.Id(\u0022username\u0022)) is used as a locator target but is not mapped. Each occurrence produces a TODO comment in generated code.",
+      "risks": "Applying without source truth will generate invalid selectors. Verify selector via PageObject inspection.",
+      "nextAction": "Inspect PageObject classes for \u0060WebDriver.FindElement(By.Id(\u0022username\u0022))\u0060. Search for corresponding WithDataTestId/WithDataTest/WithDataTid. Add UiTarget mapping to the narrowest scope.",
+      "score": 7
+    }
+  ]
+}

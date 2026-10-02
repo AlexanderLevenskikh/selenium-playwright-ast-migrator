@@ -1,0 +1,57 @@
+{
+  "Status": "failed",
+  "InputPath": "p01-basic-id-login",
+  "ConfigPath": null,
+  "OutputPath": "_candidate",
+  "Stages": [
+    {
+      "Name": "analyze",
+      "Status": "passed",
+      "ExitCode": 0,
+      "Message": "1 files, 1 tests",
+      "OutputDir": "analyze"
+    },
+    {
+      "Name": "migrate",
+      "Status": "passed",
+      "ExitCode": 0,
+      "Message": "1 files generated",
+      "OutputDir": "generated"
+    },
+    {
+      "Name": "verify",
+      "Status": "failed",
+      "ExitCode": 1,
+      "Message": "failed",
+      "OutputDir": "verify"
+    },
+    {
+      "Name": "propose",
+      "Status": "passed",
+      "ExitCode": 0,
+      "Message": "3 proposals generated",
+      "OutputDir": "propose"
+    }
+  ],
+  "Metrics": {
+    "FilesProcessed": 1,
+    "TestsFound": 1,
+    "GeneratedFiles": 1,
+    "SyntaxErrors": 0,
+    "TodoComments": 6,
+    "PageTodoCalls": 0,
+    "Proposals": 3
+  },
+  "Issues": [],
+  "TopProposals": [
+    "[Low] Add UiTarget mapping for \u0060WebDriver.FindElement(By.Id(\u0022login\u0022))\u0060 (score: 7)",
+    "[Low] Add UiTarget mapping for \u0060WebDriver.FindElement(By.Id(\u0022password\u0022))\u0060 (score: 7)",
+    "[Low] Add UiTarget mapping for \u0060WebDriver.FindElement(By.Id(\u0022username\u0022))\u0060 (score: 7)"
+  ],
+  "RecommendedNextActions": [
+    "Add source-truth UiTarget mappings for 3 unmapped target(s). Review analyze/unmapped-targets.json and source truth before adding mappings.",
+    "Review mapping-proposals.md for suggested config improvements.",
+    "Re-run \u0060selenium-pw-migrator run\u0060 after applying changes to verify improvement."
+  ],
+  "Warnings": []
+}

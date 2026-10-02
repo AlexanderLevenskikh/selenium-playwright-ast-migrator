@@ -1,0 +1,52 @@
+{
+  "SchemaVersion": "migrator-run-manifest/v2",
+  "GeneratedAtUtc": "2026-09-28T22:28:46.332954+00:00",
+  "Status": "failed",
+  "SourceSha256": "f3f539f3a610aca2c7d17bcdca0250ee63289e7c5e13b9f0378fb8fafd4a72cf",
+  "SourceFiles": 2,
+  "ConfigSha256": "75a1d0e1278bca3f105be455e42558915155f7f09847e571b61b79410f39044e",
+  "TargetSha256": "7d794588cf2aad32ef904b51227dd964d6abba2b23ad5e6cde8a8ad89ae876f3",
+  "Tool": {
+    "Version": "0.0.0-preview.1\u002B734990c70aa004de5ee3841cbe715ef1332db80d",
+    "Commit": "734990c70aa004de5ee3841cbe715ef1332db80d",
+    "Distribution": "dotnet-tool/source",
+    "IdentitySha256": "1a3e5cc6dfad05a2d48da625043be662ad1f7ec5d976a0fcffbe9ad442b40786"
+  },
+  "Environment": {
+    "RuntimeIdentifier": "win-x64",
+    "Framework": ".NET 10.0.12",
+    "OperatingSystem": "Microsoft Windows 10.0.26200",
+    "ProcessArchitecture": "X64",
+    "Culture": "ru-RU",
+    "UICulture": "ru-RU",
+    "NewLine": "CRLF",
+    "IdentitySha256": "96c6c824f074a29808b836158b83415b23c76f64e156498622d17b437d0f0e95",
+    "AssemblySetSha256": "e41ab53c26f568a0ce845daa52ee2c37c947b2e953ce89446aa6fdc46f6569b5"
+  },
+  "Verification": {
+    "SchemaVersion": "migrator-verification-evidence/v1",
+    "GeneratedAtUtc": "2026-09-28T22:28:46.1044897+00:00",
+    "Kind": "generated-verify",
+    "SourceSha256": "f3f539f3a610aca2c7d17bcdca0250ee63289e7c5e13b9f0378fb8fafd4a72cf",
+    "ConfigSha256": "75a1d0e1278bca3f105be455e42558915155f7f09847e571b61b79410f39044e",
+    "TargetSha256": "7d794588cf2aad32ef904b51227dd964d6abba2b23ad5e6cde8a8ad89ae876f3",
+    "ToolSha256": "1a3e5cc6dfad05a2d48da625043be662ad1f7ec5d976a0fcffbe9ad442b40786",
+    "EnvironmentSha256": "96c6c824f074a29808b836158b83415b23c76f64e156498622d17b437d0f0e95",
+    "Status": "failed",
+    "ExitCode": 1,
+    "Metrics": {
+      "rawExpressions": 3,
+      "syntaxErrors": 0,
+      "todoComments": 6,
+      "unmappedTargets": 3,
+      "unsupportedActions": 0
+    },
+    "EvidenceSha256": "03ef118169121a61c7cefa1292947a8f38de5cea859c653346967e3fd96cff2c"
+  },
+  "TargetFiles": [
+    {
+      "RelativePath": "LoginTestsPlaywright.cs",
+      "ContentSha256": "fcdb349df90061315a13fe98835dba49c2e02c1a183d76b50a16ddcb31f8d0da"
+    }
+  ]
+}

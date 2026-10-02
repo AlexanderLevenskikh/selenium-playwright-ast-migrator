@@ -18,6 +18,12 @@ project.lock.json
 project.fragment.lock.json
 artifacts/
 packages/
+# Phase A baseline evidence is intentionally tracked: schemas, harnesses and
+# representative machine-readable results under artifacts/baseline. Everything
+# else under artifacts/ (release zips, research bundles, transient runs) stays ignored.
+!artifacts/
+!artifacts/baseline/
+!artifacts/baseline/**
 .nuget/
 *.nupkg
 *.snupkg
