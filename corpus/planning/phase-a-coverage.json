@@ -1,0 +1,132 @@
+{
+  "schemaVersion": "migrator-phase-a-coverage/v1",
+  "plan": "corpus/planning/phase-a-coverage.md",
+  "sourceCorpus": "corpus/stable/vertical-slice",
+  "groups": [
+    {
+      "id": "simple-nunit",
+      "requiredBy": "task-section-9-group-1",
+      "scenarios": ["p01-basic-id-login", "p02-css-clear-input", "p03-xpath-text-assert"],
+      "status": "COVERED"
+    },
+    {
+      "id": "locator-matrix",
+      "requiredBy": "task-section-9-group-2",
+      "scenarios": ["p01-basic-id-login", "p02-css-clear-input", "p03-xpath-text-assert", "p07-locator-in-variable", "p08-conditional-locator", "p04-findelements-count-text"],
+      "status": "COVERED"
+    },
+    {
+      "id": "wait-semantics",
+      "requiredBy": "task-section-9-group-3",
+      "scenarios": ["p15-webdriverwait-visible", "p16-wait-disappear-negative", "p17-custom-wait-state", "p17b-custom-wait-closing-state"],
+      "status": "COVERED"
+    },
+    {
+      "id": "collections-and-staleness",
+      "requiredBy": "task-section-9-group-4",
+      "scenarios": ["p04-findelements-count-text", "p05-table-row-target", "p19-control-flow-loops"],
+      "status": "PARTIAL",
+      "gaps": ["G2-stale-reference"]
+    },
+    {
+      "id": "pageobject-inheritance",
+      "requiredBy": "task-section-9-group-5",
+      "scenarios": ["p10-unresolved-pageobject-chain", "p11-pageobject-separate-project", "p12-pageobject-inheritance-composition"],
+      "status": "COVERED"
+    },
+    {
+      "id": "helper-graph",
+      "requiredBy": "task-section-9-group-6",
+      "scenarios": ["p09-helper-extension-mapping", "p13-async-lift-simple"],
+      "status": "COVERED"
+    },
+    {
+      "id": "async-cascade",
+      "requiredBy": "task-section-9-group-7",
+      "scenarios": ["p13-async-lift-simple", "p14-async-lift-setup-base"],
+      "status": "COVERED",
+      "notes": ["cross-project caller signature lift is a documented boundary, not a fixture in Phase A"]
+    },
+    {
+      "id": "frames-windows",
+      "requiredBy": "task-section-9-group-8",
+      "scenarios": ["p28-frames-popup-upload-download"],
+      "status": "COVERED",
+      "notes": ["expected unsupported; neighbour isolation is the pinned property"]
+    },
+    {
+      "id": "dynamic-js-actions",
+      "requiredBy": "task-section-9-group-9",
+      "scenarios": ["p26-jsexecutor-unsupported", "p27-actions-api-unsupported", "p29-raw-statement-dynamic"],
+      "status": "COVERED",
+      "notes": ["expected unsupported"]
+    },
+    {
+      "id": "datadriven-shared-state",
+      "requiredBy": "task-section-9-group-10",
+      "scenarios": ["p20-nunit-testcasesource-valuesource", "p21-nunit-parallelizable-retry-order"],
+      "status": "COVERED"
+    },
+    {
+      "id": "existing-target",
+      "requiredBy": "task-section-9-group-11",
+      "scenarios": ["p23-cpm-isolation", "p24a-transitive-warning-isolated", "p22-file-scoped-globalusings-nullable"],
+      "status": "PARTIAL",
+      "gaps": ["G4-prepopulated-target"]
+    },
+    {
+      "id": "custom-wrapper-adversarial",
+      "requiredBy": "task-section-9-group-12",
+      "scenarios": ["p06-checkbox-radio-selected", "p08-conditional-locator", "p18-assert-multiple-fluent", "p29-raw-statement-dynamic", "p24b-transitive-warning-sabotage"],
+      "status": "PARTIAL",
+      "gaps": ["G5-webdriver-mimicking-wrapper"]
+    },
+    {
+      "id": "broken-compilation",
+      "requiredBy": "task-section-9-group-13",
+      "scenarios": ["p24b-transitive-warning-sabotage", "p29-raw-statement-dynamic"],
+      "status": "PARTIAL",
+      "gaps": ["G1-broken-source-undefined-symbol"]
+    },
+    {
+      "id": "determinism-stress",
+      "requiredBy": "task-section-9-group-14",
+      "scenarios": ["p01-basic-id-login", "p04-findelements-count-text"],
+      "harness": "run --twice --assert-identical (see docs/vnext/determinism-baseline.md)",
+      "status": "COVERED",
+      "gaps": ["cross-machine-and-cross-toolchain-run-not-yet-measured"]
+    }
+  ],
+  "gaps": [
+    {
+      "id": "G1-broken-source-undefined-symbol",
+      "proposal": "p30-broken-compile: source referencing an undefined symbol; pin SAFE-01 -> UNRESOLVED_SYMBOL TODOs, no crash",
+      "priority": "high"
+    },
+    {
+      "id": "G2-stale-reference",
+      "proposal": "p31-stale-repattern: store locator, mutate DOM, re-assert count/text",
+      "priority": "medium"
+    },
+    {
+      "id": "G3-cross-project-async-caller",
+      "proposal": "documented boundary only; no fixture in Phase A",
+      "priority": "low"
+    },
+    {
+      "id": "G4-prepopulated-target",
+      "proposal": "verify-project into a target project that already contains its own code",
+      "priority": "low"
+    },
+    {
+      "id": "G5-webdriver-mimicking-wrapper",
+      "proposal": "adversarial wrapper mimicking WebDriver API to test recognizer misfire",
+      "priority": "medium"
+    },
+    {
+      "id": "cross-machine-and-cross-toolchain-run-not-yet-measured",
+      "proposal": "repeat determinism measurement on another machine/toolchain",
+      "priority": "medium"
+    }
+  ]
+}
