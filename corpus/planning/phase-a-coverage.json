@@ -24,9 +24,8 @@
     {
       "id": "collections-and-staleness",
       "requiredBy": "task-section-9-group-4",
-      "scenarios": ["p04-findelements-count-text", "p05-table-row-target", "p19-control-flow-loops"],
-      "status": "PARTIAL",
-      "gaps": ["G2-stale-reference"]
+      "scenarios": ["p04-findelements-count-text", "p05-table-row-target", "p19-control-flow-loops", "p31-stale-repattern"],
+      "status": "COVERED"
     },
     {
       "id": "pageobject-inheritance",
@@ -84,9 +83,8 @@
     {
       "id": "broken-compilation",
       "requiredBy": "task-section-9-group-13",
-      "scenarios": ["p24b-transitive-warning-sabotage", "p29-raw-statement-dynamic"],
-      "status": "PARTIAL",
-      "gaps": ["G1-broken-source-undefined-symbol"]
+      "scenarios": ["p24b-transitive-warning-sabotage", "p29-raw-statement-dynamic", "p30-broken-compile"],
+      "status": "COVERED"
     },
     {
       "id": "determinism-stress",
@@ -98,16 +96,6 @@
     }
   ],
   "gaps": [
-    {
-      "id": "G1-broken-source-undefined-symbol",
-      "proposal": "p30-broken-compile: source referencing an undefined symbol; pin SAFE-01 -> UNRESOLVED_SYMBOL TODOs, no crash",
-      "priority": "high"
-    },
-    {
-      "id": "G2-stale-reference",
-      "proposal": "p31-stale-repattern: store locator, mutate DOM, re-assert count/text",
-      "priority": "medium"
-    },
     {
       "id": "G3-cross-project-async-caller",
       "proposal": "documented boundary only; no fixture in Phase A",

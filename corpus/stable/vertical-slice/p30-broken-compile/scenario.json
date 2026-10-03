@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p30-broken-compile",
+  "seed": 130,
+  "tags": [
+    "broken-source",
+    "negative",
+    "stable",
+    "nightly"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "UndefinedSymbol",
+      "UnresolvedSymbolTodo",
+      "FailClosed"
+    ],
+    "migrationFiles": [
+      "Tests/BrokenSourceTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/BrokenSourceTests.cs"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/list",
+        "model": "list"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 0
+    },
+    "target": {
+      "mustPassTests": 0
+    },
+    "semantic": {}
+  },
+  "qualityBudget": {
+    "todoMax": 5,
+    "unmappedMax": 5,
+    "unsupportedMax": 0,
+    "warningsMax": 5
+  },
+  "expected": {
+    "status": "SOURCE_INVALID"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "07-gap-fixtures",
+    "notes": "G1 broken-source fixture (group 13): the source references an undefined symbol so the lightweight compilation fails to resolve it, unrelated to unsupported WebDriver features. Purpose: pin that the migrator produces UNRESOLVED_SYMBOL TODOs instead of crashing the parser/analyzer, and that run completes with a nonzero-but-classified exit. SOURCE_INVALID is expected because the source project cannot build; the page route is nominal (never reached).",
+    "contentHash": "sha256:2bf596171703e7217e69b44e181f7113e63dbcc1668380cc18e7bbf8adb1fa25"
+  }
+}

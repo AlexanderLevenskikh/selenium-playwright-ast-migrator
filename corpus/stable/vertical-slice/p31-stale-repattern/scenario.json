@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p31-stale-repattern",
+  "seed": 131,
+  "tags": [
+    "stale",
+    "runtime-pass",
+    "vertical-slice",
+    "stable",
+    "nightly",
+    "pr",
+    "smoke"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "single-project",
+    "features": [
+      "FindElements",
+      "By.CssSelector",
+      "Count",
+      "Text",
+      "DomReplacement",
+      "Assert.That"
+    ],
+    "migrationFiles": [
+      "Tests/StaleReferenceTests.cs"
+    ]
+  },
+  "project": {
+    "files": [
+      "Scenario.csproj",
+      "Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/StaleReferenceTests.cs"
+    ],
+    "references": [],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Scenario.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/stale",
+        "model": "list-replaced-on-reload"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "stale:reloaded"
+      ],
+      "dom": [
+        {
+          "selector": "#items .item",
+          "text": "alpha"
+        }
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "07-gap-fixtures",
+    "notes": "G2 stale element reference fixture (group 4): stores a locator result, mutates the DOM via the reload button which replaces the list, then re-asserts count/text through a fresh query. Documents that the migration must preserve re-evaluation semantics rather than caching the stale Selenium collection snapshot.",
+    "contentHash": "sha256:1d92275d5b936ed2e9d7d9dad6aea3d29264cbe0bc085f7a8b2ccb00f325c269"
+  }
+}

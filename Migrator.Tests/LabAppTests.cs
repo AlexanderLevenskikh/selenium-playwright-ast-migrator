@@ -14,7 +14,7 @@ public sealed class LabAppTests
         {
             "/login", "/edit", "/list", "/table", "/form", "/locator", "/helper", "/pom", "/modal",
             "/async", "/setup", "/wait", "/wait-negative", "/custom-wait", "/dialog-close", "/control-flow", "/parameterized",
-            "/smoke", "/unsupported", "/actions", "/complex", "/dynamic"
+            "/smoke", "/unsupported", "/actions", "/complex", "/dynamic", "/stale"
         };
         Assert.Equal(expected, LabAppPageCatalog.PageRoutes);
 
@@ -57,6 +57,7 @@ public sealed class LabAppTests
             ["/smoke"] = new[] { "smoke-button", "smoke-status" },
             ["/unsupported"] = new[] { "unsupported-button", "unsupported-status", "script-target" },
             ["/actions"] = new[] { "actions-target", "actions-neighbour", "actions-status" },
+            ["/stale"] = new[] { "items", "reload" },
             ["/complex"] = new[] { "lab-frame", "popup-link", "upload-input", "download-link", "complex-neighbour", "complex-status" },
             ["/dynamic"] = new[] { "dynamic-neighbour", "dynamic-status" }
         };

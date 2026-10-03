@@ -35,7 +35,8 @@ public static class LabAppPageCatalog
         "/unsupported",
         "/actions",
         "/complex",
-        "/dynamic"
+        "/dynamic",
+        "/stale"
     };
 
     public static LabAppResponse Resolve(string path)
@@ -69,6 +70,7 @@ public static class LabAppPageCatalog
             "/popup-content" => LabAppResponse.Html(BuildPopupContent()),
             "/download/sample.txt" => LabAppResponse.Text("migrator-lab-download\n", "application/octet-stream"),
             "/dynamic" => LabAppResponse.Html(BuildDynamic()),
+            "/stale" => LabAppResponse.Html(BuildStale()),
             _ => LabAppResponse.NotFound(path)
         };
     }
@@ -491,6 +493,33 @@ public static class LabAppPageCatalog
         document.getElementById('dynamic-neighbour').addEventListener('click', () => {
           document.getElementById('dynamic-status').textContent = 'ok';
           labEmit('dynamic:neighbour-click');
+        });
+        """);
+
+    static string BuildStale() => BuildDocument(
+        "Stale repattern",
+        """
+        <main>
+          <button id="reload" type="button">Replace list</button>
+          <ul id="items">
+            <li class="item">alpha</li>
+            <li class="item">beta</li>
+            <li class="item">gamma</li>
+          </ul>
+        </main>
+        """,
+        """
+        labEmit('stale:ready');
+        document.getElementById('reload').addEventListener('click', () => {
+          const list = document.getElementById('items');
+          list.querySelectorAll('.item').forEach(item => item.remove());
+          ['alpha', 'beta', 'gamma'].forEach(text => {
+            const li = document.createElement('li');
+            li.className = 'item';
+            li.textContent = text;
+            list.appendChild(li);
+          });
+          labEmit('stale:reloaded');
         });
         """);
 

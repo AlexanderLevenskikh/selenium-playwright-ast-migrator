@@ -16,11 +16,11 @@ public sealed class LabScenarioContractTests
         var result = ScenarioCatalog.Load(root);
 
         Assert.False(result.HasErrors, BuildFailureMessage(result));
-        Assert.Equal(31, result.Entries.Length);
-        Assert.Equal(31, result.ValidCount);
+        Assert.Equal(33, result.Entries.Length);
+        Assert.Equal(33, result.ValidCount);
         Assert.Equal(0, result.PlannedCount);
-        Assert.Equal(31, result.ReadyCount);
-        Assert.Equal(31, result.Entries.Select(entry => entry.Scenario!.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(33, result.ReadyCount);
+        Assert.Equal(33, result.Entries.Select(entry => entry.Scenario!.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
     }
 
     [Fact]
@@ -28,13 +28,14 @@ public sealed class LabScenarioContractTests
     {
         var scenarios = ScenarioCatalog.Load(VerticalSliceRoot()).Entries.Select(entry => entry.Scenario!).ToArray();
 
-        Assert.Equal(26, scenarios.Count(scenario => scenario.Expected.Status == ScenarioStatus.Pass));
+        Assert.Equal(27, scenarios.Count(scenario => scenario.Expected.Status == ScenarioStatus.Pass));
         Assert.Equal(4, scenarios.Count(scenario => scenario.Expected.Status == ScenarioStatus.UnsupportedAsExpected));
         Assert.Single(scenarios, scenario => scenario.Expected.Status == ScenarioStatus.InfrastructureFailure);
+        Assert.Single(scenarios, scenario => scenario.Expected.Status == ScenarioStatus.SourceInvalid);
         Assert.All(scenarios, scenario => Assert.Contains("stable", scenario.Tags));
         Assert.All(scenarios, scenario => Assert.Contains("nightly", scenario.Tags));
-        Assert.Equal(7, scenarios.Count(scenario => scenario.Tags.Contains("smoke")));
-        Assert.Equal(19, scenarios.Count(scenario => scenario.Tags.Contains("pr")));
+        Assert.Equal(8, scenarios.Count(scenario => scenario.Tags.Contains("smoke")));
+        Assert.Equal(20, scenarios.Count(scenario => scenario.Tags.Contains("pr")));
         Assert.Contains(scenarios, scenario => scenario.Tags.Contains("real-failure"));
         Assert.Contains(scenarios, scenario => scenario.Tags.Contains("msbuild"));
         Assert.Contains(scenarios, scenario => scenario.Tags.Contains("runtime-pass"));
@@ -49,7 +50,16 @@ public sealed class LabScenarioContractTests
         {
             Assert.Equal(JsonValueKind.Object, scenario.Oracle.Source.ValueKind);
             Assert.True(scenario.Oracle.Source.TryGetProperty("mustPassTests", out var sourceCount), $"{scenario.Id} must declare oracle.source.mustPassTests.");
-            Assert.True(sourceCount.GetInt32() > 0, $"{scenario.Id} must execute at least one source test.");
+            // SOURCE_INVALID scenarios (G1 broken-source) declare 0: the source cannot build,
+            // so no source test can run; the status short-circuits at the source stage.
+            if (scenario.Expected.Status == ScenarioStatus.SourceInvalid)
+            {
+                Assert.Equal(0, sourceCount.GetInt32());
+            }
+            else
+            {
+                Assert.True(sourceCount.GetInt32() > 0, $"{scenario.Id} must execute at least one source test.");
+            }
             Assert.Equal(JsonValueKind.Object, scenario.Oracle.Target.ValueKind);
             Assert.True(scenario.Oracle.Target.TryGetProperty("mustPassTests", out var targetCount), $"{scenario.Id} must declare oracle.target.mustPassTests.");
             Assert.Equal(sourceCount.GetInt32(), targetCount.GetInt32());

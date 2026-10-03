@@ -1,15 +1,16 @@
 {
   "schemaVersion": "migrator-lab-coverage/v1",
-  "scenarioCount": 31,
+  "scenarioCount": 33,
   "suiteCounts": {
-    "smoke": 7,
-    "pr": 19,
-    "nightly": 31
+    "smoke": 8,
+    "pr": 20,
+    "nightly": 33
   },
   "expectedStatusCounts": {
-    "PASS": 26,
+    "PASS": 27,
     "INFRASTRUCTURE_FAILURE": 1,
-    "UNSUPPORTED_AS_EXPECTED": 4
+    "UNSUPPORTED_AS_EXPECTED": 4,
+    "SOURCE_INVALID": 1
   },
   "categories": {
     "basic-actions-and-assertions": [
@@ -18,7 +19,8 @@
       "p03-xpath-text-assert",
       "p04-findelements-count-text",
       "p05-table-row-target",
-      "p06-checkbox-radio-selected"
+      "p06-checkbox-radio-selected",
+      "p31-stale-repattern"
     ],
     "locator-shapes": [
       "p07-locator-in-variable",
@@ -51,7 +53,8 @@
       "p23-cpm-isolation",
       "p24a-transitive-warning-isolated",
       "p24b-transitive-warning-sabotage",
-      "p25-multitarget-conditional-itemgroup"
+      "p25-multitarget-conditional-itemgroup",
+      "p30-broken-compile"
     ],
     "expected-unsupported": [
       "p26-jsexecutor-unsupported",
@@ -503,6 +506,37 @@
         "dynamic",
         "RawStatement",
         "NeighbourPreservation"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p30-broken-compile",
+      "expectedStatus": "SOURCE_INVALID",
+      "suites": [
+        "nightly"
+      ],
+      "features": [
+        "UndefinedSymbol",
+        "UnresolvedSymbolTodo",
+        "FailClosed"
+      ],
+      "mustPassTests": 0
+    },
+    {
+      "id": "p31-stale-repattern",
+      "expectedStatus": "PASS",
+      "suites": [
+        "smoke",
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "FindElements",
+        "By.CssSelector",
+        "Count",
+        "Text",
+        "DomReplacement",
+        "Assert.That"
       ],
       "mustPassTests": 1
     }
