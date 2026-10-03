@@ -177,7 +177,7 @@ public class WaitInvocationRecognizer : IInvocationRecognizer
         var closing = ContainsAny(methodName, ClosingStateVerbs);
         var opening = ContainsAny(methodName, OpeningStateVerbs);
 
-        // Conflicting or otherwise unclear signals must not be guessed — surface as
+        // Conflicting or otherwise unclear signals must not be guessed �?" surface as
         // review-required so a human/project profile picks the correct direction.
         if (closing && opening)
             return WaitForKind.ReviewRequired;
@@ -186,18 +186,24 @@ public class WaitInvocationRecognizer : IInvocationRecognizer
         if (opening)
             return WaitForKind.ProductStateVisible;
 
+        // WAIT-03: no directional verb in the method name. The widget-type bucket below
+        // (Loader/Modal/Table/...) used to be turned into a concrete ProductStateHidden/
+        // Visible/Loaded guess, which was a confirmed unsafe name heuristic: the widget
+        // type alone does not fix the direction (a dialog wait may mean "shown" or
+        // "closed"). Surface as review-required so a human or a project WaitPolicies
+        // mapping decides the exact state; do not build a new IR for it.
         var text = receiverText + "." + methodName;
 
         if (ContainsAny(text, "Loader", "Loading", "Spinner", "Progress"))
-            return WaitForKind.ProductStateHidden;
+            return WaitForKind.ReviewRequired;
 
         if (ContainsAny(text, "Modal", "Dialog", "Toast", "Popup"))
-            return WaitForKind.ProductStateVisible;
+            return WaitForKind.ReviewRequired;
 
         if (ContainsAny(text, "Table", "Grid", "Registry", "List", "Rows", "Results"))
-            return WaitForKind.ProductStateLoaded;
+            return WaitForKind.ReviewRequired;
 
-        return WaitForKind.ProductStateLoaded;
+        return WaitForKind.ReviewRequired;
     }
 
     static bool ContainsAny(string text, params string[] needles) =>

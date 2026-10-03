@@ -19,7 +19,7 @@ public class WidgetPlaywright : PageTest
 		// TODO: raw statement — review: var pagef = Navigation.OpenSearchPage()
 		// TODO: references unavailable symbol(s) 'Navigation' — verify in target
 		// TODO: map product-state wait target: pagef.Loader
-		// await Expect((locator)).ToBeHiddenAsync(); // line 18
+		// await (locator/state assertion); // line 18
 		// TODO: depends on unresolved symbol 'pagef'
 		//   pagef.WidgetButton.ClickAndOpen<WidgetPage>()
 		// TODO: raw statement — review: page = lightbox
@@ -49,7 +49,7 @@ public class WidgetPlaywright : PageTest
 		// TODO: depends on unresolved symbol 'page'
 		//   page.WidgetDate.ManualInputValue("March", "2025", 22)
 		// TODO: map product-state wait target: page.Loader
-		// await Expect((locator)).ToBeHiddenAsync(); // line 39
+		// await (locator/state assertion); // line 39
 		// TODO: depends on unresolved symbol 'page'
 		//   page.FuterUser.Visible.Should()
 		// TODO: depends on unresolved symbol 'page'
@@ -64,7 +64,7 @@ public class WidgetPlaywright : PageTest
 		// TODO: depends on unresolved symbol 'page'
 		//   page.WidgetSearch.Press(Enter)
 		// TODO: map product-state wait target: page.Loader
-		// await Expect((locator)).ToBeHiddenAsync(); // line 49
+		// await (locator/state assertion); // line 49
 		// source wait elided: page.FuterUser.WaitPresence() // line 50
 		// TODO: depends on unresolved symbol 'page'
 		//   page.FuterUser.Text.Should()

@@ -21,7 +21,7 @@ public class ButtonTestsPlaywright : PageTest
 		// TODO: depends on unresolved symbol 'pagef'
 		//   page = pagef
 		// TODO: map product-state wait target: page.Loader
-		// await Expect((locator)).ToBeHiddenAsync(); // line 17
+		// await (locator/state assertion); // line 17
 	}
 
 	[Category("QuickRunning")]

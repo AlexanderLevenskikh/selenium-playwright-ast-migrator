@@ -14,8 +14,12 @@ public class WaitPolicyTests
     readonly string _testFilesDir = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!, "TestFiles");
 
     [Fact]
-    public void Parser_ClassifiesValidateLoadingAsProductStateHiddenWait()
+    public void Parser_SurfacesNameHeuristicProductStateWaitAsReviewRequired()
     {
+        // WAIT-03: ValidateLoading carries no directional verb, so its direction (hidden)
+        // was previously guessed from the "Loader/Loading" widget bucket. That guess is a
+        // confirmed unsafe name heuristic; it must surface as ReviewRequired so a human or
+        // a project WaitPolicies mapping decides the exact state.
         var parser = new RoslynTestFileParser();
         var model = parser.Parse(Path.Combine(_testFilesDir, "ButtonTests.cs"));
 
@@ -24,7 +28,7 @@ public class WaitPolicyTests
 
         Assert.NotNull(wait);
         Assert.Equal("page.Loader", wait!.Target.SourceExpression);
-        Assert.Equal(WaitForKind.ProductStateHidden, wait.Kind);
+        Assert.Equal(WaitForKind.ReviewRequired, wait.Kind);
     }
 
     [Fact]
@@ -123,6 +127,48 @@ public class WaitPolicyTests
         var action = Assert.IsType<WaitForAction>(new WaitInvocationRecognizer().TryRecognize(ctx));
 
         Assert.Equal(WaitForKind.ReviewRequired, action.Kind);
+    }
+
+    // WAIT-03 regression: a product-state wait whose direction is only implied by a
+    // widget-type bucket (Loader/Modal/Table), without a directional verb, must not be
+    // silently guessed as Hidden/Visible/Loaded. It must come back ReviewRequired so a
+    // human or a project WaitPolicies mapping decides the exact state.
+    [Theory]
+    [InlineData("WaitRowsLoaded", "Grid")]              // Table/Grid bucket, no verb
+    [InlineData("WaitForTable", "Registry")]            // Table/List bucket, no verb
+    [InlineData("WaitLoaderFinished", "Loader")]        // Loader bucket, no verb
+    [InlineData("WaitGrid", "Modal")]                   // Dialog/Modal bucket with no verb
+    public void WaitInvocationRecognizer_NoDirectionalVerb_ReturnsReviewRequired(string methodName, string receiver)
+    {
+        var ctx = new InvocationContext(
+            MethodName: methodName,
+            ReceiverText: receiver,
+            FullText: $"{receiver}.{methodName}()",
+            SourceLine: 24,
+            SymbolResolved: false,
+            ArgumentTexts: Array.Empty<string>());
+
+        var action = Assert.IsType<WaitForAction>(new WaitInvocationRecognizer().TryRecognize(ctx));
+
+        Assert.Equal(WaitForKind.ReviewRequired, action.Kind);
+    }
+
+    // A closing verb on a dialog bucket keeps its directional meaning: verb-based
+    // inference is C2-pinned and takes priority over the ReviewRequired bucket default.
+    [Fact]
+    public void WaitInvocationRecognizer_ClosingVerbOnDialogBucket_StillInfersHidden()
+    {
+        var ctx = new InvocationContext(
+            MethodName: "WaitModalClosed",
+            ReceiverText: "Modal",
+            FullText: "Modal.WaitModalClosed()",
+            SourceLine: 25,
+            SymbolResolved: false,
+            ArgumentTexts: Array.Empty<string>());
+
+        var action = Assert.IsType<WaitForAction>(new WaitInvocationRecognizer().TryRecognize(ctx));
+
+        Assert.Equal(WaitForKind.ProductStateHidden, action.Kind);
     }
 
     static TestFileModel CreateModel(TestAction action) => new(
