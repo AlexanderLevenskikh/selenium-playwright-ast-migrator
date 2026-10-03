@@ -175,11 +175,26 @@ public static class ExecutableTargetSemantics
             return;
         }
 
+        // A mapping that emits only comment lines is a deliberate safe elision: the renderer
+        // proves the source construct has no active Playwright equivalent and documents it
+        // (e.g. a nullable-locator null-check, which is meaningless for non-null ILocator
+        // handles). Mirror the ActionabilityElided wait: elide without counting behavior or an
+        // assertion loss. A TODO-bearing comment is still counted by the TODO quality gate.
+        if (statements.All(IsCommentLine))
+            return;
+
         var executable = new List<string>();
         var rejected = new List<string>();
 
         foreach (var statement in statements)
         {
+            if (IsCommentLine(statement))
+            {
+                // Explanatory/elided text is not executable; do not let it satisfy behavior or
+                // assertion preservation or accidentally match an assertion-scanning regex.
+                continue;
+            }
+
             if (CanRenderMappedStatement(statement, action, out var normalized))
                 executable.Add(normalized);
             else
@@ -368,6 +383,9 @@ public static class ExecutableTargetSemantics
         }
     }
 
+    static bool IsCommentLine(string statement) =>
+        statement.TrimStart().StartsWith("//", StringComparison.Ordinal);
+
     static bool IsAssertionStatement(string statement) =>
         Regex.IsMatch(
             statement,
@@ -406,10 +424,20 @@ public static class ExecutableTargetSemantics
                && !expression.Contains('\n');
     }
 
+    /// <summary>
+    /// True when the Playwright .NET renderer emits an active statement for the target.
+    /// The renderer (DotNetAssertionAndWaitRenderer and the mapped-method renderer) renders a
+    /// real locator expression and an active statement for every target except
+    /// {@link TargetKind.Unresolved}; only an Unresolved target collapses to a comment plus a
+    /// smart TODO. A RawLocatorExpression / RawExpression target (a plain Playwright locator such
+    /// as {@code Page.Locator(...)} or a bare target local such as {@code result}) is spliced
+    /// verbatim into the emitted statement, so it is executable and must be counted.
+    /// Content-level fallbacks (non-literal Assert.That constraints, unsafe mapped-method
+    /// templates, review-required waits) are rejected separately by their own checks, not by
+    /// target kind, and leftover placeholder markers are still caught by the raw-expressions gate.
+    /// </summary>
     static bool IsProofSafeTarget(TargetExpression? target) =>
-        target is not null
-        && target.Kind is not TargetKind.Unresolved
-        && target.Kind is not TargetKind.RawExpression;
+        target is not null && target.Kind != TargetKind.Unresolved;
 
     static void CountTargetBehavior(TargetExpression target, AnalysisState state)
     {

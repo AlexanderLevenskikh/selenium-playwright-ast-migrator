@@ -458,7 +458,8 @@ public static class VerifyRunner
         string sourcePath,
         List<VerifyIssue> issues)
     {
-        var sourceAssertions = sourceActions.Count(IsAssertionLeaf);
+        var sourceAssertions = sourceActions.Count(
+            a => IsAssertionLeaf(a) && !IsElidedLocatorNullCheck(a));
         if (sourceAssertions == 0)
             return;
 
@@ -484,6 +485,23 @@ public static class VerifyRunner
         action is not UnsupportedAction
         && !TestActionTraversal.IsStructuralContainer(action)
         && action is not WaitForAction { Kind: WaitForKind.ActionabilityElided };
+
+    /// <summary>
+    /// A naked <c>Assert.That(x, Is.Not.Null)</c> null-check: the adapter elides it into an
+    /// explanatory comment (Playwright locator handles are non-null), so it is never preservable
+    /// as an executable Playwright .NET assertion and must not count toward the required total.
+    /// Mirrors <c>DefaultProjectAdapter.TryConvertAssertThatNonNullLocatorConstraint</c>. An
+    /// unresolved null-check still renders as a TODO and is rejected by the TODO quality gate, so
+    /// excluding it here cannot falsely green a fixture.
+    /// </summary>
+    static bool IsElidedLocatorNullCheck(TestAction action)
+    {
+        if (action is not AssertThatAction assertThat)
+            return false;
+
+        var constraint = Regex.Replace(assertThat.ConstraintExpression, @"\s+", string.Empty);
+        return assertThat.ActualExpression.Trim().Length > 0 && constraint == "Is.Not.Null";
+    }
 
     static bool IsAssertionLeaf(TestAction action) =>
         action is AssertAreEqualAction

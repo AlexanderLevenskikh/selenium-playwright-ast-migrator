@@ -155,6 +155,119 @@ public sealed class ExecutableSemanticPreservationTests
     }
 
     [Fact]
+    public void RawExpressionTargetLeafAssertions_CountAsExecutableWhenRendererEmitsExpect()
+    {
+        var result = TargetExpression.Mapped(
+            "result",
+            "result",
+            TargetKind.RawExpression);
+
+        var test = Test(
+            "Assertion",
+            new TestAction[]
+            {
+                new LocatorDeclarationAction(
+                    15,
+                    "result",
+                    "Page.Locator(\"#result\")",
+                    "WebDriver.FindElement(By.Id(\"result\"))"),
+                new VisibilityAssertionAction(
+                    16,
+                    TargetExpression.Mapped(
+                        "result",
+                        "result",
+                        TargetKind.RawExpression),
+                    VisibilityKind.Visible),
+                new TextAssertionAction(
+                    17,
+                    TargetExpression.Mapped(
+                        "result",
+                        "result",
+                        TargetKind.RawExpression),
+                    TextAssertionKind.TextEquals,
+                    "\"ok\"")
+            });
+
+        var report = Verify(File(test), File(test));
+
+        Assert.DoesNotContain(report.Issues, issue => issue.Category is "SemanticNoOp" or "AssertionLoss" or "VacuumTest");
+    }
+
+    [Fact]
+    public void CommentOnlyMappedNullCheck_IsSafeElision_NotAssertionLoss()
+    {
+        // Source: a nullable-locator null-check plus a real text assertion (mirrors p22).
+        var source = File(Test(
+            "Assertion",
+            new TestAction[]
+            {
+                new AssertThatAction(9, "button", "Is.Not.Null"),
+                new TextAssertionAction(
+                    11,
+                    TargetExpression.Mapped(
+                        "WebDriver.FindElement(By.Id(\"smoke-status\"))",
+                        "Page.Locator(\"#smoke-status\")",
+                        TargetKind.RawExpression),
+                    TextAssertionKind.TextEquals,
+                    "\"ok\"")
+            }));
+
+        // Target: the adapter elides the null-check into an explanatory comment mapping, the text
+        // assertion is real. No assertion should be reported lost.
+        var target = File(Test(
+            "Assertion",
+            new TestAction[]
+            {
+                new MappedMethodInvocationAction(
+                    9,
+                    "Assert.That(button, Is.Not.Null);",
+                    new[] { "// source locator null-check elided: Playwright locator objects are non-null handles" },
+                    requiresReview: false,
+                    targetExpr: TargetExpression.Mapped("button", "button", TargetKind.RawExpression),
+                    sourceMethod: "Assert.That.Is.Not.Null"),
+                new TextAssertionAction(
+                    11,
+                    TargetExpression.Mapped(
+                        "WebDriver.FindElement(By.Id(\"smoke-status\"))",
+                        "Page.Locator(\"#smoke-status\")",
+                        TargetKind.RawExpression),
+                    TextAssertionKind.TextEquals,
+                    "\"ok\"")
+            }));
+
+        var report = Verify(source, target);
+
+        Assert.DoesNotContain(report.Issues, issue => issue.Category is "SemanticNoOp" or "AssertionLoss" or "VacuumTest");
+    }
+
+    [Fact]
+    public void CommentOnlyMappedClick_IsSafeElision_NotSemanticNoOp()
+    {
+        // A comment-only mapping for a non-assertion operation is a deliberate elision, not a
+        // semantic no-op: it emits explanatory text and must not fail the executable check.
+        var source = File(Test(
+            "Operation",
+            new TestAction[] { new AssertThatAction(7, "button", "Is.Not.Null") }));
+
+        var target = File(Test(
+            "Operation",
+            new TestAction[]
+            {
+                new MappedMethodInvocationAction(
+                    7,
+                    "Assert.That(button, Is.Not.Null);",
+                    new[] { "// source locator null-check elided: Playwright locator objects are non-null handles" },
+                    requiresReview: false,
+                    targetExpr: TargetExpression.Mapped("button", "button", TargetKind.RawExpression),
+                    sourceMethod: "Assert.That.Is.Not.Null")
+            }));
+
+        var report = Verify(source, target);
+
+        Assert.DoesNotContain(report.Issues, issue => issue.Category == "SemanticNoOp");
+    }
+
+    [Fact]
     public void UnresolvedControlStateAssertion_IsAssertionLoss()
     {
         var sourceAssertion = new ControlStateAssertionAction(
