@@ -1,9 +1,13 @@
 # Semantic Accounting Baseline
 
 Phase A, measured on the whole corpus (`corpus/stable/vertical-slice`, 29 fixtures,
-31 files, 32 tests, 120 actions) with the **unconfigured default path**
+31 files, 32 tests) with the **unconfigured default path**
 (`--mode analyze`, no `adapter-config.json`). Harness: `scripts/baseline/semantic-accounting.ps1`.
 Machine output: `artifacts/baseline/accounting/semantic-accounting.json`.
+
+The numbers below are the **Phase A.1** state (post accounting fix, LOC-01, WAIT-03,
+metric fields). The pre-A.1 Phase A state (120 actions, 35/92, 2/31, 117 TODOs, +7
+double-count) is preserved in `docs/vnext/phase-a-findings.md` §5.
 
 ## What is counted
 
@@ -14,50 +18,61 @@ Terminology used by the analyzer/report (see `docs/vnext/current-pipeline.md`):
 | `SemanticActions` | statements recognized via Roslyn symbols/types (recognized Click/SendKeys/Assert on resolved Selenium/NUnit types) |
 | `SyntaxFallbackActions` | statements recognized by syntax recognizers (any Click/assert/wait shape by name) |
 | `UnsupportedActions` | statements with **no** recognizer (would be isolated as TODO) |
+| `TotalActions` | flattened action total (containers + leaf children); the scope Semantic/SyntaxFallback/Unsupported buckets sum to |
 | `MappedTargets` / `UnmappedTargets` | action target expressions resolved vs left as `MISSING_MAPPING` |
 | `TodoComments` | `[MIGRATOR:…]` TODO annotations emitted into generated code |
-| `SuccessfullyConvertedTests` | report metric = tests with `UnsupportedCount == 0` |
+| `SuccessfullyConvertedTests` | legacy report metric = tests with `UnsupportedCount == 0` — **not** a semantic-success signal |
+| `GeneratedTests` | tests whose source body has ≥1 emitted action |
+| `FullyConvertedTests` | tests where every source action (and shared setup) is provably emitted as executable target code via `ExecutableTargetSemantics` (no TODO/comment-only fallback) |
 
 ## Rollup
 
-| Files | Tests | Actions | Semantic | SyntaxFallback | Unsupported | Mapped | Unmapped | TODO | Fully-converted files* |
-|---|---|---|---|---|---|---|---|---|---|
-| 31 | 32 | 120 | 35 | 92 | 0 | 2 | 31 | 117 | **0** |
+| Files | Tests | Actions | Semantic | SyntaxFallback | Unsupported | Struct | Mapped | Unmapped | TODO | Generated tests | Fully-converted tests | Fully-converted files* |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 31 | 32 | 127 | 38 | 89 | 0 | 4 | 73 | 2 | 43 | 32 | **22** | 19 |
 
-\* a file is *fully converted* here only if it has zero TODOs, zero unmapped targets and
-zero unsupported statements under the **unconfigured** path.
+\* a file is *fully converted* here by the legacy heuristic (zero TODOs, zero unmapped
+targets, zero unsupported statements) under the **unconfigured** path. The honest
+test-level signal is **Fully-converted tests**: 22/32 — legacy `SuccessfullyConvertedTests`
+would claim 32/32.
 
 ## Readings (evidence, not judgment)
 
-### 1. Two accounting invariants fail, and both are structural
+### 1. The two accounting invariants now hold (fixed in Phase A.1)
 
-- `Semantic + SyntaxFallback = 127 > 120` (**+7**). Container/block statements
-  (`Assert.Multiple`, loops, conditional blocks) are counted as a node *and* their leaf
-  children again through `TestActionTraversal.Flatten`. Not noise: a reproducible
-  double-counting artefact in `ReportBuilder`.
-- `UnsupportedActions = 0` while every file contains TODOs/unmapped targets. Degradation
-  never routes through the "unsupported" bucket; it routes through `MISSING_MAPPING` and
-  TODO constraints. `SuccessfullyConvertedTests` is therefore 1 for every story — a
-  **p01-class metric that says nothing about semantic preservation** (see
-  `correctness-risk-areas.md` §4.1).
+- `Semantic + SyntaxFallback + Unsupported == TotalActions` holds on the flattened set
+  (`SemanticAccountingInvariantTests`). The Phase A `+7` double-count was
+  `ReportBuilder` counting block containers both as a node and again via
+  `TestActionTraversal.Flatten`; the report now exposes the flattened `TotalActions` as the
+  canonical scope (ACO1 in `phase-a-findings.md` §13). Ledger: `invariantHolds=True`, delta 0.
+- `UnsupportedActions = 0` while files still contain TODOs/unmapped targets: degradation
+  routes through `MISSING_MAPPING` and TODO constraints, not the unsupported bucket. The
+  legacy `SuccessfullyConvertedTests` (=1 for every story) is why `FullyConvertedTests`
+  (22/32) was added — the honest test-level signal (MTRC in §13).
 
 ### 2. Semantic vs syntax coverage
 
-Only 35/120 actions (≈29%) are recognized by the narrow Semantic path
-(Click/SendKeys/Assert.That/AreEqual on resolved types). 92 go through syntax recognizers,
-which is where the unsafe heuristics (WAIT-03, ASRT-03 text stripping, LOC-06 cardinality)
-live. The unconfigured corpus is overwhelmingly a *syntax-shaped* workload; the semantic
-path's low share is itself a scalability finding for the current architecture.
+Only 38/127 actions (≈30%) are recognized by the narrow Semantic path
+(Click/SendKeys/Assert.That/AreEqual on resolved types). 89 go through syntax recognizers,
+which is where conservative heuristics (WAIT-03 `ReviewRequired`, ASRT-03 text stripping,
+LOC-06 cardinality) live. The unconfigured corpus is overwhelmingly a *syntax-shaped*
+workload; the semantic path's low share is itself a scalability finding for the current
+architecture.
 
 ### 3. Per-file shape of the residual
 
-- Fixtures with **no config mapping needs** (p20, p24a, p24b, p25) land near a clean
-  residual (0-unmapped, 2-4 TODOs) — the syntax recognizers cover them.
-- p28 (frames/popups/upload/download) is the heaviest residual: 19 TODOs, 4 unmapped —
-  expected-unsupported, but the *report* still flags it `SuccessfullyConvertedTests=1`.
-- p01/p02/p14/p17b: 2-3 unmapped targets each even though their locators are plain
-  `By.Id` — the inline-vs-declaration path inconsistency (LOC-01) directly reduces
-  mapped targets on the simplest fixtures.
+- LOC-01 resolution moved the corpus from 2 mapped/31 unmapped/117 TODOs to
+  73 mapped/2 unmapped/43 TODOs; 19 files now pass the legacy fully-converted heuristic.
+- The remaining 2 unmapped targets: `dashboard.Status` (p10 page-object chain) and
+  `dynamicDriver.FindElement(By.Id("dynamic-target"))` (p29 raw statement) — genuine
+  unconfigured-path gaps, visible in the ledger.
+- `FullyConvertedTests = 0` per file where any source action (or the shared setup) is
+  emitted only as TODO/comment by `ExecutableTargetSemantics` — even when the file happens
+  to carry zero TODO lines. Per the ledger, FullConv = 0 for p02, p13, p14, p15, p19, p21,
+  p23, p24a, p24b, p25; FullConv = 2 for p20 (2 tests). The exact per-file reason is in the
+  ledger's Gen/FullConv columns plus the run-level gates.
+- A file whose `SuccessfullyConverted` column is 1 but `FullConv` is 0 is the false-green
+  the new metric exposes: the legacy metric alone would report it fully converted.
 
 ## How to use this ledger
 

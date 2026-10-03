@@ -201,3 +201,49 @@ it.
 phase: seal `artifacts/baseline/**` into the repo (done via `.gitignore` exception),
 rerun both harnesses on CI to get cross-machine numbers, and write gap fixtures
 G1 (broken-source) + G2 (stale-reference) from `corpus/planning/phase-a-coverage.md`.
+
+---
+
+## 13. Phase A.1 — Baseline-integrity changes (in progress, no Phase B/C/D started)
+
+Chosen direction: **NEXT-A** (fix observability first, no architecture refactor).
+Changes below are small, locally-obvious, and each carries its own regression tests.
+Evidence dirs: `migration/artifacts/baseline/work/{whole-corpus-gated3,whole-corpus-gated4}`
+and `artifacts/baseline/determinism/{p01,p04}-loc01,{p01,p04}-gated4`.
+
+### 13.1 Before / Change / After / Evidence
+
+| # | Before | Change | After | Evidence |
+|---|---|---|---|---|
+| ACO1 | `Semantic+SyntaxFallback = 127 > 120` ActionsFound (+7 double-count of block containers) | `ReportBuilder` counts the flattened set (`TotalActions`); `MigrationReport` gains `TotalActions` + `StructuralContainers`; `TestActionTraversal` made public | `Semantic 38 + SyntaxFallback 89 + Unsupported 0 == 127 == TotalActions`, invariant holds, delta 0 | `whole-corpus-gated4/report.json`, `SemanticAccountingInvariantTests` (3/3), ledger `invariantHolds=True` |
+| LOC01 | unconfigured corpus: Mapped 2, Unmapped 31, TODO 117, fully-converted files 0 | C#-scoped default adapter fallback in `Program.cs` (Java/Python frontends untouched); inline `FindElement` action targets now resolve | Mapped 73, Unmapped 2, TODO 43, fully-converted files 19 | `whole-corpus-gated3`, `LocatorPathConsistencyRegressionTests` (4/4), p01 0 TODOs |
+| WAIT03 | name-heuristic waits guessed `Hidden/Visible/Loaded` from method name + widget bucket with no product-state proof (Unsafe) | widget-bucket and default branches in `InferProductStateKind` → `ReviewRequired`; verb-based direction (closing/opening) preserved; no new IR | unsafe guesses removed, corpus output unchanged (127/38/89/4/73/2/43) | `WaitPolicyTests` renamed + 2 new fixtures, `whole-corpus-wait03` |
+| MTRC | `SuccessfullyConvertedTests` = 1 for every story (defined as "no UnsupportedAction") — blind to TODO/assertion loss | added `GeneratedTests` + `FullyConvertedTests` via `ExecutableTargetSemantics` (formal, conservative); legacy metric kept as-is | Generated 32/32, **FullyConverted 22/32** vs legacy 32/32 — the blind spot is now visible | `whole-corpus-gated4`, `SuccessfullyConvertedMetricsTests` (5/5), ledger columns |
+| DETR | p01 `11c9aaeb…`, p04 `b665d843…` | deterministic re-run after all metric/report changes | p01 `dcdf1f33…`, p04 `22b81ea9…` — both `IDENTICAL`, exit 1 (expected); generated `LoginTestsPlaywright.cs` **byte-identical** to pre-field baseline, `target-tree.sha256` unchanged | `artifacts/baseline/determinism/*-gated4/determinism-result.json` |
+
+### 13.2 Acceptance checklist (Phase A.1)
+
+| Criterion | Status |
+|---|---|
+| Accounting invariant verifiable | DONE — `SemanticAccountingInvariantTests` (3/3); ledger `invariantHolds=True` |
+| Double-count = 0 | DONE — flattened `TotalActions`; Semantic+SyntaxFallback+Unsupported == TotalActions |
+| Every unaccounted action explained | DONE — delta 0; `Unsupported=0`; residual routes through `MISSING_MAPPING`/TODO (Unmapped 2, TODO 43) |
+| `SuccessfullyConvertedTests` no false-green | DONE — `FullyConvertedTests` 22/32 vs legacy 32/32 makes the gap explicit |
+| Broken/degraded source fails closed | PENDING — needs `G1` (broken-source) fixture |
+| WAIT-03 without unproven guess | DONE — `ReviewRequired` default + verb-preserved direction, regression-tested |
+| `G1`/`G2` gap fixtures | PENDING — p30 (broken source) and p31 (stale/lifetime) fixtures not yet written |
+| Determinism green | DONE — p01/p04 `IDENTICAL` after all changes |
+| Build / tests | `dotnet build` 0 errors; `dotnet test` 1087 passed / 11 failed — the 11 are pre-existing opencode-contract tests that assert on `.opencode/**` + `opencode.jsonc`, which the user deleted locally; untouched `master` baseline is 1081/1081 green |
+
+### 13.3 Decision gate after A.1
+
+NEXT-A confirmed by the evidence above: the observability layer is now honest
+(`FullyConvertedTests`, `TotalActions` invariant, `ReviewRequired` instead of guessed
+direction). NEXT-B/C/D/F are deliberately **not** started — the architecture stays as-is
+until the remaining A.1 acceptance items (G1/G2) and small-step commits land.
+
+Smallest next change with the highest verifiable value: **write G1 (p30 broken source) and
+G2 (p31 stale reference) fixtures** and their expected accounting — they are the only
+remaining acceptance items, directly test fail-closed behaviour (broken/degraded source
+must not be reported converted), and do not touch the pipeline. After that: commit in
+small steps (accounting+LOC-01, WAIT-03, metric fields, fixtures) and stop.
