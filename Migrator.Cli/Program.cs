@@ -503,6 +503,13 @@ if (mode == "profile-match")
     return profileMatchExitCode;
 }
 
+// Handle config-source mode — checks whether each config source-side key actually occurs in the source.
+if (mode == "config-source")
+{
+    var configSourceExitCode = ConfigSourceCommand.Run(inputPath, outPath, format, configPaths);
+    return configSourceExitCode;
+}
+
 
 // Handle verify-ts-project mode — validates generated .spec.ts files inside a real Playwright TS project.
 if (mode == "verify-ts-project")

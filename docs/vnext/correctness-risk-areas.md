@@ -423,4 +423,4 @@ Recommended next action
 | 4 | ASRT-03 text normalization stripped | asserted value differs from source | none | CONFIRMED |
 | 5 | SuccessfullyConvertedTests | metric reports converted while ops lost | run-level AssertionLoss gate (not the metric) | CONFIRMED |
 | 6 | OneTime/shared-driver Setup | state sharing silently changes | none | LIKELY |
-| 7 | LOC-01 inline-vs-declaration | inconsistent resolution | none in default path | CONFIRMED |
+| 7 | LOC-01 inline-vs-declaration | inconsistent resolution | LocatorPathConsistencyRegressionTests (By.Id/Css/XPath inline vs declaration reuse); default adapter forced by CLI | CONFIRMED |

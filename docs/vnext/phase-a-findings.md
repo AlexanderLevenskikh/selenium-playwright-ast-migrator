@@ -317,3 +317,43 @@ Fresh full `lab run` (`artifacts/lab/full-corpus-4`): **35/35 conforming** —
 
 `artifacts/lab/` is now gitignored (transient run outputs); `artifacts/baseline/`
 ledger evidence remains tracked.
+
+## 15. Phase A.3 (NEXT-B): config-to-source validation + LOC-01 pin
+
+The NEXT-B decision gate (section 12) was executed: the adapter config is now checked
+against the actual Selenium source, closing the "class-B dependency on unvalidated
+config" uncertainty — the config is the only active code the pipeline runs, and a
+mistyped or dead key silently does nothing.
+
+### 15.1 config-source report
+
+- New pure-Core model/builder: `ConfigSourceReport` / `ConfigSourceReportBuilder`
+  (`Migrator.Core`), reusable by any host. Every source-side key (Methods,
+  ParameterizedMethods, UiTargets, PageObjects, Tables, Pagination, NavigationUrls,
+  Suppressed/Scaffold Methods + Patterns, GenericResultMethods, TargetKnown*,
+  SourceOnlyIdentifiers, and `Scopes/{name}/...` variants) is located in the .cs files
+  and classified used/unused with occurrences and the first example `file:line`.
+- Counting semantics mirror the config machinery: identifiers match on `\b...\b`
+  boundaries; method patterns convert `{placeholder}` to `.+?`; glob patterns follow
+  `ConfigValidator.SimpleGlobMatches` (`*` -> `.*`, everything escaped, `^...$`), so
+  `Owner.Method*` keeps the dot literal (an unqualified `Method1()` does not match).
+- New `--mode config-source` (experimental) writes `config-source.json` + `.md` with
+  a coverage %. Report-only: never edits config/source and does not gate the migration.
+- Verified on corpus: p09 parameterized pattern matched at source `HelperTests.cs:11`;
+  a foreign profile against p01 reported 20/20 unused (0%); p10's own config 2/2 (100%).
+- Unit coverage: 12 new tests in `ConfigSourceReportBuilderTests` (section extraction,
+  used/unused, coverage %, per-kind counting, first-line, empty config).
+
+### 15.2 LOC-01 pin expanded
+
+`LocatorPathConsistencyRegressionTests` now pins the inline-vs-declaration matrix for
+By.Id / By.CssSelector / By.XPath: inline action targets and declarations that are later
+reused must resolve to the same single locator (Id -> `Page.Locator("#...")`, Css ->
+`Page.Locator("...")`, XPath -> `Page.Locator("xpath=...")`). Both resolution paths
+(`ResolveInlineFindElementTarget` and `UpdateLocalVariableMappingFromAssignment`) share
+the strategy->locator shape and are now byte-pinned by 6 new theory cases.
+
+### 15.3 Result
+
+`dotnet test` **1121/1121** (was 1103; +18 new). LOC-01 row in
+`correctness-risk-areas.md` now points at the regression test as the detector.

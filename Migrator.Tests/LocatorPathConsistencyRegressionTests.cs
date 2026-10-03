@@ -46,6 +46,42 @@ public class LocatorPathConsistencyRegressionTests
         Assert.Contains("result.ClickAsync()", output);
     }
 
+    // LOC-01 matrix: inline WebDriver.FindElement(By.<strategy>) action targets AND
+    // declarations that are later reused must resolve to the same locator text. The
+    // inline path (ResolveInlineFindElementTarget) and the assignment path
+    // (UpdateLocalVariableMappingFromAssignment) share the strategy -> locator shape:
+    // XPath -> Page.Locator("xpath=..."), CssSelector -> Page.Locator("..."),
+    // Id -> Page.Locator("#...").
+
+    [Theory]
+    [InlineData("By.XPath(\"//div//input\")", "Page.Locator(\"xpath=//div//input\")")]
+    [InlineData("By.CssSelector(\".grid tr\")", "Page.Locator(\".grid tr\")")]
+    [InlineData("By.Id(\"username\")", "Page.Locator(\"#username\")")]
+    public void InlineFindElement_ByStrategy_ActionTarget_ResolvesToExpectedLocator(string byExpr, string expectedLocator)
+    {
+        var output = MigrateWithEmptyAdapter($"WebDriver.FindElement({byExpr}).Click();");
+
+        Assert.DoesNotContain("TODO", output);
+        Assert.DoesNotContain("FindElement", output);
+        Assert.Contains(expectedLocator, output);
+    }
+
+    [Theory]
+    [InlineData("By.XPath(\"//div//input\")", "Page.Locator(\"xpath=//div//input\")")]
+    [InlineData("By.CssSelector(\".grid tr\")", "Page.Locator(\".grid tr\")")]
+    [InlineData("By.Id(\"username\")", "Page.Locator(\"#username\")")]
+    public void Declaration_ByStrategy_ResolvesToSameLocatorAsInline(string byExpr, string expectedLocator)
+    {
+        var source = $"var result = WebDriver.FindElement({byExpr}); result.Click();";
+        var output = MigrateWithEmptyAdapter(source);
+
+        // Same assertion shape as the inline case: identical single locator, local reuse.
+        Assert.DoesNotContain("TODO", output);
+        Assert.DoesNotContain("FindElement", output);
+        Assert.Equal(1, CountOccurrences(output, expectedLocator));
+        Assert.Contains("result.ClickAsync()", output);
+    }
+
     [Fact]
     public void Cli_AlwaysInstantiatesDefaultAdapter_WithoutConfig()
     {
