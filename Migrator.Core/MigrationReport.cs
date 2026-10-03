@@ -13,5 +13,9 @@ public record MigrationReport(
     int UnsupportedCount,
     int MappedTargets,
     int UnmappedTargets,
-    int TodoComments
+    int TodoComments,
+    int TotalActions,
+    int StructuralContainers,
+    int GeneratedTests,
+    int FullyConvertedTests
 );

@@ -505,7 +505,7 @@ public class VerifyTests
                     Array.Empty<TestAction>())
             });
         var report = new MigrationReport("Scoped.cs", 1, 1, Array.Empty<UnsupportedAction>(),
-            "await Page.Locator(\"{name}\").ClickAsync();", 0, 0, 0, 0, 0, 0);
+            "await Page.Locator(\"{name}\").ClickAsync();", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
         var result = new PipelineResult(model, model, report.GeneratedOutput!, report);
         var config = new ProjectAdapterConfig
         {

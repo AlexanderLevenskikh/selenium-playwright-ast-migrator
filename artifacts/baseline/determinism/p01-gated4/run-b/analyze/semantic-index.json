@@ -1,0 +1,889 @@
+{
+  "SchemaVersion": "project-semantic-index/v1",
+  "RootProject": "Scenario.csproj",
+  "SemanticSha256": "2c59184732b2dfb948c0ee1ba06968280018f1b3919a5f142a193cb6ebb87fc6",
+  "ReferenceMode": "framework\u002Bhintpath\u002Bproject-references",
+  "Projects": 1,
+  "SourceFiles": 2,
+  "Types": 2,
+  "Methods": 4,
+  "Calls": 38,
+  "ResolvedCalls": 2,
+  "UnresolvedCalls": 36,
+  "CompilationErrors": 36,
+  "CompilationWarnings": 0,
+  "ProjectRecords": [
+    {
+      "ProjectFile": "Scenario.csproj",
+      "AssemblyName": "Scenario",
+      "SourceFiles": [
+        "Infrastructure/LabSeleniumTestBase.cs",
+        "Tests/LoginTests.cs"
+      ],
+      "ProjectReferences": []
+    }
+  ],
+  "TypeRecords": [
+    {
+      "SymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase",
+      "ProjectFile": "Scenario.csproj",
+      "Name": "LabSeleniumTestBase",
+      "Kind": "Class",
+      "BaseType": null,
+      "Interfaces": [],
+      "SourceFiles": [
+        "Infrastructure/LabSeleniumTestBase.cs"
+      ],
+      "IsPartial": false
+    },
+    {
+      "SymbolId": "Migrator.Lab.Corpus.P01.LoginTests",
+      "ProjectFile": "Scenario.csproj",
+      "Name": "LoginTests",
+      "Kind": "Class",
+      "BaseType": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase",
+      "Interfaces": [],
+      "SourceFiles": [
+        "Infrastructure/LabSeleniumTestBase.cs",
+        "Tests/LoginTests.cs"
+      ],
+      "IsPartial": true
+    }
+  ],
+  "MethodRecords": [
+    {
+      "SymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::BuildPageUri(string)",
+      "ProjectFile": "Scenario.csproj",
+      "ContainingTypeSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase",
+      "Name": "BuildPageUri",
+      "ReturnType": "Uri",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 41,
+      "IsAsyncDeclared": false,
+      "ReturnsAwaitable": false,
+      "IsExtensionMethod": false
+    },
+    {
+      "SymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::StartBrowser()",
+      "ProjectFile": "Scenario.csproj",
+      "ContainingTypeSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase",
+      "Name": "StartBrowser",
+      "ReturnType": "void",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 13,
+      "IsAsyncDeclared": false,
+      "ReturnsAwaitable": false,
+      "IsExtensionMethod": false
+    },
+    {
+      "SymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::StopBrowser()",
+      "ProjectFile": "Scenario.csproj",
+      "ContainingTypeSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase",
+      "Name": "StopBrowser",
+      "ReturnType": "void",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 35,
+      "IsAsyncDeclared": false,
+      "ReturnsAwaitable": false,
+      "IsExtensionMethod": false
+    },
+    {
+      "SymbolId": "Migrator.Lab.Corpus.P01.LoginTests::UserCanLogin()",
+      "ProjectFile": "Scenario.csproj",
+      "ContainingTypeSymbolId": "Migrator.Lab.Corpus.P01.LoginTests",
+      "Name": "UserCanLogin",
+      "ReturnType": "void",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 9,
+      "IsAsyncDeclared": false,
+      "ReturnsAwaitable": false,
+      "IsExtensionMethod": false
+    }
+  ],
+  "CallRecords": [
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::BuildPageUri(string)",
+      "CalleeSymbolId": null,
+      "Display": "Environment.GetEnvironmentVariable",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 43,
+      "SourceColumn": 23,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::BuildPageUri(string)",
+      "CalleeSymbolId": null,
+      "Display": "baseUrl.EndsWith",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 44,
+      "SourceColumn": 14,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::BuildPageUri(string)",
+      "CalleeSymbolId": "string::TrimStart(char)",
+      "Display": "relativePath.TrimStart",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 46,
+      "SourceColumn": 60,
+      "IsResolved": true,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::StartBrowser()",
+      "CalleeSymbolId": null,
+      "Display": "options.AddArgument",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 16,
+      "SourceColumn": 9,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::StartBrowser()",
+      "CalleeSymbolId": null,
+      "Display": "options.AddArgument",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 17,
+      "SourceColumn": 9,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::StartBrowser()",
+      "CalleeSymbolId": null,
+      "Display": "options.AddArgument",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 18,
+      "SourceColumn": 9,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::StartBrowser()",
+      "CalleeSymbolId": null,
+      "Display": "options.AddArgument",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 19,
+      "SourceColumn": 9,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::StartBrowser()",
+      "CalleeSymbolId": null,
+      "Display": "options.AddArgument",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 20,
+      "SourceColumn": 9,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::StartBrowser()",
+      "CalleeSymbolId": null,
+      "Display": "Environment.GetEnvironmentVariable",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 22,
+      "SourceColumn": 22,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::StartBrowser()",
+      "CalleeSymbolId": null,
+      "Display": "string.IsNullOrWhiteSpace",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 23,
+      "SourceColumn": 14,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "OverloadResolutionFailure"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::StartBrowser()",
+      "CalleeSymbolId": null,
+      "Display": "Environment.GetEnvironmentVariable",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 26,
+      "SourceColumn": 31,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::StartBrowser()",
+      "CalleeSymbolId": null,
+      "Display": "string.IsNullOrWhiteSpace",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 27,
+      "SourceColumn": 21,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "OverloadResolutionFailure"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::StartBrowser()",
+      "CalleeSymbolId": null,
+      "Display": "ChromeDriverService.CreateDefaultService",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 29,
+      "SourceColumn": 32,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::StartBrowser()",
+      "CalleeSymbolId": null,
+      "Display": "WebDriver.Manage",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 30,
+      "SourceColumn": 9,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::StartBrowser()",
+      "CalleeSymbolId": null,
+      "Display": "WebDriver.Manage().Timeouts",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 30,
+      "SourceColumn": 9,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::StartBrowser()",
+      "CalleeSymbolId": null,
+      "Display": "WebDriver.Navigate",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 31,
+      "SourceColumn": 9,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::StartBrowser()",
+      "CalleeSymbolId": null,
+      "Display": "WebDriver.Navigate().GoToUrl",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 31,
+      "SourceColumn": 9,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::StartBrowser()",
+      "CalleeSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::BuildPageUri(string)",
+      "Display": "BuildPageUri",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 31,
+      "SourceColumn": 38,
+      "IsResolved": true,
+      "IsSourceMethod": true,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::StopBrowser()",
+      "CalleeSymbolId": null,
+      "Display": ".Quit",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 37,
+      "SourceColumn": 19,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LabSeleniumTestBase::StopBrowser()",
+      "CalleeSymbolId": null,
+      "Display": ".Dispose",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 38,
+      "SourceColumn": 19,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LoginTests::UserCanLogin()",
+      "CalleeSymbolId": null,
+      "Display": "WebDriver.FindElement",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 11,
+      "SourceColumn": 9,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LoginTests::UserCanLogin()",
+      "CalleeSymbolId": null,
+      "Display": "WebDriver.FindElement(By.Id(\u0022username\u0022)).SendKeys",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 11,
+      "SourceColumn": 9,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LoginTests::UserCanLogin()",
+      "CalleeSymbolId": null,
+      "Display": "By.Id",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 11,
+      "SourceColumn": 31,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LoginTests::UserCanLogin()",
+      "CalleeSymbolId": null,
+      "Display": "WebDriver.FindElement",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 12,
+      "SourceColumn": 9,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LoginTests::UserCanLogin()",
+      "CalleeSymbolId": null,
+      "Display": "WebDriver.FindElement(By.Id(\u0022password\u0022)).SendKeys",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 12,
+      "SourceColumn": 9,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LoginTests::UserCanLogin()",
+      "CalleeSymbolId": null,
+      "Display": "By.Id",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 12,
+      "SourceColumn": 31,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LoginTests::UserCanLogin()",
+      "CalleeSymbolId": null,
+      "Display": "WebDriver.FindElement",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 13,
+      "SourceColumn": 9,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LoginTests::UserCanLogin()",
+      "CalleeSymbolId": null,
+      "Display": "WebDriver.FindElement(By.Id(\u0022login\u0022)).Click",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 13,
+      "SourceColumn": 9,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LoginTests::UserCanLogin()",
+      "CalleeSymbolId": null,
+      "Display": "By.Id",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 13,
+      "SourceColumn": 31,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LoginTests::UserCanLogin()",
+      "CalleeSymbolId": null,
+      "Display": "WebDriver.FindElement",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 15,
+      "SourceColumn": 22,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LoginTests::UserCanLogin()",
+      "CalleeSymbolId": null,
+      "Display": "By.Id",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 15,
+      "SourceColumn": 44,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LoginTests::UserCanLogin()",
+      "CalleeSymbolId": null,
+      "Display": "Assert.That",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 16,
+      "SourceColumn": 9,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LoginTests::UserCanLogin()",
+      "CalleeSymbolId": null,
+      "Display": "Assert.That",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 17,
+      "SourceColumn": 9,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LoginTests::UserCanLogin()",
+      "CalleeSymbolId": null,
+      "Display": "Is.EqualTo",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 17,
+      "SourceColumn": 34,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LoginTests::UserCanLogin()",
+      "CalleeSymbolId": null,
+      "Display": "Assert.That",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 18,
+      "SourceColumn": 9,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LoginTests::UserCanLogin()",
+      "CalleeSymbolId": null,
+      "Display": "WebDriver.FindElement",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 18,
+      "SourceColumn": 21,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LoginTests::UserCanLogin()",
+      "CalleeSymbolId": null,
+      "Display": "By.Id",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 18,
+      "SourceColumn": 43,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    },
+    {
+      "CallerSymbolId": "Migrator.Lab.Corpus.P01.LoginTests::UserCanLogin()",
+      "CalleeSymbolId": null,
+      "Display": "Does.Contain",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 18,
+      "SourceColumn": 73,
+      "IsResolved": false,
+      "IsSourceMethod": false,
+      "IsExtensionMethod": false,
+      "IsAwaited": false,
+      "CandidateReason": "None"
+    }
+  ],
+  "Diagnostics": [
+    {
+      "Id": "CS0246",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 1,
+      "SourceColumn": 7
+    },
+    {
+      "Id": "CS0246",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 2,
+      "SourceColumn": 7
+    },
+    {
+      "Id": "CS0246",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 3,
+      "SourceColumn": 7
+    },
+    {
+      "Id": "CS0246",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 9,
+      "SourceColumn": 15
+    },
+    {
+      "Id": "CS0246",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 12,
+      "SourceColumn": 6
+    },
+    {
+      "Id": "CS0246",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 12,
+      "SourceColumn": 6
+    },
+    {
+      "Id": "CS0246",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 15,
+      "SourceColumn": 27
+    },
+    {
+      "Id": "CS0103",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 22,
+      "SourceColumn": 22
+    },
+    {
+      "Id": "CS0103",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 26,
+      "SourceColumn": 31
+    },
+    {
+      "Id": "CS0246",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 28,
+      "SourceColumn": 19
+    },
+    {
+      "Id": "CS0246",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 29,
+      "SourceColumn": 19
+    },
+    {
+      "Id": "CS0103",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 29,
+      "SourceColumn": 32
+    },
+    {
+      "Id": "CS0103",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 30,
+      "SourceColumn": 54
+    },
+    {
+      "Id": "CS0246",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 34,
+      "SourceColumn": 6
+    },
+    {
+      "Id": "CS0246",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 34,
+      "SourceColumn": 6
+    },
+    {
+      "Id": "CS0246",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 41,
+      "SourceColumn": 12
+    },
+    {
+      "Id": "CS0103",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 43,
+      "SourceColumn": 23
+    },
+    {
+      "Id": "CS0103",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 44,
+      "SourceColumn": 36
+    },
+    {
+      "Id": "CS0246",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 46,
+      "SourceColumn": 20
+    },
+    {
+      "Id": "CS0246",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 46,
+      "SourceColumn": 28
+    },
+    {
+      "Id": "CS0103",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Infrastructure/LabSeleniumTestBase.cs",
+      "SourceLine": 46,
+      "SourceColumn": 41
+    },
+    {
+      "Id": "CS0246",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 1,
+      "SourceColumn": 7
+    },
+    {
+      "Id": "CS0246",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 2,
+      "SourceColumn": 7
+    },
+    {
+      "Id": "CS0246",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 8,
+      "SourceColumn": 6
+    },
+    {
+      "Id": "CS0246",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 8,
+      "SourceColumn": 6
+    },
+    {
+      "Id": "CS0103",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 11,
+      "SourceColumn": 31
+    },
+    {
+      "Id": "CS0103",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 12,
+      "SourceColumn": 31
+    },
+    {
+      "Id": "CS0103",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 13,
+      "SourceColumn": 31
+    },
+    {
+      "Id": "CS0103",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 15,
+      "SourceColumn": 44
+    },
+    {
+      "Id": "CS0103",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 16,
+      "SourceColumn": 9
+    },
+    {
+      "Id": "CS0103",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 16,
+      "SourceColumn": 39
+    },
+    {
+      "Id": "CS0103",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 17,
+      "SourceColumn": 9
+    },
+    {
+      "Id": "CS0103",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 17,
+      "SourceColumn": 34
+    },
+    {
+      "Id": "CS0103",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 18,
+      "SourceColumn": 9
+    },
+    {
+      "Id": "CS0103",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 18,
+      "SourceColumn": 43
+    },
+    {
+      "Id": "CS0103",
+      "Severity": "Error",
+      "ProjectFile": "Scenario.csproj",
+      "SourceFile": "Tests/LoginTests.cs",
+      "SourceLine": 18,
+      "SourceColumn": 73
+    }
+  ]
+}

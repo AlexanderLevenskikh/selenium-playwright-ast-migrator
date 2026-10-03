@@ -1,0 +1,10 @@
+{
+  "SchemaVersion": "migrator-run-determinism/v1",
+  "Decision": "IDENTICAL",
+  "InvocationSha256": "48a110fce102b3972c6cf4ae4508f5efbcf9715fc6daa3b8214a741961cd0670",
+  "RunADigestSha256": "b665d84319e863cee39479113f7f91ca7d2b387a054ab67e60ac3514bdbc2d69",
+  "RunBDigestSha256": "b665d84319e863cee39479113f7f91ca7d2b387a054ab67e60ac3514bdbc2d69",
+  "RunAExitCode": 1,
+  "RunBExitCode": 1,
+  "Differences": []
+}

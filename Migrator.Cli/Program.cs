@@ -254,6 +254,19 @@ catch (InvalidOperationException ex)
     return 2;
 }
 source = sourceFrontend.Source.Id;
+
+// LOC-01 fix: for the C# Selenium frontend, even without any adapter config, instantiate
+// a default adapter so inline WebDriver.FindElement(By.Id(...)) action targets resolve the
+// same way the parser resolves the identical expression in a local declaration. Previously
+// the adapter stayed null here, so identical FindElement patterns resolved differently
+// depending on whether they were action targets or declarations. Scoped to the C# frontend
+// because the Java/Python frontends migrate through a different (no-adapter) pipeline.
+if (adapter == null && sourceFrontend.Source.Id == CSharpSeleniumFrontend.Spec.Id)
+{
+    loadedConfig ??= new ProjectAdapterConfig();
+    adapter = new DefaultProjectAdapter(loadedConfig);
+}
+
 if (ShouldWriteSourceCapabilityReport(mode))
 {
     Console.WriteLine($"Source capability profile: {sourceFrontend.Source.Id} ({sourceFrontend.Capabilities.Status})");
@@ -3457,6 +3470,7 @@ static MigrationSummaryReport BuildSummary(List<PipelineResult> results, out IRe
     int totalUnmapped = 0;
     int totalTodo = 0;
     int filesWithWarnings = 0;
+    int totalStructuralContainers = 0;
 
     var processedFiles = new List<string>();
     var allUnsupported = new Dictionary<string, (int Count, string File, int Line)>();
@@ -3476,18 +3490,23 @@ static MigrationSummaryReport BuildSummary(List<PipelineResult> results, out IRe
         totalMapped += report.MappedTargets;
         totalUnmapped += report.UnmappedTargets;
         totalTodo += report.TodoComments;
+        totalStructuralContainers += report.StructuralContainers;
 
-        var allActions = result.TargetModel.Tests.SelectMany(t => t.BodyActions)
-            .Concat(result.TargetModel.SetUpActions).ToList();
-        totalActions += allActions.Count;
+        // ActionsFound is the flattened action total (containers + leaves), which is the
+        // same scope ReportBuilder's Semantic/SyntaxFallback/Unsupported buckets count.
+        // Aggregating report.TotalActions keeps CLI summary consistent with per-file
+        // reports and makes Semantic+SyntaxFallback+Unsupported == ActionsFound hold.
+        totalActions += report.TotalActions;
 
         if (report.TodoComments > 0)
-            filesWithWarnings++;
+            filesWithWarnings++; 
+
+        var allActions = result.TargetModel.Tests.SelectMany(t => TestActionTraversal.Flatten(t.BodyActions))
+            .Concat(TestActionTraversal.Flatten(result.TargetModel.SetUpActions)).ToList();
 
         foreach (var action in allActions)
         {
             var target = GetTarget(action);
-
             if (target is { Kind: TargetKind.Unresolved })
             {
                 var key = target.SourceExpression;
@@ -3549,6 +3568,7 @@ static MigrationSummaryReport BuildSummary(List<PipelineResult> results, out IRe
         TodoComments: totalTodo,
         FilesWithWarnings: filesWithWarnings,
         GeneratedFiles: 0,
+        StructuralContainers: totalStructuralContainers,
         ProcessedFiles: processedFiles,
         TopUnmappedTargets: topUnmapped,
         TopUnsupportedActions: topUnsupported,
@@ -4362,6 +4382,7 @@ static TodoExplanationReport BuildExplainTodoReportFromArtifacts(string artifact
         TodoComments: Math.Max(summary.TodoComments, generatedTodoCount),
         FilesWithWarnings: 0,
         GeneratedFiles: generatedReports.Count,
+        StructuralContainers: 0,
         ProcessedFiles: generatedReports.Select(r => r.SourceFilePath).ToArray(),
         TopUnmappedTargets: Array.Empty<UnmappedTargetInfo>(),
         TopUnsupportedActions: Array.Empty<UnsupportedMethodInfo>(),
@@ -4441,7 +4462,11 @@ static IReadOnlyList<MigrationReport> ReadGeneratedFileReports(string artifactDi
             UnsupportedCount: 0,
             MappedTargets: 0,
             UnmappedTargets: 0,
-            TodoComments: todoCount));
+            TodoComments: todoCount,
+            TotalActions: 0,
+            StructuralContainers: 0,
+            GeneratedTests: 0,
+            FullyConvertedTests: 0));
     }
 
     return reports;

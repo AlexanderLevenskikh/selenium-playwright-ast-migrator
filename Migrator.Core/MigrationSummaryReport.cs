@@ -18,6 +18,7 @@ public record MigrationSummaryReport(
     int TodoComments,
     int FilesWithWarnings,
     int GeneratedFiles,
+    int StructuralContainers,
     IReadOnlyList<string> ProcessedFiles,
     IReadOnlyList<UnmappedTargetInfo> TopUnmappedTargets,
     IReadOnlyList<UnsupportedMethodInfo> TopUnsupportedActions,

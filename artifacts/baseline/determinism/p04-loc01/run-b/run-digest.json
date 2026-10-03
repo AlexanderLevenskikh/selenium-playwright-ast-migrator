@@ -1,0 +1,152 @@
+{
+  "SchemaVersion": "migrator-run-digest/v1",
+  "DigestSha256": "b665d84319e863cee39479113f7f91ca7d2b387a054ab67e60ac3514bdbc2d69",
+  "FileCount": 29,
+  "Files": [
+    {
+      "RelativePath": "analyze/migration-quality-dashboard.json",
+      "SemanticSha256": "bbaf6d2909f47f89416307cc835553f85ec07e5c726046dfbd39bdcda1254f18",
+      "SizeBytes": 1082
+    },
+    {
+      "RelativePath": "analyze/migration-quality-dashboard.md",
+      "SemanticSha256": "57e7ebba802cc5d4d533222aa423240951a52bb189c9eb498dd58fa7465a29c1",
+      "SizeBytes": 1116
+    },
+    {
+      "RelativePath": "analyze/migration-quality-tickets.md",
+      "SemanticSha256": "489efe433ab282d52b8ebeb32207aa0b499f88150614ee97bbef6d5513bd832d",
+      "SizeBytes": 144
+    },
+    {
+      "RelativePath": "analyze/report.json",
+      "SemanticSha256": "9cc68c572806fe7823cfa5040c28fdc8704dacdbb46dbcc34ccea8fd6977f817",
+      "SizeBytes": 858
+    },
+    {
+      "RelativePath": "analyze/report.txt",
+      "SemanticSha256": "3bb8fcdc2a1681632a9e52a2a26cfb8d815ffc55e428ea32d75c4c53b95dce21",
+      "SizeBytes": 263
+    },
+    {
+      "RelativePath": "analyze/semantic-index.json",
+      "SemanticSha256": "ba6491fed873b82f1f2fb865c9819dadf2d63ad52e4b3a82f07ac2ce898a422f",
+      "SizeBytes": 17439
+    },
+    {
+      "RelativePath": "analyze/semantic-index.sha256",
+      "SemanticSha256": "b177580dde2c99808da4a5fd6db317793cdddfc13c49cdaf71313bd2bad58353",
+      "SizeBytes": 66
+    },
+    {
+      "RelativePath": "generated/ListTestsPlaywright.cs",
+      "SemanticSha256": "099f2c94d26d90b11c5caa40a7506cd8766d97b4dccc427496dfa582c8552f75",
+      "SizeBytes": 675
+    },
+    {
+      "RelativePath": "generated/migration-quality-dashboard.json",
+      "SemanticSha256": "bbaf6d2909f47f89416307cc835553f85ec07e5c726046dfbd39bdcda1254f18",
+      "SizeBytes": 1082
+    },
+    {
+      "RelativePath": "generated/migration-quality-dashboard.md",
+      "SemanticSha256": "57e7ebba802cc5d4d533222aa423240951a52bb189c9eb498dd58fa7465a29c1",
+      "SizeBytes": 1116
+    },
+    {
+      "RelativePath": "generated/migration-quality-tickets.md",
+      "SemanticSha256": "489efe433ab282d52b8ebeb32207aa0b499f88150614ee97bbef6d5513bd832d",
+      "SizeBytes": 144
+    },
+    {
+      "RelativePath": "generated/report.json",
+      "SemanticSha256": "79df1c993b771d6ff4624f328b31700ee790c6f85af23f9075c0ac42ed7ab15b",
+      "SizeBytes": 858
+    },
+    {
+      "RelativePath": "generated/report.txt",
+      "SemanticSha256": "748151eb33b006e083a3606861d39ae812a580c0083d2d96a0047cc616798401",
+      "SizeBytes": 263
+    },
+    {
+      "RelativePath": "generated/target-tree.sha256",
+      "SemanticSha256": "00cdc46f28a7d4be2d107111a4628f526a656559e3313c48210faf1c9c4abc4e",
+      "SizeBytes": 66
+    },
+    {
+      "RelativePath": "orchestration-report.json",
+      "SemanticSha256": "87b367af2d2544c3d1cb05ea918cb05f473a3dc180fae055338aca9da50a3aea",
+      "SizeBytes": 897
+    },
+    {
+      "RelativePath": "orchestration-report.md",
+      "SemanticSha256": "cb741711b0fa5c9dfba8d52586e3db4d15332aea54fbc0356031147cbd35a13a",
+      "SizeBytes": 784
+    },
+    {
+      "RelativePath": "propose/mapping-proposals.json",
+      "SemanticSha256": "b15aaaafafd4fb95d7e38d57aa5887ef6464d42aa8b11b5d43789dc0b6c1fa67",
+      "SizeBytes": 117
+    },
+    {
+      "RelativePath": "propose/mapping-proposals.md",
+      "SemanticSha256": "deaa253205c7f68907dcfc857393766a60f89d6fbadfaa7ed018d40d8bfa89c4",
+      "SizeBytes": 163
+    },
+    {
+      "RelativePath": "run-manifest.json",
+      "SemanticSha256": "9a80f7b63b6dda7fdaec34101e2f6ad7b3e61102f75f8c7f54d21e5623289761",
+      "SizeBytes": 1827
+    },
+    {
+      "RelativePath": "source-capabilities-report.json",
+      "SemanticSha256": "4974ca286d8fdaaa3d98a6b6ffed2657deccaba170539bd8ce720530ddfee41d",
+      "SizeBytes": 2663
+    },
+    {
+      "RelativePath": "source-capabilities-report.md",
+      "SemanticSha256": "9b7abaa5d114d519969fa2d15edb7306ff53ca68340ab78c5739b01ac1abe51c",
+      "SizeBytes": 2254
+    },
+    {
+      "RelativePath": "source-detection-report.json",
+      "SemanticSha256": "6d53aa1574f8127638a777f0ff703252e87513e2448c28778c02ea8aa487ca51",
+      "SizeBytes": 1515
+    },
+    {
+      "RelativePath": "source-detection-report.md",
+      "SemanticSha256": "11c44db222ae7b5cfddc98f2e3f71e20e066866f16bd0594a342e014ed6298a0",
+      "SizeBytes": 1017
+    },
+    {
+      "RelativePath": "target-capabilities-report.json",
+      "SemanticSha256": "1fbb926a849bc1f7a2ad41a1c7c2f5c7adbee0fe9c4993362fcf874d433604f1",
+      "SizeBytes": 2761
+    },
+    {
+      "RelativePath": "target-capabilities-report.md",
+      "SemanticSha256": "3cf5d489a6cef1955c71a6de2aadff3e3d550901a6b617f36d6428be9ce44873",
+      "SizeBytes": 2425
+    },
+    {
+      "RelativePath": "verify/target-tree.sha256",
+      "SemanticSha256": "00cdc46f28a7d4be2d107111a4628f526a656559e3313c48210faf1c9c4abc4e",
+      "SizeBytes": 66
+    },
+    {
+      "RelativePath": "verify/verification-evidence.json",
+      "SemanticSha256": "952b6cea20b060a4c24eae0c2adff6ca9e890f57b973aadb3515663adfd5f33d",
+      "SizeBytes": 715
+    },
+    {
+      "RelativePath": "verify/verify-report.json",
+      "SemanticSha256": "b5229d97db79275c6ee42c8f968f5f994589550df4eebc361cce4d1619714fa1",
+      "SizeBytes": 1199
+    },
+    {
+      "RelativePath": "verify/verify-report.txt",
+      "SemanticSha256": "bc357f1fcedd07739383244fb16f2071c142351c6918358541e61b0e06ae69ff",
+      "SizeBytes": 593
+    }
+  ]
+}

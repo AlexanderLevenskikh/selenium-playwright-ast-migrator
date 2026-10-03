@@ -1,0 +1,40 @@
+{
+  "Summary": {
+    "FilesProcessed": 1,
+    "TestsFound": 1,
+    "ActionsFound": 7,
+    "MappedTargets": 6,
+    "UnmappedTargets": 0,
+    "UnsupportedActions": 0,
+    "TodoComments": 0,
+    "TargetMappingCoveragePercent": 100,
+    "TodoCommentsPerTest": 0,
+    "UnsupportedActionsPerTest": 0,
+    "GeneratedFilesWithWarnings": 0,
+    "QualityLevel": "clean"
+  },
+  "TopTodoCategories": [],
+  "TopUnsupportedActions": [],
+  "TopUnmappedTargets": [],
+  "RecommendedTickets": [],
+  "Guardrails": [
+    {
+      "Id": "unsafe-suppression",
+      "Status": "pass",
+      "Description": "Suppression must never turn a test into an apparently green empty test.",
+      "NextAction": "No empty-test-after-suppression TODOs were found in this run."
+    },
+    {
+      "Id": "pom-helper-recovery",
+      "Status": "pass",
+      "Description": "POM/helper recovery should use source POMs and helper bodies before raw locators or suppression.",
+      "NextAction": "No obvious POM/helper backlog was found in the top categories."
+    },
+    {
+      "Id": "selector-evidence",
+      "Status": "pass",
+      "Description": "Selector mappings require evidence from Selenium POMs, helper bodies, target HTML, or existing Playwright components.",
+      "NextAction": "All target expressions are mapped in this run."
+    }
+  ]
+}

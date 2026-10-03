@@ -37,13 +37,22 @@ import json, sys, os
 r = json.load(open(sys.argv[1], encoding='utf-8'))
 led = r.get("PerFileReports", [])
 fc = sum(1 for f in led if f.get("TodoComments",0)==0 and f.get("UnmappedTargets",0)==0 and f.get("UnsupportedCount",0)==0)
+gt = sum(f.get("GeneratedTests",0) or 0 for f in led)
+fct = sum(f.get("FullyConvertedTests",0) or 0 for f in led)
+inv = all(
+    f.get("SemanticActions",0)+f.get("SyntaxFallbackActions",0)+f.get("UnsupportedCount",0) == f.get("TotalActions",0)
+    for f in led
+)
 tot = {
   "FilesProcessed": r.get("FilesProcessed"), "TestsFound": r.get("TestsFound"), "ActionsFound": r.get("ActionsFound"),
   "Semantic": r.get("SemanticActions"), "SyntaxFallback": r.get("SyntaxFallbackActions"),
-  "Unsupported": r.get("UnsupportedActions"), "Mapped": r.get("MappedTargets"),
+  "Unsupported": r.get("UnsupportedActions"), "StructuralContainers": r.get("StructuralContainers"),
+  "Mapped": r.get("MappedTargets"),
   "Unmapped": r.get("UnmappedTargets"), "TodoComments": r.get("TodoComments"),
+  "GeneratedTests": gt, "FullyConvertedTests": fct,
   "FullyConvertedFiles": fc,
-  "ReportDoubleCountDelta": (r.get("SemanticActions",0)+r.get("SyntaxFallbackActions",0))-r.get("ActionsFound",0),
+  "AccountingInvariantHolds": inv,
+  "AccountedVsTotal": (r.get("SemanticActions",0)+r.get("SyntaxFallbackActions",0)+r.get("UnsupportedActions",0))-r.get("ActionsFound",0),
 }
 print(json.dumps(tot, indent=2, ensure_ascii=False))
 PY

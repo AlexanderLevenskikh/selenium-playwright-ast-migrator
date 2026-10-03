@@ -7,7 +7,7 @@ namespace Migrator.Core;
 /// Structural containers are yielded as nodes; all semantic leaves are then
 /// yielded recursively in deterministic source order.
 /// </summary>
-internal static class TestActionTraversal
+public static class TestActionTraversal
 {
     public static IEnumerable<TestAction> Flatten(IEnumerable<TestAction> actions)
     {

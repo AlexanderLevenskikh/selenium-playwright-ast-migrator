@@ -141,6 +141,7 @@ public class MigrationQualityProgramTests
             TodoComments: todoComments == 0 ? reports.Sum(r => r.TodoComments) : todoComments,
             FilesWithWarnings: reports.Count(r => r.TodoComments > 0),
             GeneratedFiles: filesProcessed,
+            StructuralContainers: 0,
             ProcessedFiles: reports.Select(r => r.SourceFilePath).ToArray(),
             TopUnmappedTargets: topUnmappedTargets ?? Array.Empty<UnmappedTargetInfo>(),
             TopUnsupportedActions: topUnsupportedActions ?? Array.Empty<UnsupportedMethodInfo>(),
@@ -153,7 +154,8 @@ public class MigrationQualityProgramTests
         int todoComments = 0,
         int unsupportedCount = 0,
         int mappedTargets = 0,
-        int unmappedTargets = 0)
+        int unmappedTargets = 0,
+        int fullyConvertedTests = 0)
     {
         var todoCount = todoComments == 0
             ? generatedOutput.Split('\n').Count(line => line.TrimStart().StartsWith("// TODO:", StringComparison.Ordinal))
@@ -170,7 +172,11 @@ public class MigrationQualityProgramTests
             UnsupportedCount: unsupportedCount,
             MappedTargets: mappedTargets,
             UnmappedTargets: unmappedTargets,
-            TodoComments: todoCount);
+            TodoComments: todoCount,
+            TotalActions: 0,
+            StructuralContainers: 0,
+            GeneratedTests: 1,
+            FullyConvertedTests: fullyConvertedTests);
     }
 
     static string FindRepositoryFile(string relativePath)

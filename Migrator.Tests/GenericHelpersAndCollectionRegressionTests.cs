@@ -260,6 +260,10 @@ public class TariffTests
             0,
             0,
             0,
+            0,
+            0,
+            0,
+            0,
             0);
         var result = new PipelineResult(model, model, string.Empty, report);
         var config = new ProjectAdapterConfig

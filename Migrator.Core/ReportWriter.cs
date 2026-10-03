@@ -20,6 +20,7 @@ public static class ReportWriter
         sb.AppendLine("Semantic actions: " + report.SemanticActions);
         sb.AppendLine("Syntax fallback actions: " + report.SyntaxFallbackActions);
         sb.AppendLine("Unsupported actions: " + report.UnsupportedActions);
+        sb.AppendLine("Structural containers: " + report.StructuralContainers);
         sb.AppendLine();
         sb.AppendLine("Mapped targets: " + report.MappedTargets);
         sb.AppendLine("Unmapped targets: " + report.UnmappedTargets);
@@ -69,6 +70,7 @@ public static class ReportWriter
             SemanticActions = report.SemanticActions,
             SyntaxFallbackActions = report.SyntaxFallbackActions,
             UnsupportedActions = report.UnsupportedActions,
+            StructuralContainers = report.StructuralContainers,
             MappedTargets = report.MappedTargets,
             UnmappedTargets = report.UnmappedTargets,
             TodoComments = report.TodoComments,
@@ -101,7 +103,11 @@ public static class ReportWriter
                 SyntaxFallbackActions = r.SyntaxFallbackActions,
                 MappedTargets = r.MappedTargets,
                 UnmappedTargets = r.UnmappedTargets,
-                TodoComments = r.TodoComments
+                TodoComments = r.TodoComments,
+                TotalActions = r.TotalActions,
+                StructuralContainers = r.StructuralContainers,
+                GeneratedTests = r.GeneratedTests,
+                FullyConvertedTests = r.FullyConvertedTests
             }).ToArray()
         };
 
