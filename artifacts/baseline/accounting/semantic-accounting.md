@@ -1,10 +1,10 @@
 ﻿# Semantic Accounting (whole corpus, unconfigured default path)
 
-Source report: `C:\Users\levenskikh\Desktop\MyProjects\Migrator\migration\artifacts\baseline\work\whole-corpus-gated4\report.json`
+Source report: `C:\Users\levenskikh\Desktop\MyProjects\Migrator\migration\artifacts\baseline\work\whole-corpus-gated5\report.json`
 
 | Files | Tests | Actions | Semantic | SyntaxFallback | Unsupported | StructuralContainers | Mapped | Unmapped | TODO | Generated tests | Fully converted tests | Fully converted files |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 31 | 32 | 127 | 38 | 89 | 0 | 4 | 73 | 2 | 43 | 32 | 22 | 19 |
+| 33 | 34 | 138 | 39 | 99 | 0 | 4 | 76 | 2 | 47 | 34 | 23 | 20 |
 
 > Invariant: Semantic+SyntaxFallback+Unsupported == ActionsFound (flattened) - holds = True (accounted-vs-total delta = 0). SuccessfullyConvertedTests is 1 for every story even when all assertions/locators became TODOs; the run-level quality gates (AssertionLoss, SemanticNoOp, MISSING_MAPPING) and FullyConvertedTests are the honest signal.
 
@@ -43,3 +43,5 @@ Source report: `C:\Users\levenskikh\Desktop\MyProjects\Migrator\migration\artifa
 | corpus\stable\vertical-slice\p27-actions-api-unsupported\Tests\ActionsApiTests.cs | 1 | 1 | 1 | 1 | 3 | 0 | 4 | 0 | 2 | 0 | 2 | no | ok |
 | corpus\stable\vertical-slice\p28-frames-popup-upload-download\Tests\ComplexWindowTests.cs | 1 | 1 | 1 | 3 | 12 | 0 | 15 | 0 | 5 | 0 | 15 | no | ok |
 | corpus\stable\vertical-slice\p29-raw-statement-dynamic\Tests\DynamicTests.cs | 1 | 1 | 1 | 1 | 3 | 0 | 4 | 0 | 2 | 1 | 3 | no | ok |
+| corpus\stable\vertical-slice\p30-broken-compile\Tests\BrokenSourceTests.cs | 1 | 1 | 0 | 0 | 4 | 0 | 4 | 0 | 0 | 0 | 4 | no | ok |
+| corpus\stable\vertical-slice\p31-stale-repattern\Tests\StaleReferenceTests.cs | 1 | 1 | 1 | 1 | 6 | 0 | 7 | 0 | 3 | 0 | 0 | YES | ok |
