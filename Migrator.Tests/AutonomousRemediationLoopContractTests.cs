@@ -8,8 +8,8 @@ public sealed class AutonomousRemediationLoopContractTests
     static readonly string[] LoopInstructions =
     {
         "AGENTS.md",
-        ".opencode/commands/supervised-task.md",
-        ".opencode/agents/orchestrator.md",
+        "templates/opencode-team/global/.config/opencode/commands/supervised-task.md",
+        "templates/opencode-team/global/.config/opencode/agents/orchestrator.md",
         "templates/migration-kit/AGENT_CONTRACT.md",
         "templates/migration-kit/prompts/kickoff-prompt.txt",
         "templates/migration-kit/prompts/continue-run-prompt.txt",
@@ -36,7 +36,7 @@ public sealed class AutonomousRemediationLoopContractTests
     [Fact]
     public void AgentCannotDeclareManualOnlyRemainderWithoutClusterEvidence()
     {
-        var command = Read(".opencode/commands/supervised-task.md");
+        var command = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
         var contract = Read("templates/migration-kit/AGENT_CONTRACT.md");
         var prompt = Read("templates/migration-kit/prompts/continue-run-prompt.txt");
 
@@ -52,8 +52,8 @@ public sealed class AutonomousRemediationLoopContractTests
     [Fact]
     public void CycleBudgetIsNotMisreportedAsGlobalPlateau()
     {
-        var command = Read(".opencode/commands/supervised-task.md");
-        var orchestrator = Read(".opencode/agents/orchestrator.md");
+        var command = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var orchestrator = Read("templates/opencode-team/global/.config/opencode/agents/orchestrator.md");
         var handoff = Read("templates/migration-kit/state/handoff.md");
 
         foreach (var text in new[] { command, orchestrator, handoff })
@@ -83,12 +83,12 @@ public sealed class AutonomousRemediationLoopContractTests
     }
 
     [Fact]
-    public void InstalledAndTemplateAgentFilesRemainIdentical()
+    public void RepoAgentsMdStaysInSyncWithProjectTemplate()
     {
+        // The repo-root .opencode/** install is generated at bootstrap time from
+        // templates/opencode-team and is no longer committed; only the AGENTS.md ->
+        // project-template AGENTS.md identity sync remains a committed invariant.
         Assert.Equal(Read("AGENTS.md"), Read("templates/opencode-team/project-template/AGENTS.md"));
-        Assert.Equal(Read(".opencode/commands/supervised-task.md"), Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md"));
-        Assert.Equal(Read(".opencode/agents/orchestrator.md"), Read("templates/opencode-team/global/.config/opencode/agents/orchestrator.md"));
-        Assert.Equal(Read(".opencode/agents/executor.md"), Read("templates/opencode-team/global/.config/opencode/agents/executor.md"));
     }
 
     static string Read(string relativePath) => File.ReadAllText(Path.Combine(FindRepositoryRoot(), relativePath.Replace('/', Path.DirectorySeparatorChar)));

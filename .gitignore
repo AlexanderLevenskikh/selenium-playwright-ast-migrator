@@ -24,6 +24,8 @@ packages/
 !artifacts/
 !artifacts/baseline/
 !artifacts/baseline/**
+# Source-built publish payload; regenerable, not tracked.
+artifacts/standalone/
 .nuget/
 *.nupkg
 *.snupkg

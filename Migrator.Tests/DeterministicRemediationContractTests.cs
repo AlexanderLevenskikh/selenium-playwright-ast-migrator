@@ -8,7 +8,7 @@ public sealed class DeterministicRemediationContractTests
     [Fact]
     public void AgentCannotAuthorProgressClassification()
     {
-        var command = Read(".opencode/commands/supervised-task.md");
+        var command = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
         var updater = Read("templates/migration-kit/scripts/update-autonomy-state.ps1");
         var state = Read("templates/migration-kit/state/autonomy-state.json");
         var program = Read("Migrator.Cli/Program.cs");

@@ -65,16 +65,12 @@ public sealed class AutonomyResidualLivenessContractTests
     [Fact]
     public void AgentContractRequiresResidualInventoryBinding()
     {
-        var command = Read(".opencode/commands/supervised-task.md");
         var template = Read(
             "templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
 
-        foreach (var text in new[] { command, template })
-        {
-            Assert.Contains("remediation residuals", text);
-            Assert.Contains("--residual-id", text);
-            Assert.Contains("global no-progress streak is telemetry", text, StringComparison.OrdinalIgnoreCase);
-        }
+        Assert.Contains("remediation residuals", template);
+        Assert.Contains("--residual-id", template);
+        Assert.Contains("global no-progress streak is telemetry", template, StringComparison.OrdinalIgnoreCase);
     }
 
     static string Read(string relativePath)

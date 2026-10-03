@@ -87,9 +87,8 @@ public sealed class StandardMigrationModeTests
     public void OpenCodeCommand_UsesFullRunAndForbidsSyntheticEvidence()
     {
         var command = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
-        var installed = Read(".opencode/commands/supervised-task.md");
 
-        foreach (var text in new[] { command, installed })
+        foreach (var text in new[] { command })
         {
             Assert.Contains("selenium-pw-migrator run", text);
             Assert.Contains("verify-project", text);

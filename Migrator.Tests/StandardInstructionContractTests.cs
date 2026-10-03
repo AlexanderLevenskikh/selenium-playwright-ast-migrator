@@ -9,12 +9,12 @@ public sealed class StandardInstructionContractTests
     {
         "AGENTS.md",
         "templates/opencode-team/project-template/AGENTS.md",
-        ".opencode/commands/supervised-task.md",
         "templates/opencode-team/global/.config/opencode/commands/supervised-task.md",
-        ".opencode/agents/orchestrator.md",
-        ".opencode/agents/executor.md",
-        ".opencode/agents/reviewer.md",
-        ".opencode/agents/watchdog.md",
+        "templates/opencode-team/global/.config/opencode/agents/orchestrator.md",
+        "templates/opencode-team/global/.config/opencode/agents/executor.md",
+        "templates/opencode-team/global/.config/opencode/agents/reviewer.md",
+        "templates/opencode-team/global/.config/opencode/agents/watchdog.md",
+        "templates/opencode-team/global/.config/opencode/opencode.jsonc",
         "templates/migration-kit/AGENT_CONTRACT.md",
         "templates/migration-kit/README.md",
         "templates/opencode-team/README.md",
@@ -43,13 +43,22 @@ public sealed class StandardInstructionContractTests
     };
 
     [Fact]
-    public void InstalledAndTemplateOpenCodeInstructions_StayIdentical()
+    public void OpenCodeTemplateDistribution_IsCompleteAndNonEmpty()
     {
-        Assert.Equal(Read("AGENTS.md"), Read("templates/opencode-team/project-template/AGENTS.md"));
-        Assert.Equal(Read("opencode.jsonc"), Read("templates/opencode-team/global/.config/opencode/opencode.jsonc"));
-        Assert.Equal(Read(".opencode/commands/supervised-task.md"), Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md"));
-        foreach (var role in new[] { "orchestrator", "executor", "reviewer", "watchdog" })
-            Assert.Equal(Read($".opencode/agents/{role}.md"), Read($"templates/opencode-team/global/.config/opencode/agents/{role}.md"));
+        // The repo-root .opencode/** + opencode.jsonc install is no longer committed:
+        // bootstrap-opencode generates it at install time from these templates. The
+        // templates stay the committed source of truth and must be complete.
+        var templateFiles = new[]
+        {
+            "templates/opencode-team/global/.config/opencode/opencode.jsonc",
+            "templates/opencode-team/global/.config/opencode/commands/supervised-task.md",
+            "templates/opencode-team/global/.config/opencode/agents/orchestrator.md",
+            "templates/opencode-team/global/.config/opencode/agents/executor.md",
+            "templates/opencode-team/global/.config/opencode/agents/reviewer.md",
+            "templates/opencode-team/global/.config/opencode/agents/watchdog.md",
+            "templates/opencode-team/project-template/AGENTS.md"
+        };
+        Assert.All(templateFiles, path => Assert.False(string.IsNullOrWhiteSpace(Read(path)), $"{path} is missing or empty"));
     }
 
     [Fact]
@@ -70,7 +79,7 @@ public sealed class StandardInstructionContractTests
     [Fact]
     public void AgentCommand_IsNoMenuEvidenceBackedAndSourceSafe()
     {
-        var command = Read(".opencode/commands/supervised-task.md");
+        var command = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
         Assert.Contains("Start-workspace no-menu fallback", command);
         Assert.Contains("SOURCE_SCOPE_MISSING", command);
         Assert.Contains("highest-payoff root cause", command, StringComparison.OrdinalIgnoreCase);
@@ -96,7 +105,7 @@ public sealed class StandardInstructionContractTests
         Assert.Contains("-FinalGatePath migration/state/final-gate-result.json", command);
         Assert.Contains("completed autonomy state is terminal", command, StringComparison.OrdinalIgnoreCase);
 
-        var orchestrator = Read(".opencode/agents/orchestrator.md");
+        var orchestrator = Read("templates/opencode-team/global/.config/opencode/agents/orchestrator.md");
         var contract = Read("templates/migration-kit/AGENT_CONTRACT.md");
         var kickoff = Read("templates/migration-kit/prompts/kickoff-prompt.txt");
         var plowAhead = Read("templates/migration-kit/agent-skills/plow-ahead/SKILL.md");
@@ -108,7 +117,7 @@ public sealed class StandardInstructionContractTests
             Assert.Contains("bounded", instruction, StringComparison.OrdinalIgnoreCase);
         }
 
-        var config = Read("opencode.jsonc");
+        var config = Read("templates/opencode-team/global/.config/opencode/opencode.jsonc");
         Assert.Contains("\"question\": \"deny\"", config);
         Assert.Contains("stop with `SOURCE_SCOPE_MISSING`", command);
     }
@@ -117,8 +126,8 @@ public sealed class StandardInstructionContractTests
     [Fact]
     public void AutonomousContinuation_UsesFreshBoundedBudgetAndDoesNotStopAfterOneFailedCycle()
     {
-        var command = Read(".opencode/commands/supervised-task.md");
-        var orchestrator = Read(".opencode/agents/orchestrator.md");
+        var command = Read("templates/opencode-team/global/.config/opencode/commands/supervised-task.md");
+        var orchestrator = Read("templates/opencode-team/global/.config/opencode/agents/orchestrator.md");
         var continuePrompt = Read("templates/migration-kit/prompts/continue-run-prompt.txt");
         var stopPolicy = Read("templates/migration-kit/state/stop-policy-checklist.md");
 
