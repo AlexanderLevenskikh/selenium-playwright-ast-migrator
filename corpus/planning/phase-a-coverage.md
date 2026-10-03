@@ -1,7 +1,7 @@
 # Phase A Regression Coverage Plan
 
 Maps every required fixture group from the Phase A task (section 9) to the existing
-`corpus/stable/vertical-slice` scenarios (p01–p31, 33 scenarios) and records the
+`corpus/stable/vertical-slice` scenarios (p01–p33, 35 scenarios) and records the
 remaining gaps. Machine-readable version: `corpus/planning/phase-a-coverage.json`.
 
 ## Coverage mapping
@@ -18,8 +18,8 @@ remaining gaps. Machine-readable version: `corpus/planning/phase-a-coverage.json
 | 8. FramesWindows | frames/popups/upload/download | `p28-frames-popup-upload-download` | COVERED (expected unsupported, isolation) |
 | 9. DynamicJsActions | JS, Actions API, dynamic/raw | `p26` (IJavaScriptExecutor), `p27` (Actions API), `p29` (dynamic raw statement) | COVERED (expected unsupported) |
 | 10. DataDrivenSharedState | TestCaseSource/ValueSource/Param rates, parallel/retry/order, shared state | `p20` (TestCaseSource/ValueSource), `p21` (parallelizable/retry/order) | COVERED |
-| 11. ExistingTarget | migrating into an already-existing target project (verify-project) | `p23` (CPM verify-project), `p24a` (transitive-warning verify), `p22` (modern C# shape) | PARTIAL — verify-project pinned; a target project pre-populated with its own code is not (gap G4) |
-| 12. CustomWrapperAdversarial | custom/POM wrappers and adversarial inputs to the recognizers | `p06` (state assertions), `p08` (conditional), `p18` (fluent multiple), `p29` (dynamic), `p24b` (sabotage) | PARTIAL — see G5 |
+| 11. ExistingTarget | migrating into an already-existing target project (verify-project) | `p23` (CPM verify-project), `p24a` (transitive-warning verify), `p22` (modern C# shape), `p32` (pre-populated target with its own code) | COVERED (G4 landed in Phase A.2) |
+| 12. CustomWrapperAdversarial | custom/POM wrappers and adversarial inputs to the recognizers | `p06` (state assertions), `p08` (conditional), `p18` (fluent multiple), `p29` (dynamic), `p24b` (sabotage), `p33` (WebDriver-API-mimicking wrapper) | COVERED (G5 landed in Phase A.2) |
 | 13. BrokenCompilation | source that fails compile/restore must degrade, not crash | `p24b` (NuGet restore sabotage → INFRASTRUCTURE_FAILURE), `p29` (dynamic), `p30` (undefined symbol → SOURCE_INVALID, fail-closed) | COVERED (G1 landed in Phase A.1) |
 | 14. DeterminismStress | same input → identical output under repetition/toolchain variation | `p01`, `p04` + `run --twice --assert-identical` (see `docs/vnext/determinism-baseline.md`) | COVERED (single-machine back-to-back); cross-machine/toolchain not yet measured |
 
@@ -33,13 +33,26 @@ remaining gaps. Machine-readable version: `corpus/planning/phase-a-coverage.json
   `/stale` route).
 - **G3 — cross-project async caller (group 7).** p13/p14 lift a file and its SetUp base.
   No fixture whose *caller in another project* must change signature (ASYNC-01 is D-rated
-  for that). Document as a known boundary; do not add a fixture in Phase A.
-- **G4 — pre-populated target (group 11).** verify-project is pinned on p23/p24a; a target
-  that already contains its own code and receives migrated classes on top is not. Lower
-  priority: Phase A read record only.
-- **G5 — adversarial wrapper (group 12).** p29/p24b are adversarial; a wrapper that
-  *mimics* WebDriver API (so the syntax recognizer can misfire) is the stronger negative
-  case. Lower priority, ties to G1.
+  for that). Document as a known boundary; do not add a fixture in Phase A.0.
+- **G4 — pre-populated target (group 11): LANDED in Phase A.2 as `p32-pre-populated-target`**
+  (target project pre-populated with its own `LabNavigationHelper` code; migrated tests are
+  added on top; harness `source.prePopulatedTargetFiles` staging; `PASS`, source 2/2).
+- **G5 — adversarial wrapper (group 12): LANDED in Phase A.2 as `p33-adversarial-wrapper`**
+  (a custom wrapper whose façade mimics the WebDriver API so the syntax recognizer can
+  misfire; `UNSUPPORTED_AS_EXPECTED` with explicit quality budget including `rawMax: 1`).
+
+## Corpus runtime status (Phase A.2, fresh real-lab run)
+
+`lab run` over the full 35-scenario corpus — `artifacts/lab/full-corpus-4`:
+**35/35 conforming**: 28× `PASS`, 5× `UNSUPPORTED_AS_EXPECTED` (p26–p29, p33),
+1× `INFRASTRUCTURE_FAILURE` (p24b, intentional sabotage), 1× `SOURCE_INVALID`
+(p30, broken source). This is the first fully runtime-green corpus: two pre-existing
+verifier false positives (RawExpression-target assertions not counted; qualifying
+`Assert.That(x, Is.Not.Null)` locator null-checks counted as loss) and the lab's
+strict-by-default quality-gate threading were fixed, and p31's pre-existing impossible
+`dom` oracle selector (descendant `#items .item` vs the flat `[id]`-only observation
+model) was corrected to `#items`/`visible`.
+
 
 ## Probes beyond fixtures (run, not lab-runtime)
 

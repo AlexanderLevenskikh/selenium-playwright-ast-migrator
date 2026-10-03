@@ -26,6 +26,8 @@ packages/
 !artifacts/baseline/**
 # Source-built publish payload; regenerable, not tracked.
 artifacts/standalone/
+# Transient lab run outputs (browsers, workspaces, per-project runs); recomputed on demand.
+artifacts/lab/
 .nuget/
 *.nupkg
 *.snupkg

@@ -248,3 +248,72 @@ Phase A.1 is complete: baseline-integrity changes (ACO1/LOC01/WAIT03/MTRC/DETR) 
 G1/G2 gap fixtures are landed with regression tests and an honest ledger
 (fail-closed row for p30, pass row for p31). Stop criteria met — no further autonomous
 cycles in this phase.
+
+## 14. Phase A.2 Addendum — G4/G5 landed; first fully runtime-green corpus
+
+Commit basis: this working tree on top of `3cfbec7`.
+
+### 14.1 Gap fixtures landed (coverage groups 11 and 12 closed)
+
+- **G4 (group 11, ExistingTarget) → `p32-pre-populated-target`.** A target project
+  pre-populated with its own `LabNavigationHelper`/production code plus pre-existing
+  tests; migrated tests are added on top. Harness support: `source.prePopulatedTargetFiles`
+  in `ScenarioSpec`/loader, staged by `LabTargetProjectBuilder.Prepare` before migration.
+  Result: `PASS`, source 2/2 — the migrated test runs against the real pre-populated
+  project and its pre-existing code stays intact.
+- **G5 (group 12, CustomWrapperAdversarial) → `p33-adversarial-wrapper`.** A custom
+  wrapper whose façade mimics the WebDriver API (so the syntax recognizer can misfire).
+  Result: `UNSUPPORTED_AS_EXPECTED` with the strict quality budget (`todoMax 4`,
+  `unmappedMax 2`, `rawMax 1`), diagnostic evidence in the generated file.
+
+Coverage plan + matrix updated: groups 11/12 now `COVERED`; the G4/G5 gap entries are
+marked `LANDED` (`corpus/planning/phase-a-coverage.{md,json}`).
+
+### 14.2 Pre-existing verifier false positives fixed (Core + VerifyRunner)
+
+1. **RawExpression targets counted as loss (AssertionLoss/SemanticNoOp).** The legacy
+   target model tags plain locators/local-variable results as `TargetKind.RawExpression`,
+   and `IsProofSafeTarget` rejected them. The Playwright .NET renderer, however, splices
+   any non-`Unresolved` target into active `await Expect(...)` code — proven in generated
+   files for p01/p02/p19/p32. Fixed: `ExecutableTargetSemantics.IsProofSafeTarget` now
+   accepts `RawExpression` (predicate = `Kind != Unresolved`). Placeholder markers are
+   still caught by the raw-expressions gate and the syntax gate, so no false-green.
+2. **Locator null-check counted as loss (p22).** `Assert.That(x, Is.Not.Null)` on a
+   renderable target is elided by the adapter into an explanatory comment (Playwright
+   handles are non-null) — a provably safe elision. Fixed at both sides:
+   `AnalyzeMappedMethod` treats comment-only mapped methods as safe elisions (like
+   `ActionabilityElided` waits) and `VerifyRunner` excludes `Is.Not.Null` source
+   assertions from the required total. An unresolved null-check still renders as a TODO,
+   so the TODO gate keeps it fail-closed.
+3. **Lab budget threading (unsupported fixtures falsely REGRESSION).** The CLI `run`
+   applied strict-by-default quality gates; any TODO/unmapped/raw > 0 made every
+   unsupported fixture a spurious verify failure. Fixed: `LabRunCoordinator` always writes
+   `migration-config.json` with `QualityGates` from the scenario budget and passes
+   `--config`; same gates land in `project-verify-config.json`. Added `ScenarioQualityBudget.RawMax`
+   (`rawMax`); p29/p33 declare `rawMax: 1`.
+
+These defects predate this session (the committed `p01-gated4` determinism artifacts
+already show p01 verify `failed (exit 1)` with all-zero counters). The corpus had never
+been end-to-end runtime-green; a fresh `lab run` is the honest gate.
+
+### 14.3 p31 stale oracle corrected (pre-existing fixture defect)
+
+p31 (`G2` stale-repattern) was fully functional at runtime — source test, generated
+Playwright target test, migration verify, quality gates all passed — but declared an
+impossible `dom` oracle selector `#items .item`. The LabApp observation model
+(`labSnapshot()`) captures only `[id]` elements into a flat map, and the `#items`
+list's `<li class="item">` children carry no `id`, so the descendant selector could
+never match. Corrected to `#items` / `visible: true` (the container, re-rendered and
+visible after `stale:reloaded`); replaced-content semantics stay enforced by the event
+sequence and the passing source+target tests.
+
+### 14.4 Result
+
+Fresh full `lab run` (`artifacts/lab/full-corpus-4`): **35/35 conforming** —
+28 `PASS`, 5 `UNSUPPORTED_AS_EXPECTED` (p26–p29, p33), 1 `INFRASTRUCTURE_FAILURE`
+(p24b intentional sabotage), 1 `SOURCE_INVALID` (p30). Semantics ledger:
+`invariantHolds=True`, 34/38 fully-converted tests (37 files, 38 tests, 148 actions,
+52 TODOs, 3 unmapped on the unconfigured path). Unit suite: `dotnet test` **1103/1103**.
+
+`artifacts/lab/` is now gitignored (transient run outputs); `artifacts/baseline/`
+ledger evidence remains tracked.

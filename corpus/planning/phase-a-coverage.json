@@ -69,16 +69,16 @@
     {
       "id": "existing-target",
       "requiredBy": "task-section-9-group-11",
-      "scenarios": ["p23-cpm-isolation", "p24a-transitive-warning-isolated", "p22-file-scoped-globalusings-nullable"],
-      "status": "PARTIAL",
-      "gaps": ["G4-prepopulated-target"]
+      "scenarios": ["p23-cpm-isolation", "p24a-transitive-warning-isolated", "p22-file-scoped-globalusings-nullable", "p32-pre-populated-target"],
+      "status": "COVERED",
+      "notes": ["p32 pre-populated target with its own code; source.prePopulatedTargetFiles staging; PASS source 2/2"]
     },
     {
       "id": "custom-wrapper-adversarial",
       "requiredBy": "task-section-9-group-12",
-      "scenarios": ["p06-checkbox-radio-selected", "p08-conditional-locator", "p18-assert-multiple-fluent", "p29-raw-statement-dynamic", "p24b-transitive-warning-sabotage"],
-      "status": "PARTIAL",
-      "gaps": ["G5-webdriver-mimicking-wrapper"]
+      "scenarios": ["p06-checkbox-radio-selected", "p08-conditional-locator", "p18-assert-multiple-fluent", "p29-raw-statement-dynamic", "p24b-transitive-warning-sabotage", "p33-adversarial-wrapper"],
+      "status": "COVERED",
+      "notes": ["p33 WebDriver-API-mimicking wrapper; UNSUPPORTED_AS_EXPECTED with rawMax:1 budget"]
     },
     {
       "id": "broken-compilation",
@@ -103,12 +103,14 @@
     },
     {
       "id": "G4-prepopulated-target",
-      "proposal": "verify-project into a target project that already contains its own code",
+      "proposal": "Landed as p32-pre-populated-target in Phase A.2",
+      "status": "LANDED",
       "priority": "low"
     },
     {
       "id": "G5-webdriver-mimicking-wrapper",
-      "proposal": "adversarial wrapper mimicking WebDriver API to test recognizer misfire",
+      "proposal": "Landed as p33-adversarial-wrapper in Phase A.2",
+      "status": "LANDED",
       "priority": "medium"
     },
     {

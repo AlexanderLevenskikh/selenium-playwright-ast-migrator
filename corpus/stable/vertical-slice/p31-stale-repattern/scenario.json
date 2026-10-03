@@ -63,8 +63,8 @@
       ],
       "dom": [
         {
-          "selector": "#items .item",
-          "text": "alpha"
+          "selector": "#items",
+          "visible": true
         }
       ]
     }
