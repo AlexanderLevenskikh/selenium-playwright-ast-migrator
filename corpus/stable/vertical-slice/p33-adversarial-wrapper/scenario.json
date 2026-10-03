@@ -1,0 +1,92 @@
+﻿{
+    "schemaVersion":  "lab-scenario/v1",
+    "id":  "p33-adversarial-wrapper",
+    "seed":  133,
+    "tags":  [
+                 "unsupported",
+                 "adversarial",
+                 "wrapper",
+                 "vertical-slice",
+                 "stable",
+                 "nightly"
+             ],
+    "source":  {
+                   "language":  "csharp",
+                   "testFramework":  "nunit",
+                   "template":  "single-project",
+                   "features":  [
+                                    "AdversarialWrapper",
+                                    "WebDriverMimicry"
+                                ],
+                   "migrationFiles":  [
+                                          "Tests/WrapperTests.cs"
+                                      ]
+               },
+    "project":  {
+                    "files":  [
+                                  "Scenario.csproj",
+                                  "Infrastructure/LabSeleniumTestBase.cs",
+                                  "Infrastructure/ImposterDriver.cs",
+                                  "Tests/WrapperTests.cs"
+                              ],
+                    "references":  [
+
+                                   ],
+                    "msBuild":  {
+                                    "nullable":  true,
+                                    "implicitUsings":  true,
+                                    "fileScopedNamespace":  true
+                                },
+                    "entryProject":  "Scenario.csproj"
+                },
+    "app":  {
+                "pages":  [
+                              {
+                                  "path":  "/smoke",
+                                  "model":  "button-status"
+                              }
+                          ],
+                "baseUrlEnvironmentVariable":  "MIGRATOR_LAB_APP_URL"
+            },
+    "oracle":  {
+                   "source":  {
+                                  "mustPassTests":  1
+                              },
+                   "target":  {
+                                  "mustPassTests":  1
+                              },
+                   "semantic":  {
+                                    "events":  [
+                                                   "smoke:click"
+                                               ],
+                                    "dom":  [
+                                                {
+                                                    "selector":  "#smoke-status",
+                                                    "text":  "ok"
+                                                }
+                                            ]
+                                },
+                   "diagnostics":  {
+                                       "mustContainAny":  [
+                                                              "UNRESOLVED_SYMBOL",
+                                                              "ImposterDriver"
+                                                          ]
+                                   }
+               },
+    "qualityBudget":  {
+                          "todoMax":  4,
+                          "unmappedMax":  2,
+                          "unsupportedMax":  0,
+                          "warningsMax":  1,
+                          "rawMax":  1
+                      },
+    "expected":  {
+                     "status":  "UNSUPPORTED_AS_EXPECTED"
+                 },
+    "implementation":  {
+                           "state":  "READY",
+                           "block":  "06-stable-corpus",
+                           "notes":  "G5 adversarial wrapper: a WebDriver-mimicking wrapper must not make the recognizers misfire. Real WebDriver usage migrates (target test still passes), wrapper calls degrade to UNRESOLVED_SYMBOL TODOs and unmapped targets - no false PASS, no crash.",
+                           "contentHash":  "sha256:ac83f89ad511b51d8e3e3a22ceb9846bc9d3dd729a03f329569d7a16f122fcb7"
+                       }
+}

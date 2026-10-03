@@ -26,6 +26,15 @@ public sealed record ScenarioSourceSpec
     public string[] Features { get; init; } = Array.Empty<string>();
     public string[] MigrationFiles { get; init; } = Array.Empty<string>();
     public string AdapterConfig { get; init; } = "";
+
+    // Files already present in the TARGET project (its own code, NOT migrated) that the
+    // generated runtime target must carry alongside the migrated tests. They are staged
+    // under <target>/PreExisting and compiled together with the generated files, so a
+    // scenario can pin "migrate into a target that already contains its own code".
+    // Each path is relative to the scenario directory and must NOT overlap
+    // project.files or source.migrationFiles (the target's own code is never part of
+    // the source build and is never fed to the migrator).
+    public string[] PrePopulatedTargetFiles { get; init; } = Array.Empty<string>();
 }
 
 public sealed record ScenarioProjectSpec
@@ -67,6 +76,7 @@ public sealed record ScenarioQualityBudget
     public int UnmappedMax { get; init; }
     public int UnsupportedMax { get; init; }
     public int WarningsMax { get; init; }
+    public int RawMax { get; init; }
 }
 
 public sealed record ScenarioExpectedSpec

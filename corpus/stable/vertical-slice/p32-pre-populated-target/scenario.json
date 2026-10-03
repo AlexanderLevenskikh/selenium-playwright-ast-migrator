@@ -1,0 +1,90 @@
+﻿{
+    "schemaVersion":  "lab-scenario/v1",
+    "id":  "p32-pre-populated-target",
+    "seed":  132,
+    "tags":  [
+                 "pr",
+                 "smoke",
+                 "verify-project",
+                 "pre-populated-target",
+                 "vertical-slice",
+                 "stable",
+                 "nightly"
+             ],
+    "source":  {
+                   "language":  "csharp",
+                   "testFramework":  "nunit",
+                   "template":  "single-project",
+                   "features":  [
+                                    "VerifyProject",
+                                    "PrePopulatedTarget"
+                                ],
+                   "migrationFiles":  [
+                                          "Tests/PrePopulatedTests.cs"
+                                      ],
+                   "prePopulatedTargetFiles":  [
+                                                   "Production/OrderStatus.cs",
+                                                   "Production/PreExistingTargetTests.cs"
+                                               ]
+               },
+    "project":  {
+                    "files":  [
+                                  "Scenario.csproj",
+                                  "Infrastructure/LabSeleniumTestBase.cs",
+                                  "Tests/PrePopulatedTests.cs",
+                                  "SourceOnly/PreExistingContractTests.cs"
+                              ],
+                    "references":  [
+
+                                   ],
+                    "msBuild":  {
+                                    "nullable":  true,
+                                    "implicitUsings":  true,
+                                    "fileScopedNamespace":  true
+                                },
+                    "entryProject":  "Scenario.csproj"
+                },
+    "app":  {
+                "pages":  [
+                              {
+                                  "path":  "/smoke",
+                                  "model":  "button-status"
+                              }
+                          ],
+                "baseUrlEnvironmentVariable":  "MIGRATOR_LAB_APP_URL"
+            },
+    "oracle":  {
+                   "source":  {
+                                  "mustPassTests":  2
+                              },
+                   "target":  {
+                                  "mustPassTests":  2
+                              },
+                   "semantic":  {
+                                    "events":  [
+                                                   "smoke:click"
+                                               ],
+                                    "dom":  [
+                                                {
+                                                    "selector":  "#smoke-status",
+                                                    "text":  "ok"
+                                                }
+                                            ]
+                                }
+               },
+    "qualityBudget":  {
+                          "todoMax":  0,
+                          "unmappedMax":  0,
+                          "unsupportedMax":  0,
+                          "warningsMax":  0
+                      },
+    "expected":  {
+                     "status":  "PASS"
+                 },
+    "implementation":  {
+                           "state":  "READY",
+                           "block":  "06-stable-corpus",
+                           "notes":  "G4 pre-populated target: the target already contains its own production helper and its own Playwright test (PreExisting/ in the runtime target); the migrated test is added on top and everything builds and runs together. Source carries the non-migrated twin (PreExistingContractTests) to keep source==target test counts.",
+                           "contentHash":  "sha256:8d6900fe8a9163172ccd160cf78d9555c5fe909cdc3c6de629b504c283de4977"
+                       }
+}

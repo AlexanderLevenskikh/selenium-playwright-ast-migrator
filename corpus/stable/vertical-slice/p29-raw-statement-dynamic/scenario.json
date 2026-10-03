@@ -78,7 +78,8 @@
     "todoMax": 5,
     "unmappedMax": 1,
     "unsupportedMax": 2,
-    "warningsMax": 1
+    "warningsMax": 1,
+    "rawMax": 1
   },
   "expected": {
     "status": "UNSUPPORTED_AS_EXPECTED"

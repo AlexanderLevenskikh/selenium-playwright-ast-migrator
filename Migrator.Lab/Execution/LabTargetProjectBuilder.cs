@@ -15,7 +15,8 @@ public static partial class LabTargetProjectBuilder
     public static LabTargetProject Prepare(
         string migrationDirectory,
         string targetRoot,
-        string route)
+        string route,
+        IReadOnlyList<(string SourcePath, string RelativePath)> prePopulatedFiles)
     {
         var sourceGenerated = Path.Combine(migrationDirectory, "generated");
         if (!Directory.Exists(sourceGenerated))
@@ -43,6 +44,25 @@ public static partial class LabTargetProjectBuilder
             File.Copy(source, destination, overwrite: true);
             copiedFiles.Add(destination);
             namespaces.Add(ReadNamespace(File.ReadAllText(source)) ?? "");
+        }
+
+        // Pre-populated target files simulate target code that already existed before the
+        // migration (its own helpers/tests). Copy them verbatim into PreExisting/ so the
+        // migrated tests compile and run side-by-side with it.
+        var preExistingRoot = Path.Combine(targetRoot, "PreExisting");
+        if (prePopulatedFiles.Count > 0)
+        {
+            Directory.CreateDirectory(preExistingRoot);
+            foreach (var entry in prePopulatedFiles)
+            {
+                var relativePath = entry.RelativePath.Replace('/', Path.DirectorySeparatorChar);
+                var destination = Path.Combine(preExistingRoot, relativePath);
+                var destinationDirectory = Path.GetDirectoryName(destination);
+                if (!string.IsNullOrWhiteSpace(destinationDirectory))
+                    Directory.CreateDirectory(destinationDirectory);
+                File.Copy(entry.SourcePath, destination, overwrite: true);
+                copiedFiles.Add(destination);
+            }
         }
 
         var index = 0;

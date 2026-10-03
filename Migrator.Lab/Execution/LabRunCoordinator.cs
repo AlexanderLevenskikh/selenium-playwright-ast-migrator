@@ -226,7 +226,7 @@ public sealed class LabRunCoordinator
                 LabWorkspaceCleaner.DeleteBuildOutputs(workspace);
                 Directory.CreateDirectory(migrationInput);
                 CopyDeclaredProject(workspace, migrationInput, scenario.Source.MigrationFiles);
-                var adapterConfigPath = ResolveScenarioAdapterConfigPath(workspace, scenario);
+                var runConfigPath = WriteMigrationRunConfig(workspace, scenario, scenarioArtifacts);
                 var commandArguments = options.MigratorCommand.PrefixArguments
                     .Concat(new[]
                     {
@@ -236,14 +236,10 @@ public sealed class LabRunCoordinator
                         "--format", "both",
                         "--source", "selenium-csharp",
                         "--target", "dotnet",
-                        "--target-test-framework", "nunit"
+                        "--target-test-framework", "nunit",
+                        "--config", runConfigPath
                     })
                     .ToList();
-                if (adapterConfigPath != null)
-                {
-                    commandArguments.Add("--config");
-                    commandArguments.Add(adapterConfigPath);
-                }
 
                 stages.Add(await RunProcessStageAsync(
                     LabRunStage.Migration,
@@ -318,7 +314,8 @@ public sealed class LabRunCoordinator
                 var targetProject = LabTargetProjectBuilder.Prepare(
                     migrationDirectory,
                     targetRoot,
-                    ReadScenarioRoute(scenario));
+                    ReadScenarioRoute(scenario),
+                    ResolvePrePopulatedTargetFiles(entry.ScenarioDirectory, scenario));
                 runtimeArtifactsDirectory = targetProject.RuntimeArtifactsDirectory;
                 var targetEnvironment = new Dictionary<string, string?>(environment, StringComparer.OrdinalIgnoreCase)
                 {
@@ -560,6 +557,7 @@ public sealed class LabRunCoordinator
 
         config["SchemaVersion"] ??= "adapter-config/v1";
         config["SourceProjectName"] ??= "Migrator.Lab." + scenario.Id;
+        config["QualityGates"] = BuildQualityGates(scenario.QualityBudget);
         config["Verification"] = JsonSerializer.SerializeToNode(new
         {
             TargetFramework = "net10.0",
@@ -588,6 +586,44 @@ public sealed class LabRunCoordinator
             scenario.Source.AdapterConfig.Replace('/', Path.DirectorySeparatorChar)));
     }
 
+    /// <summary>
+    /// Materialize the exact adapter config used for the scenario migration `run`. The
+    /// adapter recipe (source.adapterConfig) is preserved when present; the quality gates are
+    /// always taken from the scenario's declared quality budget so that `run` fails closed at
+    /// the budget the fixture itself declares instead of the strict-by-default CLI gates
+    /// (which would reject expected-unsupported fixtures before verification even starts).
+    /// </summary>
+    static string WriteMigrationRunConfig(string workspace, ScenarioSpec scenario, string scenarioArtifacts)
+    {
+        var configPath = Path.Combine(scenarioArtifacts, "migration-config.json");
+        var sourceConfigPath = ResolveScenarioAdapterConfigPath(workspace, scenario);
+        var config = sourceConfigPath == null
+            ? new JsonObject()
+            : JsonNode.Parse(File.ReadAllText(sourceConfigPath)) as JsonObject
+              ?? throw new InvalidOperationException($"Scenario adapter config must contain a JSON object: {sourceConfigPath}");
+
+        config["SchemaVersion"] ??= "adapter-config/v1";
+        config["QualityGates"] = BuildQualityGates(scenario.QualityBudget);
+
+        File.WriteAllText(configPath, config.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
+        return Path.GetFullPath(configPath);
+    }
+
+    /// <summary>
+    /// Map the scenario's quality budget onto the CLI quality gates. Strict-by-default
+    /// residual-work gates would stop expected-unsupported fixtures at the `run` quality gate
+    /// (FailedStages=[verify]) before the project/target/oracle stages can classify them.
+    /// </summary>
+    static JsonObject BuildQualityGates(ScenarioQualityBudget budget) => new()
+    {
+        ["MaxTodoComments"] = budget.TodoMax,
+        ["MaxUnsupportedActions"] = budget.UnsupportedMax,
+        ["MaxUnmappedTargets"] = budget.UnmappedMax,
+        ["MaxRawExpressions"] = budget.RawMax,
+        ["FailOnPageTodo"] = true,
+        ["FailOnInvalidGeneratedSyntax"] = true
+    };
+
     static string ReadScenarioRoute(ScenarioSpec scenario)
     {
         foreach (var page in scenario.App.Pages)
@@ -601,6 +637,17 @@ public sealed class LabRunCoordinator
             }
         }
         return "/";
+    }
+
+    static (string SourcePath, string RelativePath)[] ResolvePrePopulatedTargetFiles(
+        string scenarioDirectory,
+        ScenarioSpec scenario)
+    {
+        return scenario.Source.PrePopulatedTargetFiles
+            .Select(relativePath => (
+                SourcePath: Path.GetFullPath(Path.Combine(scenarioDirectory, ToPlatformPath(relativePath))),
+                RelativePath: relativePath))
+            .ToArray();
     }
 
     static string ReadProcessOutput(LabProcessResult result)

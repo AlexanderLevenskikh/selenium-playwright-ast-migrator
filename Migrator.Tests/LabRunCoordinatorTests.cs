@@ -79,9 +79,16 @@ public sealed class LabRunCoordinatorTests
             var migrationRequest = Assert.Single(runner.Requests.Where(request => request.Arguments.Contains("run", StringComparer.Ordinal)));
             var configIndex = Array.IndexOf(migrationRequest.Arguments, "--config");
             Assert.True(configIndex >= 0 && configIndex + 1 < migrationRequest.Arguments.Length);
-            Assert.Equal("adapter-config.json", Path.GetFileName(migrationRequest.Arguments[configIndex + 1]));
 
             var project = Assert.Single(result.Projects);
+            var migrationConfigPath = Path.Combine(project.ArtifactsDirectory, "migration-config.json");
+            Assert.Equal("migration-config.json", Path.GetFileName(migrationRequest.Arguments[configIndex + 1]));
+            using var migrationConfig = JsonDocument.Parse(File.ReadAllText(migrationConfigPath));
+            Assert.Equal(1, migrationConfig.RootElement.GetProperty("ParameterizedMethods").GetArrayLength());
+            Assert.True(migrationConfig.RootElement.TryGetProperty("QualityGates", out var gates));
+            Assert.Equal(0, gates.GetProperty("MaxTodoComments").GetInt32());
+            Assert.Equal(0, gates.GetProperty("MaxRawExpressions").GetInt32());
+
             var configPath = Path.Combine(project.ArtifactsDirectory, "project-verify-config.json");
             using var document = JsonDocument.Parse(File.ReadAllText(configPath));
             Assert.Equal("Migrator.Lab.P09", document.RootElement.GetProperty("SourceProjectName").GetString());

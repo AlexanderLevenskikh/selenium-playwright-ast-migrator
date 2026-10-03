@@ -1,15 +1,15 @@
 {
   "schemaVersion": "migrator-lab-coverage/v1",
-  "scenarioCount": 33,
+  "scenarioCount": 35,
   "suiteCounts": {
-    "smoke": 8,
-    "pr": 20,
-    "nightly": 33
+    "smoke": 9,
+    "pr": 21,
+    "nightly": 35
   },
   "expectedStatusCounts": {
-    "PASS": 27,
+    "PASS": 28,
     "INFRASTRUCTURE_FAILURE": 1,
-    "UNSUPPORTED_AS_EXPECTED": 4,
+    "UNSUPPORTED_AS_EXPECTED": 5,
     "SOURCE_INVALID": 1
   },
   "categories": {
@@ -54,13 +54,15 @@
       "p24a-transitive-warning-isolated",
       "p24b-transitive-warning-sabotage",
       "p25-multitarget-conditional-itemgroup",
-      "p30-broken-compile"
+      "p30-broken-compile",
+      "p32-pre-populated-target"
     ],
     "expected-unsupported": [
       "p26-jsexecutor-unsupported",
       "p27-actions-api-unsupported",
       "p28-frames-popup-upload-download",
-      "p29-raw-statement-dynamic"
+      "p29-raw-statement-dynamic",
+      "p33-adversarial-wrapper"
     ]
   },
   "scenarios": [
@@ -537,6 +539,37 @@
         "Text",
         "DomReplacement",
         "Assert.That"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p32-pre-populated-target",
+      "expectedStatus": "PASS",
+      "suites": [
+        "smoke",
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "VerifyProject",
+        "PrePopulatedTarget",
+        "PreExistingTargetCode",
+        "Coexistence",
+        "PreExistingTargetTests"
+      ],
+      "mustPassTests": 2
+    },
+    {
+      "id": "p33-adversarial-wrapper",
+      "expectedStatus": "UNSUPPORTED_AS_EXPECTED",
+      "suites": [
+        "nightly"
+      ],
+      "features": [
+        "AdversarialWrapper",
+        "WebDriverMimicry",
+        "UnresolvedSymbolTodo",
+        "NoMisfire"
       ],
       "mustPassTests": 1
     }

@@ -120,7 +120,8 @@ public static partial class ScenarioSpecLoader
             Source = source with
             {
                 Features = source.Features ?? Array.Empty<string>(),
-                MigrationFiles = source.MigrationFiles ?? Array.Empty<string>()
+                MigrationFiles = source.MigrationFiles ?? Array.Empty<string>(),
+                PrePopulatedTargetFiles = source.PrePopulatedTargetFiles ?? Array.Empty<string>()
             },
             Project = project with
             {
@@ -163,7 +164,7 @@ public static partial class ScenarioSpecLoader
                 source,
                 "$.source",
                 required: new[] { "language", "testFramework", "template", "features", "migrationFiles" },
-                allowed: new[] { "language", "testFramework", "template", "features", "migrationFiles", "adapterConfig" },
+                allowed: new[] { "language", "testFramework", "template", "features", "migrationFiles", "adapterConfig", "prePopulatedTargetFiles" },
                 issues);
         }
 
@@ -203,7 +204,7 @@ public static partial class ScenarioSpecLoader
                 qualityBudget,
                 "$.qualityBudget",
                 required: Array.Empty<string>(),
-                allowed: new[] { "todoMax", "unmappedMax", "unsupportedMax", "warningsMax" },
+                allowed: new[] { "todoMax", "unmappedMax", "unsupportedMax", "warningsMax", "rawMax" },
                 issues);
         }
 
@@ -305,8 +306,10 @@ public static partial class ScenarioSpecLoader
         ValidateRelativePaths("source.migrationFiles", scenario.Source.MigrationFiles, scenarioDirectory, ScenarioImplementationState.Planned, issues);
         if (!string.IsNullOrWhiteSpace(scenario.Source.AdapterConfig))
             ValidateRelativePaths("source.adapterConfig", new[] { scenario.Source.AdapterConfig }, scenarioDirectory, ScenarioImplementationState.Planned, issues);
+        ValidateRelativePaths("source.prePopulatedTargetFiles", scenario.Source.PrePopulatedTargetFiles, scenarioDirectory, scenario.Implementation.State, issues);
         ValidateRelativePaths("project.references", scenario.Project.References, scenarioDirectory, ScenarioImplementationState.Planned, issues);
         ValidateMigrationFiles(scenario, issues);
+        ValidatePrePopulatedTargetFiles(scenario, scenarioDirectory, issues);
         ValidateAdapterConfig(scenario, issues);
         ValidateEntryProject(scenario, issues);
         ValidateProjectReferences(scenario, issues);
@@ -339,6 +342,36 @@ public static partial class ScenarioSpecLoader
     }
 
 
+
+    static void ValidatePrePopulatedTargetFiles(ScenarioSpec scenario, string scenarioDirectory, List<ScenarioValidationIssue> issues)
+    {
+        var prePopulated = scenario.Source.PrePopulatedTargetFiles;
+        if (prePopulated.Length == 0)
+            return;
+
+        var projectFiles = scenario.Project.Files.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var migrationFiles = scenario.Source.MigrationFiles.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in prePopulated)
+        {
+            if (projectFiles.Contains(path))
+                issues.Add(Error("PREPOPULATED_TARGET_FILE_IN_PROJECT",
+                    $"source.prePopulatedTargetFiles entry must not be listed in project.files (target's own code is not part of the source build): {path}"));
+
+            if (migrationFiles.Contains(path))
+                issues.Add(Error("PREPOPULATED_TARGET_FILE_MIGRATED",
+                    $"source.prePopulatedTargetFiles entry must not be listed in source.migrationFiles (target's own code is not migrated): {path}"));
+
+            if (!string.Equals(Path.GetExtension(path), ".cs", StringComparison.OrdinalIgnoreCase))
+                issues.Add(Error("PREPOPULATED_TARGET_FILE_NOT_CSHARP",
+                    $"source.prePopulatedTargetFiles must contain C# source files: {path}"));
+
+            if (scenario.Implementation.State == ScenarioImplementationState.Ready
+                && !File.Exists(Path.Combine(scenarioDirectory, path.Replace('/', Path.DirectorySeparatorChar))))
+            {
+                issues.Add(Error("READY_PREPOPULATED_TARGET_FILE_MISSING", $"Ready pre-populated target file is missing: {path}"));
+            }
+        }
+    }
 
     static void ValidateAdapterConfig(ScenarioSpec scenario, List<ScenarioValidationIssue> issues)
     {
@@ -387,6 +420,7 @@ public static partial class ScenarioSpecLoader
             return;
 
         var declared = scenario.Project.Files.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var prePopulated = scenario.Source.PrePopulatedTargetFiles.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var actual = Directory.EnumerateFiles(scenarioDirectory, "*", SearchOption.AllDirectories)
             .Select(path => Path.GetRelativePath(scenarioDirectory, path).Replace('\\', '/'))
             .Where(path => !string.Equals(path, "scenario.json", StringComparison.OrdinalIgnoreCase))
@@ -398,7 +432,7 @@ public static partial class ScenarioSpecLoader
             .Where(path => !string.Equals(Path.GetFileName(path), ".DS_Store", StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
-        foreach (var path in actual.Where(path => !declared.Contains(path)))
+        foreach (var path in actual.Where(path => !declared.Contains(path) && !prePopulated.Contains(path)))
             issues.Add(Error("READY_PROJECT_FILE_UNLISTED", $"Ready scenario contains an unlisted fixture file: {path}"));
     }
 
@@ -413,12 +447,15 @@ public static partial class ScenarioSpecLoader
             return;
         }
 
-        if (scenario.Project.Files.Any(path => !File.Exists(Path.Combine(scenarioDirectory, path.Replace('/', Path.DirectorySeparatorChar)))))
+        var hashedFiles = scenario.Project.Files
+            .Concat(scenario.Source.PrePopulatedTargetFiles)
+            .ToArray();
+        if (hashedFiles.Any(path => !File.Exists(Path.Combine(scenarioDirectory, path.Replace('/', Path.DirectorySeparatorChar)))))
             return;
 
         try
         {
-            var actual = ScenarioContentHasher.Compute(scenarioDirectory, scenario.Project.Files);
+            var actual = ScenarioContentHasher.Compute(scenarioDirectory, hashedFiles);
             if (!string.Equals(actual, scenario.Implementation.ContentHash, StringComparison.Ordinal))
                 issues.Add(Error("READY_CONTENT_HASH_MISMATCH", $"Ready scenario content changed. Expected {scenario.Implementation.ContentHash}, actual {actual}."));
         }
@@ -430,7 +467,7 @@ public static partial class ScenarioSpecLoader
 
     static void ValidateBudgets(ScenarioQualityBudget budget, List<ScenarioValidationIssue> issues)
     {
-        if (budget.TodoMax < 0 || budget.UnmappedMax < 0 || budget.UnsupportedMax < 0 || budget.WarningsMax < 0)
+        if (budget.TodoMax < 0 || budget.UnmappedMax < 0 || budget.UnsupportedMax < 0 || budget.WarningsMax < 0 || budget.RawMax < 0)
             issues.Add(Error("QUALITY_BUDGET_NEGATIVE", "Quality budget values must be non-negative."));
     }
 
