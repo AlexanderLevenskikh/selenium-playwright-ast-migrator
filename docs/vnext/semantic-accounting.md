@@ -109,3 +109,17 @@ powershell -File scripts/baseline/semantic-accounting.ps1 -WriteMarkdown
 ```
 
 Wait until the CLI is built; measure uses the debug build (`Migrator.Cli\bin\Debug\net10.0`).
+
+## Known intentional non-converted entries (Phase A.3)
+
+The entries that remain below 100% conversion are intentional fail-closed behavior, not
+defects. Do not "fix" them by adding mappings or suppressing assertions (AGENTS hard rules).
+
+| File | State | Why |
+|---|---|---|
+| p13 Tests/AsyncLiftTests.cs (1 test, 3 TODOs) | fail-closed | Async-lift scenario calls a project-specific receiverless helper `ClickAndReadStatus`. Unconfigured path honestly emits HELPER_METHOD_REQUIRES_MAPPING + UNAVAILABLE_SYMBOLS (the helper) and ASSERTION_CONSTRAINT (its `Assert.That(status, ...)` is downstream of the unmapped helper). The lab config maps the helper, and the scenario passes 0-TODO. |
+| p32 Production/PreExistingTargetTests.cs (1 test, 1 TODO) | out of migration scope | Pre-existing target-side file, not part of `source.migrationFiles` (`Tests/PrePopulatedTests.cs`). The whole-directory ledger scan sees it; the in-scope test converts 1/1. |
+| p32 SourceOnly/PreExistingContractTests.cs (1 test, 1 TODO) | out of migration scope | Pre-existing contract file outside migration scope (same reason). |
+| p10 PageObjectChainTests.cs (1 unmapped `dashboard.Status`) | fail-closed / config-resolved | Unresolved POM property with no default mapping; the scenario config resolves the chain and the lab scenario passes. |
+| p29 DynamicTests.cs (1 unmapped `dynamicDriver.FindElement(By.Id("dynamic-target"))`) | expected | UNSUPPORTED_AS_EXPECTED adversarial scenario: driver variable is not the literal `WebDriver.` receiver, so the default locator patterns do not match. |
+| p33 WrapperTests.cs (1 unmapped `driver.FindElement(By.Id("smoke-button"))`) | expected | UNSUPPORTED_AS_EXPECTED adversarial wrapper (`ImposterDriver`); oracle requires `UNRESOLVED_SYMBOL | ImposterDriver`. |
