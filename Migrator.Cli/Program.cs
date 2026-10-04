@@ -1121,6 +1121,7 @@ static void RunAnalyze(MigrationSummaryReport summary, string outPath, string fo
 
     var allUnsupported = CollectAllUnsupported(results);
     WriteReports(summary, outPath, format, allUnmapped, allUnsupported);
+    WriteConfigSourceAdditive(outPath, format, config, results);
     GenerateDraftConfig(allUnmapped, outPath, config);
     WriteExplainTodoArtifacts(summary, outPath, format, allUnmapped, allUnsupported, null);
 
@@ -1140,6 +1141,7 @@ static void RunMigrate(MigrationSummaryReport summary, string outPath, string fo
 
     var allUnsupported = CollectAllUnsupported(results);
     WriteReports(summaryWithGenerated, outPath, format, allUnmapped, allUnsupported);
+    WriteConfigSourceAdditive(outPath, format, config, results);
     GenerateDraftConfig(allUnmapped, outPath, config);
     WriteExplainTodoArtifacts(summaryWithGenerated, outPath, format, allUnmapped, allUnsupported, null);
     WriteSmokePlanArtifacts(outPath, outPath, format);
@@ -3357,6 +3359,36 @@ static void WriteReports(MigrationSummaryReport summary, string outPath, string 
                 WriteAllUnsupportedCsv(allUnsupported));
         }
     }
+}
+
+/// <summary>
+/// Additive NEXT-B artifact: writes config-source.json (+ .md) into an existing report
+/// directory. Purely additive — a new file with its own name, never touching existing
+/// reports — so snapshot/golden comparisons of run output are unaffected. Skipped when
+/// the run carried no config or the config exposes no source-facing keys.
+/// </summary>
+static void WriteConfigSourceAdditive(string outPath, string format, ProjectAdapterConfig? config, List<PipelineResult> results)
+{
+    if (config == null || results == null || results.Count == 0)
+        return;
+
+    var files = new List<(string Path, string Text)>(results.Count);
+    foreach (var result in results)
+    {
+        var path = result.SourceModel.FilePath;
+        if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            files.Add((path, File.ReadAllText(path)));
+    }
+
+    var displayInput = files.Count > 0
+        ? Path.GetDirectoryName(files[0].Path) ?? string.Empty
+        : string.Empty;
+
+    var report = ConfigSourceReportBuilder.Build(displayInput, config, files);
+    if (report.Summary.TotalKeys == 0)
+        return;
+
+    ConfigSourceCommand.WriteReportArtifacts(report, outPath, format);
 }
 
 static string WriteAllUnmappedJson(IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped, MigrationSummaryReport summary)
@@ -9752,6 +9784,7 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
                 allUnsupported = CollectAllUnsupported(migrationResults);
 
                 WriteReports(analyzedSummary, analyzeDir, format, allUnmapped, allUnsupported);
+                WriteConfigSourceAdditive(analyzeDir, format, config, migrationResults);
                 GenerateDraftConfig(allUnmapped, analyzeDir, config);
 
                 stage = stage with

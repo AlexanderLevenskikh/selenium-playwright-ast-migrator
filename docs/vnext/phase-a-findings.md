@@ -357,3 +357,15 @@ the strategy->locator shape and are now byte-pinned by 6 new theory cases.
 
 `dotnet test` **1121/1121** (was 1103; +18 new). LOC-01 row in
 `correctness-risk-areas.md` now points at the regression test as the detector.
+
+### 15.4 Closeout: run/analyze additive artifact + corpus regression
+
+`config-source` is now also emitted additively by `analyze`, `migrate`, and `run`
+(`--mode orchestrate`) into their report directories via `WriteConfigSourceAdditive`
+(skips when the run carried no config or no source-facing keys). It is a new named file
+(`config-source.json`/`.md`) that never touches existing reports, so snapshot/golden
+comparisons are unaffected.
+
+Full-corpus regression after the wiring (`artifacts/lab/full-corpus-5`): **35/35**
+conforming — 28 `PASS`, 5 `UNSUPPORTED_AS_EXPECTED`, p24b `INFRASTRUCTURE_FAILURE`,
+p30 `SOURCE_INVALID`; **0 regressions, 0 non-deterministic**. Identical to full-corpus-4.

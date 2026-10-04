@@ -50,14 +50,20 @@ internal static class ConfigSourceCommand
         var sourceFiles = files.Select(f => (Path: f.Path, Text: f.Text)).ToArray();
         var report = ConfigSourceReportBuilder.Build(inputPath, merged, sourceFiles);
 
-        WriteJson(report, Path.Combine(outPath, "config-source.json"));
-        if (format is "markdown" or "both" or "md")
-            WriteMarkdown(report, Path.Combine(outPath, "config-source.md"));
+        WriteReportArtifacts(report, outPath, format);
 
         Console.WriteLine($"config-source: {report.Summary.TotalKeys} config keys checked against source, " +
                           $"{report.Summary.UsedKeys} used ({report.Summary.CoveragePercent}%), " +
                           $"{report.Summary.UnusedKeys} unused.");
         return 0;
+    }
+
+    public static void WriteReportArtifacts(ConfigSourceReport report, string outPath, string format)
+    {
+        Directory.CreateDirectory(outPath);
+        WriteJson(report, Path.Combine(outPath, "config-source.json"));
+        if (format is "markdown" or "both" or "md")
+            WriteMarkdown(report, Path.Combine(outPath, "config-source.md"));
     }
 
     static void WriteJson(ConfigSourceReport report, string path)
