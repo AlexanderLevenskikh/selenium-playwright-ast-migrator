@@ -42,9 +42,9 @@
     {
       "id": "async-cascade",
       "requiredBy": "task-section-9-group-7",
-      "scenarios": ["p13-async-lift-simple", "p14-async-lift-setup-base"],
+      "scenarios": ["p13-async-lift-simple", "p14-async-lift-setup-base", "p34-cross-project-async-caller"],
       "status": "COVERED",
-      "notes": ["cross-project caller signature lift is a documented boundary, not a fixture in Phase A"]
+      "notes": ["G3 landed as p34-cross-project-async-caller in Phase A.3: cross-project caller lifted via source-backed config expansion; full ASYNC-01 signature propagation stays D-rated"]
     },
     {
       "id": "frames-windows",
@@ -98,7 +98,8 @@
   "gaps": [
     {
       "id": "G3-cross-project-async-caller",
-      "proposal": "documented boundary only; no fixture in Phase A",
+      "proposal": "Landed as p34-cross-project-async-caller in Phase A.3 (multi-project async caller; awaited expansion via source-backed config)",
+      "status": "LANDED",
       "priority": "low"
     },
     {

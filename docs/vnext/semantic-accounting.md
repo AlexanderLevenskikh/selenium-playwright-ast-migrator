@@ -1,11 +1,12 @@
 # Semantic Accounting Baseline
 
-Phase A, measured on the whole corpus (`corpus/stable/vertical-slice`, 35 fixtures,
-37 files, 38 tests) with the **unconfigured default path**
+Phase A, measured on the whole corpus (`corpus/stable/vertical-slice`, 36 fixtures,
+38 files, 39 tests) with the **unconfigured default path**
 (`--mode analyze`, no `adapter-config.json`). Harness: `scripts/baseline/semantic-accounting.ps1`.
 Machine output: `artifacts/baseline/accounting/semantic-accounting.json`.
 
-The numbers below are the **Phase A.2** state (G4/G5 gap fixtures p32/p33 landed; the
+The numbers below are the **Phase A.4** state (G4/G5 gap fixtures p32/p33 landed in A.2,
+G3 cross-project async caller landed as p34 in A.3; the
 RawExpression-target assertion false positive and the locator null-check elision loss are
 fixed in `ExecutableTargetSemantics`/`VerifyRunner`, so p02/p19/p22-class files now count
 as fully converted; the lab's strict-by-default quality-gate threading is fixed). The
@@ -24,7 +25,7 @@ Terminology used by the analyzer/report (see `docs/vnext/current-pipeline.md`):
 | `TotalActions` | flattened action total (containers + leaf children); the scope Semantic/SyntaxFallback/Unsupported buckets sum to |
 | `MappedTargets` / `UnmappedTargets` | action target expressions resolved vs left as `MISSING_MAPPING` |
 | `TodoComments` | `[MIGRATOR:TODO]` annotations emitted into generated code |
-| `SuccessfullyConvertedTests` | legacy report metric = tests with `UnsupportedCount == 0` — **not** a semantic-success signal |
+| `SuccessfullyConvertedTests` | legacy report metric = tests with `UnsupportedCount == 0` вЂ” **not** a semantic-success signal |
 | `GeneratedTests` | tests whose source body has >=1 emitted action |
 | `FullyConvertedTests` | tests where every source action (and shared setup) is provably emitted as executable target code via `ExecutableTargetSemantics` (no TODO/comment-only fallback) |
 
@@ -32,11 +33,11 @@ Terminology used by the analyzer/report (see `docs/vnext/current-pipeline.md`):
 
 | Files | Tests | Actions | Semantic | SyntaxFallback | Unsupported | Struct | Mapped | Unmapped | TODO | Generated tests | Fully-converted tests | Fully-converted files* |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 37 | 38 | 148 | 44 | 104 | 0 | 4 | 80 | 3 | 52 | 38 | **34** | 21 |
+| 38 | 39 | 150 | 45 | 105 | 0 | 4 | 80 | 3 | 55 | 39 | **34** | 21 |
 
 \* a file is *fully converted* here by the legacy heuristic (zero TODOs, zero unmapped
 targets, zero unsupported statements) under the **unconfigured** path. The honest
-test-level signal is **Fully-converted tests**: 34/38 — legacy `SuccessfullyConvertedTests`
+test-level signal is **Fully-converted tests**: 34/39 вЂ” legacy `SuccessfullyConvertedTests`
 would claim 38/38.
 
 ## Readings (evidence, not judgment)
@@ -52,31 +53,36 @@ would claim 38/38.
 
 ### 2. Semantic vs syntax coverage
 
-Only 44/148 actions (~30%) are recognized by the narrow Semantic path
+Only 45/150 actions (~30%) are recognized by the narrow Semantic path
 (Click/SendKeys/Assert.That/AreEqual on resolved types). 104 go through syntax
 recognizers, which is where conservative heuristics live. The unconfigured corpus is
 overwhelmingly a *syntax-shaped* workload.
 
 ### 3. Per-file shape of the residual
 
-- Since **Phase A.1** the ledger jumped from 23/34 to 34/38 fully-converted tests.
+- Since **Phase A.1** the ledger jumped from 23/34 to 34/39 fully-converted tests.
   The jump is driven by the verifier false-positive fixes (Phase A.2): a `RawExpression`
   target on leaf Text/Visibility assertions and mapped-method actions is honestly an
   executable Playwright `.NET` render (the renderer emits `await Expect(...)`), so files
-  that were only "syntactically" generated (p02, p19, p22, …) now count as fully
+  that were only "syntactically" generated (p02, p19, p22, вЂ¦) now count as fully
   converted AND pass in the real lab.
-- The remaining **4 files** with `FullyConvertedTests = 0`:
-  - `p13-async-lift-simple` (1 test, todo 3) — helper-return chain leaves a TODO on the
+- The remaining **5 files** with `FullyConvertedTests = 0`:
+  - `p13-async-lift-simple` (1 test, todo 3) вЂ” helper-return chain leaves a TODO on the
     unconfigured path; configured path still passes in the lab.
-  - `p30-broken-compile` (G1, `SOURCE_INVALID`) — by construction: all 4 actions degrade
+  - `p30-broken-compile` (G1, `SOURCE_INVALID`) вЂ” by construction: all 4 actions degrade
     to `UNRESOLVED_SYMBOL` TODOs, fail-closed by `BrokenSourceFailClosedCliTests`.
   - `p32-pre-populated-target` `Production/PreExistingTargetTests.cs` and
     `SourceOnly/PreExistingContractTests.cs` (1 test each, todo 1) — the pre-existing,
     non-migrated fixture files carrying the pre-populated target code; counted by the
     ledger because they live in the corpus, but they are not part of the migration.
+  - `p34-cross-project-async-caller` `Tests/CrossProjectCallerTests.cs` (1 test, todo 3) —
+    the cross-project caller calls `StatusHelper.ClickAndReadStatus(WebDriver)` from a
+    separate referenced project; on the unconfigured path that helper is honestly unmapped
+    (helper-mapping / unavailable-symbol TODOs). The configured path expands the call and
+    the scenario passes in the lab (`PASS`, source 1/1).
 - The 3 unmapped targets on the unconfigured path: `dashboard.Status` (p10 page-object
   chain), `dynamicDriver.FindElement(By.Id("dynamic-target"))` (p29 raw statement), and
-  `driver.FindElement(By.Id("smoke-button"))` (p33 adversarial wrapper) — genuine
+  `driver.FindElement(By.Id("smoke-button"))` (p33 adversarial wrapper) вЂ” genuine
   unconfigured-path gaps. Notably p33 (`UNSUPPORTED_AS_EXPECTED`) and p29 bound these as
   expected; p22's locator null-check elision is now accounted as a safe elision rather
   than a loss.
@@ -85,11 +91,11 @@ overwhelmingly a *syntax-shaped* workload.
 ### 4. Runtime (configured) status of the same corpus
 
 The unconfigured ledger and the configured live-lab run measure different things. Phase
-A.2's full `lab run` (`artifacts/lab/full-corpus-4`) is **35/35 conforming**: 28 `PASS`,
-5 `UNSUPPORTED_AS_EXPECTED` (p26–p29, p33), 1 `INFRASTRUCTURE_FAILURE` (p24b, intentional
-sabotage), 1 `SOURCE_INVALID` (p30). This is the first fully runtime-green corpus; the
-rationale for the fixes that enabled it is in `phase-a-findings.md` and
-`corpus/planning/phase-a-coverage.md`.
+A.4's full `lab run` (`artifacts/lab/full-corpus-6`) is **36/36 conforming**: 29 `PASS`
+(incl. new `p34` cross-project async caller), 5 `UNSUPPORTED_AS_EXPECTED` (p26–p29, p33),
+1 `INFRASTRUCTURE_FAILURE` (p24b, intentional sabotage), 1 `SOURCE_INVALID` (p30). The
+corpus is fully runtime-green; the rationale for the fixes that enabled it is in
+`phase-a-findings.md` and `corpus/planning/phase-a-coverage.md`.
 
 ## How to use this ledger
 

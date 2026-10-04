@@ -369,3 +369,24 @@ comparisons are unaffected.
 Full-corpus regression after the wiring (`artifacts/lab/full-corpus-5`): **35/35**
 conforming — 28 `PASS`, 5 `UNSUPPORTED_AS_EXPECTED`, p24b `INFRASTRUCTURE_FAILURE`,
 p30 `SOURCE_INVALID`; **0 regressions, 0 non-deterministic**. Identical to full-corpus-4.
+
+## 16. Phase A.3 (G3): cross-project async caller fixture
+
+The G3 branch fixture landed as `p34-cross-project-async-caller`: a multi-project
+scenario where the async-lift caller (`Tests/CrossProjectCallerTests.cs`) invokes
+`StatusHelper.ClickAndReadStatus(WebDriver)` defined in a separate referenced
+`Helpers/` project. The qualified cross-project call is matched by the config pattern
+`StatusHelper.ClickAndReadStatus({driver})` and source-backed expanded into awaited
+Playwright statements (`ClickAsync`/`InnerTextAsync`), so no signature change needs to
+cross the project boundary. Full `ASYNC-01` signature propagation (the caller learns the
+helper became `async` and rewrites its call site) remains a documented D-rated boundary,
+noted in the fixture's own description.
+
+- Verified in isolation (`artifacts/lab/p34-g3`): `PASS`, source 1/1, generated target
+  has 0 TODOs and no reference to the unmigrated helper.
+- Full corpus (`artifacts/lab/full-corpus-6`): **36/36** conforming — 29 `PASS`
+  (incl. p34), 5 `UNSUPPORTED_AS_EXPECTED`, p24b `INFRASTRUCTURE_FAILURE`,
+  p30 `SOURCE_INVALID`; 0 regressions, 0 non-deterministic.
+- Unconfigured ledger (36 fixtures/38 files/39 tests): totals moved to 150 actions,
+  45 semantic, 105 syntax, 55 TODOs, `invariantHolds=True`; p34 reproduces p13's honest
+  fail-closed shape on the unconfigured path (1 test, todo 3, fully-converted 0).

@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "lab-scenario/v1",
+  "id": "p34-cross-project-async-caller",
+  "seed": 134,
+  "tags": [
+    "async",
+    "cross-project",
+    "runtime-pass",
+    "vertical-slice",
+    "stable",
+    "nightly",
+    "pr"
+  ],
+  "source": {
+    "language": "csharp",
+    "testFramework": "nunit",
+    "template": "multi-project",
+    "features": [
+      "AsyncLift",
+      "CrossProject",
+      "ProjectReference",
+      "FindElement",
+      "Click"
+    ],
+    "migrationFiles": [
+      "Tests/CrossProjectCallerTests.cs"
+    ],
+    "adapterConfig": "adapter-config.json"
+  },
+  "project": {
+    "files": [
+      "Helpers/Helpers.csproj",
+      "Helpers/StatusHelper.cs",
+      "Tests/Tests.csproj",
+      "Tests/Infrastructure/LabSeleniumTestBase.cs",
+      "Tests/CrossProjectCallerTests.cs",
+      "adapter-config.json"
+    ],
+    "references": [
+      "Helpers/Helpers.csproj"
+    ],
+    "msBuild": {
+      "nullable": true,
+      "implicitUsings": true,
+      "fileScopedNamespace": true
+    },
+    "entryProject": "Tests/Tests.csproj"
+  },
+  "app": {
+    "pages": [
+      {
+        "path": "/async",
+        "model": "async-lift"
+      }
+    ],
+    "baseUrlEnvironmentVariable": "MIGRATOR_LAB_APP_URL"
+  },
+  "oracle": {
+    "source": {
+      "mustPassTests": 1
+    },
+    "target": {
+      "mustPassTests": 1
+    },
+    "semantic": {
+      "events": [
+        "async:click"
+      ],
+      "dom": [
+        {
+          "selector": "#async-status",
+          "text": "done"
+        }
+      ]
+    }
+  },
+  "qualityBudget": {
+    "todoMax": 0,
+    "unmappedMax": 0,
+    "unsupportedMax": 0,
+    "warningsMax": 0
+  },
+  "expected": {
+    "status": "PASS"
+  },
+  "implementation": {
+    "state": "READY",
+    "block": "06-stable-corpus",
+    "notes": "READY: G3 boundary close - an async-lift caller whose helper lives in a separate referenced project. The qualified cross-project call StatusHelper.ClickAndReadStatus({driver}) is source-backed expanded into awaited Playwright statements (no signature change crosses the project boundary; full ASYNC-01 signature propagation stays D-rated).",
+    "contentHash": "sha256:21d6c7e2de03aa9f7fc9ec17c99b01c6d287c2b1e03018b8d0ffd46ffc72b0aa"
+  }
+}

@@ -14,7 +14,7 @@ remaining gaps. Machine-readable version: `corpus/planning/phase-a-coverage.json
 | 4. CollectionsAndStaleness | FindElements handling, count, index, lazy re-evaluation, stale patterns | `p04` (count+text), `p05` (table row indexer), `p19` (foreach/continue/break), `p31` (re-query after DOM replacement) | COVERED (G2 landed in Phase A.1) |
 | 5. PageObjectInheritance | deep POM chains across projects | `p10` (unresolved chain), `p11` (separate project), `p12` (inheritance+composition) | COVERED |
 | 6. HelperGraph | helpers/extension methods with waits inside | `p09` (extension+WebDriverWait), `p13` (helper return chain) | COVERED |
-| 7. AsyncCascade | sync→async lift across file/setup/callers | `p13` (simple), `p14` (setup-base) | COVERED (file/profile boundary; cross-project caller lift not pinned — gap G3) |
+| 7. AsyncCascade | sync→async lift across file/setup/callers | `p13` (simple), `p14` (setup-base), `p34` (cross-project caller) | COVERED (G3 landed as `p34` in Phase A.3) |
 | 8. FramesWindows | frames/popups/upload/download | `p28-frames-popup-upload-download` | COVERED (expected unsupported, isolation) |
 | 9. DynamicJsActions | JS, Actions API, dynamic/raw | `p26` (IJavaScriptExecutor), `p27` (Actions API), `p29` (dynamic raw statement) | COVERED (expected unsupported) |
 | 10. DataDrivenSharedState | TestCaseSource/ValueSource/Param rates, parallel/retry/order, shared state | `p20` (TestCaseSource/ValueSource), `p21` (parallelizable/retry/order) | COVERED |
@@ -31,9 +31,12 @@ remaining gaps. Machine-readable version: `corpus/planning/phase-a-coverage.json
 - **G2 — stale element reference (group 4): LANDED in Phase A.1 as `p31-stale-repattern`**
   (store locator, mutate DOM via reload, re-assert count/text on a fresh query; new LabApp
   `/stale` route).
-- **G3 — cross-project async caller (group 7).** p13/p14 lift a file and its SetUp base.
-  No fixture whose *caller in another project* must change signature (ASYNC-01 is D-rated
-  for that). Document as a known boundary; do not add a fixture in Phase A.0.
+- **G3 — cross-project async caller (group 7): LANDED in Phase A.3 as
+  `p34-cross-project-async-caller`** (multi-project fixture: the caller test lives in
+  `Tests/` and the `StatusHelper` it calls lives in a separate referenced `Helpers/`
+  project; the qualified cross-project call is source-backed expanded into awaited
+  Playwright statements, so no signature change needs to cross the project boundary;
+  full ASYNC-01 signature propagation remains a documented D-rated boundary).
 - **G4 — pre-populated target (group 11): LANDED in Phase A.2 as `p32-pre-populated-target`**
   (target project pre-populated with its own `LabNavigationHelper` code; migrated tests are
   added on top; harness `source.prePopulatedTargetFiles` staging; `PASS`, source 2/2).
@@ -41,17 +44,18 @@ remaining gaps. Machine-readable version: `corpus/planning/phase-a-coverage.json
   (a custom wrapper whose façade mimics the WebDriver API so the syntax recognizer can
   misfire; `UNSUPPORTED_AS_EXPECTED` with explicit quality budget including `rawMax: 1`).
 
-## Corpus runtime status (Phase A.2, fresh real-lab run)
+## Corpus runtime status (Phase A.4, fresh real-lab run)
 
-`lab run` over the full 35-scenario corpus — `artifacts/lab/full-corpus-4`:
-**35/35 conforming**: 28× `PASS`, 5× `UNSUPPORTED_AS_EXPECTED` (p26–p29, p33),
-1× `INFRASTRUCTURE_FAILURE` (p24b, intentional sabotage), 1× `SOURCE_INVALID`
-(p30, broken source). This is the first fully runtime-green corpus: two pre-existing
-verifier false positives (RawExpression-target assertions not counted; qualifying
-`Assert.That(x, Is.Not.Null)` locator null-checks counted as loss) and the lab's
-strict-by-default quality-gate threading were fixed, and p31's pre-existing impossible
-`dom` oracle selector (descendant `#items .item` vs the flat `[id]`-only observation
-model) was corrected to `#items`/`visible`.
+`lab run` over the full 36-scenario corpus — `artifacts/lab/full-corpus-6`:
+**36/36 conforming**: 29× `PASS` (incl. new `p34-cross-project-async-caller`),
+5× `UNSUPPORTED_AS_EXPECTED` (p26–p29, p33), 1× `INFRASTRUCTURE_FAILURE`
+(p24b, intentional sabotage), 1× `SOURCE_INVALID` (p30, broken source). The corpus is
+fully runtime-green: two pre-existing verifier false positives (RawExpression-target
+assertions not counted; qualifying `Assert.That(x, Is.Not.Null)` locator null-checks
+counted as loss) and the lab's strict-by-default quality-gate threading were fixed,
+p31's pre-existing impossible `dom` oracle selector (descendant `#items .item` vs the
+flat `[id]`-only observation model) was corrected to `#items`/`visible`, and the G3
+cross-project async caller gap landed as `p34`.
 
 
 ## Probes beyond fixtures (run, not lab-runtime)

@@ -1,0 +1,22 @@
+{
+  "SchemaVersion": "adapter-config/v1",
+  "SourceProjectName": "Migrator.Lab.P34",
+  "ParameterizedMethods": [
+    {
+      "SourceMethodPattern": "StatusHelper.ClickAndReadStatus({driver})",
+      "TargetStatements": [
+        "await Page.Locator(\"#async-button\").ClickAsync();",
+        "var {result} = await Page.Locator(\"#async-status\").InnerTextAsync();"
+      ],
+      "RequiresReview": false
+    }
+  ],
+  "QualityGates": {
+    "MaxTodoComments": 0,
+    "MaxUnsupportedActions": 0,
+    "MaxUnmappedTargets": 0,
+    "MaxRawExpressions": 0,
+    "FailOnPageTodo": true,
+    "FailOnInvalidGeneratedSyntax": true
+  }
+}

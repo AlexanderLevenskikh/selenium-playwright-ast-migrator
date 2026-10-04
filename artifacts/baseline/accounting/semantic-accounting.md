@@ -4,7 +4,7 @@ Source report: `C:\Users\levenskikh\Desktop\MyProjects\Migrator\migration\artifa
 
 | Files | Tests | Actions | Semantic | SyntaxFallback | Unsupported | StructuralContainers | Mapped | Unmapped | TODO | Generated tests | Fully converted tests | Fully converted files |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 37 | 38 | 148 | 44 | 104 | 0 | 4 | 80 | 3 | 52 | 38 | 34 | 21 |
+| 38 | 39 | 150 | 45 | 105 | 0 | 4 | 80 | 3 | 55 | 39 | 34 | 21 |
 
 > Invariant: Semantic+SyntaxFallback+Unsupported == ActionsFound (flattened) - holds = True (accounted-vs-total delta = 0). SuccessfullyConvertedTests is 1 for every story even when all assertions/locators became TODOs; the run-level quality gates (AssertionLoss, SemanticNoOp, MISSING_MAPPING) and FullyConvertedTests are the honest signal.
 
@@ -49,3 +49,4 @@ Source report: `C:\Users\levenskikh\Desktop\MyProjects\Migrator\migration\artifa
 | corpus\stable\vertical-slice\p32-pre-populated-target\SourceOnly\PreExistingContractTests.cs | 1 | 1 | 0 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | 1 | no | ok |
 | corpus\stable\vertical-slice\p32-pre-populated-target\Tests\PrePopulatedTests.cs | 1 | 1 | 1 | 1 | 2 | 0 | 3 | 0 | 2 | 0 | 0 | YES | ok |
 | corpus\stable\vertical-slice\p33-adversarial-wrapper\Tests\WrapperTests.cs | 1 | 1 | 1 | 2 | 3 | 0 | 5 | 0 | 2 | 1 | 3 | no | ok |
+| corpus\stable\vertical-slice\p34-cross-project-async-caller\Tests\CrossProjectCallerTests.cs | 1 | 1 | 0 | 1 | 1 | 0 | 2 | 0 | 0 | 0 | 3 | no | ok |
