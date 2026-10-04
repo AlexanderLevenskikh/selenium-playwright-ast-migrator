@@ -77,3 +77,23 @@ dotnet Migrator.Cli\bin\Debug\net10.0\Migrator.Cli.dll run --twice --assert-iden
    cross-toolchain runs are not yet measured.
 2. The digest verifies *reproducibility*, not *semantic correctness*: identical bytes can
    still be wrong (see `correctness-risk-areas.md`).
+
+## Phase A.3 addendum — final determinism re-run sweep (after NEXT-B/C/D + G3)
+
+Re-ran the harness on fresh machines state after all Phase A.3 changes (config-source,
+LOC-01 matrix, hygiene classification, G3 p34, NEXT-C honest accounting, NEXT-D arm
+record). Evidence: `artifacts/baseline/determinism/phase-a3-final/{p01,p04,p34}`.
+
+| Case | Decision | RunA digest | RunB digest | Exit A/B | Notes |
+|---|---|---|---|---|---|
+| p01-basic-id-login (unconfigured) | **IDENTICAL** | `bc4961ba…09ae` | `bc4961ba…09ae` | 0 / 0 | 0 TODOs unconfigured (LOC-01) — passes gates now |
+| p04-findelements-count-text (unconfigured) | **IDENTICAL** | `e08e36d3…ecb4` | `e08e36d3…ecb4` | 0 / 0 | 0 TODOs |
+| p34-cross-project-async-caller (unconfigured) | **IDENTICAL** | `cb77972e…acbe` | `cb77972e…acbe` | 1 / 1 | unconfigured fail-closed, 3 TODOs (helper not inlined); expected p13-shape — configured PASS is lab-proven (full-corpus-6) |
+
+Every probe reproduces byte-identically across the two back-to-back invocations; the
+newest code path (multi-project p34) is deterministic too. The run-level quality gate
+failing *identically* for unconfigured p34 is the honest fail-closed contract. Broader
+signal: full-corpus-4/5/6 each reported **0 non-deterministic** across all 36 fixtures.
+
+**Remaining** (unchanged from the baseline): true cross-machine/cross-toolchain
+reproducibility still needs a CI host run; this sweep is same-machine, same-toolchain.

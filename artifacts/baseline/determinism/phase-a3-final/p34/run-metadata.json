@@ -1,0 +1,6 @@
+{
+  "SchemaVersion": "migrator-run-determinism-metadata/v1",
+  "StartedAtUtc": "2026-10-04T06:25:24.4038433+00:00",
+  "CompletedAtUtc": "2026-10-04T06:25:26.8061492+00:00",
+  "InvocationSha256": "c9280bccc6440d25bb188ea94a2d6d2f1819a7344712f441b9c0be49291aa2a3"
+}

@@ -1,0 +1,114 @@
+{
+  "Summary": {
+    "FilesProcessed": 1,
+    "TestsFound": 1,
+    "ActionsFound": 2,
+    "MappedTargets": 0,
+    "UnmappedTargets": 0,
+    "UnsupportedActions": 0,
+    "TodoComments": 3,
+    "TargetMappingCoveragePercent": 100,
+    "TodoCommentsPerTest": 3,
+    "UnsupportedActionsPerTest": 0,
+    "GeneratedFilesWithWarnings": 1,
+    "QualityLevel": "needs_profile_iteration"
+  },
+  "TopTodoCategories": [
+    {
+      "Code": "DEPENDS_ON_UNRESOLVED_SYMBOL",
+      "Count": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\corpus\\stable\\vertical-slice\\p34-cross-project-async-caller\\Tests\\CrossProjectCallerTests.cs",
+      "ExampleLine": 25,
+      "ExampleMessage": "depends on unresolved symbol \u0027status\u0027 [MIGRATOR:UNRESOLVED_SYMBOL] [MIGRATOR-SOURCE-LINE:12]",
+      "RootCause": "A downstream statement uses a variable or page object that the migrator could not safely reconstruct.",
+      "NextAction": "Recover the page object/helper chain that defines the symbol, then add PageObject/UiTarget mappings before touching downstream assertions.",
+      "RegressionTestIdea": "Add a fixture with a recovered page object/helper assignment and assert downstream statements are unblocked.",
+      "SafetyRisk": "Low/Medium: manual TODO remains visible and should be tracked by the quality dashboard."
+    },
+    {
+      "Code": "RAW_STATEMENT",
+      "Count": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\corpus\\stable\\vertical-slice\\p34-cross-project-async-caller\\Tests\\CrossProjectCallerTests.cs",
+      "ExampleLine": 19,
+      "ExampleMessage": "raw statement \u2014 review: var status = StatusHelper.ClickAndReadStatus(WebDriver) [MIGRATOR:RAW_STATEMENT] [MIGRATOR-SOURCE-LINE:11]",
+      "RootCause": "The parser preserved an unknown source statement as a comment because no semantic migration pattern exists yet.",
+      "NextAction": "Create a recognizer or MethodMapping for the repeated source statement; keep one-off business logic as a manual-review TODO.",
+      "RegressionTestIdea": "Add a minimal source fixture reproducing this TODO category and assert the intended renderer/config behavior.",
+      "SafetyRisk": "Medium: unknown business logic may be lost if the comment is ignored."
+    },
+    {
+      "Code": "UNCATEGORIZED_TODO",
+      "Count": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\corpus\\stable\\vertical-slice\\p34-cross-project-async-caller\\Tests\\CrossProjectCallerTests.cs",
+      "ExampleLine": 22,
+      "ExampleMessage": "references unavailable symbol(s) \u0027StatusHelper\u0027, \u0027WebDriver\u0027 \u2014 verify in target [MIGRATOR:UNAVAILABLE_SYMBOLS] [MIGRATOR-SOURCE-LINE:11]",
+      "RootCause": "A project helper has no reviewed target semantics yet.",
+      "NextAction": "Add a MIGRATOR diagnostic code if this is common; otherwise create a focused regression ticket from the example line.",
+      "RegressionTestIdea": "Add a minimal source fixture reproducing this TODO category and assert the intended renderer/config behavior.",
+      "SafetyRisk": "Low/Medium: manual TODO remains visible and should be tracked by the quality dashboard."
+    }
+  ],
+  "TopUnsupportedActions": [],
+  "TopUnmappedTargets": [],
+  "RecommendedTickets": [
+    {
+      "Id": "MQ-001",
+      "Priority": "P3",
+      "Title": "Reduce TODO category \u0060DEPENDS_ON_UNRESOLVED_SYMBOL\u0060",
+      "Category": "todo-category",
+      "Occurrences": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\corpus\\stable\\vertical-slice\\p34-cross-project-async-caller\\Tests\\CrossProjectCallerTests.cs",
+      "ExampleLine": 25,
+      "RootCause": "A downstream statement uses a variable or page object that the migrator could not safely reconstruct.",
+      "NextAction": "Recover the page object/helper chain that defines the symbol, then add PageObject/UiTarget mappings before touching downstream assertions.",
+      "AcceptanceCriteria": "The category count decreases in migration-quality-dashboard.json and generated code remains compile-safe.",
+      "RegressionTestIdea": "Add a fixture with a recovered page object/helper assignment and assert downstream statements are unblocked."
+    },
+    {
+      "Id": "MQ-002",
+      "Priority": "P3",
+      "Title": "Reduce TODO category \u0060RAW_STATEMENT\u0060",
+      "Category": "todo-category",
+      "Occurrences": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\corpus\\stable\\vertical-slice\\p34-cross-project-async-caller\\Tests\\CrossProjectCallerTests.cs",
+      "ExampleLine": 19,
+      "RootCause": "The parser preserved an unknown source statement as a comment because no semantic migration pattern exists yet.",
+      "NextAction": "Create a recognizer or MethodMapping for the repeated source statement; keep one-off business logic as a manual-review TODO.",
+      "AcceptanceCriteria": "The category count decreases in migration-quality-dashboard.json and generated code remains compile-safe.",
+      "RegressionTestIdea": "Add a minimal source fixture reproducing this TODO category and assert the intended renderer/config behavior."
+    },
+    {
+      "Id": "MQ-003",
+      "Priority": "P3",
+      "Title": "Reduce TODO category \u0060UNCATEGORIZED_TODO\u0060",
+      "Category": "todo-category",
+      "Occurrences": 1,
+      "ExampleFile": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\corpus\\stable\\vertical-slice\\p34-cross-project-async-caller\\Tests\\CrossProjectCallerTests.cs",
+      "ExampleLine": 22,
+      "RootCause": "A project helper has no reviewed target semantics yet.",
+      "NextAction": "Add a MIGRATOR diagnostic code if this is common; otherwise create a focused regression ticket from the example line.",
+      "AcceptanceCriteria": "The category count decreases in migration-quality-dashboard.json and generated code remains compile-safe.",
+      "RegressionTestIdea": "Add a minimal source fixture reproducing this TODO category and assert the intended renderer/config behavior."
+    }
+  ],
+  "Guardrails": [
+    {
+      "Id": "unsafe-suppression",
+      "Status": "pass",
+      "Description": "Suppression must never turn a test into an apparently green empty test.",
+      "NextAction": "No empty-test-after-suppression TODOs were found in this run."
+    },
+    {
+      "Id": "pom-helper-recovery",
+      "Status": "pass",
+      "Description": "POM/helper recovery should use source POMs and helper bodies before raw locators or suppression.",
+      "NextAction": "No obvious POM/helper backlog was found in the top categories."
+    },
+    {
+      "Id": "selector-evidence",
+      "Status": "pass",
+      "Description": "Selector mappings require evidence from Selenium POMs, helper bodies, target HTML, or existing Playwright components.",
+      "NextAction": "All target expressions are mapped in this run."
+    }
+  ]
+}

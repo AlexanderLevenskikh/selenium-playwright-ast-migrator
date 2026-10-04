@@ -1,0 +1,61 @@
+{
+  "SchemaVersion": "source-detection/v1",
+  "GeneratedAtUtc": "2026-10-04T06:25:25.6540724+00:00",
+  "ExplicitSource": false,
+  "SelectedSource": "selenium-csharp",
+  "InputPath": "C:\\Users\\levenskikh\\Desktop\\MyProjects\\Migrator\\corpus\\stable\\vertical-slice\\p34-cross-project-async-caller",
+  "DetectedSourceId": "selenium-csharp",
+  "Confidence": "high",
+  "FilesScanned": 3,
+  "Reasons": [
+    "found .cs file (3 files)",
+    "found C# test attribute (2 files)",
+    "found OpenQA.Selenium reference (2 files)",
+    "found Selenium WebDriver/WebElement type (2 files)",
+    "found FindElement/FindElements call",
+    "found Selenium By locator usage"
+  ],
+  "Candidates": [
+    {
+      "SourceId": "selenium-csharp",
+      "Language": "csharp",
+      "Framework": "selenium",
+      "Score": 167,
+      "Confidence": "high",
+      "MatchingFiles": 3,
+      "Reasons": [
+        "found .cs file (3 files)",
+        "found C# test attribute (2 files)",
+        "found OpenQA.Selenium reference (2 files)",
+        "found Selenium WebDriver/WebElement type (2 files)",
+        "found FindElement/FindElements call",
+        "found Selenium By locator usage"
+      ],
+      "SampleFiles": [
+        "\u003CUSER_HOME\u003E\\Desktop\\MyProjects\\Migrator\\corpus\\stable\\vertical-slice\\p34-cross-project-async-caller\\Tests\\CrossProjectCallerTests.cs",
+        "\u003CUSER_HOME\u003E\\Desktop\\MyProjects\\Migrator\\corpus\\stable\\vertical-slice\\p34-cross-project-async-caller\\Tests\\Infrastructure\\LabSeleniumTestBase.cs",
+        "\u003CUSER_HOME\u003E\\Desktop\\MyProjects\\Migrator\\corpus\\stable\\vertical-slice\\p34-cross-project-async-caller\\Helpers\\StatusHelper.cs"
+      ]
+    },
+    {
+      "SourceId": "selenium-java",
+      "Language": "java",
+      "Framework": "selenium",
+      "Score": 0,
+      "Confidence": "none",
+      "MatchingFiles": 0,
+      "Reasons": [],
+      "SampleFiles": []
+    },
+    {
+      "SourceId": "selenium-python",
+      "Language": "python",
+      "Framework": "selenium",
+      "Score": 0,
+      "Confidence": "none",
+      "MatchingFiles": 0,
+      "Reasons": [],
+      "SampleFiles": []
+    }
+  ]
+}
