@@ -11,6 +11,37 @@ This project uses preview SemVer-style versions while the public API is still st
 ### Changed
 ### Fixed
 
+## [0.0.4-preview.1]
+
+### Added
+
+- New experimental `--mode config-source`: each adapter-config source-side key is
+  located in the actual Selenium source and reported as used/unused with a coverage %
+  and first occurrence `file:line`; the report (`config-source.json` + `.md`) is also
+  emitted additively into `analyze`/`migrate`/`run` report directories. Report-only,
+  never edits config or source.
+- Honest conversion metrics: `GeneratedTests` and `FullyConvertedTests` via
+  `ExecutableTargetSemantics`, plus a flattened `TotalActions`/`StructuralContainers`
+  accounting invariant; the old `SuccessfullyConvertedTests` ("no UnsupportedAction")
+  blind spot is now visible.
+- Determinism harness: `run --twice --assert-identical` compares byte-level `RunDigest`
+  digests of two full pipeline runs; non-identical output fails with exit code 6.
+
+### Changed
+
+- Inline `WebDriver.FindElement(...)` action targets resolve to the same single
+  `Page.Locator` as declaration reuse (LOC-01), across `By.Id`/`By.CssSelector`/`By.XPath`.
+- Product-state waits inferred from method name no longer emit silent guesses;
+  unproven directions surface as `ReviewRequired` for product-evidence mapping.
+
+### Fixed
+
+- `verify-project` counts `RawExpression` targets and elided locator null-checks as
+  executable, avoiding false "assertion lost" reports.
+- Stable corpus grew to 36 fixtures (cross-project async-lift caller, broken-source,
+  stale-repattern, adversarial gap fixtures); reserved-as-design behaviour fails closed
+  and is documented in the semantic-accounting ledger with `invariantHolds=True`.
+
 ## [0.3.0-preview.1]
 
 ### Breaking changes
