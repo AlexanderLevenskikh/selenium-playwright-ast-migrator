@@ -413,3 +413,22 @@ feature work.** No semantic-path expansion; the honest signal is pinned by the n
 (`FullyConvertedTests=1`, 0 TODOs), and relabelling the same actions moves
 `SemanticActions` without moving `FullyConvertedTests`. `docs/vnext/semantic-accounting.md`
 §2 reframed accordingly.
+
+## 18. Phase A.3 (NEXT-D) — agent arms C/D: measured status, no fabricated benchmark
+
+NEXT-D asked for measured data on agent arms C (handoff) and D (supervised loop) — the
+protocol (`docs/vnext/agent-benchmark-protocol.md`) was already ready. Per protocol §3 no
+number is fabricated. Outcome written to `artifacts/baseline/agent-eval/arm-status.{md,json}`:
+
+- **Arm B** (deterministic-only) is the measured floor: `full-corpus-6` 36/36, 0
+  regressions, 0 non-deterministic.
+- **Arm D** (supervised loop) has an honest pilot data point: this repository session —
+  5 Phase-A.3 commits, corpus runs 4/5/6 green, 0 no-progress stops, and **one
+  gate-caught regression** (the contract suite failed on `c702d7f` — p34 shipped without
+  its `coverage-matrix.json`/count updates; fixed by `aa48ffd`).
+- **Arm A/C** require an external agent harness intentionally out of the Phase A baseline
+  scope — `n/a`, not assessed.
+
+The p34 coverage-matrix gap also fixed the red that `c702d7f` had introduced:
+`LabScenarioContractTests` + `LabStableCorpusTests` now assert the 36-fixture /
+29-`PASS` / 22-`pr` / 36-`nightly` shape; `dotnet test` **1123/1123**.

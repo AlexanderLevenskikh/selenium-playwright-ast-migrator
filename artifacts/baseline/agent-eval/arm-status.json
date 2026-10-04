@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "agent-benchmark-protocol/v1",
+  "scope": "corpus/stable/vertical-slice",
+  "generatedAtNote": "Phase A.3 (NEXT-D) — honest status record. No benchmark result is fabricated: arms not executed are 'n/a', per protocol section 3.",
+  "arms": [
+    {
+      "id": "A-from-scratch",
+      "executed": false,
+      "measured": "n/a",
+      "notes": "Requires an external agent harness (selenium-pw-migrator disabled, source->target by hand). Intentionally out of Phase A baseline scope (protocol section 6)."
+    },
+    {
+      "id": "B-deterministic-only",
+      "executed": true,
+      "measured": "36/36 conforming on the full stable corpus via 'run' with agent-authored adapter-config (artifacts/lab/full-corpus-6): 29 PASS, 5 UNSUPPORTED_AS_EXPECTED, 1 INFRASTRUCTURE_FAILURE (p24b sabotage), 1 SOURCE_INVALID (p30). Generated-code compile 0 errors; run-level quality gates (todoMax/unmappedMax/unsupportedMax) enforced per fixture; 0 regressions, 0 non-deterministic.",
+      "evidence": [
+        "artifacts/lab/full-corpus-6",
+        "artifacts/baseline/accounting/analyze/report.json",
+        "docs/vnext/phase-a-findings.md"
+      ]
+    },
+    {
+      "id": "C-handoff",
+      "executed": false,
+      "measured": "n/a",
+      "notes": "Protocol artifacts for the handoff arm are ready — agent-next-task.md is produced for every lab fixture (priority/category/exact-task/root-causes/do-not-do/acceptance criteria), and this session performed handoff-driven repairs (NEXT-B/-C, G3). But a controlled 'agent reads config/manifest, delegates to run, fixes residual' triple run needs an external agent harness and was not measured; per protocol section 5 its outcome must not be declared."
+    },
+    {
+      "id": "D-supervised-loop",
+      "executed": true,
+      "measured": "Pilot data point only — this repository session acted as a supervised-task loop (single pilot, not the full multi-triple benchmark). Evidence: 5 Phase A.3 commits (2d0dc56, 3d37277, 232386c, c702d7f, aa48ffd), full-corpus lab runs full-corpus-4/5/6 (each 100% conforming), 0 no-progress stops since the plan lock, and 1 harness-caught regression (the contract suite caught that c702d7f shipped with coverage-matrix/35-fixture counts un-updated; fixed in aa48ffd). Tool-call and token counts: n/a (provider does not expose them).",
+      "evidence": [
+        "docs/vnext/phase-a-findings.md",
+        "corpus/stable/vertical-slice/coverage-matrix.json",
+        "docs/vnext/agent-benchmark-protocol.md"
+      ]
+    }
+  ],
+  "thresholdNote": "An arm counts as 'pass' only when it meets protocol 5(b) quality budget AND 5(c) assert preservation; (a) compile is a precondition. Arms A and C are not assessed here for lack of an executed agent harness."
+}
