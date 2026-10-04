@@ -1,13 +1,13 @@
 {
   "schemaVersion": "migrator-lab-coverage/v1",
-  "scenarioCount": 35,
+  "scenarioCount": 36,
   "suiteCounts": {
     "smoke": 9,
-    "pr": 21,
-    "nightly": 35
+    "pr": 22,
+    "nightly": 36
   },
   "expectedStatusCounts": {
-    "PASS": 28,
+    "PASS": 29,
     "INFRASTRUCTURE_FAILURE": 1,
     "UNSUPPORTED_AS_EXPECTED": 5,
     "SOURCE_INVALID": 1
@@ -34,7 +34,8 @@
     ],
     "async-and-lifecycle": [
       "p13-async-lift-simple",
-      "p14-async-lift-setup-base"
+      "p14-async-lift-setup-base",
+      "p34-cross-project-async-caller"
     ],
     "wait-semantics": [
       "p15-webdriverwait-visible",
@@ -570,6 +571,22 @@
         "WebDriverMimicry",
         "UnresolvedSymbolTodo",
         "NoMisfire"
+      ],
+      "mustPassTests": 1
+    },
+    {
+      "id": "p34-cross-project-async-caller",
+      "expectedStatus": "PASS",
+      "suites": [
+        "pr",
+        "nightly"
+      ],
+      "features": [
+        "AsyncLift",
+        "CrossProject",
+        "ProjectReference",
+        "FindElement",
+        "Click"
       ],
       "mustPassTests": 1
     }

@@ -53,10 +53,17 @@ would claim 38/38.
 
 ### 2. Semantic vs syntax coverage
 
-Only 45/150 actions (~30%) are recognized by the narrow Semantic path
-(Click/SendKeys/Assert.That/AreEqual on resolved types). 104 go through syntax
-recognizers, which is where conservative heuristics live. The unconfigured corpus is
-overwhelmingly a *syntax-shaped* workload.
+45/150 actions (~30%) carry the `Semantic` confidence label (Click/SendKeys/Assert.That/
+AreEqual on resolved types); 105 go through the SyntaxFallback recognizers, which is
+where conservative heuristics live. The unconfigured corpus is overwhelmingly a
+*syntax-shaped* workload. **This split is a confidence label, not a correctness
+signal.** The heavy-SyntaxFallback files (p06, p04, p19, p01, p15, …) are fully
+converted (`FullyConvertedTests=1`) with 0 TODOs: the syntax recognizers already emit
+executable Playwright. The honest test-level signal is `FullyConvertedTests` (via
+`ExecutableTargetSemantics`), computed independently of the buckets; chasing a bigger
+"Semantic %" by relabelling actions would change a statistic without changing generated
+code — metric gaming, which the AGENTS hard rules forbid (Phase A.3 NEXT-C conclusion,
+pinned by `SemanticLabelHonestyTests`).
 
 ### 3. Per-file shape of the residual
 

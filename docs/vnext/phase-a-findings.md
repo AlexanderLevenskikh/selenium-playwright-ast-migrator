@@ -390,3 +390,26 @@ noted in the fixture's own description.
 - Unconfigured ledger (36 fixtures/38 files/39 tests): totals moved to 150 actions,
   45 semantic, 105 syntax, 55 TODOs, `invariantHolds=True`; p34 reproduces p13's honest
   fail-closed shape on the unconfigured path (1 test, todo 3, fully-converted 0).
+
+## 17. Phase A.3 (NEXT-C) — recon result: reframed as honest accounting
+
+The NEXT-C gate ("semantic path narrowness §2/§5, syntax-recognizer dominance") was
+investigated before any code change. The recon (baseline explain-todo + per-file ledger):
+
+- The heavy-SyntaxFallback files (p06 SF=8, p19 SF=7, p04/18 SF=5, p01/15/31 …) are all
+  `fullyConvertedTests=1, todo=0` **PASS** scenarios: their SyntaxFallback recognizers
+  already emit executable Playwright. The remaining todo/unmapped debt (55 TODOs,
+  3 unmapped, 9 `MANUAL_REVIEW`, 15 `UNAVAILABLE_SYMBOLS root:WebDriver`) is entirely
+  intentional fail-closed: unmapped project helpers (p13/p34), by-design/adversarial
+  scenarios (p26–p29/p33, p30), and `RequiresReview` mappings (p09).
+- Therefore Semantic vs SyntaxFallback is a *confidence label* (ReportBuilder counts
+  `Confidence == Semantic`), **not** a correctness signal. Relabelling actions to inflate
+  the ~30% `Semantic` share would change a statistic without changing generated code —
+  metric gaming, which the AGENTS hard rules forbid.
+
+**Decision (owner-confirmed 2026-10-04): NEXT-C is concluded as honest accounting, not
+feature work.** No semantic-path expansion; the honest signal is pinned by the new
+`SemanticLabelHonestyTests` (2/2): a SyntaxFallback body is still fully converted
+(`FullyConvertedTests=1`, 0 TODOs), and relabelling the same actions moves
+`SemanticActions` without moving `FullyConvertedTests`. `docs/vnext/semantic-accounting.md`
+§2 reframed accordingly.

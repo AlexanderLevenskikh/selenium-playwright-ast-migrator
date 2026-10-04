@@ -16,11 +16,11 @@ public sealed class LabScenarioContractTests
         var result = ScenarioCatalog.Load(root);
 
         Assert.False(result.HasErrors, BuildFailureMessage(result));
-        Assert.Equal(35, result.Entries.Length);
-        Assert.Equal(35, result.ValidCount);
+        Assert.Equal(36, result.Entries.Length);
+        Assert.Equal(36, result.ValidCount);
         Assert.Equal(0, result.PlannedCount);
-        Assert.Equal(35, result.ReadyCount);
-        Assert.Equal(35, result.Entries.Select(entry => entry.Scenario!.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(36, result.ReadyCount);
+        Assert.Equal(36, result.Entries.Select(entry => entry.Scenario!.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
     }
 
     [Fact]
@@ -28,14 +28,14 @@ public sealed class LabScenarioContractTests
     {
         var scenarios = ScenarioCatalog.Load(VerticalSliceRoot()).Entries.Select(entry => entry.Scenario!).ToArray();
 
-        Assert.Equal(28, scenarios.Count(scenario => scenario.Expected.Status == ScenarioStatus.Pass));
+        Assert.Equal(29, scenarios.Count(scenario => scenario.Expected.Status == ScenarioStatus.Pass));
         Assert.Equal(5, scenarios.Count(scenario => scenario.Expected.Status == ScenarioStatus.UnsupportedAsExpected));
         Assert.Single(scenarios, scenario => scenario.Expected.Status == ScenarioStatus.InfrastructureFailure);
         Assert.Single(scenarios, scenario => scenario.Expected.Status == ScenarioStatus.SourceInvalid);
         Assert.All(scenarios, scenario => Assert.Contains("stable", scenario.Tags));
         Assert.All(scenarios, scenario => Assert.Contains("nightly", scenario.Tags));
         Assert.Equal(9, scenarios.Count(scenario => scenario.Tags.Contains("smoke")));
-        Assert.Equal(21, scenarios.Count(scenario => scenario.Tags.Contains("pr")));
+        Assert.Equal(22, scenarios.Count(scenario => scenario.Tags.Contains("pr")));
         Assert.Contains(scenarios, scenario => scenario.Tags.Contains("real-failure"));
         Assert.Contains(scenarios, scenario => scenario.Tags.Contains("msbuild"));
         Assert.Contains(scenarios, scenario => scenario.Tags.Contains("runtime-pass"));
