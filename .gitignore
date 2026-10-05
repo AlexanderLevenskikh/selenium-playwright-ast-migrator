@@ -148,6 +148,15 @@ yarn-error.log*
 pnpm-debug.log*
 .pnpm-store/
 
+# Electron desktop app build outputs
+desktop/dist/
+desktop/dist-electron/
+desktop/release/
+desktop/.vite/
+
+# Generated sample artifacts used by desktop smoke/UI checks (regenerate with the CLI)
+examples/simple-example-out/
+
 # Environment files
 .env
 .env.*

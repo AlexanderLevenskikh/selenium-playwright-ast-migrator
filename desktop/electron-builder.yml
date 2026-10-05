@@ -1,0 +1,20 @@
+appId: io.github.alexanderlevenskikh.selenium-pw-migrator.desktop
+productName: Selenium Playwright Migrator
+directories:
+  output: release
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+asar: true
+win:
+  target:
+    - nsis
+nsis:
+  artifactName: SeleniumPlaywrightMigrator-Setup-${version}-${arch}.${ext}
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Selenium Playwright Migrator
