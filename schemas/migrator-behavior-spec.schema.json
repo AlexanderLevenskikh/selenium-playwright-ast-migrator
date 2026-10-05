@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/main/schemas/migrator-behavior-spec.schema.json",
+  "title": "Migrator behavior scenario spec (migrator-behavior-spec/v1)",
+  "description": "Declares one behavior scenario: the deterministic application state (observables) that must hold after its actions run. The spec is the contract the behavioral gate enforces — a spec without observables is invalid (it could never be honestly accepted), and unknown observable kinds are refused.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "scenarioId",
+    "observables"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "migrator-behavior-spec/v1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "title": {
+      "type": "string"
+    },
+    "scenarioId": {
+      "type": "string",
+      "description": "Id of the lab corpus scenario that executes this behavior (source + migrated target)."
+    },
+    "preconditions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "disallowedSideEffects": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "observables": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/observable"
+      }
+    }
+  },
+  "$defs": {
+    "observable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "kind",
+        "path",
+        "expected"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "dom-text",
+            "dom-visible",
+            "dom-checked",
+            "dom-count",
+            "event-sequence"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "description": "DOM element id or route the observable refers to."
+        },
+        "expected": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

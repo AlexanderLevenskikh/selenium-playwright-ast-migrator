@@ -49,6 +49,49 @@ jobs:
             artifacts/lab/ci-smoke-triage
           if-no-files-found: warn
 
+  behavior:
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+          cache: true
+          cache-dependency-path: "**/*.csproj"
+      - name: Build
+        run: dotnet build Migrator.sln -c Release
+      - name: Install Playwright Chromium
+        shell: pwsh
+        run: ./Migrator.Tests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+      - name: Run behavior scenarios
+        run: >-
+          dotnet run --project Migrator.Cli -c Release --no-build --
+          lab run --suite vertical --corpus ./corpus/stable/vertical-slice
+          --project p15-webdriverwait-visible,p06-checkbox-radio-selected,p04-findelements-count-text
+          --out ./artifacts/lab/ci-behavior --timeout-seconds 600 --configuration Release
+      - name: Apply behavior gate
+        run: >-
+          dotnet run --project Migrator.Cli -c Release --no-build --
+          lab behavior --run ./artifacts/lab/ci-behavior --specs ./corpus/behavior-scenarios
+          --out ./artifacts/lab/ci-behavior
+      - name: Triage behavior failures
+        if: failure()
+        run: >-
+          dotnet run --project Migrator.Cli -c Release --no-build --
+          lab triage --run ./artifacts/lab/ci-behavior --corpus ./corpus/stable/vertical-slice
+          --repo . --out ./artifacts/lab/ci-behavior-triage
+      - name: Upload behavior report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migrator-lab-behavior
+          path: |
+            artifacts/lab/ci-behavior
+            artifacts/lab/ci-behavior-triage
+          if-no-files-found: warn
+
   nightly:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest

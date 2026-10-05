@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "migrator-behavior-spec/v1",
+  "id": "b01-delayed-appearance",
+  "title": "Delayed appearance after click is preserved (wait is not elided)",
+  "scenarioId": "p15-webdriverwait-visible",
+  "preconditions": [
+    "The Save button starts hidden and appears only after the app settles (deterministic delay)."
+  ],
+  "disallowedSideEffects": [
+    "The migrated test must not click before the button is actionable.",
+    "The migrated test must not poll forever (no unbounded retry loops)."
+  ],
+  "observables": [
+    {
+      "key": "save-visible",
+      "kind": "dom-visible",
+      "path": "save",
+      "expected": "true"
+    },
+    {
+      "key": "save-enabled",
+      "kind": "dom-visible",
+      "path": "save",
+      "expected": "true"
+    },
+    {
+      "key": "toast-text",
+      "kind": "dom-text",
+      "path": "toast",
+      "expected": "Saved"
+    }
+  ]
+}

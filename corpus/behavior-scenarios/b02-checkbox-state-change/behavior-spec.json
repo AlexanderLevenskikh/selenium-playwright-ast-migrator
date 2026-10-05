@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "migrator-behavior-spec/v1",
+  "id": "b02-checkbox-state-change",
+  "title": "Checkbox state change is observed through a real assertion",
+  "scenarioId": "p06-checkbox-radio-selected",
+  "preconditions": [
+    "The checkbox starts unchecked; toggling it flips the checked state and the toggle label."
+  ],
+  "disallowedSideEffects": [
+    "The migrated test must not drop the checked-state assertion.",
+    "The migrated test must not re-mount the app (state must persist across action and assertion)."
+  ],
+  "observables": [
+    {
+      "key": "checkbox-checked",
+      "kind": "dom-checked",
+      "path": "agree",
+      "expected": "true"
+    },
+    {
+      "key": "toggle-label",
+      "kind": "dom-text",
+      "path": "agree-label",
+      "expected": "Agreed"
+    }
+  ]
+}

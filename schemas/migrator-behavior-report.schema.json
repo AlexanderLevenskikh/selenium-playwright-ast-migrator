@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/main/schemas/migrator-behavior-report.schema.json",
+  "title": "Migrator behavior gate report (migrator-behavior/v1)",
+  "description": "Outcome of the behavioral gate. Deterministic and machine-checkable: accepted only when every declared observable was satisfied and observed; mismatch/not-observed rejects; an unexecuted scenario blocks; zero checks rejects.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "SchemaVersion",
+    "Status",
+    "Scenarios",
+    "Checks",
+    "Passed",
+    "Mismatch",
+    "NotObserved",
+    "Blockers",
+    "ChecksDetail",
+    "Sha256"
+  ],
+  "properties": {
+    "SchemaVersion": {
+      "const": "migrator-behavior/v1"
+    },
+    "Status": {
+      "type": "string",
+      "enum": [
+        "accepted",
+        "rejected",
+        "blocked"
+      ]
+    },
+    "Scenarios": {
+      "type": "integer"
+    },
+    "Checks": {
+      "type": "integer"
+    },
+    "Passed": {
+      "type": "integer"
+    },
+    "Mismatch": {
+      "type": "integer"
+    },
+    "NotObserved": {
+      "type": "integer"
+    },
+    "Blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ChecksDetail": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/check"
+      }
+    },
+    "Sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ScenarioId",
+        "ScenarioTitle",
+        "ObservableKey",
+        "Kind",
+        "Path",
+        "Expected",
+        "Status",
+        "Actual",
+        "Reason"
+      ],
+      "properties": {
+        "ScenarioId": {
+          "type": "string"
+        },
+        "ScenarioTitle": {
+          "type": "string"
+        },
+        "ObservableKey": {
+          "type": "string"
+        },
+        "Kind": {
+          "type": "string",
+          "enum": [
+            "dom-text",
+            "dom-visible",
+            "dom-checked",
+            "dom-count",
+            "event-sequence"
+          ]
+        },
+        "Path": {
+          "type": "string"
+        },
+        "Expected": {
+          "type": "string"
+        },
+        "Status": {
+          "type": "string",
+          "enum": [
+            "Passed",
+            "Mismatch",
+            "NotObserved"
+          ]
+        },
+        "Actual": {
+          "type": ["string", "null"]
+        },
+        "Reason": {
+          "type": ["string", "null"]
+        }
+      }
+    }
+  }
+}

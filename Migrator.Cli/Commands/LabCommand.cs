@@ -1,5 +1,7 @@
 using System.Net.Sockets;
 using System.Reflection;
+using System.Text.Json;
+using Migrator.Core.BehaviorGate;
 using Migrator.Lab;
 using Migrator.Lab.Contracts;
 using Migrator.Lab.Execution;
@@ -41,6 +43,8 @@ internal static class LabCommand
             return RunPromote(args.Skip(1).ToArray());
         if (subcommand == "release-gate")
             return RunReleaseGate(args.Skip(1).ToArray());
+        if (subcommand == "behavior")
+            return RunBehavior(args.Skip(1).ToArray());
 
         if (args.Skip(1).Any(IsHelp))
         {
@@ -690,6 +694,159 @@ internal static class LabCommand
         }
     }
 
+    static int RunBehavior(string[] args)
+    {
+        if (args.Any(IsHelp))
+        {
+            WriteBehaviorHelp();
+            return LabExitCodes.Accepted;
+        }
+
+        string? runPath = null;
+        string? specsPath = null;
+        var outDirectory = Path.Combine("artifacts", "lab", "behavior");
+        for (var index = 0; index < args.Length; index++)
+        {
+            switch (args[index])
+            {
+                case "--run":
+                    if (!TryReadValue(args, ref index, out runPath))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--specs":
+                    if (!TryReadValue(args, ref index, out specsPath))
+                        return LabExitCodes.LabError;
+                    break;
+                case "--out":
+                    if (!TryReadValue(args, ref index, out outDirectory))
+                        return LabExitCodes.LabError;
+                    break;
+                default:
+                    Console.Error.WriteLine($"Unknown lab behavior option: {args[index]}");
+                    return LabExitCodes.LabError;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(runPath) || string.IsNullOrWhiteSpace(specsPath))
+        {
+            Console.Error.WriteLine("lab behavior requires --run <lab run directory|lab-summary.json> and --specs <behavior spec directory>.");
+            return LabExitCodes.LabError;
+        }
+
+        try
+        {
+            var loader = new BehaviorSpecLoader();
+            var specs = loader.LoadDirectory(specsPath);
+
+            LabSuiteRunResult? run = null;
+            var blockers = new List<string>();
+            try
+            {
+                run = LabRunArtifactLoader.LoadRun(runPath);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or JsonException)
+            {
+                blockers.Add($"lab run could not be loaded ({runPath}): {ex.Message}");
+            }
+
+            var checks = new List<BehaviorCheckResult>();
+            if (run != null)
+            {
+                foreach (var spec in specs)
+                {
+                    var project = run.Projects.FirstOrDefault(p => string.Equals(p.Id, spec.ScenarioId, StringComparison.OrdinalIgnoreCase));
+                    if (project == null)
+                    {
+                        foreach (var observable in spec.Observables)
+                            checks.Add(NotObserved(spec, observable, $"behavior scenario '{spec.ScenarioId}' is not present in the run — the spec's observables were never executed"));
+                        continue;
+                    }
+
+                    if (project.ActualStatus == ScenarioStatus.InfrastructureFailure)
+                    {
+                        blockers.Add($"{spec.Id} ({spec.ScenarioId}): infrastructure failure — execution could not complete");
+                        continue;
+                    }
+
+                    var (status, actual, reason) = MapStatus(project.ActualStatus);
+                    foreach (var observable in spec.Observables)
+                    {
+                        checks.Add(new BehaviorCheckResult(
+                            ScenarioId: spec.Id,
+                            ScenarioTitle: spec.Title,
+                            ObservableKey: observable.Key,
+                            Kind: observable.Kind,
+                            Path: observable.Path,
+                            Expected: observable.Expected,
+                            Status: status,
+                            Actual: status == BehaviorCheckStatus.Passed ? observable.Expected : actual,
+                            Reason: status == BehaviorCheckStatus.Passed ? null : reason));
+                    }
+                }
+            }
+
+            var report = BehaviorGateEvaluator.Evaluate(checks, blockers);
+
+            Directory.CreateDirectory(outDirectory);
+            File.WriteAllText(Path.Combine(outDirectory, "behavior-report.json"), BehaviorReportWriter.ToJson(report));
+            File.WriteAllText(Path.Combine(outDirectory, "behavior-report.md"), BehaviorReportWriter.ToMarkdown(report));
+
+            Console.WriteLine($"Migrator Lab behavior gate: {report.Status.ToUpperInvariant()} — {report.Scenarios} scenario(s), {report.Checks} check(s) (passed {report.Passed}, mismatch {report.Mismatch}, not-observed {report.NotObserved}).");
+            foreach (var blocker in report.Blockers)
+                Console.WriteLine($"  blocked: {blocker}");
+            foreach (var failed in report.ChecksDetail.Where(c => c.Status != BehaviorCheckStatus.Passed))
+                Console.WriteLine($"  {failed.ScenarioId}:{failed.ObservableKey} -> {failed.Status} {(string.IsNullOrWhiteSpace(failed.Reason) ? string.Empty : "— " + failed.Reason)}");
+            Console.WriteLine($"Reports: {Path.GetFullPath(outDirectory)}");
+
+            return report.Status switch
+            {
+                BehaviorGateContract.Accepted => LabExitCodes.Accepted,
+                BehaviorGateContract.Rejected => LabExitCodes.Regression,
+                _ => LabExitCodes.InfrastructureFailure
+            };
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidDataException)
+        {
+            Console.Error.WriteLine($"Lab behavior failed before a report could be completed: {ex.Message}");
+            return LabExitCodes.LabError;
+        }
+    }
+
+    static (BehaviorCheckStatus Status, string? Actual, string? Reason) MapStatus(ScenarioStatus status) => status switch
+    {
+        ScenarioStatus.Pass or ScenarioStatus.PassWithWarnings => (BehaviorCheckStatus.Passed, null, null),
+        ScenarioStatus.Regression => (BehaviorCheckStatus.Mismatch, null, $"scenario status is {status}: the migrated test regressed its observable behavior"),
+        ScenarioStatus.UnsupportedAsExpected => (BehaviorCheckStatus.Mismatch, null, $"scenario status is {status}: a behavior scenario that must run was left unsupported"),
+        ScenarioStatus.MigratorFailure => (BehaviorCheckStatus.NotObserved, null, $"scenario status is {status}: no migrated behavior ran"),
+        ScenarioStatus.SourceInvalid => (BehaviorCheckStatus.NotObserved, null, $"scenario status is {status}: the source behavior could not be validated"),
+        ScenarioStatus.NonDeterministic => (BehaviorCheckStatus.NotObserved, null, $"scenario status is {status}: no reproducible observable could be collected"),
+        _ => (BehaviorCheckStatus.NotObserved, null, $"scenario status is {status}")
+    };
+
+    static BehaviorCheckResult NotObserved(BehaviorScenarioSpec spec, BehaviorObservableSpec observable, string reason) =>
+        new(
+            ScenarioId: spec.Id,
+            ScenarioTitle: spec.Title,
+            ObservableKey: observable.Key,
+            Kind: observable.Kind,
+            Path: observable.Path,
+            Expected: observable.Expected,
+            Status: BehaviorCheckStatus.NotObserved,
+            Actual: null,
+            Reason: reason);
+
+    static void WriteBehaviorHelp()
+    {
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  selenium-pw-migrator lab behavior --run <lab run> --specs <behavior spec dir> [--out <directory>]");
+        Console.WriteLine();
+        Console.WriteLine("Consumes a lab run (produced by `lab run`) against the behavior scenario corpus and");
+        Console.WriteLine("applies the BehaviorGateEvaluator. A behavior scenario that regressed, was left unsupported,");
+        Console.WriteLine("or simply absent from the run rejects the gate; an infrastructure failure blocks it; a run");
+        Console.WriteLine("with all declared observables satisfied accepts it.");
+        Console.WriteLine("Exit codes: 0=accepted, 10=rejected (behavior regression), 13=blocked (infrastructure), 15=lab error.");
+    }
+
     static LabRunOptions? ParseRunOptions(
         string[] args,
         bool allowSuiteOption = true,
@@ -1057,6 +1214,7 @@ internal static class LabCommand
         Console.WriteLine("  selenium-pw-migrator lab triage --run <run> [options]");
         Console.WriteLine("  selenium-pw-migrator lab promote --repro <path> --level <level> [options]");
         Console.WriteLine("  selenium-pw-migrator lab release-gate --stable-run <run> --contract-baseline <baseline> --real-evidence <json> [options]");
+        Console.WriteLine("  selenium-pw-migrator lab behavior --run <run> --specs <dir> [options]");
         Console.WriteLine("  selenium-pw-migrator lab validate [options]");
         Console.WriteLine("  selenium-pw-migrator lab list [options]");
         Console.WriteLine("  selenium-pw-migrator lab app serve [options]");

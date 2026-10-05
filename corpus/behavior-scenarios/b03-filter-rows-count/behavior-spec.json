@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "migrator-behavior-spec/v1",
+  "id": "b03-filter-rows-count",
+  "title": "Filtering changes the visible row set (element count is asserted)",
+  "scenarioId": "p04-findelements-count-text",
+  "preconditions": [
+    "The table has exactly four rows; typing a filter term leaves exactly the matching rows."
+  ],
+  "disallowedSideEffects": [
+    "The migrated test must not count rows before the filter applied.",
+    "The migrated test must not assert a hard-coded total that ignores the filter."
+  ],
+  "observables": [
+    {
+      "key": "filtered-row-count",
+      "kind": "dom-count",
+      "path": "row",
+      "expected": "1"
+    },
+    {
+      "key": "filtered-row-text",
+      "kind": "dom-text",
+      "path": "row",
+      "expected": "Match"
+    }
+  ]
+}
