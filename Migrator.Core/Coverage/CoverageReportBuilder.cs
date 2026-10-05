@@ -432,6 +432,11 @@ public static class CoverageReportBuilder
         return string.IsNullOrEmpty(name) ? inputRootNormalized : name;
     }
 
+    /// <summary>
+    /// Canonical relative path: always forward slashes, on every platform. Relative paths in
+    /// the report must stay diffable across machines (a Linux run cannot emit '\' just because
+    /// a discovered path was passed in Windows style), so stray backslashes are normalized too.
+    /// </summary>
     static string NormalizeRelative(string relative) =>
-        relative.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
+        relative.Replace('\\', '/');
 }

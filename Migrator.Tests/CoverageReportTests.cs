@@ -17,7 +17,11 @@ namespace Migrator.Tests;
 /// </summary>
 public sealed class CoverageReportTests
 {
-    const string InputRoot = @"C:\migrator-test-input";
+    // Platform-independent input root: a real, OS-correct temporary directory. Only the
+    // relative paths ever reach the report, so the fixture itself must not hardcode a
+    // Windows drive path (that breaks GetFullPath/GetRelativePath on every other OS).
+    static string InputRoot =>
+        Path.Combine(Path.GetTempPath(), "migrator-coverage-tests");
     const string Backend = "playwright-dotnet";
 
     [Fact]
@@ -262,7 +266,7 @@ public sealed class CoverageReportTests
 
         var report = Report(
             new[] { Real("Tests/T.cs", "T", "T", target) },
-            discoveredButUnsurveyed: new[] { @"C:\migrator-test-input\Tests\NotASurveyedFixture.cs" });
+            discoveredButUnsurveyed: new[] { Path.Combine(InputRoot, "Tests", "NotASurveyedFixture.cs") });
 
         Assert.False(report.DetectionComplete);
         Assert.Equal("partial", report.SurveyStatus);
@@ -289,15 +293,22 @@ public sealed class CoverageReportTests
         var report = Report(
             new[] { Real(@"Tests\P.cs", "P", "P", target) },
             excludedFiles: excluded,
-            discoveredButUnsurveyed: new[] { @"C:\migrator-test-input\Tests\Gap.cs" });
+            discoveredButUnsurveyed: new[] { Path.Combine(InputRoot, "Tests", "Gap.cs") });
 
         var json = CoverageReportWriter.ToJson(report);
 
         Assert.Equal("Tests/P.cs", report.FilesDetail[0].RelativePath);
-        Assert.All(report.FilesDetail, f => Assert.False(f.RelativePath.Contains("\\migrator-test-input", StringComparison.Ordinal)));
-        Assert.All(report.FilesDetail, f => Assert.False(f.RelativePath.StartsWith(@"/", StringComparison.Ordinal)));
-        Assert.False(json.Contains("C:/migrator-test-input", StringComparison.Ordinal));
-        Assert.False(json.Contains("C:\\migrator-test-input", StringComparison.Ordinal));
+        foreach (var f in report.FilesDetail)
+        {
+            // The contract: relative only, never rooted, and the input root never leaks into
+            // the report regardless of the platform the report was produced on.
+            Assert.False(Path.IsPathRooted(f.RelativePath));
+            Assert.False(f.RelativePath.Contains("migrator-coverage-tests", StringComparison.Ordinal));
+        }
+        // The full input root (either separator style) must never appear in the serialized
+        // report; SourceRootRelative is only the root's leaf label, which is allowed.
+        Assert.False(json.Contains(InputRoot, StringComparison.Ordinal));
+        Assert.False(json.Contains(InputRoot.Replace('\\', '/'), StringComparison.Ordinal));
     }
 
     [Fact]
