@@ -302,6 +302,8 @@ public class DocumentationPublicReadinessTests
             .Where(path => !HasPathSegment(path, "migration"))
             .Where(path => !HasPathSegment(path, "TestResults"))
             .Where(path => !HasPathSegment(path, "artifacts"))
+            .Where(path => !HasPathSegment(path, "node_modules")) // third-party deps, not public readiness docs
+            .Where(path => !HasPathSegment(path, "release")) // electron-builder output (win-unpacked, builder-debug.yml)
             .Where(path =>
                 path.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
                 path.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase) ||
