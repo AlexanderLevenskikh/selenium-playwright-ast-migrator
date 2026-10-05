@@ -48,4 +48,10 @@
     <None Include="performance-budgets.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\corpus\regression-counterexamples\**\*.*"
+          Link="RegressionCounterexamples\%(RecursiveDir)%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

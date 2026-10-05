@@ -1,0 +1,116 @@
+{
+  "$schema": "https://raw.githubusercontent.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/main/schemas/migrator-counterexamples.schema.json",
+  "schemaVersion": "migrator-counterexamples/v1",
+  "description": "Catalog of minimal regression counterexamples: each entry is a tiny Selenium C# fixture whose migration must keep a documented invariant, plus the current honest verdict. status=guarded means the invariant IS enforced by the migration today; status=known-gap means the invariant is NOT yet enforced and the residual must stay visible (review/unsupported), never silently closed.",
+  "counterexamples": [
+    {
+      "id": "loc-01-xpath-lossless",
+      "defectClass": "LOC-01",
+      "origin": "docs/vnext/correctness-risk-areas.md (LOC-01) — locator rewording must be lossless",
+      "title": "XPath locator rewording is lossless",
+      "property": "A By.XPath(...) source locator must be re-expressed in the target exactly (same selector), never dropped or replaced by an empty/guessed locator.",
+      "whyItIsADefect": "A rewritten-but-different selector silently changes which elements the test controls; this is the classic silent locator regression.",
+      "status": "guarded",
+      "sourceFile": "loc-01-xpath-lossless/Source.cs",
+      "verdict": {
+        "mustProduce": "transformed",
+        "mustContain": [
+          "xpath=//div[@id='main']"
+        ],
+        "mustNotContain": [
+          "By.XPath"
+        ]
+      }
+    },
+    {
+      "id": "asrt-03-assert-multiple",
+      "defectClass": "ASRT-03",
+      "origin": "docs/vnext/correctness-risk-areas.md (ASRT-03) — grouped fluent assertions must not be silently dropped",
+      "title": "Assert.Multiple wrapper is never silently elided into nothing",
+      "property": "A grouped Assert.Multiple body must survive the migration: the wrapper itself is reviewable(elided to a comment) and every nested assertion is individually accounted for — none silently dropped.",
+      "whyItIsADefect": "Eliding the whole Assert.Multiple to nothing would make every assertion inside disappear while the test still 'passes' the build.",
+      "status": "guarded",
+      "sourceFile": "asrt-03-assert-multiple/Source.cs",
+      "verdict": {
+        "mustProduce": "requires_review",
+        "mustContain": [
+          "[MIGRATOR:ASSERT_MULTIPLE]"
+        ],
+        "mustNotContain": [
+          "await Expect("
+        ]
+      }
+    },
+    {
+      "id": "wait-03-custom-condition",
+      "defectClass": "WAIT-02 / WAIT-03",
+      "origin": "docs/vnext/correctness-risk-areas.md (WAIT-02/03) — custom waits must not become silent no-ops",
+      "title": "Custom WaitUntil condition is surfaced for mapping, not dropped",
+      "property": "A project helper that performs a wait must not vanish: it either maps to a Playwright auto-wait with a concrete condition, or remains an explicit reviewable construct.",
+      "whyItIsADefect": "A wait that silently disappears changes timing semantics (the test no longer waits for the product state it depends on).",
+      "status": "guarded",
+      "sourceFile": "wait-03-custom-condition/Source.cs",
+      "verdict": {
+        "mustProduce": "partial",
+        "mustContain": [
+          "[MIGRATOR:HELPER_METHOD_REQUIRES_MAPPING]"
+        ],
+        "mustNotContain": []
+      }
+    },
+    {
+      "id": "act-02-actions-api",
+      "defectClass": "ACT-02",
+      "origin": "docs/vnext/correctness-risk-areas.md (ACT-02) — Actions API has side effects and is not auto-mapped",
+      "title": "OpenQA.Selenium.Interactions chain is a reviewable construct, not executable target code",
+      "property": "An Actions(...).Build()/Perform() chain is preserved as an explicit reviewable construct (comment + TODO), never emitted as a fabricated Playwright action.",
+      "whyItIsADefect": "Actions chains carry ordering and side effects; inventing an executable equivalent (e.g. a bare Click) would change behavior.",
+      "status": "guarded",
+      "sourceFile": "act-02-actions-api/Source.cs",
+      "verdict": {
+        "mustProduce": "partial",
+        "mustContain": [
+          "[MIGRATOR:MANUAL_REVIEW]"
+        ],
+        "mustNotContain": []
+      }
+    },
+    {
+      "id": "js-01-js-executor",
+      "defectClass": "JS-01",
+      "origin": "docs/vnext/correctness-risk-areas.md (JS) — raw JavaScript execution is side-effectful",
+      "title": "IJavaScriptExecutor scripts stay reviewable unless explicitly mapped",
+      "property": "An ExecuteScript(...) call must not be silently counted as transformed or dropped; without a mapped Playwright.Evaluate it is a reviewable residual.",
+      "whyItIsADefect": "JavaScript with closure/scope side effects cannot be proven equivalent to any fabricated target call.",
+      "status": "guarded",
+      "sourceFile": "js-01-js-executor/Source.cs",
+      "verdict": {
+        "mustProduce": "requires_review",
+        "mustContain": [
+          "[MIGRATOR:MANUAL_REVIEW]"
+        ],
+        "mustNotContain": [
+          "Page.Evaluate"
+        ]
+      }
+    },
+    {
+      "id": "coll-01-refresh-inside-loop",
+      "defectClass": "LOC-01 / loop-snapshot",
+      "origin": "docs/vnext/correctness-risk-areas.md (LOC-01) + corpus p31 (stale re-query in a loop)",
+      "title": "Collection re-query inside a foreach is surfaced, not silently re-fetched",
+      "property": "The source loop iterates a snapshot; a re-query of the collection inside the loop body is preserved as an explicit reviewable residual (raw statement), so the snapshot-vs-live difference is never hidden.",
+      "whyItIsADefect": "Playwright locators are live; silently iterating a re-query changes which rows are visited and when DOM is re-read.",
+      "status": "guarded",
+      "sourceFile": "coll-01-refresh-inside-loop/Source.cs",
+      "verdict": {
+        "mustProduce": "partial",
+        "mustContain": [
+          "rows.AllAsync()",
+          "[MIGRATOR:RAW_STATEMENT]"
+        ],
+        "mustNotContain": []
+      }
+    }
+  ]
+}

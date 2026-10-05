@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/main/schemas/migrator-counterexamples.schema.json",
+  "title": "Migrator regression counterexample (migrator-counterexamples/v1)",
+  "description": "One minimal counterexample entry: a tiny Selenium fixture plus the invariant it must keep and the current honest verdict. Used by the data-driven RegressionCounterexampleCatalogTests, which fail when the migration stops honoring a documented invariant (or starts misreporting a known gap).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "counterexamples"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "migrator-counterexamples/v1"
+    },
+    "description": {
+      "type": "string"
+    },
+    "counterexamples": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/counterexample"
+      }
+    }
+  },
+  "$defs": {
+    "counterexample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "defectClass",
+        "origin",
+        "title",
+        "property",
+        "whyItIsADefect",
+        "status",
+        "sourceFile",
+        "verdict"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "defectClass": {
+          "type": "string",
+          "description": "Risk-class code from docs/vnext/correctness-risk-areas.md (LOC-01, WAIT-02, ACT-02, ASRT-03, ...)."
+        },
+        "origin": {
+          "type": "string",
+          "description": "Where the counterexample came from (doc section, corpus scenario)."
+        },
+        "title": {
+          "type": "string"
+        },
+        "property": {
+          "type": "string",
+          "description": "The migration invariant this entry protects."
+        },
+        "whyItIsADefect": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "guarded",
+            "known-gap"
+          ]
+        },
+        "sourceFile": {
+          "type": "string"
+        },
+        "verdict": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mustProduce",
+            "mustContain",
+            "mustNotContain"
+          ],
+          "properties": {
+            "mustProduce": {
+              "type": "string",
+              "enum": [
+                "transformed",
+                "partial",
+                "requires_review",
+                "unsupported",
+                "ambiguous"
+              ]
+            },
+            "mustContain": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "mustNotContain": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
