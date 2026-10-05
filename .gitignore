@@ -155,7 +155,7 @@ desktop/release/
 desktop/.vite/
 
 # Generated sample artifacts used by desktop smoke/UI checks (regenerate with the CLI)
-examples/simple-example-out/
+artifacts/simple-example-out/
 
 # Environment files
 .env

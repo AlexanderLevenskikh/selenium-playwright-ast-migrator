@@ -61,20 +61,20 @@ UI-окна (обнаружение CLI + чтение coverage), `--smoke-ui` �
 npm run build
 
 # CLI найден + coverage-report.json читается (Files=1 на сэмпле examples/simple)
-npx electron . --smoke --smoke-out ../examples/simple-example-out
+npx electron . --smoke --smoke-out ../artifacts/simple-example-out
 # => MIGRATOR-DESKTOP-SMOKE {"cli":{"ok":true,...},"coverageOk":true,"coverageFiles":1}
 
 # то же + реальная загрузка окна и рендера
-npx electron . --smoke --smoke-ui --smoke-out ../examples/simple-example-out
+npx electron . --smoke --smoke-ui --smoke-out ../artifacts/simple-example-out
 # => ... "ui":true
 ```
 
-Сэмпл `examples/simple-example-out` генерируется CLI из `examples/simple`:
+Сэмпл `artifacts/simple-example-out` (gitignored) генерируется CLI из `examples/simple`:
 
 ```powershell
 <путь-к-свежему-CLI> --mode analyze `
   --input examples/simple/input `
-  --out examples/simple-example-out `
+  --out artifacts/simple-example-out `
   --config examples/simple/adapter-config.json
 ```
 
