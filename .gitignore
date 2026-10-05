@@ -40,6 +40,9 @@ TestResults/
 *.coveragexml
 coverage/
 coverage.*/
+# Keep the source folder Migrator.Core/Coverage (the rule above is case-insensitive on Windows).
+!Migrator.Core/Coverage/
+!Migrator.Core/Coverage/**
 lcov.info
 
 # BenchmarkDotNet

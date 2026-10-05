@@ -360,16 +360,7 @@ public class RoslynTestFileParser : ITestFileParser
             requiresSemicolon);
     }
 
-    static bool IsInputFixtureFile(string filePath)
-    {
-        var fileName = Path.GetFileName(filePath);
-        if (fileName.EndsWith(".generated.cs", StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        var parts = filePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return !parts.Any(p => string.Equals(p, "Expected", StringComparison.OrdinalIgnoreCase) ||
-                               string.Equals(p, "CompileSmoke", StringComparison.OrdinalIgnoreCase));
-    }
+    static bool IsInputFixtureFile(string filePath) => InputFixtureDiscoveryPolicy.IsFixtureFile(filePath);
 
     static bool LooksLikeMigratedPlaywrightFixture(string filePath, SyntaxNode root)
     {

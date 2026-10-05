@@ -84,7 +84,13 @@ public static class ReportBuilder
         && report.StructuralContainers >= 0
         && report.StructuralContainers <= report.TotalActions;
 
-    static TargetExpression? GetTarget(this TestAction action)
+    static TargetExpression? GetTarget(this TestAction action) => GetTargetOf(action);
+
+    /// <summary>
+    /// Public target probe used by coverage accounting and other consumers that need the
+    /// same "which target does this action carry" view as ReportBuilder.
+    /// </summary>
+    public static TargetExpression? GetTargetOf(TestAction action)
     {
         if (action is ClickAction click) return click.Target;
         if (action is SendKeysAction sk) return sk.Target;

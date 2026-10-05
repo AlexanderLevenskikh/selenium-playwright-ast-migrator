@@ -1,0 +1,334 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AlexanderLevenskikh/selenium-playwright-ast-migrator/main/schemas/migrator-coverage.schema.json",
+  "title": "Migrator coverage report (migrator-coverage/v1)",
+  "description": "Machine-checkable accounting of one migration survey+transformation run. The report is deterministic (relative source paths, no timestamps, canonical CoverageSha256) and distinguishes what was surveyed, what was transformed, and what is provably residual (requires_review / ambiguous / parse_error). Acceptance is deliberately never derived from a report: it is a human decision recorded in AcceptanceStatus.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "SchemaVersion",
+    "Id",
+    "TargetBackend",
+    "SurveyStatus",
+    "TransformationStatus",
+    "DetectionComplete",
+    "ClassificationComplete",
+    "Files",
+    "Tests",
+    "Constructs",
+    "Transformed",
+    "RequiresReview",
+    "Unsupported",
+    "Ambiguous",
+    "ParseError",
+    "ExcludedFiles",
+    "UnexplainedResidual",
+    "CoverageSha256",
+    "FilesDetail",
+    "Excluded"
+  ],
+  "properties": {
+    "SchemaVersion": {
+      "type": "string",
+      "const": "migrator-coverage/v1"
+    },
+    "Id": {
+      "type": "string",
+      "description": "Canonical sha256 of the sorted relative file paths of the surveyed files."
+    },
+    "SourceRootRelative": {
+      "type": "string",
+      "description": "Stable label of the surveyed root, relative to its own parent (never an absolute path)."
+    },
+    "TargetBackend": {
+      "type": "string",
+      "description": "Target backend the transformation was rendered for (e.g. playwright-dotnet)."
+    },
+    "SurveyStatus": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "partial"
+      ]
+    },
+    "TransformationStatus": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "incomplete"
+      ]
+    },
+    "AcceptanceStatus": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Human decision slot, always null in a freshly generated report; never derived from the report itself."
+    },
+    "DetectionComplete": {
+      "type": "boolean",
+      "description": "Every *.cs fixture discovered under the input root was surveyed. False when discovered-but-unsurveyed files exist."
+    },
+    "ClassificationComplete": {
+      "type": "boolean",
+      "description": "Every surveyed construct was attributed a terminal state. True by construction (a state is always assigned); false only when proof issues lack an attributable source line."
+    },
+    "Files": {
+      "type": "integer"
+    },
+    "Tests": {
+      "type": "integer"
+    },
+    "Constructs": {
+      "type": "integer"
+    },
+    "Transformed": {
+      "type": "integer"
+    },
+    "RequiresReview": {
+      "type": "integer"
+    },
+    "Unsupported": {
+      "type": "integer"
+    },
+    "Ambiguous": {
+      "type": "integer"
+    },
+    "ParseError": {
+      "type": "integer"
+    },
+    "ExcludedFiles": {
+      "type": "integer"
+    },
+    "UnexplainedResidual": {
+      "type": "integer",
+      "description": "RequiresReview + Ambiguous + ParseError. Known unsupported is separate: it is explained residual, not a gap."
+    },
+    "CoverageSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Canonical sha256 of the report itself (computed with an empty placeholder then set), so two runs can be compared byte-wise."
+    },
+    "FilesDetail": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FileUnit"
+      }
+    },
+    "Excluded": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ExcludedFile"
+      }
+    }
+  },
+  "$defs": {
+    "FileUnit": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "Id",
+        "RelativePath",
+        "State",
+        "ConstructCount",
+        "Transformed",
+        "RequiresReview",
+        "Unsupported",
+        "Ambiguous",
+        "ParseError",
+        "SurveyComplete",
+        "Tests",
+        "SetUp"
+      ],
+      "properties": {
+        "Id": {
+          "type": "string"
+        },
+        "RelativePath": {
+          "type": "string"
+        },
+        "State": {
+          "type": "string",
+          "enum": [
+            "transformed",
+            "requires_review",
+            "unsupported",
+            "ambiguous",
+            "parse_error",
+            "partial",
+            "none"
+          ]
+        },
+        "ConstructCount": {
+          "type": "integer"
+        },
+        "Transformed": {
+          "type": "integer"
+        },
+        "RequiresReview": {
+          "type": "integer"
+        },
+        "Unsupported": {
+          "type": "integer"
+        },
+        "Ambiguous": {
+          "type": "integer"
+        },
+        "ParseError": {
+          "type": "integer"
+        },
+        "SurveyComplete": {
+          "type": "boolean"
+        },
+        "FailureMessage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "Tests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TestUnit"
+          }
+        },
+        "SetUp": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConstructUnit"
+          }
+        }
+      }
+    },
+    "TestUnit": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "Id",
+        "Name",
+        "State",
+        "ConstructCount",
+        "TransformedCount",
+        "ActionableCount",
+        "Constructs"
+      ],
+      "properties": {
+        "Id": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "State": {
+          "type": "string",
+          "enum": [
+            "transformed",
+            "requires_review",
+            "unsupported",
+            "ambiguous",
+            "parse_error",
+            "partial",
+            "none"
+          ]
+        },
+        "ConstructCount": {
+          "type": "integer"
+        },
+        "TransformedCount": {
+          "type": "integer"
+        },
+        "ActionableCount": {
+          "type": "integer"
+        },
+        "Constructs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConstructUnit"
+          }
+        }
+      }
+    },
+    "ConstructUnit": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "Id",
+        "Kind",
+        "State",
+        "SourceLine",
+        "OutputOperationCount"
+      ],
+      "properties": {
+        "Id": {
+          "type": "string"
+        },
+        "Kind": {
+          "type": "string",
+          "description": "Action type name, e.g. MappedMethodInvocationAction."
+        },
+        "State": {
+          "type": "string",
+          "enum": [
+            "transformed",
+            "requires_review",
+            "unsupported",
+            "ambiguous",
+            "parse_error"
+          ]
+        },
+        "SourceLine": {
+          "type": "integer"
+        },
+        "OutputOperationCount": {
+          "type": "integer",
+          "description": "Active (non-comment) target statements emitted for a transformed construct."
+        },
+        "OutputOperations": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "Reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "PolicySource": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ExcludedFile": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "Id",
+        "RelativePath",
+        "Reason",
+        "PolicySource"
+      ],
+      "properties": {
+        "Id": {
+          "type": "string"
+        },
+        "RelativePath": {
+          "type": "string"
+        },
+        "Reason": {
+          "type": "string"
+        },
+        "PolicySource": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -21,6 +21,7 @@ using Migrator.Lab.Execution;
 using Migrator.PlaywrightDotNet;
 using Migrator.PlaywrightTypeScript;
 using Migrator.Roslyn;
+using Migrator.Core.Coverage;
 using Migrator.SeleniumCSharp;
 
 if (args.Length > 0 && string.Equals(args[0], "kit", StringComparison.OrdinalIgnoreCase))
@@ -618,7 +619,7 @@ var summary = BuildSummary(resultsList, out var allUnmapped) with
 switch (mode)
 {
     case "analyze":
-        RunAnalyze(summary, outPath, format, loadedConfig, resultsList, allUnmapped);
+        RunAnalyze(summary, outPath, format, loadedConfig, resultsList, allUnmapped, inputPath, targetBackend.Target.Id);
         break;
     case "dump-ir":
         RunDumpIr(outPath, format, resultsList, sourceFrontend.Source, targetBackend.Target, irVersion);
@@ -1115,13 +1116,14 @@ static void RunDumpIr(string outPath, string format, List<PipelineResult> result
     Console.WriteLine($"IR dump written to: {Path.GetFullPath(outPath)}");
 }
 
-static void RunAnalyze(MigrationSummaryReport summary, string outPath, string format, ProjectAdapterConfig? config, List<PipelineResult> results, IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped)
+static void RunAnalyze(MigrationSummaryReport summary, string outPath, string format, ProjectAdapterConfig? config, List<PipelineResult> results, IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped, string inputPath, string? backendId)
 {
     Directory.CreateDirectory(outPath);
 
     var allUnsupported = CollectAllUnsupported(results);
     WriteReports(summary, outPath, format, allUnmapped, allUnsupported);
     WriteConfigSourceAdditive(outPath, format, config, results);
+    WriteCoverageAdditive(outPath, format, inputPath, results, backendId);
     GenerateDraftConfig(allUnmapped, outPath, config);
     WriteExplainTodoArtifacts(summary, outPath, format, allUnmapped, allUnsupported, null);
 
@@ -3371,7 +3373,6 @@ static void WriteConfigSourceAdditive(string outPath, string format, ProjectAdap
 {
     if (config == null || results == null || results.Count == 0)
         return;
-
     var files = new List<(string Path, string Text)>(results.Count);
     foreach (var result in results)
     {
@@ -3390,6 +3391,50 @@ static void WriteConfigSourceAdditive(string outPath, string format, ProjectAdap
 
     ConfigSourceCommand.WriteReportArtifacts(report, outPath, format);
 }
+
+/// <summary>
+/// Additive coverage artifact: writes coverage-report.json + coverage-summary.md into an
+/// existing report directory. Purely additive (its own file names; never touches existing
+/// reports). The report is deterministic: relative source paths, no timestamps, a canonical
+/// CoverageSha256, and an explicit distinction survey-complete / transformation-complete /
+/// acceptance-not-declared.
+/// </summary>
+static void WriteCoverageAdditive(string outPath, string format, string inputPath, List<PipelineResult> results, string? backendId)
+{
+    if (results == null || results.Count == 0)
+        return;
+
+    var inputRoot = Directory.Exists(inputPath)
+        ? inputPath
+        : Path.GetDirectoryName(inputPath) ?? Environment.CurrentDirectory;
+
+    var discovery = InputFixtureDiscoveryPolicy.DiscoverFixtureFiles(inputRoot);
+    var surveyed = new HashSet<string>(results.Select(r => Path.GetFullPath(r.SourceModel.FilePath)), StringComparer.OrdinalIgnoreCase);
+    var gap = discovery
+        .Where(p => !surveyed.Contains(Path.GetFullPath(p)))
+        .ToArray();
+
+    var excluded = InputFixtureDiscoveryPolicy.DiscoverExcludedFiles(inputRoot)
+        .Select(x => new CoverageExcludedFile(
+            Id: CoverageReportBuilder.BuildFileId(RelativeTo(x.Path, inputRoot)),
+            RelativePath: RelativeTo(x.Path, inputRoot),
+            Reason: x.Reason,
+            PolicySource: InputFixtureDiscoveryPolicy.PolicySource))
+        .ToArray();
+
+    var report = CoverageReportBuilder.Build(results, inputRoot, backendId, excluded, gap);
+
+    if (format == "json" || format == "both")
+        File.WriteAllText(Path.Combine(outPath, "coverage-report.json"), CoverageReportWriter.ToJson(report));
+
+    if (format == "text" || format == "both")
+        File.WriteAllText(Path.Combine(outPath, "coverage-summary.md"), CoverageSummaryText.ToMarkdown(report));
+}
+
+static string RelativeTo(string filePath, string root) =>
+    Path.GetRelativePath(Path.GetFullPath(root), Path.GetFullPath(filePath))
+        .Replace(Path.DirectorySeparatorChar, '/')
+        .Replace(Path.AltDirectorySeparatorChar, '/');
 
 static string WriteAllUnmappedJson(IReadOnlyDictionary<string, (int Count, string File, int Line)> allUnmapped, MigrationSummaryReport summary)
 {
@@ -9785,6 +9830,7 @@ static int RunOrchestrate(string inputPath, string outPath, string? configPath, 
 
                 WriteReports(analyzedSummary, analyzeDir, format, allUnmapped, allUnsupported);
                 WriteConfigSourceAdditive(analyzeDir, format, config, migrationResults);
+                WriteCoverageAdditive(analyzeDir, format, inputPath, migrationResults, targetBackend.Target.Id);
                 GenerateDraftConfig(allUnmapped, analyzeDir, config);
 
                 stage = stage with
