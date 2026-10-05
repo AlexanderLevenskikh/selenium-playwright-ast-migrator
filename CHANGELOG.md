@@ -11,6 +11,39 @@ This project uses preview SemVer-style versions while the public API is still st
 ### Changed
 ### Fixed
 
+## [0.0.5-preview.1]
+
+### Added
+
+- Machine-checkable migration coverage accounting (`migrator-coverage/v1`):
+  `analyze`, `migrate`, and `orchestrate` now write an additive `coverage-report.json`
+  and `coverage-summary.md` that separate what was surveyed, what was transformed, and
+  what is provably residual (`requires_review` / `unsupported` / `ambiguous` /
+  `parse_error`) at file, test, and construct level. Classification is honest by
+  construction (comment-only emission is never counted as `transformed`;
+  `MethodInvocationAction` / `AssertMultipleAction` surface as `requires_review`), and
+  the report is deterministic (relative source paths, canonical `CoverageSha256`, no
+  timestamps) so two runs are byte-comparable. Schema:
+  `schemas/migrator-coverage.schema.json`; accounting policy:
+  `docs/vnext/coverage-accounting.md`.
+- Regression counterexample catalog (`migrator-counterexamples/v1`): a committed
+  `corpus/regression-counterexamples/` of known-bad source/outcome pairs guarded by
+  data-driven `RegressionCounterexampleCatalogTests` and shipped with
+  `schemas/migrator-counterexamples.schema.json`, so previously fixed corruptions can
+  never silently regress in a migration run.
+- Behavioral gate (`migrator-behavior/v1`): `lab behavior --run <run> --specs
+  <corpus/behavior-scenarios>` deterministically accepts (exit 0), rejects (exit 10,
+  mismatch or not-observed), or blocks (exit 13, blocker construct) a lab run via the
+  pure `BehaviorGateEvaluator`; outcomes are written as `migrator-behavior-report` and
+  a `behavior` CI job runs the gate on Chromium inside `migrator-lab.yml`.
+- Electron desktop GUI: a new `desktop/` app wraps the CLI so the team can migrate
+  without the console — pick input / adapter-config / output folder via dialogs, run
+  `analyze` / `migrate` / `run` by button with a live CLI log, browse the coverage
+  summary and per-file detail, review every non-`transformed` construct with a local
+  review-state sidecar, and open generated `*Playwright.cs` / `*Playwright.ts` files.
+  Packaged as a Windows NSIS installer (`electron-builder`) and covered by headless
+  smokes (`--smoke`, `--smoke-ui`).
+
 ## [0.0.4-preview.1]
 
 ### Added
