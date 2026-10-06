@@ -11,6 +11,40 @@ This project uses preview SemVer-style versions while the public API is still st
 ### Changed
 ### Fixed
 
+## [0.0.5-preview.2]
+
+### Fixed
+
+- Cross-process environment identity for `verify-project --run-manifest`: the
+  environment fingerprint compared during provenance preflight no longer includes
+  the loaded-assembly set, so `run` and `verify-project` in separate CLI processes
+  on the same host no longer fail with `EVIDENCE_IDENTITY_MISMATCH`. The
+  assembly-set hash remains computed and reported as metadata. This was the root
+  cause of the chronically red "Enforce standard migration performance budget" step
+  in Full Validation.
+- `scripts/install-standalone.ps1` / `scripts/install-standalone.sh`: standalone
+  installer downloads are now robust — TLS 1.2 pinned for Windows PowerShell 5.1,
+  `-UseBasicParsing` with timeout, retries with backoff, `HTTPS_PROXY`/`HTTP_PROXY`
+  or `-ProxyUrl` support, and actionable errors. Fixes transient "Unable to connect
+  to the remote server" failures when downloading GitHub Release archives.
+- `scripts/run-standard-migration-smoke.ps1`: the smoke now builds a real autonomy
+  workspace (`runs/run-001` layout plus `state/autonomy-state.json` and the ledger
+  anchor produced by `update-autonomy-state.ps1`) before invoking the final gate, and
+  invokes the gate with `pwsh` instead of Windows PowerShell so it works on Linux CI.
+- `scripts/baseline/measure-baseline.ps1`: fixed a PowerShell parse error
+  (`$LASTEXITCODE:` read as an invalid variable-with-drive reference) that broke the
+  "Validate repository scripts" CI job.
+- `AutonomyStateRecoveryTests.Mig06_NewInvocationPreservesCumulativeCycleProof` now
+  surfaces the action's combined output in its failure message for diagnosable CI
+  flakes.
+
+### Notes
+
+- Full Validation was red for several days (10-01 through 10-06) on three
+  pre-existing defects — the environment identity mismatch, the smoke's
+  Windows-only final-gate invocation, and the measure-baseline parse error — all
+  fixed in this release.
+
 ## [0.0.5-preview.1]
 
 ### Added
