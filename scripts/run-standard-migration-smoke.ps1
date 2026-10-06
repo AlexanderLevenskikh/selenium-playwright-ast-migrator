@@ -20,7 +20,7 @@ if ($LASTEXITCODE -ne 0 -or $verifyProjectHelp -notmatch [regex]::Escape('--run-
     throw "Migrator.Cli.dll does not expose verify-project --run-manifest. Rebuild Migrator.Cli from the current sources before running the standard smoke. CLI: $CliDll"
 }
 $sourceDir = Join-Path $outputPath 'source'
-$runDir = Join-Path $outputPath 'run-001'
+$runDir = Join-Path $outputPath 'runs/run-001'
 New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
 @'
 using NUnit.Framework;
@@ -63,6 +63,8 @@ $projectVerifyEvidencePath = Join-Path $verifyProjectDir 'verification-evidence.
 $projectVerifyExitCode = $null
 $finalGateExitCode = $null
 $finalGateOutput = @()
+$autonomyBootstrapExitCode = $null
+$autonomyBootstrapOutput = @()
 
 if ($orchestrationPassed) {
     & dotnet $CliDll verify-project `
@@ -74,8 +76,18 @@ if ($orchestrationPassed) {
 }
 
 if ($orchestrationPassed -and $projectVerifyExitCode -eq 0) {
+    $autonomyStateScript = Join-Path $rootPath 'templates/migration-kit/scripts/update-autonomy-state.ps1'
+    $autonomyBootstrapOutput = @(& pwsh -NoProfile -ExecutionPolicy Bypass `
+        -File $autonomyStateScript `
+        -Action StartInvocation `
+        -Workspace $outputPath `
+        -Mode standard `
+        -InvocationId ("standard-smoke-" + [guid]::NewGuid().ToString("N")) 2>&1)
+    $autonomyBootstrapExitCode = $LASTEXITCODE
+    $autonomyBootstrapOutput | ForEach-Object { Write-Host $_ }
+
     $finalGateScript = Join-Path $rootPath 'templates/migration-kit/scripts/check-final-gate.ps1'
-    $finalGateOutput = @(& powershell -NoProfile -ExecutionPolicy Bypass `
+    $finalGateOutput = @(& pwsh -NoProfile -ExecutionPolicy Bypass `
         -File $finalGateScript `
         -Workspace $outputPath `
         -Run $runDir `
@@ -87,6 +99,7 @@ if ($orchestrationPassed -and $projectVerifyExitCode -eq 0) {
 $status = if (
     $orchestrationPassed `
     -and $projectVerifyExitCode -eq 0 `
+    -and $autonomyBootstrapExitCode -eq 0 `
     -and $finalGateExitCode -eq 0 `
     -and (Test-Path $runManifestPath) `
     -and (Test-Path $projectVerifyReportPath) `
@@ -98,6 +111,7 @@ $summary = [ordered]@{
     status = $status
     orchestrationExitCode = $exitCode
     exactProjectVerifyExitCode = $projectVerifyExitCode
+    autonomyBootstrapExitCode = $autonomyBootstrapExitCode
     finalGateExitCode = $finalGateExitCode
     durationMs = [Math]::Round($watch.Elapsed.TotalMilliseconds, 3)
     source = $sourceDir
@@ -111,12 +125,13 @@ $summary = [ordered]@{
     syntaxErrors = $syntaxErrors
     todoComments = $todoComments
     hiddenPartitionDirectories = @($partitionDirectories | ForEach-Object { $_.FullName })
+    autonomyBootstrapOutput = @($autonomyBootstrapOutput | ForEach-Object { [string]$_ })
     finalGateOutput = @($finalGateOutput | ForEach-Object { [string]$_ })
     generatedAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
 }
 $summary | ConvertTo-Json -Depth 10 | Set-Content -Encoding UTF8 (Join-Path $outputPath 'standard-migration-smoke.json')
 if ($status -ne 'PASS') {
-    throw "Standard migration smoke failed; orchestrationExit=$exitCode; exactProjectVerifyExit=$projectVerifyExitCode; finalGateExit=$finalGateExitCode; runManifest=$(Test-Path $runManifestPath); projectVerifyReport=$(Test-Path $projectVerifyReportPath); projectVerifyEvidence=$(Test-Path $projectVerifyEvidencePath); syntaxErrors=$syntaxErrors; TODOs=$todoComments; hiddenPartitions=$($partitionDirectories.Count)"
+    throw "Standard migration smoke failed; orchestrationExit=$exitCode; exactProjectVerifyExit=$projectVerifyExitCode; autonomyBootstrapExit=$autonomyBootstrapExitCode; finalGateExit=$finalGateExitCode; runManifest=$(Test-Path $runManifestPath); projectVerifyReport=$(Test-Path $projectVerifyReportPath); projectVerifyEvidence=$(Test-Path $projectVerifyEvidencePath); syntaxErrors=$syntaxErrors; TODOs=$todoComments; hiddenPartitions=$($partitionDirectories.Count)"
 }
 Write-Host 'STANDARD_MIGRATION_SMOKE_PASS'
 Write-Host "Report: $(Join-Path $outputPath 'standard-migration-smoke.json')"

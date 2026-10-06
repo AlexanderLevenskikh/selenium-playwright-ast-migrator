@@ -1821,8 +1821,7 @@ static RunEnvironmentIdentity CreateRunEnvironmentIdentity()
         processArchitecture,
         culture,
         uiCulture,
-        newLine,
-        assemblySetSha256
+        newLine
     });
 
     return new RunEnvironmentIdentity(

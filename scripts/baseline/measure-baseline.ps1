@@ -26,7 +26,7 @@ if (-not (Test-Path $cli)) { throw "CLI not built: $cli (run dotnet build first)
 function Invoke-Cli {
     param([string[]]$ArgsList)
     & dotnet $cli @ArgsList
-    if ($LASTEXITCODE -ne 0) { throw "CLI exited $LASTEXITCODE: dotnet $cli $($ArgsList -join ' ')" }
+    if ($LASTEXITCODE -ne 0) { throw "CLI exited ${LASTEXITCODE}: dotnet $cli $($ArgsList -join ' ')" }
 }
 
 # The CLI re-bases --out under migration/ for the plain run/analyze paths but NOT for
