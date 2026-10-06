@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Xunit;
 
 namespace Migrator.Tests;
@@ -93,6 +94,93 @@ public sealed class AutonomyStateSoundnessTests
                 Directory.Delete(root, recursive: true);
         }
     }
+
+    [Fact]
+    public void Mig05_RecordedCycleTimestamp_IsWholeSecondRoundTripInvariant()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"migrator-mig05-ts-{Guid.NewGuid():N}");
+        var workspace = Path.Combine(root, "migration");
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var script = Path.Combine(
+                FindRepositoryRoot(),
+                "templates",
+                "migration-kit",
+                "scripts",
+                "update-autonomy-state.ps1");
+
+            Assert.Equal(0, RunPowerShell(
+                script,
+                "-Action", "StartInvocation",
+                "-Workspace", workspace,
+                "-Mode", "standard",
+                "-InvocationId", "mig05-ts").ExitCode);
+
+            var guardPath = Path.Combine(root, "guard.json");
+            WriteJson(guardPath, new
+            {
+                SchemaVersion = "migrator-remediation-cycle-guard/v1",
+                GuardSha256 = "guard-mig05-ts",
+                AcceptedStateHash = "state-a",
+                WorkspaceIdentitySha256 = "workspace-mig05-ts",
+                Decision = "READY_INITIAL_BASELINE",
+                ReadyToStartCycle = true,
+                RollbackConfirmed = false,
+                Reason = "synthetic regression guard"
+            });
+
+            Assert.Equal(0, RunPowerShell(
+                script,
+                "-Action", "StartCycle",
+                "-Workspace", workspace,
+                "-GuardPath", guardPath).ExitCode);
+
+            var evaluationPath = Path.Combine(root, "evaluation.json");
+            WriteJson(evaluationPath, new
+            {
+                SchemaVersion = "migrator-remediation-evaluation/v1",
+                EvaluationSha256 = "evaluation-mig05-ts",
+                CandidateFingerprint = "candidate-mig05-ts",
+                CandidateLabel = "synthetic accepted candidate",
+                Decision = "ACCEPT",
+                Reason = "synthetic progress",
+                RollbackRequired = false,
+                Before = new { StateHash = "state-a", Defects = new { } },
+                After = new { StateHash = "state-b", Defects = new { } },
+                Improvements = Array.Empty<string>(),
+                Regressions = Array.Empty<string>()
+            });
+
+            Assert.Equal(0, RunPowerShell(
+                script,
+                "-Action", "RecordCycle",
+                "-Workspace", workspace,
+                "-EvaluationPath", evaluationPath).ExitCode);
+
+            using var state = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(workspace, "state", "autonomy-state.json")));
+            var recorded = state.RootElement
+                .GetProperty("completedCycles")[0]
+                .GetProperty("completedAtUtc")
+                .GetString();
+
+            Assert.Matches(
+                new Regex(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"),
+                recorded);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    static void WriteJson(string path, object value) =>
+        File.WriteAllText(
+            path,
+            JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true }));
 
     static PowerShellRunResult RunPowerShell(string script, params string[] arguments)
     {

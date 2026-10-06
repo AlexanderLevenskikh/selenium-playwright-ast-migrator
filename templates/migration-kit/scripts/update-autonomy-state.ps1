@@ -901,7 +901,7 @@ switch ($Action) {
             legacyBeforeStateHash = $legacyBeforeHash
             usedLegacyStateBridge = [bool]$matchesLegacyBefore
             improvements = @($evidence.Improvements)
-            completedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+            completedAtUtc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", [System.Globalization.CultureInfo]::InvariantCulture)
         }
         $state.rebaselineHistory = @(@($state.rebaselineHistory) + @([pscustomobject]$record))
         $state.visitedStateHashes = @(
@@ -1010,7 +1010,7 @@ switch ($Action) {
             improvements = @($evaluation.Improvements)
             regressions = @($evaluation.Regressions)
             rollbackRequired = $rollbackRequired
-            completedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+            completedAtUtc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", [System.Globalization.CultureInfo]::InvariantCulture)
         }
         $state.completedCycles = @(@($state.completedCycles) + @([pscustomobject]$record))
         $state.cycleHistory = @(@($state.cycleHistory) + @([pscustomobject]$record))
