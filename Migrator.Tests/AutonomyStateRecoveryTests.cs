@@ -225,12 +225,15 @@ public sealed class AutonomyStateRecoveryTests
                 "-Workspace", workspace,
                 "-EvaluationPath", evaluationPath).ExitCode);
 
-            Assert.Equal(0, RunPowerShell(
+            var stop = RunPowerShell(
                 script,
                 "-Action", "Stop",
                 "-Workspace", workspace,
                 "-Status", "STOPPED",
-                "-StopReason", "SYNTHETIC_INVOCATION_BOUNDARY").ExitCode);
+                "-StopReason", "SYNTHETIC_INVOCATION_BOUNDARY");
+            Assert.True(
+                stop.ExitCode == 0,
+                $"Stop action failed with exit {stop.ExitCode}: {stop.CombinedOutput}");
 
             Assert.Equal(0, RunPowerShell(
                 script,

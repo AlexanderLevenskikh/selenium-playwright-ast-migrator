@@ -174,24 +174,28 @@ else
 
   echo "Downloading $archive_url"
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$archive_url" -o "$archive_path"
+    curl -fsSL --retry 4 --retry-delay 2 --retry-connrefused "$archive_url" -o "$archive_path"
   elif command -v wget >/dev/null 2>&1; then
-    wget -q "$archive_url" -O "$archive_path"
+    wget -q --tries=4 --retry-connrefused "$archive_url" -O "$archive_path"
   else
     echo "curl or wget is required" >&2
     exit 2
+  fi
+  if [[ ! -s "$archive_path" ]]; then
+    echo "Failed to download $archive_url (empty result after retries). If the network is transiently down or a proxy/firewall blocks direct downloads, retry later, point --base-url at an internal mirror, or install from a local file with --archive-path." >&2
+    exit 1
   fi
 
   checksums_url="$BASE_URL/checksums.sha256"
   checksums_path="$tmp_dir/checksums.sha256"
   if command -v curl >/dev/null 2>&1; then
-    if curl -fsSL "$checksums_url" -o "$checksums_path"; then
+    if curl -fsSL --retry 4 --retry-delay 2 --retry-connrefused "$checksums_url" -o "$checksums_path"; then
       verify_checksum "$archive_path" "$checksums_path" "$archive_name"
     else
       echo "Checksum verification skipped: checksums.sha256 not available at $checksums_url."
     fi
   elif command -v wget >/dev/null 2>&1; then
-    if wget -q "$checksums_url" -O "$checksums_path"; then
+    if wget -q --tries=4 --retry-connrefused "$checksums_url" -O "$checksums_path"; then
       verify_checksum "$archive_path" "$checksums_path" "$archive_name"
     else
       echo "Checksum verification skipped: checksums.sha256 not available at $checksums_url."

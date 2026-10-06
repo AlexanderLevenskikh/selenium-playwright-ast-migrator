@@ -8,10 +8,23 @@ param(
     [switch]$AddToUserPath,
     [switch]$SkipUserPathUpdate,
     [switch]$RemoveDotnetTool,
-    [switch]$Uninstall
+    [switch]$Uninstall,
+    [int]$DownloadAttempts = 4,
+    [string]$ProxyUrl = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+# Windows PowerShell 5.1 defaults to TLS 1.0/1.1, which GitHub Releases and modern
+# mirror hosts reject, surfacing as "Unable to connect to the remote server". Pin at
+# least TLS 1.2. On PowerShell 7+ (.NET Core) this control point does not exist, and
+# the runtime already negotiates TLS 1.2+ by default, so a failure here is harmless.
+try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+}
+catch {
+    # Not supported on this runtime; TLS 1.2+ is already the default there.
+}
 
 function Resolve-Runtime {
     if (-not [string]::IsNullOrWhiteSpace($Runtime)) {
@@ -65,6 +78,49 @@ function Assert-Checksum([string]$FilePath, [string]$ExpectedChecksumsPath, [str
     }
 
     Write-Host "Checksum verified."
+}
+
+# Download with retries. GitHub Releases answers with a redirect to a CDN and transient
+# connector glitches surface as "Unable to connect to the remote server", so a single
+# attempt is not reliable. Proxy comes from HTTPS_PROXY/HTTP_PROXY (as git/curl do) or an
+# explicit -ProxyUrl, because Windows PowerShell 5.1 does not honour proxy env vars itself.
+function Invoke-NetFileDownload([string]$Url, [string]$OutFile) {
+    $attempts = [Math]::Max(1, $DownloadAttempts)
+    $proxy = $ProxyUrl
+    if ([string]::IsNullOrWhiteSpace($proxy)) {
+        $proxy = if ($env:HTTPS_PROXY) { $env:HTTPS_PROXY } elseif ($env:HTTP_PROXY) { $env:HTTP_PROXY } else { "" }
+    }
+
+    $iwrArgs = @{
+        Uri             = $Url
+        OutFile         = $OutFile
+        UseBasicParsing = $true
+        TimeoutSec      = 120
+        ErrorAction     = "Stop"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($proxy)) {
+        $iwrArgs.Proxy = $proxy
+    }
+
+    $delay = 2
+    for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+        try {
+            Invoke-WebRequest @iwrArgs
+            if (-not (Test-Path $OutFile)) { throw "Download completed without writing $OutFile" }
+            if ((Get-Item $OutFile).Length -le 0) { throw "Downloaded file is empty (0 bytes)" }
+            return
+        }
+        catch {
+            $message = $_.Exception.Message
+            if ($attempt -eq $attempts) {
+                throw "Failed to download $Url after $attempts attempt(s). Original error: $message. If the network is transiently down or a proxy/firewall blocks direct downloads, retry later, point -BaseUrl at an internal mirror, or install from a local file with -ArchivePath."
+            }
+
+            Write-Warning "Download attempt $attempt/$attempts for $Url failed: $message. Retrying in ${delay}s... (set -ProxyUrl or HTTPS_PROXY if a proxy is required)"
+            Start-Sleep -Seconds $delay
+            $delay = [Math]::Min($delay * 2, 30)
+        }
+    }
 }
 
 function Normalize-PathForCompare([string]$PathValue) {
@@ -294,17 +350,12 @@ try {
         $archivePath = Join-Path $temp $archiveName
 
         Write-Host "Downloading $archiveUrl"
-        try {
-            Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath
-        }
-        catch {
-            throw "Failed to download standalone archive from $archiveUrl. For private Nexus/static release folders, verify that -BaseUrl points at the directory containing $archiveName and checksums.sha256. Original error: $($_.Exception.Message)"
-        }
+        Invoke-NetFileDownload -Url $archiveUrl -OutFile $archivePath
 
         $checksumsUrl = "$resolvedBaseUrl/checksums.sha256"
         $downloadedChecksumsPath = Join-Path $temp "checksums.sha256"
         try {
-            Invoke-WebRequest -Uri $checksumsUrl -OutFile $downloadedChecksumsPath
+            Invoke-NetFileDownload -Url $checksumsUrl -OutFile $downloadedChecksumsPath
             Assert-Checksum -FilePath $archivePath -ExpectedChecksumsPath $downloadedChecksumsPath -ExpectedArchiveName $archiveName
         }
         catch {
