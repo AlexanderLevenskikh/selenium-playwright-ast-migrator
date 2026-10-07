@@ -11,6 +11,26 @@ This project uses preview SemVer-style versions while the public API is still st
 ### Changed
 ### Fixed
 
+## [0.0.5-preview.3]
+
+### Fixed
+
+- `templates/migration-kit/scripts/update-autonomy-state.ps1` stores the recorded
+  cycle's `completedAtUtc` as a whole-second UTC string
+  (`yyyy-MM-ddTHH:mm:ssZ`) instead of the ISO-8601 round-trip form. PowerShell 7
+  coerces ISO date strings to `System.DateTime` in `ConvertFrom-Json` and
+  `ConvertTo-Json` re-serializes them with trailing fractional zeros trimmed, so the
+  ledger-anchored canonical state hash drifted whenever the last fractional digit
+  was `0` and the next invocation failed with `AUTONOMY_STATE_LEDGER_MISMATCH`
+  (the flaky `Mig06_NewInvocationPreservesCumulativeCycleProof` on CI). The
+  whole-second form is byte-invariant under the JSON round trip in both PowerShell 7
+  and Windows PowerShell 5.1.
+
+### Added
+
+- `Mig05_RecordedCycleTimestamp_IsWholeSecondRoundTripInvariant` locks the
+  `completedAtUtc` format so the state hash cannot drift again.
+
 ## [0.0.5-preview.2]
 
 ### Fixed
