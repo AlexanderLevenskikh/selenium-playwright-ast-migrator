@@ -2,7 +2,7 @@
 
 Local, read-only MCP server for Selenium C# → Playwright .NET. This source tree is staged in the original repository branch `split/mcp-alpha`, intended for a standalone `selenium-playwright-migrator-mcp` repository.
 
-The MCP host depends on the versioned **`SeleniumPlaywrightMigrator.Application` NuGet package**. It does not reference the Core source projects. Until publication, CI builds a local NuGet feed from the Core staging branch.
+The MCP host depends on the versioned **`SeleniumPlaywrightMigrator.Application` NuGet package**. It does not reference the Core source projects. Until publication, CI builds a local NuGet feed from pinned Core commit `e9e7a7e` (`0.1.0-preview.1`); CI does not float with a mutable Core branch.
 
 ## Developer setup
 
