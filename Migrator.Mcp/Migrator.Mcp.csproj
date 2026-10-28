@@ -5,11 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
-    <CoreSourceRoot Condition="'$(CoreSourceRoot)' == ''">../core</CoreSourceRoot>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="ModelContextProtocol" Version="2.3.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
-    <ProjectReference Include="$(CoreSourceRoot)/Migrator.Application/Migrator.Application.csproj" />
+    <!-- Real package boundary; no Core source project reference. -->
+    <PackageReference Include="SeleniumPlaywrightMigrator.Application" Version="0.1.0-preview.1" />
   </ItemGroup>
 </Project>

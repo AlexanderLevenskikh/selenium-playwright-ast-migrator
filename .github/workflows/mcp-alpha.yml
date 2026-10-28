@@ -8,7 +8,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - name: Checkout Core only to produce NuGet feed
+        uses: actions/checkout@v4
         with:
           repository: AlexanderLevenskikh/selenium-playwright-ast-migrator
           ref: split/core-alpha
@@ -16,6 +17,20 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - run: dotnet restore Migrator.Mcp/Migrator.Mcp.csproj
-      - run: dotnet build Migrator.Mcp/Migrator.Mcp.csproj --no-restore -c Release
-      - run: python3 scripts/mcp_stdio_smoke.py Migrator.Mcp/bin/Release/net10.0/Migrator.Mcp.dll
+      - name: Build versioned Core package feed
+        run: |
+          mkdir -p artifacts/nuget
+          for project in Migrator.Core Migrator.Roslyn Migrator.SeleniumCSharp Migrator.PlaywrightDotNet Migrator.Application; do
+            dotnet pack "core/$project/$project.csproj" -c Release -o artifacts/nuget
+          done
+      - name: Restore MCP from packages, not Core source projects
+        run: |
+          if grep -q 'ProjectReference' Migrator.Mcp/Migrator.Mcp.csproj; then
+            echo 'MCP unexpectedly has a Core ProjectReference' >&2
+            exit 1
+          fi
+          dotnet restore Migrator.Mcp/Migrator.Mcp.csproj --source "$PWD/artifacts/nuget" --source https://api.nuget.org/v3/index.json
+      - name: Build independently linked MCP host
+        run: dotnet build Migrator.Mcp/Migrator.Mcp.csproj --no-restore -c Release
+      - name: MCP protocol integration smoke
+        run: python3 scripts/mcp_stdio_smoke.py Migrator.Mcp/bin/Release/net10.0/Migrator.Mcp.dll

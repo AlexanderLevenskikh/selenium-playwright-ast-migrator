@@ -2,16 +2,20 @@
 
 Local, read-only MCP server for Selenium C# → Playwright .NET. This source tree is staged in the original repository branch `split/mcp-alpha`, intended for a standalone `selenium-playwright-migrator-mcp` repository.
 
-It calls the **separate** Core tree via a project reference. The versioned Core NuGet package is not yet available: do not claim the MCP host is independently distributable until a Core package release exists.
+The MCP host depends on the versioned **`SeleniumPlaywrightMigrator.Application` NuGet package**. It does not reference the Core source projects. Until publication, CI builds a local NuGet feed from the Core staging branch.
 
 ## Developer setup
 
-Checkout the future Core repo (or the staging `split/core-alpha` branch) into `./core`, next to `Migrator.Mcp`:
+For the current staging setup, clone the Core branch into `./core` and pack its version-matched modules. This source checkout is **only needed to make the local feed**, not to compile the MCP host:
 
 ```sh
 git clone --branch split/core-alpha https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator.git core
-dotnet restore Migrator.Mcp/Migrator.Mcp.csproj
-dotnet build Migrator.Mcp/Migrator.Mcp.csproj -c Release
+mkdir -p artifacts/nuget
+for project in Migrator.Core Migrator.Roslyn Migrator.SeleniumCSharp Migrator.PlaywrightDotNet Migrator.Application; do
+  dotnet pack "core/$project/$project.csproj" -c Release -o artifacts/nuget
+done
+dotnet restore Migrator.Mcp/Migrator.Mcp.csproj --source "$PWD/artifacts/nuget" --source https://api.nuget.org/v3/index.json
+dotnet build Migrator.Mcp/Migrator.Mcp.csproj --no-restore -c Release
 MIGRATOR_WORKSPACE=/absolute/path/to/product dotnet run --project Migrator.Mcp/Migrator.Mcp.csproj -c Release --no-build
 ```
 
