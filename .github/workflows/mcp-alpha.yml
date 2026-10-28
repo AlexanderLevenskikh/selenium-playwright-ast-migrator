@@ -1,0 +1,20 @@
+name: MCP Alpha
+on:
+  push:
+    branches: [split/mcp-alpha]
+  workflow_dispatch:
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: AlexanderLevenskikh/selenium-playwright-ast-migrator
+          ref: split/core-alpha
+          path: core
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet restore Migrator.Mcp/Migrator.Mcp.csproj
+      - run: dotnet build Migrator.Mcp/Migrator.Mcp.csproj --no-restore -c Release
