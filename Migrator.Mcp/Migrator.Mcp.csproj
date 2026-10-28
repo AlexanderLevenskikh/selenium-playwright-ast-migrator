@@ -5,11 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
-    <!-- Can later be replaced by a pinned NuGet dependency once Core is published. -->
     <CoreSourceRoot Condition="'$(CoreSourceRoot)' == ''">../core</CoreSourceRoot>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="ModelContextProtocol" Version="2.3.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <ProjectReference Include="$(CoreSourceRoot)/Migrator.Application/Migrator.Application.csproj" />
   </ItemGroup>
 </Project>
