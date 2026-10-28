@@ -34,8 +34,9 @@ MIGRATOR_WORKSPACE=/absolute/path/to/product dotnet run --project Migrator.Mcp/M
 ## Tools
 
 - `analyze_migration(source, config?)` — inventory, source/config hashes, findings, completeness.
+- `explain_finding(source, findingId, config?, expectedAnalysisId?)` — source-backed explanation and next action.
 - `preview_migration(source, config?, expectedAnalysisId?)` — conservative generated draft and target identity; no build or behavior assertions.
 
-Use the included [agent skill](skills/selenium-playwright-migration/SKILL.md). The initial API explicitly blocks multi-fixture files and xUnit source instead of silently dropping tests. It does not provide `verify_artifact`, `explain_finding` or safe agent-edit verification yet.
+Use the included [agent skill](skills/selenium-playwright-migration/SKILL.md). The initial API explicitly blocks multi-fixture files and xUnit source instead of silently dropping tests. It does not provide `verify_artifact` or safe agent-edit verification yet.
 
 License: MIT, inherited from source project.

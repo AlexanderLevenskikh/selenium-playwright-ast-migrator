@@ -20,6 +20,20 @@ public static class MigrationTools
         return JsonSerializer.Serialize(result, JsonOptions);
     }
 
+    [McpServerTool(Name = "explain_finding")]
+    [Description("Explain a current analysis/preview finding with evidence, bounded source excerpt and next action. Recommendations are not behavioral proof.")]
+    public static string ExplainFinding(MigrationEngine engine, WorkspacePaths workspace,
+        [Description("Source .cs file or directory within the workspace")] string source,
+        [Description("Finding ID returned by analyze_migration or preview_migration")] string findingId,
+        [Description("Optional adapter config within workspace")] string? config = null,
+        [Description("Expected analysis ID to reject stale source/config")] string? expectedAnalysisId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = engine.Explain(workspace.Resolve(source), findingId,
+            config == null ? null : workspace.Resolve(config), expectedAnalysisId, cancellationToken);
+        return JsonSerializer.Serialize(result, JsonOptions);
+    }
+
     [McpServerTool(Name = "preview_migration")]
     [Description("Generate a read-only conservative Playwright .NET candidate; this is NOT a syntax, compile, runtime or behavior verification. Unsupported source shapes are blocked.")]
     public static string PreviewMigration(MigrationEngine engine, WorkspacePaths workspace,

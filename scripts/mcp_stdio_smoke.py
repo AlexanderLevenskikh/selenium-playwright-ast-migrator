@@ -83,7 +83,7 @@ using NUnit.Framework;
             send(proc, {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
             listing = receive(proc, 2)
             names = {tool["name"] for tool in listing.get("tools", [])}
-            expect({"analyze_migration", "preview_migration"} <= names,
+            expect({"analyze_migration", "preview_migration", "explain_finding"} <= names,
                    f"Missing MCP tools: {names}")
             report = value(call(proc, 3, "analyze_migration", {"source": "."}))
             expect(report["discoveryStatus"] == "complete", f"Incorrect discovery: {report}")
@@ -113,6 +113,13 @@ using NUnit.Framework;
             multiple = value(call(proc, 8, "analyze_migration", {"source": "."}))
             expect(multiple["discoveryStatus"] == "partial"
                    and multiple["declaredTests"] == 2, "Multi-fixture source was hidden")
+            finding_id = multiple["findings"][0]["id"]
+            explanation = value(call(proc, 9, "explain_finding",
+                                     {"source": ".", "findingId": finding_id,
+                                      "expectedAnalysisId": multiple["analysisId"]}))
+            expect(explanation["code"] == "MULTIPLE_FIXTURES", "Wrong finding explanation")
+            expect("Split fixtures" in explanation["suggestedNextAction"],
+                   "Explanation lacks a grounded next action")
             print("MCP stdio integration smoke passed", flush=True)
         finally:
             proc.terminate()
