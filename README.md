@@ -37,3 +37,9 @@ Output is read-only and generated as memory-only candidates; no source/config ch
 The engine consists of several C# projects with project references. A future package release should publish version-matched domain/implementation dependencies, not only a single application nupkg. Do not claim this branch is already published to NuGet.
 
 License: MIT, as in the source repository.
+
+## Preview NuGet packaging
+
+The Core alpha packages **all five** version-matched modules, rather than shipping only a facade with missing dependencies. Their package versions come from `Directory.Build.props`. The `PackageConsumer.Smoke` project has no project references; GitHub Actions builds it against the generated NuGet feed.
+
+Use `dotnet pack` on all five projects, then point a consumer to the produced `artifacts/nuget` feed. The CI workflow uploads the packages as a build artifact. These are preview test artifacts, **not published NuGet releases**.

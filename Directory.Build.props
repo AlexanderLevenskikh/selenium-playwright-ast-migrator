@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <Version>0.1.0-preview.1</Version>
+    <PackageVersion>$(Version)</PackageVersion>
+    <Authors>Selenium Playwright Migrator Contributors</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/AlexanderLevenskikh/selenium-playwright-ast-migrator</RepositoryUrl>
+    <PackageTags>selenium;playwright;roslyn;ast;migration;tests</PackageTags>
+  </PropertyGroup>
+</Project>
