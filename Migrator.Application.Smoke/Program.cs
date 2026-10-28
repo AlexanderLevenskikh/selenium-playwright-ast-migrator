@@ -18,6 +18,17 @@ try
     Require(first.DiscoveryStatus == "partial", "multi fixture must be partial");
     Require(first.DeclaredTests == 2, "must count both test declarations");
     Require(first.Files.Single().Disposition == "multiple_fixtures", "must reject lossy generation");
+    var firstExplanation = engine.Explain(work, first.Findings.Single().Id, expectedAnalysisId: first.AnalysisId);
+    Require(firstExplanation.Code == "MULTIPLE_FIXTURES", "finding explanation code");
+    Require(firstExplanation.AnalysisId == first.AnalysisId, "explanation must match source snapshot");
+    Require(firstExplanation.SuggestedNextAction.Contains("Split fixtures"), "missing next action");
+    try
+    {
+        engine.Explain(work, "unknown-id", expectedAnalysisId: first.AnalysisId);
+        throw new Exception("unknown finding was accepted");
+    }
+    catch (KeyNotFoundException ex) when (ex.Message.StartsWith("UNKNOWN_FINDING", StringComparison.Ordinal)) {}
+
     Require(engine.Preview(work).Files.Count == 0, "blocked files cannot generate outputs");
     File.Delete(multi);
     var xunit = Path.Combine(work, "Xunit.cs");

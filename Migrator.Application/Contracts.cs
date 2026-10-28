@@ -5,6 +5,7 @@ public static class ContractVersions
 {
     public const string Analysis = "migrator-analysis/v1alpha1";
     public const string Preview = "migrator-preview/v1alpha1";
+    public const string Explanation = "migrator-explanation/v1alpha1";
 }
 
 public sealed record MigrationFinding(
@@ -53,3 +54,23 @@ public sealed record MigrationPreview(
     string TransformationStatus,
     IReadOnlyList<GeneratedFile> Files,
     IReadOnlyList<MigrationFinding> Findings);
+
+public sealed record SourceExcerptLine(int Line, string Text);
+
+/// <summary>
+/// Evidence grounded in the current analysis snapshot. A recommendation is not a proof
+/// of source/target semantic equivalence.
+/// </summary>
+public sealed record FindingExplanation(
+    string SchemaVersion,
+    string AnalysisId,
+    string FindingId,
+    string Code,
+    string Message,
+    string EvidenceKind,
+    string SourcePath,
+    int Line,
+    IReadOnlyList<SourceExcerptLine> SourceExcerpt,
+    string SuggestedNextAction,
+    string? CandidateId,
+    IReadOnlyList<string> Limitations);

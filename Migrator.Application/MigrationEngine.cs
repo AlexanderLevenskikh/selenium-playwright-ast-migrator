@@ -208,6 +208,85 @@ public sealed class MigrationEngine
             artifact.TargetHash, status, files, findings);
     }
 
+
+    /// <summary>
+    /// Resolve a finding against a fresh, matching snapshot. Findings not present in
+    /// the analysis can originate from preview, which is evaluated read-only on demand.
+    /// No cached finding can silently outlive its source.
+    /// </summary>
+    public FindingExplanation Explain(
+        string sourcePath, string findingId, string? configPath = null,
+        string? expectedAnalysisId = null, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(findingId))
+            throw new ArgumentException("A finding ID is required.", nameof(findingId));
+
+        var analysis = Analyze(sourcePath, configPath, cancellationToken);
+        if (expectedAnalysisId != null
+            && !string.Equals(expectedAnalysisId, analysis.AnalysisId, StringComparison.Ordinal))
+            throw new InvalidOperationException("STALE_ANALYSIS: source/configuration changed.");
+
+        var finding = analysis.Findings.FirstOrDefault(f => f.Id == findingId);
+        string? candidateId = null;
+        if (finding == null)
+        {
+            var preview = Preview(sourcePath, configPath, analysis.AnalysisId, cancellationToken);
+            finding = preview.Findings.FirstOrDefault(f => f.Id == findingId);
+            candidateId = preview.CandidateId;
+        }
+        if (finding == null)
+            throw new KeyNotFoundException("UNKNOWN_FINDING: the finding is not part of the current source snapshot.");
+
+        var excerpt = new List<SourceExcerptLine>();
+        if (finding.Line > 0)
+        {
+            var file = File.Exists(analysis.SourceScope)
+                ? analysis.SourceScope
+                : Path.Combine(analysis.SourceScope,
+                    finding.SourcePath.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(file))
+            {
+                var lines = File.ReadAllLines(file);
+                var from = Math.Max(1, finding.Line - 2);
+                var to = Math.Min(lines.Length, finding.Line + 2);
+                for (var line = from; line <= to; line++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var text = lines[line - 1];
+                    excerpt.Add(new SourceExcerptLine(line, text.Length <= 320 ? text : text[..320] + "…"));
+                }
+            }
+        }
+
+        // A source read after the snapshot could otherwise attach unrelated evidence.
+        var fresh = Analyze(sourcePath, configPath, cancellationToken);
+        if (fresh.AnalysisId != analysis.AnalysisId)
+            throw new InvalidOperationException("SOURCE_CHANGED_DURING_EXPLANATION: retry with a fresh analysis.");
+        return new FindingExplanation(ContractVersions.Explanation, analysis.AnalysisId, finding.Id,
+            finding.Code, finding.Message, finding.EvidenceKind, finding.SourcePath,
+            finding.Line, excerpt, NextAction(finding.Code), candidateId,
+            new[] { "The excerpt is source evidence, not a verified target mapping.",
+                    "An AST/syntax match does not establish runtime behavioral equivalence.",
+                    "Source position uses legacy line information, not an exact symbol span." });
+    }
+
+    static string NextAction(string code) => code switch
+    {
+        "MULTIPLE_FIXTURES" =>
+            "Split fixtures into individually supported source files or extend the parser; never mark the omitted fixture as converted.",
+        "UNSUPPORTED_SOURCE_FRAMEWORK" =>
+            "Use an explicitly supported NUnit input or implement and test the corresponding source frontend before migration.",
+        "DECLARATION_COUNT_MISMATCH" =>
+            "Review parser selection and compare the discovered declarations with the parsed model; block full-completion claims.",
+        "SOURCE_PARSE_ERROR" => "Resolve the C# parse diagnostics in the source file and rerun analysis.",
+        "PARSER_ERROR" => "Inspect the parser diagnostic and relevant project references before attempting generation.",
+        "READ_ERROR" => "Check file access and input encoding before retrying.",
+        "GENERATION_ERROR" => "Inspect the adapter/renderer diagnostic and candidate configuration; do not invent a replacement.",
+        "UNSUPPORTED_ACTION" => "Inspect the invoked helper and its resolved symbol before proposing a project-specific mapping.",
+        "GENERATED_TODO" => "Review the TODO and source evidence. A generated comment does not count as migrated behavior.",
+        _ => "Inspect the source and supporting diagnostics. Do not assume the conversion is correct."
+    };
+
     static MigrationFinding Finding(string path, int line, string code, string message, string evidence)
         => new(Digest(path + ":" + line + ":" + code + ":" + message)[..20], code, path, line, message, evidence);
 
